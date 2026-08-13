@@ -57,19 +57,7 @@ public static class IdentityHttp
     /// <returns>The HTTP result.</returns>
     public static IResult Problem(string errorCode, string message)
     {
-        var status = errorCode switch
-        {
-            ErrorCodes.Unauthorized or ErrorCodes.InvalidCredentials => StatusCodes.Status401Unauthorized,
-            ErrorCodes.LockedOut or ErrorCodes.EmailNotConfirmed => StatusCodes.Status403Forbidden,
-            ErrorCodes.ProfileNotFound => StatusCodes.Status404NotFound,
-            ErrorCodes.EmailTaken or ErrorCodes.UsernameTaken or ErrorCodes.ConcurrencyConflict
-                or ErrorCodes.ExternalLinkRequired => StatusCodes.Status409Conflict,
-            ErrorCodes.UploadTooLarge => StatusCodes.Status413PayloadTooLarge,
-            ErrorCodes.ExternalProviderUnavailable => StatusCodes.Status404NotFound,
-            _ => StatusCodes.Status400BadRequest,
-        };
-
-        return Results.Json(new ErrorResponse(errorCode, message), statusCode: status);
+        return Problem(errorCode, message, []);
     }
 
     /// <summary>
@@ -80,7 +68,10 @@ public static class IdentityHttp
     public static IResult Problem(OperationResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        return Problem(result.ErrorCode ?? "request.invalid", result.Message ?? "The request was invalid.");
+        return Problem(
+            result.ErrorCode ?? "request.invalid",
+            result.Message ?? "The request was invalid.",
+            result.Errors);
     }
 
     /// <summary>
@@ -92,6 +83,46 @@ public static class IdentityHttp
     public static IResult Problem<T>(OperationResult<T> result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        return Problem(result.ErrorCode ?? "request.invalid", result.Message ?? "The request was invalid.");
+        return Problem(
+            result.ErrorCode ?? "request.invalid",
+            result.Message ?? "The request was invalid.",
+            result.Errors);
+    }
+
+    private static IResult Problem(string errorCode, string message, IReadOnlyList<Campaign.Domain.Common.DomainError> errors)
+    {
+        var status = StatusFor(errorCode);
+        return Results.Json(
+            new ErrorResponse(errorCode, message, ToFieldErrors(errors)),
+            statusCode: status);
+    }
+
+    private static int StatusFor(string errorCode)
+    {
+        return errorCode switch
+        {
+            ErrorCodes.Unauthorized or ErrorCodes.InvalidCredentials => StatusCodes.Status401Unauthorized,
+            ErrorCodes.LockedOut or ErrorCodes.EmailNotConfirmed => StatusCodes.Status403Forbidden,
+            ErrorCodes.ProfileNotFound => StatusCodes.Status404NotFound,
+            ErrorCodes.EmailTaken or ErrorCodes.UsernameTaken or ErrorCodes.ConcurrencyConflict
+                or ErrorCodes.ExternalLinkRequired => StatusCodes.Status409Conflict,
+            ErrorCodes.UploadTooLarge => StatusCodes.Status413PayloadTooLarge,
+            ErrorCodes.ExternalProviderUnavailable => StatusCodes.Status404NotFound,
+            _ => StatusCodes.Status400BadRequest,
+        };
+    }
+
+    private static FieldErrorResponse[]? ToFieldErrors(IReadOnlyList<Campaign.Domain.Common.DomainError> errors)
+    {
+        if (errors.Count == 0)
+        {
+            return null;
+        }
+
+        var mapped = errors
+            .Where(static error => !string.IsNullOrWhiteSpace(error.Field))
+            .Select(static error => new FieldErrorResponse(error.Field!, error.Code, error.Message))
+            .ToArray();
+        return mapped.Length == 0 ? null : mapped;
     }
 }

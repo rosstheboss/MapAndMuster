@@ -38,6 +38,11 @@ public sealed class UserAccount
     public required string LastName { get; init; }
 
     /// <summary>
+    /// Gets the optional name suffix.
+    /// </summary>
+    public string? Suffix { get; init; }
+
+    /// <summary>
     /// Gets the city.
     /// </summary>
     public required string City { get; init; }

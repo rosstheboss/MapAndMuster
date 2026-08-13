@@ -25,6 +25,11 @@ public sealed class ApplicationUser : IdentityUser<Guid>
     public string LastName { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the optional name suffix.
+    /// </summary>
+    public string? Suffix { get; set; }
+
+    /// <summary>
     /// Gets or sets the city.
     /// </summary>
     public string City { get; set; } = string.Empty;

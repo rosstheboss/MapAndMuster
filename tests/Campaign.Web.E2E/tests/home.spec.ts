@@ -26,7 +26,11 @@ test('register page collects profile fields on a phone-sized screen', async ({ p
   await expect(page.getByRole('heading', { level: 1, name: 'Create an account' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Username' })).toBeVisible();
   await expect(page.getByLabel('City')).toBeVisible();
+  await expect(page.getByLabel('Confirm password')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible();
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await expect(page.getByRole('alert')).toContainText('Email is not filled in.');
+  await expect(page.getByRole('alert')).toContainText('Password is not filled in.');
 });
 
 test('home shows the signed-in player and logout', async ({ page }) => {
@@ -37,6 +41,7 @@ test('home shows the signed-in player and logout', async ({ page }) => {
     firstName: 'Ada',
     middleInitial: null,
     lastName: 'Lovelace',
+    suffix: null,
     city: 'Halifax',
     region: null,
     country: 'Canada',

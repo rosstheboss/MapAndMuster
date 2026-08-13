@@ -70,6 +70,20 @@ public interface IUserAccountStore
     Task<UpdateProfileOutcome> UpdateProfileAsync(UpdateStoredProfileRequest request, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Changes the password for a local account after verifying the current password.
+    /// </summary>
+    /// <param name="userId">The account identifier.</param>
+    /// <param name="currentPassword">The current password.</param>
+    /// <param name="newPassword">The proposed password.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The outcome.</returns>
+    Task<ChangePasswordOutcome> ChangePasswordAsync(
+        Guid userId,
+        string currentPassword,
+        string newPassword,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Replaces the stored avatar key for an account.
     /// </summary>
     /// <param name="userId">The account identifier.</param>
@@ -208,5 +222,20 @@ public sealed class UpdateProfileOutcome
     public string? ErrorCode { get; init; }
 
     /// <summary>Gets the error message when the update failed.</summary>
+    public string? Message { get; init; }
+}
+
+/// <summary>
+/// Outcome of changing a stored password.
+/// </summary>
+public sealed class ChangePasswordOutcome
+{
+    /// <summary>Gets a value indicating whether the change succeeded.</summary>
+    public required bool IsSuccess { get; init; }
+
+    /// <summary>Gets the error code when the change failed.</summary>
+    public string? ErrorCode { get; init; }
+
+    /// <summary>Gets the error message when the change failed.</summary>
     public string? Message { get; init; }
 }

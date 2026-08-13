@@ -35,6 +35,38 @@ public sealed class RegisterAccountHandlerTests
     }
 
     [Fact]
+    public async Task ListsEveryInvalidField()
+    {
+        var store = new FakeUserAccountStore();
+        var handler = CreateHandler(store);
+        var command = new RegisterAccountCommand
+        {
+            Email = "not-an-email",
+            Username = "ab",
+            Password = "short",
+            FirstName = "A",
+            LastName = "",
+            City = "",
+            Region = null,
+            Country = "Canada",
+            DisplayNameMode = DisplayNameMode.Username,
+        };
+
+        var result = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.ValidationFailed, result.ErrorCode);
+        Assert.Contains("Username is too short", result.Message, StringComparison.Ordinal);
+        Assert.Contains("Password is too short", result.Message, StringComparison.Ordinal);
+        Assert.Contains("First name is too short", result.Message, StringComparison.Ordinal);
+        Assert.Contains("Last name is not filled in", result.Message, StringComparison.Ordinal);
+        Assert.Contains("City is not filled in", result.Message, StringComparison.Ordinal);
+        Assert.Contains("State or province is not filled in", result.Message, StringComparison.Ordinal);
+        Assert.Contains("Time zone is not filled in", result.Message, StringComparison.Ordinal);
+        Assert.Equal(0, store.CreateCalls);
+    }
+
+    [Fact]
     public async Task QueuesConfirmationEmailWhenRegistrationSucceeds()
     {
         var store = new FakeUserAccountStore();
@@ -68,8 +100,9 @@ public sealed class RegisterAccountHandlerTests
             FirstName = "Ada",
             LastName = "Lovelace",
             City = "Halifax",
+            Region = "Nova Scotia",
             Country = "Canada",
-            TimeZoneId = timeZoneId,
+            TimeZoneId = timeZoneId ?? "America/Halifax",
             DisplayNameMode = DisplayNameMode.Username,
         };
     }
@@ -146,6 +179,15 @@ public sealed class RegisterAccountHandlerTests
         }
 
         public Task<string?> ReplaceAvatarKeyAsync(Guid userId, string? avatarStorageKey, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<ChangePasswordOutcome> ChangePasswordAsync(
+            Guid userId,
+            string currentPassword,
+            string newPassword,
+            CancellationToken cancellationToken)
         {
             throw new NotSupportedException();
         }

@@ -20,9 +20,6 @@ public sealed class UsernameTests
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
     [InlineData("ab")]
     [InlineData("1player")]
     [InlineData("_player")]
@@ -38,6 +35,32 @@ public sealed class UsernameTests
         Assert.Null(username);
         Assert.NotNull(error);
         Assert.Equal("username.invalid", error.Code);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void RejectsMissingUsernames(string? value)
+    {
+        var created = Username.TryCreate(value, out var username, out var error);
+
+        Assert.False(created);
+        Assert.Null(username);
+        Assert.NotNull(error);
+        Assert.Equal("username.invalid", error.Code);
+        Assert.Equal("Username is not filled in.", error.Message);
+    }
+
+    [Fact]
+    public void RejectsProhibitedLanguageWithADedicatedCode()
+    {
+        var created = Username.TryCreate("fuckyou", out var username, out var error);
+
+        Assert.False(created);
+        Assert.Null(username);
+        Assert.NotNull(error);
+        Assert.Equal("username.prohibited", error.Code);
     }
 
     [Fact]

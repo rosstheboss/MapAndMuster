@@ -3,6 +3,7 @@ using Campaign.Api.Contracts;
 using Campaign.Application.Common;
 using Campaign.Application.Identity;
 using Campaign.Application.Ports;
+using Campaign.Domain.Identity;
 using Campaign.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -77,6 +78,14 @@ public static class AuthEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
 
+        group.MapPost("/change-password", ChangePasswordAsync)
+            .RequireAuthorization()
+            .RequireRateLimiting(IdentityHttp.AuthRateLimitPolicy)
+            .WithName("ChangePassword")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status401Unauthorized);
+
         group.MapGet("/external-providers", GetExternalProviders)
             .AllowAnonymous()
             .WithName("GetExternalProviders")
@@ -104,6 +113,7 @@ public static class AuthEndpoints
                 FirstName = form["firstName"].ToString(),
                 MiddleInitial = NullIfEmpty(form["middleInitial"].ToString()),
                 LastName = form["lastName"].ToString(),
+                Suffix = NullIfEmpty(form["suffix"].ToString()),
                 City = form["city"].ToString(),
                 Region = NullIfEmpty(form["region"].ToString()),
                 Country = form["country"].ToString(),
@@ -145,6 +155,7 @@ public static class AuthEndpoints
                         FirstName = request.FirstName,
                         MiddleInitial = request.MiddleInitial,
                         LastName = request.LastName,
+                        Suffix = request.Suffix,
                         City = request.City,
                         Region = request.Region,
                         Country = request.Country,
@@ -303,6 +314,11 @@ public static class AuthEndpoints
         UserManager<ApplicationUser> userManager)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (!PasswordPolicy.TryValidate(request.Password, out var passwordError))
+        {
+            return IdentityHttp.Problem(passwordError.Code, passwordError.Message);
+        }
+
         var user = await userManager.FindByIdAsync(request.UserId.ToString()).ConfigureAwait(false);
         if (user is null)
         {
@@ -313,6 +329,37 @@ public static class AuthEndpoints
         if (!reset.Succeeded)
         {
             return IdentityHttp.Problem(ErrorCodes.PasswordInvalid, string.Join(" ", reset.Errors.Select(error => error.Description)));
+        }
+
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> ChangePasswordAsync(
+        ClaimsPrincipal principal,
+        [FromBody] ChangePasswordRequest request,
+        ChangePasswordHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ChangePasswordCommand
+                {
+                    UserId = userId.Value,
+                    CurrentPassword = request.CurrentPassword,
+                    NewPassword = request.NewPassword,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!result.IsSuccess)
+        {
+            return IdentityHttp.Problem(result);
         }
 
         return Results.NoContent();

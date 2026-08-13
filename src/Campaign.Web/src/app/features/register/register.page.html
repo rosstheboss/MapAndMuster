@@ -1,53 +1,84 @@
 <section class="page">
   <h1>Create an account</h1>
-  <p class="muted">Email, a unique username, and a profile others can only partly see.</p>
+  <p class="muted">
+    Email, a unique username, and a profile others can only partly see. Required fields are marked with an asterisk.
+  </p>
 
-  <form class="panel stack" [formGroup]="form" (ngSubmit)="submit()">
-    @if (errorMessage()) {
-      <p class="error" role="alert">{{ errorMessage() }}</p>
+  <form class="panel stack" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    @if (errorMessages().length > 0) {
+      <div #formAlert class="error error-banner" role="alert" tabindex="-1">
+        @for (message of errorMessages(); track $index) {
+          <p>{{ message }}</p>
+        }
+      </div>
     }
 
-    <div class="field">
-      <label for="email">Email</label>
-      <input id="email" type="email" autocomplete="email" formControlName="email" />
+    <div class="field" [class.invalid]="isInvalid('email')">
+      <label for="email">Email <span class="required-marker" aria-hidden="true">*</span></label>
+      <input id="email" type="email" autocomplete="email" formControlName="email" aria-required="true" />
     </div>
-    <div class="field">
-      <label for="username">Username</label>
-      <input id="username" autocomplete="username" formControlName="username" />
+    <div class="field" [class.invalid]="isInvalid('username')">
+      <label for="username">Username <span class="required-marker" aria-hidden="true">*</span></label>
+      <input id="username" autocomplete="username" formControlName="username" aria-required="true" />
     </div>
-    <div class="field">
-      <label for="password">Password</label>
-      <input id="password" type="password" autocomplete="new-password" formControlName="password" />
-      <p class="muted">At least 10 characters, with upper, lower, a number, and a symbol.</p>
+    <div class="field" [class.invalid]="isInvalid('password')">
+      <label for="password">Password <span class="required-marker" aria-hidden="true">*</span></label>
+      <input
+        id="password"
+        type="password"
+        autocomplete="new-password"
+        formControlName="password"
+        aria-required="true"
+      />
+      <p class="muted">At least 12 characters, with upper, lower, a number, and a special character.</p>
     </div>
-    <div class="field">
-      <label for="firstName">First name</label>
-      <input id="firstName" autocomplete="given-name" formControlName="firstName" />
+    <div class="field" [class.invalid]="isInvalid('confirmPassword')">
+      <label for="confirmPassword">Confirm password <span class="required-marker" aria-hidden="true">*</span></label>
+      <input
+        id="confirmPassword"
+        type="password"
+        autocomplete="new-password"
+        formControlName="confirmPassword"
+        aria-required="true"
+      />
     </div>
-    <div class="field">
+    <div class="field" [class.invalid]="isInvalid('firstName')">
+      <label for="firstName">First name <span class="required-marker" aria-hidden="true">*</span></label>
+      <input id="firstName" autocomplete="given-name" formControlName="firstName" aria-required="true" />
+    </div>
+    <div class="field" [class.invalid]="isInvalid('middleInitial')">
       <label for="middleInitial">Middle initial (optional)</label>
       <input id="middleInitial" maxlength="1" formControlName="middleInitial" />
     </div>
-    <div class="field">
-      <label for="lastName">Last name</label>
-      <input id="lastName" autocomplete="family-name" formControlName="lastName" />
+    <div class="field" [class.invalid]="isInvalid('lastName')">
+      <label for="lastName">Last name <span class="required-marker" aria-hidden="true">*</span></label>
+      <input id="lastName" autocomplete="family-name" formControlName="lastName" aria-required="true" />
     </div>
-    <div class="field">
-      <label for="country">Country</label>
+    <div class="field" [class.invalid]="isInvalid('suffix')">
+      <label for="suffix">Suffix (optional)</label>
+      <select id="suffix" formControlName="suffix">
+        <option value="">None</option>
+        @for (suffix of suffixes; track suffix) {
+          <option [value]="suffix">{{ suffix }}</option>
+        }
+      </select>
+    </div>
+    <div class="field" [class.invalid]="isInvalid('country')">
+      <label for="country">Country <span class="required-marker" aria-hidden="true">*</span></label>
       <app-filterable-combobox inputId="country" formControlName="country" [options]="countries" />
     </div>
-    <div class="field">
-      <label for="region">State or province (optional)</label>
+    <div class="field" [class.invalid]="isInvalid('region')">
+      <label for="region">State or province <span class="required-marker" aria-hidden="true">*</span></label>
       <app-filterable-combobox inputId="region" formControlName="region" [options]="regionOptions()" />
     </div>
-    <div class="field">
-      <label for="city">City</label>
-      <input id="city" autocomplete="address-level2" formControlName="city" />
+    <div class="field" [class.invalid]="isInvalid('city')">
+      <label for="city">City <span class="required-marker" aria-hidden="true">*</span></label>
+      <input id="city" autocomplete="address-level2" formControlName="city" aria-required="true" />
     </div>
-    <div class="field">
-      <label for="timeZoneId">Time zone (optional)</label>
+    <div class="field" [class.invalid]="isInvalid('timeZoneId')">
+      <label for="timeZoneId">Time zone <span class="required-marker" aria-hidden="true">*</span></label>
       <app-filterable-combobox inputId="timeZoneId" formControlName="timeZoneId" [options]="timeZones" />
-      <p class="muted">Account times are stored in UTC. Leave blank to display them in UTC.</p>
+      <p class="muted">Account times are stored in UTC. Choose a zone for how they are displayed.</p>
     </div>
     <fieldset class="field">
       <legend>Other players should see</legend>

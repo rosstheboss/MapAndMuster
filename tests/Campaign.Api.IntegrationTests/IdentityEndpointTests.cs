@@ -164,6 +164,7 @@ public sealed class IdentityEndpointTests
                 firstName = "Ada",
                 lastName = "Lovelace",
                 city = "Halifax",
+                region = "Nova Scotia",
                 country = "Canada",
                 displayNameMode = "Username",
                 timeZoneId = "Not/AZone",
@@ -187,7 +188,9 @@ public sealed class IdentityEndpointTests
                 firstName = "Ada",
                 lastName = "Lovelace",
                 city = "Halifax",
+                region = "Nova Scotia",
                 country = "Canada",
+                timeZoneId = "America/Halifax",
                 displayNameMode = "FullName",
                 profileRevision = 1,
             });
@@ -247,7 +250,9 @@ public sealed class IdentityEndpointTests
             firstName = "Ada",
             lastName = "Lovelace",
             city = "Halifax",
+            region = "Nova Scotia",
             country = "Canada",
+            timeZoneId = "America/Halifax",
             displayNameMode = "Username",
             profileRevision = 1,
         };
@@ -266,6 +271,75 @@ public sealed class IdentityEndpointTests
         var providers = await client.GetFromJsonAsync<ExternalProviderResponse[]>("/api/auth/external-providers", JsonOptions);
         Assert.NotNull(providers);
         Assert.Empty(providers);
+    }
+
+    [Fact]
+    public async Task WeakPasswordIsRejectedWithFieldErrors()
+    {
+        using var client = _factory.CreateClient();
+        using var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new
+            {
+                email = "weak@example.test",
+                username = UniqueName("weak"),
+                password = "short",
+                firstName = "Ada",
+                lastName = "Lovelace",
+                city = "Halifax",
+                region = "Nova Scotia",
+                country = "Canada",
+                timeZoneId = "America/Halifax",
+                displayNameMode = "Username",
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.NotNull(body);
+        Assert.Contains("Password is too short", body.Message, StringComparison.Ordinal);
+        Assert.Contains(body.Errors ?? [], error => error.Field == "password");
+    }
+
+    [Fact]
+    public async Task ProhibitedUsernameIsRejected()
+    {
+        using var client = _factory.CreateClient();
+        using var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            CreateRegisterBody("banned@example.test", "fuckyou"));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.NotNull(body);
+        Assert.Contains("prohibited language", body.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ChangePasswordRequiresTheCurrentPassword()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("pwchg");
+        var email = $"{username}@example.test";
+        await RegisterConfirmAndLoginAsync(client, email, username);
+
+        using var wrong = await client.PostAsJsonAsync(
+            "/api/auth/change-password",
+            new { currentPassword = "Wrong-Password-1", newPassword = "Correct-Horse-2!" });
+        Assert.Equal(HttpStatusCode.BadRequest, wrong.StatusCode);
+
+        using var changed = await client.PostAsJsonAsync(
+            "/api/auth/change-password",
+            new { currentPassword = ValidPassword, newPassword = "Correct-Horse-2!" });
+        Assert.Equal(HttpStatusCode.NoContent, changed.StatusCode);
+
+        using var logout = await client.PostAsync("/api/auth/logout", null);
+        Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+
+        using var oldPassword = await client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.Unauthorized, oldPassword.StatusCode);
+
+        using var newPassword = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { email, password = "Correct-Horse-2!" });
+        Assert.Equal(HttpStatusCode.OK, newPassword.StatusCode);
     }
 
     private async Task RegisterAndConfirmAsync(HttpClient client, string email, string username)
@@ -311,7 +385,9 @@ public sealed class IdentityEndpointTests
             firstName = "Ada",
             lastName = "Lovelace",
             city = "Halifax",
+            region = "Nova Scotia",
             country = "Canada",
+            timeZoneId = "America/Halifax",
             displayNameMode = "Username",
         };
     }

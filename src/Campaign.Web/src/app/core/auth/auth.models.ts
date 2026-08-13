@@ -1,6 +1,13 @@
+export interface FieldError {
+  field: string;
+  code: string;
+  message: string;
+}
+
 export interface ErrorResponse {
   code: string;
   message: string;
+  errors?: FieldError[] | null;
 }
 
 export interface OwnProfile {
@@ -10,6 +17,7 @@ export interface OwnProfile {
   firstName: string;
   middleInitial: string | null;
   lastName: string;
+  suffix: string | null;
   city: string;
   region: string | null;
   country: string;
@@ -52,6 +60,7 @@ export interface RegisterPayload {
   firstName: string;
   middleInitial: string;
   lastName: string;
+  suffix: string;
   city: string;
   region: string;
   country: string;
@@ -65,9 +74,15 @@ export interface ProfileFormValue {
   firstName: string;
   middleInitial: string;
   lastName: string;
+  suffix: string;
   city: string;
   region: string;
   country: string;
   displayNameMode: 'Username' | 'FullName';
   timeZoneId: string;
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
 }

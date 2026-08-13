@@ -59,7 +59,7 @@ public static class ProfileMapper
 
         var showsFullName = account.DisplayNameMode == DisplayNameMode.FullName;
         var displayName = showsFullName
-            ? FormatFullName(account.FirstName, account.MiddleInitial, account.LastName)
+            ? FormatFullName(account.FirstName, account.MiddleInitial, account.LastName, account.Suffix)
             : account.Username;
 
         return new PublicProfile
@@ -80,14 +80,17 @@ public static class ProfileMapper
     /// <param name="firstName">The first name.</param>
     /// <param name="middleInitial">The optional middle initial.</param>
     /// <param name="lastName">The last name.</param>
+    /// <param name="suffix">The optional name suffix.</param>
     /// <returns>The formatted full name.</returns>
-    public static string FormatFullName(string firstName, char? middleInitial, string lastName)
+    public static string FormatFullName(string firstName, char? middleInitial, string lastName, string? suffix = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(firstName);
         ArgumentException.ThrowIfNullOrWhiteSpace(lastName);
 
-        return middleInitial is { } initial
+        var core = middleInitial is { } initial
             ? $"{firstName} {initial}. {lastName}"
             : $"{firstName} {lastName}";
+
+        return string.IsNullOrWhiteSpace(suffix) ? core : $"{core} {suffix}";
     }
 }

@@ -169,6 +169,7 @@ public sealed class UserAccountStore : IUserAccountStore
         user.FirstName = request.Name.FirstName;
         user.MiddleInitial = request.Name.MiddleInitial?.ToString();
         user.LastName = request.Name.LastName;
+        user.Suffix = request.Name.Suffix;
         user.City = request.Location.City;
         user.Region = request.Location.Region;
         user.Country = request.Location.Country;
@@ -225,6 +226,54 @@ public sealed class UserAccountStore : IUserAccountStore
         return previous;
     }
 
+    /// <inheritdoc />
+    public async Task<ChangePasswordOutcome> ChangePasswordAsync(
+        Guid userId,
+        string currentPassword,
+        string newPassword,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(currentPassword);
+        ArgumentException.ThrowIfNullOrWhiteSpace(newPassword);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var user = await _userManager.FindByIdAsync(userId.ToString()).ConfigureAwait(false);
+        if (user is null)
+        {
+            return new ChangePasswordOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.ProfileNotFound,
+                Message = "The profile was not found.",
+            };
+        }
+
+        var changed = await _userManager.ChangePasswordAsync(user, currentPassword, newPassword).ConfigureAwait(false);
+        if (!changed.Succeeded)
+        {
+            if (changed.Errors.Any(error =>
+                    error.Code.Contains("PasswordMismatch", StringComparison.OrdinalIgnoreCase)
+                    || error.Code.Contains("PasswordIncorrect", StringComparison.OrdinalIgnoreCase)))
+            {
+                return new ChangePasswordOutcome
+                {
+                    IsSuccess = false,
+                    ErrorCode = ErrorCodes.CurrentPasswordInvalid,
+                    Message = "Current password is incorrect.",
+                };
+            }
+
+            return new ChangePasswordOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = MapIdentityError(changed),
+                Message = CombineErrors(changed),
+            };
+        }
+
+        return new ChangePasswordOutcome { IsSuccess = true };
+    }
+
     private ApplicationUser CreateUser(
         string email,
         Username username,
@@ -243,6 +292,7 @@ public sealed class UserAccountStore : IUserAccountStore
             FirstName = name.FirstName,
             MiddleInitial = name.MiddleInitial?.ToString(),
             LastName = name.LastName,
+            Suffix = name.Suffix,
             City = location.City,
             Region = location.Region,
             Country = location.Country,
@@ -271,6 +321,7 @@ public sealed class UserAccountStore : IUserAccountStore
             FirstName = user.FirstName,
             MiddleInitial = initial,
             LastName = user.LastName,
+            Suffix = user.Suffix,
             City = user.City,
             Region = user.Region,
             Country = user.Country,

@@ -38,7 +38,7 @@ public sealed class ProfileMapperTests
         var publicProfile = ProfileMapper.ToPublic(account);
 
         Assert.Equal("ada", publicProfile.Username);
-        Assert.Equal("Ada L. Lovelace", publicProfile.DisplayName);
+        Assert.Equal("Ada L. Lovelace Jr.", publicProfile.DisplayName);
         Assert.True(publicProfile.ShowsFullName);
     }
 
@@ -52,6 +52,7 @@ public sealed class ProfileMapperTests
             FirstName = "Ada",
             MiddleInitial = 'L',
             LastName = "Lovelace",
+            Suffix = "Jr.",
             City = "Halifax",
             Region = "Nova Scotia",
             Country = "Canada",

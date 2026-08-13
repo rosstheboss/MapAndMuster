@@ -102,6 +102,7 @@ public static class ProfileEndpoints
                     FirstName = request.FirstName,
                     MiddleInitial = request.MiddleInitial,
                     LastName = request.LastName,
+                    Suffix = request.Suffix,
                     City = request.City,
                     Region = request.Region,
                     Country = request.Country,

@@ -5,7 +5,17 @@ namespace Campaign.Backend.UnitTests.Identity;
 public sealed class IanaTimeZoneTests
 {
     [Fact]
-    public void EmptyInputLeavesThePreferenceUnset()
+    public void RequiredInputRejectsEmpty()
+    {
+        Assert.False(IanaTimeZone.TryCreate(null, out var timeZone, out var error));
+        Assert.Null(timeZone);
+        Assert.NotNull(error);
+        Assert.Equal("timeZone.invalid", error.Code);
+        Assert.Equal("Time zone is not filled in.", error.Message);
+    }
+
+    [Fact]
+    public void EmptyOptionalInputLeavesThePreferenceUnset()
     {
         Assert.True(IanaTimeZone.TryCreateOptional(null, out var timeZone, out var error));
         Assert.Null(timeZone);

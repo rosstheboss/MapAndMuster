@@ -5,4 +5,5 @@ namespace Campaign.Domain.Common;
 /// </summary>
 /// <param name="Code">The stable error code.</param>
 /// <param name="Message">A safe, non-secret explanation suitable for API clients.</param>
-public sealed record DomainError(string Code, string Message);
+/// <param name="Field">The request field that failed, when the error is field-scoped.</param>
+public sealed record DomainError(string Code, string Message, string? Field = null);

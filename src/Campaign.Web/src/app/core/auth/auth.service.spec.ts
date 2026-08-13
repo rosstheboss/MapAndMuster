@@ -3,7 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { AuthService, readApiError } from './auth.service';
+import { AuthService, readApiError, readApiErrorMessages } from './auth.service';
 
 describe('AuthService', () => {
   beforeEach(() => {
@@ -24,6 +24,7 @@ describe('AuthService', () => {
       firstName: 'Ada',
       middleInitial: null,
       lastName: 'Lovelace',
+      suffix: null,
       city: 'Halifax',
       region: null,
       country: 'Canada',
@@ -47,5 +48,23 @@ describe('AuthService', () => {
       error: { code: 'auth.invalid_credentials', message: 'Email or password is incorrect.' },
     });
     expect(readApiError(error, 'fallback')).toBe('Email or password is incorrect.');
+  });
+
+  it('keeps each API field error as its own message', () => {
+    const error = new HttpErrorResponse({
+      status: 400,
+      error: {
+        code: 'validation.failed',
+        message: 'Username is already taken.\nFirst name is too short (minimum 2 characters).',
+        errors: [
+          { field: 'username', code: 'username.taken', message: 'Username is already taken.' },
+          { field: 'firstName', code: 'name.too_short', message: 'First name is too short (minimum 2 characters).' },
+        ],
+      },
+    });
+    expect(readApiErrorMessages(error, 'fallback')).toEqual([
+      'Username is already taken.',
+      'First name is too short (minimum 2 characters).',
+    ]);
   });
 });

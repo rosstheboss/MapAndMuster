@@ -23,6 +23,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<GetOwnProfileHandler>();
         services.AddScoped<GetPublicProfileHandler>();
         services.AddScoped<CompleteExternalRegistrationHandler>();
+        services.AddScoped<ChangePasswordHandler>();
 
         return services;
     }

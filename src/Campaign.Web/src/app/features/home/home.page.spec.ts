@@ -15,6 +15,7 @@ const profile: OwnProfile = {
   firstName: 'Ada',
   middleInitial: null,
   lastName: 'Lovelace',
+  suffix: null,
   city: 'Halifax',
   region: null,
   country: 'Canada',

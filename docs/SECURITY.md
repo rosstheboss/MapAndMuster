@@ -14,6 +14,12 @@ separate response models for public, participant, and staff views.
 ## Authentication
 
 - ASP.NET Core Identity with verified email, secure password reset, lockout, and rate limiting.
+- Local passwords must be at least 12 characters and include uppercase, lowercase, a number,
+  and a special character. Changing a password while signed in requires the current password.
+- Usernames and legal names reject English profanity, racial slurs, and similar abusive terms.
+- Registration and profile updates require username, first name, last name, city, state or
+  province, country, and time zone. Middle initial, suffix, and avatar are optional.
+- Secure, HTTP-only, same-site cookies for the same-origin web application.
 - Secure, HTTP-only, same-site cookies for the same-origin web application.
 - External providers are optional and configuration-gated. A matching email does not auto-link;
   the player must sign in to the existing verified account.

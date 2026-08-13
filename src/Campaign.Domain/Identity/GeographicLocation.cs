@@ -19,7 +19,7 @@ public sealed class GeographicLocation
         RegexOptions.CultureInvariant | RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(100));
 
-    private GeographicLocation(string city, string? region, string country)
+    private GeographicLocation(string city, string region, string country)
     {
         City = city;
         Region = region;
@@ -32,9 +32,9 @@ public sealed class GeographicLocation
     public string City { get; }
 
     /// <summary>
-    /// Gets the optional state, province, or region.
+    /// Gets the state, province, or region.
     /// </summary>
-    public string? Region { get; }
+    public string Region { get; }
 
     /// <summary>
     /// Gets the country.
@@ -45,10 +45,10 @@ public sealed class GeographicLocation
     /// Attempts to create a location from user input.
     /// </summary>
     /// <param name="city">The city.</param>
-    /// <param name="region">The optional state, province, or region.</param>
+    /// <param name="region">The state, province, or region.</param>
     /// <param name="country">The country.</param>
     /// <param name="location">The created location when validation succeeds.</param>
-    /// <param name="error">The validation error when creation fails.</param>
+    /// <param name="error">The first validation error when creation fails.</param>
     /// <returns><see langword="true"/> when the location is valid.</returns>
     public static bool TryCreate(
         string? city,
@@ -57,30 +57,48 @@ public sealed class GeographicLocation
         [NotNullWhen(true)] out GeographicLocation? location,
         [NotNullWhen(false)] out DomainError? error)
     {
-        location = null;
-
-        if (!TryValidateRequired(city, "city.invalid", "City", out var parsedCity, out error))
+        var errors = CollectErrors(city, region, country);
+        if (errors.Count > 0)
         {
+            location = null;
+            error = errors[0];
             return false;
         }
 
-        if (!TryValidateRequired(country, "country.invalid", "Country", out var parsedCountry, out error))
-        {
-            return false;
-        }
-
-        string? parsedRegion = null;
-        if (!string.IsNullOrWhiteSpace(region))
-        {
-            if (!TryValidateRequired(region, "region.invalid", "State or region", out parsedRegion, out error))
-            {
-                return false;
-            }
-        }
-
-        location = new GeographicLocation(parsedCity, parsedRegion, parsedCountry);
+        location = new GeographicLocation(
+            CollapseWhitespace(city!.Trim()),
+            CollapseWhitespace(region!.Trim()),
+            CollapseWhitespace(country!.Trim()));
         error = null;
         return true;
+    }
+
+    /// <summary>
+    /// Validates every location field and returns all failures.
+    /// </summary>
+    /// <param name="city">The city.</param>
+    /// <param name="region">The state, province, or region.</param>
+    /// <param name="country">The country.</param>
+    /// <returns>The field errors, or an empty list.</returns>
+    public static IReadOnlyList<DomainError> CollectErrors(string? city, string? region, string? country)
+    {
+        var errors = new List<DomainError>(3);
+        if (!TryValidateRequired(city, "city", "City", out _, out var cityError))
+        {
+            errors.Add(cityError);
+        }
+
+        if (!TryValidateRequired(region, "region", "State or province", out _, out var regionError))
+        {
+            errors.Add(regionError);
+        }
+
+        if (!TryValidateRequired(country, "country", "Country", out _, out var countryError))
+        {
+            errors.Add(countryError);
+        }
+
+        return errors;
     }
 
     /// <summary>
@@ -89,14 +107,12 @@ public sealed class GeographicLocation
     /// <returns>A comma-separated location string.</returns>
     public string Format()
     {
-        return string.IsNullOrWhiteSpace(Region)
-            ? $"{City}, {Country}"
-            : $"{City}, {Region}, {Country}";
+        return $"{City}, {Region}, {Country}";
     }
 
     private static bool TryValidateRequired(
         string? raw,
-        string errorCode,
+        string field,
         string fieldLabel,
         [NotNullWhen(true)] out string? value,
         [NotNullWhen(false)] out DomainError? error)
@@ -104,16 +120,26 @@ public sealed class GeographicLocation
         value = null;
         if (string.IsNullOrWhiteSpace(raw))
         {
-            error = new DomainError(errorCode, $"{fieldLabel} is required.");
+            error = new DomainError($"{field}.invalid", $"{fieldLabel} is not filled in.", field);
             return false;
         }
 
         var trimmed = CollapseWhitespace(raw.Trim());
-        if (trimmed.Length > MaxLength || !LocationPattern.IsMatch(trimmed))
+        if (trimmed.Length > MaxLength)
         {
             error = new DomainError(
-                errorCode,
-                $"{fieldLabel} must be 1-{MaxLength} characters and cannot include markup or control characters.");
+                $"{field}.invalid",
+                $"{fieldLabel} is too long (maximum {MaxLength} characters).",
+                field);
+            return false;
+        }
+
+        if (!LocationPattern.IsMatch(trimmed))
+        {
+            error = new DomainError(
+                $"{field}.invalid",
+                $"{fieldLabel} cannot include markup or control characters.",
+                field);
             return false;
         }
 

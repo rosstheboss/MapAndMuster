@@ -1,5 +1,6 @@
 using Campaign.Application.Common;
 using Campaign.Application.Ports;
+using Campaign.Domain.Common;
 using Campaign.Domain.Identity;
 
 namespace Campaign.Application.Identity;
@@ -33,39 +34,41 @@ public sealed class UpdateProfileHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!Username.TryCreate(command.Username, out var username, out var usernameError))
+        _ = AccountProfileRules.TryCreate(
+            command.Username,
+            command.FirstName,
+            command.MiddleInitial,
+            command.LastName,
+            command.Suffix,
+            command.City,
+            command.Region,
+            command.Country,
+            command.TimeZoneId,
+            out var username,
+            out var name,
+            out var location,
+            out var timeZone,
+            out var errors);
+
+        if (username is not null
+            && await _accounts.UsernameExistsAsync(username.Value, command.UserId, cancellationToken).ConfigureAwait(false))
         {
-            return OperationResults.Failure<UserAccount>(usernameError.Code, usernameError.Message);
+            errors = [.. errors, new DomainError(ErrorCodes.UsernameTaken, "That username is already taken.", "username")];
         }
 
-        if (!PersonName.TryCreate(command.FirstName, command.MiddleInitial, command.LastName, out var name, out var nameError))
+        if (errors.Count > 0)
         {
-            return OperationResults.Failure<UserAccount>(nameError.Code, nameError.Message);
-        }
-
-        if (!GeographicLocation.TryCreate(command.City, command.Region, command.Country, out var location, out var locationError))
-        {
-            return OperationResults.Failure<UserAccount>(locationError.Code, locationError.Message);
-        }
-
-        if (!IanaTimeZone.TryCreateOptional(command.TimeZoneId, out var timeZone, out var timeZoneError))
-        {
-            return OperationResults.Failure<UserAccount>(timeZoneError.Code, timeZoneError.Message);
-        }
-
-        if (await _accounts.UsernameExistsAsync(username.Value, command.UserId, cancellationToken).ConfigureAwait(false))
-        {
-            return OperationResults.Failure<UserAccount>(ErrorCodes.UsernameTaken, "That username is already taken.");
+            return OperationResults.Failure<UserAccount>(errors);
         }
 
         var updated = await _accounts.UpdateProfileAsync(
                 new UpdateStoredProfileRequest
                 {
                     UserId = command.UserId,
-                    Username = username,
-                    Name = name,
-                    Location = location,
-                    TimeZoneId = timeZone?.Id,
+                    Username = username!,
+                    Name = name!,
+                    Location = location!,
+                    TimeZoneId = timeZone!.Id,
                     DisplayNameMode = command.DisplayNameMode,
                     ExpectedRevision = command.ProfileRevision,
                 },

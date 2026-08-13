@@ -38,12 +38,17 @@ public sealed class RegisterAccountCommand
     public required string LastName { get; init; }
 
     /// <summary>
+    /// Gets the optional name suffix.
+    /// </summary>
+    public string? Suffix { get; init; }
+
+    /// <summary>
     /// Gets the city.
     /// </summary>
     public required string City { get; init; }
 
     /// <summary>
-    /// Gets the optional state, province, or region.
+    /// Gets the state, province, or region.
     /// </summary>
     public string? Region { get; init; }
 
@@ -53,7 +58,7 @@ public sealed class RegisterAccountCommand
     public required string Country { get; init; }
 
     /// <summary>
-    /// Gets the optional IANA time-zone identifier used to display UTC timestamps.
+    /// Gets the IANA time-zone identifier used to display UTC timestamps.
     /// </summary>
     public string? TimeZoneId { get; init; }
 

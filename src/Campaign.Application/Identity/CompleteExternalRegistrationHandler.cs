@@ -27,16 +27,19 @@ public sealed class CompleteExternalRegistrationCommand
     /// <summary>Gets the last name.</summary>
     public required string LastName { get; init; }
 
+    /// <summary>Gets the optional name suffix.</summary>
+    public string? Suffix { get; init; }
+
     /// <summary>Gets the city.</summary>
     public required string City { get; init; }
 
-    /// <summary>Gets the optional state, province, or region.</summary>
+    /// <summary>Gets the state, province, or region.</summary>
     public string? Region { get; init; }
 
     /// <summary>Gets the country.</summary>
     public required string Country { get; init; }
 
-    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    /// <summary>Gets the IANA time-zone identifier used to display UTC timestamps.</summary>
     public string? TimeZoneId { get; init; }
 
     /// <summary>Gets the public display-name preference.</summary>
@@ -96,42 +99,48 @@ public sealed class CompleteExternalRegistrationHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!Username.TryCreate(command.Username, out var username, out var usernameError))
+        var errors = new List<Domain.Common.DomainError>();
+        var emailError = IdentityFieldErrors.Email(command.Email);
+        if (emailError is not null)
         {
-            return OperationResults.Failure<UserAccount>(usernameError.Code, usernameError.Message);
+            errors.Add(emailError);
         }
 
-        if (!PersonName.TryCreate(command.FirstName, command.MiddleInitial, command.LastName, out var name, out var nameError))
-        {
-            return OperationResults.Failure<UserAccount>(nameError.Code, nameError.Message);
-        }
+        _ = AccountProfileRules.TryCreate(
+            command.Username,
+            command.FirstName,
+            command.MiddleInitial,
+            command.LastName,
+            command.Suffix,
+            command.City,
+            command.Region,
+            command.Country,
+            command.TimeZoneId,
+            out var username,
+            out var name,
+            out var location,
+            out var timeZone,
+            out var profileErrors);
+        errors.AddRange(profileErrors);
 
-        if (!GeographicLocation.TryCreate(command.City, command.Region, command.Country, out var location, out var locationError))
+        var email = (command.Email ?? string.Empty).Trim();
+        if (emailError is null && await _accounts.EmailExistsAsync(email, cancellationToken).ConfigureAwait(false))
         {
-            return OperationResults.Failure<UserAccount>(locationError.Code, locationError.Message);
-        }
-
-        if (!IanaTimeZone.TryCreateOptional(command.TimeZoneId, out var timeZone, out var timeZoneError))
-        {
-            return OperationResults.Failure<UserAccount>(timeZoneError.Code, timeZoneError.Message);
-        }
-
-        var email = command.Email.Trim();
-        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@', StringComparison.Ordinal))
-        {
-            return OperationResults.Failure<UserAccount>(ErrorCodes.EmailInvalid, "Email address is invalid.");
-        }
-
-        if (await _accounts.EmailExistsAsync(email, cancellationToken).ConfigureAwait(false))
-        {
-            return OperationResults.Failure<UserAccount>(
+            errors.Add(new Domain.Common.DomainError(
                 ErrorCodes.ExternalLinkRequired,
-                "An account with that email already exists. Sign in and link the provider from your profile.");
+                "An account with that email already exists. Sign in and link the provider from your profile.",
+                "email"));
         }
 
-        if (await _accounts.UsernameExistsAsync(username.Value, null, cancellationToken).ConfigureAwait(false))
+        if (username is not null
+            && await _accounts.UsernameExistsAsync(username.Value, null, cancellationToken).ConfigureAwait(false))
         {
-            return OperationResults.Failure<UserAccount>(ErrorCodes.UsernameTaken, "That username is already taken.");
+            errors.Add(new Domain.Common.DomainError(ErrorCodes.UsernameTaken, "That username is already taken.", "username"));
+        }
+
+        if (errors.Count > 0)
+        {
+            return OperationResults.Failure<UserAccount>(errors);
         }
 
         string? avatarKey = null;
@@ -153,10 +162,10 @@ public sealed class CompleteExternalRegistrationHandler
                 {
                     Email = email,
                     EmailConfirmed = command.EmailConfirmed,
-                    Username = username,
-                    Name = name,
-                    Location = location,
-                    TimeZoneId = timeZone?.Id,
+                    Username = username!,
+                    Name = name!,
+                    Location = location!,
+                    TimeZoneId = timeZone!.Id,
                     DisplayNameMode = command.DisplayNameMode,
                     AvatarStorageKey = avatarKey,
                     Provider = command.Provider,

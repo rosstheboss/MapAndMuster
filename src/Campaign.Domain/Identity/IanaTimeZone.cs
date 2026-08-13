@@ -4,8 +4,8 @@ using Campaign.Domain.Common;
 namespace Campaign.Domain.Identity;
 
 /// <summary>
-/// An optional IANA time zone used only for displaying stored UTC instants.
-/// Timestamps remain UTC in persistence.
+/// An IANA time zone used only for displaying stored UTC instants.
+/// Timestamps remain UTC in persistence. Registration and profile updates require a zone.
 /// </summary>
 public sealed class IanaTimeZone
 {
@@ -30,6 +30,28 @@ public sealed class IanaTimeZone
     public string Id { get; }
 
     /// <summary>
+    /// Attempts to parse a required time-zone preference.
+    /// </summary>
+    /// <param name="raw">The raw identifier.</param>
+    /// <param name="timeZone">The parsed zone when valid.</param>
+    /// <param name="error">The validation error when creation fails.</param>
+    /// <returns><see langword="true"/> when the value is a known IANA zone.</returns>
+    public static bool TryCreate(
+        string? raw,
+        [NotNullWhen(true)] out IanaTimeZone? timeZone,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            timeZone = null;
+            error = new DomainError("timeZone.invalid", "Time zone is not filled in.", "timeZoneId");
+            return false;
+        }
+
+        return TryParse(raw, out timeZone, out error);
+    }
+
+    /// <summary>
     /// Attempts to parse an optional time-zone preference. Empty input means no selection.
     /// </summary>
     /// <param name="raw">The raw identifier, or empty to leave the preference unset.</param>
@@ -49,26 +71,37 @@ public sealed class IanaTimeZone
             return true;
         }
 
+        return TryParse(raw, out timeZone, out error);
+    }
+
+    private static bool TryParse(
+        string raw,
+        [NotNullWhen(true)] out IanaTimeZone? timeZone,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        timeZone = null;
         var trimmed = raw.Trim();
         if (trimmed.Length > MaxLength)
         {
-            error = new DomainError("timeZone.invalid", "Choose a valid time zone, or leave it blank to display UTC.");
+            error = new DomainError("timeZone.invalid", "Choose a valid time zone.", "timeZoneId");
             return false;
         }
 
         if (string.Equals(trimmed, UtcId, StringComparison.OrdinalIgnoreCase))
         {
             timeZone = new IanaTimeZone(UtcId);
+            error = null;
             return true;
         }
 
         if (!TimeZoneInfo.TryFindSystemTimeZoneById(trimmed, out _))
         {
-            error = new DomainError("timeZone.invalid", "Choose a valid time zone, or leave it blank to display UTC.");
+            error = new DomainError("timeZone.invalid", "Choose a valid time zone.", "timeZoneId");
             return false;
         }
 
         timeZone = new IanaTimeZone(trimmed);
+        error = null;
         return true;
     }
 

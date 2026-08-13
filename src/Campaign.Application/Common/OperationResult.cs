@@ -1,3 +1,5 @@
+using Campaign.Domain.Common;
+
 namespace Campaign.Application.Common;
 
 /// <summary>
@@ -5,11 +7,12 @@ namespace Campaign.Application.Common;
 /// </summary>
 public sealed class OperationResult
 {
-    private OperationResult(bool isSuccess, string? errorCode, string? message)
+    private OperationResult(bool isSuccess, string? errorCode, string? message, IReadOnlyList<DomainError> errors)
     {
         IsSuccess = isSuccess;
         ErrorCode = errorCode;
         Message = message;
+        Errors = errors;
     }
 
     /// <summary>
@@ -28,12 +31,17 @@ public sealed class OperationResult
     public string? Message { get; }
 
     /// <summary>
+    /// Gets field-scoped errors when the failure lists more than a single summary.
+    /// </summary>
+    public IReadOnlyList<DomainError> Errors { get; }
+
+    /// <summary>
     /// Creates a successful result.
     /// </summary>
     /// <returns>A successful result.</returns>
     public static OperationResult Success()
     {
-        return new OperationResult(true, null, null);
+        return new OperationResult(true, null, null, []);
     }
 
     /// <summary>
@@ -46,7 +54,33 @@ public sealed class OperationResult
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(errorCode);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
-        return new OperationResult(false, errorCode, message);
+        return new OperationResult(false, errorCode, message, []);
+    }
+
+    /// <summary>
+    /// Creates a failed result from one or more field errors.
+    /// </summary>
+    /// <param name="errors">The field errors.</param>
+    /// <returns>A failed result.</returns>
+    public static OperationResult Failure(IReadOnlyList<DomainError> errors)
+    {
+        ArgumentNullException.ThrowIfNull(errors);
+        if (errors.Count == 0)
+        {
+            throw new ArgumentException("At least one validation error is required.", nameof(errors));
+        }
+
+        return new OperationResult(false, CombineCode(errors), CombineMessage(errors), errors);
+    }
+
+    internal static string CombineCode(IReadOnlyList<DomainError> errors)
+    {
+        return errors.Count == 1 ? errors[0].Code : ErrorCodes.ValidationFailed;
+    }
+
+    internal static string CombineMessage(IReadOnlyList<DomainError> errors)
+    {
+        return string.Join('\n', errors.Select(static error => error.Message));
     }
 }
 
@@ -56,12 +90,13 @@ public sealed class OperationResult
 /// <typeparam name="T">The success value type.</typeparam>
 public sealed class OperationResult<T>
 {
-    internal OperationResult(bool isSuccess, T? value, string? errorCode, string? message)
+    internal OperationResult(bool isSuccess, T? value, string? errorCode, string? message, IReadOnlyList<DomainError> errors)
     {
         IsSuccess = isSuccess;
         Value = value;
         ErrorCode = errorCode;
         Message = message;
+        Errors = errors;
     }
 
     /// <summary>
@@ -83,6 +118,11 @@ public sealed class OperationResult<T>
     /// Gets a safe explanation when the operation failed.
     /// </summary>
     public string? Message { get; }
+
+    /// <summary>
+    /// Gets field-scoped errors when the failure lists more than a single summary.
+    /// </summary>
+    public IReadOnlyList<DomainError> Errors { get; }
 }
 
 /// <summary>
@@ -99,7 +139,7 @@ public static class OperationResults
     public static OperationResult<T> Success<T>(T value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        return new OperationResult<T>(true, value, null, null);
+        return new OperationResult<T>(true, value, null, null, []);
     }
 
     /// <summary>
@@ -113,6 +153,28 @@ public static class OperationResults
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(errorCode);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
-        return new OperationResult<T>(false, default, errorCode, message);
+        return new OperationResult<T>(false, default, errorCode, message, []);
+    }
+
+    /// <summary>
+    /// Creates a failed result from one or more field errors.
+    /// </summary>
+    /// <typeparam name="T">The success value type.</typeparam>
+    /// <param name="errors">The field errors.</param>
+    /// <returns>A failed result.</returns>
+    public static OperationResult<T> Failure<T>(IReadOnlyList<DomainError> errors)
+    {
+        ArgumentNullException.ThrowIfNull(errors);
+        if (errors.Count == 0)
+        {
+            throw new ArgumentException("At least one validation error is required.", nameof(errors));
+        }
+
+        return new OperationResult<T>(
+            false,
+            default,
+            OperationResult.CombineCode(errors),
+            OperationResult.CombineMessage(errors),
+            errors);
     }
 }

@@ -3,9 +3,13 @@
   @if (loading()) {
     <p>Loading profile…</p>
   } @else {
-    <form class="panel stack" [formGroup]="form" (ngSubmit)="save()">
-      @if (errorMessage()) {
-        <p class="error" role="alert">{{ errorMessage() }}</p>
+    <form class="panel stack" [formGroup]="form" (ngSubmit)="save()" novalidate>
+      @if (errorMessages().length > 0) {
+        <div #formAlert class="error error-banner" role="alert" tabindex="-1">
+          @for (message of errorMessages(); track $index) {
+            <p>{{ message }}</p>
+          }
+        </div>
       }
       @if (successMessage()) {
         <p role="status">{{ successMessage() }}</p>
@@ -16,7 +20,7 @@
       }
 
       <div class="field">
-        <label for="avatar">Change profile picture</label>
+        <label for="avatar">Change profile picture (optional)</label>
         <input
           id="avatar"
           type="file"
@@ -25,38 +29,48 @@
           [disabled]="uploading()"
         />
       </div>
-      <div class="field">
-        <label for="username">Username</label>
-        <input id="username" formControlName="username" />
+      <div class="field" [class.invalid]="isInvalid('username')">
+        <label for="username">Username <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="username" formControlName="username" aria-required="true" />
+        <p class="muted">You do not have to change your username to save other profile fields.</p>
       </div>
-      <div class="field">
-        <label for="firstName">First name</label>
-        <input id="firstName" formControlName="firstName" />
+      <div class="field" [class.invalid]="isInvalid('firstName')">
+        <label for="firstName">First name <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="firstName" formControlName="firstName" aria-required="true" />
       </div>
-      <div class="field">
+      <div class="field" [class.invalid]="isInvalid('middleInitial')">
         <label for="middleInitial">Middle initial (optional)</label>
         <input id="middleInitial" maxlength="1" formControlName="middleInitial" />
       </div>
-      <div class="field">
-        <label for="lastName">Last name</label>
-        <input id="lastName" formControlName="lastName" />
+      <div class="field" [class.invalid]="isInvalid('lastName')">
+        <label for="lastName">Last name <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="lastName" formControlName="lastName" aria-required="true" />
       </div>
-      <div class="field">
-        <label for="country">Country</label>
+      <div class="field" [class.invalid]="isInvalid('suffix')">
+        <label for="suffix">Suffix (optional)</label>
+        <select id="suffix" formControlName="suffix">
+          <option value="">None</option>
+          @for (suffix of suffixes; track suffix) {
+            <option [value]="suffix">{{ suffix }}</option>
+          }
+        </select>
+      </div>
+      <div class="field" [class.invalid]="isInvalid('country')">
+        <label for="country">Country <span class="required-marker" aria-hidden="true">*</span></label>
         <app-filterable-combobox inputId="country" formControlName="country" [options]="countries" />
       </div>
-      <div class="field">
-        <label for="region">State or province (optional)</label>
+      <div class="field" [class.invalid]="isInvalid('region')">
+        <label for="region">State or province <span class="required-marker" aria-hidden="true">*</span></label>
         <app-filterable-combobox inputId="region" formControlName="region" [options]="regionOptions()" />
       </div>
-      <div class="field">
-        <label for="city">City</label>
-        <input id="city" formControlName="city" />
+      <div class="field" [class.invalid]="isInvalid('city')">
+        <label for="city">City <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="city" formControlName="city" aria-required="true" />
       </div>
-      <div class="field">
-        <label for="timeZoneId">Time zone</label>
+      <div class="field" [class.invalid]="isInvalid('timeZoneId')">
+        <label for="timeZoneId">Time zone <span class="required-marker" aria-hidden="true">*</span></label>
         <app-filterable-combobox inputId="timeZoneId" formControlName="timeZoneId" [options]="timeZones" />
-        <p class="muted">Times below use this zone. Leave blank to display UTC. Values stay stored in UTC.</p>
+        <p class="muted">Times below use this zone. Values stay stored in UTC.</p>
       </div>
       <fieldset class="field">
         <legend>Other players should see</legend>
@@ -71,10 +85,36 @@
           </label>
         </div>
       </fieldset>
+
+      <fieldset class="field">
+        <legend>Change password (optional)</legend>
+        <p class="muted">
+          Leave these blank to keep your current password. New passwords need 12 characters with upper, lower, a number,
+          and a special character.
+        </p>
+        <div class="field" [class.invalid]="isInvalid('currentPassword')">
+          <label for="currentPassword">Current password</label>
+          <input
+            id="currentPassword"
+            type="password"
+            autocomplete="current-password"
+            formControlName="currentPassword"
+          />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('newPassword')">
+          <label for="newPassword">New password</label>
+          <input id="newPassword" type="password" autocomplete="new-password" formControlName="newPassword" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('confirmPassword')">
+          <label for="confirmPassword">Confirm new password</label>
+          <input id="confirmPassword" type="password" autocomplete="new-password" formControlName="confirmPassword" />
+        </div>
+      </fieldset>
+
       <p class="muted">Created {{ createdUtc() | instantDate: timeZoneValue() }}</p>
       <p class="muted">Last edited {{ updatedUtc() | instantDate: timeZoneValue() }}</p>
       <div class="actions">
-        <button class="button" type="submit" [disabled]="saving()">Save profile</button>
+        <button class="button" type="submit" [disabled]="saving()">Save changes</button>
       </div>
     </form>
   }

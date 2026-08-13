@@ -17,10 +17,14 @@
 ## Accounts and public identity
 
 An account has a unique username (3-32 characters, starting with a letter, then letters,
-digits, or underscores), email, password or external login, legal name, optional middle
-initial, city/region/country, optional IANA time-zone preference, optional avatar, and a
-display-name preference. Created and last-edited instants are stored in UTC. The owner may
-choose a time zone for display; when none is selected, those times are shown in UTC.
+digits, or underscores; English profanity, racial slurs, and similar abusive terms are
+rejected), email, password or external login, legal name, optional middle initial, optional
+name suffix (Jr., Sr., or Roman numerals I-X), city/region/country, IANA time-zone
+preference, optional avatar, and a display-name preference. First and last names are at least
+two characters and use the same prohibited-language rule as usernames. Local passwords must
+be at least 12 characters and include uppercase, lowercase, a number, and a special character.
+Created and last-edited instants are stored in UTC. The owner chooses a time zone for display;
+when none has been stored yet, those times are shown in UTC.
 
 Other users may see username, location, avatar, and either the username or the full name
 according to that preference. Email, created/updated timestamps, time-zone preference, and

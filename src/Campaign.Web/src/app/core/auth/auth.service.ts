@@ -50,6 +50,7 @@ export class AuthService {
       form.set('firstName', payload.firstName);
       form.set('middleInitial', payload.middleInitial);
       form.set('lastName', payload.lastName);
+      form.set('suffix', payload.suffix);
       form.set('city', payload.city);
       form.set('region', payload.region);
       form.set('country', payload.country);
@@ -70,6 +71,7 @@ export class AuthService {
           firstName: payload.firstName,
           middleInitial: payload.middleInitial || null,
           lastName: payload.lastName,
+          suffix: payload.suffix || null,
           city: payload.city,
           region: payload.region || null,
           country: payload.country,
@@ -98,6 +100,12 @@ export class AuthService {
     await firstValueFrom(this.http.post('/api/auth/reset-password', { userId, token, password }));
   }
 
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post('/api/auth/change-password', { currentPassword, newPassword }, { withCredentials: true }),
+    );
+  }
+
   async getOwnProfile(): Promise<OwnProfile> {
     const profile = await firstValueFrom(this.http.get<OwnProfile>('/api/profiles/me', { withCredentials: true }));
     this.currentUser.set(profile);
@@ -113,6 +121,7 @@ export class AuthService {
           firstName: value.firstName,
           middleInitial: value.middleInitial || null,
           lastName: value.lastName,
+          suffix: value.suffix || null,
           city: value.city,
           region: value.region || null,
           country: value.country,
@@ -168,6 +177,7 @@ export class AuthService {
           firstName: value.firstName,
           middleInitial: value.middleInitial || null,
           lastName: value.lastName,
+          suffix: value.suffix || null,
           city: value.city,
           region: value.region || null,
           country: value.country,
@@ -184,12 +194,38 @@ export class AuthService {
 }
 
 export function readApiError(error: unknown, fallback: string): string {
+  const messages = readApiErrorMessages(error, fallback);
+  return messages.join('\n');
+}
+
+export function readApiErrorMessages(error: unknown, fallback: string): string[] {
   if (error instanceof HttpErrorResponse && error.error && typeof error.error === 'object') {
     const body = error.error as ErrorResponse;
+    if (Array.isArray(body.errors) && body.errors.length > 0) {
+      const messages = body.errors.map((item) => item.message).filter((message) => message.length > 0);
+      if (messages.length > 0) {
+        return messages;
+      }
+    }
+
     if (typeof body.message === 'string' && body.message.length > 0) {
-      return body.message;
+      return body.message
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
     }
   }
 
-  return fallback;
+  return [fallback];
+}
+
+export function readApiFieldErrors(error: unknown): string[] {
+  if (error instanceof HttpErrorResponse && error.error && typeof error.error === 'object') {
+    const body = error.error as ErrorResponse;
+    if (Array.isArray(body.errors)) {
+      return body.errors.map((item) => item.field).filter((field) => field.length > 0);
+    }
+  }
+
+  return [];
 }

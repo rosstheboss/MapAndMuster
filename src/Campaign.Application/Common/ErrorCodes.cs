@@ -32,6 +32,12 @@ public static class ErrorCodes
     /// <summary>The password does not meet complexity requirements.</summary>
     public const string PasswordInvalid = "password.invalid";
 
+    /// <summary>The current password was not accepted.</summary>
+    public const string CurrentPasswordInvalid = "password.current_invalid";
+
+    /// <summary>Two or more fields failed validation.</summary>
+    public const string ValidationFailed = "validation.failed";
+
     /// <summary>The profile was modified by another request.</summary>
     public const string ConcurrencyConflict = "concurrency.conflict";
 

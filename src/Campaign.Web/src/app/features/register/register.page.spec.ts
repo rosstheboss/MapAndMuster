@@ -28,7 +28,19 @@ describe('RegisterPage', () => {
     expect(compiled.querySelector('#firstName')).toBeTruthy();
     expect(compiled.querySelector('#country')).toBeTruthy();
     expect(compiled.querySelector('#timeZoneId')).toBeTruthy();
-    expect(compiled.querySelector('#region')).toBeTruthy();
+    expect(compiled.querySelector('#confirmPassword')).toBeTruthy();
+    expect(compiled.querySelector('#suffix')).toBeTruthy();
+    expect(compiled.querySelector('.required-marker')).toBeTruthy();
+
+    const form = fixture.componentInstance as unknown as { submit: () => Promise<void> };
+    await form.submit();
+    fixture.detectChanges();
+    const lines = [...compiled.querySelectorAll('.error-banner p')].map((node) => node.textContent.trim());
+    expect(lines).toContain('Email is not filled in.');
+    expect(lines).toContain('Username is not filled in.');
+    expect(lines).toContain('Password is not filled in.');
+    expect(lines).toContain('First name is not filled in.');
+    expect(lines.length).toBeGreaterThan(1);
     http.verify();
   });
 });

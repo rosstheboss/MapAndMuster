@@ -49,18 +49,41 @@ public sealed class Username : IEquatable<Username>
         username = null;
         if (string.IsNullOrWhiteSpace(raw))
         {
-            error = new DomainError("username.invalid", "Username is required.");
+            error = new DomainError("username.invalid", "Username is not filled in.", "username");
             return false;
         }
 
         var trimmed = raw.Trim();
-        if (trimmed.Length < MinLength
-            || trimmed.Length > MaxLength
-            || !Pattern.IsMatch(trimmed))
+        if (trimmed.Length < MinLength)
         {
             error = new DomainError(
                 "username.invalid",
-                "Username must be 3-32 characters, start with a letter, and contain only letters, digits, or underscores.");
+                $"Username is too short (minimum {MinLength} characters).",
+                "username");
+            return false;
+        }
+
+        if (trimmed.Length > MaxLength)
+        {
+            error = new DomainError(
+                "username.invalid",
+                $"Username is too long (maximum {MaxLength} characters).",
+                "username");
+            return false;
+        }
+
+        if (!Pattern.IsMatch(trimmed))
+        {
+            error = new DomainError(
+                "username.invalid",
+                "Username must start with a letter and contain only letters, digits, or underscores.",
+                "username");
+            return false;
+        }
+
+        if (ProhibitedLanguage.ContainsProhibitedTerm(trimmed))
+        {
+            error = ProhibitedLanguage.ErrorFor("username", "Username");
             return false;
         }
 

@@ -5,11 +5,20 @@ using Campaign.Domain.Identity;
 namespace Campaign.Api.Contracts;
 
 /// <summary>
+/// A field-scoped validation failure returned with an <see cref="ErrorResponse"/>.
+/// </summary>
+/// <param name="Field">The request field name.</param>
+/// <param name="Code">The stable error code.</param>
+/// <param name="Message">A safe explanation.</param>
+public sealed record FieldErrorResponse(string Field, string Code, string Message);
+
+/// <summary>
 /// Machine-readable API error payload.
 /// </summary>
 /// <param name="Code">The stable error code.</param>
-/// <param name="Message">A safe explanation.</param>
-public sealed record ErrorResponse(string Code, string Message);
+/// <param name="Message">A safe explanation listing every failed field.</param>
+/// <param name="Errors">Optional field-scoped errors used to highlight inputs.</param>
+public sealed record ErrorResponse(string Code, string Message, IReadOnlyList<FieldErrorResponse>? Errors = null);
 
 /// <summary>
 /// Local account registration request.
@@ -34,16 +43,19 @@ public sealed class RegisterRequest
     /// <summary>Gets the last name.</summary>
     public required string LastName { get; init; }
 
+    /// <summary>Gets the optional name suffix.</summary>
+    public string? Suffix { get; init; }
+
     /// <summary>Gets the city.</summary>
     public required string City { get; init; }
 
-    /// <summary>Gets the optional state, province, or region.</summary>
+    /// <summary>Gets the state, province, or region.</summary>
     public string? Region { get; init; }
 
     /// <summary>Gets the country.</summary>
     public required string Country { get; init; }
 
-    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    /// <summary>Gets the IANA time-zone identifier used to display UTC timestamps.</summary>
     public string? TimeZoneId { get; init; }
 
     /// <summary>Gets the public display-name preference.</summary>
@@ -106,6 +118,18 @@ public sealed class ResetPasswordRequest
 }
 
 /// <summary>
+/// Authenticated password change request.
+/// </summary>
+public sealed class ChangePasswordRequest
+{
+    /// <summary>Gets the current password.</summary>
+    public required string CurrentPassword { get; init; }
+
+    /// <summary>Gets the new password.</summary>
+    public required string NewPassword { get; init; }
+}
+
+/// <summary>
 /// Resend confirmation request. The response does not reveal whether the email exists.
 /// </summary>
 public sealed class ResendConfirmationRequest
@@ -138,16 +162,19 @@ public sealed class CompleteExternalRegistrationRequest
     /// <summary>Gets the last name.</summary>
     public required string LastName { get; init; }
 
+    /// <summary>Gets the optional name suffix.</summary>
+    public string? Suffix { get; init; }
+
     /// <summary>Gets the city.</summary>
     public required string City { get; init; }
 
-    /// <summary>Gets the optional state, province, or region.</summary>
+    /// <summary>Gets the state, province, or region.</summary>
     public string? Region { get; init; }
 
     /// <summary>Gets the country.</summary>
     public required string Country { get; init; }
 
-    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    /// <summary>Gets the IANA time-zone identifier used to display UTC timestamps.</summary>
     public string? TimeZoneId { get; init; }
 
     /// <summary>Gets the public display-name preference.</summary>
@@ -177,10 +204,13 @@ public sealed class OwnProfileResponse
     /// <summary>Gets the last name.</summary>
     public required string LastName { get; init; }
 
+    /// <summary>Gets the optional name suffix.</summary>
+    public string? Suffix { get; init; }
+
     /// <summary>Gets the city.</summary>
     public required string City { get; init; }
 
-    /// <summary>Gets the optional region.</summary>
+    /// <summary>Gets the state, province, or region.</summary>
     public string? Region { get; init; }
 
     /// <summary>Gets the country.</summary>
@@ -226,7 +256,7 @@ public sealed class PublicProfileResponse
     /// <summary>Gets the city.</summary>
     public required string City { get; init; }
 
-    /// <summary>Gets the optional region.</summary>
+    /// <summary>Gets the state, province, or region.</summary>
     public string? Region { get; init; }
 
     /// <summary>Gets the country.</summary>
@@ -253,10 +283,13 @@ public sealed class UpdateProfileRequest
     /// <summary>Gets the last name.</summary>
     public required string LastName { get; init; }
 
+    /// <summary>Gets the optional name suffix.</summary>
+    public string? Suffix { get; init; }
+
     /// <summary>Gets the city.</summary>
     public required string City { get; init; }
 
-    /// <summary>Gets the optional region.</summary>
+    /// <summary>Gets the state, province, or region.</summary>
     public string? Region { get; init; }
 
     /// <summary>Gets the country.</summary>
@@ -265,7 +298,7 @@ public sealed class UpdateProfileRequest
     /// <summary>Gets the display-name preference.</summary>
     public required string DisplayNameMode { get; init; }
 
-    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    /// <summary>Gets the IANA time-zone identifier used to display UTC timestamps.</summary>
     public string? TimeZoneId { get; init; }
 
     /// <summary>Gets the last observed profile revision.</summary>
@@ -293,6 +326,7 @@ public static class ProfileResponses
             FirstName = account.FirstName,
             MiddleInitial = account.MiddleInitial?.ToString(),
             LastName = account.LastName,
+            Suffix = account.Suffix,
             City = account.City,
             Region = account.Region,
             Country = account.Country,

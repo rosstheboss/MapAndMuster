@@ -117,6 +117,35 @@ textarea:focus-visible {
   color: var(--color-danger);
 }
 
+.error-banner {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--color-danger);
+  background: #fef2f2;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+}
+
+.error-banner p {
+  margin: 0;
+}
+
+.error-banner:focus {
+  outline: 3px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+.required-marker {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.field.invalid input,
+.field.invalid select {
+  border-color: var(--color-danger);
+  background: #fef2f2;
+}
+
 .choice-row {
   display: flex;
   flex-wrap: wrap;

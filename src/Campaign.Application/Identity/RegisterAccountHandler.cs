@@ -1,5 +1,6 @@
 using Campaign.Application.Common;
 using Campaign.Application.Ports;
+using Campaign.Domain.Common;
 using Campaign.Domain.Identity;
 
 namespace Campaign.Application.Identity;
@@ -50,40 +51,53 @@ public sealed class RegisterAccountHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!Username.TryCreate(command.Username, out var username, out var usernameError))
+        var errors = new List<DomainError>();
+        var emailError = IdentityFieldErrors.Email(command.Email);
+        if (emailError is not null)
         {
-            return OperationResults.Failure<RegisterAccountResult>(usernameError.Code, usernameError.Message);
+            errors.Add(emailError);
         }
 
-        if (!PersonName.TryCreate(command.FirstName, command.MiddleInitial, command.LastName, out var name, out var nameError))
+        if (!PasswordPolicy.TryValidate(command.Password, out var passwordError))
         {
-            return OperationResults.Failure<RegisterAccountResult>(nameError.Code, nameError.Message);
+            errors.Add(passwordError);
         }
 
-        if (!GeographicLocation.TryCreate(command.City, command.Region, command.Country, out var location, out var locationError))
+        _ = AccountProfileRules.TryCreate(
+            command.Username,
+            command.FirstName,
+            command.MiddleInitial,
+            command.LastName,
+            command.Suffix,
+            command.City,
+            command.Region,
+            command.Country,
+            command.TimeZoneId,
+            out var username,
+            out var name,
+            out var location,
+            out var timeZone,
+            out var profileErrors);
+        errors.AddRange(profileErrors);
+
+        if (emailError is null)
         {
-            return OperationResults.Failure<RegisterAccountResult>(locationError.Code, locationError.Message);
+            var email = command.Email.Trim();
+            if (await _accounts.EmailExistsAsync(email, cancellationToken).ConfigureAwait(false))
+            {
+                errors.Add(new DomainError(ErrorCodes.EmailTaken, "That email address is already registered.", "email"));
+            }
         }
 
-        if (!IanaTimeZone.TryCreateOptional(command.TimeZoneId, out var timeZone, out var timeZoneError))
+        if (username is not null
+            && await _accounts.UsernameExistsAsync(username.Value, null, cancellationToken).ConfigureAwait(false))
         {
-            return OperationResults.Failure<RegisterAccountResult>(timeZoneError.Code, timeZoneError.Message);
+            errors.Add(new DomainError(ErrorCodes.UsernameTaken, "That username is already taken.", "username"));
         }
 
-        var email = command.Email.Trim();
-        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@', StringComparison.Ordinal))
+        if (errors.Count > 0)
         {
-            return OperationResults.Failure<RegisterAccountResult>(ErrorCodes.EmailInvalid, "Email address is invalid.");
-        }
-
-        if (await _accounts.EmailExistsAsync(email, cancellationToken).ConfigureAwait(false))
-        {
-            return OperationResults.Failure<RegisterAccountResult>(ErrorCodes.EmailTaken, "That email address is already registered.");
-        }
-
-        if (await _accounts.UsernameExistsAsync(username.Value, null, cancellationToken).ConfigureAwait(false))
-        {
-            return OperationResults.Failure<RegisterAccountResult>(ErrorCodes.UsernameTaken, "That username is already taken.");
+            return OperationResults.Failure<RegisterAccountResult>(errors);
         }
 
         string? avatarKey = null;
@@ -107,12 +121,12 @@ public sealed class RegisterAccountHandler
         var created = await _accounts.CreateLocalAccountAsync(
                 new CreateLocalAccountRequest
                 {
-                    Email = email,
-                    Username = username,
+                    Email = command.Email.Trim(),
+                    Username = username!,
                     Password = command.Password,
-                    Name = name,
-                    Location = location,
-                    TimeZoneId = timeZone?.Id,
+                    Name = name!,
+                    Location = location!,
+                    TimeZoneId = timeZone!.Id,
                     DisplayNameMode = command.DisplayNameMode,
                     AvatarStorageKey = avatarKey,
                 },

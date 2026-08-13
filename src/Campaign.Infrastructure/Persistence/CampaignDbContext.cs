@@ -36,6 +36,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(user => user.FirstName).HasMaxLength(50).IsRequired();
             entity.Property(user => user.MiddleInitial).HasMaxLength(1);
             entity.Property(user => user.LastName).HasMaxLength(50).IsRequired();
+            entity.Property(user => user.Suffix).HasMaxLength(8);
             entity.Property(user => user.City).HasMaxLength(100).IsRequired();
             entity.Property(user => user.Region).HasMaxLength(100);
             entity.Property(user => user.Country).HasMaxLength(100).IsRequired();
