@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: campaign
+      POSTGRES_USER: campaign
+      POSTGRES_PASSWORD: campaign
+    ports:
+      - "5432:5432"
+    volumes:
+      - campaign-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campaign -d campaign"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  campaign-postgres:

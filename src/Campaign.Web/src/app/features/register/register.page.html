@@ -1,0 +1,83 @@
+<section class="page">
+  <h1>Create an account</h1>
+  <p class="muted">Email, a unique username, and a profile others can only partly see.</p>
+
+  <form class="panel stack" [formGroup]="form" (ngSubmit)="submit()">
+    @if (errorMessage()) {
+      <p class="error" role="alert">{{ errorMessage() }}</p>
+    }
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" formControlName="email" />
+    </div>
+    <div class="field">
+      <label for="username">Username</label>
+      <input id="username" autocomplete="username" formControlName="username" />
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="new-password" formControlName="password" />
+      <p class="muted">At least 10 characters, with upper, lower, a number, and a symbol.</p>
+    </div>
+    <div class="field">
+      <label for="firstName">First name</label>
+      <input id="firstName" autocomplete="given-name" formControlName="firstName" />
+    </div>
+    <div class="field">
+      <label for="middleInitial">Middle initial (optional)</label>
+      <input id="middleInitial" maxlength="1" formControlName="middleInitial" />
+    </div>
+    <div class="field">
+      <label for="lastName">Last name</label>
+      <input id="lastName" autocomplete="family-name" formControlName="lastName" />
+    </div>
+    <div class="field">
+      <label for="city">City</label>
+      <input id="city" autocomplete="address-level2" formControlName="city" />
+    </div>
+    <div class="field">
+      <label for="region">State or region (optional)</label>
+      <input id="region" autocomplete="address-level1" formControlName="region" />
+    </div>
+    <div class="field">
+      <label for="country">Country</label>
+      <input id="country" autocomplete="country-name" formControlName="country" />
+    </div>
+    <fieldset class="field">
+      <legend>Other players should see</legend>
+      <div class="choice-row">
+        <label>
+          <input type="radio" formControlName="displayNameMode" value="Username" />
+          Username only
+        </label>
+        <label>
+          <input type="radio" formControlName="displayNameMode" value="FullName" />
+          Full name
+        </label>
+      </div>
+    </fieldset>
+    <div class="field">
+      <label for="avatar">Profile picture (optional)</label>
+      <input id="avatar" type="file" accept="image/jpeg,image/png,image/webp" (change)="onAvatarSelected($event)" />
+    </div>
+    <div class="actions">
+      <button class="button" type="submit" [disabled]="submitting()">Create account</button>
+    </div>
+  </form>
+
+  @if (providers().length > 0) {
+    <div class="panel stack">
+      <h2>Or sign up with</h2>
+      <div class="actions">
+        @for (provider of providers(); track provider.name) {
+          <button class="button-secondary" type="button" (click)="startExternal(provider.name)">
+            {{ provider.displayName }}
+          </button>
+        }
+      </div>
+    </div>
+  }
+
+  <p>Already have an account? <a routerLink="/login">Sign in</a></p>
+</section>

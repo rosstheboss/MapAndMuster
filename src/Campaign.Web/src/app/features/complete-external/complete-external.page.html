@@ -1,0 +1,60 @@
+<section class="page">
+  <h1>Finish your account</h1>
+  @if (loading()) {
+    <p>Loading imported profile…</p>
+  } @else {
+    <form class="panel stack" [formGroup]="form" (ngSubmit)="submit()">
+      @if (provider()) {
+        <p class="muted">Imported from {{ provider() }}. Choose a unique username and location to continue.</p>
+      }
+      @if (errorMessage()) {
+        <p class="error" role="alert">{{ errorMessage() }}</p>
+      }
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" formControlName="username" />
+      </div>
+      <div class="field">
+        <label for="firstName">First name</label>
+        <input id="firstName" formControlName="firstName" />
+      </div>
+      <div class="field">
+        <label for="middleInitial">Middle initial (optional)</label>
+        <input id="middleInitial" maxlength="1" formControlName="middleInitial" />
+      </div>
+      <div class="field">
+        <label for="lastName">Last name</label>
+        <input id="lastName" formControlName="lastName" />
+      </div>
+      <div class="field">
+        <label for="city">City</label>
+        <input id="city" formControlName="city" />
+      </div>
+      <div class="field">
+        <label for="region">State or region (optional)</label>
+        <input id="region" formControlName="region" />
+      </div>
+      <div class="field">
+        <label for="country">Country</label>
+        <input id="country" formControlName="country" />
+      </div>
+      <fieldset class="field">
+        <legend>Other players should see</legend>
+        <div class="choice-row">
+          <label>
+            <input type="radio" formControlName="displayNameMode" value="Username" />
+            Username only
+          </label>
+          <label>
+            <input type="radio" formControlName="displayNameMode" value="FullName" />
+            Full name
+          </label>
+        </div>
+      </fieldset>
+      <div class="actions">
+        <button class="button" type="submit" [disabled]="submitting()">Finish account</button>
+      </div>
+      <p><a routerLink="/login">Back to sign in</a></p>
+    </form>
+  }
+</section>

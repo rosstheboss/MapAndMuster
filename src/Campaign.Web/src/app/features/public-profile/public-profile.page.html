@@ -1,0 +1,19 @@
+<section class="page">
+  <h1>Player profile</h1>
+  @if (loading()) {
+    <p>Loading profile…</p>
+  } @else if (errorMessage()) {
+    <p class="error" role="alert">{{ errorMessage() }}</p>
+  } @else if (profile(); as player) {
+    <article class="panel stack">
+      @if (player.hasAvatar) {
+        <img class="avatar" [src]="avatarSrc(player.username)" width="96" height="96" [alt]="player.displayName" />
+      }
+      <p>
+        <strong>{{ player.displayName }}</strong>
+      </p>
+      <p>Username: {{ player.username }}</p>
+      <p>Location: {{ player.city }}{{ player.region ? ', ' + player.region : '' }}, {{ player.country }}</p>
+    </article>
+  }
+</section>

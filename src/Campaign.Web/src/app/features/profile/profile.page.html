@@ -1,0 +1,76 @@
+<section class="page">
+  <h1>Your profile</h1>
+  @if (loading()) {
+    <p>Loading profile…</p>
+  } @else {
+    <form class="panel stack" [formGroup]="form" (ngSubmit)="save()">
+      @if (errorMessage()) {
+        <p class="error" role="alert">{{ errorMessage() }}</p>
+      }
+      @if (successMessage()) {
+        <p role="status">{{ successMessage() }}</p>
+      }
+
+      @if (avatarSrc(); as src) {
+        <img class="avatar" [src]="src" width="96" height="96" alt="Your profile picture" />
+      }
+
+      <div class="field">
+        <label for="avatar">Change profile picture</label>
+        <input
+          id="avatar"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          (change)="onAvatarSelected($event)"
+          [disabled]="uploading()"
+        />
+      </div>
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" formControlName="username" />
+      </div>
+      <div class="field">
+        <label for="firstName">First name</label>
+        <input id="firstName" formControlName="firstName" />
+      </div>
+      <div class="field">
+        <label for="middleInitial">Middle initial (optional)</label>
+        <input id="middleInitial" maxlength="1" formControlName="middleInitial" />
+      </div>
+      <div class="field">
+        <label for="lastName">Last name</label>
+        <input id="lastName" formControlName="lastName" />
+      </div>
+      <div class="field">
+        <label for="city">City</label>
+        <input id="city" formControlName="city" />
+      </div>
+      <div class="field">
+        <label for="region">State or region (optional)</label>
+        <input id="region" formControlName="region" />
+      </div>
+      <div class="field">
+        <label for="country">Country</label>
+        <input id="country" formControlName="country" />
+      </div>
+      <fieldset class="field">
+        <legend>Other players should see</legend>
+        <div class="choice-row">
+          <label>
+            <input type="radio" formControlName="displayNameMode" value="Username" />
+            Username only
+          </label>
+          <label>
+            <input type="radio" formControlName="displayNameMode" value="FullName" />
+            Full name
+          </label>
+        </div>
+      </fieldset>
+      <p class="muted">Created {{ createdUtc() | date: 'medium' : 'UTC' }} UTC</p>
+      <p class="muted">Last edited {{ updatedUtc() | date: 'medium' : 'UTC' }} UTC</p>
+      <div class="actions">
+        <button class="button" type="submit" [disabled]="saving()">Save profile</button>
+      </div>
+    </form>
+  }
+</section>

@@ -1,0 +1,14 @@
+<div class="app-shell">
+  <header class="app-header">
+    <a routerLink="/" class="app-brand">Campaign Map</a>
+    @if (auth.currentUser(); as user) {
+      <nav class="app-nav" aria-label="Account">
+        <a routerLink="/profile">Profile</a>
+        <span class="app-user">{{ user.username }}</span>
+      </nav>
+    }
+  </header>
+  <main class="app-main">
+    <router-outlet />
+  </main>
+</div>

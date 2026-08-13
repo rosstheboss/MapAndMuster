@@ -1,0 +1,9 @@
+---
+description: Canonical repository instructions and quality requirements
+alwaysApply: true
+---
+
+Read and follow `AGENTS.md` before editing. Read the nearest nested `AGENTS.md` and all
+referenced domain, architecture, security, and testing documents. `AGENTS.md` is canonical;
+do not duplicate or reinterpret it in Cursor rules.
+

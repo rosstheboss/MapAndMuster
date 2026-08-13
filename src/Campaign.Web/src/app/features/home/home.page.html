@@ -1,0 +1,20 @@
+<section class="page">
+  <h1>Home</h1>
+  @if (auth.currentUser(); as user) {
+    <div class="panel stack">
+      <p>
+        You are signed in as <strong>{{ user.username }}</strong
+        >.
+      </p>
+      <p class="muted">Account created {{ user.createdUtc | date: 'medium' : 'UTC' }} UTC.</p>
+      @if (errorMessage()) {
+        <p class="error" role="alert">{{ errorMessage() }}</p>
+      }
+      <div class="actions">
+        <a class="button" routerLink="/profile">Edit profile</a>
+        <a class="button-secondary" [routerLink]="['/users', user.username]">View public profile</a>
+        <button class="button-secondary" type="button" (click)="logout()" [disabled]="loggingOut()">Log out</button>
+      </div>
+    </div>
+  }
+</section>

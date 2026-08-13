@@ -1,0 +1,48 @@
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #1e3a5f;
+  color: #fff;
+}
+
+.app-brand {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 1.1rem;
+}
+
+.app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.app-nav a {
+  color: inherit;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.app-user {
+  opacity: 0.9;
+}
+
+.app-main {
+  flex: 1;
+  width: min(100%, 52rem);
+  margin: 0 auto;
+  padding: 1rem;
+}

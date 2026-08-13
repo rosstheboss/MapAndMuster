@@ -1,0 +1,11 @@
+:host {
+  display: block;
+}
+
+.avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e7e5e4;
+}

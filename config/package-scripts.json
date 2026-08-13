@@ -1,0 +1,18 @@
+{
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "ng lint && stylelint \"src/**/*.css\"",
+    "lint:fix": "ng lint --fix && stylelint \"src/**/*.css\" --fix",
+    "test:ci": "ng test --watch=false --coverage",
+    "verify": "npm run format:check && npm run lint && npm run test:ci && ng build"
+  },
+  "devDependenciesToAdd": {
+    "@angular-eslint/schematics": "Use the Angular 22-compatible release",
+    "eslint": "Use the Angular 22-compatible release",
+    "prettier": "Use the current stable release",
+    "stylelint": "Use the current stable release",
+    "stylelint-config-standard": "Use the current stable release",
+    "typescript-eslint": "Use the Angular 22-compatible release"
+  }
+}

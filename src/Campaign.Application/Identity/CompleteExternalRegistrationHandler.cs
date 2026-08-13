@@ -1,0 +1,173 @@
+using Campaign.Application.Common;
+using Campaign.Application.Ports;
+using Campaign.Domain.Identity;
+
+namespace Campaign.Application.Identity;
+
+/// <summary>
+/// Completes registration after a successful external-provider challenge.
+/// </summary>
+public sealed class CompleteExternalRegistrationCommand
+{
+    /// <summary>Gets the email imported from the provider or supplied by the user.</summary>
+    public required string Email { get; init; }
+
+    /// <summary>Gets a value indicating whether the provider confirmed the email.</summary>
+    public required bool EmailConfirmed { get; init; }
+
+    /// <summary>Gets the unique username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the first name.</summary>
+    public required string FirstName { get; init; }
+
+    /// <summary>Gets the optional middle initial.</summary>
+    public string? MiddleInitial { get; init; }
+
+    /// <summary>Gets the last name.</summary>
+    public required string LastName { get; init; }
+
+    /// <summary>Gets the city.</summary>
+    public required string City { get; init; }
+
+    /// <summary>Gets the optional state, province, or region.</summary>
+    public string? Region { get; init; }
+
+    /// <summary>Gets the country.</summary>
+    public required string Country { get; init; }
+
+    /// <summary>Gets the public display-name preference.</summary>
+    public required DisplayNameMode DisplayNameMode { get; init; }
+
+    /// <summary>Gets the external provider name.</summary>
+    public required string Provider { get; init; }
+
+    /// <summary>Gets the provider's stable user key.</summary>
+    public required string ProviderKey { get; init; }
+
+    /// <summary>Gets the optional imported avatar stream. The caller owns disposal.</summary>
+    public Stream? AvatarContent { get; init; }
+
+    /// <summary>Gets the avatar content type when an avatar is supplied.</summary>
+    public string? AvatarContentType { get; init; }
+}
+
+/// <summary>
+/// Creates an account from a completed external login and imported demographics.
+/// </summary>
+public sealed class CompleteExternalRegistrationHandler
+{
+    private readonly IUserAccountStore _accounts;
+    private readonly IAvatarImageProcessor _avatarProcessor;
+    private readonly IAvatarStorage _avatarStorage;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    /// <param name="accounts">The account store.</param>
+    /// <param name="avatarProcessor">The avatar processor.</param>
+    /// <param name="avatarStorage">The avatar storage.</param>
+    public CompleteExternalRegistrationHandler(
+        IUserAccountStore accounts,
+        IAvatarImageProcessor avatarProcessor,
+        IAvatarStorage avatarStorage)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(avatarProcessor);
+        ArgumentNullException.ThrowIfNull(avatarStorage);
+
+        _accounts = accounts;
+        _avatarProcessor = avatarProcessor;
+        _avatarStorage = avatarStorage;
+    }
+
+    /// <summary>
+    /// Completes external registration after uniqueness and profile validation.
+    /// </summary>
+    /// <param name="command">The completion command.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The created account.</returns>
+    public async Task<OperationResult<UserAccount>> HandleAsync(
+        CompleteExternalRegistrationCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        if (!Username.TryCreate(command.Username, out var username, out var usernameError))
+        {
+            return OperationResults.Failure<UserAccount>(usernameError.Code, usernameError.Message);
+        }
+
+        if (!PersonName.TryCreate(command.FirstName, command.MiddleInitial, command.LastName, out var name, out var nameError))
+        {
+            return OperationResults.Failure<UserAccount>(nameError.Code, nameError.Message);
+        }
+
+        if (!GeographicLocation.TryCreate(command.City, command.Region, command.Country, out var location, out var locationError))
+        {
+            return OperationResults.Failure<UserAccount>(locationError.Code, locationError.Message);
+        }
+
+        var email = command.Email.Trim();
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@', StringComparison.Ordinal))
+        {
+            return OperationResults.Failure<UserAccount>(ErrorCodes.EmailInvalid, "Email address is invalid.");
+        }
+
+        if (await _accounts.EmailExistsAsync(email, cancellationToken).ConfigureAwait(false))
+        {
+            return OperationResults.Failure<UserAccount>(
+                ErrorCodes.ExternalLinkRequired,
+                "An account with that email already exists. Sign in and link the provider from your profile.");
+        }
+
+        if (await _accounts.UsernameExistsAsync(username.Value, null, cancellationToken).ConfigureAwait(false))
+        {
+            return OperationResults.Failure<UserAccount>(ErrorCodes.UsernameTaken, "That username is already taken.");
+        }
+
+        string? avatarKey = null;
+        if (command.AvatarContent is not null)
+        {
+            var processed = await _avatarProcessor
+                .ProcessAsync(command.AvatarContent, command.AvatarContentType ?? "image/jpeg", null, cancellationToken)
+                .ConfigureAwait(false);
+            if (processed.IsSuccess && processed.Content is not null && processed.FileExtension is not null)
+            {
+                avatarKey = await _avatarStorage
+                    .SaveAsync(processed.Content, processed.FileExtension, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        var created = await _accounts.CreateExternalAccountAsync(
+                new CreateExternalAccountRequest
+                {
+                    Email = email,
+                    EmailConfirmed = command.EmailConfirmed,
+                    Username = username,
+                    Name = name,
+                    Location = location,
+                    DisplayNameMode = command.DisplayNameMode,
+                    AvatarStorageKey = avatarKey,
+                    Provider = command.Provider,
+                    ProviderKey = command.ProviderKey,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!created.IsSuccess || created.Account is null)
+        {
+            if (avatarKey is not null)
+            {
+                await _avatarStorage.DeleteAsync(avatarKey, cancellationToken).ConfigureAwait(false);
+            }
+
+            return OperationResults.Failure<UserAccount>(
+                created.ErrorCode ?? ErrorCodes.ExternalProviderUnavailable,
+                created.Message ?? "The external account could not be created.");
+        }
+
+        return OperationResults.Success(created.Account);
+    }
+}

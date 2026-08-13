@@ -1,0 +1,10 @@
+:host {
+  display: block;
+}
+
+.button,
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}

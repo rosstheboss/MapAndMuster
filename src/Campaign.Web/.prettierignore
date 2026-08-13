@@ -1,0 +1,5 @@
+dist
+coverage
+.angular
+node_modules
+src/app/api/generated

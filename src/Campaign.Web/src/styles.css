@@ -1,0 +1,132 @@
+:root {
+  --color-bg: #f6f4f0;
+  --color-surface: #fff;
+  --color-text: #1c1917;
+  --color-muted: #57534e;
+  --color-accent: #245c4a;
+  --color-accent-hover: #1b4638;
+  --color-danger: #9b1c1c;
+  --color-border: #d6d3d1;
+  --touch-min: 44px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+a {
+  color: var(--color-accent);
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+.page {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.stack {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field label {
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  min-height: var(--touch-min);
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  font: inherit;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.button,
+.button-secondary {
+  min-height: var(--touch-min);
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.button:hover {
+  background: var(--color-accent-hover);
+}
+
+.button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.button-secondary {
+  background: #e7e5e4;
+  color: var(--color-text);
+}
+
+.muted {
+  color: var(--color-muted);
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.choice-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: var(--touch-min);
+  font-weight: 500;
+}

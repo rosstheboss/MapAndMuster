@@ -1,0 +1,43 @@
+<section class="page">
+  <h1>Sign in</h1>
+  <p class="muted">Use your email and password, or a configured external provider.</p>
+
+  <form class="panel stack" [formGroup]="form" (ngSubmit)="submit()">
+    @if (errorMessage()) {
+      <p class="error" role="alert">{{ errorMessage() }}</p>
+    }
+    @if (infoMessage()) {
+      <p role="status">{{ infoMessage() }}</p>
+    }
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" formControlName="email" />
+    </div>
+
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" formControlName="password" />
+    </div>
+
+    <div class="actions">
+      <button class="button" type="submit" [disabled]="submitting()">Sign in</button>
+      <a routerLink="/forgot-password">Forgot password</a>
+    </div>
+  </form>
+
+  @if (providers().length > 0) {
+    <div class="panel stack">
+      <h2>Or continue with</h2>
+      <div class="actions">
+        @for (provider of providers(); track provider.name) {
+          <button class="button-secondary" type="button" (click)="startExternal(provider.name)">
+            {{ provider.displayName }}
+          </button>
+        }
+      </div>
+    </div>
+  }
+
+  <p>Need an account? <a routerLink="/register">Create one</a></p>
+</section>

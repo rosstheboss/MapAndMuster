@@ -1,0 +1,11 @@
+bin
+obj
+node_modules
+dist
+coverage
+TestResults
+playwright-report
+test-results
+.angular
+src/Campaign.Web/src/app/api/generated
+

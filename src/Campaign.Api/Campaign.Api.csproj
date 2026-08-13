@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>Campaign.Api</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>campaign-api-development</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Facebook" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Campaign.Application\Campaign.Application.csproj" />
+    <ProjectReference Include="..\Campaign.Infrastructure\Campaign.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Campaign.Api.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

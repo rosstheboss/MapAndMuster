@@ -1,0 +1,18 @@
+<section class="page">
+  <h1>Confirm email</h1>
+  <div class="panel">
+    @switch (status()) {
+      @case ('working') {
+        <p>Confirming your email…</p>
+      }
+      @case ('success') {
+        <p>Your email is confirmed. You can sign in now.</p>
+        <p><a routerLink="/login">Go to sign in</a></p>
+      }
+      @case ('error') {
+        <p class="error" role="alert">{{ errorMessage() }}</p>
+        <p><a routerLink="/login">Go to sign in</a></p>
+      }
+    }
+  </div>
+</section>
