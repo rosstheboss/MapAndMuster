@@ -113,15 +113,10 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
         }
     }
 
-#pragma warning disable SYSLIB0014
     private SmtpClient CreateClient()
     {
-        return new SmtpClient(_emailOptions.Value.SmtpHost, _emailOptions.Value.SmtpPort)
-        {
-            DeliveryMethod = SmtpDeliveryMethod.Network,
-        };
+        return SmtpClientFactory.Create(_emailOptions.Value);
     }
-#pragma warning restore SYSLIB0014
 
     private MailMessage CreateMail(string type, OutboxEmailPayload payload)
     {

@@ -1,0 +1,35 @@
+<div class="combobox" [class.is-open]="open()" (focusout)="onFocusOut($event)">
+  <input
+    [id]="inputId()"
+    type="text"
+    role="combobox"
+    autocomplete="off"
+    [attr.aria-expanded]="open()"
+    [attr.aria-controls]="listId()"
+    [attr.aria-activedescendant]="open() ? optionId(highlight()) : null"
+    aria-autocomplete="list"
+    [placeholder]="placeholder()"
+    [value]="query()"
+    [disabled]="disabled()"
+    (input)="onInput($event)"
+    (focus)="onFocus()"
+    (keydown)="onKeyDown($event)"
+  />
+  @if (open()) {
+    <ul [id]="listId()" class="combobox-list" role="listbox">
+      @for (option of filtered(); track option; let index = $index) {
+        <li
+          [id]="optionId(index)"
+          role="option"
+          [class.is-active]="index === highlight()"
+          [attr.aria-selected]="index === highlight()"
+          (mousedown)="select(option)"
+        >
+          {{ option }}
+        </li>
+      } @empty {
+        <li class="combobox-empty" role="presentation">No matching options</li>
+      }
+    </ul>
+  }
+</div>

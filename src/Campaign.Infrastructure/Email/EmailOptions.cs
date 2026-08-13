@@ -21,9 +21,24 @@ public sealed class EmailOptions
     public int SmtpPort { get; set; } = 1025;
 
     /// <summary>
-    /// Gets or sets the from address.
+    /// Gets or sets the from address. Real SMTP providers usually require this to match the authenticated account.
     /// </summary>
     public string FromAddress { get; set; } = "campaign@localhost";
+
+    /// <summary>
+    /// Gets or sets the optional SMTP username. Leave empty for unauthenticated local catchers such as Mailpit.
+    /// </summary>
+    public string SmtpUsername { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the optional SMTP password. Store this in user secrets, never in source control.
+    /// </summary>
+    public string SmtpPassword { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets whether the SMTP connection uses SSL or STARTTLS.
+    /// </summary>
+    public bool EnableSsl { get; set; }
 }
 
 /// <summary>

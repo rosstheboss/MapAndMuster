@@ -48,6 +48,11 @@ public sealed class UpdateProfileCommand
     public required string Country { get; init; }
 
     /// <summary>
+    /// Gets the optional IANA time-zone identifier used to display UTC timestamps.
+    /// </summary>
+    public string? TimeZoneId { get; init; }
+
+    /// <summary>
     /// Gets the public display-name preference.
     /// </summary>
     public required DisplayNameMode DisplayNameMode { get; init; }

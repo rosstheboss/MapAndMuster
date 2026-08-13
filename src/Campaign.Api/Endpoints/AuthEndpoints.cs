@@ -107,6 +107,7 @@ public static class AuthEndpoints
                 City = form["city"].ToString(),
                 Region = NullIfEmpty(form["region"].ToString()),
                 Country = form["country"].ToString(),
+                TimeZoneId = NullIfEmpty(form["timeZoneId"].ToString()),
                 DisplayNameMode = form["displayNameMode"].ToString(),
             };
 
@@ -147,6 +148,7 @@ public static class AuthEndpoints
                         City = request.City,
                         Region = request.Region,
                         Country = request.Country,
+                        TimeZoneId = request.TimeZoneId,
                         DisplayNameMode = displayNameMode,
                         AvatarContent = avatar,
                         AvatarContentType = avatarContentType,

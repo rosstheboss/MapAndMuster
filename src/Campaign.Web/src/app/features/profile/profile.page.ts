@@ -1,13 +1,16 @@
-import { DatePipe } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { maxLength, minLength, required } from '../../core/forms/validators';
+import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
+import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
+import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 
 @Component({
   selector: 'app-profile-page',
-  imports: [ReactiveFormsModule, DatePipe],
+  imports: [ReactiveFormsModule, FilterableComboboxComponent, InstantDatePipe],
   templateUrl: './profile.page.html',
   styleUrl: './profile.page.css',
 })
@@ -25,6 +28,8 @@ export class ProfilePage {
   protected readonly username = signal<string | null>(null);
   protected readonly hasAvatar = signal(false);
   protected readonly avatarCacheBust = signal(Date.now());
+  protected readonly countries = listCountries();
+  protected readonly timeZones = listTimeZones();
   protected profileRevision = 0;
   protected readonly form = this.formBuilder.nonNullable.group({
     username: ['', [required, minLength(3), maxLength(32)]],
@@ -34,8 +39,16 @@ export class ProfilePage {
     city: ['', required],
     region: [''],
     country: ['', required],
+    timeZoneId: [''],
     displayNameMode: this.formBuilder.nonNullable.control<'Username' | 'FullName'>('Username'),
   });
+  protected readonly countryValue = toSignal(this.form.controls.country.valueChanges, {
+    initialValue: this.form.controls.country.value,
+  });
+  protected readonly timeZoneValue = toSignal(this.form.controls.timeZoneId.valueChanges, {
+    initialValue: this.form.controls.timeZoneId.value,
+  });
+  protected readonly regionOptions = computed(() => regionsForCountry(this.countryValue()));
 
   constructor() {
     void this.loadProfile();
@@ -52,6 +65,7 @@ export class ProfilePage {
         city: profile.city,
         region: profile.region ?? '',
         country: profile.country,
+        timeZoneId: profile.timeZoneId ?? '',
         displayNameMode: profile.displayNameMode,
       });
       this.profileRevision = profile.profileRevision;

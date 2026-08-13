@@ -1,13 +1,16 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { maxLength, minLength, required } from '../../core/forms/validators';
+import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
+import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 
 @Component({
   selector: 'app-complete-external-page',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, FilterableComboboxComponent],
   templateUrl: './complete-external.page.html',
   styleUrl: './complete-external.page.css',
 })
@@ -20,6 +23,8 @@ export class CompleteExternalPage {
   protected readonly submitting = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly provider = signal<string | null>(null);
+  protected readonly countries = listCountries();
+  protected readonly timeZones = listTimeZones();
   protected readonly form = this.formBuilder.nonNullable.group({
     username: ['', [required, minLength(3), maxLength(32)]],
     firstName: ['', required],
@@ -28,8 +33,13 @@ export class CompleteExternalPage {
     city: ['', required],
     region: [''],
     country: ['', required],
+    timeZoneId: [''],
     displayNameMode: this.formBuilder.nonNullable.control<'Username' | 'FullName'>('Username'),
   });
+  protected readonly countryValue = toSignal(this.form.controls.country.valueChanges, {
+    initialValue: this.form.controls.country.value,
+  });
+  protected readonly regionOptions = computed(() => regionsForCountry(this.countryValue()));
 
   constructor() {
     void this.loadPending();

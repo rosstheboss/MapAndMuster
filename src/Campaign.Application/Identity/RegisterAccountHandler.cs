@@ -65,6 +65,11 @@ public sealed class RegisterAccountHandler
             return OperationResults.Failure<RegisterAccountResult>(locationError.Code, locationError.Message);
         }
 
+        if (!IanaTimeZone.TryCreateOptional(command.TimeZoneId, out var timeZone, out var timeZoneError))
+        {
+            return OperationResults.Failure<RegisterAccountResult>(timeZoneError.Code, timeZoneError.Message);
+        }
+
         var email = command.Email.Trim();
         if (string.IsNullOrWhiteSpace(email) || !email.Contains('@', StringComparison.Ordinal))
         {
@@ -107,6 +112,7 @@ public sealed class RegisterAccountHandler
                     Password = command.Password,
                     Name = name,
                     Location = location,
+                    TimeZoneId = timeZone?.Id,
                     DisplayNameMode = command.DisplayNameMode,
                     AvatarStorageKey = avatarKey,
                 },

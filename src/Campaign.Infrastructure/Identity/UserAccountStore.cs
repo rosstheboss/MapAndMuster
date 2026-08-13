@@ -55,7 +55,14 @@ public sealed class UserAccountStore : IUserAccountStore
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var user = CreateUser(request.Email, request.Username, request.Name, request.Location, request.DisplayNameMode, request.AvatarStorageKey);
+        var user = CreateUser(
+            request.Email,
+            request.Username,
+            request.Name,
+            request.Location,
+            request.TimeZoneId,
+            request.DisplayNameMode,
+            request.AvatarStorageKey);
         var created = await _userManager.CreateAsync(user, request.Password).ConfigureAwait(false);
         if (!created.Succeeded)
         {
@@ -79,7 +86,14 @@ public sealed class UserAccountStore : IUserAccountStore
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var user = CreateUser(request.Email, request.Username, request.Name, request.Location, request.DisplayNameMode, request.AvatarStorageKey);
+        var user = CreateUser(
+            request.Email,
+            request.Username,
+            request.Name,
+            request.Location,
+            request.TimeZoneId,
+            request.DisplayNameMode,
+            request.AvatarStorageKey);
         user.EmailConfirmed = request.EmailConfirmed;
 
         var created = await _userManager.CreateAsync(user).ConfigureAwait(false);
@@ -158,6 +172,7 @@ public sealed class UserAccountStore : IUserAccountStore
         user.City = request.Location.City;
         user.Region = request.Location.Region;
         user.Country = request.Location.Country;
+        user.TimeZoneId = request.TimeZoneId;
         user.DisplayNameMode = request.DisplayNameMode;
         user.UpdatedUtc = _clock.UtcNow;
         user.ProfileRevision++;
@@ -215,6 +230,7 @@ public sealed class UserAccountStore : IUserAccountStore
         Username username,
         PersonName name,
         GeographicLocation location,
+        string? timeZoneId,
         DisplayNameMode displayNameMode,
         string? avatarStorageKey)
     {
@@ -230,6 +246,7 @@ public sealed class UserAccountStore : IUserAccountStore
             City = location.City,
             Region = location.Region,
             Country = location.Country,
+            TimeZoneId = timeZoneId,
             DisplayNameMode = displayNameMode,
             AvatarStorageKey = avatarStorageKey,
             CreatedUtc = now,
@@ -257,6 +274,7 @@ public sealed class UserAccountStore : IUserAccountStore
             City = user.City,
             Region = user.Region,
             Country = user.Country,
+            TimeZoneId = user.TimeZoneId,
             DisplayNameMode = user.DisplayNameMode,
             AvatarStorageKey = user.AvatarStorageKey,
             CreatedUtc = user.CreatedUtc,

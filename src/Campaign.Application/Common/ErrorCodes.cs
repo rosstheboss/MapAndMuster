@@ -52,4 +52,7 @@ public static class ErrorCodes
 
     /// <summary>The requested external provider is not configured.</summary>
     public const string ExternalProviderUnavailable = "auth.external_provider_unavailable";
+
+    /// <summary>The time-zone identifier is not a known IANA zone.</summary>
+    public const string TimeZoneInvalid = "timeZone.invalid";
 }

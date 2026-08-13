@@ -33,16 +33,21 @@
       <input id="lastName" autocomplete="family-name" formControlName="lastName" />
     </div>
     <div class="field">
+      <label for="country">Country</label>
+      <app-filterable-combobox inputId="country" formControlName="country" [options]="countries" />
+    </div>
+    <div class="field">
+      <label for="region">State or province (optional)</label>
+      <app-filterable-combobox inputId="region" formControlName="region" [options]="regionOptions()" />
+    </div>
+    <div class="field">
       <label for="city">City</label>
       <input id="city" autocomplete="address-level2" formControlName="city" />
     </div>
     <div class="field">
-      <label for="region">State or region (optional)</label>
-      <input id="region" autocomplete="address-level1" formControlName="region" />
-    </div>
-    <div class="field">
-      <label for="country">Country</label>
-      <input id="country" autocomplete="country-name" formControlName="country" />
+      <label for="timeZoneId">Time zone (optional)</label>
+      <app-filterable-combobox inputId="timeZoneId" formControlName="timeZoneId" [options]="timeZones" />
+      <p class="muted">Account times are stored in UTC. Leave blank to display them in UTC.</p>
     </div>
     <fieldset class="field">
       <legend>Other players should see</legend>

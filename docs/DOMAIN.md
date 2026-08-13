@@ -18,12 +18,14 @@
 
 An account has a unique username (3-32 characters, starting with a letter, then letters,
 digits, or underscores), email, password or external login, legal name, optional middle
-initial, city/region/country, optional avatar, and a display-name preference.
+initial, city/region/country, optional IANA time-zone preference, optional avatar, and a
+display-name preference. Created and last-edited instants are stored in UTC. The owner may
+choose a time zone for display; when none is selected, those times are shown in UTC.
 
 Other users may see username, location, avatar, and either the username or the full name
-according to that preference. Email, created/updated timestamps, and the legal name when
-the owner chose username display are omitted from public queries. Created and last-edited
-times are visible only to the owning user.
+according to that preference. Email, created/updated timestamps, time-zone preference, and
+the legal name when the owner chose username display are omitted from public queries. Created
+and last-edited times are visible only to the owning user.
 
 ## Role and actor model
 

@@ -9,6 +9,8 @@ test('unauthenticated visitors are sent to sign in', async ({ page }) => {
   });
 
   await page.goto('/');
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   await expect(page.getByLabel('Email')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
@@ -39,6 +41,7 @@ test('home shows the signed-in player and logout', async ({ page }) => {
     region: null,
     country: 'Canada',
     displayNameMode: 'Username',
+    timeZoneId: null,
     hasAvatar: false,
     createdUtc: '2026-08-13T00:00:00+00:00',
     updatedUtc: '2026-08-13T00:00:00+00:00',

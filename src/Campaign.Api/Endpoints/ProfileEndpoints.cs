@@ -105,6 +105,7 @@ public static class ProfileEndpoints
                     City = request.City,
                     Region = request.Region,
                     Country = request.Country,
+                    TimeZoneId = request.TimeZoneId,
                     DisplayNameMode = displayNameMode,
                     ProfileRevision = request.ProfileRevision,
                 },

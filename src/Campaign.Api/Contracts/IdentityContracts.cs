@@ -43,6 +43,9 @@ public sealed class RegisterRequest
     /// <summary>Gets the country.</summary>
     public required string Country { get; init; }
 
+    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    public string? TimeZoneId { get; init; }
+
     /// <summary>Gets the public display-name preference.</summary>
     public required string DisplayNameMode { get; init; }
 }
@@ -144,6 +147,9 @@ public sealed class CompleteExternalRegistrationRequest
     /// <summary>Gets the country.</summary>
     public required string Country { get; init; }
 
+    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    public string? TimeZoneId { get; init; }
+
     /// <summary>Gets the public display-name preference.</summary>
     public required string DisplayNameMode { get; init; }
 }
@@ -183,6 +189,9 @@ public sealed class OwnProfileResponse
     /// <summary>Gets the display-name preference.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public required DisplayNameMode DisplayNameMode { get; init; }
+
+    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    public string? TimeZoneId { get; init; }
 
     /// <summary>Gets a value indicating whether an avatar is stored.</summary>
     public required bool HasAvatar { get; init; }
@@ -256,6 +265,9 @@ public sealed class UpdateProfileRequest
     /// <summary>Gets the display-name preference.</summary>
     public required string DisplayNameMode { get; init; }
 
+    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    public string? TimeZoneId { get; init; }
+
     /// <summary>Gets the last observed profile revision.</summary>
     public required int ProfileRevision { get; init; }
 }
@@ -285,6 +297,7 @@ public static class ProfileResponses
             Region = account.Region,
             Country = account.Country,
             DisplayNameMode = account.DisplayNameMode,
+            TimeZoneId = account.TimeZoneId,
             HasAvatar = !string.IsNullOrWhiteSpace(account.AvatarStorageKey),
             CreatedUtc = account.CreatedUtc,
             UpdatedUtc = account.UpdatedUtc,

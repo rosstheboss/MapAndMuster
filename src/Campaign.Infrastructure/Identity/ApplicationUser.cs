@@ -40,6 +40,11 @@ public sealed class ApplicationUser : IdentityUser<Guid>
     public string Country { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the optional IANA time-zone identifier used to display UTC timestamps.
+    /// </summary>
+    public string? TimeZoneId { get; set; }
+
+    /// <summary>
     /// Gets or sets whether other users see the full name.
     /// </summary>
     public DisplayNameMode DisplayNameMode { get; set; }

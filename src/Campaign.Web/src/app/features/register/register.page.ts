@@ -1,14 +1,17 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
 import type { ExternalProvider } from '../../core/auth/auth.models';
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { emailAddress, maxLength, minLength, required } from '../../core/forms/validators';
+import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
+import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 
 @Component({
   selector: 'app-register-page',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, FilterableComboboxComponent],
   templateUrl: './register.page.html',
   styleUrl: './register.page.css',
 })
@@ -20,6 +23,8 @@ export class RegisterPage {
   protected readonly submitting = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly providers = signal<ExternalProvider[]>([]);
+  protected readonly countries = listCountries();
+  protected readonly timeZones = listTimeZones();
   protected readonly form = this.formBuilder.nonNullable.group({
     email: ['', [required, emailAddress]],
     username: ['', [required, minLength(3), maxLength(32)]],
@@ -30,8 +35,13 @@ export class RegisterPage {
     city: ['', required],
     region: [''],
     country: ['', required],
+    timeZoneId: [''],
     displayNameMode: this.formBuilder.nonNullable.control<'Username' | 'FullName'>('Username'),
   });
+  protected readonly countryValue = toSignal(this.form.controls.country.valueChanges, {
+    initialValue: this.form.controls.country.value,
+  });
+  protected readonly regionOptions = computed(() => regionsForCountry(this.countryValue()));
   protected avatar: File | null = null;
 
   constructor() {

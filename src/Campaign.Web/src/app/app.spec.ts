@@ -25,4 +25,15 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.app-brand')?.textContent).toContain('Campaign Map');
   });
+
+  it('renders the main navigation under the banner', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const nav = compiled.querySelector('nav[aria-label="Main"]');
+    expect(nav?.textContent).toContain('Home');
+    expect(nav?.textContent).toContain('Profile');
+    expect(nav?.textContent).toContain('Sign in');
+  });
 });

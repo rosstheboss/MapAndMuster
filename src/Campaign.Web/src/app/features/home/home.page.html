@@ -6,14 +6,10 @@
         You are signed in as <strong>{{ user.username }}</strong
         >.
       </p>
-      <p class="muted">Account created {{ user.createdUtc | date: 'medium' : 'UTC' }} UTC.</p>
-      @if (errorMessage()) {
-        <p class="error" role="alert">{{ errorMessage() }}</p>
-      }
+      <p class="muted">Account created {{ user.createdUtc | instantDate: user.timeZoneId }}.</p>
       <div class="actions">
         <a class="button" routerLink="/profile">Edit profile</a>
         <a class="button-secondary" [routerLink]="['/users', user.username]">View public profile</a>
-        <button class="button-secondary" type="button" (click)="logout()" [disabled]="loggingOut()">Log out</button>
       </div>
     </div>
   }

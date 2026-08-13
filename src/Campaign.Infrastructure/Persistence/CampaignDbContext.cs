@@ -39,6 +39,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(user => user.City).HasMaxLength(100).IsRequired();
             entity.Property(user => user.Region).HasMaxLength(100);
             entity.Property(user => user.Country).HasMaxLength(100).IsRequired();
+            entity.Property(user => user.TimeZoneId).HasMaxLength(64);
             entity.Property(user => user.AvatarStorageKey).HasMaxLength(260);
             entity.Property(user => user.DisplayNameMode).HasConversion<string>().HasMaxLength(32);
             entity.Property(user => user.ProfileRevision).IsConcurrencyToken();

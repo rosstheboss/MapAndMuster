@@ -27,6 +27,8 @@ describe('RegisterPage', () => {
     expect(compiled.querySelector('#username')).toBeTruthy();
     expect(compiled.querySelector('#firstName')).toBeTruthy();
     expect(compiled.querySelector('#country')).toBeTruthy();
+    expect(compiled.querySelector('#timeZoneId')).toBeTruthy();
+    expect(compiled.querySelector('#region')).toBeTruthy();
     http.verify();
   });
 });

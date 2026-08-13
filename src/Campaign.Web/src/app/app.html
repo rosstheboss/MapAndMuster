@@ -1,13 +1,35 @@
 <div class="app-shell">
-  <header class="app-header">
-    <a routerLink="/" class="app-brand">Campaign Map</a>
-    @if (auth.currentUser(); as user) {
-      <nav class="app-nav" aria-label="Account">
-        <a routerLink="/profile">Profile</a>
-        <span class="app-user">{{ user.username }}</span>
-      </nav>
-    }
+  <header class="app-banner">
+    <a routerLink="/" class="app-brand">
+      <app-icon name="castle" />
+      Campaign Map
+    </a>
   </header>
+  <nav class="app-menubar" aria-label="Main">
+    <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }" class="nav-link">
+      <app-icon name="home" />
+      Home
+    </a>
+    <a routerLink="/profile" routerLinkActive="is-active" class="nav-link">
+      <app-icon name="helm" />
+      Profile
+    </a>
+    @if (auth.currentUser(); as user) {
+      <span class="nav-user">{{ user.username }}</span>
+      <button type="button" class="nav-link nav-button" (click)="logout()" [disabled]="loggingOut()">
+        <app-icon name="logout" />
+        Log out
+      </button>
+    } @else {
+      <a routerLink="/login" routerLinkActive="is-active" class="nav-link">
+        <app-icon name="key" />
+        Sign in
+      </a>
+    }
+  </nav>
+  @if (navError()) {
+    <p class="nav-error" role="alert">{{ navError() }}</p>
+  }
   <main class="app-main">
     <router-outlet />
   </main>

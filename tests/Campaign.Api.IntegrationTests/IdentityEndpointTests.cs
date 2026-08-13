@@ -119,10 +119,15 @@ public sealed class IdentityEndpointTests
                 city = "Halifax",
                 region = "Nova Scotia",
                 country = "Canada",
+                timeZoneId = "America/Halifax",
                 displayNameMode = "Username",
                 profileRevision = 1,
             });
         Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+
+        var own = await owner.GetFromJsonAsync<OwnProfileResponse>("/api/profiles/me", JsonOptions);
+        Assert.NotNull(own);
+        Assert.Equal("America/Halifax", own.TimeZoneId);
 
         using var stranger = _factory.CreateClient();
         using var publicResponse = await stranger.GetAsync($"/api/profiles/{username}");
@@ -138,9 +143,33 @@ public sealed class IdentityEndpointTests
         Assert.False(root.TryGetProperty("lastName", out _));
         Assert.False(root.TryGetProperty("createdUtc", out _));
         Assert.False(root.TryGetProperty("updatedUtc", out _));
+        Assert.False(root.TryGetProperty("timeZoneId", out _));
         Assert.False(root.TryGetProperty("profileRevision", out _));
         Assert.DoesNotContain(email, json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Lovelace", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UnknownTimeZoneIsRejected()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("tzbad");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var update = await client.PutAsJsonAsync(
+            "/api/profiles/me",
+            new
+            {
+                username,
+                firstName = "Ada",
+                lastName = "Lovelace",
+                city = "Halifax",
+                country = "Canada",
+                displayNameMode = "Username",
+                timeZoneId = "Not/AZone",
+                profileRevision = 1,
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, update.StatusCode);
     }
 
     [Fact]
@@ -258,8 +287,10 @@ public sealed class IdentityEndpointTests
         using var scope = _factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CampaignDbContext>();
         var message = dbContext.OutboxMessages
+            .Where(item => item.Type == EmailOutbox.ConfirmEmailType)
             .OrderByDescending(item => item.CreatedUtc)
-            .First(item => item.Type == EmailOutbox.ConfirmEmailType && item.Payload.Contains(email, StringComparison.Ordinal));
+            .AsEnumerable()
+            .First(item => item.Payload.Contains(email, StringComparison.Ordinal));
         var payload = JsonSerializer.Deserialize<OutboxEmailPayload>(message.Payload);
         Assert.NotNull(payload);
 

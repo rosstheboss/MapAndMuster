@@ -27,16 +27,20 @@
         <input id="lastName" formControlName="lastName" />
       </div>
       <div class="field">
+        <label for="country">Country</label>
+        <app-filterable-combobox inputId="country" formControlName="country" [options]="countries" />
+      </div>
+      <div class="field">
+        <label for="region">State or province (optional)</label>
+        <app-filterable-combobox inputId="region" formControlName="region" [options]="regionOptions()" />
+      </div>
+      <div class="field">
         <label for="city">City</label>
         <input id="city" formControlName="city" />
       </div>
       <div class="field">
-        <label for="region">State or region (optional)</label>
-        <input id="region" formControlName="region" />
-      </div>
-      <div class="field">
-        <label for="country">Country</label>
-        <input id="country" formControlName="country" />
+        <label for="timeZoneId">Time zone (optional)</label>
+        <app-filterable-combobox inputId="timeZoneId" formControlName="timeZoneId" [options]="timeZones" />
       </div>
       <fieldset class="field">
         <legend>Other players should see</legend>

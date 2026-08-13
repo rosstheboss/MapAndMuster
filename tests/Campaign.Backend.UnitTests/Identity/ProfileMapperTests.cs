@@ -24,6 +24,8 @@ public sealed class ProfileMapperTests
         Assert.DoesNotContain("ada@example.test", serialized, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("CreatedUtc", serialized, StringComparison.Ordinal);
         Assert.DoesNotContain("UpdatedUtc", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("TimeZoneId", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("America/Halifax", serialized, StringComparison.Ordinal);
         Assert.DoesNotContain("Lovelace", serialized, StringComparison.Ordinal);
         Assert.DoesNotContain("Email", serialized, StringComparison.Ordinal);
     }
@@ -53,6 +55,7 @@ public sealed class ProfileMapperTests
             City = "Halifax",
             Region = "Nova Scotia",
             Country = "Canada",
+            TimeZoneId = "America/Halifax",
             DisplayNameMode = displayNameMode,
             AvatarStorageKey = "avatars/abc.jpg",
             CreatedUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),

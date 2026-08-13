@@ -200,6 +200,7 @@ public static class ExternalAuthEndpoints
                         City = request.City,
                         Region = request.Region,
                         Country = request.Country,
+                        TimeZoneId = request.TimeZoneId,
                         DisplayNameMode = displayNameMode,
                         Provider = provider,
                         ProviderKey = providerKey,

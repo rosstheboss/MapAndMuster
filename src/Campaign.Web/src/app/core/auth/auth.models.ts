@@ -14,6 +14,7 @@ export interface OwnProfile {
   region: string | null;
   country: string;
   displayNameMode: 'Username' | 'FullName';
+  timeZoneId: string | null;
   hasAvatar: boolean;
   createdUtc: string;
   updatedUtc: string;
@@ -55,6 +56,7 @@ export interface RegisterPayload {
   region: string;
   country: string;
   displayNameMode: 'Username' | 'FullName';
+  timeZoneId: string;
   avatar: File | null;
 }
 
@@ -67,4 +69,5 @@ export interface ProfileFormValue {
   region: string;
   country: string;
   displayNameMode: 'Username' | 'FullName';
+  timeZoneId: string;
 }

@@ -24,8 +24,9 @@ Player and Game Master in the same campaign.
 
 ## Core capabilities
 
-- Account registration with unique username, name, location, optional avatar, email
-  verification, password reset, and optional Google/Facebook/Discord sign-in.
+- Account registration with unique username, name, location, optional display time zone,
+  optional avatar, email verification, password reset, and optional Google/Facebook/Discord
+  sign-in.
 - Campaign creation, membership, factions, alliances, forces, rounds, deadlines, and roles.
 - Raster-map upload with polygon territories, adjacency, terrain, structures, spawn locations,
   ownership, and force/relic markers.

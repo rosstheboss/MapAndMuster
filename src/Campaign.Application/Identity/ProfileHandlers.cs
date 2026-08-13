@@ -48,6 +48,11 @@ public sealed class UpdateProfileHandler
             return OperationResults.Failure<UserAccount>(locationError.Code, locationError.Message);
         }
 
+        if (!IanaTimeZone.TryCreateOptional(command.TimeZoneId, out var timeZone, out var timeZoneError))
+        {
+            return OperationResults.Failure<UserAccount>(timeZoneError.Code, timeZoneError.Message);
+        }
+
         if (await _accounts.UsernameExistsAsync(username.Value, command.UserId, cancellationToken).ConfigureAwait(false))
         {
             return OperationResults.Failure<UserAccount>(ErrorCodes.UsernameTaken, "That username is already taken.");
@@ -60,6 +65,7 @@ public sealed class UpdateProfileHandler
                     Username = username,
                     Name = name,
                     Location = location,
+                    TimeZoneId = timeZone?.Id,
                     DisplayNameMode = command.DisplayNameMode,
                     ExpectedRevision = command.ProfileRevision,
                 },

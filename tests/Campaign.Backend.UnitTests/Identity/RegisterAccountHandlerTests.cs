@@ -21,6 +21,20 @@ public sealed class RegisterAccountHandlerTests
     }
 
     [Fact]
+    public async Task RejectsUnknownTimeZoneBeforeCreatingAccount()
+    {
+        var store = new FakeUserAccountStore();
+        var handler = CreateHandler(store);
+        var command = ValidCommand("Not/AZone");
+
+        var result = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.TimeZoneInvalid, result.ErrorCode);
+        Assert.Equal(0, store.CreateCalls);
+    }
+
+    [Fact]
     public async Task QueuesConfirmationEmailWhenRegistrationSucceeds()
     {
         var store = new FakeUserAccountStore();
@@ -44,7 +58,7 @@ public sealed class RegisterAccountHandlerTests
             new FakeAvatarStorage());
     }
 
-    private static RegisterAccountCommand ValidCommand()
+    private static RegisterAccountCommand ValidCommand(string? timeZoneId = null)
     {
         return new RegisterAccountCommand
         {
@@ -55,6 +69,7 @@ public sealed class RegisterAccountHandlerTests
             LastName = "Lovelace",
             City = "Halifax",
             Country = "Canada",
+            TimeZoneId = timeZoneId,
             DisplayNameMode = DisplayNameMode.Username,
         };
     }

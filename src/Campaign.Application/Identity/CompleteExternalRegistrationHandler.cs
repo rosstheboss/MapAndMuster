@@ -36,6 +36,9 @@ public sealed class CompleteExternalRegistrationCommand
     /// <summary>Gets the country.</summary>
     public required string Country { get; init; }
 
+    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    public string? TimeZoneId { get; init; }
+
     /// <summary>Gets the public display-name preference.</summary>
     public required DisplayNameMode DisplayNameMode { get; init; }
 
@@ -108,6 +111,11 @@ public sealed class CompleteExternalRegistrationHandler
             return OperationResults.Failure<UserAccount>(locationError.Code, locationError.Message);
         }
 
+        if (!IanaTimeZone.TryCreateOptional(command.TimeZoneId, out var timeZone, out var timeZoneError))
+        {
+            return OperationResults.Failure<UserAccount>(timeZoneError.Code, timeZoneError.Message);
+        }
+
         var email = command.Email.Trim();
         if (string.IsNullOrWhiteSpace(email) || !email.Contains('@', StringComparison.Ordinal))
         {
@@ -148,6 +156,7 @@ public sealed class CompleteExternalRegistrationHandler
                     Username = username,
                     Name = name,
                     Location = location,
+                    TimeZoneId = timeZone?.Id,
                     DisplayNameMode = command.DisplayNameMode,
                     AvatarStorageKey = avatarKey,
                     Provider = command.Provider,

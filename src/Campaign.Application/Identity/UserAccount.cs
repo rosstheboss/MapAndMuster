@@ -53,6 +53,11 @@ public sealed class UserAccount
     public required string Country { get; init; }
 
     /// <summary>
+    /// Gets the optional IANA time-zone identifier used to display UTC timestamps.
+    /// </summary>
+    public string? TimeZoneId { get; init; }
+
+    /// <summary>
     /// Gets whether other users see the full name.
     /// </summary>
     public required DisplayNameMode DisplayNameMode { get; init; }

@@ -53,6 +53,7 @@ export class AuthService {
       form.set('city', payload.city);
       form.set('region', payload.region);
       form.set('country', payload.country);
+      form.set('timeZoneId', payload.timeZoneId);
       form.set('displayNameMode', payload.displayNameMode);
       form.set('avatar', payload.avatar);
       await firstValueFrom(this.http.post('/api/auth/register', form, { withCredentials: true }));
@@ -72,6 +73,7 @@ export class AuthService {
           city: payload.city,
           region: payload.region || null,
           country: payload.country,
+          timeZoneId: payload.timeZoneId || null,
           displayNameMode: payload.displayNameMode,
         },
         { withCredentials: true },
@@ -114,6 +116,7 @@ export class AuthService {
           city: value.city,
           region: value.region || null,
           country: value.country,
+          timeZoneId: value.timeZoneId || null,
           displayNameMode: value.displayNameMode,
           profileRevision,
         },
@@ -168,6 +171,7 @@ export class AuthService {
           city: value.city,
           region: value.region || null,
           country: value.country,
+          timeZoneId: value.timeZoneId || null,
           displayNameMode: value.displayNameMode,
         },
         { withCredentials: true },

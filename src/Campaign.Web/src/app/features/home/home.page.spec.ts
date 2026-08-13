@@ -19,6 +19,7 @@ const profile: OwnProfile = {
   region: null,
   country: 'Canada',
   displayNameMode: 'Username',
+  timeZoneId: null,
   hasAvatar: false,
   createdUtc: '2026-08-13T00:00:00+00:00',
   updatedUtc: '2026-08-13T00:00:00+00:00',
@@ -34,7 +35,7 @@ describe('HomePage', () => {
     }).compileComponents();
   });
 
-  it('shows the signed-in username and a logout button', async () => {
+  it('shows the signed-in username', async () => {
     const auth = TestBed.inject(AuthService);
     auth.currentUser.set(profile);
 
@@ -44,7 +45,7 @@ describe('HomePage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('ada');
-    expect(compiled.querySelector('button')?.textContent).toContain('Log out');
+    expect(compiled.textContent).toContain('Account created');
     TestBed.inject(HttpTestingController).verify();
   });
 });

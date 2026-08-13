@@ -99,6 +99,9 @@ public sealed class CreateLocalAccountRequest
     /// <summary>Gets the location.</summary>
     public required GeographicLocation Location { get; init; }
 
+    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    public string? TimeZoneId { get; init; }
+
     /// <summary>Gets the display-name preference.</summary>
     public required DisplayNameMode DisplayNameMode { get; init; }
 
@@ -125,6 +128,9 @@ public sealed class CreateExternalAccountRequest
 
     /// <summary>Gets the location.</summary>
     public required GeographicLocation Location { get; init; }
+
+    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    public string? TimeZoneId { get; init; }
 
     /// <summary>Gets the display-name preference.</summary>
     public required DisplayNameMode DisplayNameMode { get; init; }
@@ -155,6 +161,9 @@ public sealed class UpdateStoredProfileRequest
 
     /// <summary>Gets the location.</summary>
     public required GeographicLocation Location { get; init; }
+
+    /// <summary>Gets the optional IANA time-zone identifier used to display UTC timestamps.</summary>
+    public string? TimeZoneId { get; init; }
 
     /// <summary>Gets the display-name preference.</summary>
     public required DisplayNameMode DisplayNameMode { get; init; }

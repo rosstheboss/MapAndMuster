@@ -52,6 +52,19 @@ Restore the local `dotnet-ef` tool with `dotnet tool restore` from the repositor
 
 The Angular dev server proxies `/api` to `http://localhost:5219`. Start PostgreSQL and Mailpit, apply migrations by running `Campaign.Api`, then run `npm --prefix src/Campaign.Web start`. Confirmation and password-reset emails appear in Mailpit at `http://localhost:8025`.
 
+To send those messages to a real inbox while testing, override SMTP in user secrets (do not commit credentials). Restart `Campaign.Api` after changing them. Sign up with the address that should receive the mail, or call resend-confirmation for an existing unconfirmed account. Example Gmail app-password settings:
+
+```bash
+dotnet user-secrets set "Email:SmtpHost" "smtp.gmail.com" --project src/Campaign.Api
+dotnet user-secrets set "Email:SmtpPort" "587" --project src/Campaign.Api
+dotnet user-secrets set "Email:EnableSsl" "true" --project src/Campaign.Api
+dotnet user-secrets set "Email:FromAddress" "you@gmail.com" --project src/Campaign.Api
+dotnet user-secrets set "Email:SmtpUsername" "you@gmail.com" --project src/Campaign.Api
+dotnet user-secrets set "Email:SmtpPassword" "your-app-password" --project src/Campaign.Api
+```
+
+Leave `Email:SmtpUsername` empty to keep using Mailpit. A production email provider is still an open operations decision.
+
 Google, Facebook, and Discord sign-in are optional. Leave those settings empty for email-only development. To enable a provider, set the client id/secret (Facebook uses AppId/AppSecret) in user secrets and register these callback URLs with the provider:
 
 - `http://localhost:4200/api/auth/external/google/callback`

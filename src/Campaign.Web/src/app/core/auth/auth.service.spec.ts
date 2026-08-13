@@ -28,6 +28,7 @@ describe('AuthService', () => {
       region: null,
       country: 'Canada',
       displayNameMode: 'Username',
+      timeZoneId: null,
       hasAvatar: false,
       createdUtc: '2026-08-13T00:00:00+00:00',
       updatedUtc: '2026-08-13T00:00:00+00:00',

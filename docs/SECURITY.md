@@ -18,8 +18,8 @@ separate response models for public, participant, and staff views.
 - External providers are optional and configuration-gated. A matching email does not auto-link;
   the player must sign in to the existing verified account.
 - Other users receive only username, location, avatar, and the chosen display name. Email,
-  created/updated timestamps, and the legal name (unless the owner opted to show full name)
-  are omitted from public profile responses.
+  created/updated timestamps, time-zone preference, and the legal name (unless the owner opted
+  to show full name) are omitted from public profile responses.
 - Never log passwords, tokens, reset links, cookies, private objectives, or hidden locations.
 
 ## Authorization

@@ -8,4 +8,5 @@ playwright-report
 test-results
 .angular
 src/Campaign.Web/src/app/api/generated
+src/Campaign.Web/src/app/core/location/location-catalog.ts
 
