@@ -48,6 +48,12 @@ describe('CampaignSetupPage', () => {
     expect(lines).toContain('Start date and time is not filled in.');
     expect(lines).toContain('Faction 1 name is not filled in.');
     expect(lines).toContain('Faction 2 name is not filled in.');
+    expect(lines).toContain('A campaign map image is required.');
+    expect(compiled.textContent).toContain('up to 20 MB');
+    const factionsToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
+      button.textContent.includes('Factions'),
+    );
+    expect(factionsToggle?.getAttribute('aria-expanded')).toBe('true');
     TestBed.inject(HttpTestingController).verify();
   });
 
@@ -89,7 +95,25 @@ describe('CampaignSetupPage', () => {
     expect(daemonsGroup.controls.requiresSubfaction.value).toBe(true);
     expect(compiled.querySelector('#terrain-name-0')).toBeTruthy();
     expect(compiled.querySelector<HTMLInputElement>('#terrain-name-0')?.value).toBe('Beach');
+    const terrainNames = [...compiled.querySelectorAll<HTMLInputElement>('input[id^="terrain-name-"]')].map(
+      (input) => input.value,
+    );
+    expect(terrainNames).toContain('Cave');
+    expect(terrainNames).toContain('Forest');
+    expect(terrainNames).toContain('Jungle');
     expect(compiled.querySelector('#structure-name-0')).toBeTruthy();
+    expect(compiled.querySelector('#structure-symbol-0')).toBeTruthy();
+    expect(compiled.querySelector('#terrain-mission-name-0-0')).toBeTruthy();
+    expect(compiled.querySelector<HTMLInputElement>('#terrain-mission-name-0-0')?.value).toBe('');
+    expect(compiled.querySelector('#structure-mission-name-0-0')).toBeNull();
+    expect(compiled.textContent).toContain('Color flag');
+    const imageOption = [...compiled.querySelectorAll<HTMLInputElement>('input[type="radio"]')].find((input) =>
+      (input.closest('label')?.textContent ?? '').includes('Uploaded image'),
+    );
+    expect(imageOption).toBeTruthy();
+    imageOption!.click();
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Maximum size 50px × 50px');
 
     page.factions.at(0).controls.name.setValue('Renamed Herd');
     fixture.detectChanges();
@@ -110,6 +134,37 @@ describe('CampaignSetupPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(factionNames(compiled)).toEqual(['', '']);
+
+    const factionsToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
+      button.textContent.includes('Factions'),
+    );
+    factionsToggle?.click();
+    fixture.detectChanges();
+    expect(factionsToggle?.getAttribute('aria-expanded')).toBe('false');
+    const pageSave = fixture.componentInstance as unknown as { save: () => Promise<void> };
+    await pageSave.save();
+    fixture.detectChanges();
+    expect(factionsToggle?.getAttribute('aria-expanded')).toBe('true');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('rejects campaign maps larger than 20 MB before upload', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onMapSelected: (event: Event) => void;
+    };
+    const input = { files: [{ name: 'huge.png', size: 20 * 1024 * 1024 + 1 }], value: 'huge.png' };
+    page.onMapSelected({ target: input } as unknown as Event);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect([...compiled.querySelectorAll('.error-banner p')].map((node) => node.textContent.trim())).toContain(
+      'Campaign maps must be 20 MB or smaller.',
+    );
+    expect(input.value).toBe('');
     TestBed.inject(HttpTestingController).verify();
   });
 });

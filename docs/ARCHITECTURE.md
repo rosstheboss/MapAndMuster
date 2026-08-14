@@ -77,13 +77,17 @@ Modules may initially share a database and process. Keep public module interacti
 - A sanitized raster image is the background.
 - Territories use normalized polygon coordinates stored with the campaign overlay graph as JSONB.
 - Terrain types, structures, and nested missions are stored with the campaign as JSONB catalogs.
-- Structure logos and mission documents are stored outside web root; file keys are not returned to
-  clients.
+- Structure logos, faction flags, and mission documents are stored outside web root; file keys are not
+  returned to clients. Replacing or deleting a campaign map, flag, logo, or mission file deletes the
+  previous stored file when nothing else references it. Only user-uploaded files are deleted; built-in
+  structure icons stay in the application. Structure logos and faction flags are re-encoded and shrunk
+  to at most 50×50 pixels.
 - Adjacency is explicit and validated; geometry may suggest but not silently establish it.
 - Generate Connections may propose edges from shared borders; user-created edges persist across
   regeneration.
 - The client renders an SVG overlay on the rectangular map image. Leaflet is not required for this
-  overlay editor.
+  overlay editor. Appearance (light or dark) is a cookie-backed client preference, not campaign
+  state.
 - Arbitrary active SVG upload is out of scope. Import only a validated application schema.
 
 ## API contracts

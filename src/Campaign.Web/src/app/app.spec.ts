@@ -24,6 +24,8 @@ describe('App', () => {
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.app-brand')?.textContent).toContain('Campaign Map');
+    expect(compiled.querySelector('.skip-link')?.textContent).toContain('Skip to content');
+    expect(compiled.querySelector('app-theme-toggle button')?.getAttribute('aria-label')).toBe('Switch to dark mode');
   });
 
   it('renders the main navigation under the banner', async () => {

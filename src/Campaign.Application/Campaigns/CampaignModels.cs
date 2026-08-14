@@ -177,6 +177,9 @@ public sealed class FactionDetail
 
     /// <summary>Gets whether a player who chooses this faction must pick a subfaction.</summary>
     public required bool RequiresSubfaction { get; init; }
+
+    /// <summary>Gets whether the faction has an uploaded flag image.</summary>
+    public required bool HasFlagImage { get; init; }
 }
 
 /// <summary>
@@ -342,6 +345,9 @@ public sealed class StoredFaction
 
     /// <summary>Gets whether a player who chooses this faction must pick a subfaction.</summary>
     public required bool RequiresSubfaction { get; init; }
+
+    /// <summary>Gets the stored flag image key, when a custom flag was uploaded.</summary>
+    public string? FlagImageStorageKey { get; init; }
 }
 
 /// <summary>

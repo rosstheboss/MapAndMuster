@@ -33,7 +33,7 @@
 
 .combobox-list li.is-active,
 .combobox-list li:hover {
-  background: #e7e5e4;
+  background: var(--color-button-secondary);
 }
 
 .combobox-empty {

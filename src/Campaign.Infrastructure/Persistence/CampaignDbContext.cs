@@ -120,6 +120,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(faction => faction.Name).HasMaxLength(60).IsRequired();
             entity.Property(faction => faction.Color).HasMaxLength(7).IsRequired();
             entity.Property(faction => faction.RequiresSubfaction).IsRequired();
+            entity.Property(faction => faction.FlagImageStorageKey).HasMaxLength(260);
             entity.HasOne(faction => faction.AllyGroup)
                 .WithMany(group => group.Factions)
                 .HasForeignKey(faction => faction.AllyGroupId)

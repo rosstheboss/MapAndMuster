@@ -4,7 +4,6 @@ import { TERRAIN_TYPES } from '../maps/terrain';
 export interface DefaultTerrainType {
   name: string;
   color: string;
-  missionName: string;
 }
 
 export interface DefaultStructureType {
@@ -12,15 +11,10 @@ export interface DefaultStructureType {
   builtinSymbol: string;
 }
 
-export function defaultMissionName(terrainLabel: string): string {
-  return `${terrainLabel.trim()} control`;
-}
-
 export function defaultTerrainCatalog(): DefaultTerrainType[] {
   return TERRAIN_TYPES.map((entry) => ({
     name: entry.label,
     color: entry.overlayColor,
-    missionName: defaultMissionName(entry.label),
   }));
 }
 

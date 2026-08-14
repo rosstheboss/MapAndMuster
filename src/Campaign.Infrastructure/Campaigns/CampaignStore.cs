@@ -349,6 +349,7 @@ public sealed class CampaignStore : ICampaignStore
                 Name = faction.Name,
                 Color = faction.Color,
                 RequiresSubfaction = faction.RequiresSubfaction,
+                FlagImageStorageKey = faction.FlagImageStorageKey,
                 AllyGroup = allyGroup,
                 SortOrder = factionOrder++,
             };
@@ -454,6 +455,7 @@ public sealed class CampaignStore : ICampaignStore
                                 .Select(subfaction => subfaction.Name),
                         ],
                         AllyGroupName = faction.AllyGroup?.Name,
+                        FlagImageStorageKey = faction.FlagImageStorageKey,
                     }),
             ],
             Links =

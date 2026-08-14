@@ -19,7 +19,7 @@ public sealed class CampaignMapGraphRulesTests
     public void CatalogsAreAlphabetical()
     {
         Assert.Equal(
-            ["Beach", "Desert", "Highlands", "Lake", "Mountain", "Plains", "Riverlands", "Sea", "Swamp"],
+            ["Beach", "Cave", "Desert", "Forest", "Highlands", "Jungle", "Lake", "Mountain", "Plains", "Riverlands", "Sea", "Swamp"],
             TerrainCatalog.All.Select(entry => entry.Label));
         Assert.Equal(
             ["Capital City", "Castle", "City", "Fortification", "Supply Depot", "Town"],

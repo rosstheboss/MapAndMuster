@@ -13,7 +13,58 @@
   border: 1px solid var(--color-border);
   border-radius: 0.6rem;
   padding: 0.85rem;
-  background: #fafaf9;
+  background: var(--color-nested);
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0.15rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.section-toggle::after {
+  content: '▾';
+  font-weight: 400;
+}
+
+.section-toggle[aria-expanded='false']::after {
+  content: '▸';
+}
+
+.nested-toggle {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.reuse-mission {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+.reuse-mission select {
+  min-height: var(--touch-min);
+  min-width: 12rem;
+}
+
+.ally-members {
+  margin: 0.15rem 0 0.35rem;
+}
+
+.faction-flag-preview {
+  width: 2rem;
+  height: 1.4rem;
+  clip-path: polygon(0 0, 100% 20%, 70% 50%, 100% 80%, 0 100%);
 }
 
 .nested-row {

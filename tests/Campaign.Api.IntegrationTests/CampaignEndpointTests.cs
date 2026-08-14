@@ -50,8 +50,11 @@ public sealed class CampaignEndpointTests
         Assert.Equal(3, created.Phases.Count);
         Assert.Equal("Action", created.Phases[0].Kind);
         Assert.Equal("Battle", created.Phases[2].Kind);
-        Assert.Equal(9, created.TerrainTypes.Count);
+        Assert.Equal(12, created.TerrainTypes.Count);
         Assert.Equal("Beach", created.TerrainTypes[0].Name);
+        Assert.Contains(created.TerrainTypes, type => type.Name == "Cave");
+        Assert.Contains(created.TerrainTypes, type => type.Name == "Forest");
+        Assert.Contains(created.TerrainTypes, type => type.Name == "Jungle");
         Assert.NotEmpty(created.TerrainTypes[0].Missions);
         Assert.Equal(6, created.StructureTypes.Count);
         Assert.Equal("#2563EB", created.Factions[0].Color);

@@ -77,6 +77,10 @@ export class CampaignService {
     return `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/image?v=${revision}`;
   }
 
+  flagImageUrl(campaignId: string, factionId: string, revision: number): string {
+    return `/api/campaigns/${encodeURIComponent(campaignId)}/factions/${encodeURIComponent(factionId)}/flag?v=${revision}`;
+  }
+
   missionFileUrl(campaignId: string, missionId: string): string {
     return `/api/campaigns/${encodeURIComponent(campaignId)}/missions/${encodeURIComponent(missionId)}/file`;
   }
@@ -93,6 +97,19 @@ export class CampaignService {
     return firstValueFrom(
       this.http.post<CampaignDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/image`,
+        form,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async uploadFlagImage(campaignId: string, factionId: string, file: File, revision: number): Promise<CampaignDetail> {
+    const form = new FormData();
+    form.set('image', file);
+    form.set('revision', String(revision));
+    return firstValueFrom(
+      this.http.post<CampaignDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/factions/${encodeURIComponent(factionId)}/flag`,
         form,
         { withCredentials: true },
       ),

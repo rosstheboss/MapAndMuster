@@ -79,8 +79,11 @@
         </div>
         <p class="muted">
           Draw on the overlay, not the image. Click to place segments; a ring highlights when a line is about to
-          connect. Press Enter to close a territory, Escape to cancel, and Ctrl+Z to undo. Lines stay inside the map
-          rectangle.
+          connect. If two endpoints land on the same open border of an existing territory, that border is traced when
+          you release the mouse. If both endpoints sit on the map image edge, the shape closes along that edge. Press
+          Enter to close a territory, Escape to cancel, Delete to remove selected territories, and Ctrl+Z to undo.
+          Ctrl+click selects multiple territories; drag them together in Select mode. Zoom starts fitted to the panel;
+          drawing stays aligned to the full-size map. Use the territory list to select without a pointer.
         </p>
       }
 
@@ -92,15 +95,18 @@
             [adjacencies]="graph().adjacencies"
             [drawingPoints]="drawing()"
             [snapTarget]="snapTarget()"
-            [selectedTerritoryId]="selectedId()"
+            [selectedTerritoryIds]="highlightedTerritoryIds()"
             [hoveredTerritoryId]="hoveredTerritoryId()"
             [hoveredAdjacencyId]="hoveredAdjacencyId()"
-            [highlightedTerritoryIds]="highlightedTerritoryIds()"
+            [adjacentTerritoryIds]="adjacentTerritoryIds()"
             [showAdjacencies]="true"
             [interactive]="true"
+            [pointerPan]="tool() !== 'draw'"
+            [moveTerritories]="tool() === 'select'"
             [factions]="campaign()?.factions ?? []"
             [structures]="campaign()?.structureTypes ?? []"
             [structureImageUrl]="structureImageUrl"
+            [flagImageUrl]="flagImageUrl"
             (mapPoint)="onMapPoint($event)"
             (mapHover)="onMapHover($event)"
             (territoryHover)="onTerritoryHover($event)"
@@ -108,6 +114,8 @@
             (territorySelect)="onTerritorySelect($event)"
             (adjacencySelect)="onAdjacencySelect($event)"
             (backgroundSelect)="onBackground()"
+            (territoryMove)="onTerritoryMove($event)"
+            (territoryMoveEnd)="onTerritoryMoveEnd()"
           />
         </div>
 
@@ -279,6 +287,11 @@
                     (ngModelChange)="setOverlayColor($event)"
                   />
                 </div>
+                @if (selectedIds().length > 0) {
+                  <button type="button" class="button-secondary" (click)="deleteSelectedTerritories()">
+                    {{ deleteLabel() }}
+                  </button>
+                }
               </form>
             }
           } @else {
@@ -295,8 +308,8 @@
                 <button
                   type="button"
                   class="list-button"
-                  [class.is-active]="selectedId() === territory.id"
-                  (click)="onTerritorySelect(territory.id)"
+                  [class.is-active]="selectedIds().includes(territory.id)"
+                  (click)="onTerritorySelect({ id: territory.id, additive: $event.ctrlKey || $event.metaKey })"
                 >
                   @if (terrainSymbol(territory.terrainTypeId); as symbol) {
                     <app-map-symbol kind="terrain" [name]="symbol" />

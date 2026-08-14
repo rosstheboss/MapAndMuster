@@ -210,11 +210,12 @@ public static class CampaignSetupRules
 
         var parsedGroups = ParseAllyGroups(allyGroups, collected);
         var usedIds = new HashSet<Guid>();
+        var missionIndex = new MissionIndex();
         var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, collected);
         ValidateAllyMembership(parsedFactions, parsedGroups, collected);
         var parsedLinks = ParseLinks(links, collected);
-        var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, collected);
-        var parsedStructures = ParseStructureTypes(structureTypes, usedIds, collected);
+        var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, collected);
+        var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, collected);
         var parsedSchedule = ParseSchedule(schedule, collected);
 
         if (collected.Count > 0)
@@ -478,7 +479,8 @@ public static class CampaignSetupRules
                 color,
                 subfactions,
                 canonicalGroup,
-                faction.RequiresSubfaction));
+                faction.RequiresSubfaction,
+                faction.ClearFlagImage));
         }
 
         return parsed;
@@ -542,6 +544,7 @@ public static class CampaignSetupRules
     private static List<TerrainTypeSetup> ParseTerrainTypes(
         IReadOnlyList<TerrainTypeInput>? terrainTypes,
         HashSet<Guid> usedIds,
+        MissionIndex missions,
         List<DomainError> errors)
     {
         var supplied = terrainTypes is null || terrainTypes.Count == 0
@@ -585,9 +588,10 @@ public static class CampaignSetupRules
                 $"Terrain type {index + 1} color",
                 assignDefault: false,
                 errors);
-            var missions = ParseMissions(
+            var missionsForType = ParseMissions(
                 input.Missions,
                 usedIds,
+                missions,
                 $"terrainTypes[{index}].missions",
                 $"Terrain type {index + 1}",
                 requireAtLeastOne: true,
@@ -610,7 +614,7 @@ public static class CampaignSetupRules
                 ResolveId(input.Id, usedIds, $"terrainTypes[{index}].id", errors),
                 name,
                 color,
-                missions));
+                missionsForType));
         }
 
         return parsed;
@@ -619,6 +623,7 @@ public static class CampaignSetupRules
     private static List<StructureTypeSetup> ParseStructureTypes(
         IReadOnlyList<StructureTypeInput>? structureTypes,
         HashSet<Guid> usedIds,
+        MissionIndex missions,
         List<DomainError> errors)
     {
         var supplied = structureTypes is null
@@ -654,9 +659,10 @@ public static class CampaignSetupRules
                     $"structureTypes[{index}].builtinSymbol"));
             }
 
-            var missions = ParseMissions(
+            var missionsForType = ParseMissions(
                 input.Missions,
                 usedIds,
+                missions,
                 $"structureTypes[{index}].missions",
                 $"Structure {index + 1}",
                 requireAtLeastOne: false,
@@ -680,7 +686,7 @@ public static class CampaignSetupRules
                 name,
                 builtin,
                 input.ClearImage,
-                missions));
+                missionsForType));
         }
 
         return parsed;
@@ -689,6 +695,7 @@ public static class CampaignSetupRules
     private static List<MissionSetup> ParseMissions(
         IReadOnlyList<MissionInput>? missions,
         HashSet<Guid> usedIds,
+        MissionIndex index,
         string field,
         string ownerLabel,
         bool requireAtLeastOne,
@@ -717,42 +724,60 @@ public static class CampaignSetupRules
         }
 
         var parsed = new List<MissionSetup>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (var index = 0; index < supplied.Length; index++)
+        var seenOnOwner = new HashSet<Guid>();
+        for (var missionIndex = 0; missionIndex < supplied.Length; missionIndex++)
         {
-            var mission = supplied[index];
-            var nameField = $"{field}[{index}].name";
+            var mission = supplied[missionIndex];
+            var nameField = $"{field}[{missionIndex}].name";
             var name = ParseRequiredName(
                 mission.Name,
                 nameField,
-                $"{ownerLabel} mission {index + 1} name",
+                $"{ownerLabel} mission {missionIndex + 1} name",
                 minLength: 1,
                 NamedItemMaxLength,
                 errors);
             var url = ParseOptionalHttpUrl(
                 mission.Url,
-                $"{field}[{index}].url",
-                $"{ownerLabel} mission {index + 1} URL",
+                $"{field}[{missionIndex}].url",
+                $"{ownerLabel} mission {missionIndex + 1} URL",
                 errors);
             if (name is null)
             {
                 continue;
             }
 
-            if (!seen.Add(name))
+            var reused = TryReuseMission(
+                mission.Id,
+                name,
+                index,
+                nameField,
+                errors);
+            if (reused is not null)
             {
-                errors.Add(new DomainError(
-                    "missions.duplicate",
-                    $"{ownerLabel} mission names must be unique.",
-                    nameField));
+                if (!seenOnOwner.Add(reused.Id))
+                {
+                    errors.Add(new DomainError(
+                        "missions.duplicate",
+                        $"{ownerLabel} already includes that mission.",
+                        nameField));
+                    continue;
+                }
+
+                parsed.Add(reused);
                 continue;
             }
 
-            parsed.Add(new MissionSetup(
-                ResolveId(mission.Id, usedIds, $"{field}[{index}].id", errors),
-                name,
-                url,
-                mission.ClearFile));
+            if (errors.Exists(error => error.Field == nameField && error.Code == "missions.duplicate"))
+            {
+                continue;
+            }
+
+            var id = ResolveId(mission.Id, usedIds, $"{field}[{missionIndex}].id", errors);
+            var created = new MissionSetup(id, name, url, mission.ClearFile);
+            index.ById[id] = created;
+            index.Names[name] = id;
+            seenOnOwner.Add(id);
+            parsed.Add(created);
         }
 
         if (requireAtLeastOne && parsed.Count == 0 && supplied.Length > 0)
@@ -764,6 +789,38 @@ public static class CampaignSetupRules
         }
 
         return parsed;
+    }
+
+    private static MissionSetup? TryReuseMission(
+        Guid? suppliedId,
+        string name,
+        MissionIndex index,
+        string nameField,
+        List<DomainError> errors)
+    {
+        if (suppliedId is { } id && id != Guid.Empty && index.ById.TryGetValue(id, out var byId))
+        {
+            if (!string.Equals(byId.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add(new DomainError(
+                    "missions.duplicate",
+                    "Mission names must be unique.",
+                    nameField));
+                return null;
+            }
+
+            return byId;
+        }
+
+        if (index.Names.ContainsKey(name))
+        {
+            errors.Add(new DomainError(
+                "missions.duplicate",
+                "Mission names must be unique.",
+                nameField));
+        }
+
+        return null;
     }
 
     private static string? ParseUniqueColor(
@@ -1187,5 +1244,12 @@ public static class CampaignSetupRules
         }
 
         return Enum.TryParse(raw.Trim(), ignoreCase: true, out kind) && Enum.IsDefined(kind);
+    }
+
+    private sealed class MissionIndex
+    {
+        public Dictionary<Guid, MissionSetup> ById { get; } = [];
+
+        public Dictionary<string, Guid> Names { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }

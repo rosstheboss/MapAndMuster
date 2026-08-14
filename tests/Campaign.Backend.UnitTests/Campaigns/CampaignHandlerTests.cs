@@ -10,6 +10,9 @@ public sealed class CampaignHandlerTests
 {
     private static readonly Guid UserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid OtherUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid NorthFactionId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private static readonly Guid SouthFactionId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    private static readonly Guid TownStructureId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
     private static readonly DateTimeOffset Now = new(2026, 8, 13, 18, 0, 0, TimeSpan.Zero);
 
     [Fact]
@@ -76,7 +79,7 @@ public sealed class CampaignHandlerTests
             new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
         ]);
         var store = new FakeCampaignStore { Existing = campaign };
-        var handler = new UpdateCampaignHandler(store, new FakeClock(), new FakeSecretHasher());
+        var handler = new UpdateCampaignHandler(store, new FakeClock(), new FakeSecretHasher(), new FakeAssetStorage());
 
         var result = await handler.HandleAsync(
             new UpdateCampaignCommand
@@ -124,6 +127,136 @@ public sealed class CampaignHandlerTests
         Assert.True(deleted.IsSuccess);
         Assert.True(store.Deleted);
         Assert.Contains("maps/old.png", maps.DeletedKeys);
+        Assert.Contains("flags/north.png", maps.DeletedKeys);
+        Assert.Contains("structures/town.png", maps.DeletedKeys);
+        Assert.DoesNotContain("Town", maps.DeletedKeys);
+        Assert.DoesNotContain("Castle", maps.DeletedKeys);
+    }
+
+    [Fact]
+    public async Task UpdateDeletesCatalogFilesThatAreNoLongerReferenced()
+    {
+        var campaign = StoredCampaignFor(UserId);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var assets = new FakeAssetStorage();
+        var handler = new UpdateCampaignHandler(store, new FakeClock(), new FakeSecretHasher(), assets);
+
+        var result = await handler.HandleAsync(
+            new UpdateCampaignCommand
+            {
+                UserId = UserId,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+                Name = campaign.Name,
+                Description = campaign.Description,
+                PlayerCount = campaign.PlayerSlotCount,
+                IsPrivate = false,
+                CreatorIsParticipant = true,
+                Factions =
+                [
+                    new FactionInput
+                    {
+                        Id = NorthFactionId,
+                        Name = "North",
+                        Color = "#2563EB",
+                        ClearFlagImage = true,
+                    },
+                    new FactionInput
+                    {
+                        Id = SouthFactionId,
+                        Name = "South",
+                        Color = "#DC2626",
+                    },
+                ],
+                Schedule = ValidSchedule(),
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains("flags/north.png", assets.DeletedKeys);
+        Assert.Contains("structures/town.png", assets.DeletedKeys);
+        Assert.DoesNotContain("maps/old.png", assets.DeletedKeys);
+        Assert.DoesNotContain("Town", assets.DeletedKeys);
+        Assert.DoesNotContain("Castle", assets.DeletedKeys);
+    }
+
+    [Fact]
+    public async Task UpdateDoesNotDeleteBuiltInStructureLogos()
+    {
+        var campaign = WithStructures(
+            StoredCampaignFor(UserId),
+            [
+                new StoredStructureType
+                {
+                    Id = TownStructureId,
+                    Name = "Town",
+                    BuiltinSymbol = "Town",
+                    ImageStorageKey = "Town",
+                    Missions = [],
+                },
+                new StoredStructureType
+                {
+                    Id = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+                    Name = "Keep",
+                    BuiltinSymbol = "Castle",
+                    ImageStorageKey = "structures/keep.png",
+                    Missions = [],
+                },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var assets = new FakeAssetStorage();
+        var handler = new UpdateCampaignHandler(store, new FakeClock(), new FakeSecretHasher(), assets);
+
+        var result = await handler.HandleAsync(
+            new UpdateCampaignCommand
+            {
+                UserId = UserId,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+                Name = campaign.Name,
+                Description = campaign.Description,
+                PlayerCount = campaign.PlayerSlotCount,
+                IsPrivate = false,
+                CreatorIsParticipant = true,
+                Factions =
+                [
+                    new FactionInput { Id = NorthFactionId, Name = "North", Color = "#2563EB" },
+                    new FactionInput { Id = SouthFactionId, Name = "South", Color = "#DC2626" },
+                ],
+                Schedule = ValidSchedule(),
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains("structures/keep.png", assets.DeletedKeys);
+        Assert.DoesNotContain("Town", assets.DeletedKeys);
+        Assert.DoesNotContain("Castle", assets.DeletedKeys);
+    }
+
+    [Fact]
+    public async Task UploadMapDeletesThePreviousMapFile()
+    {
+        var campaign = StoredCampaignFor(UserId);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var maps = new FakeMapStorage();
+        var handler = new UploadCampaignMapHandler(store, new FakeMapProcessor(), maps, new FakeClock());
+
+        var result = await handler.HandleAsync(
+            new UploadCampaignMapCommand
+            {
+                UserId = UserId,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+                Content = Stream.Null,
+                ContentType = "image/png",
+                Length = 12,
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("maps/new.png", store.Updated!.MapStorageKey);
+        Assert.Contains("maps/old.png", maps.DeletedKeys);
+        Assert.DoesNotContain("flags/north.png", maps.DeletedKeys);
     }
 
     [Fact]
@@ -200,8 +333,23 @@ public sealed class CampaignHandlerTests
             ],
             Factions =
             [
-                new StoredFaction { Id = Guid.NewGuid(), Name = "North", Color = "#2563EB", Subfactions = ["Riders"], RequiresSubfaction = false },
-                new StoredFaction { Id = Guid.NewGuid(), Name = "South", Color = "#DC2626", Subfactions = [], RequiresSubfaction = false },
+                new StoredFaction
+                {
+                    Id = NorthFactionId,
+                    Name = "North",
+                    Color = "#2563EB",
+                    Subfactions = ["Riders"],
+                    RequiresSubfaction = false,
+                    FlagImageStorageKey = "flags/north.png",
+                },
+                new StoredFaction
+                {
+                    Id = SouthFactionId,
+                    Name = "South",
+                    Color = "#DC2626",
+                    Subfactions = [],
+                    RequiresSubfaction = false,
+                },
             ],
             AllyGroups = [],
             Links =
@@ -221,7 +369,17 @@ public sealed class CampaignHandlerTests
                 new StoredRoundPhase { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
             ],
             TerrainTypes = [],
-            StructureTypes = [],
+            StructureTypes =
+            [
+                new StoredStructureType
+                {
+                    Id = TownStructureId,
+                    Name = "Town",
+                    BuiltinSymbol = "Town",
+                    ImageStorageKey = "structures/town.png",
+                    Missions = [],
+                },
+            ],
         };
     }
 
@@ -255,6 +413,39 @@ public sealed class CampaignHandlerTests
             MapGraph = campaign.MapGraph,
             TerrainTypes = campaign.TerrainTypes,
             StructureTypes = campaign.StructureTypes,
+        };
+    }
+
+    private static StoredCampaign WithStructures(StoredCampaign campaign, IReadOnlyList<StoredStructureType> structures)
+    {
+        return new StoredCampaign
+        {
+            Id = campaign.Id,
+            Name = campaign.Name,
+            Description = campaign.Description,
+            PlayerSlotCount = campaign.PlayerSlotCount,
+            IsPrivate = campaign.IsPrivate,
+            JoinPasswordHash = campaign.JoinPasswordHash,
+            CreatorIsParticipant = campaign.CreatorIsParticipant,
+            MapStorageKey = campaign.MapStorageKey,
+            Revision = campaign.Revision,
+            CreatedUtc = campaign.CreatedUtc,
+            UpdatedUtc = campaign.UpdatedUtc,
+            CreatedByUserId = campaign.CreatedByUserId,
+            Memberships = campaign.Memberships,
+            Factions = campaign.Factions,
+            AllyGroups = campaign.AllyGroups,
+            Links = campaign.Links,
+            TimeZoneId = campaign.TimeZoneId,
+            StartsUtc = campaign.StartsUtc,
+            EndsUtc = campaign.EndsUtc,
+            RoundCount = campaign.RoundCount,
+            RoundLengthAmount = campaign.RoundLengthAmount,
+            RoundLengthUnit = campaign.RoundLengthUnit,
+            Phases = campaign.Phases,
+            MapGraph = campaign.MapGraph,
+            TerrainTypes = campaign.TerrainTypes,
+            StructureTypes = structures,
         };
     }
 
@@ -402,6 +593,50 @@ public sealed class CampaignHandlerTests
         public Task<StoredCampaignMap?> OpenReadAsync(string storageKey, CancellationToken cancellationToken)
         {
             return Task.FromResult<StoredCampaignMap?>(null);
+        }
+    }
+
+    private sealed class FakeAssetStorage : ICampaignAssetStorage
+    {
+        public List<string> DeletedKeys { get; } = [];
+
+        public Task<string> SaveAsync(
+            string folder,
+            ReadOnlyMemory<byte> content,
+            string fileExtension,
+            string contentType,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult($"{folder}/new.png");
+        }
+
+        public Task DeleteAsync(string storageKey, CancellationToken cancellationToken)
+        {
+            DeletedKeys.Add(storageKey);
+            return Task.CompletedTask;
+        }
+
+        public Task<StoredCampaignAsset?> OpenReadAsync(string storageKey, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<StoredCampaignAsset?>(null);
+        }
+    }
+
+    private sealed class FakeMapProcessor : ICampaignMapProcessor
+    {
+        public Task<ProcessedCampaignMapResult> ProcessAsync(
+            Stream content,
+            string contentType,
+            long? length,
+            CancellationToken cancellationToken,
+            int maxDimension = ICampaignMapProcessor.MapMaxDimension)
+        {
+            return Task.FromResult(new ProcessedCampaignMapResult
+            {
+                IsSuccess = true,
+                Content = [1, 2, 3],
+                FileExtension = ".png",
+            });
         }
     }
 }

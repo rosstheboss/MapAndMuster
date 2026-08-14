@@ -37,6 +37,8 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<SaveCampaignMapGraphHandler>();
         services.AddScoped<UploadStructureImageHandler>();
         services.AddScoped<GetStructureImageHandler>();
+        services.AddScoped<UploadFactionFlagHandler>();
+        services.AddScoped<GetFactionFlagHandler>();
         services.AddScoped<UploadMissionFileHandler>();
         services.AddScoped<GetMissionFileHandler>();
 

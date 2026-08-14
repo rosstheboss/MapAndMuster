@@ -1,21 +1,57 @@
 :host {
-  display: block;
+  display: grid;
+  gap: 0.65rem;
 }
 
-.map-stage {
+.map-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.zoom-hint {
+  margin: 0;
+  flex: 1 1 16rem;
+}
+
+.zoom-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.zoom-input input {
+  width: 4.5rem;
+  min-height: var(--touch-min);
+}
+
+.map-viewport {
   position: relative;
-  display: inline-block;
-  max-width: 100%;
+  overflow: hidden;
+  width: 100%;
+  height: min(70vh, 42rem);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-nested);
+  touch-action: none;
+}
+
+.map-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
   line-height: 0;
 }
 
-.map-stage img {
+.map-canvas > img {
   display: block;
-  max-width: 100%;
-  height: auto;
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  background: #e7e5e4;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  background: var(--color-nested);
 }
 
 .map-overlay {
@@ -32,20 +68,21 @@
   stroke: rgb(28 25 23 / 75%);
   stroke-width: 0.004;
   cursor: pointer;
+  pointer-events: fill;
 }
 
-.territory.is-highlighted {
-  fill-opacity: 0.22;
-  stroke-width: 0.01;
+.territory.is-adjacent {
+  fill-opacity: 0.16;
+  stroke-width: 0.008;
   filter: drop-shadow(0 0 0.008px var(--glow-color, var(--color-glow)))
     drop-shadow(0 0 0.018px var(--glow-color, var(--color-glow)));
 }
 
-.structure-disc {
-  fill: rgb(255 255 255 / 88%);
-  stroke: rgb(28 25 23 / 70%);
-  stroke-width: 0.003;
-  pointer-events: none;
+.territory.is-selected {
+  fill-opacity: 0.22;
+  stroke-width: 0.01;
+  filter: drop-shadow(0 0 0.008px var(--glow-color, var(--color-glow)))
+    drop-shadow(0 0 0.018px var(--glow-color, var(--color-glow)));
 }
 
 .structure-pin {
@@ -53,35 +90,41 @@
   z-index: 1;
   display: grid;
   place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  margin: -0.75rem 0 0 -0.75rem;
   border-radius: 999px;
   background: rgb(255 255 255 / 92%);
   color: #1c1917;
   pointer-events: none;
   box-shadow: 0 0 0 1px rgb(28 25 23 / 35%);
+  overflow: hidden;
 }
 
 .structure-pin app-map-symbol,
-.structure-pin img {
-  width: 1rem;
-  height: 1rem;
+.structure-pin img,
+.faction-flag img {
+  width: 80%;
+  height: 80%;
 }
 
-.structure-pin img {
+.structure-pin img,
+.faction-flag img {
   object-fit: contain;
 }
 
 .faction-flag {
   position: absolute;
   z-index: 1;
-  width: 0.7rem;
-  height: 0.5rem;
-  margin: -0.25rem 0 0 -0.1rem;
   clip-path: polygon(0 0, 100% 20%, 70% 50%, 100% 80%, 0 100%);
   pointer-events: none;
   box-shadow: 0 0 0 1px rgb(28 25 23 / 35%);
+}
+
+.faction-flag.has-image {
+  clip-path: none;
+  border-radius: 0.15rem;
+  background: rgb(255 255 255 / 92%);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
 }
 
 .drawing-path {

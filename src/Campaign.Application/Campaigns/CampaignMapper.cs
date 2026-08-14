@@ -71,6 +71,7 @@ public static class CampaignMapper
                 Subfactions = faction.Subfactions,
                 AllyGroupName = faction.AllyGroupName,
                 RequiresSubfaction = faction.RequiresSubfaction,
+                HasFlagImage = !string.IsNullOrWhiteSpace(faction.FlagImageStorageKey),
             })],
             TerrainTypes = [.. campaign.TerrainTypes.Select(static type => new TerrainTypeDetail
             {

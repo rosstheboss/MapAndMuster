@@ -102,6 +102,9 @@ public sealed class FactionRequest
 
     /// <summary>Gets whether a player who chooses this faction must pick a subfaction.</summary>
     public bool RequiresSubfaction { get; init; }
+
+    /// <summary>Gets whether an existing uploaded flag image should be removed.</summary>
+    public bool ClearFlagImage { get; init; }
 }
 
 /// <summary>
@@ -357,6 +360,9 @@ public sealed class FactionResponse
 
     /// <summary>Gets whether a player who chooses this faction must pick a subfaction.</summary>
     public required bool RequiresSubfaction { get; init; }
+
+    /// <summary>Gets whether the faction has an uploaded flag image.</summary>
+    public required bool HasFlagImage { get; init; }
 }
 
 /// <summary>
@@ -507,6 +513,7 @@ public static class CampaignResponses
                     AllyGroupName = faction.AllyGroupName,
                     Color = faction.Color,
                     RequiresSubfaction = faction.RequiresSubfaction,
+                    HasFlagImage = faction.HasFlagImage,
                 }),
             ],
             TerrainTypes =
@@ -720,6 +727,7 @@ public static class CampaignResponses
                 Subfactions = faction.Subfactions,
                 AllyGroupName = faction.AllyGroupName,
                 RequiresSubfaction = faction.RequiresSubfaction,
+                ClearFlagImage = faction.ClearFlagImage,
             }),
         ];
     }

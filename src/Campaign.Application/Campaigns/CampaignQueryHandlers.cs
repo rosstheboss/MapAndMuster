@@ -131,9 +131,9 @@ public sealed class DeleteCampaignHandler
             return OperationResult.Failure(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
-        if (!string.IsNullOrWhiteSpace(campaign.MapStorageKey))
+        foreach (var key in CatalogFileBinder.CollectCampaignStorageKeys(campaign))
         {
-            await _maps.DeleteAsync(campaign.MapStorageKey, cancellationToken).ConfigureAwait(false);
+            await _maps.DeleteAsync(key, cancellationToken).ConfigureAwait(false);
         }
 
         return OperationResult.Success();
@@ -221,7 +221,7 @@ public sealed class UploadCampaignMapHandler
                 outcome.Message ?? "The campaign map could not be saved.");
         }
 
-        if (!string.IsNullOrWhiteSpace(previousKey))
+        if (CatalogFileBinder.IsUserUploadedFileKey(previousKey))
         {
             await _maps.DeleteAsync(previousKey, cancellationToken).ConfigureAwait(false);
         }
@@ -353,6 +353,42 @@ internal static class CampaignMapClone
             MapGraph = existing.MapGraph,
             TerrainTypes = terrainTypes,
             StructureTypes = structureTypes,
+        };
+    }
+
+    public static StoredCampaign CloneWithFactions(
+        StoredCampaign existing,
+        IReadOnlyList<StoredFaction> factions,
+        DateTimeOffset updatedUtc)
+    {
+        return new StoredCampaign
+        {
+            Id = existing.Id,
+            Name = existing.Name,
+            Description = existing.Description,
+            PlayerSlotCount = existing.PlayerSlotCount,
+            IsPrivate = existing.IsPrivate,
+            JoinPasswordHash = existing.JoinPasswordHash,
+            CreatorIsParticipant = existing.CreatorIsParticipant,
+            MapStorageKey = existing.MapStorageKey,
+            Revision = existing.Revision,
+            CreatedUtc = existing.CreatedUtc,
+            UpdatedUtc = updatedUtc,
+            CreatedByUserId = existing.CreatedByUserId,
+            Memberships = existing.Memberships,
+            Factions = factions,
+            AllyGroups = existing.AllyGroups,
+            Links = existing.Links,
+            TimeZoneId = existing.TimeZoneId,
+            StartsUtc = existing.StartsUtc,
+            EndsUtc = existing.EndsUtc,
+            RoundCount = existing.RoundCount,
+            RoundLengthAmount = existing.RoundLengthAmount,
+            RoundLengthUnit = existing.RoundLengthUnit,
+            Phases = existing.Phases,
+            MapGraph = existing.MapGraph,
+            TerrainTypes = existing.TerrainTypes,
+            StructureTypes = existing.StructureTypes,
         };
     }
 }

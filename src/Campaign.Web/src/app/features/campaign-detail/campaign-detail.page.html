@@ -132,14 +132,19 @@
             [imageUrl]="src"
             [territories]="graph().territories"
             [adjacencies]="graph().adjacencies"
+            [selectedTerritoryIds]="focusTerritoryIds()"
             [hoveredTerritoryId]="hoveredTerritoryId()"
+            [adjacentTerritoryIds]="adjacentTerritoryIds()"
             [showAdjacencies]="false"
             [interactive]="true"
+            [pointerPan]="true"
             [factions]="campaign.factions"
             [structures]="campaign.structureTypes"
             [structureImageUrl]="structureImageUrl"
+            [flagImageUrl]="flagImageUrl"
             (territoryHover)="hoveredTerritoryId.set($event)"
-            (territorySelect)="hoveredTerritoryId.set($event)"
+            (territorySelect)="onTerritorySelect($event)"
+            (backgroundSelect)="selectedIds.set([])"
           />
           <aside class="map-meta panel stack" aria-live="polite">
             @if (hoveredTerritory(); as territory) {

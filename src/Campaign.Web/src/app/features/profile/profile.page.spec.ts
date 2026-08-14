@@ -44,6 +44,7 @@ describe('ProfilePage', () => {
     expect(compiled.querySelector('#newPassword')).toBeTruthy();
     expect(compiled.querySelector('#confirmPassword')).toBeTruthy();
     expect(compiled.querySelector('#suffix')).toBeTruthy();
+    expect(compiled.querySelector('app-theme-toggle button')?.getAttribute('aria-pressed')).toBe('false');
 
     const page = fixture.componentInstance as unknown as {
       form: {

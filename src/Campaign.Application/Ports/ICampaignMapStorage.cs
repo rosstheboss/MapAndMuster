@@ -32,14 +32,14 @@ public interface ICampaignMapStorage
 }
 
 /// <summary>
-/// Stores campaign catalog files (structure logos and mission documents) outside the web root.
+/// Stores campaign catalog files (structure logos, faction flags, and mission documents) outside the web root.
 /// </summary>
 public interface ICampaignAssetStorage
 {
     /// <summary>
     /// Saves bytes under a generated key in the specified folder.
     /// </summary>
-    /// <param name="folder">The storage folder, such as structures or missions.</param>
+    /// <param name="folder">The storage folder, such as structures, flags, or missions.</param>
     /// <param name="content">The file bytes.</param>
     /// <param name="fileExtension">The file extension including the leading period.</param>
     /// <param name="contentType">The content type to store with the file.</param>
@@ -92,7 +92,17 @@ public interface ICampaignMapProcessor
     /// <summary>
     /// Maximum accepted upload size in bytes.
     /// </summary>
-    const int MaxUploadBytes = 10 * 1024 * 1024;
+    const int MaxUploadBytes = 20 * 1024 * 1024;
+
+    /// <summary>
+    /// Maximum width and height for a structure logo after shrinking.
+    /// </summary>
+    const int StructureLogoMaxDimension = 50;
+
+    /// <summary>
+    /// Maximum width and height for a campaign map after shrinking.
+    /// </summary>
+    const int MapMaxDimension = 8192;
 
     /// <summary>
     /// Attempts to process an uploaded map image.
@@ -101,12 +111,14 @@ public interface ICampaignMapProcessor
     /// <param name="contentType">The declared content type.</param>
     /// <param name="length">The declared length, if known.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="maxDimension">The maximum width or height to keep.</param>
     /// <returns>The processed image, or a failure.</returns>
     Task<ProcessedCampaignMapResult> ProcessAsync(
         Stream content,
         string contentType,
         long? length,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        int maxDimension = MapMaxDimension);
 }
 
 /// <summary>

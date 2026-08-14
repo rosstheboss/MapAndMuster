@@ -20,6 +20,9 @@ public sealed class CampaignFactionRecord
     /// <summary>Gets or sets whether a player who chooses this faction must pick a subfaction.</summary>
     public bool RequiresSubfaction { get; set; }
 
+    /// <summary>Gets or sets the stored custom flag image key.</summary>
+    public string? FlagImageStorageKey { get; set; }
+
     /// <summary>Gets or sets the optional ally-group identifier.</summary>
     public Guid? AllyGroupId { get; set; }
 

@@ -14,13 +14,15 @@ public sealed class FactionSetup
     /// <param name="subfactions">The subfaction names.</param>
     /// <param name="allyGroupName">The ally group this faction joins, if any.</param>
     /// <param name="requiresSubfaction">Whether a player who chooses this faction must pick a subfaction.</param>
+    /// <param name="clearFlagImage">Whether an existing uploaded flag image should be removed.</param>
     public FactionSetup(
         Guid id,
         string name,
         string color,
         IReadOnlyList<string> subfactions,
         string? allyGroupName,
-        bool requiresSubfaction)
+        bool requiresSubfaction,
+        bool clearFlagImage)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(color);
@@ -31,6 +33,7 @@ public sealed class FactionSetup
         Subfactions = subfactions;
         AllyGroupName = allyGroupName;
         RequiresSubfaction = requiresSubfaction;
+        ClearFlagImage = clearFlagImage;
     }
 
     /// <summary>Gets the faction identifier.</summary>
@@ -50,4 +53,7 @@ public sealed class FactionSetup
 
     /// <summary>Gets whether a player who chooses this faction must pick a subfaction.</summary>
     public bool RequiresSubfaction { get; }
+
+    /// <summary>Gets whether an existing uploaded flag image should be removed.</summary>
+    public bool ClearFlagImage { get; }
 }

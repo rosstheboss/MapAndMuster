@@ -27,9 +27,10 @@ Created and last-edited instants are stored in UTC. The owner chooses a time zon
 when none has been stored yet, those times are shown in UTC.
 
 Other users may see username, location, avatar, and either the username or the full name
-according to that preference. Email, created/updated timestamps, time-zone preference, and
-the legal name when the owner chose username display are omitted from public queries. Created
-and last-edited times are visible only to the owning user.
+according to that preference. Email, created/updated timestamps, time-zone preference, and the
+legal name when the owner chose username display are omitted from public queries. Created and
+last-edited times are visible only to the owning user. Light or dark appearance is a client
+preference stored in a cookie so it remains after sign-out; light mode is the default.
 
 ## Campaign setup
 
@@ -54,7 +55,15 @@ occupy one player slot. Private campaigns store a hashed join password; the plai
 is never returned. Campaign names and faction names reject the same prohibited-language terms
 as usernames. Members may read campaign metadata for campaigns they manage or play in. Only a
 manager may edit or delete a campaign. Deletion removes the campaign from every member's list.
-One map may be stored and later replaced; SVG and other active content are rejected.
+A raster map image is required when creating a campaign; SVG and other active content are
+rejected. Maps may be JPEG, PNG, or WebP up to 20 MB. One map may later be replaced; the previous
+map file is deleted when it is no longer used. Deleting a campaign also deletes its stored map and
+user-uploaded catalog images. Built-in structure icons are application assets and are never deleted.
+
+Setup sections (details, schedule, visibility, ally groups, factions, subfactions, terrain,
+structures, missions, links, and map) can be expanded or collapsed. Section actions collapse
+with their section. Invalid sections expand automatically when save validation fails. Sections
+start expanded.
 
 ## Campaign schedule and lifecycle
 
@@ -158,20 +167,62 @@ aids and are not part of the published map image. Hovering an arrow enlarges it 
 highlights both connected territories.
 
 Campaign setup owns the terrain-type and structure catalogs. The initial terrain types,
-alphabetically, are Beach, Desert, Highlands, Lake, Mountain, Plains, Riverlands, Sea, and Swamp.
-Each has a unique color, a symbol, and at least one mission (default name `{terrain} control`).
-The initial structures, alphabetically, are Capital City, Castle, City, Fortification, Supply
-Depot, and Town. Each has a built-in symbol; a custom logo image may replace it. Structures may
-have zero or more missions. A territory uses its structure missions when that structure has any;
-otherwise it uses its terrain missions. Mission attachments are an http/https URL or a stored
-PDF/Word file, not both.
+alphabetically, are Beach, Cave, Desert, Forest, Highlands, Jungle, Lake, Mountain, Plains, Riverlands, Sea,
+and Swamp.
+Each has a unique color, a symbol, and at least one mission. Setup starts each terrain type with one
+empty mission row. The initial structures, alphabetically, are Capital City, Castle, City, Fortification, Supply
+Depot, and Town. Each structure uses either a built-in icon or an uploaded logo image, not both.
+Clearing or replacing an uploaded logo deletes only that uploaded file. Built-in icons remain in the
+application.
+Uploaded structure logos are limited to 50×50 pixels; larger images are shrunk to that size.
+Structures start with no missions. Structures may have zero or more missions. A territory uses its structure
+missions when that structure has any; otherwise it uses its terrain missions. Mission attachments are an http/https
+URL or a stored PDF/Word file, not both. Mission names are unique across the campaign. An already
+configured mission may be selected again for another terrain or structure instead of uploading a
+duplicate file. New uploads and reused missions may be mixed.
 
 Hovering or selecting a territory, while editing or viewing, shows Name, Description, structures,
 ownership (or Neutral), spawn-location faction, adjacent territories, terrain, and missions.
-Owned territories also show a small flag in the faction color. Highlights use a subtle contrasting
-glow. When a territory has an overlay color, that color is the glow, strongest around the
-territory border. Overlay colors may be assigned randomly, removed, taken from terrain, or set
-manually.
+In Select mode, a mouse click on a territory keeps that territory selected. Ctrl+click (or Command+click)
+adds or removes territories from the selection. A click on the map with no territory clears the
+selection. Selected territories can be deleted with Delete or the Delete territory control, including
+when several are selected. Dragging a selection moves those territories together when the move stays on
+the map and does not overlap another territory; shared edges are allowed.
+Owned territories also show a flag at up to 50×50 pixels, using the faction color flag by default or an
+uploaded image that is not recolored. Structure logos and ownership flags sit at 50×50 pixels in the
+territory center when that size fits; otherwise they shrink and shift to stay inside the polygon, as centered
+as possible. When a structure is present, the ownership flag sits beside it. Highlights use a subtle
+contrasting glow. Selected or hovered territories use the full selected glow. Connected adjacent territories
+glow with half of the usual fill transparency. When several territories are selected, those
+territories stay selected and every other connected territory uses the half-glow. When a territory
+has an overlay color, that color is the glow, strongest around the territory border. Overlay
+colors may be assigned randomly, removed, taken from terrain, or set manually.
+
+The map overlay starts fitted to the panel. Zoom is 10% to 200% of the map image's actual pixel size,
+in 10% steps, with a typed percent field, a 100% control, and a Fit to panel control. 100% shows the
+image at its native size and centers it. Fit to panel scales the image to the view and recenters it.
+Drawing coordinates stay normalized to the
+full-size image. When the zoomed image is larger than the panel, it can be panned
+but not dragged past the image bounds. Drawing territories requires a pointer; other map controls,
+including zoom, pan, tool choice, and the territory list, are keyboard accessible.
+
+If two endpoints of a new drawing land on the same border of an existing territory, and no other
+lines, endpoints, or territories lie between those points on that border, a line matching that
+border is inserted when the pointer is released. If a drawn line’s endpoints touch one or more
+territory borders and walking those borders can close a single empty region, that loop is enclosed
+as a new territory. If both endpoints sit on the map image edge, the shape is enclosed along that
+image edge.
+
+Factions, terrain types, and structures can be expanded or collapsed inside their setup sections.
+Each ally group lists its member factions in a paragraph. When any ally group exists, unaligned
+factions are listed after the groups.
+
+Each faction uses a color flag by default or an uploaded 50×50 flag image. Uploaded flags are not
+recolored.
+
+The Your campaigns page groups campaigns as Active, Upcoming, and Completed. Campaigns start
+collapsed and expand to view or edit. Active campaigns are ordered by soonest end. Upcoming
+campaigns are ordered by soonest start. Completed campaigns are ordered by most recently finished.
 
 ## Forces
 

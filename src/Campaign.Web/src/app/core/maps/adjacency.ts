@@ -57,6 +57,20 @@ export function adjacencyMarker(left: MapTerritory, right: MapTerritory): { x: n
   );
 }
 
+export function adjacentTerritoryIds(adjacencies: readonly MapAdjacency[], selectedIds: readonly string[]): string[] {
+  const selected = new Set(selectedIds.filter((id) => id.length > 0));
+  const adjacent = new Set<string>();
+  for (const edge of adjacencies) {
+    if (selected.has(edge.territoryAId) && !selected.has(edge.territoryBId)) {
+      adjacent.add(edge.territoryBId);
+    } else if (selected.has(edge.territoryBId) && !selected.has(edge.territoryAId)) {
+      adjacent.add(edge.territoryAId);
+    }
+  }
+
+  return [...adjacent];
+}
+
 function midpointOf(left: { x: number; y: number }, right: { x: number; y: number }): { x: number; y: number } {
   return { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 };
 }

@@ -22,4 +22,7 @@ public sealed class FactionInput
 
     /// <summary>Gets whether a player who chooses this faction must pick a subfaction.</summary>
     public bool RequiresSubfaction { get; init; }
+
+    /// <summary>Gets whether an existing uploaded flag image should be removed.</summary>
+    public bool ClearFlagImage { get; init; }
 }

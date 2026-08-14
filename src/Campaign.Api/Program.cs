@@ -19,7 +19,11 @@ builder.Services.AddHttpClient("external-avatar", client =>
 
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 12 * 1024 * 1024;
+    options.MultipartBodyLengthLimit = 24 * 1024 * 1024;
+});
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 24 * 1024 * 1024;
 });
 
 builder.Services.ConfigureApplicationCookie(options =>

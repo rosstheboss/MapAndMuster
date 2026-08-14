@@ -215,6 +215,10 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                         .HasMaxLength(7)
                         .HasColumnType("character varying(7)");
 
+                    b.Property<string>("FlagImageStorageKey")
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(60)

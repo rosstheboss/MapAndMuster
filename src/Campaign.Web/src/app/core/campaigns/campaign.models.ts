@@ -59,6 +59,7 @@ export interface CampaignFaction {
   subfactions: string[];
   allyGroupName: string | null;
   requiresSubfaction: boolean;
+  hasFlagImage: boolean;
 }
 
 export interface CampaignAllyGroup {
@@ -129,6 +130,7 @@ export interface SaveFactionPayload {
   subfactions: string[];
   allyGroupName: string | null;
   requiresSubfaction: boolean;
+  clearFlagImage?: boolean;
 }
 
 export interface SaveAllyGroupPayload {

@@ -88,6 +88,7 @@ public sealed class UpdateCampaignHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly ISecretHasher _secrets;
+    private readonly ICampaignAssetStorage _assets;
 
     /// <summary>
     /// Initializes a new handler.
@@ -95,14 +96,17 @@ public sealed class UpdateCampaignHandler
     /// <param name="campaigns">The campaign store.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="secrets">The secret hasher.</param>
-    public UpdateCampaignHandler(ICampaignStore campaigns, IClock clock, ISecretHasher secrets)
+    /// <param name="assets">The catalog file storage.</param>
+    public UpdateCampaignHandler(ICampaignStore campaigns, IClock clock, ISecretHasher secrets, ICampaignAssetStorage assets)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(secrets);
+        ArgumentNullException.ThrowIfNull(assets);
         _campaigns = campaigns;
         _clock = clock;
         _secrets = secrets;
+        _assets = assets;
     }
 
     /// <summary>
@@ -203,7 +207,8 @@ public sealed class UpdateCampaignHandler
             memberships,
             existing.MapGraph,
             existing.TerrainTypes,
-            existing.StructureTypes);
+            existing.StructureTypes,
+            existing.Factions);
 
         var outcome = await _campaigns
             .UpdateAsync(updated, command.ExpectedRevision, cancellationToken)
@@ -213,6 +218,11 @@ public sealed class UpdateCampaignHandler
             return OperationResults.Failure<CampaignDetail>(
                 outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
                 outcome.Message ?? "The campaign could not be updated.");
+        }
+
+        foreach (var key in CatalogFileBinder.UnusedStorageKeys(existing, outcome.Campaign))
+        {
+            await _assets.DeleteAsync(key, cancellationToken).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
@@ -236,7 +246,8 @@ internal static class CampaignPersistenceFactory
         IReadOnlyList<StoredCampaignMembership>? memberships = null,
         StoredMapGraph? mapGraph = null,
         IReadOnlyList<StoredTerrainType>? previousTerrainTypes = null,
-        IReadOnlyList<StoredStructureType>? previousStructureTypes = null)
+        IReadOnlyList<StoredStructureType>? previousStructureTypes = null,
+        IReadOnlyList<StoredFaction>? previousFactions = null)
     {
         var allyGroups = setup.AllyGroups
             .Select(group => new StoredAllyGroup { Id = Guid.NewGuid(), Name = group.Name })
@@ -265,18 +276,7 @@ internal static class CampaignPersistenceFactory
                     IsPlayer = setup.CreatorIsParticipant,
                 },
             ],
-            Factions =
-            [
-                .. setup.Factions.Select(faction => new StoredFaction
-                {
-                    Id = faction.Id,
-                    Name = faction.Name,
-                    Color = faction.Color,
-                    Subfactions = faction.Subfactions,
-                    AllyGroupName = faction.AllyGroupName,
-                    RequiresSubfaction = faction.RequiresSubfaction,
-                }),
-            ],
+            Factions = CatalogFileBinder.BindFactions(setup.Factions, previousFactions),
             AllyGroups = allyGroups,
             Links =
             [

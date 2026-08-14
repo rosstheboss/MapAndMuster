@@ -7,6 +7,7 @@ import type { CampaignDetail, CampaignMission } from '../../core/campaigns/campa
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 import { actionNumberAt, formatDuration, formatPhaseLabel, statusLabel } from '../../core/campaigns/campaign-schedule';
+import { adjacentTerritoryIds } from '../../core/maps/adjacency';
 import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
 import { territoryLabel } from '../../core/maps/map-graph.models';
 import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
@@ -29,6 +30,7 @@ export class CampaignDetailPage {
   protected readonly campaign = signal<CampaignDetail | null>(null);
   protected readonly graph = signal<MapGraph>({ territories: [], adjacencies: [] });
   protected readonly hoveredTerritoryId = signal<string | null>(null);
+  protected readonly selectedIds = signal<string[]>([]);
   protected readonly confirmingDelete = signal(false);
   protected readonly deleting = signal(false);
 
@@ -52,9 +54,33 @@ export class CampaignDetailPage {
   }
 
   protected hoveredTerritory = computed(() => {
-    const id = this.hoveredTerritoryId();
+    const id = this.hoveredTerritoryId() ?? this.selectedIds().at(-1) ?? null;
     return this.graph().territories.find((territory) => territory.id === id) ?? null;
   });
+  protected readonly focusTerritoryIds = computed(() => {
+    const ids = [...this.selectedIds()];
+    const hover = this.hoveredTerritoryId();
+    if (hover) {
+      ids.push(hover);
+    }
+
+    return [...new Set(ids)];
+  });
+  protected readonly adjacentTerritoryIds = computed(() =>
+    adjacentTerritoryIds(this.graph().adjacencies, this.focusTerritoryIds()),
+  );
+
+  protected onTerritorySelect(event: { id: string; additive: boolean }): void {
+    if (event.additive) {
+      this.selectedIds.update((current) =>
+        current.includes(event.id) ? current.filter((id) => id !== event.id) : [...current, event.id],
+      );
+      return;
+    }
+
+    this.selectedIds.set([event.id]);
+    this.hoveredTerritoryId.set(event.id);
+  }
 
   protected factionName(id: string | null | undefined): string {
     if (!id) {
@@ -109,6 +135,16 @@ export class CampaignDetailPage {
     }
 
     return this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.revision);
+  };
+
+  protected flagImageUrl = (factionId: string): string | null => {
+    const campaign = this.campaign();
+    const faction = campaign?.factions.find((item) => item.id === factionId);
+    if (!campaign || !faction?.hasFlagImage) {
+      return null;
+    }
+
+    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.revision);
   };
 
   protected missionFileUrl(mission: CampaignMission): string | null {

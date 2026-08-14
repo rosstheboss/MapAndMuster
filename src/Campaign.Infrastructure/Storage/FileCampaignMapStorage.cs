@@ -1,4 +1,5 @@
 using Campaign.Application.Ports;
+using Campaign.Domain.Campaigns;
 using Microsoft.Extensions.Options;
 
 namespace Campaign.Infrastructure.Storage;
@@ -12,6 +13,7 @@ public sealed class FileCampaignMapStorage : ICampaignMapStorage, ICampaignAsset
     {
         "maps",
         "structures",
+        "flags",
         "missions",
     };
 
@@ -27,6 +29,7 @@ public sealed class FileCampaignMapStorage : ICampaignMapStorage, ICampaignAsset
         _rootPath = Path.GetFullPath(options.Value.RootPath);
         Directory.CreateDirectory(Path.Combine(_rootPath, "maps"));
         Directory.CreateDirectory(Path.Combine(_rootPath, "structures"));
+        Directory.CreateDirectory(Path.Combine(_rootPath, "flags"));
         Directory.CreateDirectory(Path.Combine(_rootPath, "missions"));
     }
 
@@ -72,6 +75,11 @@ public sealed class FileCampaignMapStorage : ICampaignMapStorage, ICampaignAsset
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
         cancellationToken.ThrowIfCancellationRequested();
+        if (CampaignCatalogDefaults.CanonicalBuiltinSymbol(storageKey) is not null)
+        {
+            return Task.CompletedTask;
+        }
+
         var path = GetFullPath(storageKey);
         if (File.Exists(path))
         {

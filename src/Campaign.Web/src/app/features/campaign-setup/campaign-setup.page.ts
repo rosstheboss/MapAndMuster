@@ -30,6 +30,7 @@ import {
 } from '../../core/campaigns/faction-presets';
 import { listTimeZones } from '../../core/location/location';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
+import { STRUCTURE_TYPES } from '../../core/maps/structures';
 import {
   describeControlError,
   httpUrl,
@@ -55,6 +56,8 @@ type FactionGroup = FormGroup<{
   color: FormControl<string>;
   requiresSubfaction: FormControl<boolean>;
   allyGroupName: FormControl<string>;
+  flagSource: FormControl<'color' | 'image'>;
+  clearFlagImage: FormControl<boolean>;
   subfactions: FormArray<NamedGroup>;
 }>;
 type TerrainGroup = FormGroup<{
@@ -67,6 +70,7 @@ type StructureGroup = FormGroup<{
   id: FormControl<string>;
   name: FormControl<string>;
   builtinSymbol: FormControl<string>;
+  iconSource: FormControl<'symbol' | 'image'>;
   clearImage: FormControl<boolean>;
   missions: FormArray<MissionGroup>;
 }>;
@@ -98,17 +102,24 @@ export class CampaignSetupPage {
   protected readonly campaignId = signal<string | null>(null);
   protected readonly hasExistingMap = signal(false);
   protected readonly mapFileName = signal<string | null>(null);
+  private readonly sectionOpen = signal<Record<string, boolean>>({});
   private mapFile: File | null = null;
   private revision = 0;
   private readonly structureImages = new Map<string, File>();
+  private readonly flagImages = new Map<string, File>();
   private readonly missionFiles = new Map<string, File>();
   private readonly storedStructureImages = signal<ReadonlySet<string>>(new Set());
+  private readonly storedFlagImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedMissionFiles = signal<ReadonlySet<string>>(new Set());
 
   protected readonly timeZones = listTimeZones();
   protected readonly durationUnits = DURATION_UNITS;
   protected readonly phaseKinds = PHASE_KINDS;
   protected readonly factionPresets = FACTION_PRESETS;
+  protected readonly structureSymbols = STRUCTURE_TYPES;
+  protected readonly structureImageMaxPx = 50;
+  protected readonly flagImageMaxPx = 50;
+  protected readonly mapMaxBytes = 20 * 1024 * 1024;
   protected readonly presetId = this.formBuilder.nonNullable.control('');
   protected readonly selectedPresetId = toSignal(this.presetId.valueChanges, {
     initialValue: this.presetId.value,
@@ -218,6 +229,33 @@ export class CampaignSetupPage {
 
     const control = group.get(name);
     return !!control && control.touched && control.invalid;
+  }
+
+  protected isOpen(id: string): boolean {
+    return this.sectionOpen()[id] !== false;
+  }
+
+  protected toggleSection(id: string): void {
+    this.sectionOpen.update((current) => ({ ...current, [id]: current[id] === false }));
+  }
+
+  protected allyMembers(groupName: string): string {
+    return this.factions.controls
+      .filter((faction) => faction.controls.allyGroupName.value === groupName && faction.controls.name.value.trim())
+      .map((faction) => faction.controls.name.value.trim())
+      .join(', ');
+  }
+
+  protected unalignedFactions(): string {
+    return this.factions.controls
+      .filter((faction) => !faction.controls.allyGroupName.value.trim() && faction.controls.name.value.trim())
+      .map((faction) => faction.controls.name.value.trim())
+      .join(', ');
+  }
+
+  protected itemLabel(name: string, fallback: string): string {
+    const trimmed = name.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
   }
 
   protected applySelectedPreset(): void {
@@ -342,10 +380,86 @@ export class CampaignSetupPage {
     group.controls.missions.push(this.createMissionGroup());
   }
 
+  protected addReusedMission(group: TerrainGroup | StructureGroup, missionId: string): void {
+    if (!missionId || group.controls.missions.length >= 20) {
+      return;
+    }
+
+    if (group.controls.missions.controls.some((mission) => mission.controls.id.value === missionId)) {
+      return;
+    }
+
+    const source = this.findMission(missionId);
+    if (!source) {
+      return;
+    }
+
+    group.controls.missions.push(
+      this.createMissionGroup(
+        source.controls.id.value,
+        source.controls.name.value,
+        source.controls.url.value,
+        source.controls.clearFile.value,
+      ),
+    );
+  }
+
+  protected onReuseMissionSelected(group: TerrainGroup | StructureGroup, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    this.addReusedMission(group, select.value);
+    select.value = '';
+  }
+
+  protected reusableMissions(group: TerrainGroup | StructureGroup): { id: string; name: string }[] {
+    const used = new Set(group.controls.missions.controls.map((mission) => mission.controls.id.value));
+    const seen = new Map<string, { id: string; name: string }>();
+    for (const owner of [...this.terrainTypes.controls, ...this.structureTypes.controls]) {
+      for (const mission of owner.controls.missions.controls) {
+        const name = mission.controls.name.value.trim();
+        const id = mission.controls.id.value;
+        if (!name || used.has(id) || seen.has(id)) {
+          continue;
+        }
+
+        seen.set(id, { id, name });
+      }
+    }
+
+    return [...seen.values()].sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  protected setIconSource(structure: StructureGroup, source: 'symbol' | 'image'): void {
+    structure.controls.iconSource.setValue(source);
+    if (source === 'symbol') {
+      this.structureImages.delete(structure.controls.id.value);
+      structure.controls.clearImage.setValue(true);
+      if (!structure.controls.builtinSymbol.value) {
+        structure.controls.builtinSymbol.setValue(this.structureSymbols[0].id);
+      }
+    } else {
+      structure.controls.clearImage.setValue(false);
+    }
+  }
+
+  protected setFlagSource(faction: FactionGroup, source: 'color' | 'image'): void {
+    faction.controls.flagSource.setValue(source);
+    if (source === 'color') {
+      this.flagImages.delete(faction.controls.id.value);
+      faction.controls.clearFlagImage.setValue(true);
+    } else {
+      faction.controls.clearFlagImage.setValue(false);
+    }
+  }
+
   protected removeMission(group: TerrainGroup | StructureGroup, index: number): void {
     const missionId = group.controls.missions.at(index).controls.id.value;
-    this.missionFiles.delete(missionId);
     group.controls.missions.removeAt(index);
+    const stillUsed = [...this.terrainTypes.controls, ...this.structureTypes.controls].some((owner) =>
+      owner.controls.missions.controls.some((mission) => mission.controls.id.value === missionId),
+    );
+    if (!stillUsed) {
+      this.missionFiles.delete(missionId);
+    }
   }
 
   protected addPhase(kind: string): void {
@@ -379,6 +493,15 @@ export class CampaignSetupPage {
   protected onMapSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
+    if (file && file.size > this.mapMaxBytes) {
+      input.value = '';
+      this.mapFile = null;
+      this.mapFileName.set(null);
+      this.successMessage.set(null);
+      this.errorMessages.set(['Campaign maps must be 20 MB or smaller.']);
+      return;
+    }
+
     this.mapFile = file;
     this.mapFileName.set(file?.name ?? null);
   }
@@ -391,6 +514,33 @@ export class CampaignSetupPage {
       const group = this.structureTypes.controls.find((item) => item.controls.id.value === structureId);
       group?.controls.clearImage.setValue(false);
     }
+  }
+
+  protected onFlagImageSelected(factionId: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    if (file) {
+      this.flagImages.set(factionId, file);
+      const group = this.factions.controls.find((item) => item.controls.id.value === factionId);
+      group?.controls.clearFlagImage.setValue(false);
+    }
+  }
+
+  protected flagImageName(factionId: string): string | null {
+    return this.flagImages.get(factionId)?.name ?? null;
+  }
+
+  protected hasStoredFlagImage(factionId: string): boolean {
+    return this.storedFlagImages().has(factionId);
+  }
+
+  protected factionFlagUrl(factionId: string): string | null {
+    const campaignId = this.campaignId();
+    if (!campaignId || !this.hasStoredFlagImage(factionId)) {
+      return null;
+    }
+
+    return this.campaignsApi.flagImageUrl(campaignId, factionId, this.revision);
   }
 
   protected onMissionFileSelected(missionId: string, event: Event): void {
@@ -437,9 +587,10 @@ export class CampaignSetupPage {
     this.form.markAllAsTouched();
     this.serverFields.set(new Set());
     this.successMessage.set(null);
-    const failures = this.collectFailures();
-    if (failures.length > 0) {
-      this.revealErrors(failures);
+    const collected = this.collectFailures();
+    if (collected.messages.length > 0) {
+      this.expandSections(collected.sections);
+      this.revealErrors(collected.messages);
       return;
     }
 
@@ -461,7 +612,21 @@ export class CampaignSetupPage {
         }
 
         for (const [structureId, file] of this.structureImages) {
+          const structure = this.structureTypes.controls.find((item) => item.controls.id.value === structureId);
+          if (structure?.controls.iconSource.value !== 'image') {
+            continue;
+          }
+
           detail = await this.campaignsApi.uploadStructureImage(detail.id, structureId, file, detail.revision);
+        }
+
+        for (const [factionId, file] of this.flagImages) {
+          const faction = this.factions.controls.find((item) => item.controls.id.value === factionId);
+          if (faction?.controls.flagSource.value !== 'image') {
+            continue;
+          }
+
+          detail = await this.campaignsApi.uploadFlagImage(detail.id, factionId, file, detail.revision);
         }
 
         for (const [missionId, file] of this.missionFiles) {
@@ -476,6 +641,7 @@ export class CampaignSetupPage {
       this.mapFile = null;
       this.mapFileName.set(null);
       this.structureImages.clear();
+      this.flagImages.clear();
       this.missionFiles.clear();
       this.rememberStoredFiles(created.detail);
       if (created.isNew) {
@@ -523,6 +689,7 @@ export class CampaignSetupPage {
             id: faction.id,
             color: faction.color,
             requiresSubfaction: faction.requiresSubfaction,
+            hasFlagImage: faction.hasFlagImage,
           }),
         ),
       );
@@ -564,7 +731,12 @@ export class CampaignSetupPage {
     name = '',
     allyGroupName = '',
     subfactions: readonly string[] = [''],
-    options?: { id?: string; color?: string; requiresSubfaction?: boolean },
+    options?: {
+      id?: string;
+      color?: string;
+      requiresSubfaction?: boolean;
+      hasFlagImage?: boolean;
+    },
   ): FactionGroup {
     const names = subfactions.length > 0 ? subfactions : [''];
     return this.formBuilder.nonNullable.group({
@@ -573,6 +745,8 @@ export class CampaignSetupPage {
       color: [options?.color ?? '#2563EB', required],
       requiresSubfaction: [options?.requiresSubfaction === true],
       allyGroupName: [allyGroupName],
+      flagSource: this.formBuilder.nonNullable.control<'color' | 'image'>(options?.hasFlagImage ? 'image' : 'color'),
+      clearFlagImage: [false],
       subfactions: this.formBuilder.array<NamedGroup>(names.map((value) => this.createNamedGroup(value))),
     });
   }
@@ -618,22 +792,33 @@ export class CampaignSetupPage {
     });
   }
 
-  private createStructureGroup(id?: string, name = '', builtinSymbol = '', missions?: MissionGroup[]): StructureGroup {
+  private createStructureGroup(
+    id?: string,
+    name = '',
+    builtinSymbol = '',
+    missions?: MissionGroup[],
+    iconSource: 'symbol' | 'image' = 'symbol',
+  ): StructureGroup {
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
       name: [name, [required, maxLength(60)]],
       builtinSymbol: [builtinSymbol],
+      iconSource: this.formBuilder.nonNullable.control<'symbol' | 'image'>(iconSource),
       clearImage: [false],
-      missions: this.formBuilder.array<MissionGroup>(missions ?? [this.createMissionGroup()]),
+      missions: this.formBuilder.array<MissionGroup>(missions ?? []),
     });
   }
 
   private createStructureGroupFromDetail(type: CampaignStructureType): StructureGroup {
     const missions =
-      type.missions.length > 0
-        ? type.missions.map((mission) => this.createMissionGroupFromDetail(mission))
-        : [this.createMissionGroup()];
-    return this.createStructureGroup(type.id, type.name, type.builtinSymbol ?? '', missions);
+      type.missions.length > 0 ? type.missions.map((mission) => this.createMissionGroupFromDetail(mission)) : [];
+    return this.createStructureGroup(
+      type.id,
+      type.name,
+      type.builtinSymbol ?? '',
+      missions,
+      type.hasImage ? 'image' : 'symbol',
+    );
   }
 
   private createMissionGroupFromDetail(mission: CampaignMission): MissionGroup {
@@ -641,9 +826,7 @@ export class CampaignSetupPage {
   }
 
   private createDefaultTerrainGroups(): TerrainGroup[] {
-    return defaultTerrainCatalog().map((entry) =>
-      this.createTerrainGroup(undefined, entry.name, entry.color, entry.missionName),
-    );
+    return defaultTerrainCatalog().map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color));
   }
 
   private createDefaultStructureGroups(): StructureGroup[] {
@@ -687,6 +870,7 @@ export class CampaignSetupPage {
       requiresSubfaction: faction.requiresSubfaction,
       allyGroupName: faction.allyGroupName.trim() || null,
       subfactions: faction.subfactions.map((item) => item.name.trim()).filter((name) => name.length > 0),
+      clearFlagImage: faction.flagSource === 'color' || faction.clearFlagImage,
     }));
     const links = value.links
       .filter((link) => link.label.trim().length > 0 || link.url.trim().length > 0)
@@ -703,7 +887,7 @@ export class CampaignSetupPage {
       id: type.id,
       name: type.name.trim(),
       builtinSymbol: type.builtinSymbol.trim() || null,
-      clearImage: type.clearImage,
+      clearImage: type.iconSource === 'symbol' || type.clearImage,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toMissionPayload(mission)),
@@ -749,8 +933,9 @@ export class CampaignSetupPage {
     };
   }
 
-  private collectFailures(): string[] {
+  private collectFailures(): { messages: string[]; sections: string[] } {
     const failures: string[] = [];
+    const sections = new Set<string>();
     const labels: Record<string, string> = {
       name: 'Campaign name',
       description: 'Description',
@@ -760,10 +945,20 @@ export class CampaignSetupPage {
       roundCount: 'Number of rounds',
       roundLengthAmount: 'Round length',
     };
+    const labelSections: Record<string, string> = {
+      name: 'details',
+      description: 'details',
+      playerCount: 'details',
+      startsAtLocal: 'schedule',
+      timeZoneId: 'schedule',
+      roundCount: 'schedule',
+      roundLengthAmount: 'schedule',
+    };
     for (const [name, label] of Object.entries(labels)) {
       const message = describeControlError(this.form.get(name), label);
       if (message) {
         failures.push(message);
+        sections.add(labelSections[name] ?? 'details');
       }
     }
 
@@ -771,8 +966,10 @@ export class CampaignSetupPage {
       const password = this.form.controls.joinPassword.value;
       if (!this.isEdit() && password.trim().length === 0) {
         failures.push('Private campaigns require a join password.');
+        sections.add('visibility');
       } else if (password.length > 0 && password.length < 8) {
         failures.push('Join password is too short (minimum 8 characters).');
+        sections.add('visibility');
       }
     }
 
@@ -780,6 +977,8 @@ export class CampaignSetupPage {
       const message = describeControlError(faction.controls.name, `Faction ${index + 1} name`);
       if (message) {
         failures.push(message);
+        sections.add('factions');
+        sections.add(`faction-item-${index}`);
       }
 
       const namedSubfactions = faction.controls.subfactions.controls.filter(
@@ -787,11 +986,15 @@ export class CampaignSetupPage {
       );
       if (faction.controls.requiresSubfaction.value && namedSubfactions.length === 0) {
         failures.push(`Faction ${index + 1} requires at least one subfaction.`);
+        sections.add('factions');
+        sections.add(`faction-item-${index}`);
+        sections.add(`faction-sub-${index}`);
       }
     });
 
     if (this.factions.length < 2) {
       failures.push('At least 2 factions are required.');
+      sections.add('factions');
     }
 
     const usedFactionColors = new Set<string>();
@@ -799,13 +1002,29 @@ export class CampaignSetupPage {
       const color = faction.controls.color.value.toUpperCase();
       if (usedFactionColors.has(color)) {
         failures.push(`Faction ${index + 1} color must be unique.`);
+        sections.add('factions');
+        sections.add(`faction-item-${index}`);
       }
 
       usedFactionColors.add(color);
     });
 
+    this.factions.controls.forEach((faction, index) => {
+      if (faction.controls.flagSource.value !== 'image') {
+        return;
+      }
+
+      const id = faction.controls.id.value;
+      if (!this.flagImages.has(id) && !this.hasStoredFlagImage(id)) {
+        failures.push(`Faction ${index + 1} needs a flag image or the color flag.`);
+        sections.add('factions');
+        sections.add(`faction-item-${index}`);
+      }
+    });
+
     if (this.terrainTypes.length < 1) {
       failures.push('At least 1 terrain type is required.');
+      sections.add('terrain');
     }
 
     const usedTerrainColors = new Set<string>();
@@ -813,11 +1032,15 @@ export class CampaignSetupPage {
       const nameMessage = describeControlError(terrain.controls.name, `Terrain type ${index + 1} name`);
       if (nameMessage) {
         failures.push(nameMessage);
+        sections.add('terrain');
+        sections.add(`terrain-item-${index}`);
       }
 
       const color = terrain.controls.color.value.toUpperCase();
       if (usedTerrainColors.has(color)) {
         failures.push(`Terrain type ${index + 1} color must be unique.`);
+        sections.add('terrain');
+        sections.add(`terrain-item-${index}`);
       }
 
       usedTerrainColors.add(color);
@@ -827,6 +1050,9 @@ export class CampaignSetupPage {
       );
       if (namedMissions.length === 0) {
         failures.push(`Terrain type ${index + 1} requires at least one mission.`);
+        sections.add('terrain');
+        sections.add(`terrain-item-${index}`);
+        sections.add(`terrain-missions-${index}`);
       }
     });
 
@@ -834,6 +1060,17 @@ export class CampaignSetupPage {
       const nameMessage = describeControlError(structure.controls.name, `Structure ${index + 1} name`);
       if (nameMessage) {
         failures.push(nameMessage);
+        sections.add('structures');
+        sections.add(`structure-item-${index}`);
+      }
+
+      if (structure.controls.iconSource.value === 'image') {
+        const id = structure.controls.id.value;
+        if (!this.structureImages.has(id) && !this.hasStoredStructureImage(id)) {
+          failures.push(`Structure ${index + 1} needs a logo image or a built-in icon.`);
+          sections.add('structures');
+          sections.add(`structure-item-${index}`);
+        }
       }
     });
 
@@ -846,6 +1083,7 @@ export class CampaignSetupPage {
       );
       if (roundLengthMessage) {
         failures.push(roundLengthMessage);
+        sections.add('schedule');
       }
     }
 
@@ -853,12 +1091,14 @@ export class CampaignSetupPage {
     const battleCount = this.phases.controls.filter((phase) => phase.controls.kind.value === 'Battle').length;
     if (actionCount < 1 || battleCount < 1) {
       failures.push('A round must include at least one action and one battle phase.');
+      sections.add('schedule');
     }
 
     this.phases.controls.forEach((phase, index) => {
       const amountMessage = describeControlError(phase.controls.durationAmount, `Round step ${index + 1} length`);
       if (amountMessage) {
         failures.push(amountMessage);
+        sections.add('schedule');
         return;
       }
 
@@ -869,12 +1109,14 @@ export class CampaignSetupPage {
       );
       if (rangeMessage) {
         failures.push(rangeMessage);
+        sections.add('schedule');
       }
     });
 
     this.allyGroups.controls.forEach((group, index) => {
       if (group.controls.name.value.trim().length === 0) {
         failures.push(`Ally group ${index + 1} name is not filled in.`);
+        sections.add('allies');
       }
     });
 
@@ -887,24 +1129,93 @@ export class CampaignSetupPage {
       const labelMessage = describeControlError(link.controls.label, `Link ${index + 1} label`);
       if (!link.controls.label.value.trim()) {
         failures.push(`Link ${index + 1} label is not filled in.`);
+        sections.add('links');
       } else if (labelMessage) {
         failures.push(labelMessage);
+        sections.add('links');
       }
 
       const urlMessage = describeControlError(link.controls.url, `Link ${index + 1} URL`);
       if (!link.controls.url.value.trim()) {
         failures.push(`Link ${index + 1} URL is not filled in.`);
+        sections.add('links');
       } else if (urlMessage) {
         failures.push(urlMessage);
+        sections.add('links');
       }
     });
 
-    return failures;
+    const missionNames = new Map<string, string>();
+    const owners: { group: TerrainGroup | StructureGroup; section: string; nested: string }[] = [
+      ...this.terrainTypes.controls.map((group, index) => ({
+        group,
+        section: 'terrain',
+        nested: `terrain-missions-${index}`,
+      })),
+      ...this.structureTypes.controls.map((group, index) => ({
+        group,
+        section: 'structures',
+        nested: `structure-missions-${index}`,
+      })),
+    ];
+    for (const owner of owners) {
+      for (const mission of owner.group.controls.missions.controls) {
+        const name = mission.controls.name.value.trim();
+        if (!name) {
+          continue;
+        }
+
+        const key = name.toLowerCase();
+        const id = mission.controls.id.value;
+        const existing = missionNames.get(key);
+        if (existing && existing !== id) {
+          sections.add(owner.section);
+          sections.add(owner.nested);
+          if (!failures.includes('Mission names must be unique.')) {
+            failures.push('Mission names must be unique.');
+          }
+        } else {
+          missionNames.set(key, id);
+        }
+      }
+    }
+
+    if (!this.isEdit() && !this.mapFile) {
+      failures.push('A campaign map image is required.');
+      sections.add('map');
+    }
+
+    return { messages: failures, sections: [...sections] };
+  }
+
+  private findMission(missionId: string): MissionGroup | null {
+    for (const owner of [...this.terrainTypes.controls, ...this.structureTypes.controls]) {
+      const match = owner.controls.missions.controls.find((mission) => mission.controls.id.value === missionId);
+      if (match) {
+        return match;
+      }
+    }
+
+    return null;
+  }
+
+  private expandSections(ids: readonly string[]): void {
+    this.sectionOpen.update((current) => {
+      const next = { ...current };
+      for (const id of ids) {
+        next[id] = true;
+      }
+
+      return next;
+    });
   }
 
   private rememberStoredFiles(campaign: CampaignDetail): void {
     this.storedStructureImages.set(
       new Set(campaign.structureTypes.filter((type) => type.hasImage).map((type) => type.id)),
+    );
+    this.storedFlagImages.set(
+      new Set(campaign.factions.filter((faction) => faction.hasFlagImage).map((faction) => faction.id)),
     );
     this.storedMissionFiles.set(
       new Set(

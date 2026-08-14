@@ -12,7 +12,7 @@ namespace Campaign.Infrastructure.Storage;
 /// </summary>
 public sealed class CampaignMapProcessor : ICampaignMapProcessor
 {
-    private const int MaxDimension = 8192;
+    private const int DefaultMaxDimension = ICampaignMapProcessor.MapMaxDimension;
 
     private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -27,13 +27,14 @@ public sealed class CampaignMapProcessor : ICampaignMapProcessor
         Stream content,
         string contentType,
         long? length,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int maxDimension = DefaultMaxDimension)
     {
         ArgumentNullException.ThrowIfNull(content);
 
         if (length > ICampaignMapProcessor.MaxUploadBytes)
         {
-            return Fail(ErrorCodes.UploadTooLarge, "Campaign maps must be 10 MB or smaller.");
+            return Fail(ErrorCodes.UploadTooLarge, "Campaign maps must be 20 MB or smaller.");
         }
 
         if (string.IsNullOrWhiteSpace(contentType) || !AllowedContentTypes.Contains(contentType))
@@ -45,7 +46,7 @@ public sealed class CampaignMapProcessor : ICampaignMapProcessor
         await content.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
         if (buffer.Length > ICampaignMapProcessor.MaxUploadBytes)
         {
-            return Fail(ErrorCodes.UploadTooLarge, "Campaign maps must be 10 MB or smaller.");
+            return Fail(ErrorCodes.UploadTooLarge, "Campaign maps must be 20 MB or smaller.");
         }
 
         if (buffer.Length == 0 || LooksLikeMarkup(buffer))
@@ -59,13 +60,14 @@ public sealed class CampaignMapProcessor : ICampaignMapProcessor
         }
 
         buffer.Position = 0;
+        var dimension = maxDimension < 1 ? DefaultMaxDimension : maxDimension;
         try
         {
             using var image = await Image.LoadAsync(buffer, cancellationToken).ConfigureAwait(false);
             image.Mutate(processor => processor.Resize(new ResizeOptions
             {
                 Mode = ResizeMode.Max,
-                Size = new Size(MaxDimension, MaxDimension),
+                Size = new Size(dimension, dimension),
             }));
 
             await using var output = new MemoryStream();

@@ -20,10 +20,11 @@ import { NAME_SUFFIXES, PROFILE_FIELD_LABELS } from '../../core/identity/identit
 import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
+import { ThemeToggleComponent } from '../../shared/theme-toggle/theme-toggle.component';
 
 @Component({
   selector: 'app-profile-page',
-  imports: [ReactiveFormsModule, FilterableComboboxComponent, InstantDatePipe],
+  imports: [ReactiveFormsModule, FilterableComboboxComponent, InstantDatePipe, ThemeToggleComponent],
   templateUrl: './profile.page.html',
   styleUrl: './profile.page.css',
 })

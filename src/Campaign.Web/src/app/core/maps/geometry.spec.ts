@@ -1,9 +1,15 @@
-import { generateAdjacencies } from './adjacency';
+import { adjacentTerritoryIds, generateAdjacencies } from './adjacency';
 import {
+  clampTranslation,
+  encloseAlongImageEdge,
+  encloseAlongTouchedBorders,
   findSnapTarget,
+  fitSquareInPolygon,
   interiorsOverlap,
   isValidTerritoryPolygon,
   sharedBorderMidpoint,
+  traceSharedBorder,
+  translatePolygon,
   type MapPoint,
 } from './geometry';
 import type { MapAdjacency, MapTerritory } from './map-graph.models';
@@ -45,6 +51,102 @@ describe('map geometry', () => {
       y: 0.2,
     });
   });
+
+  it('traces an unobstructed shared border between two endpoints', () => {
+    const existing = square(0.1, 0.1, 0.3);
+    const traced = traceSharedBorder({ x: 0.4, y: 0.12 }, { x: 0.4, y: 0.38 }, [existing]);
+    expect(traced).toEqual([
+      { x: 0.4, y: 0.12 },
+      { x: 0.4, y: 0.38 },
+    ]);
+  });
+
+  it('inserts existing vertices when endpoints sit on the same territory outline', () => {
+    const existing = square(0.1, 0.1, 0.3);
+    const traced = traceSharedBorder({ x: 0.2, y: 0.1 }, { x: 0.4, y: 0.2 }, [existing]);
+    expect(traced?.[0]).toEqual({ x: 0.2, y: 0.1 });
+    expect(traced?.at(-1)).toEqual({ x: 0.4, y: 0.2 });
+    expect(traced?.some((point) => point.x === 0.4 && point.y === 0.1)).toBe(true);
+  });
+
+  it('does not trace a border already shared with another territory', () => {
+    const leftPoly = square(0.1, 0.1, 0.3);
+    const rightPoly = square(0.4, 0.1, 0.3);
+    expect(traceSharedBorder({ x: 0.4, y: 0.15 }, { x: 0.4, y: 0.35 }, [leftPoly, rightPoly])).toBeNull();
+  });
+
+  it('encloses an empty pocket by walking the touched territory border', () => {
+    const existing = square(0.1, 0.4, 0.3);
+    const enclosed = encloseAlongTouchedBorders(
+      [
+        { x: 0.1, y: 0.4 },
+        { x: 0.25, y: 0.2 },
+        { x: 0.4, y: 0.4 },
+      ],
+      [existing],
+    );
+    expect(enclosed).toBeTruthy();
+    expect(isValidTerritoryPolygon(enclosed ?? [])).toBe(true);
+    expect(interiorsOverlap(enclosed ?? [], existing)).toBe(false);
+  });
+
+  it('encloses a pocket against two adjacent territories', () => {
+    const leftPoly = square(0.1, 0.2, 0.3);
+    const rightPoly = square(0.4, 0.2, 0.3);
+    const enclosed = encloseAlongTouchedBorders(
+      [
+        { x: 0.2, y: 0.2 },
+        { x: 0.4, y: 0.05 },
+        { x: 0.55, y: 0.2 },
+      ],
+      [leftPoly, rightPoly],
+    );
+    expect(enclosed).toBeTruthy();
+    expect(interiorsOverlap(enclosed ?? [], leftPoly)).toBe(false);
+    expect(interiorsOverlap(enclosed ?? [], rightPoly)).toBe(false);
+  });
+
+  it('fits a 50px-class marker at the center when the territory is large enough', () => {
+    const fitted = fitSquareInPolygon(square(0.1, 0.1, 0.4), { x: 0.3, y: 0.3 }, 0.05, 0.05);
+    expect(fitted.x).toBeCloseTo(0.3, 3);
+    expect(fitted.y).toBeCloseTo(0.3, 3);
+    expect(fitted.width).toBeCloseTo(0.05, 3);
+  });
+
+  it('encloses a drawn line along the map image edge', () => {
+    const enclosed = encloseAlongImageEdge(
+      [
+        { x: 0, y: 0.3 },
+        { x: 0.2, y: 0.5 },
+        { x: 0, y: 0.7 },
+      ],
+      [],
+    );
+    expect(enclosed).toBeTruthy();
+    expect(isValidTerritoryPolygon(enclosed ?? [])).toBe(true);
+    expect(enclosed?.some((point) => point.x === 0 && point.y === 0)).toBe(false);
+    expect(enclosed?.some((point) => point.x === 1)).toBe(false);
+  });
+
+  it('does not enclose along the image edge unless both endpoints sit on it', () => {
+    expect(
+      encloseAlongImageEdge(
+        [
+          { x: 0, y: 0.3 },
+          { x: 0.2, y: 0.5 },
+          { x: 0.4, y: 0.4 },
+        ],
+        [],
+      ),
+    ).toBeNull();
+  });
+
+  it('clamps a group translation so every vertex stays on the map', () => {
+    expect(clampTranslation([square(0.1, 0.1, 0.3)], -1, 0)).toEqual({ x: -0.1, y: 0 });
+    expect(clampTranslation([square(0.1, 0.1, 0.3)], 1, 1)).toEqual({ x: 0.6, y: 0.6 });
+    expect(translatePolygon(square(0.1, 0.1, 0.3), 0.05, 0)[0]?.x).toBeCloseTo(0.15, 5);
+    expect(translatePolygon(square(0.1, 0.1, 0.3), 0.05, 0)[0]?.y).toBeCloseTo(0.1, 5);
+  });
 });
 
 describe('adjacency generation', () => {
@@ -77,6 +179,17 @@ describe('adjacency generation', () => {
     expect(generated.some((edge) => edge.id === 'stale')).toBe(false);
     expect(generated.some((edge) => edge.origin === 'Generated' && edge.territoryAId === 'b')).toBe(true);
     expect(generated.some((edge) => edge.origin === 'Generated' && edge.territoryAId === 'a')).toBe(false);
+  });
+
+  it('lists neighboring territories and omits the selected ones', () => {
+    const territories: MapTerritory[] = [
+      territory('a', 1, square(0.1, 0.1, 0.3)),
+      territory('b', 2, square(0.4, 0.1, 0.3)),
+      territory('c', 3, square(0.7, 0.1, 0.3)),
+    ];
+    const edges = generateAdjacencies(territories, []);
+    expect(adjacentTerritoryIds(edges, ['a']).sort()).toEqual(['b']);
+    expect(adjacentTerritoryIds(edges, ['a', 'b']).sort()).toEqual(['c']);
   });
 });
 

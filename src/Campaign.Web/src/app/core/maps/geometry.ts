@@ -7,6 +7,10 @@ export const GEOMETRY_EPSILON = 1e-6;
 export const MIN_SHARED_BORDER_LENGTH = 0.008;
 export const SNAP_DISTANCE = 0.018;
 export const MIN_DRAW_STEP = 0.008;
+export const MARKER_MAX_PX = 50;
+export const MIN_ZOOM = 0.1;
+export const MAX_ZOOM = 2;
+export const ZOOM_STEP = 0.1;
 
 export function clamp01(value: number): number {
   if (value < 0) {
@@ -169,6 +173,501 @@ export function polygonPointsAttribute(polygon: readonly MapPoint[]): string {
   return polygon.map((point) => `${point.x},${point.y}`).join(' ');
 }
 
+export function pointOnPolygonBoundary(polygon: readonly MapPoint[], point: MapPoint): boolean {
+  return isOnBoundary(polygon, point);
+}
+
+export function snapToExistingGeometry(
+  cursor: MapPoint,
+  vertices: readonly MapPoint[],
+  polygons: readonly (readonly MapPoint[])[],
+): MapPoint | null {
+  const vertex = findSnapTarget(cursor, vertices);
+  if (vertex) {
+    return vertex;
+  }
+
+  return snapToNearestEdge(cursor, polygons);
+}
+
+export const MAP_FRAME: readonly MapPoint[] = [
+  { x: 0, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 1 },
+  { x: 0, y: 1 },
+];
+
+export function isOnImageEdge(point: MapPoint): boolean {
+  return (
+    point.x <= SNAP_DISTANCE || point.x >= 1 - SNAP_DISTANCE || point.y <= SNAP_DISTANCE || point.y >= 1 - SNAP_DISTANCE
+  );
+}
+
+export function snapToImageEdge(point: MapPoint): MapPoint {
+  return {
+    x: point.x <= SNAP_DISTANCE ? 0 : point.x >= 1 - SNAP_DISTANCE ? 1 : point.x,
+    y: point.y <= SNAP_DISTANCE ? 0 : point.y >= 1 - SNAP_DISTANCE ? 1 : point.y,
+  };
+}
+
+export function clampTranslation(polygons: readonly (readonly MapPoint[])[], dx: number, dy: number): MapPoint {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const polygon of polygons) {
+    for (const point of polygon) {
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minY = Math.min(minY, point.y);
+      maxY = Math.max(maxY, point.y);
+    }
+  }
+
+  if (!Number.isFinite(minX)) {
+    return { x: 0, y: 0 };
+  }
+
+  return {
+    x: Math.min(1 - maxX, Math.max(-minX, dx)),
+    y: Math.min(1 - maxY, Math.max(-minY, dy)),
+  };
+}
+
+export function translatePolygon(polygon: readonly MapPoint[], dx: number, dy: number): MapPoint[] {
+  return polygon.map((point) => ({ x: point.x + dx, y: point.y + dy }));
+}
+
+export function snapToNearestEdge(cursor: MapPoint, polygons: readonly (readonly MapPoint[])[]): MapPoint | null {
+  let best: MapPoint | null = null;
+  let bestDistance = SNAP_DISTANCE * SNAP_DISTANCE;
+  for (const polygon of [...polygons, MAP_FRAME]) {
+    const count = polygon.length;
+    for (let i = 0; i < count; i += 1) {
+      const a = polygon.at(i);
+      const b = polygon.at((i + 1) % count);
+      if (!a || !b) {
+        continue;
+      }
+
+      const projected = projectPointOnSegment(a, b, cursor);
+      if (!projected) {
+        continue;
+      }
+
+      const distance = distanceSquared(cursor, projected);
+      if (distance <= bestDistance) {
+        best = projected;
+        bestDistance = distance;
+      }
+    }
+  }
+
+  return best;
+}
+
+export function traceSharedBorder(
+  start: MapPoint,
+  end: MapPoint,
+  polygons: readonly (readonly MapPoint[])[],
+): MapPoint[] | null {
+  if (distanceSquared(start, end) <= GEOMETRY_EPSILON * GEOMETRY_EPSILON) {
+    return null;
+  }
+
+  let best: MapPoint[] | null = null;
+  let bestLength = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < polygons.length; index += 1) {
+    const polygon = polygons.at(index);
+    if (!polygon || !isOnBoundary(polygon, start) || !isOnBoundary(polygon, end)) {
+      continue;
+    }
+
+    for (const path of boundaryPaths(polygon, start, end)) {
+      if (path.length < 2) {
+        continue;
+      }
+
+      const length = polylineLength(path);
+      if (length < MIN_SHARED_BORDER_LENGTH || length >= bestLength) {
+        continue;
+      }
+
+      if (pathBlockedByOtherPolygons(path, polygons, index)) {
+        continue;
+      }
+
+      best = path;
+      bestLength = length;
+    }
+  }
+
+  return best;
+}
+
+export function encloseAlongTouchedBorders(
+  drawn: readonly MapPoint[],
+  polygons: readonly (readonly MapPoint[])[],
+): MapPoint[] | null {
+  const unique = distinctVertices(drawn);
+  if (unique.length < 2) {
+    return null;
+  }
+
+  const start = unique[0];
+  const end = unique.at(-1);
+  if (!end || distanceSquared(start, end) <= GEOMETRY_EPSILON * GEOMETRY_EPSILON) {
+    return null;
+  }
+
+  const touched = polygons.filter((polygon) => isOnBoundary(polygon, start) || isOnBoundary(polygon, end));
+  if (touched.length === 0) {
+    return null;
+  }
+
+  const graph = buildUnsharedBoundaryGraph(touched, polygons, start, end);
+  const walks = simpleBoundaryPaths(graph, end, start, 12);
+  let best: MapPoint[] | null = null;
+  let bestArea = Number.POSITIVE_INFINITY;
+  for (const walk of walks) {
+    if (walk.length < 2) {
+      continue;
+    }
+
+    const polygon = distinctVertices([...unique, ...walk.slice(1, -1)]);
+    if (!isValidTerritoryPolygon(polygon)) {
+      continue;
+    }
+
+    if (polygons.some((existing) => interiorsOverlap(polygon, existing))) {
+      continue;
+    }
+
+    if (polygons.some((existing) => territoryContainedBy(existing, polygon))) {
+      continue;
+    }
+
+    const area = polygonArea(polygon);
+    if (area < bestArea) {
+      best = polygon;
+      bestArea = area;
+    }
+  }
+
+  return best;
+}
+
+export function encloseAlongImageEdge(
+  drawn: readonly MapPoint[],
+  polygons: readonly (readonly MapPoint[])[],
+): MapPoint[] | null {
+  const unique = distinctVertices(drawn);
+  if (unique.length < 2) {
+    return null;
+  }
+
+  const rawStart = unique[0];
+  const rawEnd = unique.at(-1);
+  if (!rawEnd || !isOnImageEdge(rawStart) || !isOnImageEdge(rawEnd)) {
+    return null;
+  }
+
+  const start = snapToImageEdge(rawStart);
+  const end = snapToImageEdge(rawEnd);
+  if (distanceSquared(start, end) <= GEOMETRY_EPSILON * GEOMETRY_EPSILON) {
+    return null;
+  }
+
+  const drawnWithEdges = [start, ...unique.slice(1, -1), end];
+  let best: MapPoint[] | null = null;
+  let bestArea = Number.POSITIVE_INFINITY;
+  for (const walk of boundaryPaths(MAP_FRAME, end, start)) {
+    if (walk.length < 2) {
+      continue;
+    }
+
+    const polygon = distinctVertices([...drawnWithEdges, ...walk.slice(1, -1)]);
+    if (!isValidTerritoryPolygon(polygon)) {
+      continue;
+    }
+
+    if (polygons.some((existing) => interiorsOverlap(polygon, existing))) {
+      continue;
+    }
+
+    if (polygons.some((existing) => territoryContainedBy(existing, polygon))) {
+      continue;
+    }
+
+    const area = polygonArea(polygon);
+    if (area < bestArea) {
+      best = polygon;
+      bestArea = area;
+    }
+  }
+
+  return best;
+}
+
+export interface FittedSquare {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function fitSquareInPolygon(
+  polygon: readonly MapPoint[],
+  preferred: MapPoint,
+  maxWidth: number,
+  maxHeight: number,
+  avoid: FittedSquare | null = null,
+): FittedSquare {
+  const minWidth = Math.max(maxWidth * 0.2, 0.004);
+  const minHeight = Math.max(maxHeight * 0.2, 0.004);
+  let best: FittedSquare = {
+    x: preferred.x,
+    y: preferred.y,
+    width: minWidth,
+    height: minHeight,
+  };
+  let bestScore = Number.NEGATIVE_INFINITY;
+  const sizes = [1, 0.85, 0.7, 0.55, 0.4, 0.28, 0.2];
+  for (const factor of sizes) {
+    const width = Math.max(minWidth, maxWidth * factor);
+    const height = Math.max(minHeight, maxHeight * factor);
+    for (const offset of markerOffsets()) {
+      const candidate: FittedSquare = {
+        x: preferred.x + offset.x * width,
+        y: preferred.y + offset.y * height,
+        width,
+        height,
+      };
+      if (!squareFitsPolygon(polygon, candidate, avoid)) {
+        continue;
+      }
+
+      const score = factor * 10 - Math.hypot(candidate.x - preferred.x, candidate.y - preferred.y);
+      if (score > bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    }
+
+    if (bestScore > Number.NEGATIVE_INFINITY && factor >= 0.85) {
+      return best;
+    }
+  }
+
+  return best;
+}
+
+function territoryContainedBy(inner: readonly MapPoint[], outer: readonly MapPoint[]): boolean {
+  if (inner.length === 0) {
+    return false;
+  }
+
+  if (containsStrict(outer, centroid(inner))) {
+    return true;
+  }
+
+  return inner.some((vertex) => containsStrict(outer, vertex));
+}
+
+function markerOffsets(): MapPoint[] {
+  return [
+    { x: 0, y: 0 },
+    { x: 0.6, y: 0 },
+    { x: -0.6, y: 0 },
+    { x: 0, y: 0.6 },
+    { x: 0, y: -0.6 },
+    { x: 0.8, y: 0.35 },
+    { x: -0.8, y: 0.35 },
+    { x: 0.8, y: -0.35 },
+    { x: -0.8, y: -0.35 },
+  ];
+}
+
+function squareFitsPolygon(polygon: readonly MapPoint[], square: FittedSquare, avoid: FittedSquare | null): boolean {
+  if (avoid && rectanglesOverlap(square, avoid)) {
+    return false;
+  }
+
+  const hw = square.width / 2;
+  const hh = square.height / 2;
+  const samples: MapPoint[] = [
+    { x: square.x, y: square.y },
+    { x: square.x - hw, y: square.y - hh },
+    { x: square.x + hw, y: square.y - hh },
+    { x: square.x + hw, y: square.y + hh },
+    { x: square.x - hw, y: square.y + hh },
+    { x: square.x, y: square.y - hh },
+    { x: square.x, y: square.y + hh },
+    { x: square.x - hw, y: square.y },
+    { x: square.x + hw, y: square.y },
+  ];
+  return samples.every((point) => containsInclusive(polygon, point));
+}
+
+function rectanglesOverlap(left: FittedSquare, right: FittedSquare): boolean {
+  return (
+    Math.abs(left.x - right.x) < (left.width + right.width) / 2 &&
+    Math.abs(left.y - right.y) < (left.height + right.height) / 2
+  );
+}
+
+function containsInclusive(polygon: readonly MapPoint[], point: MapPoint): boolean {
+  return containsStrict(polygon, point) || isOnBoundary(polygon, point);
+}
+
+function buildUnsharedBoundaryGraph(
+  touched: readonly (readonly MapPoint[])[],
+  allPolygons: readonly (readonly MapPoint[])[],
+  start: MapPoint,
+  end: MapPoint,
+): Map<string, MapPoint[]> {
+  const adj = new Map<string, MapPoint[]>();
+  for (let owner = 0; owner < allPolygons.length; owner += 1) {
+    const polygon = allPolygons.at(owner);
+    if (!polygon || !touched.includes(polygon)) {
+      continue;
+    }
+
+    const count = polygon.length;
+    for (let i = 0; i < count; i += 1) {
+      const a = polygon.at(i);
+      const b = polygon.at((i + 1) % count);
+      if (!a || !b) {
+        continue;
+      }
+
+      if (pathBlockedByOtherPolygons([a, b], allPolygons, owner)) {
+        continue;
+      }
+
+      const splits = [a, b];
+      if (pointOnSegment(a, b, start)) {
+        splits.push(start);
+      }
+
+      if (pointOnSegment(a, b, end)) {
+        splits.push(end);
+      }
+
+      for (const other of touched) {
+        for (const vertex of other) {
+          if (pointOnSegment(a, b, vertex)) {
+            splits.push(vertex);
+          }
+        }
+      }
+
+      const ordered = sortAlongSegment(a, b, splits);
+      for (let j = 1; j < ordered.length; j += 1) {
+        addUndirectedEdge(adj, ordered[j - 1], ordered[j]);
+      }
+    }
+  }
+
+  return adj;
+}
+
+function sortAlongSegment(a: MapPoint, b: MapPoint, points: readonly MapPoint[]): MapPoint[] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const unique: MapPoint[] = [];
+  for (const point of points) {
+    if (!unique.some((existing) => distanceSquared(existing, point) <= GEOMETRY_EPSILON * GEOMETRY_EPSILON)) {
+      unique.push(point);
+    }
+  }
+
+  return unique.sort((left, right) => {
+    const leftT = (left.x - a.x) * dx + (left.y - a.y) * dy;
+    const rightT = (right.x - a.x) * dx + (right.y - a.y) * dy;
+    return leftT - rightT;
+  });
+}
+
+function addUndirectedEdge(adj: Map<string, MapPoint[]>, left: MapPoint, right: MapPoint): void {
+  if (distanceSquared(left, right) <= GEOMETRY_EPSILON * GEOMETRY_EPSILON) {
+    return;
+  }
+
+  const leftKey = pointKey(left);
+  const rightKey = pointKey(right);
+  const leftNeighbors = adj.get(leftKey) ?? [];
+  const rightNeighbors = adj.get(rightKey) ?? [];
+  if (!leftNeighbors.some((point) => pointKey(point) === rightKey)) {
+    leftNeighbors.push(right);
+    adj.set(leftKey, leftNeighbors);
+  }
+
+  if (!rightNeighbors.some((point) => pointKey(point) === leftKey)) {
+    rightNeighbors.push(left);
+    adj.set(rightKey, rightNeighbors);
+  }
+}
+
+function simpleBoundaryPaths(adj: Map<string, MapPoint[]>, from: MapPoint, to: MapPoint, limit: number): MapPoint[][] {
+  const results: MapPoint[][] = [];
+  const goal = pointKey(to);
+  const visited = new Set<string>([pointKey(from)]);
+  const path: MapPoint[] = [from];
+
+  const visit = (): void => {
+    if (results.length >= limit) {
+      return;
+    }
+
+    const current = path.at(-1);
+    if (!current) {
+      return;
+    }
+
+    if (path.length > 1 && pointKey(current) === goal) {
+      results.push([...path]);
+      return;
+    }
+
+    if (path.length > 48) {
+      return;
+    }
+
+    for (const next of adj.get(pointKey(current)) ?? []) {
+      const key = pointKey(next);
+      if (key === goal && path.length > 1) {
+        results.push([...path, next]);
+        if (results.length >= limit) {
+          return;
+        }
+
+        continue;
+      }
+
+      if (visited.has(key)) {
+        continue;
+      }
+
+      visited.add(key);
+      path.push(next);
+      visit();
+      path.pop();
+      visited.delete(key);
+      if (results.length >= limit) {
+        return;
+      }
+    }
+  };
+
+  visit();
+  return results;
+}
+
+function pointKey(point: MapPoint): string {
+  return `${point.x.toFixed(6)},${point.y.toFixed(6)}`;
+}
+
 function distinctVertices(polygon: readonly MapPoint[]): MapPoint[] {
   const points: MapPoint[] = [];
   for (const point of polygon) {
@@ -247,6 +746,165 @@ function hasInteriorSampleInside(source: readonly MapPoint[], other: readonly Ma
   }
 
   return source.some((vertex) => containsStrict(other, { x: (vertex.x + center.x) / 2, y: (vertex.y + center.y) / 2 }));
+}
+
+function projectPointOnSegment(a: MapPoint, b: MapPoint, p: MapPoint): MapPoint | null {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared < GEOMETRY_EPSILON * GEOMETRY_EPSILON) {
+    return distanceSquared(a, p) <= SNAP_DISTANCE * SNAP_DISTANCE ? a : null;
+  }
+
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared));
+  return { x: a.x + dx * t, y: a.y + dy * t };
+}
+
+function boundaryPaths(polygon: readonly MapPoint[], start: MapPoint, end: MapPoint): MapPoint[][] {
+  const startEdge = edgeIndexContaining(polygon, start);
+  const endEdge = edgeIndexContaining(polygon, end);
+  if (startEdge < 0 || endEdge < 0) {
+    return [];
+  }
+
+  if (startEdge === endEdge) {
+    return [[start, end], walkBoundary(polygon, start, end, startEdge, endEdge, 1)];
+  }
+
+  return [
+    walkBoundary(polygon, start, end, startEdge, endEdge, 1),
+    walkBoundary(polygon, start, end, startEdge, endEdge, -1),
+  ];
+}
+
+function edgeIndexContaining(polygon: readonly MapPoint[], point: MapPoint): number {
+  const count = polygon.length;
+  for (let i = 0; i < count; i += 1) {
+    const a = polygon.at(i);
+    const b = polygon.at((i + 1) % count);
+    if (a && b && pointOnSegment(a, b, point)) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+function walkBoundary(
+  polygon: readonly MapPoint[],
+  start: MapPoint,
+  end: MapPoint,
+  startEdge: number,
+  endEdge: number,
+  direction: 1 | -1,
+): MapPoint[] {
+  const count = polygon.length;
+  const path: MapPoint[] = [start];
+  let edge = startEdge;
+  let guard = 0;
+  while (guard < count + 2) {
+    guard += 1;
+    if (edge === endEdge && path.length > 1) {
+      path.push(end);
+      return path;
+    }
+
+    const nextVertexIndex = direction === 1 ? (edge + 1) % count : edge;
+    const nextVertex = polygon.at(nextVertexIndex);
+    if (nextVertex) {
+      path.push(nextVertex);
+    }
+
+    edge = (edge + direction + count) % count;
+    if (edge === endEdge) {
+      path.push(end);
+      return path;
+    }
+  }
+
+  return [];
+}
+
+function polylineLength(path: readonly MapPoint[]): number {
+  let length = 0;
+  for (let i = 1; i < path.length; i += 1) {
+    const previous = path.at(i - 1);
+    const current = path.at(i);
+    if (previous && current) {
+      length += Math.sqrt(distanceSquared(previous, current));
+    }
+  }
+
+  return length;
+}
+
+function pathBlockedByOtherPolygons(
+  path: readonly MapPoint[],
+  polygons: readonly (readonly MapPoint[])[],
+  ownerIndex: number,
+): boolean {
+  for (let index = 0; index < polygons.length; index += 1) {
+    if (index === ownerIndex) {
+      continue;
+    }
+
+    const other = polygons.at(index);
+    if (!other) {
+      continue;
+    }
+
+    for (const vertex of other) {
+      if (pointStrictlyOnPolyline(path, vertex)) {
+        return true;
+      }
+    }
+
+    const otherCount = other.length;
+    for (let i = 0; i < otherCount; i += 1) {
+      const a = other.at(i);
+      const b = other.at((i + 1) % otherCount);
+      if (!a || !b) {
+        continue;
+      }
+
+      for (let j = 1; j < path.length; j += 1) {
+        const c = path.at(j - 1);
+        const d = path.at(j);
+        if (!c || !d) {
+          continue;
+        }
+
+        const overlap = collinearOverlap(c, d, a, b);
+        if (overlap && Math.sqrt(distanceSquared(overlap.start, overlap.end)) >= MIN_SHARED_BORDER_LENGTH) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function pointStrictlyOnPolyline(path: readonly MapPoint[], point: MapPoint): boolean {
+  const first = path.at(0);
+  const last = path.at(-1);
+  if (first && distanceSquared(first, point) <= GEOMETRY_EPSILON * GEOMETRY_EPSILON) {
+    return false;
+  }
+
+  if (last && distanceSquared(last, point) <= GEOMETRY_EPSILON * GEOMETRY_EPSILON) {
+    return false;
+  }
+
+  for (let i = 1; i < path.length; i += 1) {
+    const a = path.at(i - 1);
+    const b = path.at(i);
+    if (a && b && pointOnSegment(a, b, point)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isOnBoundary(polygon: readonly MapPoint[], point: MapPoint): boolean {

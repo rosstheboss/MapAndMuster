@@ -94,8 +94,8 @@ test('managers can open the map editor after setup', async ({ page }) => {
         createdUtc: '2026-08-13T00:00:00+00:00',
         updatedUtc: '2026-08-13T00:00:00+00:00',
         factions: [
-          { id: '1', name: 'North', color: '#2563EB', subfactions: [], allyGroupName: null, requiresSubfaction: false },
-          { id: '2', name: 'South', color: '#DC2626', subfactions: [], allyGroupName: null, requiresSubfaction: false },
+          { id: '1', name: 'North', color: '#2563EB', subfactions: [], allyGroupName: null, requiresSubfaction: false, hasFlagImage: false },
+          { id: '2', name: 'South', color: '#DC2626', subfactions: [], allyGroupName: null, requiresSubfaction: false, hasFlagImage: false },
         ],
         allyGroups: [],
         links: [],

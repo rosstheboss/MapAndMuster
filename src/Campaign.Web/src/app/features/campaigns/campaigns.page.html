@@ -16,22 +16,47 @@
       <p class="muted">Create a campaign to set factions, player slots, and a map.</p>
     </div>
   } @else {
-    <ul class="campaign-list">
-      @for (campaign of campaigns(); track campaign.id) {
-        <li>
-          <a class="panel campaign-card" [routerLink]="['/campaigns', campaign.id]">
-            <h2>{{ campaign.name }}</h2>
-            <p>
-              {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} players ·
-              {{ campaign.isPrivate ? 'Private' : 'Public' }}
-              ·
-              {{ campaign.canManage ? 'Manager' : 'Player' }}
-              ·
-              {{ campaign.status === 'InProgress' ? 'In progress' : campaign.status }}
-            </p>
-          </a>
-        </li>
+    @for (group of groupedCampaigns(); track group.id) {
+      @if (group.campaigns.length > 0) {
+        <section class="campaign-group stack">
+          <h2>{{ group.title }}</h2>
+          <ul class="campaign-list">
+            @for (campaign of group.campaigns; track campaign.id) {
+              <li class="panel campaign-card">
+                <button
+                  type="button"
+                  class="section-toggle"
+                  [attr.aria-expanded]="isOpen(campaign.id)"
+                  (click)="toggleCampaign(campaign.id)"
+                >
+                  {{ campaign.name }}
+                </button>
+                <div [hidden]="!isOpen(campaign.id)" class="campaign-body stack">
+                  <p>
+                    {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} players ·
+                    {{ campaign.isPrivate ? 'Private' : 'Public' }}
+                    ·
+                    {{ campaign.canManage ? 'Manager' : 'Player' }}
+                    ·
+                    {{ statusLabel(campaign.status) }}
+                  </p>
+                  <p class="muted">Starts {{ campaign.startsUtc | instantDate }}</p>
+                  <p class="muted">
+                    {{ campaign.status === 'Completed' ? 'Finished' : 'Ends' }}
+                    {{ campaign.endsUtc | instantDate }}
+                  </p>
+                  <div class="choice-row">
+                    <a class="button" [routerLink]="['/campaigns', campaign.id]">View</a>
+                    @if (campaign.canManage) {
+                      <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit</a>
+                    }
+                  </div>
+                </div>
+              </li>
+            }
+          </ul>
+        </section>
       }
-    </ul>
+    }
   }
 </section>

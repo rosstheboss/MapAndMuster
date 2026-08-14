@@ -26,8 +26,24 @@ const campaign = {
   createdUtc: '2026-08-13T00:00:00+00:00',
   updatedUtc: '2026-08-13T00:00:00+00:00',
   factions: [
-    { id: 'north', name: 'North', color: '#2563EB', subfactions: [], allyGroupName: null, requiresSubfaction: false },
-    { id: 'south', name: 'South', color: '#DC2626', subfactions: [], allyGroupName: null, requiresSubfaction: false },
+    {
+      id: 'north',
+      name: 'North',
+      color: '#2563EB',
+      subfactions: [],
+      allyGroupName: null,
+      requiresSubfaction: false,
+      hasFlagImage: false,
+    },
+    {
+      id: 'south',
+      name: 'South',
+      color: '#DC2626',
+      subfactions: [],
+      allyGroupName: null,
+      requiresSubfaction: false,
+      hasFlagImage: false,
+    },
   ],
   allyGroups: [],
   links: [],
@@ -93,10 +109,30 @@ describe('MapEditorPage', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('Map editor');
     expect(compiled.textContent).toContain('Generate Connections');
     expect(compiled.textContent).toContain('Clear connections');
+    expect(compiled.textContent).toContain('100%');
+    expect(compiled.textContent).toContain('Fit to panel');
+    expect(compiled.textContent).toContain('Zoom in');
+    const zoomInput = compiled.querySelector<HTMLInputElement>('input[aria-label="Zoom percent"]');
+    expect(zoomInput?.value).toBe('100');
+    const zoomIn = [...compiled.querySelectorAll('button')].find((button) => button.textContent.includes('Zoom in'));
+    zoomIn?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector<HTMLInputElement>('input[aria-label="Zoom percent"]')?.value).toBe('110');
+    const hundred = [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === '100%');
+    hundred?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector<HTMLInputElement>('input[aria-label="Zoom percent"]')?.value).toBe('100');
+    const fit = [...compiled.querySelectorAll('button')].find((button) => button.textContent.includes('Fit to panel'));
+    expect(fit).toBeTruthy();
+    fit?.click();
+    fixture.detectChanges();
     expect(TERRAIN_TYPES.map((entry) => entry.label)).toEqual([
       'Beach',
+      'Cave',
       'Desert',
+      'Forest',
       'Highlands',
+      'Jungle',
       'Lake',
       'Mountain',
       'Plains',
@@ -119,6 +155,151 @@ describe('MapEditorPage', () => {
     expect(generate).toBeTruthy();
     generate?.click();
     fixture.detectChanges();
+    http.verify();
+  });
+
+  it('keeps a clicked territory selected in select mode until empty map is clicked', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        {
+          id: 't1',
+          displayNumber: 1,
+          name: 'Northmarch',
+          description: null,
+          polygon: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.4, y: 0.1 },
+            { x: 0.4, y: 0.4 },
+            { x: 0.1, y: 0.4 },
+          ],
+          terrainTypeId: 'plains',
+          structureTypeId: null,
+          overlayColor: null,
+          ownerFactionId: null,
+          spawnFactionId: null,
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onToolChange: (tool: string) => void;
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      onBackground: () => void;
+      selectedIds: () => string[];
+    };
+    page.onToolChange('select');
+    page.onTerritorySelect({ id: 't1', additive: false });
+    fixture.detectChanges();
+    expect(page.selectedIds()).toEqual(['t1']);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Delete territory');
+    page.onBackground();
+    fixture.detectChanges();
+    expect(page.selectedIds()).toEqual([]);
+    http.verify();
+  });
+
+  it('ctrl-selects, moves, and deletes territories together', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        {
+          id: 't1',
+          displayNumber: 1,
+          name: 'Northmarch',
+          description: null,
+          polygon: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.3, y: 0.1 },
+            { x: 0.3, y: 0.3 },
+            { x: 0.1, y: 0.3 },
+          ],
+          terrainTypeId: 'plains',
+          structureTypeId: null,
+          overlayColor: null,
+          ownerFactionId: null,
+          spawnFactionId: null,
+        },
+        {
+          id: 't2',
+          displayNumber: 2,
+          name: 'Southmarch',
+          description: null,
+          polygon: [
+            { x: 0.3, y: 0.1 },
+            { x: 0.5, y: 0.1 },
+            { x: 0.5, y: 0.3 },
+            { x: 0.3, y: 0.3 },
+          ],
+          terrainTypeId: 'plains',
+          structureTypeId: null,
+          overlayColor: null,
+          ownerFactionId: null,
+          spawnFactionId: null,
+        },
+        {
+          id: 't3',
+          displayNumber: 3,
+          name: 'Eastmarch',
+          description: null,
+          polygon: [
+            { x: 0.58, y: 0.12 },
+            { x: 0.73, y: 0.12 },
+            { x: 0.73, y: 0.27 },
+            { x: 0.58, y: 0.27 },
+          ],
+          terrainTypeId: 'plains',
+          structureTypeId: null,
+          overlayColor: null,
+          ownerFactionId: null,
+          spawnFactionId: null,
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onToolChange: (tool: string) => void;
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      onTerritoryMove: (event: { origin: { x: number; y: number }; current: { x: number; y: number } }) => void;
+      onTerritoryMoveEnd: () => void;
+      onKeydown: (event: KeyboardEvent) => void;
+      deleteSelectedTerritories: () => void;
+      deleteLabel: () => string;
+      selectedIds: () => string[];
+      graph: () => { territories: { id: string; polygon: { x: number; y: number }[] }[] };
+    };
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    page.onToolChange('select');
+    page.onTerritorySelect({ id: 't1', additive: false });
+    page.onTerritorySelect({ id: 't2', additive: true });
+    fixture.detectChanges();
+    expect(page.selectedIds()).toEqual(['t1', 't2']);
+    expect(page.deleteLabel()).toBe('Delete territories');
+    expect(compiled.textContent).toContain('Delete territories');
+
+    page.onTerritoryMove({ origin: { x: 0.2, y: 0.2 }, current: { x: 0.3, y: 0.2 } });
+    expect(page.graph().territories.find((territory) => territory.id === 't1')?.polygon[0]?.x).toBeCloseTo(0.1, 5);
+
+    page.onTerritoryMove({ origin: { x: 0.2, y: 0.2 }, current: { x: 0.24, y: 0.2 } });
+    page.onTerritoryMoveEnd();
+    expect(page.graph().territories.find((territory) => territory.id === 't1')?.polygon[0]?.x).toBeCloseTo(0.14, 5);
+    expect(page.graph().territories.find((territory) => territory.id === 't2')?.polygon[1]?.x).toBeCloseTo(0.54, 5);
+
+    page.onKeydown(new KeyboardEvent('keydown', { key: 'Delete' }));
+    fixture.detectChanges();
+    expect(page.graph().territories.map((territory) => territory.id)).toEqual(['t3']);
+    expect(page.selectedIds()).toEqual([]);
     http.verify();
   });
 });

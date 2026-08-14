@@ -31,4 +31,13 @@ public enum TerrainType
 
     /// <summary>Wet, marshy ground.</summary>
     Swamp = 8,
+
+    /// <summary>Underground chambers.</summary>
+    Cave = 9,
+
+    /// <summary>Dense woodland.</summary>
+    Forest = 10,
+
+    /// <summary>Thick tropical growth.</summary>
+    Jungle = 11,
 }

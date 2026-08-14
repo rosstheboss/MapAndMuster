@@ -1,100 +1,159 @@
-<div class="map-stage">
-  <img [src]="imageUrl()" alt="Campaign map" />
-  <svg
-    class="map-overlay"
-    viewBox="0 0 1 1"
-    preserveAspectRatio="none"
-    role="img"
-    aria-label="Territory overlay"
-    (pointermove)="onPointerMove($event)"
-    (pointerdown)="onPointerDown($event)"
-    (pointerleave)="clearHovers()"
-  >
-    @for (item of overlayTerritories(); track item.territory.id) {
-      <polygon
-        class="territory"
-        [class.is-highlighted]="item.highlighted"
-        [attr.points]="item.points"
-        [attr.fill]="item.territory.overlayColor ? item.territory.overlayColor : 'transparent'"
-        [style.--glow-color]="item.glowColor"
-        [attr.data-kind]="'territory'"
-        [attr.data-id]="item.territory.id"
-        [attr.aria-label]="item.territory.name || item.territory.displayNumber"
-        (pointerenter)="onTerritoryEnter(item.territory.id)"
-        (pointerleave)="onTerritoryLeave(item.territory.id)"
+<div class="map-shell">
+  <div class="map-toolbar" role="toolbar" aria-label="Map zoom">
+    <button type="button" class="button-secondary" (click)="zoomOut()">Zoom out</button>
+    <label class="zoom-input">
+      Zoom
+      <input
+        type="number"
+        min="10"
+        max="200"
+        step="10"
+        [value]="zoomPercent()"
+        (change)="onZoomInput($event)"
+        aria-label="Zoom percent"
       />
-      @if (item.territory.structureTypeId) {
-        <circle
-          class="structure-disc"
-          [attr.cx]="item.center.x"
-          [attr.cy]="item.center.y"
-          r="0.022"
-          pointer-events="none"
-        />
-      }
-    }
-
-    @if (drawingPath()) {
-      <path class="drawing-path" [attr.d]="drawingPath()" />
-      @for (point of drawingPoints(); track $index) {
-        <circle class="drawing-vertex" [attr.cx]="point.x" [attr.cy]="point.y" r="0.008" />
-      }
-    }
-
-    @if (snapTarget(); as snap) {
-      <circle class="snap-target app-glow" [attr.cx]="snap.x" [attr.cy]="snap.y" r="0.014" />
-    }
-
-    @for (item of overlayAdjacencies(); track item.edge.id) {
-      <g
-        class="adjacency"
-        [class.is-highlighted]="item.highlighted"
-        [attr.transform]="item.transform"
-        [attr.data-kind]="'adjacency'"
-        [attr.data-id]="item.edge.id"
-        (pointerenter)="onAdjacencyEnter(item.edge.id)"
-        (pointerleave)="onAdjacencyLeave(item.edge.id)"
+      <span aria-hidden="true">%</span>
+    </label>
+    <button type="button" class="button-secondary" (click)="zoomToActualSize()">100%</button>
+    <button type="button" class="button-secondary" (click)="zoomIn()">Zoom in</button>
+    <button type="button" class="button-secondary" (click)="zoomToFit()">Fit to panel</button>
+    <p class="muted zoom-hint">
+      Zoom is 10% to 200% of the map image size. 100% is the image at its actual size, centered. Fit to panel scales the
+      map to the view. Plus, minus, the buttons, or the wheel move 10% at a time. Arrow keys or drag to pan when the
+      image is larger than the panel. Drawing stays aligned to the full-size map.
+    </p>
+  </div>
+  <div
+    #viewport
+    class="map-viewport"
+    tabindex="0"
+    role="application"
+    [attr.aria-label]="
+      'Campaign map at ' +
+      zoomPercent() +
+      ' percent of image size. Plus and minus zoom by 10 percent. Zero sets 100 percent. ' +
+      'Fit to panel fits the image in the view. Arrow keys pan when the image is larger than the panel. ' +
+      'Drawing requires a pointer.'
+    "
+    (wheel)="onWheel($event)"
+    (keydown)="onViewportKeydown($event)"
+    (keyup)="onViewportKeyup($event)"
+  >
+    <div
+      class="map-canvas"
+      [style.width.px]="imageSize().width"
+      [style.height.px]="imageSize().height"
+      [style.transform]="canvasTransform()"
+    >
+      <img [src]="imageUrl()" alt="Campaign map" (load)="onImageLoad($event)" />
+      <svg
+        class="map-overlay"
+        viewBox="0 0 1 1"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="Territory overlay"
+        (pointermove)="onPointerMove($event)"
+        (pointerdown)="onPointerDown($event)"
+        (pointerup)="onPointerUp()"
+        (pointercancel)="onPointerUp()"
+        (pointerleave)="clearHovers()"
       >
-        <line
-          class="adjacency-hit"
-          [attr.x1]="item.geometry.x1"
-          [attr.y1]="item.geometry.y1"
-          [attr.x2]="item.geometry.x2"
-          [attr.y2]="item.geometry.y2"
-          [attr.data-kind]="'adjacency'"
-          [attr.data-id]="item.edge.id"
-        />
-        <line
-          class="adjacency-line"
-          [attr.x1]="item.geometry.x1"
-          [attr.y1]="item.geometry.y1"
-          [attr.x2]="item.geometry.x2"
-          [attr.y2]="item.geometry.y2"
-          [attr.data-kind]="'adjacency'"
-          [attr.data-id]="item.edge.id"
-        />
-        <polygon class="adjacency-head" [attr.points]="item.geometry.headA" />
-        <polygon class="adjacency-head" [attr.points]="item.geometry.headB" />
-      </g>
-    }
-  </svg>
-  @for (item of overlayTerritories(); track item.territory.id) {
-    @if (item.flag; as flag) {
-      <div
-        class="faction-flag"
-        [style.left.%]="flag.x * 100"
-        [style.top.%]="flag.y * 100"
-        [style.background]="flag.color"
-      ></div>
-    }
-    @if (item.structure; as structure) {
-      <div class="structure-pin" [style.left.%]="item.center.x * 100" [style.top.%]="item.center.y * 100">
-        @if (item.structureImage; as src) {
-          <img [src]="src" alt="" />
-        } @else if (structure.builtinSymbol) {
-          <app-map-symbol kind="structure" [name]="structure.builtinSymbol" />
+        @for (item of overlayTerritories(); track item.territory.id) {
+          <polygon
+            class="territory"
+            [class.is-selected]="item.selected"
+            [class.is-adjacent]="item.adjacent"
+            [attr.points]="item.points"
+            [attr.fill]="item.territory.overlayColor ? item.territory.overlayColor : 'transparent'"
+            [style.--glow-color]="item.glowColor"
+            [attr.data-kind]="'territory'"
+            [attr.data-id]="item.territory.id"
+            [attr.aria-label]="item.territory.name || item.territory.displayNumber"
+            (pointerenter)="onTerritoryEnter(item.territory.id)"
+            (pointerleave)="onTerritoryLeave(item.territory.id)"
+          />
         }
-      </div>
-    }
-  }
+
+        @if (drawingPath()) {
+          <path class="drawing-path" [attr.d]="drawingPath()" />
+          @for (point of drawingPoints(); track $index) {
+            <circle class="drawing-vertex" [attr.cx]="point.x" [attr.cy]="point.y" r="0.008" />
+          }
+        }
+
+        @if (snapTarget(); as snap) {
+          <circle class="snap-target app-glow" [attr.cx]="snap.x" [attr.cy]="snap.y" r="0.014" />
+        }
+
+        @for (item of overlayAdjacencies(); track item.edge.id) {
+          <g
+            class="adjacency"
+            [class.is-highlighted]="item.highlighted"
+            [attr.transform]="item.transform"
+            [attr.data-kind]="'adjacency'"
+            [attr.data-id]="item.edge.id"
+            (pointerenter)="onAdjacencyEnter(item.edge.id)"
+            (pointerleave)="onAdjacencyLeave(item.edge.id)"
+          >
+            <line
+              class="adjacency-hit"
+              [attr.x1]="item.geometry.x1"
+              [attr.y1]="item.geometry.y1"
+              [attr.x2]="item.geometry.x2"
+              [attr.y2]="item.geometry.y2"
+              [attr.data-kind]="'adjacency'"
+              [attr.data-id]="item.edge.id"
+            />
+            <line
+              class="adjacency-line"
+              [attr.x1]="item.geometry.x1"
+              [attr.y1]="item.geometry.y1"
+              [attr.x2]="item.geometry.x2"
+              [attr.y2]="item.geometry.y2"
+              [attr.data-kind]="'adjacency'"
+              [attr.data-id]="item.edge.id"
+            />
+            <polygon class="adjacency-head" [attr.points]="item.geometry.headA" />
+            <polygon class="adjacency-head" [attr.points]="item.geometry.headB" />
+          </g>
+        }
+      </svg>
+      @for (item of overlayTerritories(); track item.territory.id) {
+        @if (item.flag; as flag) {
+          <div
+            class="faction-flag"
+            [class.has-image]="!!flag.image"
+            [style.left.%]="flag.x * 100"
+            [style.top.%]="flag.y * 100"
+            [style.width.px]="markerSize(flag).width"
+            [style.height.px]="markerSize(flag).height"
+            [style.margin-left.px]="-markerSize(flag).width / 2"
+            [style.margin-top.px]="-markerSize(flag).height / 2"
+            [style.background]="flag.image ? 'transparent' : flag.color"
+          >
+            @if (flag.image; as src) {
+              <img [src]="src" alt="" />
+            }
+          </div>
+        }
+        @if (item.structureFit; as fit) {
+          <div
+            class="structure-pin"
+            [style.left.%]="fit.x * 100"
+            [style.top.%]="fit.y * 100"
+            [style.width.px]="markerSize(fit).width"
+            [style.height.px]="markerSize(fit).height"
+            [style.margin-left.px]="-markerSize(fit).width / 2"
+            [style.margin-top.px]="-markerSize(fit).height / 2"
+          >
+            @if (item.structureImage; as src) {
+              <img [src]="src" alt="" />
+            } @else if (item.structure?.builtinSymbol) {
+              <app-map-symbol kind="structure" [name]="item.structure.builtinSymbol" />
+            }
+          </div>
+        }
+      }
+    </div>
+  </div>
 </div>
