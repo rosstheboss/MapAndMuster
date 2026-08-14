@@ -27,6 +27,24 @@ const campaign = {
   ],
   allyGroups: [],
   links: [{ id: '3', label: 'Notes', url: 'https://example.test/notes' }],
+  timeZoneId: 'UTC',
+  startsAtLocal: '2099-01-05T12:00',
+  startsUtc: '2099-01-05T12:00:00+00:00',
+  endsUtc: '2099-03-02T12:00:00+00:00',
+  roundCount: 8,
+  roundLengthAmount: 1,
+  roundLengthUnit: 'Weeks',
+  phases: [
+    { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+    { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+    { kind: 'Battle', durationAmount: 1, durationUnit: 'Days' },
+  ],
+  status: 'Scheduled',
+  currentRound: null,
+  currentPhaseNumber: null,
+  currentPhaseKind: null,
+  currentPhaseStartsUtc: null,
+  currentPhaseEndsUtc: null,
 };
 
 describe('CampaignDetailPage', () => {
@@ -58,6 +76,11 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('A contested frontier.');
     expect(compiled.textContent).toContain('North');
     expect(compiled.textContent).toContain('Private campaign');
+    expect(compiled.textContent).toContain('Scheduled');
+    expect(compiled.textContent).toContain('8');
+    expect(compiled.textContent).toContain('1 week');
+    expect(compiled.textContent).toContain('Action 1 · 3 days');
+    expect(compiled.textContent).toContain('Battle phase · 1 day');
     expect(compiled.querySelector('a.button')?.textContent).toContain('Edit campaign');
 
     const deleteButton = [...compiled.querySelectorAll('button')].find((button) =>

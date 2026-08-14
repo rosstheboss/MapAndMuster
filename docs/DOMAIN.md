@@ -39,12 +39,41 @@ http/https URLs), a raster map image, and at least two factions. Each faction ma
 subfactions. Optional ally groups may include two or more factions; every faction cannot belong
 to a single ally group.
 
+Setup may apply a faction preset. Applying a preset replaces the current faction and subfaction
+list with an alphabetically sorted copy of that catalog entry. Later add/remove/rename edits
+apply only to that campaign and do not change the preset. The initial catalog includes
+Warhammer: The Old World. Setup can also clear the faction list (back to two empty slots) or
+clear all ally groups.
+
 The creating user is always a campaign manager (Game Master). If they also participate, they
 occupy one player slot. Private campaigns store a hashed join password; the plaintext password
 is never returned. Campaign names and faction names reject the same prohibited-language terms
 as usernames. Members may read campaign metadata for campaigns they manage or play in. Only a
 manager may edit or delete a campaign. Deletion removes the campaign from every member's list.
 One map may be stored and later replaced; SVG and other active content are rejected.
+
+## Campaign schedule and lifecycle
+
+A campaign has a start date and time interpreted in a creator-chosen IANA time zone (UTC when
+none is chosen). Instants are stored in UTC. Members see start, end, and current-phase times in
+their personal display time zone.
+
+Round count is 3-52. Each round has one length using minutes (1-60), hours (1-24), days (1-7),
+weeks (1-52), or months (1-12). A round contains an ordered list of action windows and battle
+phases. At least one action and one battle phase are required. Action lengths added together
+cannot exceed the round length. Action and battle-phase lengths together must add up to the
+round length, using calendar addition in the campaign time zone from the start instant. Campaign
+end is start plus round length applied once per round.
+
+The campaign state machine is derived from the server clock:
+
+1. `Scheduled`: before the start instant.
+2. `InProgress`: inside a configured round and phase. The current round number, phase, and
+   phase window are included on the campaign page.
+3. `Completed`: at or after the computed end instant.
+
+A phase boundary belongs to the following phase. Action-window open/close and battle-result
+rules remain as specified in later sections.
 
 ## Role and actor model
 

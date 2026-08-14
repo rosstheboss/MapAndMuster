@@ -9,15 +9,19 @@ namespace Campaign.Application.Campaigns;
 public sealed class ListCampaignsHandler
 {
     private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
 
     /// <summary>
     /// Initializes a new handler.
     /// </summary>
     /// <param name="campaigns">The campaign store.</param>
-    public ListCampaignsHandler(ICampaignStore campaigns)
+    /// <param name="clock">The clock.</param>
+    public ListCampaignsHandler(ICampaignStore campaigns, IClock clock)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
         _campaigns = campaigns;
+        _clock = clock;
     }
 
     /// <summary>
@@ -31,7 +35,7 @@ public sealed class ListCampaignsHandler
         CancellationToken cancellationToken)
     {
         var campaigns = await _campaigns.ListForUserAsync(userId, cancellationToken).ConfigureAwait(false);
-        var items = campaigns.Select(campaign => CampaignMapper.ToListItem(campaign, userId)).ToArray();
+        var items = campaigns.Select(campaign => CampaignMapper.ToListItem(campaign, userId, _clock.UtcNow)).ToArray();
         return OperationResults.Success<IReadOnlyList<CampaignListItem>>(items);
     }
 }
@@ -42,15 +46,19 @@ public sealed class ListCampaignsHandler
 public sealed class GetCampaignHandler
 {
     private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
 
     /// <summary>
     /// Initializes a new handler.
     /// </summary>
     /// <param name="campaigns">The campaign store.</param>
-    public GetCampaignHandler(ICampaignStore campaigns)
+    /// <param name="clock">The clock.</param>
+    public GetCampaignHandler(ICampaignStore campaigns, IClock clock)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
         _campaigns = campaigns;
+        _clock = clock;
     }
 
     /// <summary>
@@ -71,7 +79,7 @@ public sealed class GetCampaignHandler
             return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
-        return OperationResults.Success(CampaignMapper.ToDetail(campaign, userId));
+        return OperationResults.Success(CampaignMapper.ToDetail(campaign, userId, _clock.UtcNow));
     }
 }
 
@@ -218,7 +226,7 @@ public sealed class UploadCampaignMapHandler
             await _maps.DeleteAsync(previousKey, cancellationToken).ConfigureAwait(false);
         }
 
-        return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId));
+        return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
     }
 }
 
@@ -298,6 +306,13 @@ internal static class CampaignMapClone
             Factions = existing.Factions,
             AllyGroups = existing.AllyGroups,
             Links = existing.Links,
+            TimeZoneId = existing.TimeZoneId,
+            StartsUtc = existing.StartsUtc,
+            EndsUtc = existing.EndsUtc,
+            RoundCount = existing.RoundCount,
+            RoundLengthAmount = existing.RoundLengthAmount,
+            RoundLengthUnit = existing.RoundLengthUnit,
+            Phases = existing.Phases,
         };
     }
 }

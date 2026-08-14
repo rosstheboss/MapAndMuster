@@ -19,6 +19,7 @@ public sealed class CampaignSetupRulesTests
             factions: TwoFactions(),
             allyGroups: null,
             links: null,
+            schedule: WeekSchedule(),
             out var setup,
             out var password,
             out var errors);
@@ -32,6 +33,9 @@ public sealed class CampaignSetupRulesTests
         Assert.False(setup.IsPrivate);
         Assert.True(setup.CreatorIsParticipant);
         Assert.Equal(2, setup.Factions.Count);
+        Assert.Equal(8, setup.Schedule.RoundCount);
+        Assert.Equal(DurationUnit.Weeks, setup.Schedule.RoundLength.Unit);
+        Assert.Equal(3, setup.Schedule.Phases.Count);
     }
 
     [Fact]
@@ -52,6 +56,7 @@ public sealed class CampaignSetupRulesTests
             [
                 new CampaignLinkInput { Label = "", Url = "javascript:alert(1)" },
             ],
+            schedule: WeekSchedule(),
             out var setup,
             out _,
             out var errors);
@@ -69,21 +74,7 @@ public sealed class CampaignSetupRulesTests
     [Fact]
     public void RejectsProhibitedCampaignName()
     {
-        var succeeded = CampaignSetupRules.TryCreate(
-            "fuck war",
-            null,
-            2,
-            false,
-            null,
-            false,
-            false,
-            0,
-            TwoFactions(),
-            null,
-            null,
-            out _,
-            out _,
-            out var errors);
+        var succeeded = TryMinimal("fuck war", out var errors);
 
         Assert.False(succeeded);
         Assert.Contains(errors, error => error.Message.Contains("prohibited language", StringComparison.Ordinal));
@@ -104,6 +95,7 @@ public sealed class CampaignSetupRulesTests
             TwoFactions(),
             null,
             null,
+            WeekSchedule(),
             out _,
             out _,
             out var errors);
@@ -127,6 +119,7 @@ public sealed class CampaignSetupRulesTests
             TwoFactions(),
             null,
             null,
+            WeekSchedule(),
             out var setup,
             out var password,
             out var errors);
@@ -156,6 +149,7 @@ public sealed class CampaignSetupRulesTests
             ],
             [new AllyGroupInput { Name = "Pact" }],
             null,
+            WeekSchedule(),
             out _,
             out _,
             out var errors);
@@ -185,6 +179,7 @@ public sealed class CampaignSetupRulesTests
             [
                 new CampaignLinkInput { Label = "Rules", Url = "https://example.test/rules" },
             ],
+            WeekSchedule(),
             out var setup,
             out _,
             out var errors);
@@ -217,6 +212,7 @@ public sealed class CampaignSetupRulesTests
             ],
             [new AllyGroupInput { Name = "Pact" }],
             null,
+            WeekSchedule(),
             out _,
             out _,
             out var errors);
@@ -240,6 +236,7 @@ public sealed class CampaignSetupRulesTests
             TwoFactions(),
             null,
             null,
+            WeekSchedule(),
             out _,
             out _,
             out var errors);
@@ -267,6 +264,7 @@ public sealed class CampaignSetupRulesTests
             TwoFactions(),
             null,
             links,
+            WeekSchedule(),
             out _,
             out _,
             out var errors);
@@ -293,6 +291,7 @@ public sealed class CampaignSetupRulesTests
             ],
             null,
             null,
+            WeekSchedule(),
             out _,
             out _,
             out var errors);
@@ -319,6 +318,7 @@ public sealed class CampaignSetupRulesTests
             ],
             null,
             null,
+            WeekSchedule(),
             out _,
             out _,
             out var errors);
@@ -342,6 +342,7 @@ public sealed class CampaignSetupRulesTests
             TwoFactions(),
             null,
             null,
+            WeekSchedule(),
             out var setup,
             out var password,
             out var errors);
@@ -350,6 +351,183 @@ public sealed class CampaignSetupRulesTests
         Assert.Empty(errors);
         Assert.NotNull(setup);
         Assert.Equal("join-secret", password);
+    }
+
+    [Fact]
+    public void RejectsRoundCountOutsideRange()
+    {
+        var schedule = WeekSchedule() with { RoundCount = 2 };
+        var succeeded = TryMinimal("Border War", out var errors, schedule);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Field == "roundCount");
+    }
+
+    [Fact]
+    public void RejectsWhenActionsExceedRoundLength()
+    {
+        var schedule = WeekSchedule() with
+        {
+            Phases =
+            [
+                new RoundPhaseInput { Kind = "Action", DurationAmount = 4, DurationUnit = "Days" },
+                new RoundPhaseInput { Kind = "Action", DurationAmount = 4, DurationUnit = "Days" },
+                new RoundPhaseInput { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+            ],
+        };
+        var succeeded = TryMinimal("Border War", out var errors, schedule);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Code == "phases.actions_too_long");
+        Assert.Contains(errors, error => error.Code == "phases.duration_mismatch");
+    }
+
+    [Fact]
+    public void RejectsWhenPhasesDoNotAddUpToRoundLength()
+    {
+        var schedule = WeekSchedule() with
+        {
+            Phases =
+            [
+                new RoundPhaseInput { Kind = "Action", DurationAmount = 1, DurationUnit = "Days" },
+                new RoundPhaseInput { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+            ],
+        };
+        var succeeded = TryMinimal("Border War", out var errors, schedule);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Code == "phases.duration_mismatch");
+    }
+
+    [Fact]
+    public void RejectsRoundWithoutABattlePhase()
+    {
+        var schedule = WeekSchedule() with
+        {
+            Phases =
+            [
+                new RoundPhaseInput { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new RoundPhaseInput { Kind = "Action", DurationAmount = 4, DurationUnit = "Days" },
+            ],
+        };
+        var succeeded = TryMinimal("Border War", out var errors, schedule);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Field == "phases");
+    }
+
+    [Fact]
+    public void RejectsInvalidDurationAmounts()
+    {
+        var schedule = WeekSchedule() with { RoundLengthAmount = 8, RoundLengthUnit = "Days" };
+        var succeeded = TryMinimal("Border War", out var errors, schedule);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Field == "roundLength");
+    }
+
+    [Fact]
+    public void AcceptsBattleBetweenActionWindows()
+    {
+        var schedule = WeekSchedule() with
+        {
+            Phases =
+            [
+                new RoundPhaseInput { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new RoundPhaseInput { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+                new RoundPhaseInput { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+            ],
+        };
+        var succeeded = TryMinimal("Border War", out var errors, schedule);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+    }
+
+    [Fact]
+    public void AcceptsMonthLengthRoundsWhenPhasesMatch()
+    {
+        var schedule = new CampaignScheduleInput
+        {
+            TimeZoneId = "UTC",
+            StartsAtLocal = "2026-01-15T12:00",
+            RoundCount = 3,
+            RoundLengthAmount = 2,
+            RoundLengthUnit = "Months",
+            Phases =
+            [
+                new RoundPhaseInput { Kind = "Action", DurationAmount = 1, DurationUnit = "Months" },
+                new RoundPhaseInput { Kind = "Battle", DurationAmount = 1, DurationUnit = "Months" },
+            ],
+        };
+        var succeeded = TryMinimal("Long War", out var errors, schedule);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+    }
+
+    [Fact]
+    public void DefaultsBlankTimeZoneToUtc()
+    {
+        var schedule = WeekSchedule() with { TimeZoneId = null };
+        var succeeded = TryMinimal("Border War", out var errors, schedule, out var setup);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        Assert.Equal("UTC", setup.Schedule.TimeZone.Id);
+    }
+
+    private static bool TryMinimal(string name, out IReadOnlyList<Campaign.Domain.Common.DomainError> errors)
+    {
+        return TryMinimal(name, out errors, WeekSchedule(), out _);
+    }
+
+    private static bool TryMinimal(
+        string name,
+        out IReadOnlyList<Campaign.Domain.Common.DomainError> errors,
+        CampaignScheduleInput schedule)
+    {
+        return TryMinimal(name, out errors, schedule, out _);
+    }
+
+    private static bool TryMinimal(
+        string name,
+        out IReadOnlyList<Campaign.Domain.Common.DomainError> errors,
+        CampaignScheduleInput schedule,
+        out CampaignSetup? setup)
+    {
+        return CampaignSetupRules.TryCreate(
+            name,
+            null,
+            8,
+            false,
+            null,
+            false,
+            true,
+            0,
+            TwoFactions(),
+            null,
+            null,
+            schedule,
+            out setup,
+            out _,
+            out errors);
+    }
+
+    internal static CampaignScheduleInput WeekSchedule()
+    {
+        return new CampaignScheduleInput
+        {
+            TimeZoneId = "UTC",
+            StartsAtLocal = "2026-09-01T12:00",
+            RoundCount = 8,
+            RoundLengthAmount = 1,
+            RoundLengthUnit = "Weeks",
+            Phases =
+            [
+                new RoundPhaseInput { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new RoundPhaseInput { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new RoundPhaseInput { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+            ],
+        };
     }
 
     private static IReadOnlyList<FactionInput> TwoFactions()

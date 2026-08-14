@@ -110,6 +110,7 @@ public static class CampaignEndpoints
                     Factions = CampaignResponses.ToFactionInputs(request.Factions),
                     AllyGroups = CampaignResponses.ToAllyGroupInputs(request.AllyGroups),
                     Links = CampaignResponses.ToLinkInputs(request.Links),
+                    Schedule = CampaignResponses.ToScheduleInput(request),
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -177,6 +178,7 @@ public static class CampaignEndpoints
                     Factions = CampaignResponses.ToFactionInputs(request.Factions),
                     AllyGroups = CampaignResponses.ToAllyGroupInputs(request.AllyGroups),
                     Links = CampaignResponses.ToLinkInputs(request.Links),
+                    Schedule = CampaignResponses.ToScheduleInput(request),
                 },
                 cancellationToken)
             .ConfigureAwait(false);

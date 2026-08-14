@@ -1,4 +1,4 @@
-<div class="app-shell">
+<div class="app-shell" [attr.inert]="submitOverlay.busy() ? '' : null">
   <header class="app-banner">
     <a routerLink="/" class="app-brand">
       <app-icon name="castle" />
@@ -38,3 +38,4 @@
     <router-outlet />
   </main>
 </div>
+<app-form-submit-overlay />

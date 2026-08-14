@@ -3,6 +3,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
+import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
   collectFormFailures,
   describeControlError,
@@ -27,6 +29,7 @@ import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 })
 export class ProfilePage {
   private readonly auth = inject(AuthService);
+  private readonly overlay = inject(FormSubmitOverlayService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly formAlert = viewChild<ElementRef<HTMLElement>>('formAlert');
 
@@ -132,35 +135,36 @@ export class ProfilePage {
     this.saving.set(true);
     this.errorMessages.set([]);
     try {
-      const value = this.form.getRawValue();
-      const profile = await this.auth.updateProfile(
-        {
-          username: value.username,
-          firstName: value.firstName,
-          middleInitial: value.middleInitial,
-          lastName: value.lastName,
-          suffix: value.suffix,
-          city: value.city,
-          region: value.region,
-          country: value.country,
-          timeZoneId: value.timeZoneId,
-          displayNameMode: value.displayNameMode,
-        },
-        this.profileRevision,
-      );
-      this.profileRevision = profile.profileRevision;
-      this.updatedUtc.set(profile.updatedUtc);
-      this.username.set(profile.username);
+      await this.overlay.run(async () => {
+        const value = this.form.getRawValue();
+        const profile = await this.auth.updateProfile(
+          {
+            username: value.username,
+            firstName: value.firstName,
+            middleInitial: value.middleInitial,
+            lastName: value.lastName,
+            suffix: value.suffix,
+            city: value.city,
+            region: value.region,
+            country: value.country,
+            timeZoneId: value.timeZoneId,
+            displayNameMode: value.displayNameMode,
+          },
+          this.profileRevision,
+        );
+        this.profileRevision = profile.profileRevision;
+        this.updatedUtc.set(profile.updatedUtc);
+        this.username.set(profile.username);
 
-      if (this.isChangingPassword()) {
-        await this.auth.changePassword(value.currentPassword, value.newPassword);
-        this.form.patchValue({ currentPassword: '', newPassword: '', confirmPassword: '' });
-        this.form.controls.currentPassword.markAsUntouched();
-        this.form.controls.newPassword.markAsUntouched();
-        this.form.controls.confirmPassword.markAsUntouched();
-      }
-
-      this.successMessage.set('Profile saved.');
+        if (this.isChangingPassword()) {
+          await this.auth.changePassword(value.currentPassword, value.newPassword);
+          this.form.patchValue({ currentPassword: '', newPassword: '', confirmPassword: '' });
+          this.form.controls.currentPassword.markAsUntouched();
+          this.form.controls.newPassword.markAsUntouched();
+          this.form.controls.confirmPassword.markAsUntouched();
+        }
+      });
+      this.revealSuccess();
     } catch (error: unknown) {
       this.serverFields.set(new Set(readApiFieldErrors(error)));
       this.revealErrors(readApiErrorMessages(error, 'Unable to save your profile.'));
@@ -180,12 +184,14 @@ export class ProfilePage {
     this.errorMessages.set([]);
     this.successMessage.set(null);
     try {
-      const profile = await this.auth.uploadAvatar(file);
-      this.profileRevision = profile.profileRevision;
-      this.updatedUtc.set(profile.updatedUtc);
-      this.hasAvatar.set(profile.hasAvatar);
-      this.avatarCacheBust.set(Date.now());
-      this.successMessage.set('Profile picture updated.');
+      await this.overlay.run(async () => {
+        const profile = await this.auth.uploadAvatar(file);
+        this.profileRevision = profile.profileRevision;
+        this.updatedUtc.set(profile.updatedUtc);
+        this.hasAvatar.set(profile.hasAvatar);
+        this.avatarCacheBust.set(Date.now());
+      });
+      this.revealSuccess();
     } catch (error: unknown) {
       this.revealErrors(readApiErrorMessages(error, 'Unable to upload that picture.'));
     } finally {
@@ -236,7 +242,14 @@ export class ProfilePage {
   }
 
   private revealErrors(messages: readonly string[]): void {
+    this.successMessage.set(null);
     this.errorMessages.set([...messages]);
+    queueMicrotask(() => scrollAlertIntoView(this.formAlert()?.nativeElement));
+  }
+
+  private revealSuccess(): void {
+    this.errorMessages.set([]);
+    this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
     queueMicrotask(() => scrollAlertIntoView(this.formAlert()?.nativeElement));
   }
 }

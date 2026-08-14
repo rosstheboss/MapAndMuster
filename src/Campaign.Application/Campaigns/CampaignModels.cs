@@ -25,6 +25,15 @@ public sealed class CampaignListItem
 
     /// <summary>Gets whether the current user occupies a player slot.</summary>
     public required bool IsParticipant { get; init; }
+
+    /// <summary>Gets the campaign lifecycle status.</summary>
+    public required string Status { get; init; }
+
+    /// <summary>Gets the campaign start instant, in UTC.</summary>
+    public required DateTimeOffset StartsUtc { get; init; }
+
+    /// <summary>Gets the campaign end instant, in UTC.</summary>
+    public required DateTimeOffset EndsUtc { get; init; }
 }
 
 /// <summary>
@@ -79,6 +88,63 @@ public sealed class CampaignDetail
 
     /// <summary>Gets the external links.</summary>
     public required IReadOnlyList<CampaignLinkDetail> Links { get; init; }
+
+    /// <summary>Gets the IANA time zone used when the schedule was configured.</summary>
+    public required string TimeZoneId { get; init; }
+
+    /// <summary>Gets the start as a local wall-clock value in the campaign time zone.</summary>
+    public required string StartsAtLocal { get; init; }
+
+    /// <summary>Gets the campaign start instant, in UTC.</summary>
+    public required DateTimeOffset StartsUtc { get; init; }
+
+    /// <summary>Gets the campaign end instant, in UTC.</summary>
+    public required DateTimeOffset EndsUtc { get; init; }
+
+    /// <summary>Gets the number of rounds.</summary>
+    public required int RoundCount { get; init; }
+
+    /// <summary>Gets the round-length amount.</summary>
+    public required int RoundLengthAmount { get; init; }
+
+    /// <summary>Gets the round-length unit name.</summary>
+    public required string RoundLengthUnit { get; init; }
+
+    /// <summary>Gets the ordered action and battle steps in a round.</summary>
+    public required IReadOnlyList<RoundPhaseDetail> Phases { get; init; }
+
+    /// <summary>Gets the campaign lifecycle status.</summary>
+    public required string Status { get; init; }
+
+    /// <summary>Gets the 1-based current round when the campaign is in progress.</summary>
+    public int? CurrentRound { get; init; }
+
+    /// <summary>Gets the 1-based current phase in the round when the campaign is in progress.</summary>
+    public int? CurrentPhaseNumber { get; init; }
+
+    /// <summary>Gets the current phase kind when the campaign is in progress.</summary>
+    public string? CurrentPhaseKind { get; init; }
+
+    /// <summary>Gets when the current phase opened, in UTC.</summary>
+    public DateTimeOffset? CurrentPhaseStartsUtc { get; init; }
+
+    /// <summary>Gets when the current phase closes, in UTC.</summary>
+    public DateTimeOffset? CurrentPhaseEndsUtc { get; init; }
+}
+
+/// <summary>
+/// An action or battle step in a campaign round.
+/// </summary>
+public sealed class RoundPhaseDetail
+{
+    /// <summary>Gets the phase kind name.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the duration amount.</summary>
+    public required int DurationAmount { get; init; }
+
+    /// <summary>Gets the duration unit name.</summary>
+    public required string DurationUnit { get; init; }
 }
 
 /// <summary>
@@ -178,6 +244,42 @@ public sealed class StoredCampaign
 
     /// <summary>Gets the external links.</summary>
     public required IReadOnlyList<StoredCampaignLink> Links { get; init; }
+
+    /// <summary>Gets the IANA time zone used when the schedule was configured.</summary>
+    public required string TimeZoneId { get; init; }
+
+    /// <summary>Gets the campaign start instant, in UTC.</summary>
+    public required DateTimeOffset StartsUtc { get; init; }
+
+    /// <summary>Gets the campaign end instant, in UTC.</summary>
+    public required DateTimeOffset EndsUtc { get; init; }
+
+    /// <summary>Gets the number of rounds.</summary>
+    public required int RoundCount { get; init; }
+
+    /// <summary>Gets the round-length amount.</summary>
+    public required int RoundLengthAmount { get; init; }
+
+    /// <summary>Gets the round-length unit name.</summary>
+    public required string RoundLengthUnit { get; init; }
+
+    /// <summary>Gets the ordered action and battle steps in a round.</summary>
+    public required IReadOnlyList<StoredRoundPhase> Phases { get; init; }
+}
+
+/// <summary>
+/// A persisted action or battle step.
+/// </summary>
+public sealed class StoredRoundPhase
+{
+    /// <summary>Gets the phase kind name.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the duration amount.</summary>
+    public required int DurationAmount { get; init; }
+
+    /// <summary>Gets the duration unit name.</summary>
+    public required string DurationUnit { get; init; }
 }
 
 /// <summary>

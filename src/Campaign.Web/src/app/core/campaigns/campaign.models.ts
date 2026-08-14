@@ -6,6 +6,9 @@ export interface CampaignListItem {
   isPrivate: boolean;
   canManage: boolean;
   isParticipant: boolean;
+  status: string;
+  startsUtc: string;
+  endsUtc: string;
 }
 
 export interface CampaignDetail {
@@ -25,6 +28,26 @@ export interface CampaignDetail {
   factions: CampaignFaction[];
   allyGroups: CampaignAllyGroup[];
   links: CampaignLink[];
+  timeZoneId: string;
+  startsAtLocal: string;
+  startsUtc: string;
+  endsUtc: string;
+  roundCount: number;
+  roundLengthAmount: number;
+  roundLengthUnit: string;
+  phases: RoundPhase[];
+  status: string;
+  currentRound: number | null;
+  currentPhaseNumber: number | null;
+  currentPhaseKind: string | null;
+  currentPhaseStartsUtc: string | null;
+  currentPhaseEndsUtc: string | null;
+}
+
+export interface RoundPhase {
+  kind: string;
+  durationAmount: number;
+  durationUnit: string;
 }
 
 export interface CampaignFaction {
@@ -56,6 +79,18 @@ export interface SaveCampaignPayload {
   allyGroups: SaveAllyGroupPayload[];
   links: SaveLinkPayload[];
   revision?: number;
+  timeZoneId: string;
+  startsAtLocal: string;
+  roundCount: number;
+  roundLengthAmount: number;
+  roundLengthUnit: string;
+  phases: SaveRoundPhasePayload[];
+}
+
+export interface SaveRoundPhasePayload {
+  kind: string;
+  durationAmount: number;
+  durationUnit: string;
 }
 
 export interface SaveFactionPayload {

@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
   collectFormFailures,
   isControlInvalid,
@@ -37,6 +38,7 @@ const COMPLETE_FIELD_LABELS: Readonly<Record<string, string>> = {
 })
 export class CompleteExternalPage {
   private readonly auth = inject(AuthService);
+  private readonly overlay = inject(FormSubmitOverlayService);
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
   private readonly formAlert = viewChild<ElementRef<HTMLElement>>('formAlert');
@@ -101,8 +103,10 @@ export class CompleteExternalPage {
     this.submitting.set(true);
     this.errorMessages.set([]);
     try {
-      await this.auth.completeExternalRegistration(this.form.getRawValue());
-      await this.router.navigateByUrl('/');
+      await this.overlay.run(async () => {
+        await this.auth.completeExternalRegistration(this.form.getRawValue());
+        await this.router.navigateByUrl('/');
+      });
     } catch (error: unknown) {
       this.serverFields.set(new Set(readApiFieldErrors(error)));
       this.revealErrors(readApiErrorMessages(error, 'Unable to finish creating the account.'));

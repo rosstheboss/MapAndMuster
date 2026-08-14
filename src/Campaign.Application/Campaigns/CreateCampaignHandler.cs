@@ -53,6 +53,7 @@ public sealed class CreateCampaignHandler
                 command.Factions,
                 command.AllyGroups,
                 command.Links,
+                command.Schedule,
                 out var setup,
                 out var joinPassword,
                 out var errors))
@@ -72,7 +73,7 @@ public sealed class CreateCampaignHandler
             createdByUserId: command.UserId);
 
         var created = await _campaigns.AddAsync(stored, cancellationToken).ConfigureAwait(false);
-        return OperationResults.Success(CampaignMapper.ToDetail(created, command.UserId));
+        return OperationResults.Success(CampaignMapper.ToDetail(created, command.UserId, now));
     }
 }
 
@@ -142,6 +143,7 @@ public sealed class UpdateCampaignHandler
                 command.Factions,
                 command.AllyGroups,
                 command.Links,
+                command.Schedule,
                 out var setup,
                 out var joinPassword,
                 out var errors))
@@ -205,7 +207,7 @@ public sealed class UpdateCampaignHandler
                 outcome.Message ?? "The campaign could not be updated.");
         }
 
-        return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId));
+        return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
     }
 }
 
@@ -270,6 +272,21 @@ internal static class CampaignPersistenceFactory
                     Id = Guid.NewGuid(),
                     Label = link.Label,
                     Url = link.Url,
+                }),
+            ],
+            TimeZoneId = setup.Schedule.TimeZone.Id,
+            StartsUtc = setup.Schedule.StartsUtc,
+            EndsUtc = setup.Schedule.EndsUtc,
+            RoundCount = setup.Schedule.RoundCount,
+            RoundLengthAmount = setup.Schedule.RoundLength.Amount,
+            RoundLengthUnit = setup.Schedule.RoundLength.Unit.ToString(),
+            Phases =
+            [
+                .. setup.Schedule.Phases.Select(phase => new StoredRoundPhase
+                {
+                    Kind = phase.Kind.ToString(),
+                    DurationAmount = phase.Duration.Amount,
+                    DurationUnit = phase.Duration.Unit.ToString(),
                 }),
             ],
         };

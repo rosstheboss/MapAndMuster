@@ -1,3 +1,6 @@
+using Campaign.Domain.Campaigns;
+using Campaign.Domain.Identity;
+
 namespace Campaign.Application.Campaigns;
 
 /// <summary>
@@ -10,11 +13,13 @@ public static class CampaignMapper
     /// </summary>
     /// <param name="campaign">The stored campaign.</param>
     /// <param name="viewerUserId">The viewing user's identifier.</param>
+    /// <param name="utcNow">The current UTC instant.</param>
     /// <returns>The list item.</returns>
-    public static CampaignListItem ToListItem(StoredCampaign campaign, Guid viewerUserId)
+    public static CampaignListItem ToListItem(StoredCampaign campaign, Guid viewerUserId, DateTimeOffset utcNow)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
+        var progress = ToSchedule(campaign).Evaluate(utcNow);
         return new CampaignListItem
         {
             Id = campaign.Id,
@@ -24,6 +29,9 @@ public static class CampaignMapper
             IsPrivate = campaign.IsPrivate,
             CanManage = membership?.IsGameMaster == true,
             IsParticipant = membership?.IsPlayer == true,
+            Status = progress.Status.ToString(),
+            StartsUtc = campaign.StartsUtc,
+            EndsUtc = campaign.EndsUtc,
         };
     }
 
@@ -32,11 +40,14 @@ public static class CampaignMapper
     /// </summary>
     /// <param name="campaign">The stored campaign.</param>
     /// <param name="viewerUserId">The viewing user's identifier.</param>
+    /// <param name="utcNow">The current UTC instant.</param>
     /// <returns>The detail.</returns>
-    public static CampaignDetail ToDetail(StoredCampaign campaign, Guid viewerUserId)
+    public static CampaignDetail ToDetail(StoredCampaign campaign, Guid viewerUserId, DateTimeOffset utcNow)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
+        var schedule = ToSchedule(campaign);
+        var progress = schedule.Evaluate(utcNow);
         return new CampaignDetail
         {
             Id = campaign.Id,
@@ -70,6 +81,28 @@ public static class CampaignMapper
                 Label = link.Label,
                 Url = link.Url,
             })],
+            TimeZoneId = schedule.TimeZone.Id,
+            StartsAtLocal = schedule.StartsAtLocal,
+            StartsUtc = schedule.StartsUtc,
+            EndsUtc = schedule.EndsUtc,
+            RoundCount = schedule.RoundCount,
+            RoundLengthAmount = schedule.RoundLength.Amount,
+            RoundLengthUnit = schedule.RoundLength.Unit.ToString(),
+            Phases =
+            [
+                .. schedule.Phases.Select(static phase => new RoundPhaseDetail
+                {
+                    Kind = phase.Kind.ToString(),
+                    DurationAmount = phase.Duration.Amount,
+                    DurationUnit = phase.Duration.Unit.ToString(),
+                }),
+            ],
+            Status = progress.Status.ToString(),
+            CurrentRound = progress.CurrentRound,
+            CurrentPhaseNumber = progress.CurrentPhaseNumber,
+            CurrentPhaseKind = progress.CurrentPhaseKind?.ToString(),
+            CurrentPhaseStartsUtc = progress.CurrentPhaseStartsUtc,
+            CurrentPhaseEndsUtc = progress.CurrentPhaseEndsUtc,
         };
     }
 
@@ -94,5 +127,38 @@ public static class CampaignMapper
     {
         ArgumentNullException.ThrowIfNull(campaign);
         return campaign.Memberships.FirstOrDefault(membership => membership.UserId == viewerUserId);
+    }
+
+    /// <summary>
+    /// Rebuilds the validated schedule from persistence fields.
+    /// </summary>
+    /// <param name="campaign">The stored campaign.</param>
+    /// <returns>The schedule.</returns>
+    public static CampaignSchedule ToSchedule(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        if (!IanaTimeZone.TryCreate(campaign.TimeZoneId, out var timeZone, out _))
+        {
+            timeZone = IanaTimeZone.TryCreate(IanaTimeZone.UtcId, out var utc, out _)
+                ? utc
+                : throw new InvalidOperationException("UTC is required.");
+        }
+
+        var roundLength = new ScheduleDuration(
+            campaign.RoundLengthAmount,
+            Enum.Parse<DurationUnit>(campaign.RoundLengthUnit, ignoreCase: true));
+        var phases = campaign.Phases
+            .Select(phase => new RoundPhaseSetup(
+                Enum.Parse<RoundPhaseKind>(phase.Kind, ignoreCase: true),
+                new ScheduleDuration(phase.DurationAmount, Enum.Parse<DurationUnit>(phase.DurationUnit, ignoreCase: true))))
+            .ToArray();
+
+        return new CampaignSchedule(
+            timeZone,
+            campaign.StartsUtc,
+            campaign.EndsUtc,
+            campaign.RoundCount,
+            roundLength,
+            phases);
     }
 }

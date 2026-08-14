@@ -8,10 +8,22 @@
     <p>Loading campaign…</p>
   } @else {
     <form class="panel stack" [formGroup]="form" (ngSubmit)="save()" novalidate>
-      @if (errorMessages().length > 0) {
-        <div #formAlert class="error error-banner" role="alert" tabindex="-1">
-          @for (message of errorMessages(); track $index) {
+      @if (errorMessages().length > 0 || successMessage()) {
+        <div
+          #formAlert
+          class="form-banner"
+          [class.error]="!successMessage()"
+          [class.error-banner]="!successMessage()"
+          [class.success-banner]="!!successMessage()"
+          [attr.role]="successMessage() ? 'status' : 'alert'"
+          tabindex="-1"
+        >
+          @if (successMessage(); as message) {
             <p>{{ message }}</p>
+          } @else {
+            @for (message of errorMessages(); track $index) {
+              <p>{{ message }}</p>
+            }
           }
         </div>
       }
@@ -48,6 +60,116 @@
       </fieldset>
 
       <fieldset class="field">
+        <legend>Schedule <span class="required-marker" aria-hidden="true">*</span></legend>
+        <p class="muted">
+          Setup uses the campaign time zone. Players and managers later see start, end, and phase times in their own
+          time zone. Action and battle lengths must add up to the round length.
+        </p>
+        <div class="nested-row">
+          <div class="field grow" [class.invalid]="isInvalid('startsAtLocal')">
+            <label for="startsAtLocal"
+              >Start date and time <span class="required-marker" aria-hidden="true">*</span></label
+            >
+            <input id="startsAtLocal" type="datetime-local" formControlName="startsAtLocal" aria-required="true" />
+          </div>
+          <div class="field grow" [class.invalid]="isInvalid('timeZoneId')">
+            <label for="timeZoneId">Campaign time zone <span class="required-marker" aria-hidden="true">*</span></label>
+            <app-filterable-combobox inputId="timeZoneId" formControlName="timeZoneId" [options]="timeZones" />
+          </div>
+        </div>
+        <div class="nested-row">
+          <div class="field" [class.invalid]="isInvalid('roundCount')">
+            <label for="roundCount">Number of rounds <span class="required-marker" aria-hidden="true">*</span></label>
+            <input id="roundCount" type="number" min="3" max="52" formControlName="roundCount" aria-required="true" />
+            <p class="muted">Between 3 and 52.</p>
+          </div>
+          <div class="field" [class.invalid]="isInvalid('roundLengthAmount')">
+            <label for="roundLengthAmount"
+              >Round length <span class="required-marker" aria-hidden="true">*</span></label
+            >
+            <input
+              id="roundLengthAmount"
+              type="number"
+              min="1"
+              [max]="maxAmountFor(form.controls.roundLengthUnit.value)"
+              formControlName="roundLengthAmount"
+              aria-required="true"
+            />
+          </div>
+          <div class="field">
+            <label for="roundLengthUnit">Round length unit</label>
+            <select id="roundLengthUnit" formControlName="roundLengthUnit">
+              @for (unit of durationUnits; track unit) {
+                <option [value]="unit">{{ unit }}</option>
+              }
+            </select>
+          </div>
+        </div>
+        <p class="muted">This round has {{ actionCount() }} action{{ actionCount() === 1 ? '' : 's' }}.</p>
+        <div formArrayName="phases" class="stack">
+          @for (_phase of phases.controls; track $index; let index = $index) {
+            <div class="nested-card nested-row" [formGroupName]="index">
+              <div class="field">
+                <label [attr.for]="'phase-kind-' + index">Step {{ index + 1 }}</label>
+                <select [id]="'phase-kind-' + index" formControlName="kind">
+                  @for (kind of phaseKinds; track kind) {
+                    <option [value]="kind">{{ kind }}</option>
+                  }
+                </select>
+              </div>
+              <div class="field">
+                <label [attr.for]="'phase-amount-' + index">Length</label>
+                <input
+                  [id]="'phase-amount-' + index"
+                  type="number"
+                  min="1"
+                  [max]="maxAmountFor(phases.at(index).controls.durationUnit.value)"
+                  formControlName="durationAmount"
+                />
+              </div>
+              <div class="field">
+                <label [attr.for]="'phase-unit-' + index">Unit</label>
+                <select [id]="'phase-unit-' + index" formControlName="durationUnit">
+                  @for (unit of durationUnits; track unit) {
+                    <option [value]="unit">{{ unit }}</option>
+                  }
+                </select>
+              </div>
+              <div class="choice-row">
+                <button type="button" class="button-secondary" (click)="movePhase(index, -1)" [disabled]="index === 0">
+                  Move up
+                </button>
+                <button
+                  type="button"
+                  class="button-secondary"
+                  (click)="movePhase(index, 1)"
+                  [disabled]="index === phases.length - 1"
+                >
+                  Move down
+                </button>
+                <button
+                  type="button"
+                  class="button-secondary"
+                  (click)="removePhase(index)"
+                  [disabled]="phases.length <= 2"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+        <div class="choice-row">
+          <button type="button" class="button-secondary" (click)="addPhase('Action')" [disabled]="phases.length >= 16">
+            Add action
+          </button>
+          <button type="button" class="button-secondary" (click)="addPhase('Battle')" [disabled]="phases.length >= 16">
+            Add battle phase
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field">
         <legend>Visibility</legend>
         <label class="choice-row">
           <input type="checkbox" formControlName="isPrivate" />
@@ -67,6 +189,10 @@
       <fieldset class="field">
         <legend>Ally groups (optional)</legend>
         <p class="muted">Two or more factions can join a group. All factions cannot belong to a single group.</p>
+        <div class="choice-row">
+          <button type="button" class="button-secondary" (click)="addAllyGroup()">Add ally group</button>
+          <button type="button" class="button-secondary" (click)="clearAllyGroups()">Clear allies</button>
+        </div>
         <div formArrayName="allyGroups" class="stack">
           @for (group of allyGroups.controls; track $index; let index = $index) {
             <div class="nested-row" [formGroupName]="index">
@@ -78,14 +204,36 @@
             </div>
           }
         </div>
-        <button type="button" class="button-secondary" (click)="addAllyGroup()">Add ally group</button>
       </fieldset>
 
       <fieldset class="field">
         <legend>Factions <span class="required-marker" aria-hidden="true">*</span></legend>
-        <p class="muted">At least two factions are required. Subfactions are optional.</p>
+        <p class="muted">
+          At least two factions are required. Subfactions are optional. Adding a preset replaces the current faction
+          list with a copy you can then edit. The preset itself is not changed.
+        </p>
+        <div class="nested-row">
+          <div class="field grow">
+            <label for="factionPreset">Faction preset</label>
+            <select id="factionPreset" [formControl]="presetId">
+              <option value="">Select a preset</option>
+              @for (preset of factionPresets; track preset.id) {
+                <option [value]="preset.id">{{ preset.name }}</option>
+              }
+            </select>
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="applySelectedPreset()"
+            [disabled]="!selectedPresetId()"
+          >
+            Add preset
+          </button>
+          <button type="button" class="button-secondary" (click)="clearFactions()">Clear factions</button>
+        </div>
         <div formArrayName="factions" class="stack">
-          @for (faction of factions.controls; track $index; let index = $index) {
+          @for (faction of factions.controls; track faction; let index = $index) {
             <div class="nested-card stack" [formGroupName]="index">
               <div class="nested-row">
                 <div
@@ -116,7 +264,7 @@
               }
               <div class="field" formArrayName="subfactions">
                 <p class="muted">Subfactions (optional)</p>
-                @for (subfaction of subfactionsOf(faction).controls; track $index; let subIndex = $index) {
+                @for (subfaction of subfactionsOf(faction).controls; track subfaction; let subIndex = $index) {
                   <div class="nested-row" [formGroupName]="subIndex">
                     <label class="sr-only" [attr.for]="'subfaction-' + index + '-' + subIndex">
                       Faction {{ index + 1 }} subfaction {{ subIndex + 1 }}

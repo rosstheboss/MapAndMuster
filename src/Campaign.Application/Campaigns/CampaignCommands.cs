@@ -36,6 +36,9 @@ public sealed class CreateCampaignCommand
 
     /// <summary>Gets the external links.</summary>
     public IReadOnlyList<CampaignLinkInput>? Links { get; init; }
+
+    /// <summary>Gets the round schedule.</summary>
+    public required CampaignScheduleInput Schedule { get; init; }
 }
 
 /// <summary>
@@ -78,6 +81,9 @@ public sealed class UpdateCampaignCommand
 
     /// <summary>Gets the external links.</summary>
     public IReadOnlyList<CampaignLinkInput>? Links { get; init; }
+
+    /// <summary>Gets the round schedule.</summary>
+    public required CampaignScheduleInput Schedule { get; init; }
 }
 
 /// <summary>

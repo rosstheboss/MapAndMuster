@@ -2,17 +2,20 @@ import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService, readApiError } from './core/auth/auth.service';
+import { FormSubmitOverlayService } from './core/forms/form-submit-overlay.service';
+import { FormSubmitOverlayComponent } from './shared/form-submit-overlay/form-submit-overlay.component';
 import { IconComponent } from './shared/icon/icon.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, IconComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, IconComponent, FormSubmitOverlayComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
 export class App {
   private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
+  protected readonly submitOverlay = inject(FormSubmitOverlayService);
   protected readonly loggingOut = signal(false);
   protected readonly navError = signal<string | null>(null);
 

@@ -3,6 +3,7 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
+import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { emailAddress, required } from '../../core/forms/validators';
 
 @Component({
@@ -13,6 +14,7 @@ import { emailAddress, required } from '../../core/forms/validators';
 })
 export class ForgotPasswordPage {
   private readonly auth = inject(AuthService);
+  private readonly overlay = inject(FormSubmitOverlayService);
   private readonly formBuilder = inject(FormBuilder);
 
   protected readonly submitting = signal(false);
@@ -31,7 +33,9 @@ export class ForgotPasswordPage {
     this.submitting.set(true);
     this.errorMessage.set(null);
     try {
-      await this.auth.forgotPassword(this.form.controls.email.value);
+      await this.overlay.run(async () => {
+        await this.auth.forgotPassword(this.form.controls.email.value);
+      });
       this.submitted.set(true);
     } catch (error: unknown) {
       this.errorMessage.set(readApiError(error, 'Unable to send a reset email.'));

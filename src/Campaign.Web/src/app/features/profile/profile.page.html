@@ -4,15 +4,24 @@
     <p>Loading profile…</p>
   } @else {
     <form class="panel stack" [formGroup]="form" (ngSubmit)="save()" novalidate>
-      @if (errorMessages().length > 0) {
-        <div #formAlert class="error error-banner" role="alert" tabindex="-1">
-          @for (message of errorMessages(); track $index) {
+      @if (errorMessages().length > 0 || successMessage()) {
+        <div
+          #formAlert
+          class="form-banner"
+          [class.error]="!successMessage()"
+          [class.error-banner]="!successMessage()"
+          [class.success-banner]="!!successMessage()"
+          [attr.role]="successMessage() ? 'status' : 'alert'"
+          tabindex="-1"
+        >
+          @if (successMessage(); as message) {
             <p>{{ message }}</p>
+          } @else {
+            @for (message of errorMessages(); track $index) {
+              <p>{{ message }}</p>
+            }
           }
         </div>
-      }
-      @if (successMessage()) {
-        <p role="status">{{ successMessage() }}</p>
       }
 
       @if (avatarSrc(); as src) {

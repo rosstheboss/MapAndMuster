@@ -26,6 +26,8 @@
               {{ campaign.isPrivate ? 'Private' : 'Public' }}
               ·
               {{ campaign.canManage ? 'Manager' : 'Player' }}
+              ·
+              {{ campaign.status === 'InProgress' ? 'In progress' : campaign.status }}
             </p>
           </a>
         </li>

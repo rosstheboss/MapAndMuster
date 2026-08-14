@@ -16,6 +16,7 @@ public sealed class CampaignSetup
     /// <param name="factions">The factions.</param>
     /// <param name="allyGroups">The ally groups.</param>
     /// <param name="links">The external links.</param>
+    /// <param name="schedule">The validated round schedule.</param>
     public CampaignSetup(
         string name,
         string? description,
@@ -24,12 +25,14 @@ public sealed class CampaignSetup
         bool creatorIsParticipant,
         IReadOnlyList<FactionSetup> factions,
         IReadOnlyList<AllyGroupSetup> allyGroups,
-        IReadOnlyList<CampaignExternalLink> links)
+        IReadOnlyList<CampaignExternalLink> links,
+        CampaignSchedule schedule)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factions);
         ArgumentNullException.ThrowIfNull(allyGroups);
         ArgumentNullException.ThrowIfNull(links);
+        ArgumentNullException.ThrowIfNull(schedule);
         Name = name;
         Description = description;
         PlayerSlotCount = playerSlotCount;
@@ -38,6 +41,7 @@ public sealed class CampaignSetup
         Factions = factions;
         AllyGroups = allyGroups;
         Links = links;
+        Schedule = schedule;
     }
 
     /// <summary>Gets the campaign name.</summary>
@@ -63,4 +67,7 @@ public sealed class CampaignSetup
 
     /// <summary>Gets the external links.</summary>
     public IReadOnlyList<CampaignExternalLink> Links { get; }
+
+    /// <summary>Gets the validated round schedule.</summary>
+    public CampaignSchedule Schedule { get; }
 }

@@ -303,6 +303,9 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<DateTimeOffset>("EndsUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsPrivate")
                         .HasColumnType("boolean");
 
@@ -327,6 +330,25 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                         .ValueGeneratedNever()
                         .HasColumnType("integer");
 
+                    b.Property<int>("RoundCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RoundLengthAmount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RoundLengthUnit")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("StartsUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTimeOffset>("UpdatedUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -335,6 +357,38 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedByUserId");
 
                     b.ToTable("Campaigns", (string)null);
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignRoundPhaseRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DurationAmount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DurationUnit")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampaignId");
+
+                    b.ToTable("CampaignRoundPhases", (string)null);
                 });
 
             modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignSubfactionRecord", b =>
@@ -542,6 +596,17 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.Navigation("Campaign");
                 });
 
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignRoundPhaseRecord", b =>
+                {
+                    b.HasOne("Campaign.Infrastructure.Persistence.Entities.CampaignRecord", "Campaign")
+                        .WithMany("Phases")
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Campaign");
+                });
+
             modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignSubfactionRecord", b =>
                 {
                     b.HasOne("Campaign.Infrastructure.Persistence.Entities.CampaignFactionRecord", "Faction")
@@ -623,6 +688,8 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.Navigation("Links");
 
                     b.Navigation("Memberships");
+
+                    b.Navigation("Phases");
                 });
 #pragma warning restore 612, 618
         }

@@ -3,6 +3,7 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
   collectFormFailures,
   isControlInvalid,
@@ -20,6 +21,7 @@ import {
 })
 export class ResetPasswordPage {
   private readonly auth = inject(AuthService);
+  private readonly overlay = inject(FormSubmitOverlayService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
@@ -62,8 +64,10 @@ export class ResetPasswordPage {
     this.submitting.set(true);
     this.errorMessages.set([]);
     try {
-      await this.auth.resetPassword(userId, token, this.form.controls.password.value);
-      await this.router.navigateByUrl('/login');
+      await this.overlay.run(async () => {
+        await this.auth.resetPassword(userId, token, this.form.controls.password.value);
+        await this.router.navigateByUrl('/login');
+      });
     } catch (error: unknown) {
       this.serverFields.set(new Set(readApiFieldErrors(error)));
       this.revealErrors(readApiErrorMessages(error, 'Unable to reset that password.'));

@@ -44,6 +44,12 @@ public sealed class CampaignEndpointTests
         Assert.True(created.IsParticipant);
         Assert.Equal(2, created.Factions.Count);
         Assert.Equal(1, created.Revision);
+        Assert.Equal("Scheduled", created.Status);
+        Assert.Equal(8, created.RoundCount);
+        Assert.Equal("Weeks", created.RoundLengthUnit);
+        Assert.Equal(3, created.Phases.Count);
+        Assert.Equal("Action", created.Phases[0].Kind);
+        Assert.Equal("Battle", created.Phases[2].Kind);
 
         var list = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
         Assert.NotNull(list);
@@ -64,6 +70,7 @@ public sealed class CampaignEndpointTests
         Assert.Equal(12, updated.PlayerSlotCount);
         Assert.Equal(0, updated.OccupiedPlayerSlots);
         Assert.False(updated.IsParticipant);
+        Assert.Equal(8, updated.RoundCount);
 
         using var deleted = await client.DeleteAsync($"/api/campaigns/{created.Id}");
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
@@ -119,19 +126,7 @@ public sealed class CampaignEndpointTests
 
         using var createdResponse = await client.PostAsJsonAsync(
             "/api/campaigns",
-            new SaveCampaignRequest
-            {
-                Name = "Hidden War",
-                PlayerCount = 8,
-                IsPrivate = true,
-                JoinPassword = "join-secret",
-                CreatorIsParticipant = true,
-                Factions =
-                [
-                    new FactionRequest { Name = "North" },
-                    new FactionRequest { Name = "South" },
-                ],
-            });
+            ValidCampaignBody("Hidden War", isPrivate: true, joinPassword: "join-secret"));
         Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
         var json = await createdResponse.Content.ReadAsStringAsync();
         Assert.DoesNotContain("join-secret", json, StringComparison.Ordinal);
@@ -264,14 +259,17 @@ public sealed class CampaignEndpointTests
         string name,
         int? revision = null,
         int playerCount = 8,
-        bool creatorIsParticipant = true)
+        bool creatorIsParticipant = true,
+        bool isPrivate = false,
+        string? joinPassword = null)
     {
         return new SaveCampaignRequest
         {
             Name = name,
             Description = "A contested frontier.",
             PlayerCount = playerCount,
-            IsPrivate = false,
+            IsPrivate = isPrivate,
+            JoinPassword = joinPassword,
             CreatorIsParticipant = creatorIsParticipant,
             Factions =
             [
@@ -279,6 +277,17 @@ public sealed class CampaignEndpointTests
                 new FactionRequest { Name = "South" },
             ],
             Revision = revision,
+            TimeZoneId = "UTC",
+            StartsAtLocal = "2099-01-05T12:00",
+            RoundCount = 8,
+            RoundLengthAmount = 1,
+            RoundLengthUnit = "Weeks",
+            Phases =
+            [
+                new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new RoundPhaseRequest { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+            ],
         };
     }
 

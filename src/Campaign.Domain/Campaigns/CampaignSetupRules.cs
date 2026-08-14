@@ -54,6 +54,21 @@ public static class CampaignSetupRules
     /// <summary>Maximum private-campaign join password length.</summary>
     public const int JoinPasswordMaxLength = 128;
 
+    /// <summary>Minimum number of rounds.</summary>
+    public const int MinRoundCount = 3;
+
+    /// <summary>Maximum number of rounds.</summary>
+    public const int MaxRoundCount = 52;
+
+    /// <summary>Minimum action windows in a round.</summary>
+    public const int MinActionPhaseCount = 1;
+
+    /// <summary>Minimum battle phases in a round.</summary>
+    public const int MinBattlePhaseCount = 1;
+
+    /// <summary>Maximum action and battle steps in a round.</summary>
+    public const int MaxPhaseCount = 16;
+
     /// <summary>
     /// Validates campaign setup and, when successful, returns the normalized configuration plus any new join password.
     /// </summary>
@@ -68,6 +83,7 @@ public static class CampaignSetupRules
     /// <param name="factions">The faction inputs.</param>
     /// <param name="allyGroups">The ally-group inputs.</param>
     /// <param name="links">The external-link inputs.</param>
+    /// <param name="schedule">The round-schedule inputs.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
@@ -84,6 +100,7 @@ public static class CampaignSetupRules
         IReadOnlyList<FactionInput>? factions,
         IReadOnlyList<AllyGroupInput>? allyGroups,
         IReadOnlyList<CampaignLinkInput>? links,
+        CampaignScheduleInput? schedule,
         [NotNullWhen(true)] out CampaignSetup? setup,
         out string? validatedJoinPassword,
         out IReadOnlyList<DomainError> errors)
@@ -123,6 +140,7 @@ public static class CampaignSetupRules
         var parsedFactions = ParseFactions(factions, parsedGroups, collected);
         ValidateAllyMembership(parsedFactions, parsedGroups, collected);
         var parsedLinks = ParseLinks(links, collected);
+        var parsedSchedule = ParseSchedule(schedule, collected);
 
         if (collected.Count > 0)
         {
@@ -139,7 +157,8 @@ public static class CampaignSetupRules
             creatorIsParticipant,
             parsedFactions,
             parsedGroups,
-            parsedLinks);
+            parsedLinks,
+            parsedSchedule!);
         errors = collected;
         return true;
     }
@@ -518,5 +537,221 @@ public static class CampaignSetupRules
         }
 
         return parsed;
+    }
+
+    private static CampaignSchedule? ParseSchedule(CampaignScheduleInput? schedule, List<DomainError> errors)
+    {
+        if (schedule is null)
+        {
+            errors.Add(new DomainError(
+                "schedule.invalid",
+                "Round schedule is required.",
+                "schedule"));
+            return null;
+        }
+
+        if (!IanaTimeZone.TryCreate(
+                string.IsNullOrWhiteSpace(schedule.TimeZoneId) ? IanaTimeZone.UtcId : schedule.TimeZoneId,
+                out var timeZone,
+                out var timeZoneError))
+        {
+            errors.Add(timeZoneError);
+            timeZone = null;
+        }
+
+        DateTimeOffset startsUtc = default;
+        if (timeZone is not null
+            && !CampaignCalendar.TryParseLocalStart(schedule.StartsAtLocal, timeZone, out startsUtc, out var startError))
+        {
+            errors.Add(startError);
+        }
+
+        if (schedule.RoundCount < MinRoundCount || schedule.RoundCount > MaxRoundCount)
+        {
+            errors.Add(new DomainError(
+                "roundCount.invalid",
+                $"Number of rounds must be between {MinRoundCount} and {MaxRoundCount}.",
+                "roundCount"));
+        }
+
+        var roundLength = ParseDuration(
+            schedule.RoundLengthAmount,
+            schedule.RoundLengthUnit,
+            "roundLength",
+            "Round length",
+            errors);
+        var phases = ParsePhases(schedule.Phases, errors);
+
+        if (timeZone is null || roundLength is null || phases.Count == 0 || startsUtc == default)
+        {
+            return null;
+        }
+
+        var roundEnd = CampaignCalendar.Add(startsUtc, timeZone, roundLength);
+        var actionCursor = startsUtc;
+        foreach (var phase in phases.Where(static phase => phase.Kind == RoundPhaseKind.Action))
+        {
+            actionCursor = CampaignCalendar.Add(actionCursor, timeZone, phase.Duration);
+        }
+
+        if (actionCursor > roundEnd)
+        {
+            errors.Add(new DomainError(
+                "phases.actions_too_long",
+                "Action lengths added together cannot be longer than the round.",
+                "phases"));
+        }
+
+        var phaseCursor = startsUtc;
+        foreach (var phase in phases)
+        {
+            phaseCursor = CampaignCalendar.Add(phaseCursor, timeZone, phase.Duration);
+        }
+
+        if (phaseCursor != roundEnd)
+        {
+            errors.Add(new DomainError(
+                "phases.duration_mismatch",
+                "Action and battle-phase lengths must add up to the round length.",
+                "phases"));
+        }
+
+        if (errors.Count > 0)
+        {
+            return null;
+        }
+
+        var endsUtc = startsUtc;
+        for (var round = 0; round < schedule.RoundCount; round++)
+        {
+            endsUtc = CampaignCalendar.Add(endsUtc, timeZone, roundLength);
+        }
+
+        return new CampaignSchedule(timeZone, startsUtc, endsUtc, schedule.RoundCount, roundLength, phases);
+    }
+
+    private static List<RoundPhaseSetup> ParsePhases(IReadOnlyList<RoundPhaseInput>? phases, List<DomainError> errors)
+    {
+        var parsed = new List<RoundPhaseSetup>();
+        if (phases is null || phases.Count == 0)
+        {
+            errors.Add(new DomainError(
+                "phases.invalid",
+                "A round must include at least one action and one battle phase.",
+                "phases"));
+            return parsed;
+        }
+
+        if (phases.Count > MaxPhaseCount)
+        {
+            errors.Add(new DomainError(
+                "phases.invalid",
+                $"At most {MaxPhaseCount} action and battle steps are allowed in a round.",
+                "phases"));
+            return parsed;
+        }
+
+        for (var index = 0; index < phases.Count; index++)
+        {
+            var phase = phases[index];
+            var field = $"phases[{index}].kind";
+            if (!TryParsePhaseKind(phase.Kind, out var kind))
+            {
+                errors.Add(new DomainError(
+                    "phases.kind.invalid",
+                    $"Round step {index + 1} must be an action or a battle phase.",
+                    field));
+                continue;
+            }
+
+            var duration = ParseDuration(
+                phase.DurationAmount,
+                phase.DurationUnit,
+                $"phases[{index}].duration",
+                $"Round step {index + 1} length",
+                errors);
+            if (duration is null)
+            {
+                continue;
+            }
+
+            parsed.Add(new RoundPhaseSetup(kind, duration));
+        }
+
+        var actionCount = parsed.Count(static phase => phase.Kind == RoundPhaseKind.Action);
+        var battleCount = parsed.Count(static phase => phase.Kind == RoundPhaseKind.Battle);
+        if (actionCount < MinActionPhaseCount || battleCount < MinBattlePhaseCount)
+        {
+            errors.Add(new DomainError(
+                "phases.invalid",
+                "A round must include at least one action and one battle phase.",
+                "phases"));
+        }
+
+        return parsed;
+    }
+
+    private static ScheduleDuration? ParseDuration(
+        int amount,
+        string? unitName,
+        string field,
+        string label,
+        List<DomainError> errors)
+    {
+        if (!TryParseDurationUnit(unitName, out var unit))
+        {
+            errors.Add(new DomainError(
+                $"{field}.invalid",
+                $"{label} must use minutes, hours, days, weeks, or months.",
+                field));
+            return null;
+        }
+
+        var (min, max) = RangeFor(unit);
+        if (amount < min || amount > max)
+        {
+            errors.Add(new DomainError(
+                $"{field}.invalid",
+                $"{label} must be between {min} and {max} {unit.ToString().ToLowerInvariant()}.",
+                field));
+            return null;
+        }
+
+        return new ScheduleDuration(amount, unit);
+    }
+
+    private static (int Min, int Max) RangeFor(DurationUnit unit)
+    {
+        return unit switch
+        {
+            DurationUnit.Minutes => (1, 60),
+            DurationUnit.Hours => (1, 24),
+            DurationUnit.Days => (1, 7),
+            DurationUnit.Weeks => (1, 52),
+            DurationUnit.Months => (1, 12),
+            _ => (1, 1),
+        };
+    }
+
+    private static bool TryParseDurationUnit(string? raw, out DurationUnit unit)
+    {
+        unit = default;
+        if (string.IsNullOrWhiteSpace(raw) || int.TryParse(raw, out _))
+        {
+            return false;
+        }
+
+        return Enum.TryParse(raw.Trim(), ignoreCase: true, out unit) && Enum.IsDefined(unit);
+    }
+
+    private static bool TryParsePhaseKind(string? raw, out RoundPhaseKind kind)
+    {
+        kind = default;
+        if (string.IsNullOrWhiteSpace(raw) || int.TryParse(raw, out _))
+        {
+            return false;
+        }
+
+        return Enum.TryParse(raw.Trim(), ignoreCase: true, out kind) && Enum.IsDefined(kind);
     }
 }

@@ -5,6 +5,7 @@ import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type { CampaignDetail } from '../../core/campaigns/campaign.models';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
+import { actionNumberAt, formatDuration, formatPhaseLabel, statusLabel } from '../../core/campaigns/campaign-schedule';
 
 @Component({
   selector: 'app-campaign-detail-page',
@@ -57,6 +58,32 @@ export class CampaignDetailPage {
     }
 
     return 'Player';
+  }
+
+  protected statusText(campaign: CampaignDetail): string {
+    return statusLabel(campaign.status);
+  }
+
+  protected roundLengthText(campaign: CampaignDetail): string {
+    return formatDuration(campaign.roundLengthAmount, campaign.roundLengthUnit);
+  }
+
+  protected phaseText(campaign: CampaignDetail, index: number): string {
+    const phase = campaign.phases[index];
+    if (!phase) {
+      return '';
+    }
+
+    return `${formatPhaseLabel(phase.kind, actionNumberAt(campaign.phases, index))} · ${formatDuration(phase.durationAmount, phase.durationUnit)}`;
+  }
+
+  protected currentPhaseText(campaign: CampaignDetail): string {
+    if (campaign.currentRound === null || campaign.currentPhaseNumber === null || !campaign.currentPhaseKind) {
+      return '';
+    }
+
+    const index = campaign.currentPhaseNumber - 1;
+    return `Round ${campaign.currentRound} · ${formatPhaseLabel(campaign.currentPhaseKind, actionNumberAt(campaign.phases, index))}`;
   }
 
   protected requestDelete(): void {

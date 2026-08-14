@@ -1,0 +1,16 @@
+@if (overlay.busy()) {
+  <div class="form-submit-overlay">
+    <div
+      #dialog
+      class="form-submit-dialog panel stack"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="form-submit-title"
+      aria-describedby="form-submit-desc"
+      tabindex="-1"
+    >
+      <h2 id="form-submit-title">Saving</h2>
+      <p id="form-submit-desc">Please wait while your changes are saved.</p>
+    </div>
+  </div>
+}

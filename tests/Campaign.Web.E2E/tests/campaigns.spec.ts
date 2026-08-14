@@ -39,6 +39,13 @@ test('signed-in players can open their campaigns and start setup', async ({ page
   await page.getByRole('link', { name: 'Create campaign' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Create campaign' })).toBeVisible();
   await expect(page.getByLabel('Campaign name')).toBeVisible();
+  await expect(page.getByLabel('Start date and time')).toBeVisible();
+  await expect(page.getByLabel('Number of rounds')).toBeVisible();
+  await expect(page.getByLabel('Faction preset')).toBeVisible();
+  await page.getByLabel('Faction preset').selectOption('Warhammer: The Old World');
+  await page.getByRole('button', { name: 'Add preset' }).click();
+  await expect(page.getByLabel('Faction 1 name')).toHaveValue('Beastmen Brayherds');
   await page.getByRole('button', { name: 'Create campaign' }).click();
   await expect(page.getByRole('alert')).toContainText('Campaign name is not filled in.');
+  await expect(page.getByRole('alert')).toContainText('Start date and time is not filled in.');
 });

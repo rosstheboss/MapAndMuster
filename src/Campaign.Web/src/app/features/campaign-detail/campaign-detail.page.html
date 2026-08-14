@@ -51,8 +51,31 @@
         {{ campaign.creatorIsParticipant ? 'Manager and participant' : 'Manager only' }}
       </p>
       <p>Your role: {{ roleLabel(campaign) }}</p>
+      <p>Status: {{ statusText(campaign) }}</p>
+      <p>Start: {{ campaign.startsUtc | instantDate: timeZoneId() }}</p>
+      <p>End: {{ campaign.endsUtc | instantDate: timeZoneId() }}</p>
+      <p>Rounds: {{ campaign.roundCount }} · each {{ roundLengthText(campaign) }}</p>
+      <p class="muted">Schedule time zone: {{ campaign.timeZoneId }}</p>
+      @if (currentPhaseText(campaign)) {
+        <p>Current: {{ currentPhaseText(campaign) }}</p>
+        @if (campaign.currentPhaseStartsUtc && campaign.currentPhaseEndsUtc) {
+          <p class="muted">
+            {{ campaign.currentPhaseStartsUtc | instantDate: timeZoneId() }} –
+            {{ campaign.currentPhaseEndsUtc | instantDate: timeZoneId() }}
+          </p>
+        }
+      }
       <p class="muted">Created {{ campaign.createdUtc | instantDate: timeZoneId() }}</p>
       <p class="muted">Last edited {{ campaign.updatedUtc | instantDate: timeZoneId() }}</p>
+    </div>
+
+    <div class="panel stack">
+      <h2>Round structure</h2>
+      <ol class="plain-list">
+        @for (phase of campaign.phases; track $index; let index = $index) {
+          <li>{{ phaseText(campaign, index) }}</li>
+        }
+      </ol>
     </div>
 
     <div class="panel stack">

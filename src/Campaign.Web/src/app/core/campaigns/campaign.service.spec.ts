@@ -26,6 +26,9 @@ describe('CampaignService', () => {
         isPrivate: false,
         canManage: true,
         isParticipant: true,
+        status: 'Scheduled',
+        startsUtc: '2099-01-05T12:00:00+00:00',
+        endsUtc: '2099-03-02T12:00:00+00:00',
       },
     ]);
 

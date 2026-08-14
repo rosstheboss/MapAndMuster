@@ -96,6 +96,12 @@ public sealed class CampaignStore : ICampaignStore
                     .SetProperty(item => item.JoinPasswordHash, campaign.JoinPasswordHash)
                     .SetProperty(item => item.CreatorIsParticipant, campaign.CreatorIsParticipant)
                     .SetProperty(item => item.MapStorageKey, campaign.MapStorageKey)
+                    .SetProperty(item => item.TimeZoneId, campaign.TimeZoneId)
+                    .SetProperty(item => item.StartsUtc, campaign.StartsUtc)
+                    .SetProperty(item => item.EndsUtc, campaign.EndsUtc)
+                    .SetProperty(item => item.RoundCount, campaign.RoundCount)
+                    .SetProperty(item => item.RoundLengthAmount, campaign.RoundLengthAmount)
+                    .SetProperty(item => item.RoundLengthUnit, campaign.RoundLengthUnit)
                     .SetProperty(item => item.UpdatedUtc, campaign.UpdatedUtc)
                     .SetProperty(item => item.Revision, expectedRevision + 1),
                 cancellationToken)
@@ -125,6 +131,10 @@ public sealed class CampaignStore : ICampaignStore
             .ConfigureAwait(false);
         await _dbContext.Set<CampaignMembershipRecord>()
             .Where(membership => membership.CampaignId == campaign.Id)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await _dbContext.Set<CampaignRoundPhaseRecord>()
+            .Where(phase => phase.CampaignId == campaign.Id)
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -184,7 +194,8 @@ public sealed class CampaignStore : ICampaignStore
                 .ThenInclude(faction => faction.Subfactions)
             .Include(campaign => campaign.Factions)
                 .ThenInclude(faction => faction.AllyGroup)
-            .Include(campaign => campaign.Links);
+            .Include(campaign => campaign.Links)
+            .Include(campaign => campaign.Phases);
     }
 
     private static CampaignRecord ToRecord(StoredCampaign campaign)
@@ -203,6 +214,12 @@ public sealed class CampaignStore : ICampaignStore
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
             CreatedByUserId = campaign.CreatedByUserId,
+            TimeZoneId = campaign.TimeZoneId,
+            StartsUtc = campaign.StartsUtc,
+            EndsUtc = campaign.EndsUtc,
+            RoundCount = campaign.RoundCount,
+            RoundLengthAmount = campaign.RoundLengthAmount,
+            RoundLengthUnit = campaign.RoundLengthUnit,
         };
         AddChildren(record, campaign);
         return record;
@@ -236,6 +253,11 @@ public sealed class CampaignStore : ICampaignStore
         foreach (var membership in record.Memberships)
         {
             _dbContext.Entry(membership).State = EntityState.Added;
+        }
+
+        foreach (var phase in record.Phases)
+        {
+            _dbContext.Entry(phase).State = EntityState.Added;
         }
     }
 
@@ -306,6 +328,19 @@ public sealed class CampaignStore : ICampaignStore
                 IsPlayer = membership.IsPlayer,
             });
         }
+
+        var phaseOrder = 0;
+        foreach (var phase in campaign.Phases)
+        {
+            record.Phases.Add(new CampaignRoundPhaseRecord
+            {
+                CampaignId = record.Id,
+                Kind = phase.Kind,
+                DurationAmount = phase.DurationAmount,
+                DurationUnit = phase.DurationUnit,
+                SortOrder = phaseOrder++,
+            });
+        }
     }
 
     private static StoredCampaign ToStored(CampaignRecord record)
@@ -365,6 +400,23 @@ public sealed class CampaignStore : ICampaignStore
                         Id = link.Id,
                         Label = link.Label,
                         Url = link.Url,
+                    }),
+            ],
+            TimeZoneId = record.TimeZoneId,
+            StartsUtc = record.StartsUtc,
+            EndsUtc = record.EndsUtc,
+            RoundCount = record.RoundCount,
+            RoundLengthAmount = record.RoundLengthAmount,
+            RoundLengthUnit = record.RoundLengthUnit,
+            Phases =
+            [
+                .. record.Phases
+                    .OrderBy(phase => phase.SortOrder)
+                    .Select(phase => new StoredRoundPhase
+                    {
+                        Kind = phase.Kind,
+                        DurationAmount = phase.DurationAmount,
+                        DurationUnit = phase.DurationUnit,
                     }),
             ],
         };

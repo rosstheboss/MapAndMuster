@@ -44,6 +44,24 @@ public sealed class CampaignRecord
     /// <summary>Gets or sets the creating user's identifier.</summary>
     public Guid CreatedByUserId { get; set; }
 
+    /// <summary>Gets or sets the IANA time zone used when the schedule was configured.</summary>
+    public string TimeZoneId { get; set; } = "UTC";
+
+    /// <summary>Gets or sets the campaign start instant, in UTC.</summary>
+    public DateTimeOffset StartsUtc { get; set; }
+
+    /// <summary>Gets or sets the campaign end instant, in UTC.</summary>
+    public DateTimeOffset EndsUtc { get; set; }
+
+    /// <summary>Gets or sets the number of rounds.</summary>
+    public int RoundCount { get; set; }
+
+    /// <summary>Gets or sets the round-length amount.</summary>
+    public int RoundLengthAmount { get; set; }
+
+    /// <summary>Gets or sets the round-length unit name.</summary>
+    public string RoundLengthUnit { get; set; } = string.Empty;
+
     /// <summary>Gets the memberships.</summary>
     public ICollection<CampaignMembershipRecord> Memberships { get; } = [];
 
@@ -55,4 +73,7 @@ public sealed class CampaignRecord
 
     /// <summary>Gets the external links.</summary>
     public ICollection<CampaignLinkRecord> Links { get; } = [];
+
+    /// <summary>Gets the ordered round phases.</summary>
+    public ICollection<CampaignRoundPhaseRecord> Phases { get; } = [];
 }

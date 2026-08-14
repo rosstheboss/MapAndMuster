@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import type { ExternalProvider } from '../../core/auth/auth.models';
 import { AuthService, readApiError } from '../../core/auth/auth.service';
+import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { emailAddress, required } from '../../core/forms/validators';
 
 @Component({
@@ -14,6 +15,7 @@ import { emailAddress, required } from '../../core/forms/validators';
 })
 export class LoginPage {
   private readonly auth = inject(AuthService);
+  private readonly overlay = inject(FormSubmitOverlayService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly formBuilder = inject(FormBuilder);
@@ -54,8 +56,10 @@ export class LoginPage {
     this.submitting.set(true);
     this.errorMessage.set(null);
     try {
-      await this.auth.login(this.form.controls.email.value, this.form.controls.password.value);
-      await this.router.navigateByUrl('/');
+      await this.overlay.run(async () => {
+        await this.auth.login(this.form.controls.email.value, this.form.controls.password.value);
+        await this.router.navigateByUrl('/');
+      });
     } catch (error: unknown) {
       this.errorMessage.set(readApiError(error, 'Unable to sign in.'));
     } finally {

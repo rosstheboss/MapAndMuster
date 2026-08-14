@@ -44,6 +44,7 @@ public sealed class CampaignHandlerTests
             IsPrivate = false,
             CreatorIsParticipant = true,
             Factions = command.Factions,
+            Schedule = ValidSchedule(),
         };
 
         var result = await handler.HandleAsync(command, CancellationToken.None);
@@ -56,7 +57,7 @@ public sealed class CampaignHandlerTests
     public async Task GetReturnsNotFoundForNonMembers()
     {
         var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
-        var handler = new GetCampaignHandler(store);
+        var handler = new GetCampaignHandler(store, new FakeClock());
 
         var result = await handler.HandleAsync(store.Existing.Id, OtherUserId, CancellationToken.None);
 
@@ -91,6 +92,7 @@ public sealed class CampaignHandlerTests
                     new FactionInput { Name = "North" },
                     new FactionInput { Name = "South" },
                 ],
+                Schedule = ValidSchedule(),
             },
             CancellationToken.None);
 
@@ -128,7 +130,7 @@ public sealed class CampaignHandlerTests
     {
         var store = new FakeCampaignStore();
         store.ForUser.Add(StoredCampaignFor(UserId));
-        var handler = new ListCampaignsHandler(store);
+        var handler = new ListCampaignsHandler(store, new FakeClock());
 
         var result = await handler.HandleAsync(UserId, CancellationToken.None);
 
@@ -143,7 +145,7 @@ public sealed class CampaignHandlerTests
     public void DetailMappingOmitsJoinPasswordHash()
     {
         var campaign = StoredCampaignFor(UserId);
-        var json = System.Text.Json.JsonSerializer.Serialize(CampaignMapper.ToDetail(campaign, UserId));
+        var json = System.Text.Json.JsonSerializer.Serialize(CampaignMapper.ToDetail(campaign, UserId, Now));
         Assert.DoesNotContain("JoinPassword", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("hash:join-secret", json, StringComparison.Ordinal);
     }
@@ -166,7 +168,13 @@ public sealed class CampaignHandlerTests
             ],
             AllyGroups = null,
             Links = [new CampaignLinkInput { Label = "Notes", Url = "https://example.test/notes" }],
+            Schedule = ValidSchedule(),
         };
+    }
+
+    private static CampaignScheduleInput ValidSchedule()
+    {
+        return CampaignSetupRulesTests.WeekSchedule();
     }
 
     private static StoredCampaign StoredCampaignFor(Guid userId)
@@ -199,6 +207,18 @@ public sealed class CampaignHandlerTests
             [
                 new StoredCampaignLink { Id = Guid.NewGuid(), Label = "Notes", Url = "https://example.test/notes" },
             ],
+            TimeZoneId = "UTC",
+            StartsUtc = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero),
+            EndsUtc = new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero),
+            RoundCount = 8,
+            RoundLengthAmount = 1,
+            RoundLengthUnit = "Weeks",
+            Phases =
+            [
+                new StoredRoundPhase { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new StoredRoundPhase { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new StoredRoundPhase { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+            ],
         };
     }
 
@@ -222,6 +242,13 @@ public sealed class CampaignHandlerTests
             Factions = campaign.Factions,
             AllyGroups = campaign.AllyGroups,
             Links = campaign.Links,
+            TimeZoneId = campaign.TimeZoneId,
+            StartsUtc = campaign.StartsUtc,
+            EndsUtc = campaign.EndsUtc,
+            RoundCount = campaign.RoundCount,
+            RoundLengthAmount = campaign.RoundLengthAmount,
+            RoundLengthUnit = campaign.RoundLengthUnit,
+            Phases = campaign.Phases,
         };
     }
 

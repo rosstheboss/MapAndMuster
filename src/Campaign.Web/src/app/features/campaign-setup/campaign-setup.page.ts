@@ -4,8 +4,19 @@ import { FormBuilder, ReactiveFormsModule, type FormArray, type FormControl, typ
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type { CampaignDetail, SaveCampaignPayload } from '../../core/campaigns/campaign.models';
+import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
+import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
+import {
+  DURATION_UNITS,
+  PHASE_KINDS,
+  durationRangeMessage,
+  maxAmountForUnit,
+} from '../../core/campaigns/campaign-schedule';
+import { FACTION_PRESETS, factionsFromPreset } from '../../core/campaigns/faction-presets';
+import { listTimeZones } from '../../core/location/location';
 import {
   describeControlError,
   httpUrl,
@@ -24,15 +35,21 @@ type FactionGroup = FormGroup<{
   allyGroupName: FormControl<string>;
   subfactions: FormArray<NamedGroup>;
 }>;
+type PhaseGroup = FormGroup<{
+  kind: FormControl<string>;
+  durationAmount: FormControl<number>;
+  durationUnit: FormControl<string>;
+}>;
 
 @Component({
   selector: 'app-campaign-setup-page',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, FilterableComboboxComponent],
   templateUrl: './campaign-setup.page.html',
   styleUrl: './campaign-setup.page.css',
 })
 export class CampaignSetupPage {
   private readonly campaignsApi = inject(CampaignService);
+  private readonly overlay = inject(FormSubmitOverlayService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -41,12 +58,22 @@ export class CampaignSetupPage {
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly errorMessages = signal<string[]>([]);
+  protected readonly successMessage = signal<string | null>(null);
   protected readonly serverFields = signal<ReadonlySet<string>>(new Set());
   protected readonly campaignId = signal<string | null>(null);
   protected readonly hasExistingMap = signal(false);
   protected readonly mapFileName = signal<string | null>(null);
   private mapFile: File | null = null;
   private revision = 0;
+
+  protected readonly timeZones = listTimeZones();
+  protected readonly durationUnits = DURATION_UNITS;
+  protected readonly phaseKinds = PHASE_KINDS;
+  protected readonly factionPresets = FACTION_PRESETS;
+  protected readonly presetId = this.formBuilder.nonNullable.control('');
+  protected readonly selectedPresetId = toSignal(this.presetId.valueChanges, {
+    initialValue: this.presetId.value,
+  });
 
   protected readonly form = this.formBuilder.nonNullable.group({
     name: ['', [required, minLength(3), maxLength(80)]],
@@ -55,9 +82,19 @@ export class CampaignSetupPage {
     isPrivate: [false],
     joinPassword: [''],
     creatorRole: this.formBuilder.nonNullable.control<'manager' | 'both'>('both'),
+    timeZoneId: ['UTC', required],
+    startsAtLocal: ['', required],
+    roundCount: [8, [required, minValue(3), maxValue(52)]],
+    roundLengthAmount: [1, [required, minValue(1), maxValue(60)]],
+    roundLengthUnit: ['Weeks', required],
     factions: this.formBuilder.array<FactionGroup>([this.createFactionGroup(), this.createFactionGroup()]),
     allyGroups: this.formBuilder.array<NamedGroup>([]),
     links: this.formBuilder.array<LinkGroup>([]),
+    phases: this.formBuilder.array<PhaseGroup>([
+      this.createPhaseGroup('Action', 3, 'Days'),
+      this.createPhaseGroup('Action', 3, 'Days'),
+      this.createPhaseGroup('Battle', 1, 'Days'),
+    ]),
   });
   protected readonly isPrivate = toSignal(this.form.controls.isPrivate.valueChanges, {
     initialValue: this.form.controls.isPrivate.value,
@@ -83,6 +120,18 @@ export class CampaignSetupPage {
 
   protected get links(): FormArray<LinkGroup> {
     return this.form.controls.links;
+  }
+
+  protected get phases(): FormArray<PhaseGroup> {
+    return this.form.controls.phases;
+  }
+
+  protected actionCount(): number {
+    return this.phases.controls.filter((phase) => phase.controls.kind.value === 'Action').length;
+  }
+
+  protected maxAmountFor(unit: string): number {
+    return maxAmountForUnit(unit);
   }
 
   protected isEdit(): boolean {
@@ -113,6 +162,30 @@ export class CampaignSetupPage {
 
     const control = group.get(name);
     return !!control && control.touched && control.invalid;
+  }
+
+  protected applySelectedPreset(): void {
+    const factions = factionsFromPreset(this.presetId.value);
+    if (!factions) {
+      this.revealErrors(['Select a faction preset before adding it.']);
+      return;
+    }
+
+    this.replaceArray(
+      this.factions,
+      factions.map((faction) => this.createFactionGroup(faction.name, '', faction.subfactions)),
+    );
+  }
+
+  protected clearFactions(): void {
+    this.replaceArray(this.factions, [this.createFactionGroup(), this.createFactionGroup()]);
+  }
+
+  protected clearAllyGroups(): void {
+    this.replaceArray(this.allyGroups, []);
+    for (const faction of this.factions.controls) {
+      faction.controls.allyGroupName.setValue('');
+    }
   }
 
   protected addFaction(): void {
@@ -161,6 +234,34 @@ export class CampaignSetupPage {
     this.links.removeAt(index);
   }
 
+  protected addPhase(kind: string): void {
+    if (this.phases.length >= 16) {
+      return;
+    }
+
+    const unit = this.form.controls.roundLengthUnit.value;
+    this.phases.push(this.createPhaseGroup(kind, 1, unit));
+  }
+
+  protected removePhase(index: number): void {
+    if (this.phases.length <= 2) {
+      return;
+    }
+
+    this.phases.removeAt(index);
+  }
+
+  protected movePhase(index: number, offset: number): void {
+    const target = index + offset;
+    if (target < 0 || target >= this.phases.length) {
+      return;
+    }
+
+    const current = this.phases.at(index);
+    this.phases.removeAt(index);
+    this.phases.insert(target, current);
+  }
+
   protected onMapSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
@@ -171,6 +272,7 @@ export class CampaignSetupPage {
   protected async save(): Promise<void> {
     this.form.markAllAsTouched();
     this.serverFields.set(new Set());
+    this.successMessage.set(null);
     const failures = this.collectFailures();
     if (failures.length > 0) {
       this.revealErrors(failures);
@@ -180,20 +282,33 @@ export class CampaignSetupPage {
     this.saving.set(true);
     this.errorMessages.set([]);
     try {
-      const payload = this.toPayload();
-      const campaignId = this.campaignId();
-      let detail: CampaignDetail;
-      if (campaignId) {
-        detail = await this.campaignsApi.update(campaignId, { ...payload, revision: this.revision });
-      } else {
-        detail = await this.campaignsApi.create(payload);
+      const created = await this.overlay.run(async () => {
+        const payload = this.toPayload();
+        const campaignId = this.campaignId();
+        let detail: CampaignDetail;
+        if (campaignId) {
+          detail = await this.campaignsApi.update(campaignId, { ...payload, revision: this.revision });
+        } else {
+          detail = await this.campaignsApi.create(payload);
+        }
+
+        if (this.mapFile) {
+          detail = await this.campaignsApi.uploadMap(detail.id, this.mapFile, detail.revision);
+        }
+
+        return { detail, isNew: campaignId === null };
+      });
+
+      this.revision = created.detail.revision;
+      this.hasExistingMap.set(created.detail.hasMap);
+      this.mapFile = null;
+      this.mapFileName.set(null);
+      if (created.isNew) {
+        await this.router.navigate(['/campaigns', created.detail.id]);
+        return;
       }
 
-      if (this.mapFile) {
-        detail = await this.campaignsApi.uploadMap(detail.id, this.mapFile, detail.revision);
-      }
-
-      await this.router.navigate(['/campaigns', detail.id]);
+      this.revealSuccess();
     } catch (error: unknown) {
       this.serverFields.set(new Set(readApiFieldErrors(error)));
       this.revealErrors(readApiErrorMessages(error, 'Unable to save the campaign.'));
@@ -219,6 +334,11 @@ export class CampaignSetupPage {
         playerCount: campaign.playerSlotCount,
         isPrivate: campaign.isPrivate,
         creatorRole: campaign.creatorIsParticipant ? 'both' : 'manager',
+        timeZoneId: campaign.timeZoneId,
+        startsAtLocal: campaign.startsAtLocal,
+        roundCount: campaign.roundCount,
+        roundLengthAmount: campaign.roundLengthAmount,
+        roundLengthUnit: campaign.roundLengthUnit,
       });
       this.replaceArray(
         this.factions,
@@ -233,6 +353,10 @@ export class CampaignSetupPage {
       this.replaceArray(
         this.links,
         campaign.links.map((link) => this.createLinkGroup(link.label, link.url)),
+      );
+      this.replaceArray(
+        this.phases,
+        campaign.phases.map((phase) => this.createPhaseGroup(phase.kind, phase.durationAmount, phase.durationUnit)),
       );
       if (this.factions.length < 2) {
         while (this.factions.length < 2) {
@@ -268,6 +392,14 @@ export class CampaignSetupPage {
     });
   }
 
+  private createPhaseGroup(kind: string, durationAmount: number, durationUnit: string): PhaseGroup {
+    return this.formBuilder.nonNullable.group({
+      kind: [kind, required],
+      durationAmount: [durationAmount, [required, minValue(1), maxValue(60)]],
+      durationUnit: [durationUnit, required],
+    });
+  }
+
   private replaceArray<T extends FormGroup>(array: FormArray<T>, groups: T[]): void {
     array.clear();
     for (const group of groups) {
@@ -300,6 +432,16 @@ export class CampaignSetupPage {
       factions,
       allyGroups,
       links,
+      timeZoneId: value.timeZoneId || 'UTC',
+      startsAtLocal: value.startsAtLocal,
+      roundCount: Number(value.roundCount),
+      roundLengthAmount: Number(value.roundLengthAmount),
+      roundLengthUnit: value.roundLengthUnit,
+      phases: value.phases.map((phase) => ({
+        kind: phase.kind,
+        durationAmount: Number(phase.durationAmount),
+        durationUnit: phase.durationUnit,
+      })),
     };
   }
 
@@ -309,6 +451,10 @@ export class CampaignSetupPage {
       name: 'Campaign name',
       description: 'Description',
       playerCount: 'Number of players',
+      startsAtLocal: 'Start date and time',
+      timeZoneId: 'Campaign time zone',
+      roundCount: 'Number of rounds',
+      roundLengthAmount: 'Round length',
     };
     for (const [name, label] of Object.entries(labels)) {
       const message = describeControlError(this.form.get(name), label);
@@ -336,6 +482,41 @@ export class CampaignSetupPage {
     if (this.factions.length < 2) {
       failures.push('At least 2 factions are required.');
     }
+
+    const roundLengthError = describeControlError(this.form.controls.roundLengthAmount, 'Round length');
+    if (!roundLengthError) {
+      const roundLengthMessage = durationRangeMessage(
+        'Round length',
+        Number(this.form.controls.roundLengthAmount.value),
+        this.form.controls.roundLengthUnit.value,
+      );
+      if (roundLengthMessage) {
+        failures.push(roundLengthMessage);
+      }
+    }
+
+    const actionCount = this.actionCount();
+    const battleCount = this.phases.controls.filter((phase) => phase.controls.kind.value === 'Battle').length;
+    if (actionCount < 1 || battleCount < 1) {
+      failures.push('A round must include at least one action and one battle phase.');
+    }
+
+    this.phases.controls.forEach((phase, index) => {
+      const amountMessage = describeControlError(phase.controls.durationAmount, `Round step ${index + 1} length`);
+      if (amountMessage) {
+        failures.push(amountMessage);
+        return;
+      }
+
+      const rangeMessage = durationRangeMessage(
+        `Round step ${index + 1} length`,
+        Number(phase.controls.durationAmount.value),
+        phase.controls.durationUnit.value,
+      );
+      if (rangeMessage) {
+        failures.push(rangeMessage);
+      }
+    });
 
     this.allyGroups.controls.forEach((group, index) => {
       if (group.controls.name.value.trim().length === 0) {
@@ -368,7 +549,14 @@ export class CampaignSetupPage {
   }
 
   private revealErrors(messages: readonly string[]): void {
+    this.successMessage.set(null);
     this.errorMessages.set([...messages]);
+    queueMicrotask(() => scrollAlertIntoView(this.formAlert()?.nativeElement));
+  }
+
+  private revealSuccess(): void {
+    this.errorMessages.set([]);
+    this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
     queueMicrotask(() => scrollAlertIntoView(this.formAlert()?.nativeElement));
   }
 }

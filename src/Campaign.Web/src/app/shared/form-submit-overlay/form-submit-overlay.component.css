@@ -1,0 +1,27 @@
+:host {
+  display: contents;
+}
+
+.form-submit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(28 25 23 / 45%);
+}
+
+.form-submit-dialog {
+  width: min(100%, 24rem);
+}
+
+.form-submit-dialog h2,
+.form-submit-dialog p {
+  margin: 0;
+}
+
+.form-submit-dialog:focus {
+  outline: 3px solid #f59e0b;
+  outline-offset: 2px;
+}

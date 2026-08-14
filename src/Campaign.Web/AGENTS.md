@@ -10,4 +10,7 @@ These instructions extend the repository `AGENTS.md`.
 - Build accessible keyboard alternatives for map-only interactions.
 - Do not add Angular Material or another component/state library without a recorded decision.
 - Update Vitest tests with every behavioral UI/service change.
+- Form submissions show the shared saving overlay until the request settles, including success,
+  failure, and exceptions. Pages that remain after a successful save show a green banner:
+  "Successfully saved changes."
 - Generated OpenAPI client output is regenerated, never manually edited.

@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 
 import type { ExternalProvider } from '../../core/auth/auth.models';
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
   collectFormFailures,
   emailAddress,
@@ -29,6 +30,7 @@ import { FilterableComboboxComponent } from '../../shared/filterable-combobox/fi
 })
 export class RegisterPage {
   private readonly auth = inject(AuthService);
+  private readonly overlay = inject(FormSubmitOverlayService);
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
   private readonly formAlert = viewChild<ElementRef<HTMLElement>>('formAlert');
@@ -94,22 +96,24 @@ export class RegisterPage {
     this.errorMessages.set([]);
     const value = this.form.getRawValue();
     try {
-      await this.auth.register({
-        email: value.email,
-        username: value.username,
-        password: value.password,
-        firstName: value.firstName,
-        middleInitial: value.middleInitial,
-        lastName: value.lastName,
-        suffix: value.suffix,
-        city: value.city,
-        region: value.region,
-        country: value.country,
-        timeZoneId: value.timeZoneId,
-        displayNameMode: value.displayNameMode,
-        avatar: this.avatar,
+      await this.overlay.run(async () => {
+        await this.auth.register({
+          email: value.email,
+          username: value.username,
+          password: value.password,
+          firstName: value.firstName,
+          middleInitial: value.middleInitial,
+          lastName: value.lastName,
+          suffix: value.suffix,
+          city: value.city,
+          region: value.region,
+          country: value.country,
+          timeZoneId: value.timeZoneId,
+          displayNameMode: value.displayNameMode,
+          avatar: this.avatar,
+        });
+        await this.router.navigateByUrl('/login', { state: { registered: true } });
       });
-      await this.router.navigateByUrl('/login', { state: { registered: true } });
     } catch (error: unknown) {
       this.serverFields.set(new Set(readApiFieldErrors(error)));
       this.revealErrors(readApiErrorMessages(error, 'Unable to create the account.'));

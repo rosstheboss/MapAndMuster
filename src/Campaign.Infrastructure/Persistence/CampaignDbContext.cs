@@ -70,6 +70,8 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(campaign => campaign.Description).HasMaxLength(500);
             entity.Property(campaign => campaign.JoinPasswordHash).HasMaxLength(500);
             entity.Property(campaign => campaign.MapStorageKey).HasMaxLength(260);
+            entity.Property(campaign => campaign.TimeZoneId).HasMaxLength(64).IsRequired();
+            entity.Property(campaign => campaign.RoundLengthUnit).HasMaxLength(16).IsRequired();
             entity.Property(campaign => campaign.Revision).IsConcurrencyToken().ValueGeneratedNever();
             entity.HasIndex(campaign => campaign.CreatedByUserId);
             entity.HasMany(campaign => campaign.Memberships)
@@ -87,6 +89,10 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.HasMany(campaign => campaign.Links)
                 .WithOne(link => link.Campaign)
                 .HasForeignKey(link => link.CampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(campaign => campaign.Phases)
+                .WithOne(phase => phase.Campaign)
+                .HasForeignKey(phase => phase.CampaignId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -133,6 +139,15 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.HasKey(link => link.Id);
             entity.Property(link => link.Label).HasMaxLength(80).IsRequired();
             entity.Property(link => link.Url).HasMaxLength(2048).IsRequired();
+        });
+
+        builder.Entity<CampaignRoundPhaseRecord>(entity =>
+        {
+            entity.ToTable("CampaignRoundPhases");
+            entity.HasKey(phase => phase.Id);
+            entity.Property(phase => phase.Kind).HasMaxLength(16).IsRequired();
+            entity.Property(phase => phase.DurationUnit).HasMaxLength(16).IsRequired();
+            entity.HasIndex(phase => phase.CampaignId);
         });
     }
 }
