@@ -1,0 +1,92 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.75"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  [class.decorative]="!label()"
+  [attr.aria-hidden]="label() ? null : true"
+  [attr.aria-label]="label()"
+  [attr.role]="label() ? 'img' : null"
+>
+  @if (kind() === 'terrain') {
+    @switch (name()) {
+      @case ('Beach') {
+        <path d="M3 16c2 1 4-1 6 0s4 1 6 0 4-1 6 0" />
+        <path d="M3 19c2 1 4-1 6 0s4 1 6 0 4-1 6 0" />
+        <path d="M5 12c1.5-3 4-5 7-5s5.5 2 7 5" />
+      }
+      @case ('Desert') {
+        <circle cx="17" cy="7" r="2.2" />
+        <path d="M3 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0" />
+        <path d="M4 14c1.5-1.5 3-1.5 4.5 0" />
+      }
+      @case ('Highlands') {
+        <path d="M3 18 8 10l4 5 3-4 6 7H3z" />
+        <path d="M8 10c1-3 3-5 4-5" />
+      }
+      @case ('Lake') {
+        <ellipse cx="12" cy="13" rx="8" ry="5" />
+        <path d="M6 13c1.5 1 3 1 4.5 0s3-1 4.5 0 3 1 4.5 0" />
+      }
+      @case ('Mountain') {
+        <path d="M3 19 9 8l3 5 3-4 6 10H3z" />
+        <path d="M9 8l1.5-2.5L12 8" />
+      }
+      @case ('Plains') {
+        <path d="M3 16h18" />
+        <path d="M5 16c0-3 2-6 3-6s2 2 3 5" />
+        <path d="M12 16c0-4 2-7 3.5-7s2.5 3 3.5 6" />
+      }
+      @case ('Riverlands') {
+        <path d="M5 4c2 3 2 5 0 8s-2 5 0 8" />
+        <path d="M11 4c2 3 2 5 0 8s-2 5 0 8" />
+        <path d="M17 4c2 3 2 5 0 8s-2 5 0 8" />
+      }
+      @case ('Sea') {
+        <path d="M3 10c2 1 4-1 6 0s4 1 6 0 4-1 6 0" />
+        <path d="M3 14c2 1 4-1 6 0s4 1 6 0 4-1 6 0" />
+        <path d="M3 18c2 1 4-1 6 0s4 1 6 0 4-1 6 0" />
+      }
+      @case ('Swamp') {
+        <path d="M4 18c2-4 4-6 8-6s6 2 8 6" />
+        <path d="M8 12v-3M12 12V7M16 12V9" />
+        <path d="M7 9h2M11 7h2M15 9h2" />
+      }
+    }
+  } @else {
+    @switch (name()) {
+      @case ('Town') {
+        <path d="M4 20V11l4-3 4 3v9H4z" />
+        <path d="M12 20V12l4-3 4 3v8h-8z" />
+        <path d="M7 20v-4h2v4M15 20v-3h2v3" />
+      }
+      @case ('City') {
+        <path d="M3 20V8h5v12H3z" />
+        <path d="M8 20V4h8v16H8z" />
+        <path d="M16 20v-9h5v9h-5z" />
+        <path d="M10 8h2M10 12h2M18 14h1" />
+      }
+      @case ('CapitalCity') {
+        <path d="M4 20V9l4-3 4 3v11H4z" />
+        <path d="M12 20V7l4-3 4 3v13h-8z" />
+        <path d="M12 4l1.2 2.4H16l-2 1.6.8 2.5L12 9.3 9.2 10.5l.8-2.5-2-1.6h2.8L12 4z" />
+      }
+      @case ('Fortification') {
+        <path d="M4 20V9l2-2h2v2h2V7h4v2h2V7h2l2 2v11H4z" />
+        <path d="M4 9h16" />
+      }
+      @case ('Castle') {
+        <path d="M4 20V10l2-2h2v2h2V6h4v4h2V8h2l2 2v10H4z" />
+        <path d="M10 20v-5h4v5" />
+      }
+      @case ('SupplyDepot') {
+        <path d="M5 10h14l-1 10H6L5 10z" />
+        <path d="M8 10V7h8v3" />
+        <path d="M9 14h6M9 17h4" />
+      }
+    }
+  }
+</svg>

@@ -39,6 +39,12 @@ public sealed class CreateCampaignCommand
 
     /// <summary>Gets the round schedule.</summary>
     public required CampaignScheduleInput Schedule { get; init; }
+
+    /// <summary>Gets the terrain types. Defaults are used when omitted.</summary>
+    public IReadOnlyList<TerrainTypeInput>? TerrainTypes { get; init; }
+
+    /// <summary>Gets the structure types. Defaults are used when omitted.</summary>
+    public IReadOnlyList<StructureTypeInput>? StructureTypes { get; init; }
 }
 
 /// <summary>
@@ -84,6 +90,12 @@ public sealed class UpdateCampaignCommand
 
     /// <summary>Gets the round schedule.</summary>
     public required CampaignScheduleInput Schedule { get; init; }
+
+    /// <summary>Gets the terrain types. Defaults are used when omitted.</summary>
+    public IReadOnlyList<TerrainTypeInput>? TerrainTypes { get; init; }
+
+    /// <summary>Gets the structure types. Defaults are used when omitted.</summary>
+    public IReadOnlyList<StructureTypeInput>? StructureTypes { get; init; }
 }
 
 /// <summary>

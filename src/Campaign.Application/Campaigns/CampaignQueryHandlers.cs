@@ -313,6 +313,46 @@ internal static class CampaignMapClone
             RoundLengthAmount = existing.RoundLengthAmount,
             RoundLengthUnit = existing.RoundLengthUnit,
             Phases = existing.Phases,
+            MapGraph = existing.MapGraph,
+            TerrainTypes = existing.TerrainTypes,
+            StructureTypes = existing.StructureTypes,
+        };
+    }
+
+    public static StoredCampaign CloneWithCatalogs(
+        StoredCampaign existing,
+        IReadOnlyList<StoredTerrainType> terrainTypes,
+        IReadOnlyList<StoredStructureType> structureTypes,
+        DateTimeOffset updatedUtc)
+    {
+        return new StoredCampaign
+        {
+            Id = existing.Id,
+            Name = existing.Name,
+            Description = existing.Description,
+            PlayerSlotCount = existing.PlayerSlotCount,
+            IsPrivate = existing.IsPrivate,
+            JoinPasswordHash = existing.JoinPasswordHash,
+            CreatorIsParticipant = existing.CreatorIsParticipant,
+            MapStorageKey = existing.MapStorageKey,
+            Revision = existing.Revision,
+            CreatedUtc = existing.CreatedUtc,
+            UpdatedUtc = updatedUtc,
+            CreatedByUserId = existing.CreatedByUserId,
+            Memberships = existing.Memberships,
+            Factions = existing.Factions,
+            AllyGroups = existing.AllyGroups,
+            Links = existing.Links,
+            TimeZoneId = existing.TimeZoneId,
+            StartsUtc = existing.StartsUtc,
+            EndsUtc = existing.EndsUtc,
+            RoundCount = existing.RoundCount,
+            RoundLengthAmount = existing.RoundLengthAmount,
+            RoundLengthUnit = existing.RoundLengthUnit,
+            Phases = existing.Phases,
+            MapGraph = existing.MapGraph,
+            TerrainTypes = terrainTypes,
+            StructureTypes = structureTypes,
         };
     }
 }

@@ -75,7 +75,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IAvatarImageProcessor, AvatarImageProcessor>();
         services.AddSingleton<IAvatarStorage, FileAvatarStorage>();
         services.AddSingleton<ICampaignMapProcessor, CampaignMapProcessor>();
-        services.AddSingleton<ICampaignMapStorage, FileCampaignMapStorage>();
+        services.AddSingleton<FileCampaignMapStorage>();
+        services.AddSingleton<ICampaignMapStorage>(static services => services.GetRequiredService<FileCampaignMapStorage>());
+        services.AddSingleton<ICampaignAssetStorage>(static services => services.GetRequiredService<FileCampaignMapStorage>());
+        services.AddSingleton<ICampaignDocumentProcessor, CampaignDocumentProcessor>();
 
         return services;
     }

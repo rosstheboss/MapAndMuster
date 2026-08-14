@@ -1,5 +1,6 @@
 using Campaign.Application.Campaigns;
 using Campaign.Application.Identity;
+using Campaign.Application.Maps;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Campaign.Application;
@@ -32,6 +33,12 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<DeleteCampaignHandler>();
         services.AddScoped<UploadCampaignMapHandler>();
         services.AddScoped<GetCampaignMapHandler>();
+        services.AddScoped<GetCampaignMapGraphHandler>();
+        services.AddScoped<SaveCampaignMapGraphHandler>();
+        services.AddScoped<UploadStructureImageHandler>();
+        services.AddScoped<GetStructureImageHandler>();
+        services.AddScoped<UploadMissionFileHandler>();
+        services.AddScoped<GetMissionFileHandler>();
 
         return services;
     }

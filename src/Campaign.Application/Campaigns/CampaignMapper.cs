@@ -67,8 +67,25 @@ public static class CampaignMapper
             {
                 Id = faction.Id,
                 Name = faction.Name,
+                Color = faction.Color,
                 Subfactions = faction.Subfactions,
                 AllyGroupName = faction.AllyGroupName,
+                RequiresSubfaction = faction.RequiresSubfaction,
+            })],
+            TerrainTypes = [.. campaign.TerrainTypes.Select(static type => new TerrainTypeDetail
+            {
+                Id = type.Id,
+                Name = type.Name,
+                Color = type.Color,
+                Missions = [.. type.Missions.Select(ToMission)],
+            })],
+            StructureTypes = [.. campaign.StructureTypes.Select(static type => new StructureTypeDetail
+            {
+                Id = type.Id,
+                Name = type.Name,
+                BuiltinSymbol = type.ImageStorageKey is null ? type.BuiltinSymbol : null,
+                HasImage = !string.IsNullOrWhiteSpace(type.ImageStorageKey),
+                Missions = [.. type.Missions.Select(ToMission)],
             })],
             AllyGroups = [.. campaign.AllyGroups.Select(static group => new AllyGroupDetail
             {
@@ -160,5 +177,17 @@ public static class CampaignMapper
             campaign.RoundCount,
             roundLength,
             phases);
+    }
+
+    private static MissionDetail ToMission(StoredMission mission)
+    {
+        return new MissionDetail
+        {
+            Id = mission.Id,
+            Name = mission.Name,
+            Url = mission.Url,
+            HasFile = !string.IsNullOrWhiteSpace(mission.FileStorageKey),
+            FileName = mission.FileName,
+        };
     }
 }

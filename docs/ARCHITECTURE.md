@@ -69,13 +69,21 @@ Modules may initially share a database and process. Keep public module interacti
 - GeoJSON or normalized polygon points may be stored as JSONB; PostGIS is not initially
   required.
 - Never overwrite original orders or battle submissions when staff correct outcomes.
+- Factions are stored relationally with a unique color and a flag that, when enabled, requires
+  players who choose that faction to pick a subfaction.
 
 ## Map
 
 - A sanitized raster image is the background.
-- Territories use normalized polygon coordinates or validated GeoJSON.
+- Territories use normalized polygon coordinates stored with the campaign overlay graph as JSONB.
+- Terrain types, structures, and nested missions are stored with the campaign as JSONB catalogs.
+- Structure logos and mission documents are stored outside web root; file keys are not returned to
+  clients.
 - Adjacency is explicit and validated; geometry may suggest but not silently establish it.
-- The client may use Leaflet with a simple coordinate system for pan/zoom/rendering.
+- Generate Connections may propose edges from shared borders; user-created edges persist across
+  regeneration.
+- The client renders an SVG overlay on the rectangular map image. Leaflet is not required for this
+  overlay editor.
 - Arbitrary active SVG upload is out of scope. Import only a validated application schema.
 
 ## API contracts

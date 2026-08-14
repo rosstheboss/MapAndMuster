@@ -2,7 +2,13 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
-import type { CampaignDetail, CampaignListItem, SaveCampaignPayload } from './campaign.models';
+import type {
+  CampaignDetail,
+  CampaignListItem,
+  MapGraphDetail,
+  SaveCampaignPayload,
+  SaveMapGraphPayload,
+} from './campaign.models';
 
 @Injectable({ providedIn: 'root' })
 export class CampaignService {
@@ -49,5 +55,65 @@ export class CampaignService {
 
   mapUrl(campaignId: string, revision: number): string {
     return `/api/campaigns/${encodeURIComponent(campaignId)}/map?v=${revision}`;
+  }
+
+  async getMapGraph(campaignId: string): Promise<MapGraphDetail> {
+    return firstValueFrom(
+      this.http.get<MapGraphDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/map/graph`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async saveMapGraph(campaignId: string, payload: SaveMapGraphPayload): Promise<MapGraphDetail> {
+    return firstValueFrom(
+      this.http.put<MapGraphDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/map/graph`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  structureImageUrl(campaignId: string, structureTypeId: string, revision: number): string {
+    return `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/image?v=${revision}`;
+  }
+
+  missionFileUrl(campaignId: string, missionId: string): string {
+    return `/api/campaigns/${encodeURIComponent(campaignId)}/missions/${encodeURIComponent(missionId)}/file`;
+  }
+
+  async uploadStructureImage(
+    campaignId: string,
+    structureTypeId: string,
+    file: File,
+    revision: number,
+  ): Promise<CampaignDetail> {
+    const form = new FormData();
+    form.set('image', file);
+    form.set('revision', String(revision));
+    return firstValueFrom(
+      this.http.post<CampaignDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/image`,
+        form,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async uploadMissionFile(
+    campaignId: string,
+    missionId: string,
+    file: File,
+    revision: number,
+  ): Promise<CampaignDetail> {
+    const form = new FormData();
+    form.set('file', file);
+    form.set('revision', String(revision));
+    return firstValueFrom(
+      this.http.post<CampaignDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/missions/${encodeURIComponent(missionId)}/file`,
+        form,
+        { withCredentials: true },
+      ),
+    );
   }
 }

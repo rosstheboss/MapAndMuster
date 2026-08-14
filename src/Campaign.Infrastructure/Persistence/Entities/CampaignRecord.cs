@@ -31,6 +31,12 @@ public sealed class CampaignRecord
     /// <summary>Gets or sets the generated map storage key.</summary>
     public string? MapStorageKey { get; set; }
 
+    /// <summary>Gets or sets the overlay territory graph JSON.</summary>
+    public string? MapGraphJson { get; set; }
+
+    /// <summary>Gets or sets the terrain and structure catalog JSON.</summary>
+    public string? CatalogJson { get; set; }
+
     /// <summary>Gets or sets the optimistic concurrency revision.</summary>
     [ConcurrencyCheck]
     public int Revision { get; set; }

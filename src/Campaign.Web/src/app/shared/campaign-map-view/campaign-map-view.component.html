@@ -1,0 +1,100 @@
+<div class="map-stage">
+  <img [src]="imageUrl()" alt="Campaign map" />
+  <svg
+    class="map-overlay"
+    viewBox="0 0 1 1"
+    preserveAspectRatio="none"
+    role="img"
+    aria-label="Territory overlay"
+    (pointermove)="onPointerMove($event)"
+    (pointerdown)="onPointerDown($event)"
+    (pointerleave)="clearHovers()"
+  >
+    @for (item of overlayTerritories(); track item.territory.id) {
+      <polygon
+        class="territory"
+        [class.is-highlighted]="item.highlighted"
+        [attr.points]="item.points"
+        [attr.fill]="item.territory.overlayColor ? item.territory.overlayColor : 'transparent'"
+        [style.--glow-color]="item.glowColor"
+        [attr.data-kind]="'territory'"
+        [attr.data-id]="item.territory.id"
+        [attr.aria-label]="item.territory.name || item.territory.displayNumber"
+        (pointerenter)="onTerritoryEnter(item.territory.id)"
+        (pointerleave)="onTerritoryLeave(item.territory.id)"
+      />
+      @if (item.territory.structureTypeId) {
+        <circle
+          class="structure-disc"
+          [attr.cx]="item.center.x"
+          [attr.cy]="item.center.y"
+          r="0.022"
+          pointer-events="none"
+        />
+      }
+    }
+
+    @if (drawingPath()) {
+      <path class="drawing-path" [attr.d]="drawingPath()" />
+      @for (point of drawingPoints(); track $index) {
+        <circle class="drawing-vertex" [attr.cx]="point.x" [attr.cy]="point.y" r="0.008" />
+      }
+    }
+
+    @if (snapTarget(); as snap) {
+      <circle class="snap-target app-glow" [attr.cx]="snap.x" [attr.cy]="snap.y" r="0.014" />
+    }
+
+    @for (item of overlayAdjacencies(); track item.edge.id) {
+      <g
+        class="adjacency"
+        [class.is-highlighted]="item.highlighted"
+        [attr.transform]="item.transform"
+        [attr.data-kind]="'adjacency'"
+        [attr.data-id]="item.edge.id"
+        (pointerenter)="onAdjacencyEnter(item.edge.id)"
+        (pointerleave)="onAdjacencyLeave(item.edge.id)"
+      >
+        <line
+          class="adjacency-hit"
+          [attr.x1]="item.geometry.x1"
+          [attr.y1]="item.geometry.y1"
+          [attr.x2]="item.geometry.x2"
+          [attr.y2]="item.geometry.y2"
+          [attr.data-kind]="'adjacency'"
+          [attr.data-id]="item.edge.id"
+        />
+        <line
+          class="adjacency-line"
+          [attr.x1]="item.geometry.x1"
+          [attr.y1]="item.geometry.y1"
+          [attr.x2]="item.geometry.x2"
+          [attr.y2]="item.geometry.y2"
+          [attr.data-kind]="'adjacency'"
+          [attr.data-id]="item.edge.id"
+        />
+        <polygon class="adjacency-head" [attr.points]="item.geometry.headA" />
+        <polygon class="adjacency-head" [attr.points]="item.geometry.headB" />
+      </g>
+    }
+  </svg>
+  @for (item of overlayTerritories(); track item.territory.id) {
+    @if (item.flag; as flag) {
+      <div
+        class="faction-flag"
+        [style.left.%]="flag.x * 100"
+        [style.top.%]="flag.y * 100"
+        [style.background]="flag.color"
+      ></div>
+    }
+    @if (item.structure; as structure) {
+      <div class="structure-pin" [style.left.%]="item.center.x * 100" [style.top.%]="item.center.y * 100">
+        @if (item.structureImage; as src) {
+          <img [src]="src" alt="" />
+        } @else if (structure.builtinSymbol) {
+          <app-map-symbol kind="structure" [name]="structure.builtinSymbol" />
+        }
+      </div>
+    }
+  }
+</div>

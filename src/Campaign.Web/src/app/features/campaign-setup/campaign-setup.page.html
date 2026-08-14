@@ -209,8 +209,9 @@
       <fieldset class="field">
         <legend>Factions <span class="required-marker" aria-hidden="true">*</span></legend>
         <p class="muted">
-          At least two factions are required. Subfactions are optional. Adding a preset replaces the current faction
-          list with a copy you can then edit. The preset itself is not changed.
+          At least two factions are required. Subfactions are optional unless a faction requires players to pick one.
+          Adding a preset replaces the current faction and subfaction list with a copy you can then edit. The preset
+          itself is not changed. Each faction has a unique color.
         </p>
         <div class="nested-row">
           <div class="field grow">
@@ -245,10 +246,18 @@
                   </label>
                   <input [id]="'faction-name-' + index" formControlName="name" maxlength="60" aria-required="true" />
                 </div>
+                <div class="field color-field">
+                  <label [attr.for]="'faction-color-' + index">Color</label>
+                  <input [id]="'faction-color-' + index" type="color" formControlName="color" />
+                </div>
                 @if (factions.length > 2) {
                   <button type="button" class="button-secondary" (click)="removeFaction(index)">Remove faction</button>
                 }
               </div>
+              <label class="checkbox-row">
+                <input type="checkbox" formControlName="requiresSubfaction" />
+                Players who choose this faction must pick a subfaction
+              </label>
               @if (allyGroups.length > 0) {
                 <div class="field">
                   <label [attr.for]="'faction-ally-' + index">Ally group (optional)</label>
@@ -263,7 +272,9 @@
                 </div>
               }
               <div class="field" formArrayName="subfactions">
-                <p class="muted">Subfactions (optional)</p>
+                <p class="muted">
+                  Subfactions {{ faction.controls.requiresSubfaction.value ? '(required)' : '(optional)' }}
+                </p>
                 @for (subfaction of subfactionsOf(faction).controls; track subfaction; let subIndex = $index) {
                   <div class="nested-row" [formGroupName]="subIndex">
                     <label class="sr-only" [attr.for]="'subfaction-' + index + '-' + subIndex">
@@ -286,6 +297,184 @@
           }
         </div>
         <button type="button" class="button-secondary" (click)="addFaction()">Add faction</button>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Terrain types <span class="required-marker" aria-hidden="true">*</span></legend>
+        <p class="muted">
+          At least one terrain type is required. Each type needs a unique color and at least one mission. Missions may
+          use an http or https link or a PDF/Word file.
+        </p>
+        <div formArrayName="terrainTypes" class="stack">
+          @for (terrain of terrainTypes.controls; track terrain; let index = $index) {
+            <div class="nested-card stack" [formGroupName]="index">
+              <div class="nested-row">
+                <div class="field grow">
+                  <label [attr.for]="'terrain-name-' + index">
+                    Terrain {{ index + 1 }} name <span class="required-marker" aria-hidden="true">*</span>
+                  </label>
+                  <input [id]="'terrain-name-' + index" formControlName="name" maxlength="60" aria-required="true" />
+                </div>
+                <div class="field color-field">
+                  <label [attr.for]="'terrain-color-' + index">Color</label>
+                  <input [id]="'terrain-color-' + index" type="color" formControlName="color" />
+                </div>
+                @if (terrainTypes.length > 1) {
+                  <button type="button" class="button-secondary" (click)="removeTerrainType(index)">Remove</button>
+                }
+              </div>
+              <div class="field" formArrayName="missions">
+                <p class="muted">Missions</p>
+                @for (mission of missionsOf(terrain).controls; track mission; let missionIndex = $index) {
+                  <div class="nested-card stack" [formGroupName]="missionIndex">
+                    <div class="nested-row">
+                      <div class="field grow">
+                        <label [attr.for]="'terrain-mission-name-' + index + '-' + missionIndex">Mission name</label>
+                        <input
+                          [id]="'terrain-mission-name-' + index + '-' + missionIndex"
+                          formControlName="name"
+                          maxlength="60"
+                        />
+                      </div>
+                      <button type="button" class="button-secondary" (click)="removeMission(terrain, missionIndex)">
+                        Remove
+                      </button>
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'terrain-mission-url-' + index + '-' + missionIndex"
+                        >Mission URL (optional)</label
+                      >
+                      <input
+                        [id]="'terrain-mission-url-' + index + '-' + missionIndex"
+                        formControlName="url"
+                        maxlength="2048"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'terrain-mission-file-' + index + '-' + missionIndex">
+                        Mission file (optional PDF or Word)
+                      </label>
+                      <input
+                        [id]="'terrain-mission-file-' + index + '-' + missionIndex"
+                        type="file"
+                        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        (change)="onMissionFileSelected(mission.controls.id.value, $event)"
+                      />
+                      @if (missionFileName(mission.controls.id.value); as fileName) {
+                        <p class="muted">Selected: {{ fileName }}</p>
+                      } @else if (hasStoredMissionFile(mission.controls.id.value)) {
+                        <p class="muted">A document is already stored.</p>
+                      }
+                    </div>
+                  </div>
+                }
+                <button type="button" class="button-secondary" (click)="addMission(terrain)">Add mission</button>
+              </div>
+            </div>
+          }
+        </div>
+        <button
+          type="button"
+          class="button-secondary"
+          (click)="addTerrainType()"
+          [disabled]="terrainTypes.length >= 50"
+        >
+          Add terrain type
+        </button>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Structures (optional)</legend>
+        <p class="muted">
+          Structures may have a built-in symbol or an uploaded logo, and optional missions. Territory missions come from
+          the structure when it has any, otherwise from the terrain type.
+        </p>
+        <div formArrayName="structureTypes" class="stack">
+          @for (structure of structureTypes.controls; track structure; let index = $index) {
+            <div class="nested-card stack" [formGroupName]="index">
+              <div class="nested-row">
+                <div class="field grow">
+                  <label [attr.for]="'structure-name-' + index">Structure {{ index + 1 }} name</label>
+                  <input [id]="'structure-name-' + index" formControlName="name" maxlength="60" />
+                </div>
+                @if (structure.controls.builtinSymbol.value) {
+                  <app-map-symbol kind="structure" [name]="structure.controls.builtinSymbol.value" />
+                }
+                <button type="button" class="button-secondary" (click)="removeStructureType(index)">Remove</button>
+              </div>
+              <div class="field">
+                <label [attr.for]="'structure-image-' + index">Logo image (optional)</label>
+                <input
+                  [id]="'structure-image-' + index"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  (change)="onStructureImageSelected(structure.controls.id.value, $event)"
+                />
+                @if (structureImageName(structure.controls.id.value); as fileName) {
+                  <p class="muted">Selected: {{ fileName }}</p>
+                } @else if (structureImageUrl(structure.controls.id.value); as src) {
+                  <p class="muted">A logo is already stored.</p>
+                  <img class="structure-logo-preview" [src]="src" alt="" />
+                }
+              </div>
+              <div class="field" formArrayName="missions">
+                <p class="muted">Missions (optional)</p>
+                @for (mission of missionsOf(structure).controls; track mission; let missionIndex = $index) {
+                  <div class="nested-card stack" [formGroupName]="missionIndex">
+                    <div class="nested-row">
+                      <div class="field grow">
+                        <label [attr.for]="'structure-mission-name-' + index + '-' + missionIndex">Mission name</label>
+                        <input
+                          [id]="'structure-mission-name-' + index + '-' + missionIndex"
+                          formControlName="name"
+                          maxlength="60"
+                        />
+                      </div>
+                      <button type="button" class="button-secondary" (click)="removeMission(structure, missionIndex)">
+                        Remove
+                      </button>
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'structure-mission-url-' + index + '-' + missionIndex">
+                        Mission URL (optional)
+                      </label>
+                      <input
+                        [id]="'structure-mission-url-' + index + '-' + missionIndex"
+                        formControlName="url"
+                        maxlength="2048"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'structure-mission-file-' + index + '-' + missionIndex">
+                        Mission file (optional PDF or Word)
+                      </label>
+                      <input
+                        [id]="'structure-mission-file-' + index + '-' + missionIndex"
+                        type="file"
+                        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        (change)="onMissionFileSelected(mission.controls.id.value, $event)"
+                      />
+                      @if (missionFileName(mission.controls.id.value); as fileName) {
+                        <p class="muted">Selected: {{ fileName }}</p>
+                      } @else if (hasStoredMissionFile(mission.controls.id.value)) {
+                        <p class="muted">A document is already stored.</p>
+                      }
+                    </div>
+                  </div>
+                }
+                <button type="button" class="button-secondary" (click)="addMission(structure)">Add mission</button>
+              </div>
+            </div>
+          }
+        </div>
+        <button
+          type="button"
+          class="button-secondary"
+          (click)="addStructureType()"
+          [disabled]="structureTypes.length >= 50"
+        >
+          Add structure
+        </button>
       </fieldset>
 
       <fieldset class="field">

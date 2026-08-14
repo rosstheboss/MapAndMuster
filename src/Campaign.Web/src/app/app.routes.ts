@@ -68,6 +68,11 @@ export const routes: Routes = [
       import('./features/campaign-setup/campaign-setup.page').then((module) => module.CampaignSetupPage),
   },
   {
+    path: 'campaigns/:id/map',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/map-editor/map-editor.page').then((module) => module.MapEditorPage),
+  },
+  {
     path: 'users/:username',
     loadComponent: () =>
       import('./features/public-profile/public-profile.page').then((module) => module.PublicProfilePage),

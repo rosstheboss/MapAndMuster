@@ -1,4 +1,5 @@
 using Campaign.Application.Campaigns;
+using Campaign.Application.Maps;
 
 namespace Campaign.Application.Ports;
 
@@ -50,4 +51,20 @@ public interface ICampaignStore
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns><see langword="true"/> when a row was deleted.</returns>
     Task<bool> DeleteAsync(Guid campaignId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Replaces the overlay territory graph when the campaign revision matches.
+    /// </summary>
+    /// <param name="campaignId">The campaign identifier.</param>
+    /// <param name="graph">The validated graph to persist.</param>
+    /// <param name="expectedRevision">The last observed revision.</param>
+    /// <param name="updatedUtc">The edit instant.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The updated campaign, or a concurrency/not-found failure.</returns>
+    Task<UpdateStoredCampaignOutcome> UpdateMapGraphAsync(
+        Guid campaignId,
+        StoredMapGraph graph,
+        int expectedRevision,
+        DateTimeOffset updatedUtc,
+        CancellationToken cancellationToken);
 }

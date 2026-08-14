@@ -70,6 +70,8 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(campaign => campaign.Description).HasMaxLength(500);
             entity.Property(campaign => campaign.JoinPasswordHash).HasMaxLength(500);
             entity.Property(campaign => campaign.MapStorageKey).HasMaxLength(260);
+            entity.Property(campaign => campaign.MapGraphJson).HasColumnType("jsonb");
+            entity.Property(campaign => campaign.CatalogJson).HasColumnType("jsonb");
             entity.Property(campaign => campaign.TimeZoneId).HasMaxLength(64).IsRequired();
             entity.Property(campaign => campaign.RoundLengthUnit).HasMaxLength(16).IsRequired();
             entity.Property(campaign => campaign.Revision).IsConcurrencyToken().ValueGeneratedNever();
@@ -116,6 +118,8 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.ToTable("CampaignFactions");
             entity.HasKey(faction => faction.Id);
             entity.Property(faction => faction.Name).HasMaxLength(60).IsRequired();
+            entity.Property(faction => faction.Color).HasMaxLength(7).IsRequired();
+            entity.Property(faction => faction.RequiresSubfaction).IsRequired();
             entity.HasOne(faction => faction.AllyGroup)
                 .WithMany(group => group.Factions)
                 .HasForeignKey(faction => faction.AllyGroupId)

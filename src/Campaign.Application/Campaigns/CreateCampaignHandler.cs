@@ -1,4 +1,5 @@
 using Campaign.Application.Common;
+using Campaign.Application.Maps;
 using Campaign.Application.Ports;
 using Campaign.Domain.Campaigns;
 
@@ -54,6 +55,8 @@ public sealed class CreateCampaignHandler
                 command.AllyGroups,
                 command.Links,
                 command.Schedule,
+                command.TerrainTypes,
+                command.StructureTypes,
                 out var setup,
                 out var joinPassword,
                 out var errors))
@@ -144,6 +147,8 @@ public sealed class UpdateCampaignHandler
                 command.AllyGroups,
                 command.Links,
                 command.Schedule,
+                command.TerrainTypes,
+                command.StructureTypes,
                 out var setup,
                 out var joinPassword,
                 out var errors))
@@ -195,7 +200,10 @@ public sealed class UpdateCampaignHandler
             existing.CreatedUtc,
             _clock.UtcNow,
             existing.CreatedByUserId,
-            memberships);
+            memberships,
+            existing.MapGraph,
+            existing.TerrainTypes,
+            existing.StructureTypes);
 
         var outcome = await _campaigns
             .UpdateAsync(updated, command.ExpectedRevision, cancellationToken)
@@ -225,7 +233,10 @@ internal static class CampaignPersistenceFactory
         DateTimeOffset createdUtc,
         DateTimeOffset updatedUtc,
         Guid createdByUserId,
-        IReadOnlyList<StoredCampaignMembership>? memberships = null)
+        IReadOnlyList<StoredCampaignMembership>? memberships = null,
+        StoredMapGraph? mapGraph = null,
+        IReadOnlyList<StoredTerrainType>? previousTerrainTypes = null,
+        IReadOnlyList<StoredStructureType>? previousStructureTypes = null)
     {
         var allyGroups = setup.AllyGroups
             .Select(group => new StoredAllyGroup { Id = Guid.NewGuid(), Name = group.Name })
@@ -258,10 +269,12 @@ internal static class CampaignPersistenceFactory
             [
                 .. setup.Factions.Select(faction => new StoredFaction
                 {
-                    Id = Guid.NewGuid(),
+                    Id = faction.Id,
                     Name = faction.Name,
+                    Color = faction.Color,
                     Subfactions = faction.Subfactions,
                     AllyGroupName = faction.AllyGroupName,
+                    RequiresSubfaction = faction.RequiresSubfaction,
                 }),
             ],
             AllyGroups = allyGroups,
@@ -289,6 +302,9 @@ internal static class CampaignPersistenceFactory
                     DurationUnit = phase.Duration.Unit.ToString(),
                 }),
             ],
+            MapGraph = mapGraph,
+            TerrainTypes = CatalogFileBinder.BindTerrains(setup.TerrainTypes, previousTerrainTypes),
+            StructureTypes = CatalogFileBinder.BindStructures(setup.StructureTypes, previousStructureTypes),
         };
     }
 }

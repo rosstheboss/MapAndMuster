@@ -7,6 +7,7 @@
   --color-accent-hover: #1b4638;
   --color-danger: #9b1c1c;
   --color-border: #d6d3d1;
+  --color-glow: #f59e0b;
   --touch-min: 44px;
 }
 
@@ -213,4 +214,9 @@ textarea:focus-visible {
   gap: 0.4rem;
   min-height: var(--touch-min);
   font-weight: 500;
+}
+
+.app-glow {
+  filter: drop-shadow(0 0 0.35rem var(--glow-color, var(--color-glow)))
+    drop-shadow(0 0 0.7rem var(--glow-color, var(--color-glow)));
 }

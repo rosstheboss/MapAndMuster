@@ -50,6 +50,13 @@ public sealed class CampaignEndpointTests
         Assert.Equal(3, created.Phases.Count);
         Assert.Equal("Action", created.Phases[0].Kind);
         Assert.Equal("Battle", created.Phases[2].Kind);
+        Assert.Equal(9, created.TerrainTypes.Count);
+        Assert.Equal("Beach", created.TerrainTypes[0].Name);
+        Assert.NotEmpty(created.TerrainTypes[0].Missions);
+        Assert.Equal(6, created.StructureTypes.Count);
+        Assert.Equal("#2563EB", created.Factions[0].Color);
+        Assert.NotEqual(created.Factions[0].Color, created.Factions[1].Color);
+        Assert.False(created.Factions[0].RequiresSubfaction);
 
         var list = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
         Assert.NotNull(list);
@@ -193,6 +200,93 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task MapGraphRejectsOverlapAndPersistsSharedBorders()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("graph");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Mapped Border"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        var leftId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var rightId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var plainsId = created.TerrainTypes.Single(type => type.Name == "Plains").Id;
+        var townId = created.StructureTypes.Single(type => type.Name == "Town").Id;
+        using var overlap = await client.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}/map/graph",
+            new SaveMapGraphRequest
+            {
+                Revision = created.Revision,
+                Territories =
+                [
+                    GraphTerritory(leftId, 1, 0.1, 0.1, 0.4, terrainTypeId: plainsId),
+                    GraphTerritory(rightId, 2, 0.3, 0.1, 0.4, terrainTypeId: plainsId),
+                ],
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, overlap.StatusCode);
+
+        using var savedResponse = await client.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}/map/graph",
+            new SaveMapGraphRequest
+            {
+                Revision = created.Revision,
+                Territories =
+                [
+                    GraphTerritory(leftId, 1, 0.1, 0.1, 0.3, "Northmarch", plainsId, townId),
+                    GraphTerritory(rightId, 2, 0.4, 0.1, 0.3, terrainTypeId: plainsId),
+                ],
+                Adjacencies =
+                [
+                    new AdjacencyRequest
+                    {
+                        TerritoryAId = leftId,
+                        TerritoryBId = rightId,
+                        Origin = "Manual",
+                        MarkerX = 0.4,
+                        MarkerY = 0.25,
+                    },
+                ],
+            });
+        Assert.Equal(HttpStatusCode.OK, savedResponse.StatusCode);
+        var saved = await savedResponse.Content.ReadFromJsonAsync<MapGraphResponse>(JsonOptions);
+        Assert.NotNull(saved);
+        Assert.Equal(2, saved.Territories.Count);
+        Assert.Equal("Northmarch", saved.Territories[0].Name);
+        Assert.Equal(plainsId, saved.Territories[0].TerrainTypeId);
+        Assert.Equal(townId, saved.Territories[0].StructureTypeId);
+        Assert.Equal("Manual", saved.Adjacencies[0].Origin);
+
+        var loaded = await client.GetFromJsonAsync<MapGraphResponse>($"/api/campaigns/{created.Id}/map/graph", JsonOptions);
+        Assert.NotNull(loaded);
+        Assert.Equal("Northmarch", loaded.Territories[0].Name);
+        Assert.Single(loaded.Adjacencies);
+    }
+
+    [Fact]
+    public async Task NonMembersCannotReadOrChangeAMapGraph()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("gowner");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Secret Map"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var stranger = _factory.CreateClient();
+        var strangerName = UniqueName("gstranger");
+        await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
+
+        using var get = await stranger.GetAsync($"/api/campaigns/{created.Id}/map/graph");
+        Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
+
+        using var save = await stranger.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}/map/graph",
+            new SaveMapGraphRequest { Revision = created.Revision, Territories = [] });
+        Assert.Equal(HttpStatusCode.NotFound, save.StatusCode);
+    }
+
+    [Fact]
     public async Task ConcurrentUpdatesReturnConflict()
     {
         var username = UniqueName("race");
@@ -287,6 +381,33 @@ public sealed class CampaignEndpointTests
                 new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
                 new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
                 new RoundPhaseRequest { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+            ],
+        };
+    }
+
+    private static TerritoryRequest GraphTerritory(
+        Guid id,
+        int number,
+        double x,
+        double y,
+        double size,
+        string? name = null,
+        Guid? terrainTypeId = null,
+        Guid? structureTypeId = null)
+    {
+        return new TerritoryRequest
+        {
+            Id = id,
+            DisplayNumber = number,
+            Name = name,
+            TerrainTypeId = terrainTypeId,
+            StructureTypeId = structureTypeId,
+            Polygon =
+            [
+                new MapPointRequest { X = x, Y = y },
+                new MapPointRequest { X = x + size, Y = y },
+                new MapPointRequest { X = x + size, Y = y + size },
+                new MapPointRequest { X = x, Y = y + size },
             ],
         };
     }

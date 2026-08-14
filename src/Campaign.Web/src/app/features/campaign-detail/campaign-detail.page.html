@@ -14,6 +14,7 @@
     @if (campaign.canManage) {
       <div class="actions">
         <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
+        <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'map']">Edit map</a>
         <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
       </div>
     }
@@ -84,6 +85,10 @@
         @for (faction of campaign.factions; track faction.id) {
           <li>
             <strong>{{ faction.name }}</strong>
+            <span class="faction-swatch" [style.background]="faction.color" aria-hidden="true"></span>
+            @if (faction.requiresSubfaction) {
+              <span class="muted"> · Subfaction required</span>
+            }
             @if (faction.allyGroupName) {
               <span class="muted"> · Ally group: {{ faction.allyGroupName }}</span>
             }
@@ -122,7 +127,76 @@
     <div class="panel stack">
       <h2>Map</h2>
       @if (mapSrc(); as src) {
-        <img class="campaign-map" [src]="src" alt="Campaign map" />
+        <div class="map-view">
+          <app-campaign-map-view
+            [imageUrl]="src"
+            [territories]="graph().territories"
+            [adjacencies]="graph().adjacencies"
+            [hoveredTerritoryId]="hoveredTerritoryId()"
+            [showAdjacencies]="false"
+            [interactive]="true"
+            [factions]="campaign.factions"
+            [structures]="campaign.structureTypes"
+            [structureImageUrl]="structureImageUrl"
+            (territoryHover)="hoveredTerritoryId.set($event)"
+            (territorySelect)="hoveredTerritoryId.set($event)"
+          />
+          <aside class="map-meta panel stack" aria-live="polite">
+            @if (hoveredTerritory(); as territory) {
+              <h3>{{ labelFor(territory) }}</h3>
+              <p>{{ territory.description || 'No description.' }}</p>
+              <p>
+                Terrain:
+                @if (terrainSymbol(territory.terrainTypeId); as symbol) {
+                  <app-map-symbol kind="terrain" [name]="symbol" />
+                  {{ terrainName(territory.terrainTypeId) }}
+                } @else {
+                  None
+                }
+              </p>
+              <p>
+                Structure:
+                @if (territory.structureTypeId) {
+                  @if (structureSymbol(territory.structureTypeId); as symbol) {
+                    <app-map-symbol kind="structure" [name]="symbol" />
+                  }
+                  {{ structureName(territory.structureTypeId) }}
+                } @else {
+                  None
+                }
+              </p>
+              <p>
+                Missions:
+                @if (inspectedMissions().length > 0) {
+                  @for (mission of inspectedMissions(); track mission.id) {
+                    @if (mission.url) {
+                      <a [href]="mission.url" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
+                    } @else if (missionFileUrl(mission); as href) {
+                      <a [href]="href" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
+                    } @else {
+                      {{ mission.name }}
+                    }
+                    @if (!$last) {
+                      <span>, </span>
+                    }
+                  }
+                } @else {
+                  None
+                }
+              </p>
+              <p [class.app-glow]="!!territory.ownerFactionId" [style.--glow-color]="territory.overlayColor || null">
+                Ownership: {{ factionName(territory.ownerFactionId) }}
+              </p>
+              <p [class.app-glow]="!!territory.spawnFactionId">
+                Spawn location faction:
+                {{ territory.spawnFactionId ? factionName(territory.spawnFactionId) : 'None' }}
+              </p>
+              <p>Adjacent territories: {{ adjacentLabels(territory) }}</p>
+            } @else {
+              <p class="muted">Hover a territory to see its details.</p>
+            }
+          </aside>
+        </div>
       } @else {
         <p class="muted">No map has been uploaded yet.</p>
       }

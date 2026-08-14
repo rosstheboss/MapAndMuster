@@ -14,6 +14,12 @@ public sealed class CampaignFactionRecord
     /// <summary>Gets or sets the faction name.</summary>
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the unique faction color as #RRGGBB.</summary>
+    public string Color { get; set; } = "#2563EB";
+
+    /// <summary>Gets or sets whether a player who chooses this faction must pick a subfaction.</summary>
+    public bool RequiresSubfaction { get; set; }
+
     /// <summary>Gets or sets the optional ally-group identifier.</summary>
     public Guid? AllyGroupId { get; set; }
 

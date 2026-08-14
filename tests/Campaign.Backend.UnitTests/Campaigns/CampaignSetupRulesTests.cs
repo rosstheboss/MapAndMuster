@@ -36,6 +36,13 @@ public sealed class CampaignSetupRulesTests
         Assert.Equal(8, setup.Schedule.RoundCount);
         Assert.Equal(DurationUnit.Weeks, setup.Schedule.RoundLength.Unit);
         Assert.Equal(3, setup.Schedule.Phases.Count);
+        Assert.Equal(9, setup.TerrainTypes.Count);
+        Assert.Equal("Beach", setup.TerrainTypes[0].Name);
+        Assert.Equal("Beach control", setup.TerrainTypes[0].Missions[0].Name);
+        Assert.Equal(6, setup.StructureTypes.Count);
+        Assert.Empty(setup.StructureTypes[0].Missions);
+        Assert.NotEqual(setup.Factions[0].Color, setup.Factions[1].Color);
+        Assert.False(setup.Factions[0].RequiresSubfaction);
     }
 
     [Fact]
@@ -528,6 +535,125 @@ public sealed class CampaignSetupRulesTests
                 new RoundPhaseInput { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
             ],
         };
+    }
+
+    [Fact]
+    public void RejectsRequiredSubfactionWithoutSubfactions()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            factions:
+            [
+                new FactionInput { Name = "North", RequiresSubfaction = true },
+                new FactionInput { Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            schedule: WeekSchedule(),
+            out _,
+            out _,
+            out var errors);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Code == "factions.subfaction.required");
+    }
+
+    [Fact]
+    public void AcceptsRequiredSubfactionWhenSubfactionsAreListed()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            factions:
+            [
+                new FactionInput
+                {
+                    Name = "North",
+                    RequiresSubfaction = true,
+                    Subfactions = ["Riders"],
+                },
+                new FactionInput { Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            schedule: WeekSchedule(),
+            out var setup,
+            out _,
+            out var errors);
+
+        Assert.True(succeeded);
+        Assert.Empty(errors);
+        Assert.True(setup!.Factions[0].RequiresSubfaction);
+        Assert.Equal("Riders", setup.Factions[0].Subfactions[0]);
+    }
+
+    [Fact]
+    public void RejectsDuplicateFactionColors()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            factions:
+            [
+                new FactionInput { Name = "North", Color = "#2563EB" },
+                new FactionInput { Name = "South", Color = "#2563eb" },
+            ],
+            allyGroups: null,
+            links: null,
+            schedule: WeekSchedule(),
+            out _,
+            out _,
+            out var errors);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Field == "factions[1].color");
+    }
+
+    [Fact]
+    public void RejectsTerrainTypeWithoutAMission()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            [
+                new TerrainTypeInput { Name = "Plains", Color = "#7CB342", Missions = [] },
+            ],
+            structureTypes: [],
+            out _,
+            out _,
+            out var errors);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Code == "missions.invalid");
     }
 
     private static IReadOnlyList<FactionInput> TwoFactions()

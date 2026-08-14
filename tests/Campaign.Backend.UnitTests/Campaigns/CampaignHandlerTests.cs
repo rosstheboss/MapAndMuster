@@ -1,5 +1,6 @@
 using Campaign.Application.Campaigns;
 using Campaign.Application.Common;
+using Campaign.Application.Maps;
 using Campaign.Application.Ports;
 using Campaign.Domain.Campaigns;
 
@@ -199,8 +200,8 @@ public sealed class CampaignHandlerTests
             ],
             Factions =
             [
-                new StoredFaction { Id = Guid.NewGuid(), Name = "North", Subfactions = ["Riders"] },
-                new StoredFaction { Id = Guid.NewGuid(), Name = "South", Subfactions = [] },
+                new StoredFaction { Id = Guid.NewGuid(), Name = "North", Color = "#2563EB", Subfactions = ["Riders"], RequiresSubfaction = false },
+                new StoredFaction { Id = Guid.NewGuid(), Name = "South", Color = "#DC2626", Subfactions = [], RequiresSubfaction = false },
             ],
             AllyGroups = [],
             Links =
@@ -219,6 +220,8 @@ public sealed class CampaignHandlerTests
                 new StoredRoundPhase { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
                 new StoredRoundPhase { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
             ],
+            TerrainTypes = [],
+            StructureTypes = [],
         };
     }
 
@@ -249,6 +252,9 @@ public sealed class CampaignHandlerTests
             RoundLengthAmount = campaign.RoundLengthAmount,
             RoundLengthUnit = campaign.RoundLengthUnit,
             Phases = campaign.Phases,
+            MapGraph = campaign.MapGraph,
+            TerrainTypes = campaign.TerrainTypes,
+            StructureTypes = campaign.StructureTypes,
         };
     }
 
@@ -316,6 +322,65 @@ public sealed class CampaignHandlerTests
         {
             Deleted = Existing is not null && Existing.Id == campaignId;
             return Task.FromResult(Deleted);
+        }
+
+        public Task<UpdateStoredCampaignOutcome> UpdateMapGraphAsync(
+            Guid campaignId,
+            StoredMapGraph graph,
+            int expectedRevision,
+            DateTimeOffset updatedUtc,
+            CancellationToken cancellationToken)
+        {
+            if (Existing is null || Existing.Id != campaignId)
+            {
+                return Task.FromResult(new UpdateStoredCampaignOutcome
+                {
+                    IsSuccess = false,
+                    ErrorCode = ErrorCodes.CampaignNotFound,
+                    Message = "The campaign was not found.",
+                });
+            }
+
+            if (Existing.Revision != expectedRevision)
+            {
+                return Task.FromResult(new UpdateStoredCampaignOutcome
+                {
+                    IsSuccess = false,
+                    ErrorCode = ErrorCodes.ConcurrencyConflict,
+                    Message = "The campaign was changed by another request. Reload and try again.",
+                });
+            }
+
+            Existing = new StoredCampaign
+            {
+                Id = Existing.Id,
+                Name = Existing.Name,
+                Description = Existing.Description,
+                PlayerSlotCount = Existing.PlayerSlotCount,
+                IsPrivate = Existing.IsPrivate,
+                JoinPasswordHash = Existing.JoinPasswordHash,
+                CreatorIsParticipant = Existing.CreatorIsParticipant,
+                MapStorageKey = Existing.MapStorageKey,
+                Revision = expectedRevision + 1,
+                CreatedUtc = Existing.CreatedUtc,
+                UpdatedUtc = updatedUtc,
+                CreatedByUserId = Existing.CreatedByUserId,
+                Memberships = Existing.Memberships,
+                Factions = Existing.Factions,
+                AllyGroups = Existing.AllyGroups,
+                Links = Existing.Links,
+                TimeZoneId = Existing.TimeZoneId,
+                StartsUtc = Existing.StartsUtc,
+                EndsUtc = Existing.EndsUtc,
+                RoundCount = Existing.RoundCount,
+                RoundLengthAmount = Existing.RoundLengthAmount,
+                RoundLengthUnit = Existing.RoundLengthUnit,
+                Phases = Existing.Phases,
+                MapGraph = graph,
+                TerrainTypes = Existing.TerrainTypes,
+                StructureTypes = Existing.StructureTypes,
+            };
+            return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });
         }
     }
 

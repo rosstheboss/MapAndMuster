@@ -1,15 +1,20 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
-import type { CampaignDetail } from '../../core/campaigns/campaign.models';
+import type { CampaignDetail, CampaignMission } from '../../core/campaigns/campaign.models';
+import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 import { actionNumberAt, formatDuration, formatPhaseLabel, statusLabel } from '../../core/campaigns/campaign-schedule';
+import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
+import { territoryLabel } from '../../core/maps/map-graph.models';
+import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
+import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 
 @Component({
   selector: 'app-campaign-detail-page',
-  imports: [RouterLink, InstantDatePipe],
+  imports: [RouterLink, InstantDatePipe, CampaignMapViewComponent, MapSymbolComponent],
   templateUrl: './campaign-detail.page.html',
   styleUrl: './campaign-detail.page.css',
 })
@@ -22,6 +27,8 @@ export class CampaignDetailPage {
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
   protected readonly campaign = signal<CampaignDetail | null>(null);
+  protected readonly graph = signal<MapGraph>({ territories: [], adjacencies: [] });
+  protected readonly hoveredTerritoryId = signal<string | null>(null);
   protected readonly confirmingDelete = signal(false);
   protected readonly deleting = signal(false);
 
@@ -42,6 +49,75 @@ export class CampaignDetailPage {
     }
 
     return this.campaignsApi.mapUrl(campaign.id, campaign.revision);
+  }
+
+  protected hoveredTerritory = computed(() => {
+    const id = this.hoveredTerritoryId();
+    return this.graph().territories.find((territory) => territory.id === id) ?? null;
+  });
+
+  protected factionName(id: string | null | undefined): string {
+    if (!id) {
+      return 'Neutral';
+    }
+
+    return this.campaign()?.factions.find((faction) => faction.id === id)?.name ?? 'Unknown faction';
+  }
+
+  protected adjacentLabels(territory: MapTerritory): string {
+    const names = this.graph()
+      .adjacencies.filter((edge) => edge.territoryAId === territory.id || edge.territoryBId === territory.id)
+      .map((edge) => {
+        const otherId = edge.territoryAId === territory.id ? edge.territoryBId : edge.territoryAId;
+        const other = this.graph().territories.find((item) => item.id === otherId);
+        return other ? territoryLabel(other) : otherId;
+      })
+      .sort((left, right) => left.localeCompare(right));
+    return names.length > 0 ? names.join(', ') : 'None';
+  }
+
+  protected labelFor(territory: MapTerritory): string {
+    return territoryLabel(territory);
+  }
+
+  protected terrainName(id: string | null): string {
+    return terrainTypeById(this.campaign(), id)?.name ?? 'None';
+  }
+
+  protected structureName(id: string | null): string {
+    return structureTypeById(this.campaign(), id)?.name ?? 'None';
+  }
+
+  protected terrainSymbol(id: string | null | undefined): string | null {
+    return terrainTypeById(this.campaign(), id)?.name ?? null;
+  }
+
+  protected structureSymbol(id: string | null | undefined): string | null {
+    return structureTypeById(this.campaign(), id)?.builtinSymbol ?? null;
+  }
+
+  protected inspectedMissions(): CampaignMission[] {
+    const territory = this.hoveredTerritory();
+    return missionsForTerritory(this.campaign(), territory?.terrainTypeId, territory?.structureTypeId);
+  }
+
+  protected structureImageUrl = (structureTypeId: string): string | null => {
+    const campaign = this.campaign();
+    const structure = structureTypeById(campaign, structureTypeId);
+    if (!campaign || !structure?.hasImage) {
+      return null;
+    }
+
+    return this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.revision);
+  };
+
+  protected missionFileUrl(mission: CampaignMission): string | null {
+    const campaign = this.campaign();
+    if (!campaign || !mission.hasFile) {
+      return null;
+    }
+
+    return this.campaignsApi.missionFileUrl(campaign.id, mission.id);
   }
 
   protected timeZoneId(): string | null {
@@ -69,7 +145,7 @@ export class CampaignDetailPage {
   }
 
   protected phaseText(campaign: CampaignDetail, index: number): string {
-    const phase = campaign.phases[index];
+    const phase = campaign.phases.at(index);
     if (!phase) {
       return '';
     }
@@ -114,7 +190,32 @@ export class CampaignDetailPage {
 
   private async load(id: string): Promise<void> {
     try {
-      this.campaign.set(await this.campaignsApi.get(id));
+      const campaign = await this.campaignsApi.get(id);
+      this.campaign.set(campaign);
+      if (campaign.hasMap) {
+        const graph = await this.campaignsApi.getMapGraph(id);
+        this.graph.set({
+          territories: graph.territories.map((territory) => ({
+            id: territory.id,
+            displayNumber: territory.displayNumber,
+            name: territory.name,
+            description: territory.description,
+            polygon: territory.polygon.map((point) => ({ x: point.x, y: point.y })),
+            terrainTypeId: territory.terrainTypeId,
+            structureTypeId: territory.structureTypeId,
+            overlayColor: territory.overlayColor,
+            ownerFactionId: territory.ownerFactionId,
+            spawnFactionId: territory.spawnFactionId,
+          })),
+          adjacencies: graph.adjacencies.map((edge) => ({
+            id: edge.id,
+            territoryAId: edge.territoryAId,
+            territoryBId: edge.territoryBId,
+            origin: edge.origin === 'Generated' ? 'Generated' : 'Manual',
+            marker: { x: edge.markerX, y: edge.markerY },
+          })),
+        });
+      }
     } catch (error: unknown) {
       this.error.set(readApiError(error, 'Unable to load this campaign.'));
     } finally {

@@ -210,10 +210,18 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CampaignId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)");
+
+                    b.Property<bool>("RequiresSubfaction")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
@@ -316,6 +324,12 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.Property<string>("MapStorageKey")
                         .HasMaxLength(260)
                         .HasColumnType("character varying(260)");
+
+                    b.Property<string>("CatalogJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("MapGraphJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("Name")
                         .IsRequired()

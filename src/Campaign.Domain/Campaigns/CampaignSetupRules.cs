@@ -39,6 +39,18 @@ public static class CampaignSetupRules
     /// <summary>Maximum labeled external links.</summary>
     public const int MaxLinkCount = 20;
 
+    /// <summary>Minimum number of terrain types.</summary>
+    public const int MinTerrainTypeCount = 1;
+
+    /// <summary>Maximum number of terrain types.</summary>
+    public const int MaxTerrainTypeCount = 50;
+
+    /// <summary>Maximum number of structure types.</summary>
+    public const int MaxStructureTypeCount = 50;
+
+    /// <summary>Maximum missions nested under one terrain type or structure.</summary>
+    public const int MaxMissionsPerCatalogItem = 20;
+
     /// <summary>Maximum length of faction, subfaction, and ally-group names.</summary>
     public const int NamedItemMaxLength = 60;
 
@@ -105,6 +117,66 @@ public static class CampaignSetupRules
         out string? validatedJoinPassword,
         out IReadOnlyList<DomainError> errors)
     {
+        return TryCreate(
+            name,
+            description,
+            playerCount,
+            isPrivate,
+            joinPassword,
+            joinPasswordRequired,
+            creatorIsParticipant,
+            occupiedPlayerSlotsExcludingCreator,
+            factions,
+            allyGroups,
+            links,
+            schedule,
+            terrainTypes: null,
+            structureTypes: null,
+            out setup,
+            out validatedJoinPassword,
+            out errors);
+    }
+
+    /// <summary>
+    /// Validates campaign setup including terrain and structure catalogs.
+    /// </summary>
+    /// <param name="name">The campaign name.</param>
+    /// <param name="description">The optional description.</param>
+    /// <param name="playerCount">The configured player-slot count.</param>
+    /// <param name="isPrivate">Whether the campaign requires a join password.</param>
+    /// <param name="joinPassword">The proposed join password.</param>
+    /// <param name="joinPasswordRequired">Whether a join password must be supplied for a private campaign.</param>
+    /// <param name="creatorIsParticipant">Whether the creating manager occupies a player slot.</param>
+    /// <param name="occupiedPlayerSlotsExcludingCreator">Player memberships that already occupy slots, excluding the creator toggle.</param>
+    /// <param name="factions">The faction inputs.</param>
+    /// <param name="allyGroups">The ally-group inputs.</param>
+    /// <param name="links">The external-link inputs.</param>
+    /// <param name="schedule">The round-schedule inputs.</param>
+    /// <param name="terrainTypes">The terrain-type inputs. Defaults are used when omitted.</param>
+    /// <param name="structureTypes">The structure-type inputs. Defaults are used when omitted.</param>
+    /// <param name="setup">The validated setup when successful.</param>
+    /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
+    /// <param name="errors">Every field error, in a stable order.</param>
+    /// <returns><see langword="true"/> when the setup is valid.</returns>
+    public static bool TryCreate(
+        string? name,
+        string? description,
+        int playerCount,
+        bool isPrivate,
+        string? joinPassword,
+        bool joinPasswordRequired,
+        bool creatorIsParticipant,
+        int occupiedPlayerSlotsExcludingCreator,
+        IReadOnlyList<FactionInput>? factions,
+        IReadOnlyList<AllyGroupInput>? allyGroups,
+        IReadOnlyList<CampaignLinkInput>? links,
+        CampaignScheduleInput? schedule,
+        IReadOnlyList<TerrainTypeInput>? terrainTypes,
+        IReadOnlyList<StructureTypeInput>? structureTypes,
+        [NotNullWhen(true)] out CampaignSetup? setup,
+        out string? validatedJoinPassword,
+        out IReadOnlyList<DomainError> errors)
+    {
         var collected = new List<DomainError>();
         setup = null;
         validatedJoinPassword = null;
@@ -137,9 +209,12 @@ public static class CampaignSetupRules
         }
 
         var parsedGroups = ParseAllyGroups(allyGroups, collected);
-        var parsedFactions = ParseFactions(factions, parsedGroups, collected);
+        var usedIds = new HashSet<Guid>();
+        var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, collected);
         ValidateAllyMembership(parsedFactions, parsedGroups, collected);
         var parsedLinks = ParseLinks(links, collected);
+        var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, collected);
+        var parsedStructures = ParseStructureTypes(structureTypes, usedIds, collected);
         var parsedSchedule = ParseSchedule(schedule, collected);
 
         if (collected.Count > 0)
@@ -158,6 +233,8 @@ public static class CampaignSetupRules
             parsedFactions,
             parsedGroups,
             parsedLinks,
+            parsedTerrain,
+            parsedStructures,
             parsedSchedule!);
         errors = collected;
         return true;
@@ -312,6 +389,7 @@ public static class CampaignSetupRules
     private static List<FactionSetup> ParseFactions(
         IReadOnlyList<FactionInput>? factions,
         IReadOnlyList<AllyGroupSetup> allyGroups,
+        HashSet<Guid> usedIds,
         List<DomainError> errors)
     {
         var parsed = new List<FactionSetup>();
@@ -335,6 +413,7 @@ public static class CampaignSetupRules
 
         var groupNames = allyGroups.Select(group => group.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var usedColors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < factions.Count; index++)
         {
             var faction = factions[index];
@@ -345,6 +424,14 @@ public static class CampaignSetupRules
                 $"Faction {index + 1} name",
                 minLength: 1,
                 NamedItemMaxLength,
+                errors);
+
+            var color = ParseUniqueColor(
+                faction.Color,
+                usedColors,
+                $"factions[{index}].color",
+                $"Faction {index + 1} color",
+                assignDefault: true,
                 errors);
 
             var subfactions = ParseSubfactions(faction.Subfactions, index, errors);
@@ -360,7 +447,7 @@ public static class CampaignSetupRules
                 allyGroupName = null;
             }
 
-            if (name is null)
+            if (name is null || color is null)
             {
                 continue;
             }
@@ -377,7 +464,21 @@ public static class CampaignSetupRules
             var canonicalGroup = allyGroupName is null
                 ? null
                 : allyGroups.First(group => string.Equals(group.Name, allyGroupName, StringComparison.OrdinalIgnoreCase)).Name;
-            parsed.Add(new FactionSetup(name, subfactions, canonicalGroup));
+            if (faction.RequiresSubfaction && subfactions.Count == 0)
+            {
+                errors.Add(new DomainError(
+                    "factions.subfaction.required",
+                    $"Faction {index + 1} requires players to pick a subfaction, so at least one subfaction must be listed.",
+                    $"factions[{index}].subfactions"));
+            }
+
+            parsed.Add(new FactionSetup(
+                ResolveId(faction.Id, usedIds, $"factions[{index}].id", errors),
+                name,
+                color,
+                subfactions,
+                canonicalGroup,
+                faction.RequiresSubfaction));
         }
 
         return parsed;
@@ -437,6 +538,339 @@ public static class CampaignSetupRules
 
         return parsed;
     }
+
+    private static List<TerrainTypeSetup> ParseTerrainTypes(
+        IReadOnlyList<TerrainTypeInput>? terrainTypes,
+        HashSet<Guid> usedIds,
+        List<DomainError> errors)
+    {
+        var supplied = terrainTypes is null || terrainTypes.Count == 0
+            ? CampaignCatalogDefaults.TerrainTypes()
+            : terrainTypes;
+        var parsed = new List<TerrainTypeSetup>();
+        if (supplied.Count < MinTerrainTypeCount)
+        {
+            errors.Add(new DomainError(
+                "terrainTypes.invalid",
+                $"At least {MinTerrainTypeCount} terrain type is required.",
+                "terrainTypes"));
+            return parsed;
+        }
+
+        if (supplied.Count > MaxTerrainTypeCount)
+        {
+            errors.Add(new DomainError(
+                "terrainTypes.invalid",
+                $"At most {MaxTerrainTypeCount} terrain types are allowed.",
+                "terrainTypes"));
+            return parsed;
+        }
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var usedColors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var name = ParseRequiredName(
+                input.Name,
+                $"terrainTypes[{index}].name",
+                $"Terrain type {index + 1} name",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            var color = ParseUniqueColor(
+                input.Color,
+                usedColors,
+                $"terrainTypes[{index}].color",
+                $"Terrain type {index + 1} color",
+                assignDefault: false,
+                errors);
+            var missions = ParseMissions(
+                input.Missions,
+                usedIds,
+                $"terrainTypes[{index}].missions",
+                $"Terrain type {index + 1}",
+                requireAtLeastOne: true,
+                errors);
+            if (name is null || color is null)
+            {
+                continue;
+            }
+
+            if (!seenNames.Add(name))
+            {
+                errors.Add(new DomainError(
+                    "terrainTypes.duplicate",
+                    "Terrain type names must be unique.",
+                    $"terrainTypes[{index}].name"));
+                continue;
+            }
+
+            parsed.Add(new TerrainTypeSetup(
+                ResolveId(input.Id, usedIds, $"terrainTypes[{index}].id", errors),
+                name,
+                color,
+                missions));
+        }
+
+        return parsed;
+    }
+
+    private static List<StructureTypeSetup> ParseStructureTypes(
+        IReadOnlyList<StructureTypeInput>? structureTypes,
+        HashSet<Guid> usedIds,
+        List<DomainError> errors)
+    {
+        var supplied = structureTypes is null
+            ? CampaignCatalogDefaults.StructureTypes()
+            : structureTypes;
+        var parsed = new List<StructureTypeSetup>();
+        if (supplied.Count > MaxStructureTypeCount)
+        {
+            errors.Add(new DomainError(
+                "structureTypes.invalid",
+                $"At most {MaxStructureTypeCount} structure types are allowed.",
+                "structureTypes"));
+            return parsed;
+        }
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var name = ParseRequiredName(
+                input.Name,
+                $"structureTypes[{index}].name",
+                $"Structure {index + 1} name",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            var builtin = CampaignCatalogDefaults.CanonicalBuiltinSymbol(input.BuiltinSymbol);
+            if (!string.IsNullOrWhiteSpace(input.BuiltinSymbol) && builtin is null)
+            {
+                errors.Add(new DomainError(
+                    "structureTypes.symbol.invalid",
+                    $"Structure {index + 1} logo is not a recognized built-in symbol.",
+                    $"structureTypes[{index}].builtinSymbol"));
+            }
+
+            var missions = ParseMissions(
+                input.Missions,
+                usedIds,
+                $"structureTypes[{index}].missions",
+                $"Structure {index + 1}",
+                requireAtLeastOne: false,
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!seenNames.Add(name))
+            {
+                errors.Add(new DomainError(
+                    "structureTypes.duplicate",
+                    "Structure names must be unique.",
+                    $"structureTypes[{index}].name"));
+                continue;
+            }
+
+            parsed.Add(new StructureTypeSetup(
+                ResolveId(input.Id, usedIds, $"structureTypes[{index}].id", errors),
+                name,
+                builtin,
+                input.ClearImage,
+                missions));
+        }
+
+        return parsed;
+    }
+
+    private static List<MissionSetup> ParseMissions(
+        IReadOnlyList<MissionInput>? missions,
+        HashSet<Guid> usedIds,
+        string field,
+        string ownerLabel,
+        bool requireAtLeastOne,
+        List<DomainError> errors)
+    {
+        var supplied = missions?
+            .Where(static mission =>
+                !string.IsNullOrWhiteSpace(mission.Name) || !string.IsNullOrWhiteSpace(mission.Url) || mission.Id is not null)
+            .ToArray() ?? [];
+        if (requireAtLeastOne && supplied.Length == 0)
+        {
+            errors.Add(new DomainError(
+                "missions.invalid",
+                $"{ownerLabel} requires at least one mission.",
+                field));
+            return [];
+        }
+
+        if (supplied.Length > MaxMissionsPerCatalogItem)
+        {
+            errors.Add(new DomainError(
+                "missions.invalid",
+                $"{ownerLabel} can have at most {MaxMissionsPerCatalogItem} missions.",
+                field));
+            return [];
+        }
+
+        var parsed = new List<MissionSetup>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Length; index++)
+        {
+            var mission = supplied[index];
+            var nameField = $"{field}[{index}].name";
+            var name = ParseRequiredName(
+                mission.Name,
+                nameField,
+                $"{ownerLabel} mission {index + 1} name",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            var url = ParseOptionalHttpUrl(
+                mission.Url,
+                $"{field}[{index}].url",
+                $"{ownerLabel} mission {index + 1} URL",
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!seen.Add(name))
+            {
+                errors.Add(new DomainError(
+                    "missions.duplicate",
+                    $"{ownerLabel} mission names must be unique.",
+                    nameField));
+                continue;
+            }
+
+            parsed.Add(new MissionSetup(
+                ResolveId(mission.Id, usedIds, $"{field}[{index}].id", errors),
+                name,
+                url,
+                mission.ClearFile));
+        }
+
+        if (requireAtLeastOne && parsed.Count == 0 && supplied.Length > 0)
+        {
+            errors.Add(new DomainError(
+                "missions.invalid",
+                $"{ownerLabel} requires at least one mission.",
+                field));
+        }
+
+        return parsed;
+    }
+
+    private static string? ParseUniqueColor(
+        string? raw,
+        HashSet<string> usedColors,
+        string field,
+        string label,
+        bool assignDefault,
+        List<DomainError> errors)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            if (!assignDefault)
+            {
+                errors.Add(new DomainError($"{field}.invalid", $"{label} is not filled in.", field));
+                return null;
+            }
+
+            foreach (var candidate in DefaultFactionPalette)
+            {
+                if (usedColors.Add(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            errors.Add(new DomainError($"{field}.duplicate", $"{label} must be unique.", field));
+            return null;
+        }
+
+        if (!HexColor.TryNormalize(raw, out var color) || color is null)
+        {
+            errors.Add(new DomainError(
+                $"{field}.invalid",
+                $"{label} must be a six-digit hex value.",
+                field));
+            return null;
+        }
+
+        if (!usedColors.Add(color))
+        {
+            errors.Add(new DomainError($"{field}.duplicate", $"{label} must be unique.", field));
+            return null;
+        }
+
+        return color;
+    }
+
+    private static Guid ResolveId(Guid? id, HashSet<Guid> usedIds, string field, List<DomainError> errors)
+    {
+        var value = id is { } supplied && supplied != Guid.Empty ? supplied : Guid.NewGuid();
+        if (usedIds.Add(value))
+        {
+            return value;
+        }
+
+        errors.Add(new DomainError("catalog.id.duplicate", "Catalog identifiers must be unique.", field));
+        var replacement = Guid.NewGuid();
+        while (!usedIds.Add(replacement))
+        {
+            replacement = Guid.NewGuid();
+        }
+
+        return replacement;
+    }
+
+    private static string? ParseOptionalHttpUrl(string? raw, string field, string label, List<DomainError> errors)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var trimmed = raw.Trim();
+        if (trimmed.Length > LinkUrlMaxLength)
+        {
+            errors.Add(new DomainError(
+                $"{field}.invalid",
+                $"{label} is too long (maximum {LinkUrlMaxLength} characters).",
+                field));
+            return null;
+        }
+
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            errors.Add(new DomainError(
+                $"{field}.invalid",
+                $"{label} must be an http or https address.",
+                field));
+            return null;
+        }
+
+        return uri.AbsoluteUri;
+    }
+
+    private static readonly string[] DefaultFactionPalette =
+    [
+        "#2563EB", "#DC2626", "#16A34A", "#CA8A04", "#7C3AED", "#EA580C", "#0891B2", "#BE185D",
+        "#4B5563", "#65A30D", "#C026D3", "#0F766E", "#1D4ED8", "#B45309", "#15803D", "#6D28D9",
+        "#9F1239", "#0369A1", "#A16207", "#334155", "#DB2777", "#047857", "#7C2D12", "#4338CA",
+        "#0E7490", "#854D0E", "#166534", "#6B21A8", "#9A3412", "#1E3A8A", "#115E59", "#831843",
+        "#3F6212", "#701A75", "#9A2A2A", "#1E40AF", "#365314", "#4C1D95", "#7F1D1D", "#164E63",
+        "#713F12", "#14532D", "#581C87", "#7C2D43", "#1E3A5F", "#44403C", "#0F172A", "#78716C",
+        "#A8A29E", "#292524",
+    ];
 
     private static void ValidateAllyMembership(
         List<FactionSetup> factions,

@@ -22,11 +22,20 @@ const campaign = {
   createdUtc: '2026-08-13T00:00:00+00:00',
   updatedUtc: '2026-08-13T00:00:00+00:00',
   factions: [
-    { id: '1', name: 'North', subfactions: ['Riders'], allyGroupName: null },
-    { id: '2', name: 'South', subfactions: [], allyGroupName: null },
+    {
+      id: '1',
+      name: 'North',
+      color: '#2563EB',
+      subfactions: ['Riders'],
+      allyGroupName: null,
+      requiresSubfaction: false,
+    },
+    { id: '2', name: 'South', color: '#DC2626', subfactions: [], allyGroupName: null, requiresSubfaction: false },
   ],
   allyGroups: [],
   links: [{ id: '3', label: 'Notes', url: 'https://example.test/notes' }],
+  terrainTypes: [],
+  structureTypes: [],
   timeZoneId: 'UTC',
   startsAtLocal: '2099-01-05T12:00',
   startsUtc: '2099-01-05T12:00:00+00:00',
@@ -82,6 +91,7 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('Action 1 · 3 days');
     expect(compiled.textContent).toContain('Battle phase · 1 day');
     expect(compiled.querySelector('a.button')?.textContent).toContain('Edit campaign');
+    expect(compiled.textContent).toContain('Edit map');
 
     const deleteButton = [...compiled.querySelectorAll('button')].find((button) =>
       button.textContent.includes('Delete campaign'),

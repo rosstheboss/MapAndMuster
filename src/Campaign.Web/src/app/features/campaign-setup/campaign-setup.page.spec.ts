@@ -61,7 +61,9 @@ describe('CampaignSetupPage', () => {
       presetId: { setValue: (value: string) => void };
       applySelectedPreset: () => void;
       factions: {
-        at: (index: number) => { controls: { name: { setValue: (value: string) => void } } };
+        at: (index: number) => {
+          controls: { name: { setValue: (value: string) => void }; requiresSubfaction: { value: boolean } };
+        };
       };
     };
 
@@ -75,6 +77,19 @@ describe('CampaignSetupPage', () => {
     expect(names[names.length - 1]).toBe('Wood Elf Realms');
     expect(compiled.querySelector<HTMLInputElement>('#subfaction-0-0')?.value).toBe('Minotaur Blood Herd');
     expect(compiled.querySelector<HTMLInputElement>('#subfaction-0-1')?.value).toBe('Wild Herd');
+    const daemonsIndex = names.indexOf('Daemons of Chaos');
+    expect(daemonsIndex).toBeGreaterThan(-1);
+    expect(compiled.querySelector<HTMLInputElement>(`#subfaction-${daemonsIndex}-0`)?.value).toBe('Khorne');
+    expect(compiled.querySelector<HTMLInputElement>(`#subfaction-${daemonsIndex}-1`)?.value).toBe('Nurgle');
+    expect(compiled.querySelector<HTMLInputElement>(`#subfaction-${daemonsIndex}-2`)?.value).toBe('Slaanesh');
+    expect(compiled.querySelector<HTMLInputElement>(`#subfaction-${daemonsIndex}-3`)?.value).toBe('Tzeentch');
+    const daemonsGroup = page.factions.at(daemonsIndex) as unknown as {
+      controls: { requiresSubfaction: { value: boolean } };
+    };
+    expect(daemonsGroup.controls.requiresSubfaction.value).toBe(true);
+    expect(compiled.querySelector('#terrain-name-0')).toBeTruthy();
+    expect(compiled.querySelector<HTMLInputElement>('#terrain-name-0')?.value).toBe('Beach');
+    expect(compiled.querySelector('#structure-name-0')).toBeTruthy();
 
     page.factions.at(0).controls.name.setValue('Renamed Herd');
     fixture.detectChanges();

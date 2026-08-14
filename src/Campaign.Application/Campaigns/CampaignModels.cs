@@ -1,3 +1,5 @@
+using Campaign.Application.Maps;
+
 namespace Campaign.Application.Campaigns;
 
 /// <summary>
@@ -83,6 +85,12 @@ public sealed class CampaignDetail
     /// <summary>Gets the factions.</summary>
     public required IReadOnlyList<FactionDetail> Factions { get; init; }
 
+    /// <summary>Gets the terrain types.</summary>
+    public required IReadOnlyList<TerrainTypeDetail> TerrainTypes { get; init; }
+
+    /// <summary>Gets the structure types.</summary>
+    public required IReadOnlyList<StructureTypeDetail> StructureTypes { get; init; }
+
     /// <summary>Gets the ally groups.</summary>
     public required IReadOnlyList<AllyGroupDetail> AllyGroups { get; init; }
 
@@ -158,11 +166,17 @@ public sealed class FactionDetail
     /// <summary>Gets the faction name.</summary>
     public required string Name { get; init; }
 
+    /// <summary>Gets the unique faction color as #RRGGBB.</summary>
+    public required string Color { get; init; }
+
     /// <summary>Gets the subfaction names.</summary>
     public required IReadOnlyList<string> Subfactions { get; init; }
 
     /// <summary>Gets the ally-group name this faction joins, if any.</summary>
     public string? AllyGroupName { get; init; }
+
+    /// <summary>Gets whether a player who chooses this faction must pick a subfaction.</summary>
+    public required bool RequiresSubfaction { get; init; }
 }
 
 /// <summary>
@@ -265,6 +279,15 @@ public sealed class StoredCampaign
 
     /// <summary>Gets the ordered action and battle steps in a round.</summary>
     public required IReadOnlyList<StoredRoundPhase> Phases { get; init; }
+
+    /// <summary>Gets the overlay territory graph, when one has been saved.</summary>
+    public StoredMapGraph? MapGraph { get; init; }
+
+    /// <summary>Gets the terrain types.</summary>
+    public required IReadOnlyList<StoredTerrainType> TerrainTypes { get; init; }
+
+    /// <summary>Gets the structure types.</summary>
+    public required IReadOnlyList<StoredStructureType> StructureTypes { get; init; }
 }
 
 /// <summary>
@@ -308,11 +331,17 @@ public sealed class StoredFaction
     /// <summary>Gets the faction name.</summary>
     public required string Name { get; init; }
 
+    /// <summary>Gets the unique faction color as #RRGGBB.</summary>
+    public required string Color { get; init; }
+
     /// <summary>Gets the subfaction names.</summary>
     public required IReadOnlyList<string> Subfactions { get; init; }
 
     /// <summary>Gets the ally-group name this faction joins, if any.</summary>
     public string? AllyGroupName { get; init; }
+
+    /// <summary>Gets whether a player who chooses this faction must pick a subfaction.</summary>
+    public required bool RequiresSubfaction { get; init; }
 }
 
 /// <summary>
@@ -358,4 +387,124 @@ public sealed class UpdateStoredCampaignOutcome
 
     /// <summary>Gets the error message when the update failed.</summary>
     public string? Message { get; init; }
+}
+
+/// <summary>
+/// A terrain type in a campaign detail response.
+/// </summary>
+public sealed class TerrainTypeDetail
+{
+    /// <summary>Gets the terrain type identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the terrain type name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the unique overlay color as #RRGGBB.</summary>
+    public required string Color { get; init; }
+
+    /// <summary>Gets the missions.</summary>
+    public required IReadOnlyList<MissionDetail> Missions { get; init; }
+}
+
+/// <summary>
+/// A structure type in a campaign detail response.
+/// </summary>
+public sealed class StructureTypeDetail
+{
+    /// <summary>Gets the structure type identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the structure name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the built-in logo key, when no custom image is stored.</summary>
+    public string? BuiltinSymbol { get; init; }
+
+    /// <summary>Gets whether a custom logo image is stored.</summary>
+    public required bool HasImage { get; init; }
+
+    /// <summary>Gets the missions.</summary>
+    public required IReadOnlyList<MissionDetail> Missions { get; init; }
+}
+
+/// <summary>
+/// A mission nested under a terrain type or structure.
+/// </summary>
+public sealed class MissionDetail
+{
+    /// <summary>Gets the mission identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the mission name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the optional http or https link.</summary>
+    public string? Url { get; init; }
+
+    /// <summary>Gets whether a document file is stored.</summary>
+    public required bool HasFile { get; init; }
+
+    /// <summary>Gets the original uploaded file name, when a file is stored.</summary>
+    public string? FileName { get; init; }
+}
+
+/// <summary>
+/// A persisted terrain type.
+/// </summary>
+public sealed class StoredTerrainType
+{
+    /// <summary>Gets the terrain type identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the terrain type name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the unique overlay color.</summary>
+    public required string Color { get; init; }
+
+    /// <summary>Gets the missions.</summary>
+    public required IReadOnlyList<StoredMission> Missions { get; init; }
+}
+
+/// <summary>
+/// A persisted structure type.
+/// </summary>
+public sealed class StoredStructureType
+{
+    /// <summary>Gets the structure type identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the structure name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the built-in logo key, when used.</summary>
+    public string? BuiltinSymbol { get; init; }
+
+    /// <summary>Gets the stored logo key, when a custom image was uploaded.</summary>
+    public string? ImageStorageKey { get; init; }
+
+    /// <summary>Gets the missions.</summary>
+    public required IReadOnlyList<StoredMission> Missions { get; init; }
+}
+
+/// <summary>
+/// A persisted mission.
+/// </summary>
+public sealed class StoredMission
+{
+    /// <summary>Gets the mission identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the mission name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the optional http or https link.</summary>
+    public string? Url { get; init; }
+
+    /// <summary>Gets the stored document key, when a file was uploaded.</summary>
+    public string? FileStorageKey { get; init; }
+
+    /// <summary>Gets the original uploaded file name.</summary>
+    public string? FileName { get; init; }
 }

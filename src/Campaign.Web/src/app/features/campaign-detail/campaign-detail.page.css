@@ -16,12 +16,38 @@
   gap: 0.5rem;
 }
 
+.faction-swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-left: 0.4rem;
+  border-radius: 2px;
+  vertical-align: middle;
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 25%);
+}
+
 .campaign-map {
   width: min(100%, 48rem);
   height: auto;
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   background: #e7e5e4;
+}
+
+.map-view {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (width >= 56rem) {
+  .map-view {
+    grid-template-columns: minmax(0, 1fr) 16rem;
+    align-items: start;
+  }
+}
+
+.map-meta h3 {
+  margin: 0;
 }
 
 .dialog-backdrop {

@@ -35,15 +35,19 @@ and last-edited times are visible only to the owning user.
 
 A campaign has a name (3-80 characters), optional description (500 characters), player-slot
 count (2-100), public or private visibility, optional labeled external links (at most 20
-http/https URLs), a raster map image, and at least two factions. Each faction may have
-subfactions. Optional ally groups may include two or more factions; every faction cannot belong
-to a single ally group.
+http/https URLs), a raster map image, and at least two factions. Each faction has a unique
+color and may have subfactions. A faction may require players who choose it to pick a
+subfaction; that flag may only be enabled when at least one subfaction is listed. Optional
+ally groups may include two or more factions; every faction cannot belong to a single ally
+group.
 
 Setup may apply a faction preset. Applying a preset replaces the current faction and subfaction
-list with an alphabetically sorted copy of that catalog entry. Later add/remove/rename edits
-apply only to that campaign and do not change the preset. The initial catalog includes
-Warhammer: The Old World. Setup can also clear the faction list (back to two empty slots) or
-clear all ally groups.
+list with an alphabetically sorted copy of that catalog entry, including colors and whether a
+subfaction is required. Later add/remove/rename edits apply only to that campaign and do not
+change the preset. The initial catalog includes Warhammer: The Old World. In that preset,
+Daemons of Chaos includes the subfactions Khorne, Nurgle, Slaanesh, and Tzeentch (alphabetical)
+and requires a subfaction choice. Setup can also clear the faction list (back to two empty
+slots) or clear all ally groups.
 
 The creating user is always a campaign manager (Game Master). If they also participate, they
 occupy one player slot. Private campaigns store a hashed join password; the plaintext password
@@ -135,6 +139,39 @@ that force become Battle.
 - Structure type, owner/controller, and condition are separate concepts.
 - Conditions initially include `Operational`, `Pillaged`, and `Destroyed` where allowed.
 - Cities may be pillaged but not destroyed in the supplied rules.
+
+### Map overlay editor
+
+After campaign creation, the creating manager is taken to the map editor. Territories are drawn as
+an overlay on the rectangular raster map; the image itself is not modified. Overlay coordinates are
+normalized to the unit square. Drawing stays inside the image rectangle. Territories may share a
+border but their interiors must not overlap. The drawing cursor highlights when it is about to snap
+to an existing vertex. Managers may undo or erase segments, assign an optional unique name and
+description (otherwise the display number 1, 2, 3… is used), select a required terrain type,
+select at most one optional structure, assign optional ownership (otherwise Neutral), assign an
+optional spawn faction (at most one spawn per faction), and apply a transparent overlay color.
+
+Generate Connections suggests adjacency arrows from shared borders. User-created (manual) arrows
+are kept on regenerate, and those pairs are skipped. Generated arrows may be replaced. Managers may
+add or delete arrows, including generated ones, and may clear all arrows. Arrow markers are editor
+aids and are not part of the published map image. Hovering an arrow enlarges it by half and
+highlights both connected territories.
+
+Campaign setup owns the terrain-type and structure catalogs. The initial terrain types,
+alphabetically, are Beach, Desert, Highlands, Lake, Mountain, Plains, Riverlands, Sea, and Swamp.
+Each has a unique color, a symbol, and at least one mission (default name `{terrain} control`).
+The initial structures, alphabetically, are Capital City, Castle, City, Fortification, Supply
+Depot, and Town. Each has a built-in symbol; a custom logo image may replace it. Structures may
+have zero or more missions. A territory uses its structure missions when that structure has any;
+otherwise it uses its terrain missions. Mission attachments are an http/https URL or a stored
+PDF/Word file, not both.
+
+Hovering or selecting a territory, while editing or viewing, shows Name, Description, structures,
+ownership (or Neutral), spawn-location faction, adjacent territories, terrain, and missions.
+Owned territories also show a small flag in the faction color. Highlights use a subtle contrasting
+glow. When a territory has an overlay color, that color is the glow, strongest around the
+territory border. Overlay colors may be assigned randomly, removed, taken from terrain, or set
+manually.
 
 ## Forces
 

@@ -16,6 +16,8 @@ public sealed class CampaignSetup
     /// <param name="factions">The factions.</param>
     /// <param name="allyGroups">The ally groups.</param>
     /// <param name="links">The external links.</param>
+    /// <param name="terrainTypes">The terrain types.</param>
+    /// <param name="structureTypes">The structure types.</param>
     /// <param name="schedule">The validated round schedule.</param>
     public CampaignSetup(
         string name,
@@ -26,12 +28,16 @@ public sealed class CampaignSetup
         IReadOnlyList<FactionSetup> factions,
         IReadOnlyList<AllyGroupSetup> allyGroups,
         IReadOnlyList<CampaignExternalLink> links,
+        IReadOnlyList<TerrainTypeSetup> terrainTypes,
+        IReadOnlyList<StructureTypeSetup> structureTypes,
         CampaignSchedule schedule)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factions);
         ArgumentNullException.ThrowIfNull(allyGroups);
         ArgumentNullException.ThrowIfNull(links);
+        ArgumentNullException.ThrowIfNull(terrainTypes);
+        ArgumentNullException.ThrowIfNull(structureTypes);
         ArgumentNullException.ThrowIfNull(schedule);
         Name = name;
         Description = description;
@@ -41,6 +47,8 @@ public sealed class CampaignSetup
         Factions = factions;
         AllyGroups = allyGroups;
         Links = links;
+        TerrainTypes = terrainTypes;
+        StructureTypes = structureTypes;
         Schedule = schedule;
     }
 
@@ -67,6 +75,12 @@ public sealed class CampaignSetup
 
     /// <summary>Gets the external links.</summary>
     public IReadOnlyList<CampaignExternalLink> Links { get; }
+
+    /// <summary>Gets the terrain types.</summary>
+    public IReadOnlyList<TerrainTypeSetup> TerrainTypes { get; }
+
+    /// <summary>Gets the structure types.</summary>
+    public IReadOnlyList<StructureTypeSetup> StructureTypes { get; }
 
     /// <summary>Gets the validated round schedule.</summary>
     public CampaignSchedule Schedule { get; }

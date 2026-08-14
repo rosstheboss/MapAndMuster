@@ -1,0 +1,466 @@
+using Campaign.Application.Common;
+using Campaign.Application.Ports;
+
+namespace Campaign.Application.Campaigns;
+
+/// <summary>
+/// Uploads a custom structure logo for a campaign manager.
+/// </summary>
+public sealed class UploadStructureImageHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly ICampaignMapProcessor _processor;
+    private readonly ICampaignAssetStorage _assets;
+    private readonly IClock _clock;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    /// <param name="campaigns">The campaign store.</param>
+    /// <param name="processor">The image processor.</param>
+    /// <param name="assets">The asset storage.</param>
+    /// <param name="clock">The clock.</param>
+    public UploadStructureImageHandler(
+        ICampaignStore campaigns,
+        ICampaignMapProcessor processor,
+        ICampaignAssetStorage assets,
+        IClock clock)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(processor);
+        ArgumentNullException.ThrowIfNull(assets);
+        ArgumentNullException.ThrowIfNull(clock);
+        _campaigns = campaigns;
+        _processor = processor;
+        _assets = assets;
+        _clock = clock;
+    }
+
+    /// <summary>
+    /// Replaces the structure logo after validating and re-encoding the upload.
+    /// </summary>
+    /// <param name="command">The upload command.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The updated campaign detail.</returns>
+    public async Task<OperationResult<CampaignDetail>> HandleAsync(
+        UploadStructureImageCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var access = await CatalogAssetAccess.RequireManagerAsync(_campaigns, command.CampaignId, command.UserId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!access.IsSuccess || access.Campaign is null)
+        {
+            return OperationResults.Failure<CampaignDetail>(access.ErrorCode ?? ErrorCodes.CampaignNotFound, access.Message ?? "The campaign was not found.");
+        }
+
+        var processed = await _processor
+            .ProcessAsync(command.Content, command.ContentType, command.Length, cancellationToken)
+            .ConfigureAwait(false);
+        if (!processed.IsSuccess || processed.Content is null || processed.FileExtension is null)
+        {
+            return OperationResults.Failure<CampaignDetail>(
+                processed.ErrorCode ?? ErrorCodes.UploadInvalidImage,
+                processed.Message ?? "The structure image could not be processed.");
+        }
+
+        var structures = access.Campaign.StructureTypes.ToList();
+        var index = structures.FindIndex(type => type.Id == command.StructureTypeId);
+        if (index < 0)
+        {
+            return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The structure type was not found.");
+        }
+
+        var newKey = await _assets
+            .SaveAsync("structures", processed.Content, processed.FileExtension, "image/png", cancellationToken)
+            .ConfigureAwait(false);
+        var previousKey = structures[index].ImageStorageKey;
+        structures[index] = new StoredStructureType
+        {
+            Id = structures[index].Id,
+            Name = structures[index].Name,
+            BuiltinSymbol = structures[index].BuiltinSymbol,
+            ImageStorageKey = newKey,
+            Missions = structures[index].Missions,
+        };
+
+        var updated = CampaignMapClone.CloneWithCatalogs(access.Campaign, access.Campaign.TerrainTypes, structures, _clock.UtcNow);
+        var outcome = await _campaigns.UpdateAsync(updated, command.ExpectedRevision, cancellationToken).ConfigureAwait(false);
+        if (!outcome.IsSuccess || outcome.Campaign is null)
+        {
+            await _assets.DeleteAsync(newKey, cancellationToken).ConfigureAwait(false);
+            return OperationResults.Failure<CampaignDetail>(
+                outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
+                outcome.Message ?? "The structure image could not be saved.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(previousKey))
+        {
+            await _assets.DeleteAsync(previousKey, cancellationToken).ConfigureAwait(false);
+        }
+
+        return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
+    }
+}
+
+/// <summary>
+/// Opens a stored structure logo for a campaign member.
+/// </summary>
+public sealed class GetStructureImageHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly ICampaignAssetStorage _assets;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    /// <param name="campaigns">The campaign store.</param>
+    /// <param name="assets">The asset storage.</param>
+    public GetStructureImageHandler(ICampaignStore campaigns, ICampaignAssetStorage assets)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(assets);
+        _campaigns = campaigns;
+        _assets = assets;
+    }
+
+    /// <summary>
+    /// Returns the stored structure logo for a member.
+    /// </summary>
+    /// <param name="campaignId">The campaign identifier.</param>
+    /// <param name="structureTypeId">The structure type identifier.</param>
+    /// <param name="userId">The authenticated user identifier.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The stored image.</returns>
+    public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        if (campaign is null || CampaignMapper.MembershipFor(campaign, userId) is null)
+        {
+            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+        }
+
+        var structure = campaign.StructureTypes.FirstOrDefault(type => type.Id == structureTypeId);
+        if (structure is null || string.IsNullOrWhiteSpace(structure.ImageStorageKey))
+        {
+            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The structure image was not found.");
+        }
+
+        var file = await _assets.OpenReadAsync(structure.ImageStorageKey, cancellationToken).ConfigureAwait(false);
+        return file is null
+            ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The structure image was not found.")
+            : OperationResults.Success(file);
+    }
+}
+
+/// <summary>
+/// Uploads a mission document for a campaign manager.
+/// </summary>
+public sealed class UploadMissionFileHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly ICampaignDocumentProcessor _processor;
+    private readonly ICampaignAssetStorage _assets;
+    private readonly IClock _clock;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    /// <param name="campaigns">The campaign store.</param>
+    /// <param name="processor">The document processor.</param>
+    /// <param name="assets">The asset storage.</param>
+    /// <param name="clock">The clock.</param>
+    public UploadMissionFileHandler(
+        ICampaignStore campaigns,
+        ICampaignDocumentProcessor processor,
+        ICampaignAssetStorage assets,
+        IClock clock)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(processor);
+        ArgumentNullException.ThrowIfNull(assets);
+        ArgumentNullException.ThrowIfNull(clock);
+        _campaigns = campaigns;
+        _processor = processor;
+        _assets = assets;
+        _clock = clock;
+    }
+
+    /// <summary>
+    /// Attaches a PDF or Word document to a mission, replacing any previous file and clearing a URL.
+    /// </summary>
+    /// <param name="command">The upload command.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The updated campaign detail.</returns>
+    public async Task<OperationResult<CampaignDetail>> HandleAsync(
+        UploadMissionFileCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var access = await CatalogAssetAccess.RequireManagerAsync(_campaigns, command.CampaignId, command.UserId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!access.IsSuccess || access.Campaign is null)
+        {
+            return OperationResults.Failure<CampaignDetail>(access.ErrorCode ?? ErrorCodes.CampaignNotFound, access.Message ?? "The campaign was not found.");
+        }
+
+        var processed = await _processor
+            .ProcessAsync(command.Content, command.ContentType, command.FileName, command.Length, cancellationToken)
+            .ConfigureAwait(false);
+        if (!processed.IsSuccess || processed.Content is null || processed.FileExtension is null || processed.ContentType is null)
+        {
+            return OperationResults.Failure<CampaignDetail>(
+                processed.ErrorCode ?? ErrorCodes.UploadInvalidType,
+                processed.Message ?? "The mission file could not be processed.");
+        }
+
+        var terrains = access.Campaign.TerrainTypes.ToList();
+        var structures = access.Campaign.StructureTypes.ToList();
+        if (!TryReplaceMission(terrains, structures, command.MissionId, processed, out var previousKey, out var newTerrains, out var newStructures))
+        {
+            return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The mission was not found.");
+        }
+
+        var newKey = await _assets
+            .SaveAsync("missions", processed.Content, processed.FileExtension, processed.ContentType, cancellationToken)
+            .ConfigureAwait(false);
+        if (!TryReplaceMission(newTerrains.ToList(), newStructures.ToList(), command.MissionId, processed, out _, out var boundTerrains, out var boundStructures, newKey))
+        {
+            await _assets.DeleteAsync(newKey, cancellationToken).ConfigureAwait(false);
+            return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The mission was not found.");
+        }
+
+        var updated = CampaignMapClone.CloneWithCatalogs(access.Campaign, boundTerrains, boundStructures, _clock.UtcNow);
+        var outcome = await _campaigns.UpdateAsync(updated, command.ExpectedRevision, cancellationToken).ConfigureAwait(false);
+        if (!outcome.IsSuccess || outcome.Campaign is null)
+        {
+            await _assets.DeleteAsync(newKey, cancellationToken).ConfigureAwait(false);
+            return OperationResults.Failure<CampaignDetail>(
+                outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
+                outcome.Message ?? "The mission file could not be saved.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(previousKey))
+        {
+            await _assets.DeleteAsync(previousKey, cancellationToken).ConfigureAwait(false);
+        }
+
+        return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
+    }
+
+    private static bool TryReplaceMission(
+        List<StoredTerrainType> terrains,
+        List<StoredStructureType> structures,
+        Guid missionId,
+        ProcessedCampaignDocumentResult processed,
+        out string? previousKey,
+        out IReadOnlyList<StoredTerrainType> nextTerrains,
+        out IReadOnlyList<StoredStructureType> nextStructures,
+        string? fileStorageKey = null)
+    {
+        previousKey = null;
+        nextTerrains = terrains;
+        nextStructures = structures;
+        for (var i = 0; i < terrains.Count; i++)
+        {
+            var missions = terrains[i].Missions.ToList();
+            var index = missions.FindIndex(mission => mission.Id == missionId);
+            if (index < 0)
+            {
+                continue;
+            }
+
+            previousKey = missions[index].FileStorageKey;
+            missions[index] = new StoredMission
+            {
+                Id = missions[index].Id,
+                Name = missions[index].Name,
+                Url = fileStorageKey is null ? missions[index].Url : null,
+                FileStorageKey = fileStorageKey ?? missions[index].FileStorageKey,
+                FileName = fileStorageKey is null ? missions[index].FileName : processed.FileName,
+            };
+            terrains[i] = new StoredTerrainType
+            {
+                Id = terrains[i].Id,
+                Name = terrains[i].Name,
+                Color = terrains[i].Color,
+                Missions = missions,
+            };
+            nextTerrains = terrains;
+            return true;
+        }
+
+        for (var i = 0; i < structures.Count; i++)
+        {
+            var missions = structures[i].Missions.ToList();
+            var index = missions.FindIndex(mission => mission.Id == missionId);
+            if (index < 0)
+            {
+                continue;
+            }
+
+            previousKey = missions[index].FileStorageKey;
+            missions[index] = new StoredMission
+            {
+                Id = missions[index].Id,
+                Name = missions[index].Name,
+                Url = fileStorageKey is null ? missions[index].Url : null,
+                FileStorageKey = fileStorageKey ?? missions[index].FileStorageKey,
+                FileName = fileStorageKey is null ? missions[index].FileName : processed.FileName,
+            };
+            structures[i] = new StoredStructureType
+            {
+                Id = structures[i].Id,
+                Name = structures[i].Name,
+                BuiltinSymbol = structures[i].BuiltinSymbol,
+                ImageStorageKey = structures[i].ImageStorageKey,
+                Missions = missions,
+            };
+            nextStructures = structures;
+            return true;
+        }
+
+        return false;
+    }
+}
+
+/// <summary>
+/// Opens a stored mission document for a campaign member.
+/// </summary>
+public sealed class GetMissionFileHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly ICampaignAssetStorage _assets;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    /// <param name="campaigns">The campaign store.</param>
+    /// <param name="assets">The asset storage.</param>
+    public GetMissionFileHandler(ICampaignStore campaigns, ICampaignAssetStorage assets)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(assets);
+        _campaigns = campaigns;
+        _assets = assets;
+    }
+
+    /// <summary>
+    /// Returns the stored mission document for a member.
+    /// </summary>
+    /// <param name="campaignId">The campaign identifier.</param>
+    /// <param name="missionId">The mission identifier.</param>
+    /// <param name="userId">The authenticated user identifier.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The stored document.</returns>
+    public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
+        Guid campaignId,
+        Guid missionId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        if (campaign is null || CampaignMapper.MembershipFor(campaign, userId) is null)
+        {
+            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+        }
+
+        var mission = campaign.TerrainTypes.SelectMany(static type => type.Missions)
+            .Concat(campaign.StructureTypes.SelectMany(static type => type.Missions))
+            .FirstOrDefault(item => item.Id == missionId);
+        if (mission is null || string.IsNullOrWhiteSpace(mission.FileStorageKey))
+        {
+            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The mission file was not found.");
+        }
+
+        var file = await _assets.OpenReadAsync(mission.FileStorageKey, cancellationToken).ConfigureAwait(false);
+        return file is null
+            ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The mission file was not found.")
+            : OperationResults.Success(new StoredCampaignAsset(file.Content, file.ContentType, mission.FileName));
+    }
+}
+
+internal static class CatalogAssetAccess
+{
+    public static async Task<(bool IsSuccess, StoredCampaign? Campaign, string? ErrorCode, string? Message)> RequireManagerAsync(
+        ICampaignStore campaigns,
+        Guid campaignId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var existing = await campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        var membership = existing is null ? null : CampaignMapper.MembershipFor(existing, userId);
+        if (existing is null || membership is null)
+        {
+            return (false, null, ErrorCodes.CampaignNotFound, "The campaign was not found.");
+        }
+
+        if (!membership.IsGameMaster)
+        {
+            return (false, null, ErrorCodes.CampaignForbidden, "Only a campaign manager can change campaign files.");
+        }
+
+        return (true, existing, null, null);
+    }
+}
+
+/// <summary>
+/// Command to replace a structure logo.
+/// </summary>
+public sealed class UploadStructureImageCommand
+{
+    /// <summary>Gets the authenticated user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the structure type identifier.</summary>
+    public required Guid StructureTypeId { get; init; }
+
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the uploaded image stream.</summary>
+    public required Stream Content { get; init; }
+
+    /// <summary>Gets the declared content type.</summary>
+    public required string ContentType { get; init; }
+
+    /// <summary>Gets the declared length, if known.</summary>
+    public long? Length { get; init; }
+}
+
+/// <summary>
+/// Command to attach a mission document.
+/// </summary>
+public sealed class UploadMissionFileCommand
+{
+    /// <summary>Gets the authenticated user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the mission identifier.</summary>
+    public required Guid MissionId { get; init; }
+
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the uploaded document stream.</summary>
+    public required Stream Content { get; init; }
+
+    /// <summary>Gets the declared content type.</summary>
+    public required string ContentType { get; init; }
+
+    /// <summary>Gets the original file name.</summary>
+    public required string FileName { get; init; }
+
+    /// <summary>Gets the declared length, if known.</summary>
+    public long? Length { get; init; }
+}

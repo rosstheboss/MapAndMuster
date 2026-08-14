@@ -8,8 +8,8 @@ import {
 describe('faction presets', () => {
   it('sorts factions and nested subfactions alphabetically without mutating the source', () => {
     const source = [
-      { name: 'Zebra Host', subfactions: ['Gamma', 'Alpha'] },
-      { name: 'Amber League', subfactions: [] },
+      { name: 'Zebra Host', color: '#111111', subfactions: ['Gamma', 'Alpha'], requiresSubfaction: false },
+      { name: 'Amber League', color: '#222222', subfactions: [], requiresSubfaction: false },
     ];
     const sorted = sortedPresetFactions(source);
 
@@ -55,6 +55,11 @@ describe('faction presets', () => {
       'Host of Talsyn',
       "Orion's Wild Hunt",
     ]);
+    const daemons = factions!.find((faction) => faction.name === 'Daemons of Chaos');
+    expect(daemons?.subfactions).toEqual(['Khorne', 'Nurgle', 'Slaanesh', 'Tzeentch']);
+    expect(daemons?.requiresSubfaction).toBe(true);
+    const colors = factions!.map((faction) => faction.color.toUpperCase());
+    expect(new Set(colors).size).toBe(colors.length);
   });
 
   it('does not change the catalog when a copied list is edited', () => {

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Campaign.Api.Contracts;
 using Campaign.Application.Campaigns;
 using Campaign.Application.Common;
+using Campaign.Application.Maps;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Campaign.Api.Endpoints;
@@ -62,6 +63,47 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/map/graph", GetMapGraphAsync)
+            .WithName("GetCampaignMapGraph")
+            .Produces<MapGraphResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPut("/{campaignId:guid}/map/graph", SaveMapGraphAsync)
+            .WithName("SaveCampaignMapGraph")
+            .Produces<MapGraphResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapGet("/{campaignId:guid}/structures/{structureTypeId:guid}/image", GetStructureImageAsync)
+            .WithName("GetCampaignStructureImage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/structures/{structureTypeId:guid}/image", UploadStructureImageAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignStructureImage")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/missions/{missionId:guid}/file", GetMissionFileAsync)
+            .WithName("GetCampaignMissionFile")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/missions/{missionId:guid}/file", UploadMissionFileAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignMissionFile")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
     }
 
     private static async Task<IResult> ListAsync(
@@ -111,6 +153,8 @@ public static class CampaignEndpoints
                     AllyGroups = CampaignResponses.ToAllyGroupInputs(request.AllyGroups),
                     Links = CampaignResponses.ToLinkInputs(request.Links),
                     Schedule = CampaignResponses.ToScheduleInput(request),
+                    TerrainTypes = CampaignResponses.ToTerrainTypeInputs(request.TerrainTypes),
+                    StructureTypes = CampaignResponses.ToStructureTypeInputs(request.StructureTypes),
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -179,6 +223,8 @@ public static class CampaignEndpoints
                     AllyGroups = CampaignResponses.ToAllyGroupInputs(request.AllyGroups),
                     Links = CampaignResponses.ToLinkInputs(request.Links),
                     Schedule = CampaignResponses.ToScheduleInput(request),
+                    TerrainTypes = CampaignResponses.ToTerrainTypeInputs(request.TerrainTypes),
+                    StructureTypes = CampaignResponses.ToStructureTypeInputs(request.StructureTypes),
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -277,6 +323,216 @@ public static class CampaignEndpoints
                 cancellationToken)
             .ConfigureAwait(false);
 
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetMapGraphAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        GetCampaignMapGraphHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(campaignId, userId.Value, cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromMapGraph(result.Value));
+    }
+
+    private static async Task<IResult> SaveMapGraphAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        [FromBody] SaveMapGraphRequest request,
+        SaveCampaignMapGraphHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SaveCampaignMapGraphCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    Territories = CampaignResponses.ToTerritoryInputs(request.Territories),
+                    Adjacencies = CampaignResponses.ToAdjacencyInputs(request.Adjacencies),
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromMapGraph(result.Value));
+    }
+
+    private static async Task<IResult> GetStructureImageAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        GetStructureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(campaignId, structureTypeId, userId.Value, cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(result.Value.Content, result.Value.ContentType);
+    }
+
+    private static async Task<IResult> UploadStructureImageAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadStructureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Upload a JPEG, PNG, or WebP image.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("image") ?? form.Files.GetFile("file");
+        if (file is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Choose a structure image to upload.");
+        }
+
+        if (!int.TryParse(form["revision"].ToString(), out var revision))
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await handler.HandleAsync(
+                new UploadStructureImageCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    StructureTypeId = structureTypeId,
+                    ExpectedRevision = revision,
+                    Content = stream,
+                    ContentType = file.ContentType,
+                    Length = file.Length,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetMissionFileAsync(
+        Guid campaignId,
+        Guid missionId,
+        ClaimsPrincipal principal,
+        GetMissionFileHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(campaignId, missionId, userId.Value, cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(
+            result.Value.Content,
+            result.Value.ContentType,
+            result.Value.DownloadName);
+    }
+
+    private static async Task<IResult> UploadMissionFileAsync(
+        Guid campaignId,
+        Guid missionId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadMissionFileHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Upload a PDF or Word document.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("file") ?? form.Files.GetFile("document");
+        if (file is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Choose a mission document to upload.");
+        }
+
+        if (!int.TryParse(form["revision"].ToString(), out var revision))
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await handler.HandleAsync(
+                new UploadMissionFileCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    MissionId = missionId,
+                    ExpectedRevision = revision,
+                    Content = stream,
+                    ContentType = file.ContentType,
+                    FileName = file.FileName,
+                    Length = file.Length,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);
