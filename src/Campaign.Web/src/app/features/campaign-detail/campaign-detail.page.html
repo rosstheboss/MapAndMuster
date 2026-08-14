@@ -1,0 +1,116 @@
+<section class="page">
+  @if (loading()) {
+    <p>Loading campaign…</p>
+  } @else if (campaign(); as campaign) {
+    <div class="page-header">
+      <h1>{{ campaign.name }}</h1>
+      <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+    </div>
+
+    @if (error()) {
+      <p class="error error-banner" role="alert">{{ error() }}</p>
+    }
+
+    @if (campaign.canManage) {
+      <div class="actions">
+        <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
+        <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
+      </div>
+    }
+
+    @if (confirmingDelete()) {
+      <div class="dialog-backdrop">
+        <div
+          class="dialog panel stack"
+          role="alertdialog"
+          aria-labelledby="delete-title"
+          aria-describedby="delete-desc"
+        >
+          <h2 id="delete-title">Delete this campaign?</h2>
+          <p id="delete-desc">This cannot be undone. The campaign will disappear from every member's list.</p>
+          <div class="actions">
+            <button type="button" class="button-danger" (click)="confirmDelete()" [disabled]="deleting()">
+              Delete campaign
+            </button>
+            <button type="button" class="button-secondary" (click)="cancelDelete()" [disabled]="deleting()">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <div class="panel stack">
+      @if (campaign.description) {
+        <p>{{ campaign.description }}</p>
+      }
+      <p>Players: {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} occupied</p>
+      <p>{{ campaign.isPrivate ? 'Private campaign' : 'Public campaign' }}</p>
+      <p>
+        Creator role:
+        {{ campaign.creatorIsParticipant ? 'Manager and participant' : 'Manager only' }}
+      </p>
+      <p>Your role: {{ roleLabel(campaign) }}</p>
+      <p class="muted">Created {{ campaign.createdUtc | instantDate: timeZoneId() }}</p>
+      <p class="muted">Last edited {{ campaign.updatedUtc | instantDate: timeZoneId() }}</p>
+    </div>
+
+    <div class="panel stack">
+      <h2>Factions</h2>
+      <ul class="plain-list">
+        @for (faction of campaign.factions; track faction.id) {
+          <li>
+            <strong>{{ faction.name }}</strong>
+            @if (faction.allyGroupName) {
+              <span class="muted"> · Ally group: {{ faction.allyGroupName }}</span>
+            }
+            @if (faction.subfactions.length > 0) {
+              <p class="muted">Subfactions: {{ faction.subfactions.join(', ') }}</p>
+            }
+          </li>
+        }
+      </ul>
+    </div>
+
+    @if (campaign.allyGroups.length > 0) {
+      <div class="panel stack">
+        <h2>Ally groups</h2>
+        <ul class="plain-list">
+          @for (group of campaign.allyGroups; track group.id) {
+            <li>{{ group.name }}</li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (campaign.links.length > 0) {
+      <div class="panel stack">
+        <h2>Links</h2>
+        <ul class="plain-list">
+          @for (link of campaign.links; track link.id) {
+            <li>
+              <a [href]="link.url" rel="noopener noreferrer" target="_blank">{{ link.label }}</a>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    <div class="panel stack">
+      <h2>Map</h2>
+      @if (mapSrc(); as src) {
+        <img class="campaign-map" [src]="src" alt="Campaign map" />
+      } @else {
+        <p class="muted">No map has been uploaded yet.</p>
+      }
+    </div>
+  } @else {
+    <div class="page-header">
+      <h1>Campaign</h1>
+      <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+    </div>
+    @if (error()) {
+      <p class="error error-banner" role="alert">{{ error() }}</p>
+    }
+  }
+</section>

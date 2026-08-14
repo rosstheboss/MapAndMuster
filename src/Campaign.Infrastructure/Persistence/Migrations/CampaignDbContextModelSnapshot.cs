@@ -174,6 +174,193 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignAllyGroupRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampaignId");
+
+                    b.ToTable("CampaignAllyGroups", (string)null);
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignFactionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AllyGroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllyGroupId");
+
+                    b.HasIndex("CampaignId");
+
+                    b.ToTable("CampaignFactions", (string)null);
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignLinkRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampaignId");
+
+                    b.ToTable("CampaignLinks", (string)null);
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignMembershipRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsGameMaster")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPlayer")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("CampaignId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("CampaignMemberships", (string)null);
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("CreatorIsParticipant")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsPrivate")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("JoinPasswordHash")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("MapStorageKey")
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("PlayerSlotCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedNever()
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.ToTable("Campaigns", (string)null);
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignSubfactionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FactionId");
+
+                    b.ToTable("CampaignSubfactions", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
                 {
                     b.Property<Guid>("Id")
@@ -304,6 +491,68 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignAllyGroupRecord", b =>
+                {
+                    b.HasOne("Campaign.Infrastructure.Persistence.Entities.CampaignRecord", "Campaign")
+                        .WithMany("AllyGroups")
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignFactionRecord", b =>
+                {
+                    b.HasOne("Campaign.Infrastructure.Persistence.Entities.CampaignAllyGroupRecord", "AllyGroup")
+                        .WithMany("Factions")
+                        .HasForeignKey("AllyGroupId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Campaign.Infrastructure.Persistence.Entities.CampaignRecord", "Campaign")
+                        .WithMany("Factions")
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AllyGroup");
+
+                    b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignLinkRecord", b =>
+                {
+                    b.HasOne("Campaign.Infrastructure.Persistence.Entities.CampaignRecord", "Campaign")
+                        .WithMany("Links")
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignMembershipRecord", b =>
+                {
+                    b.HasOne("Campaign.Infrastructure.Persistence.Entities.CampaignRecord", "Campaign")
+                        .WithMany("Memberships")
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignSubfactionRecord", b =>
+                {
+                    b.HasOne("Campaign.Infrastructure.Persistence.Entities.CampaignFactionRecord", "Faction")
+                        .WithMany("Subfactions")
+                        .HasForeignKey("FactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Faction");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)
@@ -353,6 +602,27 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignAllyGroupRecord", b =>
+                {
+                    b.Navigation("Factions");
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignFactionRecord", b =>
+                {
+                    b.Navigation("Subfactions");
+                });
+
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignRecord", b =>
+                {
+                    b.Navigation("AllyGroups");
+
+                    b.Navigation("Factions");
+
+                    b.Navigation("Links");
+
+                    b.Navigation("Memberships");
                 });
 #pragma warning restore 612, 618
         }

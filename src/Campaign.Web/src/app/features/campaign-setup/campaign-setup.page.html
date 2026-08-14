@@ -1,0 +1,185 @@
+<section class="page">
+  <div class="page-header">
+    <h1>{{ isEdit() ? 'Edit campaign' : 'Create campaign' }}</h1>
+    <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+  </div>
+
+  @if (loading()) {
+    <p>Loading campaign…</p>
+  } @else {
+    <form class="panel stack" [formGroup]="form" (ngSubmit)="save()" novalidate>
+      @if (errorMessages().length > 0) {
+        <div #formAlert class="error error-banner" role="alert" tabindex="-1">
+          @for (message of errorMessages(); track $index) {
+            <p>{{ message }}</p>
+          }
+        </div>
+      }
+
+      <div class="field" [class.invalid]="isInvalid('name')">
+        <label for="name">Campaign name <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="name" formControlName="name" maxlength="80" aria-required="true" />
+      </div>
+
+      <div class="field" [class.invalid]="isInvalid('description')">
+        <label for="description">Description (optional)</label>
+        <textarea id="description" formControlName="description" maxlength="500" rows="4"></textarea>
+        <p class="muted">{{ descriptionLength() }} / 500 characters</p>
+      </div>
+
+      <div class="field" [class.invalid]="isInvalid('playerCount')">
+        <label for="playerCount">Number of players <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="playerCount" type="number" min="2" max="100" formControlName="playerCount" aria-required="true" />
+        <p class="muted">Between 2 and 100. A participating manager occupies one slot.</p>
+      </div>
+
+      <fieldset class="field">
+        <legend>Your role</legend>
+        <div class="choice-row">
+          <label>
+            <input type="radio" formControlName="creatorRole" value="manager" />
+            Manager only
+          </label>
+          <label>
+            <input type="radio" formControlName="creatorRole" value="both" />
+            Manager and participant
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Visibility</legend>
+        <label class="choice-row">
+          <input type="checkbox" formControlName="isPrivate" />
+          Private campaign (requires a password to join)
+        </label>
+        @if (isPrivate()) {
+          <div class="field" [class.invalid]="isInvalid('joinPassword')">
+            <label for="joinPassword">
+              Join password{{ isEdit() ? ' (leave blank to keep the current password)' : '' }}
+            </label>
+            <input id="joinPassword" type="password" formControlName="joinPassword" autocomplete="new-password" />
+            <p class="muted">At least 8 characters. This is not shown again after you save.</p>
+          </div>
+        }
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Ally groups (optional)</legend>
+        <p class="muted">Two or more factions can join a group. All factions cannot belong to a single group.</p>
+        <div formArrayName="allyGroups" class="stack">
+          @for (group of allyGroups.controls; track $index; let index = $index) {
+            <div class="nested-row" [formGroupName]="index">
+              <div class="field grow">
+                <label [attr.for]="'ally-group-' + index">Ally group {{ index + 1 }} name</label>
+                <input [id]="'ally-group-' + index" formControlName="name" maxlength="60" />
+              </div>
+              <button type="button" class="button-secondary" (click)="removeAllyGroup(index)">Remove</button>
+            </div>
+          }
+        </div>
+        <button type="button" class="button-secondary" (click)="addAllyGroup()">Add ally group</button>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Factions <span class="required-marker" aria-hidden="true">*</span></legend>
+        <p class="muted">At least two factions are required. Subfactions are optional.</p>
+        <div formArrayName="factions" class="stack">
+          @for (faction of factions.controls; track $index; let index = $index) {
+            <div class="nested-card stack" [formGroupName]="index">
+              <div class="nested-row">
+                <div
+                  class="field grow"
+                  [class.invalid]="isGroupInvalid(faction, 'name', 'factions[' + index + '].name')"
+                >
+                  <label [attr.for]="'faction-name-' + index">
+                    Faction {{ index + 1 }} name <span class="required-marker" aria-hidden="true">*</span>
+                  </label>
+                  <input [id]="'faction-name-' + index" formControlName="name" maxlength="60" aria-required="true" />
+                </div>
+                @if (factions.length > 2) {
+                  <button type="button" class="button-secondary" (click)="removeFaction(index)">Remove faction</button>
+                }
+              </div>
+              @if (allyGroups.length > 0) {
+                <div class="field">
+                  <label [attr.for]="'faction-ally-' + index">Ally group (optional)</label>
+                  <select [id]="'faction-ally-' + index" formControlName="allyGroupName">
+                    <option value="">Unaligned</option>
+                    @for (group of allyGroups.controls; track $index) {
+                      @if (group.controls.name.value.trim()) {
+                        <option [value]="group.controls.name.value">{{ group.controls.name.value }}</option>
+                      }
+                    }
+                  </select>
+                </div>
+              }
+              <div class="field" formArrayName="subfactions">
+                <p class="muted">Subfactions (optional)</p>
+                @for (subfaction of subfactionsOf(faction).controls; track $index; let subIndex = $index) {
+                  <div class="nested-row" [formGroupName]="subIndex">
+                    <label class="sr-only" [attr.for]="'subfaction-' + index + '-' + subIndex">
+                      Faction {{ index + 1 }} subfaction {{ subIndex + 1 }}
+                    </label>
+                    <input
+                      class="grow"
+                      [id]="'subfaction-' + index + '-' + subIndex"
+                      formControlName="name"
+                      maxlength="60"
+                    />
+                    <button type="button" class="button-secondary" (click)="removeSubfaction(faction, subIndex)">
+                      Remove
+                    </button>
+                  </div>
+                }
+                <button type="button" class="button-secondary" (click)="addSubfaction(faction)">Add subfaction</button>
+              </div>
+            </div>
+          }
+        </div>
+        <button type="button" class="button-secondary" (click)="addFaction()">Add faction</button>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>External links (optional)</legend>
+        <p class="muted">Up to 20 labeled http or https links.</p>
+        <div formArrayName="links" class="stack">
+          @for (_link of links.controls; track $index; let index = $index) {
+            <div class="nested-card stack" [formGroupName]="index">
+              <div class="nested-row">
+                <div class="field grow">
+                  <label [attr.for]="'link-label-' + index">Link {{ index + 1 }} label</label>
+                  <input [id]="'link-label-' + index" formControlName="label" maxlength="80" />
+                </div>
+                <button type="button" class="button-secondary" (click)="removeLink(index)">Remove</button>
+              </div>
+              <div class="field">
+                <label [attr.for]="'link-url-' + index">Link {{ index + 1 }} URL</label>
+                <input [id]="'link-url-' + index" formControlName="url" maxlength="2048" />
+              </div>
+            </div>
+          }
+        </div>
+        <button type="button" class="button-secondary" (click)="addLink()" [disabled]="links.length >= 20">
+          Add link
+        </button>
+      </fieldset>
+
+      <div class="field">
+        <label for="map">Campaign map (optional, one image)</label>
+        <input id="map" type="file" accept="image/jpeg,image/png,image/webp" (change)="onMapSelected($event)" />
+        @if (mapFileName()) {
+          <p class="muted">Selected: {{ mapFileName() }}</p>
+        } @else if (hasExistingMap()) {
+          <p class="muted">A map is already stored. Upload a new file to replace it.</p>
+        }
+      </div>
+
+      <div class="actions">
+        <button class="button" type="submit" [disabled]="saving()">
+          {{ isEdit() ? 'Save campaign' : 'Create campaign' }}
+        </button>
+      </div>
+    </form>
+  }
+</section>

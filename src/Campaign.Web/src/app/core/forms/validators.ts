@@ -57,6 +57,32 @@ export const optionalMiddleInitial: ValidatorFn = (control) => {
   return null;
 };
 
+export function minValue(minimum: number): ValidatorFn {
+  return (control) => Validators.min(minimum)(control);
+}
+
+export function maxValue(maximum: number): ValidatorFn {
+  return (control) => Validators.max(maximum)(control);
+}
+
+export const httpUrl: ValidatorFn = (control) => {
+  const value = String(control.value ?? '').trim();
+  if (value.length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return null;
+    }
+  } catch {
+    return { httpUrl: true };
+  }
+
+  return { httpUrl: true };
+};
+
 export const matchingPasswords: ValidatorFn = (control) => {
   const password = control.get('password')?.value as string | undefined;
   const confirm = control.get('confirmPassword')?.value as string | undefined;
@@ -88,6 +114,20 @@ export function describeControlError(control: AbstractControl | null, label: str
   const max = control.getError('maxlength') as { requiredLength?: number } | null;
   if (max?.requiredLength) {
     return `${label} is too long (maximum ${max.requiredLength} characters).`;
+  }
+
+  const minBound = control.getError('min') as { min?: number } | null;
+  if (minBound?.min !== undefined) {
+    return `${label} must be at least ${minBound.min}.`;
+  }
+
+  const maxBound = control.getError('max') as { max?: number } | null;
+  if (maxBound?.max !== undefined) {
+    return `${label} must be at most ${maxBound.max}.`;
+  }
+
+  if (control.hasError('httpUrl')) {
+    return `${label} must be an http or https address.`;
   }
 
   const complexity = control.getError('passwordComplexity') as { problems?: string[] } | null;

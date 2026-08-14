@@ -33,6 +33,7 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     const nav = compiled.querySelector('nav[aria-label="Main"]');
     expect(nav?.textContent).toContain('Home');
+    expect(nav?.textContent).toContain('Your Campaigns');
     expect(nav?.textContent).toContain('Profile');
     expect(nav?.textContent).toContain('Sign in');
   });

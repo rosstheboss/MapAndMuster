@@ -1,7 +1,7 @@
 import { Component, input } from '@angular/core';
 
 export type AppIconName =
-  'alert' | 'castle' | 'check' | 'chevron-down' | 'helm' | 'home' | 'key' | 'logout' | 'shield' | 'sword';
+  'alert' | 'castle' | 'check' | 'chevron-down' | 'helm' | 'home' | 'key' | 'logout' | 'map' | 'shield' | 'sword';
 
 @Component({
   selector: 'app-icon',

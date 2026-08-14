@@ -28,6 +28,13 @@ a {
   color: var(--color-accent);
 }
 
+a.button,
+a.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
@@ -64,13 +71,19 @@ textarea:focus-visible {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   min-height: var(--touch-min);
   width: 100%;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   font: inherit;
+}
+
+.field textarea {
+  min-height: 6rem;
+  resize: vertical;
 }
 
 .actions {
@@ -102,6 +115,35 @@ textarea:focus-visible {
 .button:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.button-danger {
+  min-height: var(--touch-min);
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.button-danger:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.page-header h1 {
+  margin: 0;
 }
 
 .button-secondary {
@@ -141,7 +183,8 @@ textarea:focus-visible {
 }
 
 .field.invalid input,
-.field.invalid select {
+.field.invalid select,
+.field.invalid textarea {
   border-color: var(--color-danger);
   background: #fef2f2;
 }

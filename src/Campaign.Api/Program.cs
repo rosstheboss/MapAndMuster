@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using Campaign.Api;
 using Campaign.Api.Endpoints;
 using Campaign.Infrastructure;
+using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +15,11 @@ builder.Services.AddAuthorization();
 builder.Services.AddHttpClient("external-avatar", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
+});
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 12 * 1024 * 1024;
 });
 
 builder.Services.ConfigureApplicationCookie(options =>
@@ -78,6 +84,7 @@ app.MapHealthChecks("/health");
 app.MapAuthEndpoints();
 app.MapProfileEndpoints();
 app.MapExternalAuthEndpoints();
+app.MapCampaignEndpoints();
 
 await DatabaseStartup.ApplyMigrationsAsync(app).ConfigureAwait(false);
 

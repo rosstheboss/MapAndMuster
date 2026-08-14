@@ -61,4 +61,10 @@ public static class ErrorCodes
 
     /// <summary>The time-zone identifier is not a known IANA zone.</summary>
     public const string TimeZoneInvalid = "timeZone.invalid";
+
+    /// <summary>The requested campaign does not exist or is not visible to the caller.</summary>
+    public const string CampaignNotFound = "campaign.not_found";
+
+    /// <summary>The caller is a member but lacks permission for the campaign command.</summary>
+    public const string CampaignForbidden = "campaign.forbidden";
 }

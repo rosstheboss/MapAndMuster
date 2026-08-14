@@ -1,3 +1,4 @@
+using Campaign.Application.Campaigns;
 using Campaign.Application.Identity;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -24,6 +25,13 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<GetPublicProfileHandler>();
         services.AddScoped<CompleteExternalRegistrationHandler>();
         services.AddScoped<ChangePasswordHandler>();
+        services.AddScoped<CreateCampaignHandler>();
+        services.AddScoped<UpdateCampaignHandler>();
+        services.AddScoped<ListCampaignsHandler>();
+        services.AddScoped<GetCampaignHandler>();
+        services.AddScoped<DeleteCampaignHandler>();
+        services.AddScoped<UploadCampaignMapHandler>();
+        services.AddScoped<GetCampaignMapHandler>();
 
         return services;
     }

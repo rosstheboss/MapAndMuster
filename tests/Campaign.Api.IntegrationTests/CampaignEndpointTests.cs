@@ -1,0 +1,294 @@
+using System.Globalization;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
+using Campaign.Api.Contracts;
+using Campaign.Infrastructure.Email;
+using Campaign.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Campaign.Api.IntegrationTests;
+
+[Collection("api")]
+public sealed class CampaignEndpointTests
+{
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
+    private readonly CampaignApiFactory _factory;
+
+    public CampaignEndpointTests(CampaignApiFactory factory)
+    {
+        _factory = factory;
+    }
+
+    [Fact]
+    public async Task CreateListGetUpdateAndDeleteCampaign()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("gm");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Border War"));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        Assert.Equal("Border War", created.Name);
+        Assert.Equal(8, created.PlayerSlotCount);
+        Assert.Equal(1, created.OccupiedPlayerSlots);
+        Assert.True(created.CanManage);
+        Assert.True(created.IsParticipant);
+        Assert.Equal(2, created.Factions.Count);
+        Assert.Equal(1, created.Revision);
+
+        var list = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
+        Assert.NotNull(list);
+        Assert.Contains(list, item => item.Id == created.Id && item.Name == "Border War");
+
+        var detail = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(detail);
+        Assert.Equal("North", detail.Factions[0].Name);
+        Assert.Equal(1, detail.Revision);
+
+        using var updatedResponse = await client.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}",
+            ValidCampaignBody("Renamed War", detail.Revision, playerCount: 12, creatorIsParticipant: false));
+        Assert.Equal(HttpStatusCode.OK, updatedResponse.StatusCode);
+        var updated = await updatedResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(updated);
+        Assert.Equal("Renamed War", updated.Name);
+        Assert.Equal(12, updated.PlayerSlotCount);
+        Assert.Equal(0, updated.OccupiedPlayerSlots);
+        Assert.False(updated.IsParticipant);
+
+        using var deleted = await client.DeleteAsync($"/api/campaigns/{created.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+
+        using var missing = await client.GetAsync($"/api/campaigns/{created.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        var afterDelete = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
+        Assert.NotNull(afterDelete);
+        Assert.DoesNotContain(afterDelete, item => item.Id == created.Id);
+    }
+
+    [Fact]
+    public async Task UnauthenticatedAccessIsRejected()
+    {
+        using var client = _factory.CreateClient();
+        using var list = await client.GetAsync("/api/campaigns");
+        Assert.Equal(HttpStatusCode.Unauthorized, list.StatusCode);
+    }
+
+    [Fact]
+    public async Task NonMembersCannotReadOrChangeACampaign()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("owner");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Secret War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var stranger = _factory.CreateClient();
+        var strangerName = UniqueName("stranger");
+        await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
+
+        using var get = await stranger.GetAsync($"/api/campaigns/{created.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
+
+        using var update = await stranger.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}",
+            ValidCampaignBody("Hijacked", created.Revision));
+        Assert.Equal(HttpStatusCode.NotFound, update.StatusCode);
+
+        using var delete = await stranger.DeleteAsync($"/api/campaigns/{created.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, delete.StatusCode);
+    }
+
+    [Fact]
+    public async Task PrivateJoinPasswordIsOmittedFromResponses()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("priv");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var createdResponse = await client.PostAsJsonAsync(
+            "/api/campaigns",
+            new SaveCampaignRequest
+            {
+                Name = "Hidden War",
+                PlayerCount = 8,
+                IsPrivate = true,
+                JoinPassword = "join-secret",
+                CreatorIsParticipant = true,
+                Factions =
+                [
+                    new FactionRequest { Name = "North" },
+                    new FactionRequest { Name = "South" },
+                ],
+            });
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var json = await createdResponse.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("join-secret", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("JoinPassword", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PasswordHash", json, StringComparison.OrdinalIgnoreCase);
+
+        var created = JsonSerializer.Deserialize<CampaignDetailResponse>(json, JsonOptions);
+        Assert.NotNull(created);
+        Assert.True(created.IsPrivate);
+    }
+
+    [Fact]
+    public async Task InvalidSetupIsRejected()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("bad");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/campaigns",
+            new
+            {
+                name = "x",
+                playerCount = 1,
+                isPrivate = true,
+                creatorIsParticipant = true,
+                factions = new[] { new { name = "North" } },
+            });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.NotNull(error);
+        Assert.Contains("at least 2 factions", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task MapUploadRejectsSvgAndAcceptsPng()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("map");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Mapped War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var svgContent = new MultipartFormDataContent();
+        var svg = new ByteArrayContent(Encoding.UTF8.GetBytes("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>"));
+        svg.Headers.ContentType = new MediaTypeHeaderValue("image/svg+xml");
+        svgContent.Add(svg, "map", "map.svg");
+        svgContent.Add(new StringContent(created.Revision.ToString(CultureInfo.InvariantCulture)), "revision");
+        using var svgResponse = await client.PostAsync($"/api/campaigns/{created.Id}/map", svgContent);
+        Assert.Equal(HttpStatusCode.BadRequest, svgResponse.StatusCode);
+
+        using var pngContent = new MultipartFormDataContent();
+        var png = new ByteArrayContent(PngBytes);
+        png.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        pngContent.Add(png, "map", "map.png");
+        pngContent.Add(new StringContent(created.Revision.ToString(CultureInfo.InvariantCulture)), "revision");
+        using var pngResponse = await client.PostAsync($"/api/campaigns/{created.Id}/map", pngContent);
+        Assert.Equal(HttpStatusCode.OK, pngResponse.StatusCode);
+
+        using var mapResponse = await client.GetAsync($"/api/campaigns/{created.Id}/map");
+        Assert.Equal(HttpStatusCode.OK, mapResponse.StatusCode);
+        Assert.Equal("image/png", mapResponse.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task ConcurrentUpdatesReturnConflict()
+    {
+        var username = UniqueName("race");
+        var email = $"{username}@example.test";
+        using var first = _factory.CreateClient();
+        await RegisterConfirmAndLoginAsync(first, email, username);
+        using var createdResponse = await first.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Race War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var second = _factory.CreateClient();
+        using var login = await second.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        var body = ValidCampaignBody("Race War", created.Revision);
+        using var firstUpdate = await first.PutAsJsonAsync($"/api/campaigns/{created.Id}", body);
+        using var secondUpdate = await second.PutAsJsonAsync($"/api/campaigns/{created.Id}", body);
+        var statuses = new[] { firstUpdate.StatusCode, secondUpdate.StatusCode };
+        Assert.Contains(HttpStatusCode.OK, statuses);
+        Assert.Contains(HttpStatusCode.Conflict, statuses);
+    }
+
+    private async Task RegisterConfirmAndLoginAsync(HttpClient client, string email, string username)
+    {
+        using var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new
+        {
+            email,
+            username,
+            password = ValidPassword,
+            firstName = "Ada",
+            lastName = "Lovelace",
+            city = "Halifax",
+            region = "Nova Scotia",
+            country = "Canada",
+            timeZoneId = "America/Halifax",
+            displayNameMode = "Username",
+        });
+        Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
+        await ConfirmEmailAsync(email);
+        using var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+    }
+
+    private async Task ConfirmEmailAsync(string email)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<CampaignDbContext>();
+        var message = dbContext.OutboxMessages
+            .Where(item => item.Type == EmailOutbox.ConfirmEmailType)
+            .OrderByDescending(item => item.CreatedUtc)
+            .AsEnumerable()
+            .First(item => item.Payload.Contains(email, StringComparison.Ordinal));
+        var payload = JsonSerializer.Deserialize<OutboxEmailPayload>(message.Payload);
+        Assert.NotNull(payload);
+
+        using var client = _factory.CreateClient();
+        using var confirm = await client.PostAsJsonAsync(
+            "/api/auth/confirm-email",
+            new { userId = payload.UserId, token = payload.Token });
+        Assert.Equal(HttpStatusCode.NoContent, confirm.StatusCode);
+    }
+
+    private static SaveCampaignRequest ValidCampaignBody(
+        string name,
+        int? revision = null,
+        int playerCount = 8,
+        bool creatorIsParticipant = true)
+    {
+        return new SaveCampaignRequest
+        {
+            Name = name,
+            Description = "A contested frontier.",
+            PlayerCount = playerCount,
+            IsPrivate = false,
+            CreatorIsParticipant = creatorIsParticipant,
+            Factions =
+            [
+                new FactionRequest { Name = "North", Subfactions = ["Riders"] },
+                new FactionRequest { Name = "South" },
+            ],
+            Revision = revision,
+        };
+    }
+
+    private static string UniqueName(string prefix)
+    {
+        return $"{prefix}{Guid.NewGuid():N}"[..20];
+    }
+
+    private const string ValidPassword = "Correct-Horse-1";
+
+    private static readonly byte[] PngBytes = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+}

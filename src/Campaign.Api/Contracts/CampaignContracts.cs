@@ -1,0 +1,328 @@
+using Campaign.Application.Campaigns;
+using Campaign.Domain.Campaigns;
+
+namespace Campaign.Api.Contracts;
+
+/// <summary>
+/// Request to create or update campaign setup. Join passwords are never returned.
+/// </summary>
+public sealed class SaveCampaignRequest
+{
+    /// <summary>Gets the campaign name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the optional description.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Gets the configured player-slot count.</summary>
+    public required int PlayerCount { get; init; }
+
+    /// <summary>Gets whether a join password is required.</summary>
+    public required bool IsPrivate { get; init; }
+
+    /// <summary>Gets the join password. Omit on update to keep the current password.</summary>
+    public string? JoinPassword { get; init; }
+
+    /// <summary>Gets whether the creator also occupies a player slot.</summary>
+    public required bool CreatorIsParticipant { get; init; }
+
+    /// <summary>Gets the factions.</summary>
+    public required IReadOnlyList<FactionRequest> Factions { get; init; }
+
+    /// <summary>Gets the ally groups.</summary>
+    public IReadOnlyList<AllyGroupRequest>? AllyGroups { get; init; }
+
+    /// <summary>Gets the external links.</summary>
+    public IReadOnlyList<LinkRequest>? Links { get; init; }
+
+    /// <summary>Gets the last observed campaign revision. Required for updates.</summary>
+    public int? Revision { get; init; }
+}
+
+/// <summary>
+/// Faction configuration in a save request.
+/// </summary>
+public sealed class FactionRequest
+{
+    /// <summary>Gets the faction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets optional subfaction names.</summary>
+    public IReadOnlyList<string>? Subfactions { get; init; }
+
+    /// <summary>Gets the optional ally-group name this faction joins.</summary>
+    public string? AllyGroupName { get; init; }
+}
+
+/// <summary>
+/// Ally-group configuration in a save request.
+/// </summary>
+public sealed class AllyGroupRequest
+{
+    /// <summary>Gets the ally-group name.</summary>
+    public required string Name { get; init; }
+}
+
+/// <summary>
+/// Labeled external link in a save request.
+/// </summary>
+public sealed class LinkRequest
+{
+    /// <summary>Gets the display label.</summary>
+    public required string Label { get; init; }
+
+    /// <summary>Gets the destination URL.</summary>
+    public required string Url { get; init; }
+}
+
+/// <summary>
+/// A campaign in the caller's list.
+/// </summary>
+public sealed class CampaignListItemResponse
+{
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the campaign name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the configured player-slot count.</summary>
+    public required int PlayerSlotCount { get; init; }
+
+    /// <summary>Gets the number of occupied player slots.</summary>
+    public required int OccupiedPlayerSlots { get; init; }
+
+    /// <summary>Gets whether the campaign is private.</summary>
+    public required bool IsPrivate { get; init; }
+
+    /// <summary>Gets whether the current user can manage the campaign.</summary>
+    public required bool CanManage { get; init; }
+
+    /// <summary>Gets whether the current user occupies a player slot.</summary>
+    public required bool IsParticipant { get; init; }
+}
+
+/// <summary>
+/// Member-visible campaign metadata. Join passwords are omitted.
+/// </summary>
+public sealed class CampaignDetailResponse
+{
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the campaign name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the optional description.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Gets the configured player-slot count.</summary>
+    public required int PlayerSlotCount { get; init; }
+
+    /// <summary>Gets the number of occupied player slots.</summary>
+    public required int OccupiedPlayerSlots { get; init; }
+
+    /// <summary>Gets whether the campaign is private.</summary>
+    public required bool IsPrivate { get; init; }
+
+    /// <summary>Gets whether the creating manager also occupies a player slot.</summary>
+    public required bool CreatorIsParticipant { get; init; }
+
+    /// <summary>Gets whether a map image is stored.</summary>
+    public required bool HasMap { get; init; }
+
+    /// <summary>Gets whether the current user can manage the campaign.</summary>
+    public required bool CanManage { get; init; }
+
+    /// <summary>Gets whether the current user occupies a player slot.</summary>
+    public required bool IsParticipant { get; init; }
+
+    /// <summary>Gets the optimistic concurrency revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets when the campaign was created, in UTC.</summary>
+    public required DateTimeOffset CreatedUtc { get; init; }
+
+    /// <summary>Gets when the campaign was last edited, in UTC.</summary>
+    public required DateTimeOffset UpdatedUtc { get; init; }
+
+    /// <summary>Gets the factions.</summary>
+    public required IReadOnlyList<FactionResponse> Factions { get; init; }
+
+    /// <summary>Gets the ally groups.</summary>
+    public required IReadOnlyList<AllyGroupResponse> AllyGroups { get; init; }
+
+    /// <summary>Gets the external links.</summary>
+    public required IReadOnlyList<LinkResponse> Links { get; init; }
+}
+
+/// <summary>
+/// A faction in a campaign response.
+/// </summary>
+public sealed class FactionResponse
+{
+    /// <summary>Gets the faction identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the faction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the subfaction names.</summary>
+    public required IReadOnlyList<string> Subfactions { get; init; }
+
+    /// <summary>Gets the ally-group name this faction joins, if any.</summary>
+    public string? AllyGroupName { get; init; }
+}
+
+/// <summary>
+/// An ally group in a campaign response.
+/// </summary>
+public sealed class AllyGroupResponse
+{
+    /// <summary>Gets the ally-group identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the ally-group name.</summary>
+    public required string Name { get; init; }
+}
+
+/// <summary>
+/// A labeled external link in a campaign response.
+/// </summary>
+public sealed class LinkResponse
+{
+    /// <summary>Gets the link identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the display label.</summary>
+    public required string Label { get; init; }
+
+    /// <summary>Gets the destination URL.</summary>
+    public required string Url { get; init; }
+}
+
+/// <summary>
+/// Maps campaign application models onto HTTP contracts.
+/// </summary>
+public static class CampaignResponses
+{
+    /// <summary>
+    /// Maps a list item.
+    /// </summary>
+    /// <param name="item">The list item.</param>
+    /// <returns>The HTTP response.</returns>
+    public static CampaignListItemResponse FromListItem(CampaignListItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return new CampaignListItemResponse
+        {
+            Id = item.Id,
+            Name = item.Name,
+            PlayerSlotCount = item.PlayerSlotCount,
+            OccupiedPlayerSlots = item.OccupiedPlayerSlots,
+            IsPrivate = item.IsPrivate,
+            CanManage = item.CanManage,
+            IsParticipant = item.IsParticipant,
+        };
+    }
+
+    /// <summary>
+    /// Maps a campaign detail. Join password hashes are not present on the source model.
+    /// </summary>
+    /// <param name="detail">The detail.</param>
+    /// <returns>The HTTP response.</returns>
+    public static CampaignDetailResponse FromDetail(CampaignDetail detail)
+    {
+        ArgumentNullException.ThrowIfNull(detail);
+        return new CampaignDetailResponse
+        {
+            Id = detail.Id,
+            Name = detail.Name,
+            Description = detail.Description,
+            PlayerSlotCount = detail.PlayerSlotCount,
+            OccupiedPlayerSlots = detail.OccupiedPlayerSlots,
+            IsPrivate = detail.IsPrivate,
+            CreatorIsParticipant = detail.CreatorIsParticipant,
+            HasMap = detail.HasMap,
+            CanManage = detail.CanManage,
+            IsParticipant = detail.IsParticipant,
+            Revision = detail.Revision,
+            CreatedUtc = detail.CreatedUtc,
+            UpdatedUtc = detail.UpdatedUtc,
+            Factions =
+            [
+                .. detail.Factions.Select(static faction => new FactionResponse
+                {
+                    Id = faction.Id,
+                    Name = faction.Name,
+                    Subfactions = faction.Subfactions,
+                    AllyGroupName = faction.AllyGroupName,
+                }),
+            ],
+            AllyGroups =
+            [
+                .. detail.AllyGroups.Select(static group => new AllyGroupResponse
+                {
+                    Id = group.Id,
+                    Name = group.Name,
+                }),
+            ],
+            Links =
+            [
+                .. detail.Links.Select(static link => new LinkResponse
+                {
+                    Id = link.Id,
+                    Label = link.Label,
+                    Url = link.Url,
+                }),
+            ],
+        };
+    }
+
+    /// <summary>
+    /// Maps HTTP faction requests onto domain inputs.
+    /// </summary>
+    /// <param name="factions">The request factions.</param>
+    /// <returns>The domain inputs.</returns>
+    public static IReadOnlyList<FactionInput> ToFactionInputs(IReadOnlyList<FactionRequest>? factions)
+    {
+        if (factions is null)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. factions.Select(static faction => new FactionInput
+            {
+                Name = faction.Name,
+                Subfactions = faction.Subfactions,
+                AllyGroupName = faction.AllyGroupName,
+            }),
+        ];
+    }
+
+    /// <summary>
+    /// Maps HTTP ally-group requests onto domain inputs.
+    /// </summary>
+    /// <param name="groups">The request groups.</param>
+    /// <returns>The domain inputs.</returns>
+    public static IReadOnlyList<AllyGroupInput>? ToAllyGroupInputs(IReadOnlyList<AllyGroupRequest>? groups)
+    {
+        return groups?
+            .Select(static group => new AllyGroupInput { Name = group.Name })
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Maps HTTP link requests onto domain inputs.
+    /// </summary>
+    /// <param name="links">The request links.</param>
+    /// <returns>The domain inputs.</returns>
+    public static IReadOnlyList<CampaignLinkInput>? ToLinkInputs(IReadOnlyList<LinkRequest>? links)
+    {
+        return links?
+            .Select(static link => new CampaignLinkInput { Label = link.Label, Url = link.Url })
+            .ToArray();
+    }
+}

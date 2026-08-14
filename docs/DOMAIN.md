@@ -31,6 +31,21 @@ according to that preference. Email, created/updated timestamps, time-zone prefe
 the legal name when the owner chose username display are omitted from public queries. Created
 and last-edited times are visible only to the owning user.
 
+## Campaign setup
+
+A campaign has a name (3-80 characters), optional description (500 characters), player-slot
+count (2-100), public or private visibility, optional labeled external links (at most 20
+http/https URLs), a raster map image, and at least two factions. Each faction may have
+subfactions. Optional ally groups may include two or more factions; every faction cannot belong
+to a single ally group.
+
+The creating user is always a campaign manager (Game Master). If they also participate, they
+occupy one player slot. Private campaigns store a hashed join password; the plaintext password
+is never returned. Campaign names and faction names reject the same prohibited-language terms
+as usernames. Members may read campaign metadata for campaigns they manage or play in. Only a
+manager may edit or delete a campaign. Deletion removes the campaign from every member's list.
+One map may be stored and later replaced; SVG and other active content are rejected.
+
 ## Role and actor model
 
 Administrator permissions include GM and player capabilities. Campaign GMs include player

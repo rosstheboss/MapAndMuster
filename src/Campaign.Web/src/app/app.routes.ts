@@ -45,6 +45,29 @@ export const routes: Routes = [
     loadComponent: () => import('./features/profile/profile.page').then((module) => module.ProfilePage),
   },
   {
+    path: 'campaigns',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/campaigns/campaigns.page').then((module) => module.CampaignsPage),
+  },
+  {
+    path: 'campaigns/new',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/campaign-setup/campaign-setup.page').then((module) => module.CampaignSetupPage),
+  },
+  {
+    path: 'campaigns/:id',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/campaign-detail/campaign-detail.page').then((module) => module.CampaignDetailPage),
+  },
+  {
+    path: 'campaigns/:id/edit',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/campaign-setup/campaign-setup.page').then((module) => module.CampaignSetupPage),
+  },
+  {
     path: 'users/:username',
     loadComponent: () =>
       import('./features/public-profile/public-profile.page').then((module) => module.PublicProfilePage),

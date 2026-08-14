@@ -60,6 +60,7 @@ staff review requires them.
 - Strip metadata where appropriate and re-encode raster images when feasible.
 - Reject or sanitize active HTML/SVG. Do not support arbitrary scripts or administrator code.
 - Generic seed content must not contain proprietary game text or artwork.
+- Private-campaign join passwords are hashed. They are never returned in API payloads.
 
 ## Notifications
 

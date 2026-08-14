@@ -1,8 +1,10 @@
 using Campaign.Application;
 using Campaign.Application.Ports;
+using Campaign.Infrastructure.Campaigns;
 using Campaign.Infrastructure.Email;
 using Campaign.Infrastructure.Identity;
 using Campaign.Infrastructure.Persistence;
+using Campaign.Infrastructure.Security;
 using Campaign.Infrastructure.Storage;
 using Campaign.Infrastructure.Time;
 using Microsoft.AspNetCore.Identity;
@@ -67,9 +69,13 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IUserAccountStore, UserAccountStore>();
+        services.AddScoped<ICampaignStore, CampaignStore>();
         services.AddScoped<IEmailOutbox, EmailOutbox>();
+        services.AddSingleton<ISecretHasher, Pbkdf2SecretHasher>();
         services.AddSingleton<IAvatarImageProcessor, AvatarImageProcessor>();
         services.AddSingleton<IAvatarStorage, FileAvatarStorage>();
+        services.AddSingleton<ICampaignMapProcessor, CampaignMapProcessor>();
+        services.AddSingleton<ICampaignMapStorage, FileCampaignMapStorage>();
 
         return services;
     }
