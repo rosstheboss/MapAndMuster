@@ -1,4 +1,4 @@
-import { Component, inject, signal, viewChild, type ElementRef } from '@angular/core';
+import { Component, computed, inject, signal, viewChild, type ElementRef } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, type FormArray, type FormControl, type FormGroup } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -28,7 +28,7 @@ import {
   factionsFromPreset,
   nextUnusedFactionColor,
 } from '../../core/campaigns/faction-presets';
-import { listTimeZones } from '../../core/location/location';
+import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { STRUCTURE_TYPES } from '../../core/maps/structures';
 import {
@@ -80,6 +80,18 @@ type PhaseGroup = FormGroup<{
   durationUnit: FormControl<string>;
 }>;
 
+const TOP_LEVEL_SECTION_IDS = [
+  'details',
+  'schedule',
+  'visibility',
+  'allies',
+  'factions',
+  'terrain',
+  'structures',
+  'links',
+  'map',
+] as const;
+
 @Component({
   selector: 'app-campaign-setup-page',
   imports: [ReactiveFormsModule, RouterLink, FilterableComboboxComponent, MapSymbolComponent],
@@ -130,7 +142,11 @@ export class CampaignSetupPage {
     description: ['', maxLength(500)],
     playerCount: [8, [required, minValue(2), maxValue(100)]],
     isPrivate: [false],
+    isPubliclyViewable: [true],
     joinPassword: [''],
+    city: ['', maxLength(100)],
+    region: [''],
+    country: [''],
     creatorRole: this.formBuilder.nonNullable.control<'manager' | 'both'>('both'),
     timeZoneId: ['UTC', required],
     startsAtLocal: ['', required],
@@ -154,6 +170,11 @@ export class CampaignSetupPage {
   protected readonly isPrivate = toSignal(this.form.controls.isPrivate.valueChanges, {
     initialValue: this.form.controls.isPrivate.value,
   });
+  protected readonly countries = listCountries();
+  protected readonly countryValue = toSignal(this.form.controls.country.valueChanges, {
+    initialValue: this.form.controls.country.value,
+  });
+  protected readonly regionOptions = computed(() => regionsForCountry(this.countryValue()));
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
@@ -237,6 +258,14 @@ export class CampaignSetupPage {
 
   protected toggleSection(id: string): void {
     this.sectionOpen.update((current) => ({ ...current, [id]: current[id] === false }));
+  }
+
+  protected expandAllSections(): void {
+    this.setAllSections(true);
+  }
+
+  protected collapseAllSections(): void {
+    this.setAllSections(false);
   }
 
   protected allyMembers(groupName: string): string {
@@ -675,6 +704,10 @@ export class CampaignSetupPage {
         description: campaign.description ?? '',
         playerCount: campaign.playerSlotCount,
         isPrivate: campaign.isPrivate,
+        isPubliclyViewable: campaign.isPubliclyViewable,
+        city: campaign.city ?? '',
+        region: campaign.region ?? '',
+        country: campaign.country ?? '',
         creatorRole: campaign.creatorIsParticipant ? 'both' : 'manager',
         timeZoneId: campaign.timeZoneId,
         startsAtLocal: campaign.startsAtLocal,
@@ -898,8 +931,12 @@ export class CampaignSetupPage {
       description: value.description.trim() || null,
       playerCount: Number(value.playerCount),
       isPrivate: value.isPrivate,
+      isPubliclyViewable: value.isPubliclyViewable,
       joinPassword: value.isPrivate && value.joinPassword.trim().length > 0 ? value.joinPassword : null,
       creatorIsParticipant: value.creatorRole === 'both',
+      city: value.city.trim() || null,
+      region: value.region.trim() || null,
+      country: value.country.trim() || null,
       factions,
       allyGroups,
       links,
@@ -940,6 +977,7 @@ export class CampaignSetupPage {
       name: 'Campaign name',
       description: 'Description',
       playerCount: 'Number of players',
+      city: 'City',
       startsAtLocal: 'Start date and time',
       timeZoneId: 'Campaign time zone',
       roundCount: 'Number of rounds',
@@ -949,6 +987,7 @@ export class CampaignSetupPage {
       name: 'details',
       description: 'details',
       playerCount: 'details',
+      city: 'details',
       startsAtLocal: 'schedule',
       timeZoneId: 'schedule',
       roundCount: 'schedule',
@@ -960,6 +999,19 @@ export class CampaignSetupPage {
         failures.push(message);
         sections.add(labelSections[name] ?? 'details');
       }
+    }
+
+    const city = this.form.controls.city.value.trim();
+    const region = this.form.controls.region.value.trim();
+    const country = this.form.controls.country.value.trim();
+    if (city && !region) {
+      failures.push('State or province is required when a city is provided.');
+      sections.add('details');
+    }
+
+    if (region && !country) {
+      failures.push('Country is required when a state or province is provided.');
+      sections.add('details');
     }
 
     if (this.form.controls.isPrivate.value) {
@@ -1197,6 +1249,24 @@ export class CampaignSetupPage {
     }
 
     return null;
+  }
+
+  private setAllSections(open: boolean): void {
+    this.sectionOpen.set(Object.fromEntries(this.allSectionIds().map((id) => [id, open])));
+  }
+
+  private allSectionIds(): string[] {
+    const ids: string[] = [...TOP_LEVEL_SECTION_IDS];
+    this.factions.controls.forEach((_, index) => {
+      ids.push(`faction-item-${index}`, `faction-sub-${index}`);
+    });
+    this.terrainTypes.controls.forEach((_, index) => {
+      ids.push(`terrain-item-${index}`, `terrain-missions-${index}`);
+    });
+    this.structureTypes.controls.forEach((_, index) => {
+      ids.push(`structure-item-${index}`, `structure-missions-${index}`);
+    });
+    return ids;
   }
 
   private expandSections(ids: readonly string[]): void {

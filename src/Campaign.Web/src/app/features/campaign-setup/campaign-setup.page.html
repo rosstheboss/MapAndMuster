@@ -1,13 +1,25 @@
 <section class="page">
-  <div class="page-header">
-    <h1>{{ isEdit() ? 'Edit campaign' : 'Create campaign' }}</h1>
-    <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+  <div class="setup-toolbar">
+    <div class="page-header">
+      <h1>{{ isEdit() ? 'Edit campaign' : 'Create campaign' }}</h1>
+    </div>
+    <div class="setup-toolbar-actions">
+      <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+      @if (isEdit() && campaignId(); as id) {
+        <a class="button-secondary" [routerLink]="['/campaigns', id, 'map']">Edit map</a>
+      }
+      <button type="button" class="button-secondary" (click)="expandAllSections()">Expand All</button>
+      <button type="button" class="button-secondary" (click)="collapseAllSections()">Collapse All</button>
+      <button class="button" type="submit" form="campaign-setup-form" [disabled]="saving() || loading()">
+        {{ isEdit() ? 'Save campaign' : 'Create campaign' }}
+      </button>
+    </div>
   </div>
 
   @if (loading()) {
     <p>Loading campaign…</p>
   } @else {
-    <form class="panel stack" [formGroup]="form" (ngSubmit)="save()" novalidate>
+    <form id="campaign-setup-form" class="panel stack" [formGroup]="form" (ngSubmit)="save()" novalidate>
       @if (errorMessages().length > 0 || successMessage()) {
         <div
           #formAlert
@@ -62,6 +74,22 @@
               aria-required="true"
             />
             <p class="muted">Between 2 and 100. A participating manager occupies one slot.</p>
+          </div>
+
+          <p class="muted">
+            Location is optional. A city requires a state or province, and a state or province requires a country.
+          </p>
+          <div class="field" [class.invalid]="isInvalid('country')">
+            <label for="country">Country (optional)</label>
+            <app-filterable-combobox inputId="country" formControlName="country" [options]="countries" />
+          </div>
+          <div class="field" [class.invalid]="isInvalid('region')">
+            <label for="region">State or province (optional)</label>
+            <app-filterable-combobox inputId="region" formControlName="region" [options]="regionOptions()" />
+          </div>
+          <div class="field" [class.invalid]="isInvalid('city')">
+            <label for="city">City (optional)</label>
+            <input id="city" formControlName="city" maxlength="100" />
           </div>
 
           <fieldset class="field">
@@ -230,6 +258,14 @@
           </button>
         </legend>
         <div [hidden]="!isOpen('visibility')">
+          <label class="choice-row">
+            <input type="checkbox" formControlName="isPubliclyViewable" />
+            Publicly viewable
+          </label>
+          <p class="muted">
+            When off, only players, managers, and administrators can open this campaign after it starts. Upcoming
+            campaigns still appear on All Campaigns so people can join.
+          </p>
           <label class="choice-row">
             <input type="checkbox" formControlName="isPrivate" />
             Private campaign (requires a password to join)
@@ -854,12 +890,6 @@
           </div>
         </div>
       </fieldset>
-
-      <div class="actions">
-        <button class="button" type="submit" [disabled]="saving()">
-          {{ isEdit() ? 'Save campaign' : 'Create campaign' }}
-        </button>
-      </div>
     </form>
   }
 </section>

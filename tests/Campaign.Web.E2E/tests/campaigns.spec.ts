@@ -38,7 +38,12 @@ test('signed-in players can open their campaigns and start setup', async ({ page
   await expect(page.getByRole('link', { name: 'Create campaign' })).toBeVisible();
   await page.getByRole('link', { name: 'Create campaign' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Create campaign' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back to campaigns' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Expand All' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Collapse All' })).toBeVisible();
   await expect(page.getByLabel('Campaign name')).toBeVisible();
+  await expect(page.getByLabel('City (optional)')).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Publicly viewable' })).toBeChecked();
   await expect(page.getByLabel('Start date and time')).toBeVisible();
   await expect(page.getByLabel('Number of rounds')).toBeVisible();
   await expect(page.getByLabel('Faction preset')).toBeVisible();
@@ -55,6 +60,19 @@ test('signed-in players can open their campaigns and start setup', async ({ page
   await page.getByRole('button', { name: 'Create campaign' }).click();
   await expect(page.getByRole('alert')).toContainText('Campaign name is not filled in.');
   await expect(page.getByRole('alert')).toContainText('Start date and time is not filled in.');
+});
+
+test('signed-in players can browse all campaigns', async ({ page }) => {
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profile) });
+  });
+  await page.route('**/api/campaigns/all', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+
+  await page.goto('/campaigns/all');
+  await expect(page.getByRole('heading', { level: 1, name: 'All campaigns' })).toBeVisible();
+  await expect(page.getByText('No campaigns are available to join or view right now.')).toBeVisible();
 });
 
 test('managers can open the map editor after setup', async ({ page }) => {
@@ -86,7 +104,11 @@ test('managers can open the map editor after setup', async ({ page }) => {
         playerSlotCount: 8,
         occupiedPlayerSlots: 1,
         isPrivate: false,
+        isPubliclyViewable: true,
         creatorIsParticipant: true,
+        city: null,
+        region: null,
+        country: null,
         hasMap: true,
         canManage: true,
         isParticipant: true,

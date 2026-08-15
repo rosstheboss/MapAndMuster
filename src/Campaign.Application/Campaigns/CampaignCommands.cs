@@ -22,11 +22,23 @@ public sealed class CreateCampaignCommand
     /// <summary>Gets whether a join password is required.</summary>
     public required bool IsPrivate { get; init; }
 
+    /// <summary>Gets whether non-members may view the campaign.</summary>
+    public required bool IsPubliclyViewable { get; init; }
+
     /// <summary>Gets the join password for a private campaign.</summary>
     public string? JoinPassword { get; init; }
 
     /// <summary>Gets whether the creator also occupies a player slot.</summary>
     public required bool CreatorIsParticipant { get; init; }
+
+    /// <summary>Gets the optional city.</summary>
+    public string? City { get; init; }
+
+    /// <summary>Gets the optional state, province, or region.</summary>
+    public string? Region { get; init; }
+
+    /// <summary>Gets the optional country.</summary>
+    public string? Country { get; init; }
 
     /// <summary>Gets the factions.</summary>
     public required IReadOnlyList<FactionInput> Factions { get; init; }
@@ -73,11 +85,23 @@ public sealed class UpdateCampaignCommand
     /// <summary>Gets whether a join password is required.</summary>
     public required bool IsPrivate { get; init; }
 
+    /// <summary>Gets whether non-members may view the campaign.</summary>
+    public required bool IsPubliclyViewable { get; init; }
+
     /// <summary>Gets the replacement join password, or null to keep the current hash.</summary>
     public string? JoinPassword { get; init; }
 
     /// <summary>Gets whether the creator also occupies a player slot.</summary>
     public required bool CreatorIsParticipant { get; init; }
+
+    /// <summary>Gets the optional city.</summary>
+    public string? City { get; init; }
+
+    /// <summary>Gets the optional state, province, or region.</summary>
+    public string? Region { get; init; }
+
+    /// <summary>Gets the optional country.</summary>
+    public string? Country { get; init; }
 
     /// <summary>Gets the factions.</summary>
     public required IReadOnlyList<FactionInput> Factions { get; init; }
@@ -120,4 +144,34 @@ public sealed class UploadCampaignMapCommand
 
     /// <summary>Gets the declared length, if known.</summary>
     public long? Length { get; init; }
+}
+
+/// <summary>
+/// Command to join a campaign as a player.
+/// </summary>
+public sealed class JoinCampaignCommand
+{
+    /// <summary>Gets the authenticated user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is a system administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the join password for a private campaign.</summary>
+    public string? JoinPassword { get; init; }
+}
+
+/// <summary>
+/// Command to leave a campaign the caller plays in but does not manage.
+/// </summary>
+public sealed class LeaveCampaignCommand
+{
+    /// <summary>Gets the authenticated user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
 }

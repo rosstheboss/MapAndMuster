@@ -102,6 +102,109 @@ public sealed class GeographicLocation
     }
 
     /// <summary>
+    /// Validates an optional location. City requires a state or province, and a state or province requires a country.
+    /// </summary>
+    /// <param name="city">The optional city.</param>
+    /// <param name="region">The optional state, province, or region.</param>
+    /// <param name="country">The optional country.</param>
+    /// <returns>The field errors, or an empty list.</returns>
+    public static IReadOnlyList<DomainError> CollectOptionalErrors(string? city, string? region, string? country)
+    {
+        var errors = new List<DomainError>(3);
+        var hasCity = !string.IsNullOrWhiteSpace(city);
+        var hasRegion = !string.IsNullOrWhiteSpace(region);
+        var hasCountry = !string.IsNullOrWhiteSpace(country);
+        if (!hasCity && !hasRegion && !hasCountry)
+        {
+            return errors;
+        }
+
+        if (hasCity && !TryValidateRequired(city, "city", "City", out _, out var cityError))
+        {
+            errors.Add(cityError);
+        }
+
+        if (hasRegion && !TryValidateRequired(region, "region", "State or province", out _, out var regionError))
+        {
+            errors.Add(regionError);
+        }
+
+        if (hasCountry && !TryValidateRequired(country, "country", "Country", out _, out var countryError))
+        {
+            errors.Add(countryError);
+        }
+
+        if (hasCity && !hasRegion)
+        {
+            errors.Add(new DomainError(
+                "region.invalid",
+                "State or province is required when a city is provided.",
+                "region"));
+        }
+
+        if (hasRegion && !hasCountry)
+        {
+            errors.Add(new DomainError(
+                "country.invalid",
+                "Country is required when a state or province is provided.",
+                "country"));
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Normalizes an optional location after validating hierarchy and field shape.
+    /// </summary>
+    /// <param name="city">The optional city.</param>
+    /// <param name="region">The optional state, province, or region.</param>
+    /// <param name="country">The optional country.</param>
+    /// <param name="normalizedCity">The trimmed city, or <see langword="null"/>.</param>
+    /// <param name="normalizedRegion">The trimmed region, or <see langword="null"/>.</param>
+    /// <param name="normalizedCountry">The trimmed country, or <see langword="null"/>.</param>
+    /// <param name="errors">The field errors when validation fails.</param>
+    /// <returns><see langword="true"/> when the optional location is valid.</returns>
+    public static bool TryNormalizeOptional(
+        string? city,
+        string? region,
+        string? country,
+        out string? normalizedCity,
+        out string? normalizedRegion,
+        out string? normalizedCountry,
+        out IReadOnlyList<DomainError> errors)
+    {
+        errors = CollectOptionalErrors(city, region, country);
+        if (errors.Count > 0)
+        {
+            normalizedCity = null;
+            normalizedRegion = null;
+            normalizedCountry = null;
+            return false;
+        }
+
+        normalizedCity = NormalizeOptionalPart(city);
+        normalizedRegion = NormalizeOptionalPart(region);
+        normalizedCountry = NormalizeOptionalPart(country);
+        return true;
+    }
+
+    /// <summary>
+    /// Formats the filled location parts for display.
+    /// </summary>
+    /// <param name="city">The optional city.</param>
+    /// <param name="region">The optional state, province, or region.</param>
+    /// <param name="country">The optional country.</param>
+    /// <returns>A comma-separated location string, or <see langword="null"/> when empty.</returns>
+    public static string? FormatOptional(string? city, string? region, string? country)
+    {
+        var parts = new[] { city, region, country }
+            .Where(static part => !string.IsNullOrWhiteSpace(part))
+            .Select(static part => CollapseWhitespace(part!.Trim()))
+            .ToArray();
+        return parts.Length == 0 ? null : string.Join(", ", parts);
+    }
+
+    /// <summary>
     /// Formats the location for display.
     /// </summary>
     /// <returns>A comma-separated location string.</returns>
@@ -146,6 +249,11 @@ public sealed class GeographicLocation
         value = trimmed;
         error = null;
         return true;
+    }
+
+    private static string? NormalizeOptionalPart(string? raw)
+    {
+        return string.IsNullOrWhiteSpace(raw) ? null : CollapseWhitespace(raw.Trim());
     }
 
     private static string CollapseWhitespace(string value)

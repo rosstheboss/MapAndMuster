@@ -67,4 +67,16 @@ public static class ErrorCodes
 
     /// <summary>The caller is a member but lacks permission for the campaign command.</summary>
     public const string CampaignForbidden = "campaign.forbidden";
+
+    /// <summary>The campaign is not accepting new players.</summary>
+    public const string CampaignJoinClosed = "campaign.join.closed";
+
+    /// <summary>Every player slot is already occupied.</summary>
+    public const string CampaignJoinFull = "campaign.join.full";
+
+    /// <summary>The private-campaign join password was missing or incorrect.</summary>
+    public const string CampaignJoinPasswordInvalid = "campaign.join.password.invalid";
+
+    /// <summary>The caller is already a member of the campaign.</summary>
+    public const string CampaignAlreadyMember = "campaign.join.already_member";
 }

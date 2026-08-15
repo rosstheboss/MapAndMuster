@@ -36,4 +36,50 @@ public sealed class GeographicLocationTests
         Assert.NotNull(error);
         Assert.Equal(expectedCode, error.Code);
     }
+
+    [Fact]
+    public void OptionalLocationAllowsCountryOnly()
+    {
+        Assert.True(GeographicLocation.TryNormalizeOptional(
+            null,
+            null,
+            "Canada",
+            out var city,
+            out var region,
+            out var country,
+            out var errors));
+        Assert.Empty(errors);
+        Assert.Null(city);
+        Assert.Null(region);
+        Assert.Equal("Canada", country);
+        Assert.Equal("Canada", GeographicLocation.FormatOptional(null, null, "Canada"));
+    }
+
+    [Fact]
+    public void OptionalLocationRequiresStateWhenCityIsProvided()
+    {
+        Assert.False(GeographicLocation.TryNormalizeOptional(
+            "Halifax",
+            null,
+            "Canada",
+            out _,
+            out _,
+            out _,
+            out var errors));
+        Assert.Contains(errors, error => error.Code == "region.invalid");
+    }
+
+    [Fact]
+    public void OptionalLocationRequiresCountryWhenStateIsProvided()
+    {
+        Assert.False(GeographicLocation.TryNormalizeOptional(
+            null,
+            "Nova Scotia",
+            null,
+            out _,
+            out _,
+            out _,
+            out var errors));
+        Assert.Contains(errors, error => error.Code == "country.invalid");
+    }
 }

@@ -33,6 +33,20 @@ public interface ICampaignStore
     Task<IReadOnlyList<StoredCampaign>> ListForUserAsync(Guid userId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Lists campaigns a user may discover on the All Campaigns page.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <param name="utcNow">The current UTC instant used to classify upcoming campaigns.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The discoverable campaigns.</returns>
+    Task<IReadOnlyList<StoredCampaign>> ListDiscoverableAsync(
+        Guid userId,
+        bool isAdministrator,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Replaces campaign setup when the revision matches.
     /// </summary>
     /// <param name="campaign">The campaign to persist.</param>

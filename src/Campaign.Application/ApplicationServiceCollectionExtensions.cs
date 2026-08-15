@@ -29,7 +29,10 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<CreateCampaignHandler>();
         services.AddScoped<UpdateCampaignHandler>();
         services.AddScoped<ListCampaignsHandler>();
+        services.AddScoped<ListDiscoverableCampaignsHandler>();
         services.AddScoped<GetCampaignHandler>();
+        services.AddScoped<JoinCampaignHandler>();
+        services.AddScoped<LeaveCampaignHandler>();
         services.AddScoped<DeleteCampaignHandler>();
         services.AddScoped<UploadCampaignMapHandler>();
         services.AddScoped<GetCampaignMapHandler>();

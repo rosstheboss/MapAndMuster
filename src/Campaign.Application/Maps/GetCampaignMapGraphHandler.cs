@@ -28,15 +28,17 @@ public sealed class GetCampaignMapGraphHandler
     /// <param name="campaignId">The campaign identifier.</param>
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <returns>The map graph.</returns>
     public async Task<OperationResult<CampaignMapGraphDetail>> HandleAsync(
         Guid campaignId,
         Guid userId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isAdministrator = false)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
         var membership = campaign is null ? null : CampaignMapper.MembershipFor(campaign, userId);
-        if (campaign is null || membership is null)
+        if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
             return OperationResults.Failure<CampaignMapGraphDetail>(
                 ErrorCodes.CampaignNotFound,
@@ -60,6 +62,6 @@ public sealed class GetCampaignMapGraphHandler
         }
 
         return OperationResults.Success(
-            MapGraphMapper.ToDetail(campaign.Id, campaign.Revision, membership.IsGameMaster, graph));
+            MapGraphMapper.ToDetail(campaign.Id, campaign.Revision, membership?.IsGameMaster == true, graph));
     }
 }

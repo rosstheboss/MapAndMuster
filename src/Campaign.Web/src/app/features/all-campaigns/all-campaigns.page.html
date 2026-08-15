@@ -1,7 +1,6 @@
 <section class="page">
   <div class="page-header">
-    <h1>Your campaigns</h1>
-    <a class="button" routerLink="/campaigns/new">Create campaign</a>
+    <h1>All campaigns</h1>
   </div>
 
   @if (error()) {
@@ -12,8 +11,11 @@
     <p>Loading campaigns…</p>
   } @else if (campaigns().length === 0) {
     <div class="panel stack">
-      <p>You are not managing or participating in any campaigns yet.</p>
-      <p class="muted">Create a campaign to set factions, player slots, and a map.</p>
+      <p>No campaigns are available to join or view right now.</p>
+      <p class="muted">
+        Upcoming campaigns appear here so you can join. Active and completed campaigns appear when they are publicly
+        viewable.
+      </p>
     </div>
   } @else {
     <app-campaign-list [campaigns]="campaigns()" (membershipChanged)="reload()" />

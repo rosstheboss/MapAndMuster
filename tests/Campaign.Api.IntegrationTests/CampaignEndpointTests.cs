@@ -59,7 +59,8 @@ public sealed class CampaignEndpointTests
         Assert.Equal(6, created.StructureTypes.Count);
         Assert.Equal("#2563EB", created.Factions[0].Color);
         Assert.NotEqual(created.Factions[0].Color, created.Factions[1].Color);
-        Assert.False(created.Factions[0].RequiresSubfaction);
+        Assert.True(created.IsPubliclyViewable);
+        Assert.Null(created.City);
 
         var list = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
         Assert.NotNull(list);
@@ -102,7 +103,7 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
-    public async Task NonMembersCannotReadOrChangeACampaign()
+    public async Task NonMembersCanViewPublicCampaignsButCannotChangeThem()
     {
         using var owner = _factory.CreateClient();
         var ownerName = UniqueName("owner");
@@ -116,7 +117,7 @@ public sealed class CampaignEndpointTests
         await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
 
         using var get = await stranger.GetAsync($"/api/campaigns/{created.Id}");
-        Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, get.StatusCode);
 
         using var update = await stranger.PutAsJsonAsync(
             $"/api/campaigns/{created.Id}",
@@ -281,12 +282,74 @@ public sealed class CampaignEndpointTests
         await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
 
         using var get = await stranger.GetAsync($"/api/campaigns/{created.Id}/map/graph");
-        Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, get.StatusCode);
 
         using var save = await stranger.PutAsJsonAsync(
             $"/api/campaigns/{created.Id}/map/graph",
             new SaveMapGraphRequest { Revision = created.Revision, Territories = [] });
         Assert.Equal(HttpStatusCode.NotFound, save.StatusCode);
+    }
+
+    [Fact]
+    public async Task PlayersCanJoinPublicUpcomingCampaignsAndLeave()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("host");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Open War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var player = _factory.CreateClient();
+        var playerName = UniqueName("joiner");
+        await RegisterConfirmAndLoginAsync(player, $"{playerName}@example.test", playerName);
+
+        var all = await player.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns/all", JsonOptions);
+        Assert.NotNull(all);
+        var listed = Assert.Single(all, item => item.Id == created.Id);
+        Assert.True(listed.CanJoin);
+        Assert.True(listed.CanView);
+        Assert.False(listed.CanLeave);
+
+        using var joinedResponse = await player.PostAsJsonAsync($"/api/campaigns/{created.Id}/join", new JoinCampaignRequest());
+        Assert.Equal(HttpStatusCode.OK, joinedResponse.StatusCode);
+        var joined = await joinedResponse.Content.ReadFromJsonAsync<CampaignListItemResponse>(JsonOptions);
+        Assert.NotNull(joined);
+        Assert.True(joined.IsParticipant);
+        Assert.False(joined.CanJoin);
+        Assert.True(joined.CanLeave);
+        Assert.Equal(2, joined.OccupiedPlayerSlots);
+
+        using var left = await player.PostAsync($"/api/campaigns/{created.Id}/leave", null);
+        Assert.Equal(HttpStatusCode.NoContent, left.StatusCode);
+
+        using var managerLeave = await owner.PostAsync($"/api/campaigns/{created.Id}/leave", null);
+        Assert.Equal(HttpStatusCode.Forbidden, managerLeave.StatusCode);
+    }
+
+    [Fact]
+    public async Task HiddenCampaignsCanBeJoinedButNotViewedByStrangers()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("hidden");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync(
+            "/api/campaigns",
+            ValidCampaignBody("Hidden War", isPubliclyViewable: false));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        Assert.False(created.IsPubliclyViewable);
+
+        using var stranger = _factory.CreateClient();
+        var strangerName = UniqueName("seeker");
+        await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
+
+        var all = await stranger.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns/all", JsonOptions);
+        Assert.NotNull(all);
+        Assert.Contains(all, item => item.Id == created.Id && item.CanJoin);
+
+        using var get = await stranger.GetAsync($"/api/campaigns/{created.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
     }
 
     [Fact]
@@ -358,7 +421,8 @@ public sealed class CampaignEndpointTests
         int playerCount = 8,
         bool creatorIsParticipant = true,
         bool isPrivate = false,
-        string? joinPassword = null)
+        string? joinPassword = null,
+        bool isPubliclyViewable = true)
     {
         return new SaveCampaignRequest
         {
@@ -366,6 +430,7 @@ public sealed class CampaignEndpointTests
             Description = "A contested frontier.",
             PlayerCount = playerCount,
             IsPrivate = isPrivate,
+            IsPubliclyViewable = isPubliclyViewable,
             JoinPassword = joinPassword,
             CreatorIsParticipant = creatorIsParticipant,
             Factions =

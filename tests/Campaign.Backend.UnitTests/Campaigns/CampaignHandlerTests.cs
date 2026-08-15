@@ -46,6 +46,7 @@ public sealed class CampaignHandlerTests
             Name = "x",
             PlayerCount = 8,
             IsPrivate = false,
+            IsPubliclyViewable = true,
             CreatorIsParticipant = true,
             Factions = command.Factions,
             Schedule = ValidSchedule(),
@@ -70,6 +71,95 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task GetReturnsPubliclyViewableCampaignsToNonMembers()
+    {
+        var campaign = StoredCampaignFor(UserId);
+        campaign = WithPublicView(campaign, isPubliclyViewable: true);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new GetCampaignHandler(store, new FakeClock());
+
+        var result = await handler.HandleAsync(store.Existing.Id, OtherUserId, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Equal("Border War", result.Value.Name);
+        Assert.False(result.Value.CanManage);
+        Assert.False(result.Value.IsParticipant);
+        Assert.True(result.Value.IsPubliclyViewable);
+    }
+
+    [Fact]
+    public async Task JoinAddsPlayerWhenUpcomingAndPublic()
+    {
+        var campaign = WithPublicView(StoredCampaignFor(UserId), isPubliclyViewable: true);
+        campaign = WithPrivacy(campaign, isPrivate: false, joinPasswordHash: null);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new JoinCampaignHandler(store, new FakeClock(), new FakeSecretHasher());
+
+        var result = await handler.HandleAsync(
+            new JoinCampaignCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.True(result.Value.IsParticipant);
+        Assert.False(result.Value.CanManage);
+        Assert.Equal(2, result.Value.OccupiedPlayerSlots);
+        Assert.Contains(store.Updated!.Memberships, member => member.UserId == OtherUserId && member.IsPlayer);
+    }
+
+    [Fact]
+    public async Task JoinRejectsWrongPrivatePassword()
+    {
+        var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
+        var handler = new JoinCampaignHandler(store, new FakeClock(), new FakeSecretHasher());
+
+        var result = await handler.HandleAsync(
+            new JoinCampaignCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = false,
+                CampaignId = store.Existing.Id,
+                JoinPassword = "wrong",
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignJoinPasswordInvalid, result.ErrorCode);
+        Assert.Null(store.Updated);
+    }
+
+    [Fact]
+    public async Task LeaveRemovesNonManagerPlayer()
+    {
+        var campaign = StoredCampaignFor(UserId);
+        campaign = WithMemberships(campaign,
+        [
+            new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
+            new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
+        ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new LeaveCampaignHandler(store, new FakeClock());
+
+        var forbidden = await handler.HandleAsync(
+            new LeaveCampaignCommand { UserId = UserId, CampaignId = campaign.Id },
+            CancellationToken.None);
+        Assert.False(forbidden.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignForbidden, forbidden.ErrorCode);
+
+        var left = await handler.HandleAsync(
+            new LeaveCampaignCommand { UserId = OtherUserId, CampaignId = campaign.Id },
+            CancellationToken.None);
+        Assert.True(left.IsSuccess);
+        Assert.DoesNotContain(store.Updated!.Memberships, member => member.UserId == OtherUserId);
+    }
+
+    [Fact]
     public async Task UpdateRejectsParticipantsWhoAreNotManagers()
     {
         var campaign = StoredCampaignFor(UserId);
@@ -90,6 +180,7 @@ public sealed class CampaignHandlerTests
                 Name = "Renamed",
                 PlayerCount = 8,
                 IsPrivate = false,
+                IsPubliclyViewable = true,
                 CreatorIsParticipant = false,
                 Factions =
                 [
@@ -151,6 +242,7 @@ public sealed class CampaignHandlerTests
                 Description = campaign.Description,
                 PlayerCount = campaign.PlayerSlotCount,
                 IsPrivate = false,
+                IsPubliclyViewable = true,
                 CreatorIsParticipant = true,
                 Factions =
                 [
@@ -217,6 +309,7 @@ public sealed class CampaignHandlerTests
                 Description = campaign.Description,
                 PlayerCount = campaign.PlayerSlotCount,
                 IsPrivate = false,
+                IsPubliclyViewable = true,
                 CreatorIsParticipant = true,
                 Factions =
                 [
@@ -293,6 +386,7 @@ public sealed class CampaignHandlerTests
             Description = "A contested frontier.",
             PlayerCount = 8,
             IsPrivate = isPrivate,
+            IsPubliclyViewable = true,
             JoinPassword = joinPassword,
             CreatorIsParticipant = true,
             Factions =
@@ -320,6 +414,7 @@ public sealed class CampaignHandlerTests
             Description = "A contested frontier.",
             PlayerSlotCount = 8,
             IsPrivate = true,
+            IsPubliclyViewable = false,
             JoinPasswordHash = "hash:join-secret",
             CreatorIsParticipant = true,
             MapStorageKey = "maps/old.png",
@@ -383,40 +478,12 @@ public sealed class CampaignHandlerTests
         };
     }
 
-    private static StoredCampaign WithMemberships(StoredCampaign campaign, IReadOnlyList<StoredCampaignMembership> memberships)
+    private static StoredCampaign WithPublicView(StoredCampaign campaign, bool isPubliclyViewable)
     {
-        return new StoredCampaign
-        {
-            Id = campaign.Id,
-            Name = campaign.Name,
-            Description = campaign.Description,
-            PlayerSlotCount = campaign.PlayerSlotCount,
-            IsPrivate = campaign.IsPrivate,
-            JoinPasswordHash = campaign.JoinPasswordHash,
-            CreatorIsParticipant = campaign.CreatorIsParticipant,
-            MapStorageKey = campaign.MapStorageKey,
-            Revision = campaign.Revision,
-            CreatedUtc = campaign.CreatedUtc,
-            UpdatedUtc = campaign.UpdatedUtc,
-            CreatedByUserId = campaign.CreatedByUserId,
-            Memberships = memberships,
-            Factions = campaign.Factions,
-            AllyGroups = campaign.AllyGroups,
-            Links = campaign.Links,
-            TimeZoneId = campaign.TimeZoneId,
-            StartsUtc = campaign.StartsUtc,
-            EndsUtc = campaign.EndsUtc,
-            RoundCount = campaign.RoundCount,
-            RoundLengthAmount = campaign.RoundLengthAmount,
-            RoundLengthUnit = campaign.RoundLengthUnit,
-            Phases = campaign.Phases,
-            MapGraph = campaign.MapGraph,
-            TerrainTypes = campaign.TerrainTypes,
-            StructureTypes = campaign.StructureTypes,
-        };
+        return WithCopied(campaign, isPubliclyViewable: isPubliclyViewable);
     }
 
-    private static StoredCampaign WithStructures(StoredCampaign campaign, IReadOnlyList<StoredStructureType> structures)
+    private static StoredCampaign WithPrivacy(StoredCampaign campaign, bool isPrivate, string? joinPasswordHash)
     {
         return new StoredCampaign
         {
@@ -424,9 +491,13 @@ public sealed class CampaignHandlerTests
             Name = campaign.Name,
             Description = campaign.Description,
             PlayerSlotCount = campaign.PlayerSlotCount,
-            IsPrivate = campaign.IsPrivate,
-            JoinPasswordHash = campaign.JoinPasswordHash,
+            IsPrivate = isPrivate,
+            IsPubliclyViewable = campaign.IsPubliclyViewable,
+            JoinPasswordHash = joinPasswordHash,
             CreatorIsParticipant = campaign.CreatorIsParticipant,
+            City = campaign.City,
+            Region = campaign.Region,
+            Country = campaign.Country,
             MapStorageKey = campaign.MapStorageKey,
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
@@ -445,8 +516,61 @@ public sealed class CampaignHandlerTests
             Phases = campaign.Phases,
             MapGraph = campaign.MapGraph,
             TerrainTypes = campaign.TerrainTypes,
-            StructureTypes = structures,
+            StructureTypes = campaign.StructureTypes,
         };
+    }
+
+    private static StoredCampaign WithCopied(
+        StoredCampaign campaign,
+        IReadOnlyList<StoredCampaignMembership>? memberships = null,
+        IReadOnlyList<StoredStructureType>? structures = null,
+        bool? isPubliclyViewable = null,
+        bool? isPrivate = null,
+        string? joinPasswordHash = null)
+    {
+        return new StoredCampaign
+        {
+            Id = campaign.Id,
+            Name = campaign.Name,
+            Description = campaign.Description,
+            PlayerSlotCount = campaign.PlayerSlotCount,
+            IsPrivate = isPrivate ?? campaign.IsPrivate,
+            IsPubliclyViewable = isPubliclyViewable ?? campaign.IsPubliclyViewable,
+            JoinPasswordHash = joinPasswordHash ?? campaign.JoinPasswordHash,
+            CreatorIsParticipant = campaign.CreatorIsParticipant,
+            City = campaign.City,
+            Region = campaign.Region,
+            Country = campaign.Country,
+            MapStorageKey = campaign.MapStorageKey,
+            Revision = campaign.Revision,
+            CreatedUtc = campaign.CreatedUtc,
+            UpdatedUtc = campaign.UpdatedUtc,
+            CreatedByUserId = campaign.CreatedByUserId,
+            Memberships = memberships ?? campaign.Memberships,
+            Factions = campaign.Factions,
+            AllyGroups = campaign.AllyGroups,
+            Links = campaign.Links,
+            TimeZoneId = campaign.TimeZoneId,
+            StartsUtc = campaign.StartsUtc,
+            EndsUtc = campaign.EndsUtc,
+            RoundCount = campaign.RoundCount,
+            RoundLengthAmount = campaign.RoundLengthAmount,
+            RoundLengthUnit = campaign.RoundLengthUnit,
+            Phases = campaign.Phases,
+            MapGraph = campaign.MapGraph,
+            TerrainTypes = campaign.TerrainTypes,
+            StructureTypes = structures ?? campaign.StructureTypes,
+        };
+    }
+
+    private static StoredCampaign WithMemberships(StoredCampaign campaign, IReadOnlyList<StoredCampaignMembership> memberships)
+    {
+        return WithCopied(campaign, memberships: memberships);
+    }
+
+    private static StoredCampaign WithStructures(StoredCampaign campaign, IReadOnlyList<StoredStructureType> structures)
+    {
+        return WithCopied(campaign, structures: structures);
     }
 
     private static object? GetHashProperty(CampaignDetail detail)
@@ -500,12 +624,22 @@ public sealed class CampaignHandlerTests
             return Task.FromResult<IReadOnlyList<StoredCampaign>>(ForUser);
         }
 
+        public Task<IReadOnlyList<StoredCampaign>> ListDiscoverableAsync(
+            Guid userId,
+            bool isAdministrator,
+            DateTimeOffset utcNow,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<StoredCampaign>>(ForUser);
+        }
+
         public Task<UpdateStoredCampaignOutcome> UpdateAsync(
             StoredCampaign campaign,
             int expectedRevision,
             CancellationToken cancellationToken)
         {
             Updated = campaign;
+            Existing = campaign;
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = campaign });
         }
 
@@ -549,8 +683,12 @@ public sealed class CampaignHandlerTests
                 Description = Existing.Description,
                 PlayerSlotCount = Existing.PlayerSlotCount,
                 IsPrivate = Existing.IsPrivate,
+                IsPubliclyViewable = Existing.IsPubliclyViewable,
                 JoinPasswordHash = Existing.JoinPasswordHash,
                 CreatorIsParticipant = Existing.CreatorIsParticipant,
+                City = Existing.City,
+                Region = Existing.Region,
+                Country = Existing.Country,
                 MapStorageKey = Existing.MapStorageKey,
                 Revision = expectedRevision + 1,
                 CreatedUtc = Existing.CreatedUtc,

@@ -99,6 +99,10 @@ public static class CampaignSetupRules
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
+    /// <param name="isPubliclyViewable">Whether non-members may view the campaign after it starts.</param>
+    /// <param name="city">The optional city.</param>
+    /// <param name="region">The optional state, province, or region.</param>
+    /// <param name="country">The optional country.</param>
     /// <returns><see langword="true"/> when the setup is valid.</returns>
     public static bool TryCreate(
         string? name,
@@ -115,7 +119,11 @@ public static class CampaignSetupRules
         CampaignScheduleInput? schedule,
         [NotNullWhen(true)] out CampaignSetup? setup,
         out string? validatedJoinPassword,
-        out IReadOnlyList<DomainError> errors)
+        out IReadOnlyList<DomainError> errors,
+        bool isPubliclyViewable = true,
+        string? city = null,
+        string? region = null,
+        string? country = null)
     {
         return TryCreate(
             name,
@@ -134,7 +142,11 @@ public static class CampaignSetupRules
             structureTypes: null,
             out setup,
             out validatedJoinPassword,
-            out errors);
+            out errors,
+            isPubliclyViewable,
+            city,
+            region,
+            country);
     }
 
     /// <summary>
@@ -157,6 +169,10 @@ public static class CampaignSetupRules
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
+    /// <param name="isPubliclyViewable">Whether non-members may view the campaign after it starts.</param>
+    /// <param name="city">The optional city.</param>
+    /// <param name="region">The optional state, province, or region.</param>
+    /// <param name="country">The optional country.</param>
     /// <returns><see langword="true"/> when the setup is valid.</returns>
     public static bool TryCreate(
         string? name,
@@ -175,7 +191,11 @@ public static class CampaignSetupRules
         IReadOnlyList<StructureTypeInput>? structureTypes,
         [NotNullWhen(true)] out CampaignSetup? setup,
         out string? validatedJoinPassword,
-        out IReadOnlyList<DomainError> errors)
+        out IReadOnlyList<DomainError> errors,
+        bool isPubliclyViewable = true,
+        string? city = null,
+        string? region = null,
+        string? country = null)
     {
         var collected = new List<DomainError>();
         setup = null;
@@ -208,6 +228,18 @@ public static class CampaignSetupRules
             validatedJoinPassword = ParseJoinPassword(joinPassword, joinPasswordRequired, collected);
         }
 
+        if (!GeographicLocation.TryNormalizeOptional(
+                city,
+                region,
+                country,
+                out var parsedCity,
+                out var parsedRegion,
+                out var parsedCountry,
+                out var locationErrors))
+        {
+            collected.AddRange(locationErrors);
+        }
+
         var parsedGroups = ParseAllyGroups(allyGroups, collected);
         var usedIds = new HashSet<Guid>();
         var missionIndex = new MissionIndex();
@@ -230,7 +262,11 @@ public static class CampaignSetupRules
             parsedDescription,
             playerCount,
             isPrivate,
+            isPubliclyViewable,
             creatorIsParticipant,
+            parsedCity,
+            parsedRegion,
+            parsedCountry,
             parsedFactions,
             parsedGroups,
             parsedLinks,

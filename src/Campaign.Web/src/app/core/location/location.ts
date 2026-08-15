@@ -21,3 +21,12 @@ export function listTimeZones(): readonly string[] {
   const named = supported.filter((zone) => zone !== 'UTC');
   return ['UTC', ...named];
 }
+
+export function formatLocation(
+  city: string | null | undefined,
+  region: string | null | undefined,
+  country: string | null | undefined,
+): string | null {
+  const parts = [city, region, country].map((part) => part?.trim() ?? '').filter((part) => part.length > 0);
+  return parts.length === 0 ? null : parts.join(', ');
+}

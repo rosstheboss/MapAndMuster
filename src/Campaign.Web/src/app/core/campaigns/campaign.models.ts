@@ -1,14 +1,25 @@
 export interface CampaignListItem {
   id: string;
   name: string;
+  description: string | null;
   playerSlotCount: number;
   occupiedPlayerSlots: number;
   isPrivate: boolean;
+  isPubliclyViewable: boolean;
   canManage: boolean;
   isParticipant: boolean;
+  canView: boolean;
+  canJoin: boolean;
+  canLeave: boolean;
+  city: string | null;
+  region: string | null;
+  country: string | null;
   status: string;
   startsUtc: string;
   endsUtc: string;
+  currentRound: number | null;
+  currentPhaseLabel: string | null;
+  currentPhaseEndsUtc: string | null;
 }
 
 export interface CampaignDetail {
@@ -18,7 +29,11 @@ export interface CampaignDetail {
   playerSlotCount: number;
   occupiedPlayerSlots: number;
   isPrivate: boolean;
+  isPubliclyViewable: boolean;
   creatorIsParticipant: boolean;
+  city: string | null;
+  region: string | null;
+  country: string | null;
   hasMap: boolean;
   canManage: boolean;
   isParticipant: boolean;
@@ -101,8 +116,12 @@ export interface SaveCampaignPayload {
   description: string | null;
   playerCount: number;
   isPrivate: boolean;
+  isPubliclyViewable: boolean;
   joinPassword: string | null;
   creatorIsParticipant: boolean;
+  city: string | null;
+  region: string | null;
+  country: string | null;
   factions: SaveFactionPayload[];
   allyGroups: SaveAllyGroupPayload[];
   links: SaveLinkPayload[];

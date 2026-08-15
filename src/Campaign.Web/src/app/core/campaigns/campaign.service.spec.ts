@@ -37,6 +37,50 @@ describe('CampaignService', () => {
     http.verify();
   });
 
+  it('lists all discoverable campaigns and can join or leave', async () => {
+    const service = TestBed.inject(CampaignService);
+    const http = TestBed.inject(HttpTestingController);
+    const listing = service.listAll();
+    http.expectOne('/api/campaigns/all').flush([]);
+    expect(await listing).toEqual([]);
+
+    const joining = service.join('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'join-secret');
+    const join = http.expectOne('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/join');
+    expect(join.request.method).toBe('POST');
+    expect(join.request.body).toEqual({ joinPassword: 'join-secret' });
+    join.flush({
+      id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      name: 'Border War',
+      description: null,
+      playerSlotCount: 8,
+      occupiedPlayerSlots: 2,
+      isPrivate: true,
+      isPubliclyViewable: true,
+      canManage: false,
+      isParticipant: true,
+      canView: true,
+      canJoin: false,
+      canLeave: true,
+      city: null,
+      region: null,
+      country: null,
+      status: 'Scheduled',
+      startsUtc: '2099-01-05T12:00:00+00:00',
+      endsUtc: '2099-03-02T12:00:00+00:00',
+      currentRound: null,
+      currentPhaseLabel: null,
+      currentPhaseEndsUtc: null,
+    });
+    expect((await joining).canLeave).toBe(true);
+
+    const leaving = service.leave('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    const leave = http.expectOne('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/leave');
+    expect(leave.request.method).toBe('POST');
+    leave.flush(null, { status: 204, statusText: 'No Content' });
+    await leaving;
+    http.verify();
+  });
+
   it('loads and saves a map graph', async () => {
     const service = TestBed.inject(CampaignService);
     const http = TestBed.inject(HttpTestingController);

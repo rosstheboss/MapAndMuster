@@ -311,6 +311,14 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.Property<bool>("CreatorIsParticipant")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("City")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Country")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -319,6 +327,9 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsPrivate")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPubliclyViewable")
                         .HasColumnType("boolean");
 
                     b.Property<string>("JoinPasswordHash")
@@ -342,6 +353,10 @@ namespace Campaign.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("PlayerSlotCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Region")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<int>("Revision")
                         .IsConcurrencyToken()

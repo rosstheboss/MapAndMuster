@@ -61,6 +61,10 @@ staff review requires them.
 - Reject or sanitize active HTML/SVG. Do not support arbitrary scripts or administrator code.
 - Generic seed content must not contain proprietary game text or artwork.
 - Private-campaign join passwords are hashed. They are never returned in API payloads.
+- Join privacy (`IsPrivate`) is separate from public viewing (`IsPubliclyViewable`). Hidden
+  campaigns return 404 to non-members for detail, map, and catalog reads after the caller is
+  authorized as a signed-in user. Upcoming hidden campaigns remain listable on All Campaigns so
+  players can join.
 
 ## Notifications
 

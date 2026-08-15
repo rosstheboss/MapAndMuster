@@ -22,11 +22,23 @@ public sealed class CampaignRecord
     /// <summary>Gets or sets whether a join password is required.</summary>
     public bool IsPrivate { get; set; }
 
+    /// <summary>Gets or sets whether non-members may view the campaign.</summary>
+    public bool IsPubliclyViewable { get; set; } = true;
+
     /// <summary>Gets or sets the hashed join password.</summary>
     public string? JoinPasswordHash { get; set; }
 
     /// <summary>Gets or sets whether the creating manager occupies a player slot.</summary>
     public bool CreatorIsParticipant { get; set; }
+
+    /// <summary>Gets or sets the optional city.</summary>
+    public string? City { get; set; }
+
+    /// <summary>Gets or sets the optional state, province, or region.</summary>
+    public string? Region { get; set; }
+
+    /// <summary>Gets or sets the optional country.</summary>
+    public string? Country { get; set; }
 
     /// <summary>Gets or sets the generated map storage key.</summary>
     public string? MapStorageKey { get; set; }

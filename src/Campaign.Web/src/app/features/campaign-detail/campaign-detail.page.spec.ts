@@ -14,7 +14,11 @@ const campaign = {
   playerSlotCount: 8,
   occupiedPlayerSlots: 1,
   isPrivate: true,
+  isPubliclyViewable: true,
   creatorIsParticipant: true,
+  city: 'Halifax',
+  region: 'Nova Scotia',
+  country: 'Canada',
   hasMap: false,
   canManage: true,
   isParticipant: true,
@@ -92,6 +96,7 @@ describe('CampaignDetailPage', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Border War');
     expect(compiled.textContent).toContain('A contested frontier.');
+    expect(compiled.textContent).toContain('Halifax, Nova Scotia, Canada');
     expect(compiled.textContent).toContain('North');
     expect(compiled.textContent).toContain('Private campaign');
     expect(compiled.textContent).toContain('Scheduled');

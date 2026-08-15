@@ -38,6 +38,17 @@ public static class IdentityHttp
     }
 
     /// <summary>
+    /// Whether the caller has the system Administrator role.
+    /// </summary>
+    /// <param name="user">The user principal.</param>
+    /// <returns><see langword="true"/> when the caller is an administrator.</returns>
+    public static bool IsAdministrator(this ClaimsPrincipal user)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return user.IsInRole("Administrator");
+    }
+
+    /// <summary>
     /// Parses the public display-name preference.
     /// </summary>
     /// <param name="value">The raw value.</param>
@@ -106,7 +117,9 @@ public static class IdentityHttp
             ErrorCodes.ProfileNotFound or ErrorCodes.CampaignNotFound => StatusCodes.Status404NotFound,
             ErrorCodes.CampaignForbidden => StatusCodes.Status403Forbidden,
             ErrorCodes.EmailTaken or ErrorCodes.UsernameTaken or ErrorCodes.ConcurrencyConflict
-                or ErrorCodes.ExternalLinkRequired => StatusCodes.Status409Conflict,
+                or ErrorCodes.ExternalLinkRequired
+                or ErrorCodes.CampaignAlreadyMember
+                or ErrorCodes.CampaignJoinFull => StatusCodes.Status409Conflict,
             ErrorCodes.UploadTooLarge => StatusCodes.Status413PayloadTooLarge,
             ErrorCodes.ExternalProviderUnavailable => StatusCodes.Status404NotFound,
             _ => StatusCodes.Status400BadRequest,

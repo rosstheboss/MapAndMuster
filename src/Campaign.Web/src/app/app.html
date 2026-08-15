@@ -12,9 +12,18 @@
       <app-icon name="home" />
       Home
     </a>
-    <a routerLink="/campaigns" routerLinkActive="is-active" class="nav-link">
+    <a
+      routerLink="/campaigns"
+      routerLinkActive="is-active"
+      [routerLinkActiveOptions]="{ exact: true }"
+      class="nav-link"
+    >
       <app-icon name="map" />
       Your Campaigns
+    </a>
+    <a routerLink="/campaigns/all" routerLinkActive="is-active" class="nav-link">
+      <app-icon name="shield" />
+      All Campaigns
     </a>
     <a routerLink="/profile" routerLinkActive="is-active" class="nav-link">
       <app-icon name="helm" />

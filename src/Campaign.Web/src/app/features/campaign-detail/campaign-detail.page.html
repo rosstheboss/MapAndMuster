@@ -45,6 +45,9 @@
       @if (campaign.description) {
         <p>{{ campaign.description }}</p>
       }
+      @if (locationText(campaign); as location) {
+        <p>Location: {{ location }}</p>
+      }
       <p>Players: {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} occupied</p>
       <p>{{ campaign.isPrivate ? 'Private campaign' : 'Public campaign' }}</p>
       <p>

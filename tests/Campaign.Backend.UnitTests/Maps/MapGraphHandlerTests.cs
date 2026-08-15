@@ -95,8 +95,12 @@ public sealed class MapGraphHandlerTests
             Description = campaign.Description,
             PlayerSlotCount = campaign.PlayerSlotCount,
             IsPrivate = campaign.IsPrivate,
+            IsPubliclyViewable = campaign.IsPubliclyViewable,
             JoinPasswordHash = campaign.JoinPasswordHash,
             CreatorIsParticipant = campaign.CreatorIsParticipant,
+            City = campaign.City,
+            Region = campaign.Region,
+            Country = campaign.Country,
             MapStorageKey = campaign.MapStorageKey,
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
@@ -170,6 +174,7 @@ public sealed class MapGraphHandlerTests
             Name = "Border War",
             PlayerSlotCount = 8,
             IsPrivate = false,
+            IsPubliclyViewable = true,
             CreatorIsParticipant = true,
             Revision = 1,
             CreatedUtc = Now,
@@ -228,6 +233,15 @@ public sealed class MapGraphHandlerTests
             return Task.FromResult<IReadOnlyList<StoredCampaign>>([]);
         }
 
+        public Task<IReadOnlyList<StoredCampaign>> ListDiscoverableAsync(
+            Guid userId,
+            bool isAdministrator,
+            DateTimeOffset utcNow,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<StoredCampaign>>([]);
+        }
+
         public Task<UpdateStoredCampaignOutcome> UpdateAsync(
             StoredCampaign campaign,
             int expectedRevision,
@@ -265,8 +279,12 @@ public sealed class MapGraphHandlerTests
                 Description = Existing.Description,
                 PlayerSlotCount = Existing.PlayerSlotCount,
                 IsPrivate = Existing.IsPrivate,
+                IsPubliclyViewable = Existing.IsPubliclyViewable,
                 JoinPasswordHash = Existing.JoinPasswordHash,
                 CreatorIsParticipant = Existing.CreatorIsParticipant,
+                City = Existing.City,
+                Region = Existing.Region,
+                Country = Existing.Country,
                 MapStorageKey = Existing.MapStorageKey,
                 Revision = expectedRevision + 1,
                 CreatedUtc = Existing.CreatedUtc,

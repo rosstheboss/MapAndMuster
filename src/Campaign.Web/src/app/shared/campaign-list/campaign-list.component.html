@@ -1,0 +1,110 @@
+@if (actionError()) {
+  <p class="error error-banner" role="alert">{{ actionError() }}</p>
+}
+
+@for (group of groupedCampaigns(); track group.id) {
+  @if (group.campaigns.length > 0) {
+    <section class="campaign-group stack">
+      <h2>
+        <button
+          type="button"
+          class="section-toggle group-toggle"
+          [attr.aria-expanded]="isGroupOpen(group.id)"
+          (click)="toggleGroup(group.id)"
+        >
+          {{ group.title }}
+        </button>
+      </h2>
+      @if (isGroupOpen(group.id)) {
+        <ul class="campaign-list">
+          @for (campaign of group.campaigns; track campaign.id) {
+            <li class="panel campaign-card">
+              <button
+                type="button"
+                class="section-toggle campaign-toggle"
+                [attr.aria-expanded]="isOpen(campaign.id)"
+                (click)="toggleCampaign(campaign.id)"
+              >
+                {{ campaign.name }}
+              </button>
+              @if (isOpen(campaign.id)) {
+                <div class="campaign-body stack">
+                  @if (campaign.description) {
+                    <p>{{ campaign.description }}</p>
+                  }
+                  <p>
+                    {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} players ·
+                    {{ campaign.isPrivate ? 'Private' : 'Public' }}
+                    @if (roleLabel(campaign); as role) {
+                      · {{ role }}
+                    }
+                    ·
+                    {{ statusText(campaign.status) }}
+                  </p>
+                  @if (locationText(campaign); as location) {
+                    <p>{{ location }}</p>
+                  }
+                  <p class="muted">Starts {{ campaign.startsUtc | instantDate: timeZoneId() }}</p>
+                  <p class="muted">
+                    {{ campaign.status === 'Completed' ? 'Finished' : 'Ends' }}
+                    {{ campaign.endsUtc | instantDate: timeZoneId() }}
+                  </p>
+                  @if (
+                    campaign.status === 'InProgress' && campaign.currentRound !== null && campaign.currentPhaseLabel
+                  ) {
+                    <p>Round {{ campaign.currentRound }} · {{ campaign.currentPhaseLabel }}</p>
+                    @if (campaign.currentPhaseEndsUtc) {
+                      <p class="muted">
+                        Phase ends in
+                        <app-phase-countdown [endsUtc]="campaign.currentPhaseEndsUtc" />
+                      </p>
+                    }
+                  }
+                  <div class="choice-row">
+                    @if (campaign.isParticipant && campaign.status === 'InProgress') {
+                      <a class="button" [routerLink]="['/campaigns', campaign.id]">Play</a>
+                    } @else if (campaign.canView) {
+                      <a class="button" [routerLink]="['/campaigns', campaign.id]">View</a>
+                    }
+                    @if (campaign.canManage) {
+                      <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit</a>
+                    }
+                    @if (campaign.canJoin) {
+                      <button type="button" class="button" (click)="requestJoin(campaign)">Join</button>
+                    }
+                    @if (campaign.canLeave) {
+                      <button type="button" class="button-secondary" (click)="leave(campaign)">Leave</button>
+                    }
+                  </div>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+}
+
+@if (joiningCampaign(); as joining) {
+  <div class="dialog-backdrop">
+    <div class="dialog panel stack" role="dialog" aria-labelledby="join-title" aria-describedby="join-desc">
+      <h2 id="join-title">Join {{ joining.name }}</h2>
+      <p id="join-desc">This campaign requires a password to join.</p>
+      <div class="field">
+        <label for="join-password">Join password</label>
+        <input
+          id="join-password"
+          type="password"
+          autocomplete="current-password"
+          [value]="joinPassword()"
+          (input)="onJoinPasswordInput($event)"
+        />
+      </div>
+      <div class="choice-row">
+        <button type="button" class="button" (click)="confirmJoin()">Join</button>
+        <button type="button" class="button-secondary" (click)="cancelJoin()">Cancel</button>
+      </div>
+    </div>
+  </div>
+}

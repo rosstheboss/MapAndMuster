@@ -110,6 +110,8 @@ failure does not roll back campaign state and remains visible for retry/operatio
 
 - ASP.NET Core Identity supplies local accounts and optional Google, Facebook, and Discord
   login when credentials are configured. See `docs/adr/0002-external-login-providers.md`.
-- Registration may be open, but joining a campaign requires authorization/invitation.
+- Registration may be open. Upcoming campaigns may be joined when a player slot is open;
+  private campaigns also require the join password. Active and completed campaigns that are not
+  publicly viewable are omitted from All Campaigns except for members and administrators.
 - Permission policies are derived from system role plus campaign membership roles.
 - Staff acting for another party records actual and effective actor identities.

@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 
 import { FACTION_PRESETS, WARHAMMER_OLD_WORLD_PRESET_ID } from '../../core/campaigns/faction-presets';
 import { CampaignSetupPage } from './campaign-setup.page';
@@ -32,13 +32,24 @@ describe('CampaignSetupPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Create campaign');
+    expect(compiled.querySelector('.setup-toolbar')?.textContent).toContain('Back to campaigns');
+    expect(compiled.querySelector('.setup-toolbar')?.textContent).toContain('Expand All');
+    expect(compiled.querySelector('.setup-toolbar')?.textContent).toContain('Collapse All');
+    expect(compiled.querySelector('.setup-toolbar button.button')?.textContent).toContain('Create campaign');
+    expect(compiled.querySelector('a[href$="/map"]')).toBeNull();
     expect(compiled.querySelector('#name')).toBeTruthy();
     expect(compiled.querySelector('#playerCount')).toBeTruthy();
+    expect(compiled.querySelector('#city')).toBeTruthy();
+    expect(compiled.querySelector('#country')).toBeTruthy();
     expect(compiled.querySelector('#startsAtLocal')).toBeTruthy();
     expect(compiled.querySelector('#roundCount')).toBeTruthy();
     expect(compiled.querySelector('#phase-kind-0')).toBeTruthy();
     expect(compiled.querySelector('#faction-name-0')).toBeTruthy();
     expect(compiled.querySelector('#faction-name-1')).toBeTruthy();
+    const publicView = [...compiled.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) =>
+      (input.closest('label')?.textContent ?? '').includes('Publicly viewable'),
+    );
+    expect(publicView?.checked).toBe(true);
 
     const page = fixture.componentInstance as unknown as { save: () => Promise<void> };
     await page.save();
@@ -166,5 +177,147 @@ describe('CampaignSetupPage', () => {
     );
     expect(input.value).toBe('');
     TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('requires a state when a city is provided', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      form: { controls: { city: { setValue: (value: string) => void } } };
+      save: () => Promise<void>;
+    };
+    page.form.controls.city.setValue('Halifax');
+    await page.save();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const lines = [...compiled.querySelectorAll('.error-banner p')].map((node) => node.textContent.trim());
+    expect(lines).toContain('State or province is required when a city is provided.');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('expands and collapses every setup section from the toolbar', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const detailsToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
+      button.textContent.includes('Campaign details'),
+    );
+    expect(detailsToggle?.getAttribute('aria-expanded')).toBe('true');
+
+    clickNamedButton(compiled, 'Collapse All');
+    fixture.detectChanges();
+    expect(detailsToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(compiled.querySelector('#name')?.closest('[hidden]')).toBeTruthy();
+
+    clickNamedButton(compiled, 'Expand All');
+    fixture.detectChanges();
+    expect(detailsToggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(compiled.querySelector('#name')?.closest('[hidden]')).toBeNull();
+    TestBed.inject(HttpTestingController).verify();
+  });
+});
+
+describe('CampaignSetupPage edit', () => {
+  const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [CampaignSetupPage],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: { get: () => campaignId } } },
+        },
+      ],
+    }).compileComponents();
+  });
+
+  it('keeps edit-map and save actions in a sticky toolbar without saving', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      id: campaignId,
+      name: 'Border War',
+      description: 'A contested frontier.',
+      playerSlotCount: 8,
+      occupiedPlayerSlots: 1,
+      isPrivate: false,
+      isPubliclyViewable: true,
+      creatorIsParticipant: true,
+      city: null,
+      region: null,
+      country: null,
+      hasMap: true,
+      canManage: true,
+      isParticipant: true,
+      revision: 2,
+      createdUtc: '2026-08-13T00:00:00+00:00',
+      updatedUtc: '2026-08-13T00:00:00+00:00',
+      factions: [
+        {
+          id: '1',
+          name: 'North',
+          color: '#2563EB',
+          subfactions: [],
+          allyGroupName: null,
+          requiresSubfaction: false,
+          hasFlagImage: false,
+        },
+        {
+          id: '2',
+          name: 'South',
+          color: '#DC2626',
+          subfactions: [],
+          allyGroupName: null,
+          requiresSubfaction: false,
+          hasFlagImage: false,
+        },
+      ],
+      allyGroups: [],
+      links: [],
+      terrainTypes: [],
+      structureTypes: [],
+      timeZoneId: 'UTC',
+      startsAtLocal: '2099-01-05T12:00',
+      startsUtc: '2099-01-05T12:00:00+00:00',
+      endsUtc: '2099-03-02T12:00:00+00:00',
+      roundCount: 8,
+      roundLengthAmount: 1,
+      roundLengthUnit: 'Weeks',
+      phases: [
+        { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+        { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+        { kind: 'Battle', durationAmount: 1, durationUnit: 'Days' },
+      ],
+      status: 'Scheduled',
+      currentRound: null,
+      currentPhaseNumber: null,
+      currentPhaseKind: null,
+      currentPhaseStartsUtc: null,
+      currentPhaseEndsUtc: null,
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const toolbar = compiled.querySelector<HTMLElement>('.setup-toolbar');
+    expect(toolbar).toBeTruthy();
+    expect(compiled.querySelector('h1')?.textContent).toContain('Edit campaign');
+    expect(toolbar?.textContent).toContain('Back to campaigns');
+    expect(toolbar?.querySelector(`a[href="/campaigns/${campaignId}/map"]`)?.textContent).toContain('Edit map');
+    expect(toolbar?.textContent).toContain('Expand All');
+    expect(toolbar?.textContent).toContain('Collapse All');
+    expect(toolbar?.querySelector('button.button')?.textContent).toContain('Save campaign');
+    expect(toolbar ? getComputedStyle(toolbar).position : '').toBe('sticky');
+    http.verify();
   });
 });

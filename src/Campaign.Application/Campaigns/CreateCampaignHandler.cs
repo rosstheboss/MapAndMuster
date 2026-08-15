@@ -59,7 +59,11 @@ public sealed class CreateCampaignHandler
                 command.StructureTypes,
                 out var setup,
                 out var joinPassword,
-                out var errors))
+                out var errors,
+                command.IsPubliclyViewable,
+                command.City,
+                command.Region,
+                command.Country))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -155,7 +159,11 @@ public sealed class UpdateCampaignHandler
                 command.StructureTypes,
                 out var setup,
                 out var joinPassword,
-                out var errors))
+                out var errors,
+                command.IsPubliclyViewable,
+                command.City,
+                command.Region,
+                command.Country))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -260,8 +268,12 @@ internal static class CampaignPersistenceFactory
             Description = setup.Description,
             PlayerSlotCount = setup.PlayerSlotCount,
             IsPrivate = setup.IsPrivate,
+            IsPubliclyViewable = setup.IsPubliclyViewable,
             JoinPasswordHash = joinPasswordHash,
             CreatorIsParticipant = setup.CreatorIsParticipant,
+            City = setup.City,
+            Region = setup.Region,
+            Country = setup.Country,
             MapStorageKey = mapStorageKey,
             Revision = revision,
             CreatedUtc = createdUtc,

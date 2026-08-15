@@ -35,7 +35,9 @@ preference stored in a cookie so it remains after sign-out; light mode is the de
 ## Campaign setup
 
 A campaign has a name (3-80 characters), optional description (500 characters), player-slot
-count (2-100), public or private visibility, optional labeled external links (at most 20
+count (2-100), optional location (city, state or province, and country; all optional, but a city
+requires a state or province and a state or province requires a country), public or private join
+visibility, a publicly-viewable flag (on by default), optional labeled external links (at most 20
 http/https URLs), a raster map image, and at least two factions. Each faction has a unique
 color and may have subfactions. A faction may require players who choose it to pick a
 subfaction; that flag may only be enabled when at least one subfaction is listed. Optional
@@ -52,10 +54,25 @@ slots) or clear all ally groups.
 
 The creating user is always a campaign manager (Game Master). If they also participate, they
 occupy one player slot. Private campaigns store a hashed join password; the plaintext password
-is never returned. Campaign names and faction names reject the same prohibited-language terms
-as usernames. Members may read campaign metadata for campaigns they manage or play in. Only a
-manager may edit or delete a campaign. Deletion removes the campaign from every member's list.
-A raster map image is required when creating a campaign; SVG and other active content are
+is never returned. Publicly viewable campaigns may be opened by any signed-in user. When a
+campaign is not publicly viewable, only players, managers, and administrators may open it after
+it starts. Upcoming campaigns still appear on All Campaigns so players can join. Campaign names
+and faction names reject the same prohibited-language terms as usernames.
+
+Your Campaigns lists campaigns the user manages or plays in. All Campaigns lists upcoming
+campaigns plus publicly viewable active and completed campaigns, using the same grouping and
+sort: active by soonest end, upcoming by soonest start, completed by latest end. Listings show
+player slots occupied of maximum, name, description, filled location parts, proposed start and
+end, and for active campaigns the current round, phase label (Action 1, Action 2, Battle, or
+Battle N when a round has more than one battle), and a countdown until the current phase ends.
+
+A signed-in user may join an upcoming campaign that still has an open player slot. Public
+campaigns join without a password; private campaigns require the join password. Members who are
+not managers may leave. Managers edit instead of joining. Players open an in-progress campaign
+with Play. Upcoming and completed campaigns, and campaigns the viewer is not playing, use View.
+
+Only a manager may edit or delete a campaign. Deletion removes the campaign from every member's
+list. A raster map image is required when creating a campaign; SVG and other active content are
 rejected. Maps may be JPEG, PNG, or WebP up to 20 MB. One map may later be replaced; the previous
 map file is deleted when it is no longer used. Deleting a campaign also deletes its stored map and
 user-uploaded catalog images. Built-in structure icons are application assets and are never deleted.
@@ -63,7 +80,9 @@ user-uploaded catalog images. Built-in structure icons are application assets an
 Setup sections (details, schedule, visibility, ally groups, factions, subfactions, terrain,
 structures, missions, links, and map) can be expanded or collapsed. Section actions collapse
 with their section. Invalid sections expand automatically when save validation fails. Sections
-start expanded.
+start expanded. Setup keeps Back to campaigns, Expand All, Collapse All, and Save or Create in a
+sticky toolbar. Edit campaign also includes Edit map, which opens the map editor without saving
+the current form.
 
 ## Campaign schedule and lifecycle
 
@@ -220,9 +239,10 @@ factions are listed after the groups.
 Each faction uses a color flag by default or an uploaded 50×50 flag image. Uploaded flags are not
 recolored.
 
-The Your campaigns page groups campaigns as Active, Upcoming, and Completed. Campaigns start
-collapsed and expand to view or edit. Active campaigns are ordered by soonest end. Upcoming
-campaigns are ordered by soonest start. Completed campaigns are ordered by most recently finished.
+The Your campaigns and All campaigns pages group campaigns as Active, Upcoming, and Completed.
+Each group can be expanded or collapsed. Campaigns start collapsed and expand to view or edit.
+Active campaigns are ordered by soonest end. Upcoming campaigns are ordered by soonest start.
+Completed campaigns are ordered by most recently finished.
 
 ## Forces
 

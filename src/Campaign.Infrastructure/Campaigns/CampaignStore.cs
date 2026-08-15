@@ -60,6 +60,29 @@ public sealed class CampaignStore : ICampaignStore
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<StoredCampaign>> ListDiscoverableAsync(
+        Guid userId,
+        bool isAdministrator,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken)
+    {
+        var query = QueryCampaigns().AsNoTracking();
+        if (!isAdministrator)
+        {
+            query = query.Where(campaign =>
+                campaign.IsPubliclyViewable
+                || campaign.StartsUtc > utcNow
+                || campaign.Memberships.Any(membership => membership.UserId == userId));
+        }
+
+        var records = await query
+            .OrderByDescending(campaign => campaign.UpdatedUtc)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return [.. records.Select(ToStored)];
+    }
+
+    /// <inheritdoc />
     public async Task<UpdateStoredCampaignOutcome> UpdateAsync(
         StoredCampaign campaign,
         int expectedRevision,
@@ -95,8 +118,12 @@ public sealed class CampaignStore : ICampaignStore
                     .SetProperty(item => item.Description, campaign.Description)
                     .SetProperty(item => item.PlayerSlotCount, campaign.PlayerSlotCount)
                     .SetProperty(item => item.IsPrivate, campaign.IsPrivate)
+                    .SetProperty(item => item.IsPubliclyViewable, campaign.IsPubliclyViewable)
                     .SetProperty(item => item.JoinPasswordHash, campaign.JoinPasswordHash)
                     .SetProperty(item => item.CreatorIsParticipant, campaign.CreatorIsParticipant)
+                    .SetProperty(item => item.City, campaign.City)
+                    .SetProperty(item => item.Region, campaign.Region)
+                    .SetProperty(item => item.Country, campaign.Country)
                     .SetProperty(item => item.MapStorageKey, campaign.MapStorageKey)
                     .SetProperty(item => item.CatalogJson, catalogJson)
                     .SetProperty(item => item.TimeZoneId, campaign.TimeZoneId)
@@ -261,8 +288,12 @@ public sealed class CampaignStore : ICampaignStore
             Description = campaign.Description,
             PlayerSlotCount = campaign.PlayerSlotCount,
             IsPrivate = campaign.IsPrivate,
+            IsPubliclyViewable = campaign.IsPubliclyViewable,
             JoinPasswordHash = campaign.JoinPasswordHash,
             CreatorIsParticipant = campaign.CreatorIsParticipant,
+            City = campaign.City,
+            Region = campaign.Region,
+            Country = campaign.Country,
             MapStorageKey = campaign.MapStorageKey,
             MapGraphJson = campaign.MapGraph is null ? null : MapGraphJson.Serialize(campaign.MapGraph),
             CatalogJson = CatalogJson.Serialize(campaign.TerrainTypes, campaign.StructureTypes),
@@ -413,8 +444,12 @@ public sealed class CampaignStore : ICampaignStore
             Description = record.Description,
             PlayerSlotCount = record.PlayerSlotCount,
             IsPrivate = record.IsPrivate,
+            IsPubliclyViewable = record.IsPubliclyViewable,
             JoinPasswordHash = record.JoinPasswordHash,
             CreatorIsParticipant = record.CreatorIsParticipant,
+            City = record.City,
+            Region = record.Region,
+            Country = record.Country,
             MapStorageKey = record.MapStorageKey,
             Revision = record.Revision,
             CreatedUtc = record.CreatedUtc,

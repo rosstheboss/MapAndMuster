@@ -31,7 +31,11 @@ public sealed class CampaignSetupRulesTests
         Assert.Equal("Border War", setup.Name);
         Assert.Equal(8, setup.PlayerSlotCount);
         Assert.False(setup.IsPrivate);
+        Assert.True(setup.IsPubliclyViewable);
         Assert.True(setup.CreatorIsParticipant);
+        Assert.Null(setup.City);
+        Assert.Null(setup.Region);
+        Assert.Null(setup.Country);
         Assert.Equal(2, setup.Factions.Count);
         Assert.Equal(8, setup.Schedule.RoundCount);
         Assert.Equal(DurationUnit.Weeks, setup.Schedule.RoundLength.Unit);
@@ -46,6 +50,66 @@ public sealed class CampaignSetupRulesTests
         Assert.Empty(setup.StructureTypes[0].Missions);
         Assert.NotEqual(setup.Factions[0].Color, setup.Factions[1].Color);
         Assert.False(setup.Factions[0].RequiresSubfaction);
+    }
+
+    [Fact]
+    public void AcceptsOptionalLocationAndPublicViewToggle()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            factions: TwoFactions(),
+            allyGroups: null,
+            links: null,
+            schedule: WeekSchedule(),
+            out var setup,
+            out _,
+            out var errors,
+            isPubliclyViewable: false,
+            city: "Halifax",
+            region: "Nova Scotia",
+            country: "Canada");
+
+        Assert.True(succeeded);
+        Assert.Empty(errors);
+        Assert.NotNull(setup);
+        Assert.False(setup.IsPubliclyViewable);
+        Assert.Equal("Halifax", setup.City);
+        Assert.Equal("Nova Scotia", setup.Region);
+        Assert.Equal("Canada", setup.Country);
+    }
+
+    [Fact]
+    public void RejectsCityWithoutState()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            factions: TwoFactions(),
+            allyGroups: null,
+            links: null,
+            schedule: WeekSchedule(),
+            out var setup,
+            out _,
+            out var errors,
+            city: "Halifax",
+            country: "Canada");
+
+        Assert.False(succeeded);
+        Assert.Null(setup);
+        Assert.Contains(errors, error => error.Field == "region");
     }
 
     [Fact]

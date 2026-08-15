@@ -14,8 +14,13 @@ public static class CampaignMapper
     /// <param name="campaign">The stored campaign.</param>
     /// <param name="viewerUserId">The viewing user's identifier.</param>
     /// <param name="utcNow">The current UTC instant.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <returns>The list item.</returns>
-    public static CampaignListItem ToListItem(StoredCampaign campaign, Guid viewerUserId, DateTimeOffset utcNow)
+    public static CampaignListItem ToListItem(
+        StoredCampaign campaign,
+        Guid viewerUserId,
+        DateTimeOffset utcNow,
+        bool isAdministrator = false)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
@@ -24,14 +29,25 @@ public static class CampaignMapper
         {
             Id = campaign.Id,
             Name = campaign.Name,
+            Description = campaign.Description,
             PlayerSlotCount = campaign.PlayerSlotCount,
             OccupiedPlayerSlots = OccupiedPlayerSlots(campaign),
             IsPrivate = campaign.IsPrivate,
+            IsPubliclyViewable = campaign.IsPubliclyViewable,
             CanManage = membership?.IsGameMaster == true,
             IsParticipant = membership?.IsPlayer == true,
+            CanView = CampaignAccess.CanView(campaign, viewerUserId, isAdministrator),
+            CanJoin = CampaignAccess.CanJoin(campaign, viewerUserId, utcNow),
+            CanLeave = CampaignAccess.CanLeave(campaign, viewerUserId),
+            City = campaign.City,
+            Region = campaign.Region,
+            Country = campaign.Country,
             Status = progress.Status.ToString(),
             StartsUtc = campaign.StartsUtc,
             EndsUtc = campaign.EndsUtc,
+            CurrentRound = progress.CurrentRound,
+            CurrentPhaseLabel = FormatCurrentPhaseLabel(campaign, progress),
+            CurrentPhaseEndsUtc = progress.CurrentPhaseEndsUtc,
         };
     }
 
@@ -56,7 +72,11 @@ public static class CampaignMapper
             PlayerSlotCount = campaign.PlayerSlotCount,
             OccupiedPlayerSlots = OccupiedPlayerSlots(campaign),
             IsPrivate = campaign.IsPrivate,
+            IsPubliclyViewable = campaign.IsPubliclyViewable,
             CreatorIsParticipant = campaign.CreatorIsParticipant,
+            City = campaign.City,
+            Region = campaign.Region,
+            Country = campaign.Country,
             HasMap = !string.IsNullOrWhiteSpace(campaign.MapStorageKey),
             CanManage = membership?.IsGameMaster == true,
             IsParticipant = membership?.IsPlayer == true,
@@ -145,6 +165,19 @@ public static class CampaignMapper
     {
         ArgumentNullException.ThrowIfNull(campaign);
         return campaign.Memberships.FirstOrDefault(membership => membership.UserId == viewerUserId);
+    }
+
+    private static string? FormatCurrentPhaseLabel(StoredCampaign campaign, CampaignProgress progress)
+    {
+        if (progress.Status != CampaignStatus.InProgress
+            || progress.CurrentPhaseKind is null
+            || progress.CurrentPhaseNumber is null)
+        {
+            return null;
+        }
+
+        var schedule = ToSchedule(campaign);
+        return CampaignPhaseLabels.Format(schedule.Phases, progress.CurrentPhaseNumber.Value, progress.CurrentPhaseKind.Value);
     }
 
     /// <summary>

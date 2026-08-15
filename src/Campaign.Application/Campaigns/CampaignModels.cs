@@ -13,6 +13,9 @@ public sealed class CampaignListItem
     /// <summary>Gets the campaign name.</summary>
     public required string Name { get; init; }
 
+    /// <summary>Gets the optional description.</summary>
+    public string? Description { get; init; }
+
     /// <summary>Gets the configured player-slot count.</summary>
     public required int PlayerSlotCount { get; init; }
 
@@ -22,11 +25,32 @@ public sealed class CampaignListItem
     /// <summary>Gets whether the campaign is private.</summary>
     public required bool IsPrivate { get; init; }
 
+    /// <summary>Gets whether non-members may view the campaign.</summary>
+    public required bool IsPubliclyViewable { get; init; }
+
     /// <summary>Gets whether the current user can manage the campaign.</summary>
     public required bool CanManage { get; init; }
 
     /// <summary>Gets whether the current user occupies a player slot.</summary>
     public required bool IsParticipant { get; init; }
+
+    /// <summary>Gets whether the current user may view the campaign page.</summary>
+    public required bool CanView { get; init; }
+
+    /// <summary>Gets whether the current user may join as a player.</summary>
+    public required bool CanJoin { get; init; }
+
+    /// <summary>Gets whether the current user may leave the campaign.</summary>
+    public required bool CanLeave { get; init; }
+
+    /// <summary>Gets the optional city.</summary>
+    public string? City { get; init; }
+
+    /// <summary>Gets the optional state, province, or region.</summary>
+    public string? Region { get; init; }
+
+    /// <summary>Gets the optional country.</summary>
+    public string? Country { get; init; }
 
     /// <summary>Gets the campaign lifecycle status.</summary>
     public required string Status { get; init; }
@@ -36,6 +60,15 @@ public sealed class CampaignListItem
 
     /// <summary>Gets the campaign end instant, in UTC.</summary>
     public required DateTimeOffset EndsUtc { get; init; }
+
+    /// <summary>Gets the 1-based current round when the campaign is in progress.</summary>
+    public int? CurrentRound { get; init; }
+
+    /// <summary>Gets the display label for the current phase when the campaign is in progress.</summary>
+    public string? CurrentPhaseLabel { get; init; }
+
+    /// <summary>Gets when the current phase closes, in UTC.</summary>
+    public DateTimeOffset? CurrentPhaseEndsUtc { get; init; }
 }
 
 /// <summary>
@@ -61,8 +94,20 @@ public sealed class CampaignDetail
     /// <summary>Gets whether the campaign is private.</summary>
     public required bool IsPrivate { get; init; }
 
+    /// <summary>Gets whether non-members may view the campaign.</summary>
+    public required bool IsPubliclyViewable { get; init; }
+
     /// <summary>Gets whether the creating manager also occupies a player slot.</summary>
     public required bool CreatorIsParticipant { get; init; }
+
+    /// <summary>Gets the optional city.</summary>
+    public string? City { get; init; }
+
+    /// <summary>Gets the optional state, province, or region.</summary>
+    public string? Region { get; init; }
+
+    /// <summary>Gets the optional country.</summary>
+    public string? Country { get; init; }
 
     /// <summary>Gets whether a map image is stored.</summary>
     public required bool HasMap { get; init; }
@@ -229,11 +274,23 @@ public sealed class StoredCampaign
     /// <summary>Gets whether the campaign is private.</summary>
     public required bool IsPrivate { get; init; }
 
+    /// <summary>Gets whether non-members may view the campaign.</summary>
+    public required bool IsPubliclyViewable { get; init; }
+
     /// <summary>Gets the hashed join password for private campaigns.</summary>
     public string? JoinPasswordHash { get; init; }
 
     /// <summary>Gets whether the creating manager also occupies a player slot.</summary>
     public required bool CreatorIsParticipant { get; init; }
+
+    /// <summary>Gets the optional city.</summary>
+    public string? City { get; init; }
+
+    /// <summary>Gets the optional state, province, or region.</summary>
+    public string? Region { get; init; }
+
+    /// <summary>Gets the optional country.</summary>
+    public string? Country { get; init; }
 
     /// <summary>Gets the map storage key, if a map has been uploaded.</summary>
     public string? MapStorageKey { get; init; }

@@ -26,6 +26,10 @@ public static class CampaignEndpoints
             .WithName("ListCampaigns")
             .Produces<IReadOnlyList<CampaignListItemResponse>>();
 
+        group.MapGet("/all", ListAllAsync)
+            .WithName("ListAllCampaigns")
+            .Produces<IReadOnlyList<CampaignListItemResponse>>();
+
         group.MapPost("", CreateAsync)
             .WithName("CreateCampaign")
             .Produces<CampaignDetailResponse>(StatusCodes.Status201Created)
@@ -34,6 +38,19 @@ public static class CampaignEndpoints
         group.MapGet("/{campaignId:guid}", GetAsync)
             .WithName("GetCampaign")
             .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/join", JoinAsync)
+            .WithName("JoinCampaign")
+            .Produces<CampaignListItemResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/leave", LeaveAsync)
+            .WithName("LeaveCampaign")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
         group.MapPut("/{campaignId:guid}", UpdateAsync)
@@ -140,6 +157,27 @@ public static class CampaignEndpoints
         return Results.Ok(result.Value.Select(CampaignResponses.FromListItem).ToArray());
     }
 
+    private static async Task<IResult> ListAllAsync(
+        ClaimsPrincipal principal,
+        ListDiscoverableCampaignsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(userId.Value, principal.IsAdministrator(), cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(result.Value.Select(CampaignResponses.FromListItem).ToArray());
+    }
+
     private static async Task<IResult> CreateAsync(
         ClaimsPrincipal principal,
         [FromBody] SaveCampaignRequest request,
@@ -161,8 +199,12 @@ public static class CampaignEndpoints
                     Description = request.Description,
                     PlayerCount = request.PlayerCount,
                     IsPrivate = request.IsPrivate,
+                    IsPubliclyViewable = request.IsPubliclyViewable,
                     JoinPassword = request.JoinPassword,
                     CreatorIsParticipant = request.CreatorIsParticipant,
+                    City = request.City,
+                    Region = request.Region,
+                    Country = request.Country,
                     Factions = CampaignResponses.ToFactionInputs(request.Factions),
                     AllyGroups = CampaignResponses.ToAllyGroupInputs(request.AllyGroups),
                     Links = CampaignResponses.ToLinkInputs(request.Links),
@@ -193,13 +235,77 @@ public static class CampaignEndpoints
             return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
         }
 
-        var result = await handler.HandleAsync(campaignId, userId.Value, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(
+                campaignId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);
         }
 
         return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> JoinAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        [FromBody] JoinCampaignRequest? request,
+        JoinCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new JoinCampaignCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    JoinPassword = request?.JoinPassword,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromListItem(result.Value));
+    }
+
+    private static async Task<IResult> LeaveAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        LeaveCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new LeaveCampaignCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.NoContent();
     }
 
     private static async Task<IResult> UpdateAsync(
@@ -231,8 +337,12 @@ public static class CampaignEndpoints
                     Description = request.Description,
                     PlayerCount = request.PlayerCount,
                     IsPrivate = request.IsPrivate,
+                    IsPubliclyViewable = request.IsPubliclyViewable,
                     JoinPassword = request.JoinPassword,
                     CreatorIsParticipant = request.CreatorIsParticipant,
+                    City = request.City,
+                    Region = request.Region,
+                    Country = request.Country,
                     Factions = CampaignResponses.ToFactionInputs(request.Factions),
                     AllyGroups = CampaignResponses.ToAllyGroupInputs(request.AllyGroups),
                     Links = CampaignResponses.ToLinkInputs(request.Links),
@@ -284,7 +394,12 @@ public static class CampaignEndpoints
             return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
         }
 
-        var result = await handler.HandleAsync(campaignId, userId.Value, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(
+                campaignId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);
@@ -357,7 +472,12 @@ public static class CampaignEndpoints
             return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
         }
 
-        var result = await handler.HandleAsync(campaignId, userId.Value, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(
+                campaignId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);
@@ -412,7 +532,12 @@ public static class CampaignEndpoints
             return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
         }
 
-        var result = await handler.HandleAsync(campaignId, structureTypeId, userId.Value, cancellationToken)
+        var result = await handler.HandleAsync(
+                campaignId,
+                structureTypeId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
@@ -488,7 +613,12 @@ public static class CampaignEndpoints
             return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
         }
 
-        var result = await handler.HandleAsync(campaignId, factionId, userId.Value, cancellationToken)
+        var result = await handler.HandleAsync(
+                campaignId,
+                factionId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
@@ -564,7 +694,12 @@ public static class CampaignEndpoints
             return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
         }
 
-        var result = await handler.HandleAsync(campaignId, missionId, userId.Value, cancellationToken)
+        var result = await handler.HandleAsync(
+                campaignId,
+                missionId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {

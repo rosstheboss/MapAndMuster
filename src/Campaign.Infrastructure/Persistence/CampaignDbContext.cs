@@ -69,6 +69,9 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(campaign => campaign.Name).HasMaxLength(80).IsRequired();
             entity.Property(campaign => campaign.Description).HasMaxLength(500);
             entity.Property(campaign => campaign.JoinPasswordHash).HasMaxLength(500);
+            entity.Property(campaign => campaign.City).HasMaxLength(100);
+            entity.Property(campaign => campaign.Region).HasMaxLength(100);
+            entity.Property(campaign => campaign.Country).HasMaxLength(100);
             entity.Property(campaign => campaign.MapStorageKey).HasMaxLength(260);
             entity.Property(campaign => campaign.MapGraphJson).HasColumnType("jsonb");
             entity.Property(campaign => campaign.CatalogJson).HasColumnType("jsonb");

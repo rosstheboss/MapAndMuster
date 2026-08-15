@@ -12,6 +12,7 @@ test('unauthenticated visitors are sent to sign in', async ({ page }) => {
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Your Campaigns' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'All Campaigns' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   await expect(page.getByLabel('Email')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
@@ -79,6 +80,7 @@ test('home shows the signed-in player and logout', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Your Campaigns' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'All Campaigns' })).toBeVisible();
   await expect(page.getByText('You are signed in as')).toBeVisible();
   await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();

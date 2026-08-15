@@ -50,6 +50,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/campaigns/campaigns.page').then((module) => module.CampaignsPage),
   },
   {
+    path: 'campaigns/all',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/all-campaigns/all-campaigns.page').then((module) => module.AllCampaignsPage),
+  },
+  {
     path: 'campaigns/new',
     canActivate: [authGuard],
     loadComponent: () =>

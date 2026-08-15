@@ -41,6 +41,51 @@ public sealed class ListCampaignsHandler
 }
 
 /// <summary>
+/// Lists campaigns a signed-in user may discover: upcoming campaigns, publicly viewable
+/// active and completed campaigns, plus campaigns they belong to.
+/// </summary>
+public sealed class ListDiscoverableCampaignsHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    /// <param name="campaigns">The campaign store.</param>
+    /// <param name="clock">The clock.</param>
+    public ListDiscoverableCampaignsHandler(ICampaignStore campaigns, IClock clock)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        _campaigns = campaigns;
+        _clock = clock;
+    }
+
+    /// <summary>
+    /// Returns discoverable campaigns for the caller.
+    /// </summary>
+    /// <param name="userId">The authenticated user identifier.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The campaign list.</returns>
+    public async Task<OperationResult<IReadOnlyList<CampaignListItem>>> HandleAsync(
+        Guid userId,
+        bool isAdministrator,
+        CancellationToken cancellationToken)
+    {
+        var utcNow = _clock.UtcNow;
+        var campaigns = await _campaigns.ListDiscoverableAsync(userId, isAdministrator, utcNow, cancellationToken)
+            .ConfigureAwait(false);
+        var items = campaigns
+            .Where(campaign => CampaignAccess.CanList(campaign, userId, isAdministrator, utcNow))
+            .Select(campaign => CampaignMapper.ToListItem(campaign, userId, utcNow, isAdministrator))
+            .ToArray();
+        return OperationResults.Success<IReadOnlyList<CampaignListItem>>(items);
+    }
+}
+
+/// <summary>
 /// Reads a campaign the caller manages or participates in.
 /// </summary>
 public sealed class GetCampaignHandler
@@ -67,14 +112,16 @@ public sealed class GetCampaignHandler
     /// <param name="campaignId">The campaign identifier.</param>
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <returns>The campaign detail.</returns>
     public async Task<OperationResult<CampaignDetail>> HandleAsync(
         Guid campaignId,
         Guid userId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isAdministrator = false)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
-        if (campaign is null || CampaignMapper.MembershipFor(campaign, userId) is null)
+        if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
             return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
@@ -257,14 +304,16 @@ public sealed class GetCampaignMapHandler
     /// <param name="campaignId">The campaign identifier.</param>
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <returns>The stored map.</returns>
     public async Task<OperationResult<StoredCampaignMap>> HandleAsync(
         Guid campaignId,
         Guid userId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isAdministrator = false)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
-        if (campaign is null || CampaignMapper.MembershipFor(campaign, userId) is null)
+        if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
             return OperationResults.Failure<StoredCampaignMap>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
@@ -295,8 +344,12 @@ internal static class CampaignMapClone
             Description = existing.Description,
             PlayerSlotCount = existing.PlayerSlotCount,
             IsPrivate = existing.IsPrivate,
+            IsPubliclyViewable = existing.IsPubliclyViewable,
             JoinPasswordHash = existing.JoinPasswordHash,
             CreatorIsParticipant = existing.CreatorIsParticipant,
+            City = existing.City,
+            Region = existing.Region,
+            Country = existing.Country,
             MapStorageKey = mapStorageKey,
             Revision = existing.Revision,
             CreatedUtc = existing.CreatedUtc,
@@ -332,8 +385,12 @@ internal static class CampaignMapClone
             Description = existing.Description,
             PlayerSlotCount = existing.PlayerSlotCount,
             IsPrivate = existing.IsPrivate,
+            IsPubliclyViewable = existing.IsPubliclyViewable,
             JoinPasswordHash = existing.JoinPasswordHash,
             CreatorIsParticipant = existing.CreatorIsParticipant,
+            City = existing.City,
+            Region = existing.Region,
+            Country = existing.Country,
             MapStorageKey = existing.MapStorageKey,
             Revision = existing.Revision,
             CreatedUtc = existing.CreatedUtc,
@@ -368,8 +425,12 @@ internal static class CampaignMapClone
             Description = existing.Description,
             PlayerSlotCount = existing.PlayerSlotCount,
             IsPrivate = existing.IsPrivate,
+            IsPubliclyViewable = existing.IsPubliclyViewable,
             JoinPasswordHash = existing.JoinPasswordHash,
             CreatorIsParticipant = existing.CreatorIsParticipant,
+            City = existing.City,
+            Region = existing.Region,
+            Country = existing.Country,
             MapStorageKey = existing.MapStorageKey,
             Revision = existing.Revision,
             CreatedUtc = existing.CreatedUtc,
@@ -377,6 +438,46 @@ internal static class CampaignMapClone
             CreatedByUserId = existing.CreatedByUserId,
             Memberships = existing.Memberships,
             Factions = factions,
+            AllyGroups = existing.AllyGroups,
+            Links = existing.Links,
+            TimeZoneId = existing.TimeZoneId,
+            StartsUtc = existing.StartsUtc,
+            EndsUtc = existing.EndsUtc,
+            RoundCount = existing.RoundCount,
+            RoundLengthAmount = existing.RoundLengthAmount,
+            RoundLengthUnit = existing.RoundLengthUnit,
+            Phases = existing.Phases,
+            MapGraph = existing.MapGraph,
+            TerrainTypes = existing.TerrainTypes,
+            StructureTypes = existing.StructureTypes,
+        };
+    }
+
+    public static StoredCampaign CloneWithMemberships(
+        StoredCampaign existing,
+        IReadOnlyList<StoredCampaignMembership> memberships,
+        DateTimeOffset updatedUtc)
+    {
+        return new StoredCampaign
+        {
+            Id = existing.Id,
+            Name = existing.Name,
+            Description = existing.Description,
+            PlayerSlotCount = existing.PlayerSlotCount,
+            IsPrivate = existing.IsPrivate,
+            IsPubliclyViewable = existing.IsPubliclyViewable,
+            JoinPasswordHash = existing.JoinPasswordHash,
+            CreatorIsParticipant = existing.CreatorIsParticipant,
+            City = existing.City,
+            Region = existing.Region,
+            Country = existing.Country,
+            MapStorageKey = existing.MapStorageKey,
+            Revision = existing.Revision,
+            CreatedUtc = existing.CreatedUtc,
+            UpdatedUtc = updatedUtc,
+            CreatedByUserId = existing.CreatedByUserId,
+            Memberships = memberships,
+            Factions = existing.Factions,
             AllyGroups = existing.AllyGroups,
             Links = existing.Links,
             TimeZoneId = existing.TimeZoneId,

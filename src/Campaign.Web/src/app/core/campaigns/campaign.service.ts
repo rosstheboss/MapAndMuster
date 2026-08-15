@@ -18,6 +18,26 @@ export class CampaignService {
     return firstValueFrom(this.http.get<CampaignListItem[]>('/api/campaigns', { withCredentials: true }));
   }
 
+  async listAll(): Promise<CampaignListItem[]> {
+    return firstValueFrom(this.http.get<CampaignListItem[]>('/api/campaigns/all', { withCredentials: true }));
+  }
+
+  async join(campaignId: string, joinPassword: string | null = null): Promise<CampaignListItem> {
+    return firstValueFrom(
+      this.http.post<CampaignListItem>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/join`,
+        { joinPassword },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async leave(campaignId: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post(`/api/campaigns/${encodeURIComponent(campaignId)}/leave`, {}, { withCredentials: true }),
+    );
+  }
+
   async get(campaignId: string): Promise<CampaignDetail> {
     return firstValueFrom(
       this.http.get<CampaignDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}`, { withCredentials: true }),

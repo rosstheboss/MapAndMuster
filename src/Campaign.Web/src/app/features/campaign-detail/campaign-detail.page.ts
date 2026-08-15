@@ -7,6 +7,7 @@ import type { CampaignDetail, CampaignMission } from '../../core/campaigns/campa
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 import { actionNumberAt, formatDuration, formatPhaseLabel, statusLabel } from '../../core/campaigns/campaign-schedule';
+import { formatLocation } from '../../core/location/location';
 import { adjacentTerritoryIds } from '../../core/maps/adjacency';
 import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
 import { territoryLabel } from '../../core/maps/map-graph.models';
@@ -160,6 +161,10 @@ export class CampaignDetailPage {
     return this.auth.currentUser()?.timeZoneId ?? null;
   }
 
+  protected locationText(campaign: CampaignDetail): string | null {
+    return formatLocation(campaign.city, campaign.region, campaign.country);
+  }
+
   protected roleLabel(campaign: CampaignDetail): string {
     if (campaign.canManage && campaign.isParticipant) {
       return 'Manager and player';
@@ -169,7 +174,11 @@ export class CampaignDetailPage {
       return 'Manager';
     }
 
-    return 'Player';
+    if (campaign.isParticipant) {
+      return 'Player';
+    }
+
+    return 'Viewer';
   }
 
   protected statusText(campaign: CampaignDetail): string {

@@ -12,7 +12,11 @@ public sealed class CampaignSetup
     /// <param name="description">The optional description.</param>
     /// <param name="playerSlotCount">The configured player-slot count.</param>
     /// <param name="isPrivate">Whether a join password is required.</param>
+    /// <param name="isPubliclyViewable">Whether non-members may view the campaign.</param>
     /// <param name="creatorIsParticipant">Whether the creating manager also occupies a player slot.</param>
+    /// <param name="city">The optional city.</param>
+    /// <param name="region">The optional state, province, or region.</param>
+    /// <param name="country">The optional country.</param>
     /// <param name="factions">The factions.</param>
     /// <param name="allyGroups">The ally groups.</param>
     /// <param name="links">The external links.</param>
@@ -24,7 +28,11 @@ public sealed class CampaignSetup
         string? description,
         int playerSlotCount,
         bool isPrivate,
+        bool isPubliclyViewable,
         bool creatorIsParticipant,
+        string? city,
+        string? region,
+        string? country,
         IReadOnlyList<FactionSetup> factions,
         IReadOnlyList<AllyGroupSetup> allyGroups,
         IReadOnlyList<CampaignExternalLink> links,
@@ -43,7 +51,11 @@ public sealed class CampaignSetup
         Description = description;
         PlayerSlotCount = playerSlotCount;
         IsPrivate = isPrivate;
+        IsPubliclyViewable = isPubliclyViewable;
         CreatorIsParticipant = creatorIsParticipant;
+        City = city;
+        Region = region;
+        Country = country;
         Factions = factions;
         AllyGroups = allyGroups;
         Links = links;
@@ -64,8 +76,20 @@ public sealed class CampaignSetup
     /// <summary>Gets a value indicating whether a join password is required.</summary>
     public bool IsPrivate { get; }
 
+    /// <summary>Gets a value indicating whether non-members may view the campaign.</summary>
+    public bool IsPubliclyViewable { get; }
+
     /// <summary>Gets a value indicating whether the creating manager also occupies a player slot.</summary>
     public bool CreatorIsParticipant { get; }
+
+    /// <summary>Gets the optional city.</summary>
+    public string? City { get; }
+
+    /// <summary>Gets the optional state, province, or region.</summary>
+    public string? Region { get; }
+
+    /// <summary>Gets the optional country.</summary>
+    public string? Country { get; }
 
     /// <summary>Gets the factions.</summary>
     public IReadOnlyList<FactionSetup> Factions { get; }

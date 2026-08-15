@@ -1,6 +1,7 @@
 import {
   actionNumberAt,
   durationRangeMessage,
+  formatCountdown,
   formatDuration,
   formatPhaseLabel,
   maxAmountForUnit,
@@ -15,6 +16,14 @@ describe('campaign-schedule helpers', () => {
     expect(formatPhaseLabel('Battle', 1)).toBe('Battle phase');
     expect(statusLabel('InProgress')).toBe('In progress');
     expect(statusLabel('Scheduled')).toBe('Scheduled');
+  });
+
+  it('formats a remaining phase countdown from a server end instant', () => {
+    const now = Date.parse('2026-08-14T12:00:00.000Z');
+    expect(formatCountdown('2026-08-16T12:00:00.000Z', now)).toBe('2d 0h 0m');
+    expect(formatCountdown('2026-08-14T13:00:00.000Z', now)).toBe('1h 0m 0s');
+    expect(formatCountdown('2026-08-14T12:01:30.000Z', now)).toBe('1m 30s');
+    expect(formatCountdown('2026-08-14T11:00:00.000Z', now)).toBe('0s');
   });
 
   it('numbers actions in mixed round order', () => {

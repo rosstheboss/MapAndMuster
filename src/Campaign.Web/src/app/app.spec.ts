@@ -25,7 +25,10 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.app-brand')?.textContent).toContain('Campaign Map');
     expect(compiled.querySelector('.skip-link')?.textContent).toContain('Skip to content');
-    expect(compiled.querySelector('app-theme-toggle button')?.getAttribute('aria-label')).toBe('Switch to dark mode');
+    const themeToggle = compiled.querySelector('app-theme-toggle button');
+    expect(themeToggle?.getAttribute('aria-label')).toBe('Switch to dark mode');
+    expect(themeToggle?.textContent).toContain('Light mode');
+    expect(themeToggle?.querySelector('svg circle')).toBeTruthy();
   });
 
   it('renders the main navigation under the banner', async () => {
@@ -36,6 +39,7 @@ describe('App', () => {
     const nav = compiled.querySelector('nav[aria-label="Main"]');
     expect(nav?.textContent).toContain('Home');
     expect(nav?.textContent).toContain('Your Campaigns');
+    expect(nav?.textContent).toContain('All Campaigns');
     expect(nav?.textContent).toContain('Profile');
     expect(nav?.textContent).toContain('Sign in');
   });

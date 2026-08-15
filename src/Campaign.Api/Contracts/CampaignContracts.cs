@@ -22,11 +22,23 @@ public sealed class SaveCampaignRequest
     /// <summary>Gets whether a join password is required.</summary>
     public required bool IsPrivate { get; init; }
 
+    /// <summary>Gets whether non-members may view the campaign. Defaults to true.</summary>
+    public bool IsPubliclyViewable { get; init; } = true;
+
     /// <summary>Gets the join password. Omit on update to keep the current password.</summary>
     public string? JoinPassword { get; init; }
 
     /// <summary>Gets whether the creator also occupies a player slot.</summary>
     public required bool CreatorIsParticipant { get; init; }
+
+    /// <summary>Gets the optional city.</summary>
+    public string? City { get; init; }
+
+    /// <summary>Gets the optional state, province, or region.</summary>
+    public string? Region { get; init; }
+
+    /// <summary>Gets the optional country.</summary>
+    public string? Country { get; init; }
 
     /// <summary>Gets the factions.</summary>
     public required IReadOnlyList<FactionRequest> Factions { get; init; }
@@ -196,6 +208,9 @@ public sealed class CampaignListItemResponse
     /// <summary>Gets the campaign name.</summary>
     public required string Name { get; init; }
 
+    /// <summary>Gets the optional description.</summary>
+    public string? Description { get; init; }
+
     /// <summary>Gets the configured player-slot count.</summary>
     public required int PlayerSlotCount { get; init; }
 
@@ -205,11 +220,32 @@ public sealed class CampaignListItemResponse
     /// <summary>Gets whether the campaign is private.</summary>
     public required bool IsPrivate { get; init; }
 
+    /// <summary>Gets whether non-members may view the campaign.</summary>
+    public required bool IsPubliclyViewable { get; init; }
+
     /// <summary>Gets whether the current user can manage the campaign.</summary>
     public required bool CanManage { get; init; }
 
     /// <summary>Gets whether the current user occupies a player slot.</summary>
     public required bool IsParticipant { get; init; }
+
+    /// <summary>Gets whether the current user may view the campaign page.</summary>
+    public required bool CanView { get; init; }
+
+    /// <summary>Gets whether the current user may join as a player.</summary>
+    public required bool CanJoin { get; init; }
+
+    /// <summary>Gets whether the current user may leave the campaign.</summary>
+    public required bool CanLeave { get; init; }
+
+    /// <summary>Gets the optional city.</summary>
+    public string? City { get; init; }
+
+    /// <summary>Gets the optional state, province, or region.</summary>
+    public string? Region { get; init; }
+
+    /// <summary>Gets the optional country.</summary>
+    public string? Country { get; init; }
 
     /// <summary>Gets the campaign lifecycle status.</summary>
     public required string Status { get; init; }
@@ -219,6 +255,15 @@ public sealed class CampaignListItemResponse
 
     /// <summary>Gets the campaign end instant, in UTC.</summary>
     public required DateTimeOffset EndsUtc { get; init; }
+
+    /// <summary>Gets the 1-based current round when the campaign is in progress.</summary>
+    public int? CurrentRound { get; init; }
+
+    /// <summary>Gets the display label for the current phase when the campaign is in progress.</summary>
+    public string? CurrentPhaseLabel { get; init; }
+
+    /// <summary>Gets when the current phase closes, in UTC.</summary>
+    public DateTimeOffset? CurrentPhaseEndsUtc { get; init; }
 }
 
 /// <summary>
@@ -244,8 +289,20 @@ public sealed class CampaignDetailResponse
     /// <summary>Gets whether the campaign is private.</summary>
     public required bool IsPrivate { get; init; }
 
+    /// <summary>Gets whether non-members may view the campaign.</summary>
+    public required bool IsPubliclyViewable { get; init; }
+
     /// <summary>Gets whether the creating manager also occupies a player slot.</summary>
     public required bool CreatorIsParticipant { get; init; }
+
+    /// <summary>Gets the optional city.</summary>
+    public string? City { get; init; }
+
+    /// <summary>Gets the optional state, province, or region.</summary>
+    public string? Region { get; init; }
+
+    /// <summary>Gets the optional country.</summary>
+    public string? Country { get; init; }
 
     /// <summary>Gets whether a map image is stored.</summary>
     public required bool HasMap { get; init; }
@@ -453,6 +510,15 @@ public sealed class MissionResponse
 }
 
 /// <summary>
+/// Request to join a campaign as a player.
+/// </summary>
+public sealed class JoinCampaignRequest
+{
+    /// <summary>Gets the join password for a private campaign.</summary>
+    public string? JoinPassword { get; init; }
+}
+
+/// <summary>
 /// Maps campaign application models onto HTTP contracts.
 /// </summary>
 public static class CampaignResponses
@@ -469,14 +535,25 @@ public static class CampaignResponses
         {
             Id = item.Id,
             Name = item.Name,
+            Description = item.Description,
             PlayerSlotCount = item.PlayerSlotCount,
             OccupiedPlayerSlots = item.OccupiedPlayerSlots,
             IsPrivate = item.IsPrivate,
+            IsPubliclyViewable = item.IsPubliclyViewable,
             CanManage = item.CanManage,
             IsParticipant = item.IsParticipant,
+            CanView = item.CanView,
+            CanJoin = item.CanJoin,
+            CanLeave = item.CanLeave,
+            City = item.City,
+            Region = item.Region,
+            Country = item.Country,
             Status = item.Status,
             StartsUtc = item.StartsUtc,
             EndsUtc = item.EndsUtc,
+            CurrentRound = item.CurrentRound,
+            CurrentPhaseLabel = item.CurrentPhaseLabel,
+            CurrentPhaseEndsUtc = item.CurrentPhaseEndsUtc,
         };
     }
 
@@ -496,7 +573,11 @@ public static class CampaignResponses
             PlayerSlotCount = detail.PlayerSlotCount,
             OccupiedPlayerSlots = detail.OccupiedPlayerSlots,
             IsPrivate = detail.IsPrivate,
+            IsPubliclyViewable = detail.IsPubliclyViewable,
             CreatorIsParticipant = detail.CreatorIsParticipant,
+            City = detail.City,
+            Region = detail.Region,
+            Country = detail.Country,
             HasMap = detail.HasMap,
             CanManage = detail.CanManage,
             IsParticipant = detail.IsParticipant,

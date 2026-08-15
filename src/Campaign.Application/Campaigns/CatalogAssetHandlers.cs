@@ -136,15 +136,17 @@ public sealed class GetStructureImageHandler
     /// <param name="structureTypeId">The structure type identifier.</param>
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <returns>The stored image.</returns>
     public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
         Guid campaignId,
         Guid structureTypeId,
         Guid userId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isAdministrator = false)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
-        if (campaign is null || CampaignMapper.MembershipFor(campaign, userId) is null)
+        if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
             return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
@@ -297,15 +299,17 @@ public sealed class GetFactionFlagHandler
     /// <param name="factionId">The faction identifier.</param>
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <returns>The stored image.</returns>
     public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
         Guid campaignId,
         Guid factionId,
         Guid userId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isAdministrator = false)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
-        if (campaign is null || CampaignMapper.MembershipFor(campaign, userId) is null)
+        if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
             return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
@@ -537,15 +541,17 @@ public sealed class GetMissionFileHandler
     /// <param name="missionId">The mission identifier.</param>
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <returns>The stored document.</returns>
     public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
         Guid campaignId,
         Guid missionId,
         Guid userId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isAdministrator = false)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
-        if (campaign is null || CampaignMapper.MembershipFor(campaign, userId) is null)
+        if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
             return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
