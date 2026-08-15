@@ -69,6 +69,9 @@ public sealed class CampaignListItem
 
     /// <summary>Gets when the current phase closes, in UTC.</summary>
     public DateTimeOffset? CurrentPhaseEndsUtc { get; init; }
+
+    /// <summary>Gets whether the viewer may open the play page.</summary>
+    public required bool CanPlay { get; init; }
 }
 
 /// <summary>
@@ -183,6 +186,18 @@ public sealed class CampaignDetail
 
     /// <summary>Gets when the current phase closes, in UTC.</summary>
     public DateTimeOffset? CurrentPhaseEndsUtc { get; init; }
+
+    /// <summary>Gets the viewer's chosen faction, when they are a player who has picked one.</summary>
+    public Guid? FactionId { get; init; }
+
+    /// <summary>Gets the viewer's chosen subfaction, when one is selected.</summary>
+    public string? Subfaction { get; init; }
+
+    /// <summary>Gets whether the viewer may open the play page.</summary>
+    public required bool CanPlay { get; init; }
+
+    /// <summary>Gets whether the viewer still needs to pick a faction.</summary>
+    public required bool CanChooseFaction { get; init; }
 }
 
 /// <summary>
@@ -343,6 +358,9 @@ public sealed class StoredCampaign
     /// <summary>Gets the overlay territory graph, when one has been saved.</summary>
     public StoredMapGraph? MapGraph { get; init; }
 
+    /// <summary>Gets launched play state, when the campaign has been seeded.</summary>
+    public Campaign.Domain.Play.CampaignPlayState? PlayState { get; init; }
+
     /// <summary>Gets the terrain types.</summary>
     public required IReadOnlyList<StoredTerrainType> TerrainTypes { get; init; }
 
@@ -378,6 +396,12 @@ public sealed class StoredCampaignMembership
 
     /// <summary>Gets whether the member occupies a player slot.</summary>
     public required bool IsPlayer { get; init; }
+
+    /// <summary>Gets the chosen faction, when the member is a player who has picked one.</summary>
+    public Guid? FactionId { get; init; }
+
+    /// <summary>Gets the chosen subfaction name, when required.</summary>
+    public string? Subfaction { get; init; }
 }
 
 /// <summary>

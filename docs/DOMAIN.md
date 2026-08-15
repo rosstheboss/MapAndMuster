@@ -68,8 +68,15 @@ Battle N when a round has more than one battle), and a countdown until the curre
 
 A signed-in user may join an upcoming campaign that still has an open player slot. Public
 campaigns join without a password; private campaigns require the join password. Members who are
-not managers may leave. Managers edit instead of joining. Players open an in-progress campaign
-with Play. Upcoming and completed campaigns, and campaigns the viewer is not playing, use View.
+not managers may leave. Managers edit instead of joining. Players and managers open an in-progress campaign with Play.
+Upcoming and completed campaigns, and viewers who are not playing, use View. The Play page is
+the live map, order, battle, and schedule-extension surface. Your Campaigns also offers Duplicate
+campaign on every listed campaign. Duplication copies the map overlay, factions, missions, ally
+groups, links, visibility, location, and schedule template into a new campaign whose start is one
+week after the duplication instant in the campaign time zone. The duplicating user becomes the
+manager of the copy and occupies a player slot only when they were a player on the source.
+Raster maps, flags, structure logos, and mission files are reused until the copy replaces them;
+the overlay SVG data is copied. Play state, memberships, and unresolved orders are not copied.
 
 Only a manager may edit or delete a campaign. Deletion removes the campaign from every member's
 list. A raster map image is required when creating a campaign; SVG and other active content are
@@ -104,8 +111,19 @@ The campaign state machine is derived from the server clock:
    phase window are included on the campaign page.
 3. `Completed`: at or after the computed end instant.
 
-A phase boundary belongs to the following phase. Action-window open/close and battle-result
-rules remain as specified in later sections.
+A phase boundary belongs to the following phase. After launch, actual phase windows are stored
+and may diverge from the original template when a window closes early or a manager extends it.
+
+After the start instant, managers cannot change the map, the ordered action and battle steps,
+name, description, factions, faction abilities, ally groups, terrain, structures, missions, or
+most other setup. They may increase the number of rounds, not below the current round and not
+above 52. They may lengthen the current round by adding time to the current or remaining action
+and battle windows; a window cannot be shortened below the duration already in effect for that
+window. Added rounds use the original phase template and make the campaign longer.
+
+Unused time from an action or battle window that closes early is added to the next window.
+Simultaneous-action resolution runs immediately when an action window closes; any wall-clock
+pause before the next window opens is taken from that next window.
 
 ## Role and actor model
 
@@ -131,6 +149,21 @@ The final required commitment closes an open window atomically. Before that inst
 may uncommit. At the deadline, the latest valid draft is submitted. Missing slots become
 `Hold`. Only users/forces that owe an order participate in the early-close calculation.
 
+Players pick a faction, and a required subfaction when the faction demands one, before they
+receive a starting force. On the campaign View page, every player (including a manager who occupies
+a player slot) must choose that faction before they can play. A participant who has not chosen a
+faction may do so until they have one and cannot submit orders for a round until they do. After a
+faction is chosen it cannot be changed. Each player force starts at that faction's spawn territory
+when the campaign launches or when they join play later; subfactions use the same spawn.
+
+Orders resolve simultaneously against the window's starting map state. An invalid `Move`
+becomes `Hold`. A force may not enter or claim another faction's spawn. After movement, enemy
+forces that occupy the same territory create a battle; later action slots for those forces
+become `Battle`. Same-player forces that share a territory rejoin. Uncontested occupation by a
+single faction claims the territory and plants that faction's flag, except that a spawn always
+keeps its faction's flag. Collisions that still lack a documented ranking, including competing
+builds on the same empty slot, become `Hold` rather than an invented winner.
+
 ## Initial action vocabulary
 
 - `Move`: travel to an allowed adjacent territory; invalid move becomes Hold.
@@ -154,15 +187,24 @@ that force become Battle.
 - Each participant may submit one current result; revisions retain history.
 - Staff may submit on a participant's behalf with actual/effective actor attribution.
 - Equivalent submissions finalize automatically.
+- A participant may accept the opponent's current submission; that counts as an equivalent
+  submission.
 - One timely submission becomes authoritative at the deadline.
-- Conflicting submissions become Disputed and notify GMs.
+- Conflicting submissions become Disputed and notify GMs in-app and by email.
 - GM resolution preserves both submissions and appends an authoritative result.
 - Three-or-more-participant engagements require a configured mission/result schema.
+- A battle phase ends early when every engagement is finalized and every required retreat is
+  recorded, and also when no battles remain for anyone to report. Unused time is added to the
+  next window. At the deadline, a missing retreat uses
+  the spawn fallback. A battle with no submissions at the deadline stays open for GM resolution
+  until decision 2 in `docs/DECISIONS-NEEDED.md` is recorded.
 
 ## Territory and structures
 
 - Adjacency is a graph edge, not an assumption based only on touching pixels.
-- Spawn locations prohibit enemy entry, battle, and construction unless configured otherwise.
+- Spawn locations prohibit enemy entry, battle, construction, and capture. The spawn faction's
+  flag is always present there.
+- A faction that controls a non-spawn territory displays its flag there.
 - At most one structure occupies a territory under the supplied rules.
 - Structure type, owner/controller, and condition are separate concepts.
 - Conditions initially include `Operational`, `Pillaged`, and `Destroyed` where allowed.
@@ -179,11 +221,19 @@ description (otherwise the display number 1, 2, 3… is used), select a required
 select at most one optional structure, assign optional ownership (otherwise Neutral), assign an
 optional spawn faction (at most one spawn per faction), and apply a transparent overlay color.
 
-Generate Connections suggests adjacency arrows from shared borders. User-created (manual) arrows
+Auto Generate Connections suggests adjacency arrows from shared borders. User-created (manual) arrows
 are kept on regenerate, and those pairs are skipped. Generated arrows may be replaced. Managers may
-add or delete arrows, including generated ones, and may clear all arrows. Arrow markers are editor
-aids and are not part of the published map image. Hovering an arrow enlarges it by half of its on-screen
-size and highlights both connected territories.
+add or delete arrows, including generated ones, and may clear all arrows. A pair of territories has
+at most one connection, and every connection is between exactly two territories. Select two
+territories and click Connect, or use the Connect tool and click two territories. Connection arrows
+are selectable only in Select, where clicking an arrow shows both territories in the side panel so
+the pair can be changed or deleted, and in Erase, where clicking an arrow deletes it. Drawing and
+Connect ignore arrows so they do not intercept the pointer or affect overlay drawing. Arrow markers
+are editor aids and are not part of the published map image. Each connection arrow stretches across
+the shortest gap between its territories so adjacent arrows do not cross. The arrow head and up to
+10 pixels of the shaft overhang each territory so the heads stay visible and selectable in Select
+and Erase. Hovering an arrow in those tools glows that arrow, grows it by half of its resting size,
+and glows both connected territories without washing the rest of the map.
 
 Campaign setup owns the terrain-type and structure catalogs. The initial terrain types,
 alphabetically, are Beach, Cave, Desert, Forest, Highlands, Jungle, Lake, Mountain, Plains, Riverlands, Sea,
@@ -203,10 +253,15 @@ duplicate file. New uploads and reused missions may be mixed.
 Hovering or selecting a territory, while editing or viewing, shows Name, Description, structures,
 ownership (or Neutral), spawn-location faction, adjacent territories, terrain, and missions.
 In Select mode, a mouse click on a territory keeps that territory selected. Ctrl+click (or Command+click)
-adds or removes territories from the selection. A click on the map with no territory clears the
-selection. Selected territories can be deleted with Delete or the Delete territory control, including
-when several are selected. Dragging a selection moves those territories together when the move stays on
-the map and does not overlap another territory; shared edges are allowed.
+adds or removes territories from the selection. Dragging on empty map draws a selection box that
+selects every territory it intersects; the box is 50% transparent gray with a black 2px dashed
+border and disappears when the button is released. A click on the map with no territory clears the
+selection. When two or more territories are selected, the side panel lists all of them and the map
+highlights each as selected. Selected territories can be deleted with Delete or the Delete territory
+control, including when several are selected. Dragging a selection moves those territories together
+when the move stays on the map and does not overlap another territory's interior. Shared or
+overlapping borders are allowed, and a dragged territory snaps back onto a touching border,
+including its original place, when that contact is within snap distance.
 Owned territories also show a flag at up to 50×50 pixels, using the faction color flag by default or an
 uploaded image that is not recolored. Structure logos and ownership flags sit at 50×50 pixels in the
 territory center when that size fits; otherwise they shrink and shift to stay inside the polygon, as centered
@@ -214,8 +269,10 @@ as possible. When a structure is present, the ownership flag sits beside it. Hig
 contrasting glow. Selected or hovered territories use the full selected glow. Connected adjacent territories
 glow with half of the usual fill transparency. When several territories are selected, those
 territories stay selected and every other connected territory uses the half-glow. When a territory
-has an overlay color, that color is the glow, strongest around the territory border. Overlay
-colors may be assigned randomly, removed, taken from terrain, or set manually.
+has an overlay color, that color is the glow, strongest around the territory border. Overlay color
+mode is Random Colors, Color By Terrain, or Manual Colors. Switching to Random Colors or Color By
+Terrain recolors every territory. A new territory, or a terrain change while Color By Terrain is on,
+uses that mode's color. Remove Colors switches to Manual Colors and clears every overlay color.
 
 The map overlay starts fitted to the panel. Zoom is 10% to 800% of the map image's actual pixel size,
 in 10% steps, with a typed percent field, a 100% control, and a Fit to panel control. 100% shows the
@@ -223,17 +280,26 @@ image at its native size and centers it. Fit to panel scales the image to the vi
 Drawing coordinates stay normalized to the full-size image. Snap distance, minimum draw spacing, and
 overlay stroke widths are measured in screen pixels so zooming in lets a manager trace fine coasts and
 province borders. When the zoomed image is larger than the panel, it can be panned
-but not dragged past the image bounds. Drawing territories requires a pointer; other map controls,
-including zoom, pan, tool choice, and the territory list, are keyboard accessible.
-A click on empty map, including the letterboxed panel around a fitted image, clears the territory
-selection. Hovered adjacency arrows stay a modest on-screen size and enlarge by half relative to that
-resting size; they do not scale with the map image.
+but not dragged past the image bounds. Hold a right-click (context-click) or middle-click and drag to
+pan without drawing, erasing, or selecting; the mouse wheel still zooms the same way it does with any
+tool. Left-click drag does not pan. Arrow keys and space-drag also pan. Drawing territories requires
+a pointer; other map controls, including zoom, pan, tool choice, and the territory list, are keyboard
+accessible. A click on empty map, including the letterboxed panel around a fitted image, clears the
+territory selection. Only the hovered or selected arrow glows. Saving the map graph does not change
+zoom, pan, or fit. Save Map is disabled until there are unsaved overlay edits. After a successful
+save, the green banner "Successfully saved changes." is followed by the last-saved time. Clear
+Unsaved Changes is disabled until there are unsaved overlay edits; it discards those edits and
+restores the last saved graph without resetting zoom or pan.
 
 Edit campaign and the campaign page show a static 200×113 map preview of the current image. It is not
 zoomable or selectable. The campaign page and map editor can download a PNG of the latest saved map
 image with the unselected territory overlay rasterized on top. Adjacency arrows are omitted. If the
 map editor has unsaved edits, downloading asks whether to save first; declining downloads the last
-saved overlay.
+saved overlay. The same prompt applies to Download SVG data, which downloads the overlay polygons
+and adjacencies as an SVG file. Upload SVG, in the map editor, creates territories from polygon,
+polyline, rect, or path data in an SVG file. Exported overlay files restore names, terrain,
+structures, ownership, spawns, and adjacencies. Generic SVG files become new untitled territories
+using the campaign's first terrain type.
 
 If two endpoints of a new drawing land on the same border of an existing territory, and no other
 lines, endpoints, or territories lie between those points on that border, a line matching that
@@ -289,3 +355,14 @@ A GM reopening or correcting a prior state never mutates history in place. It cr
 campaign revision, identifies downstream state requiring recomputation/review, and notifies
 affected users in-app and by email. Concurrent corrections must fail safely rather than use
 last-write-wins.
+
+## Play log
+
+Players and managers can open the campaign log from the Play page at any time. The log records
+campaign start, manager extensions of remaining phases or rounds, resolved actions after an
+action window closes (including Hold for every force), battles created or finalized, manager
+battle resolutions, player retreats, and automatic substitutions: missing orders become Hold,
+invalid orders become Hold, competing builds become Hold, deadline-submitted drafts, missing
+retreats using the spawn fallback, and battles held open when resolution cannot finish.
+Unresolved secret orders, including drafts and unrevealed commitments, are never written to or
+returned in the log.

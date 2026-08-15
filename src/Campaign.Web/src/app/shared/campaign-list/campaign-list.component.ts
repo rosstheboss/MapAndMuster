@@ -1,5 +1,5 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
@@ -21,8 +21,10 @@ export class CampaignListComponent {
   private readonly campaignsApi = inject(CampaignService);
   private readonly overlay = inject(FormSubmitOverlayService);
   private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
 
   readonly campaigns = input.required<readonly CampaignListItem[]>();
+  readonly allowDuplicate = input(false);
   readonly membershipChanged = output<void>();
 
   private readonly openCampaigns = signal<ReadonlySet<string>>(new Set());
@@ -124,6 +126,17 @@ export class CampaignListComponent {
       this.membershipChanged.emit();
     } catch (error: unknown) {
       this.actionError.set(readApiError(error, 'Unable to leave this campaign.'));
+    }
+  }
+
+  protected async duplicate(campaign: CampaignListItem): Promise<void> {
+    this.actionError.set(null);
+    try {
+      const created = await this.overlay.run(() => this.campaignsApi.duplicate(campaign.id));
+      this.membershipChanged.emit();
+      await this.router.navigate(['/campaigns', created.id, 'edit']);
+    } catch (error: unknown) {
+      this.actionError.set(readApiError(error, 'Unable to duplicate this campaign.'));
     }
   }
 

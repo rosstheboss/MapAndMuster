@@ -1,0 +1,68 @@
+:host {
+  display: block;
+}
+
+.button,
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.plain-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.map-view {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (width >= 56rem) {
+  .map-view {
+    grid-template-columns: minmax(0, 1fr) 16rem;
+    align-items: start;
+  }
+}
+
+.map-meta h3 {
+  margin: 0;
+}
+
+fieldset {
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.85rem;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(28 25 23 / 45%);
+}
+
+.dialog {
+  width: min(100%, 40rem);
+  max-height: min(90vh, 40rem);
+  overflow: auto;
+}
+
+.dialog h2 {
+  margin: 0;
+}
+
+.log-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.log-list p {
+  margin: 0;
+}

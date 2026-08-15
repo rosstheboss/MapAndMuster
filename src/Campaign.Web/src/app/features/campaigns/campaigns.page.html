@@ -16,6 +16,6 @@
       <p class="muted">Create a campaign to set factions, player slots, and a map.</p>
     </div>
   } @else {
-    <app-campaign-list [campaigns]="campaigns()" (membershipChanged)="reload()" />
+    <app-campaign-list [campaigns]="campaigns()" [allowDuplicate]="true" (membershipChanged)="reload()" />
   }
 </section>

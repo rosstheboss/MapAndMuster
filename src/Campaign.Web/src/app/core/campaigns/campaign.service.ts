@@ -5,9 +5,16 @@ import { firstValueFrom } from 'rxjs';
 import type {
   CampaignDetail,
   CampaignListItem,
+  CampaignPlayDetail,
+  ChooseFactionPayload,
+  ExtendCampaignSchedulePayload,
   MapGraphDetail,
+  PlayRevisionPayload,
   SaveCampaignPayload,
   SaveMapGraphPayload,
+  SaveOrderDraftPayload,
+  SubmitBattleResultPayload,
+  SubmitRetreatPayload,
 } from './campaign.models';
 
 @Injectable({ providedIn: 'root' })
@@ -46,6 +53,18 @@ export class CampaignService {
 
   async create(payload: SaveCampaignPayload): Promise<CampaignDetail> {
     return firstValueFrom(this.http.post<CampaignDetail>('/api/campaigns', payload, { withCredentials: true }));
+  }
+
+  async duplicate(campaignId: string): Promise<CampaignDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/duplicate`,
+        {},
+        {
+          withCredentials: true,
+        },
+      ),
+    );
   }
 
   async update(campaignId: string, payload: SaveCampaignPayload): Promise<CampaignDetail> {
@@ -149,6 +168,94 @@ export class CampaignService {
       this.http.post<CampaignDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/missions/${encodeURIComponent(missionId)}/file`,
         form,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async getPlay(campaignId: string): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.get<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async chooseFaction(campaignId: string, payload: ChooseFactionPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/faction`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async saveDraft(campaignId: string, payload: SaveOrderDraftPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/draft`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async commitOrders(campaignId: string, payload: PlayRevisionPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/commit`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async uncommitOrders(campaignId: string, payload: PlayRevisionPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/uncommit`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async submitBattleResult(campaignId: string, payload: SubmitBattleResultPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/battle-result`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async acceptBattleResult(campaignId: string, battleId: string, revision: number): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/accept-result`,
+        { revision, battleId },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async submitRetreat(campaignId: string, payload: SubmitRetreatPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/retreat`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async resolveBattle(campaignId: string, payload: SubmitBattleResultPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/gm-resolve-battle`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async extendSchedule(campaignId: string, payload: ExtendCampaignSchedulePayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/extend-schedule`,
+        payload,
         { withCredentials: true },
       ),
     );

@@ -74,6 +74,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(campaign => campaign.Country).HasMaxLength(100);
             entity.Property(campaign => campaign.MapStorageKey).HasMaxLength(260);
             entity.Property(campaign => campaign.MapGraphJson).HasColumnType("jsonb");
+            entity.Property(campaign => campaign.PlayStateJson).HasColumnType("jsonb");
             entity.Property(campaign => campaign.CatalogJson).HasColumnType("jsonb");
             entity.Property(campaign => campaign.TimeZoneId).HasMaxLength(64).IsRequired();
             entity.Property(campaign => campaign.RoundLengthUnit).HasMaxLength(16).IsRequired();
@@ -107,6 +108,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.HasKey(membership => membership.Id);
             entity.HasIndex(membership => new { membership.CampaignId, membership.UserId }).IsUnique();
             entity.HasIndex(membership => membership.UserId);
+            entity.Property(membership => membership.Subfaction).HasMaxLength(60);
         });
 
         builder.Entity<CampaignAllyGroupRecord>(entity =>

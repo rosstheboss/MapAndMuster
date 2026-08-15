@@ -175,3 +175,15 @@ public sealed class LeaveCampaignCommand
     /// <summary>Gets the campaign identifier.</summary>
     public required Guid CampaignId { get; init; }
 }
+
+/// <summary>
+/// Command to copy a campaign's setup, map overlay, and catalog while sharing stored art files.
+/// </summary>
+public sealed class DuplicateCampaignCommand
+{
+    /// <summary>Gets the authenticated user creating the copy.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the source campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+}

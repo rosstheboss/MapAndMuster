@@ -181,6 +181,11 @@ summary:focus-visible,
   color: var(--color-text);
 }
 
+.button-secondary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .muted {
   color: var(--color-muted);
 }

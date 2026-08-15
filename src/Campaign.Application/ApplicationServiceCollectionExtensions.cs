@@ -1,6 +1,7 @@
 using Campaign.Application.Campaigns;
 using Campaign.Application.Identity;
 using Campaign.Application.Maps;
+using Campaign.Application.Play;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Campaign.Application;
@@ -34,6 +35,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<JoinCampaignHandler>();
         services.AddScoped<LeaveCampaignHandler>();
         services.AddScoped<DeleteCampaignHandler>();
+        services.AddScoped<DuplicateCampaignHandler>();
         services.AddScoped<UploadCampaignMapHandler>();
         services.AddScoped<GetCampaignMapHandler>();
         services.AddScoped<GetCampaignMapGraphHandler>();
@@ -44,6 +46,16 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<GetFactionFlagHandler>();
         services.AddScoped<UploadMissionFileHandler>();
         services.AddScoped<GetMissionFileHandler>();
+        services.AddScoped<GetCampaignPlayHandler>();
+        services.AddScoped<SaveOrderDraftHandler>();
+        services.AddScoped<CommitOrdersHandler>();
+        services.AddScoped<UncommitOrdersHandler>();
+        services.AddScoped<SubmitBattleResultHandler>();
+        services.AddScoped<AcceptBattleResultHandler>();
+        services.AddScoped<ResolveBattleHandler>();
+        services.AddScoped<SubmitRetreatHandler>();
+        services.AddScoped<ExtendCampaignScheduleHandler>();
+        services.AddScoped<ChooseFactionHandler>();
 
         return services;
     }

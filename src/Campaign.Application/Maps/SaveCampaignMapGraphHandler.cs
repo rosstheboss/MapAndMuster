@@ -54,6 +54,11 @@ public sealed class SaveCampaignMapGraphHandler
                 "Only a campaign manager can edit the campaign map.");
         }
 
+        if (CampaignLifecycle.HasLaunched(existing, _clock.UtcNow))
+        {
+            return OperationResults.Failure<CampaignMapGraphDetail>(ErrorCodes.CampaignLocked, CampaignLifecycle.LockedMessage);
+        }
+
         var factionIds = existing.Factions.Select(static faction => faction.Id).ToHashSet();
         var terrainIds = existing.TerrainTypes.Select(static type => type.Id).ToHashSet();
         var structureIds = existing.StructureTypes.Select(static type => type.Id).ToHashSet();

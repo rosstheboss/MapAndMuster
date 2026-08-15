@@ -46,6 +46,9 @@ public sealed class CampaignRecord
     /// <summary>Gets or sets the overlay territory graph JSON.</summary>
     public string? MapGraphJson { get; set; }
 
+    /// <summary>Gets or sets launched play-state JSON.</summary>
+    public string? PlayStateJson { get; set; }
+
     /// <summary>Gets or sets the terrain and structure catalog JSON.</summary>
     public string? CatalogJson { get; set; }
 

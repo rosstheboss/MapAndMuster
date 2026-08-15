@@ -5,8 +5,9 @@ in an ADR or the relevant domain document and update tests.
 
 ## Campaign and phase behavior
 
-1. May a battle phase end early when all engagements and retreats are finalized, or does the
-   configured deadline always remain authoritative?
+1. Resolved: a battle phase ends early when every engagement is finalized and every required
+   retreat is recorded. Unused time is added to the next action or battle window. See
+   `docs/DOMAIN.md`.
 2. If neither battle participant submits a result, is the battle disputed, a forced retreat for
    both, a GM task, or another outcome?
 3. The draft mentions removal after three missing-action/forced-retreat incidents. Is removal

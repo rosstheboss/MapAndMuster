@@ -4,9 +4,14 @@
 
 .toolbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
+  flex-flow: column nowrap;
+  gap: 0.55rem;
+  align-items: stretch;
+}
+
+.last-saved {
+  margin: 0;
+  align-self: center;
 }
 
 .tool-group {

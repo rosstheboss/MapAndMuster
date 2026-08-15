@@ -110,6 +110,7 @@ public sealed class CampaignStore : ICampaignStore
         // Apply scalars and replace children in SQL. Graph-replace through the change tracker
         // raises false concurrency conflicts on faction rows.
         var catalogJson = CatalogJson.Serialize(campaign.TerrainTypes, campaign.StructureTypes);
+        var playJson = PlayStateJson.Serialize(campaign.PlayState);
         var affected = await _dbContext.Campaigns
             .Where(item => item.Id == campaign.Id && item.Revision == expectedRevision)
             .ExecuteUpdateAsync(
@@ -126,6 +127,7 @@ public sealed class CampaignStore : ICampaignStore
                     .SetProperty(item => item.Country, campaign.Country)
                     .SetProperty(item => item.MapStorageKey, campaign.MapStorageKey)
                     .SetProperty(item => item.CatalogJson, catalogJson)
+                    .SetProperty(item => item.PlayStateJson, playJson)
                     .SetProperty(item => item.TimeZoneId, campaign.TimeZoneId)
                     .SetProperty(item => item.StartsUtc, campaign.StartsUtc)
                     .SetProperty(item => item.EndsUtc, campaign.EndsUtc)
@@ -216,6 +218,28 @@ public sealed class CampaignStore : ICampaignStore
     }
 
     /// <inheritdoc />
+    public async Task<bool> IsStorageKeyInUseAsync(
+        string storageKey,
+        Guid? excludingCampaignId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
+        var query = _dbContext.Campaigns.AsNoTracking();
+        if (excludingCampaignId is { } excluded)
+        {
+            query = query.Where(campaign => campaign.Id != excluded);
+        }
+
+        return await query
+            .AnyAsync(
+                campaign => campaign.MapStorageKey == storageKey
+                    || campaign.Factions.Any(faction => faction.FlagImageStorageKey == storageKey)
+                    || (campaign.CatalogJson != null && campaign.CatalogJson.Contains(storageKey)),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task<UpdateStoredCampaignOutcome> UpdateMapGraphAsync(
         Guid campaignId,
         StoredMapGraph graph,
@@ -266,6 +290,82 @@ public sealed class CampaignStore : ICampaignStore
         };
     }
 
+    /// <inheritdoc />
+    public async Task<UpdateStoredCampaignOutcome> UpdatePlayStateAsync(
+        Guid campaignId,
+        Campaign.Domain.Play.CampaignPlayState playState,
+        StoredMapGraph? mapGraph,
+        DateTimeOffset endsUtc,
+        int roundCount,
+        int expectedRevision,
+        DateTimeOffset updatedUtc,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(playState);
+
+        var exists = await _dbContext.Campaigns
+            .AnyAsync(item => item.Id == campaignId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!exists)
+        {
+            return new UpdateStoredCampaignOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.CampaignNotFound,
+                Message = "The campaign was not found.",
+            };
+        }
+
+        var playJson = PlayStateJson.Serialize(playState);
+        var affected = 0;
+        if (mapGraph is null)
+        {
+            affected = await _dbContext.Campaigns
+                .Where(item => item.Id == campaignId && item.Revision == expectedRevision)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(item => item.PlayStateJson, playJson)
+                        .SetProperty(item => item.EndsUtc, endsUtc)
+                        .SetProperty(item => item.RoundCount, roundCount)
+                        .SetProperty(item => item.UpdatedUtc, updatedUtc)
+                        .SetProperty(item => item.Revision, expectedRevision + 1),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            var mapJson = MapGraphJson.Serialize(mapGraph);
+            affected = await _dbContext.Campaigns
+                .Where(item => item.Id == campaignId && item.Revision == expectedRevision)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(item => item.PlayStateJson, playJson)
+                        .SetProperty(item => item.MapGraphJson, mapJson)
+                        .SetProperty(item => item.EndsUtc, endsUtc)
+                        .SetProperty(item => item.RoundCount, roundCount)
+                        .SetProperty(item => item.UpdatedUtc, updatedUtc)
+                        .SetProperty(item => item.Revision, expectedRevision + 1),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        if (affected == 0)
+        {
+            return new UpdateStoredCampaignOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.ConcurrencyConflict,
+                Message = "The campaign was changed by another request. Reload and try again.",
+            };
+        }
+
+        var stored = await FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        return new UpdateStoredCampaignOutcome
+        {
+            IsSuccess = true,
+            Campaign = stored ?? throw new InvalidOperationException("The campaign was not found after play state was saved."),
+        };
+    }
+
     private IQueryable<CampaignRecord> QueryCampaigns()
     {
         return _dbContext.Campaigns
@@ -296,6 +396,7 @@ public sealed class CampaignStore : ICampaignStore
             Country = campaign.Country,
             MapStorageKey = campaign.MapStorageKey,
             MapGraphJson = campaign.MapGraph is null ? null : MapGraphJson.Serialize(campaign.MapGraph),
+            PlayStateJson = PlayStateJson.Serialize(campaign.PlayState),
             CatalogJson = CatalogJson.Serialize(campaign.TerrainTypes, campaign.StructureTypes),
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
@@ -417,6 +518,8 @@ public sealed class CampaignStore : ICampaignStore
                 UserId = membership.UserId,
                 IsGameMaster = membership.IsGameMaster,
                 IsPlayer = membership.IsPlayer,
+                FactionId = membership.FactionId,
+                Subfaction = membership.Subfaction,
             });
         }
 
@@ -456,6 +559,7 @@ public sealed class CampaignStore : ICampaignStore
             UpdatedUtc = record.UpdatedUtc,
             CreatedByUserId = record.CreatedByUserId,
             MapGraph = MapGraphJson.Deserialize(record.MapGraphJson),
+            PlayState = PlayStateJson.Deserialize(record.PlayStateJson),
             TerrainTypes = catalogs.TerrainTypes,
             StructureTypes = catalogs.StructureTypes,
             Memberships =
@@ -465,6 +569,8 @@ public sealed class CampaignStore : ICampaignStore
                     UserId = membership.UserId,
                     IsGameMaster = membership.IsGameMaster,
                     IsPlayer = membership.IsPlayer,
+                    FactionId = membership.FactionId,
+                    Subfaction = membership.Subfaction,
                 }),
             ],
             AllyGroups =

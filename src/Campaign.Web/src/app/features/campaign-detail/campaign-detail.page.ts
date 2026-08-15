@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
@@ -7,9 +8,12 @@ import type { CampaignDetail, CampaignMission } from '../../core/campaigns/campa
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 import { actionNumberAt, formatDuration, formatPhaseLabel, statusLabel } from '../../core/campaigns/campaign-schedule';
+import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
+import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { formatLocation } from '../../core/location/location';
 import { adjacentTerritoryIds } from '../../core/maps/adjacency';
 import { downloadBlob, mapDownloadFilename, rasterizeMapPng } from '../../core/maps/map-export';
+import { serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
 import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
 import { territoryLabel } from '../../core/maps/map-graph.models';
 import { CampaignMapPreviewComponent } from '../../shared/campaign-map-preview/campaign-map-preview.component';
@@ -18,18 +22,27 @@ import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component
 
 @Component({
   selector: 'app-campaign-detail-page',
-  imports: [RouterLink, InstantDatePipe, CampaignMapViewComponent, CampaignMapPreviewComponent, MapSymbolComponent],
+  imports: [
+    FormsModule,
+    RouterLink,
+    InstantDatePipe,
+    CampaignMapViewComponent,
+    CampaignMapPreviewComponent,
+    MapSymbolComponent,
+  ],
   templateUrl: './campaign-detail.page.html',
   styleUrl: './campaign-detail.page.css',
 })
 export class CampaignDetailPage {
   private readonly campaignsApi = inject(CampaignService);
+  private readonly overlay = inject(FormSubmitOverlayService);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
+  protected readonly successMessage = signal<string | null>(null);
   protected readonly campaign = signal<CampaignDetail | null>(null);
   protected readonly graph = signal<MapGraph>({ territories: [], adjacencies: [] });
   protected readonly hoveredTerritoryId = signal<string | null>(null);
@@ -37,6 +50,8 @@ export class CampaignDetailPage {
   protected readonly confirmingDelete = signal(false);
   protected readonly deleting = signal(false);
   protected readonly downloading = signal(false);
+  protected readonly factionChoice = signal('');
+  protected readonly subfactionChoice = signal('');
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
@@ -73,6 +88,51 @@ export class CampaignDetailPage {
   protected readonly adjacentTerritoryIds = computed(() =>
     adjacentTerritoryIds(this.graph().adjacencies, this.focusTerritoryIds()),
   );
+  protected readonly selectedFaction = computed(
+    () => this.campaign()?.factions.find((faction) => faction.id === this.factionChoice()) ?? null,
+  );
+  protected readonly chosenFaction = computed(() => {
+    const campaign = this.campaign();
+    if (!campaign?.factionId) {
+      return null;
+    }
+
+    return campaign.factions.find((faction) => faction.id === campaign.factionId) ?? null;
+  });
+
+  protected async chooseFaction(): Promise<void> {
+    const campaign = this.campaign();
+    const factionId = this.factionChoice();
+    if (!campaign || !factionId) {
+      return;
+    }
+
+    this.error.set(null);
+    this.successMessage.set(null);
+    try {
+      await this.overlay.run(() =>
+        this.campaignsApi.chooseFaction(campaign.id, {
+          revision: campaign.revision,
+          factionId,
+          subfaction: this.subfactionChoice() || null,
+        }),
+      );
+      this.campaign.update((current) =>
+        current
+          ? {
+              ...current,
+              factionId,
+              subfaction: this.subfactionChoice() || null,
+              canChooseFaction: false,
+            }
+          : current,
+      );
+      await this.load(campaign.id);
+      this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
+    } catch (error: unknown) {
+      this.error.set(readApiError(error, 'Unable to save your faction.'));
+    }
+  }
 
   protected onTerritorySelect(event: { id: string; additive: boolean }): void {
     if (event.additive) {
@@ -177,6 +237,16 @@ export class CampaignDetailPage {
     } finally {
       this.downloading.set(false);
     }
+  }
+
+  protected downloadSvg(): void {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return;
+    }
+
+    const blob = new Blob([serializeMapSvg(this.graph())], { type: 'image/svg+xml' });
+    downloadBlob(blob, svgDownloadFilename(campaign.name));
   }
 
   protected timeZoneId(): string | null {

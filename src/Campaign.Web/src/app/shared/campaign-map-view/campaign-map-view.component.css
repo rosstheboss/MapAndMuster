@@ -27,6 +27,15 @@
   min-height: var(--touch-min);
 }
 
+.selection-marquee {
+  position: absolute;
+  z-index: 4;
+  box-sizing: border-box;
+  background: rgb(128 128 128 / 50%);
+  border: 2px dashed #000;
+  pointer-events: none;
+}
+
 .map-viewport {
   position: relative;
   overflow: hidden;
@@ -36,6 +45,11 @@
   border-radius: 0.5rem;
   background: var(--color-nested);
   touch-action: none;
+}
+
+.map-viewport.is-panning,
+.map-viewport.is-panning * {
+  cursor: grabbing;
 }
 
 .map-canvas {
@@ -145,6 +159,10 @@
   pointer-events: none;
 }
 
+.adjacency {
+  pointer-events: none;
+}
+
 .adjacency-line {
   stroke: #1c1917;
   pointer-events: none;
@@ -155,13 +173,35 @@
   pointer-events: none;
 }
 
-.adjacency-hit {
-  stroke: transparent;
-  cursor: pointer;
+.adjacency-hit,
+.adjacency-hit-head {
+  pointer-events: none;
 }
 
-.adjacency.is-highlighted .adjacency-line,
-.adjacency.is-highlighted .adjacency-head {
+.adjacency.is-interactive .adjacency-hit {
+  fill: none;
+  stroke: transparent;
+  cursor: pointer;
+  pointer-events: stroke;
+}
+
+.adjacency.is-interactive .adjacency-hit-head {
+  fill: transparent;
+  stroke: none;
+  cursor: pointer;
+  pointer-events: fill;
+}
+
+.adjacency-visual {
+  pointer-events: none;
+}
+
+.adjacency.is-highlighted .adjacency-line {
   stroke: var(--color-glow);
+  filter: drop-shadow(0 0 2px var(--color-glow)) drop-shadow(0 0 4px var(--color-glow));
+}
+
+.adjacency.is-highlighted .adjacency-head {
   fill: var(--color-glow);
+  filter: drop-shadow(0 0 2px var(--color-glow)) drop-shadow(0 0 4px var(--color-glow));
 }

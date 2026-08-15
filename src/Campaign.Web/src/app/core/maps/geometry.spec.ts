@@ -1,4 +1,10 @@
-import { adjacentTerritoryIds, adjacencyArrowGeometry, generateAdjacencies } from './adjacency';
+import {
+  adjacentTerritoryIds,
+  adjacencyArrowEndpoints,
+  adjacencyArrowGeometry,
+  findConnection,
+  generateAdjacencies,
+} from './adjacency';
 import {
   clampTranslation,
   encloseAlongImageEdge,
@@ -8,6 +14,9 @@ import {
   interiorsOverlap,
   isValidTerritoryPolygon,
   normalizedFromPixels,
+  polygonIntersectsRect,
+  resolveTerritoryTranslation,
+  segmentsCross,
   sharedBorderMidpoint,
   traceSharedBorder,
   translatePolygon,
@@ -81,15 +90,31 @@ describe('map geometry', () => {
     ).toEqual({ x: 0.2, y: 0.2 });
   });
 
-  it('enlarges a hovered adjacency arrow by half around its marker', () => {
-    const marker = { x: 0.5, y: 0.5 };
-    const from = { x: 0.2, y: 0.5 };
-    const to = { x: 0.8, y: 0.5 };
-    const rest = adjacencyArrowGeometry(marker, from, to, 0.02);
-    const hovered = adjacencyArrowGeometry(marker, from, to, 0.03);
-    expect(hovered.x2 - hovered.x1).toBeCloseTo((rest.x2 - rest.x1) * 1.5, 6);
-    expect(hovered.x1).toBeGreaterThan(0.4);
-    expect(hovered.x2).toBeLessThan(0.6);
+  it('stretches an adjacency arrow so heads and a short shaft overhang both territories', () => {
+    const left = square(0.1, 0.1, 0.2);
+    const right = square(0.7, 0.1, 0.2);
+    const ends = adjacencyArrowEndpoints(left, right, 0.05);
+    expect(ends.from.x).toBeLessThan(0.3);
+    expect(ends.from.x).toBeGreaterThan(0.1);
+    expect(ends.to.x).toBeGreaterThan(0.7);
+    expect(ends.to.x).toBeLessThan(0.9);
+    const geometry = adjacencyArrowGeometry(ends.from, ends.to, 0.02);
+    expect(geometry.x1).toBe(ends.from.x);
+    expect(geometry.x2).toBe(ends.to.x);
+  });
+
+  it('keeps adjacent connection arrows from crossing', () => {
+    const a = square(0.1, 0.1, 0.3);
+    const b = square(0.4, 0.1, 0.3);
+    const c = square(0.1, 0.4, 0.3);
+    const ab = adjacencyArrowEndpoints(a, b, 0.04);
+    const ac = adjacencyArrowEndpoints(a, c, 0.04);
+    expect(segmentsCross(ab.from, ab.to, ac.from, ac.to)).toBe(false);
+  });
+
+  it('detects a territory that intersects a selection box', () => {
+    expect(polygonIntersectsRect(square(0.1, 0.1, 0.2), 0.25, 0.15, 0.4, 0.3)).toBe(true);
+    expect(polygonIntersectsRect(square(0.1, 0.1, 0.2), 0.5, 0.5, 0.7, 0.7)).toBe(false);
   });
 
   it('traces an unobstructed shared border between two endpoints', () => {
@@ -187,6 +212,21 @@ describe('map geometry', () => {
     expect(translatePolygon(square(0.1, 0.1, 0.3), 0.05, 0)[0]?.x).toBeCloseTo(0.15, 5);
     expect(translatePolygon(square(0.1, 0.1, 0.3), 0.05, 0)[0]?.y).toBeCloseTo(0.1, 5);
   });
+
+  it('snaps a move back onto a touching border instead of overlapping interiors', () => {
+    const moving = [square(0.1, 0.1, 0.3)];
+    const neighbor = [square(0.4, 0.1, 0.3)];
+    const snapped = resolveTerritoryTranslation(moving, neighbor, 0.01, 0);
+    expect(snapped?.x).toBeCloseTo(0, 5);
+    expect(interiorsOverlap(translatePolygon(moving[0] ?? [], snapped?.x ?? 1, 0), neighbor[0] ?? [])).toBe(false);
+    const blocked = resolveTerritoryTranslation(moving, neighbor, 0.2, 0);
+    expect(blocked?.x).toBeCloseTo(0, 5);
+    const along = resolveTerritoryTranslation(moving, neighbor, 0, 0.04);
+    expect(along?.x).toBeCloseTo(0, 5);
+    expect(along?.y).toBeCloseTo(0.04, 5);
+    const away = resolveTerritoryTranslation(moving, neighbor, -0.1, 0);
+    expect(away?.x).toBeCloseTo(-0.1, 5);
+  });
 });
 
 describe('adjacency generation', () => {
@@ -219,6 +259,18 @@ describe('adjacency generation', () => {
     expect(generated.some((edge) => edge.id === 'stale')).toBe(false);
     expect(generated.some((edge) => edge.origin === 'Generated' && edge.territoryAId === 'b')).toBe(true);
     expect(generated.some((edge) => edge.origin === 'Generated' && edge.territoryAId === 'a')).toBe(false);
+  });
+
+  it('finds a connection regardless of territory order', () => {
+    const edge: MapAdjacency = {
+      id: 'ab',
+      territoryAId: 'a',
+      territoryBId: 'b',
+      origin: 'Manual',
+      marker: { x: 0.4, y: 0.25 },
+    };
+    expect(findConnection([edge], 'b', 'a')?.id).toBe('ab');
+    expect(findConnection([edge], 'a', 'c')).toBeUndefined();
   });
 
   it('lists neighboring territories and omits the selected ones', () => {

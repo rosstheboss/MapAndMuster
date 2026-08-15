@@ -11,11 +11,11 @@ import {
 } from '@angular/core';
 
 import type { CampaignFaction, CampaignStructureType } from '../../core/campaigns/campaign.models';
-import { adjacencyArrowGeometry } from '../../core/maps/adjacency';
+import { adjacencyArrowEndpoints, adjacencyArrowGeometry } from '../../core/maps/adjacency';
 import {
-  ARROW_HALF_SCREEN_PX,
+  ARROW_HEAD_SCREEN_PX,
   ARROW_HIT_SCREEN_PX,
-  ARROW_HOVER_SCALE,
+  ARROW_OVERHANG_LINE_SCREEN_PX,
   centroid,
   clampPoint,
   containsStrict,
@@ -26,6 +26,7 @@ import {
   MIN_ZOOM,
   normalizedFromPixels,
   pointOnPolygonBoundary,
+  polygonIntersectsRect,
   polygonPointsAttribute,
   SNAP_RING_SCREEN_PX,
   STROKE_ADJACENT_SCREEN_PX,
@@ -53,11 +54,13 @@ export class CampaignMapViewComponent {
   readonly selectedTerritoryIds = input<readonly string[]>([]);
   readonly hoveredTerritoryId = input<string | null>(null);
   readonly hoveredAdjacencyId = input<string | null>(null);
+  readonly selectedAdjacencyId = input<string | null>(null);
   readonly adjacentTerritoryIds = input<readonly string[]>([]);
   readonly showAdjacencies = input(false);
+  readonly adjacenciesInteractive = input(false);
   readonly interactive = input(true);
-  readonly pointerPan = input(false);
   readonly moveTerritories = input(false);
+  readonly marqueeSelect = input(false);
   readonly factions = input<readonly CampaignFaction[]>([]);
   readonly structures = input<readonly CampaignStructureType[]>([]);
   readonly structureImageUrl = input<(structureTypeId: string) => string | null>(() => null);
@@ -70,6 +73,7 @@ export class CampaignMapViewComponent {
   readonly territorySelect = output<{ id: string; additive: boolean }>();
   readonly adjacencySelect = output<string>();
   readonly backgroundSelect = output<void>();
+  readonly territoryMarquee = output<{ ids: string[]; additive: boolean }>();
   readonly territoryMove = output<{ origin: MapPoint; current: MapPoint }>();
   readonly territoryMoveEnd = output<void>();
 
@@ -82,9 +86,12 @@ export class CampaignMapViewComponent {
   protected readonly imageSize = signal({ width: 1, height: 1 });
   private readonly viewportSize = signal({ width: 1, height: 1 });
   private readonly spaceHeld = signal(false);
-  private panning = false;
+  protected readonly panning = signal(false);
+  protected readonly marqueeBox = signal<{ left: number; top: number; width: number; height: number } | null>(null);
   private movingTerritory = false;
   private moveOrigin: MapPoint | null = null;
+  private hasFittedImage = false;
+  private marqueeOrigin: { clientX: number; clientY: number; point: MapPoint; additive: boolean } | null = null;
   private panOrigin = { x: 0, y: 0, panX: 0, panY: 0 };
   private resizeObserver: ResizeObserver | null = null;
   private observedDestroy = false;
@@ -146,17 +153,18 @@ export class CampaignMapViewComponent {
         return [];
       }
 
-      const from = centroid(left.polygon);
-      const to = centroid(right.polygon);
-      const hovered = edge.id === this.hoveredAdjacencyId();
-      const half = this.screenToMap(ARROW_HALF_SCREEN_PX * (hovered ? ARROW_HOVER_SCALE : 1));
+      const inset = this.screenToMap(ARROW_HEAD_SCREEN_PX + ARROW_OVERHANG_LINE_SCREEN_PX);
+      const ends = adjacencyArrowEndpoints(left.polygon, right.polygon, inset);
+      const highlighted = edge.id === this.hoveredAdjacencyId() || edge.id === this.selectedAdjacencyId();
       return [
         {
           edge,
-          geometry: adjacencyArrowGeometry(edge.marker, from, to, half),
-          highlighted: hovered || this.isSelected(edge.territoryAId),
-          hitWidth: this.screenToMap(ARROW_HIT_SCREEN_PX),
-          strokeWidth: this.screenToMap(STROKE_SELECTED_SCREEN_PX * (hovered ? ARROW_HOVER_SCALE : 1)),
+          geometry: adjacencyArrowGeometry(ends.from, ends.to, this.screenToMap(ARROW_HEAD_SCREEN_PX)),
+          cx: (ends.from.x + ends.to.x) / 2,
+          cy: (ends.from.y + ends.to.y) / 2,
+          highlighted,
+          hitWidth: Math.min(this.screenToMap(ARROW_HIT_SCREEN_PX), 0.05),
+          strokeWidth: Math.min(this.screenToMap(STROKE_SELECTED_SCREEN_PX), 0.008),
         },
       ];
     });
@@ -177,6 +185,14 @@ export class CampaignMapViewComponent {
   });
 
   protected readonly zoomPercent = computed(() => Math.round(this.currentScale() * 100));
+
+  protected adjacencyVisualTransform(item: { highlighted: boolean; cx: number; cy: number }): string | null {
+    if (!item.highlighted) {
+      return null;
+    }
+
+    return `translate(${item.cx} ${item.cy}) scale(1.5) translate(${-item.cx} ${-item.cy})`;
+  }
 
   protected markerSize(fit: FittedSquare): { width: number; height: number } {
     const image = this.imageSize();
@@ -208,7 +224,10 @@ export class CampaignMapViewComponent {
     const image = event.target as HTMLImageElement;
     this.imageSize.set({ width: image.naturalWidth || 1, height: image.naturalHeight || 1 });
     this.observeViewport();
-    this.zoomToFit();
+    if (!this.hasFittedImage) {
+      this.hasFittedImage = true;
+      this.zoomToFit();
+    }
   }
 
   protected onWheel(event: WheelEvent): void {
@@ -218,10 +237,12 @@ export class CampaignMapViewComponent {
   }
 
   protected onPointerMove(event: PointerEvent): void {
-    if (this.panning) {
-      this.panX.set(this.panOrigin.panX + event.clientX - this.panOrigin.x);
-      this.panY.set(this.panOrigin.panY + event.clientY - this.panOrigin.y);
-      this.clampPan();
+    if (this.applyPan(event)) {
+      return;
+    }
+
+    if (this.marqueeOrigin) {
+      this.updateMarquee(event);
       return;
     }
 
@@ -239,22 +260,29 @@ export class CampaignMapViewComponent {
   }
 
   protected onViewportPointerDown(event: PointerEvent): void {
+    if (this.shouldAlwaysPan(event)) {
+      this.beginPan(event);
+      return;
+    }
+
+    if (event.button === 0 && this.marqueeSelect() && event.target === event.currentTarget) {
+      this.beginMarquee(event);
+      return;
+    }
+
     if (event.target === event.currentTarget && event.button === 0) {
       this.backgroundSelect.emit();
     }
   }
 
   protected onPointerDown(event: PointerEvent): void {
-    if (event.button === 1 || this.spaceHeld()) {
+    if (this.shouldAlwaysPan(event)) {
       this.beginPan(event);
+      event.stopPropagation();
       return;
     }
 
     if (!this.interactive()) {
-      if (this.pointerPan() && event.button === 0 && this.canDragPan()) {
-        this.beginPan(event);
-      }
-
       return;
     }
 
@@ -262,17 +290,17 @@ export class CampaignMapViewComponent {
       return;
     }
 
-    const point = this.pointFromEvent(event);
-    if (!point) {
-      return;
-    }
-
     const target = event.target as SVGElement | HTMLElement;
     const kind = target.dataset['kind'];
     const id = target.dataset['id'];
-    if (kind === 'adjacency' && id) {
+    if (kind === 'adjacency' && id && this.adjacenciesInteractive()) {
       this.adjacencySelect.emit(id);
       event.preventDefault();
+      return;
+    }
+
+    const point = this.pointFromEvent(event);
+    if (!point) {
       return;
     }
 
@@ -290,21 +318,31 @@ export class CampaignMapViewComponent {
       return;
     }
 
+    if (this.marqueeSelect()) {
+      this.beginMarquee(event);
+      return;
+    }
+
     this.backgroundSelect.emit();
     this.mapPoint.emit(point);
-    if (this.pointerPan() && this.canDragPan()) {
-      this.beginPan(event);
-    }
   }
 
-  protected onPointerUp(): void {
+  protected onPointerUp(event?: PointerEvent): void {
+    if (this.marqueeOrigin) {
+      this.finishMarquee(event);
+    }
+
     if (this.movingTerritory) {
       this.movingTerritory = false;
       this.moveOrigin = null;
       this.territoryMoveEnd.emit();
     }
 
-    this.panning = false;
+    this.panning.set(false);
+  }
+
+  protected onContextMenu(event: MouseEvent): void {
+    event.preventDefault();
   }
 
   protected onTerritoryEnter(id: string): void {
@@ -318,7 +356,9 @@ export class CampaignMapViewComponent {
   }
 
   protected onAdjacencyEnter(id: string): void {
-    this.adjacencyHover.emit(id);
+    if (this.adjacenciesInteractive()) {
+      this.adjacencyHover.emit(id);
+    }
   }
 
   protected onAdjacencyLeave(id: string): void {
@@ -328,7 +368,7 @@ export class CampaignMapViewComponent {
   }
 
   protected clearHovers(): void {
-    if (!this.panning) {
+    if (!this.panning()) {
       this.territoryHover.emit(null);
       this.adjacencyHover.emit(null);
     }
@@ -426,7 +466,12 @@ export class CampaignMapViewComponent {
   }
 
   private pointFromEvent(event: PointerEvent): MapPoint | null {
-    const svg = (event.currentTarget as SVGElement).closest('svg');
+    const point = this.unclampedPointFromClient(event.clientX, event.clientY);
+    return point ? clampPoint(point) : null;
+  }
+
+  private unclampedPointFromClient(clientX: number, clientY: number): MapPoint | null {
+    const svg = this.viewport()?.nativeElement.querySelector('svg');
     if (!svg) {
       return null;
     }
@@ -436,9 +481,75 @@ export class CampaignMapViewComponent {
       return null;
     }
 
-    return clampPoint({
-      x: (event.clientX - rect.left) / rect.width,
-      y: (event.clientY - rect.top) / rect.height,
+    return {
+      x: (clientX - rect.left) / rect.width,
+      y: (clientY - rect.top) / rect.height,
+    };
+  }
+
+  private beginMarquee(event: PointerEvent): void {
+    const point = this.unclampedPointFromClient(event.clientX, event.clientY);
+    if (!point) {
+      this.backgroundSelect.emit();
+      return;
+    }
+
+    this.marqueeOrigin = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      point,
+      additive: event.ctrlKey || event.metaKey,
+    };
+    this.marqueeBox.set(null);
+    try {
+      (event.currentTarget as HTMLElement | SVGElement).setPointerCapture(event.pointerId);
+    } catch {
+      // Some test hosts do not support pointer capture; the box still follows move events.
+    }
+    event.preventDefault();
+  }
+
+  private updateMarquee(event: PointerEvent): void {
+    const origin = this.marqueeOrigin;
+    const viewport = this.viewport()?.nativeElement.getBoundingClientRect();
+    if (!origin || !viewport) {
+      return;
+    }
+
+    const width = Math.abs(event.clientX - origin.clientX);
+    const height = Math.abs(event.clientY - origin.clientY);
+    if (width < 4 && height < 4) {
+      return;
+    }
+
+    this.marqueeBox.set({
+      left: Math.min(origin.clientX, event.clientX) - viewport.left,
+      top: Math.min(origin.clientY, event.clientY) - viewport.top,
+      width,
+      height,
+    });
+  }
+
+  private finishMarquee(event?: PointerEvent): void {
+    const origin = this.marqueeOrigin;
+    const box = this.marqueeBox();
+    this.marqueeOrigin = null;
+    this.marqueeBox.set(null);
+    if (!origin) {
+      return;
+    }
+
+    if (!box || !event) {
+      this.backgroundSelect.emit();
+      return;
+    }
+
+    const end = this.unclampedPointFromClient(event.clientX, event.clientY) ?? origin.point;
+    this.territoryMarquee.emit({
+      ids: this.territories()
+        .filter((territory) => polygonIntersectsRect(territory.polygon, origin.point.x, origin.point.y, end.x, end.y))
+        .map((territory) => territory.id),
+      additive: origin.additive,
     });
   }
 
@@ -452,11 +563,30 @@ export class CampaignMapViewComponent {
     return null;
   }
 
+  private shouldAlwaysPan(event: PointerEvent): boolean {
+    return event.button === 1 || event.button === 2 || this.spaceHeld();
+  }
+
   private beginPan(event: PointerEvent): void {
-    this.panning = true;
+    this.panning.set(true);
     this.panOrigin = { x: event.clientX, y: event.clientY, panX: this.panX(), panY: this.panY() };
-    (event.currentTarget as HTMLElement | SVGElement).setPointerCapture(event.pointerId);
+    try {
+      (event.currentTarget as HTMLElement | SVGElement).setPointerCapture(event.pointerId);
+    } catch {
+      // Some test hosts do not support pointer capture; pan still follows move events.
+    }
     event.preventDefault();
+  }
+
+  private applyPan(event: PointerEvent): boolean {
+    if (!this.panning()) {
+      return false;
+    }
+
+    this.panX.set(this.panOrigin.panX + event.clientX - this.panOrigin.x);
+    this.panY.set(this.panOrigin.panY + event.clientY - this.panOrigin.y);
+    this.clampPan();
+    return true;
   }
 
   private observeViewport(): void {

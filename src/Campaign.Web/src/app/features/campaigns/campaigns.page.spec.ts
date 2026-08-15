@@ -27,6 +27,7 @@ function item(
     currentRound: null,
     currentPhaseLabel: null,
     currentPhaseEndsUtc: null,
+    canPlay: false,
     ...overrides,
   };
 }

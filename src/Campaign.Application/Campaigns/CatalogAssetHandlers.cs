@@ -47,7 +47,7 @@ public sealed class UploadStructureImageHandler
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        var access = await CatalogAssetAccess.RequireManagerAsync(_campaigns, command.CampaignId, command.UserId, cancellationToken)
+        var access = await CatalogAssetAccess.RequireManagerAsync(_campaigns, command.CampaignId, command.UserId, _clock.UtcNow, cancellationToken)
             .ConfigureAwait(false);
         if (!access.IsSuccess || access.Campaign is null)
         {
@@ -101,7 +101,12 @@ public sealed class UploadStructureImageHandler
 
         if (CatalogFileBinder.IsUserUploadedFileKey(previousKey))
         {
-            await _assets.DeleteAsync(previousKey, cancellationToken).ConfigureAwait(false);
+            await CampaignAssetRetention.DeleteIfUnreferencedAsync(
+                _campaigns,
+                _assets.DeleteAsync,
+                previousKey,
+                command.CampaignId,
+                cancellationToken).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
@@ -208,7 +213,7 @@ public sealed class UploadFactionFlagHandler
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        var access = await CatalogAssetAccess.RequireManagerAsync(_campaigns, command.CampaignId, command.UserId, cancellationToken)
+        var access = await CatalogAssetAccess.RequireManagerAsync(_campaigns, command.CampaignId, command.UserId, _clock.UtcNow, cancellationToken)
             .ConfigureAwait(false);
         if (!access.IsSuccess || access.Campaign is null)
         {
@@ -264,7 +269,12 @@ public sealed class UploadFactionFlagHandler
 
         if (CatalogFileBinder.IsUserUploadedFileKey(previousKey))
         {
-            await _assets.DeleteAsync(previousKey, cancellationToken).ConfigureAwait(false);
+            await CampaignAssetRetention.DeleteIfUnreferencedAsync(
+                _campaigns,
+                _assets.DeleteAsync,
+                previousKey,
+                command.CampaignId,
+                cancellationToken).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
@@ -371,7 +381,7 @@ public sealed class UploadMissionFileHandler
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        var access = await CatalogAssetAccess.RequireManagerAsync(_campaigns, command.CampaignId, command.UserId, cancellationToken)
+        var access = await CatalogAssetAccess.RequireManagerAsync(_campaigns, command.CampaignId, command.UserId, _clock.UtcNow, cancellationToken)
             .ConfigureAwait(false);
         if (!access.IsSuccess || access.Campaign is null)
         {
@@ -416,7 +426,12 @@ public sealed class UploadMissionFileHandler
 
         if (CatalogFileBinder.IsUserUploadedFileKey(previousKey))
         {
-            await _assets.DeleteAsync(previousKey, cancellationToken).ConfigureAwait(false);
+            await CampaignAssetRetention.DeleteIfUnreferencedAsync(
+                _campaigns,
+                _assets.DeleteAsync,
+                previousKey,
+                command.CampaignId,
+                cancellationToken).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
@@ -577,6 +592,7 @@ internal static class CatalogAssetAccess
         ICampaignStore campaigns,
         Guid campaignId,
         Guid userId,
+        DateTimeOffset utcNow,
         CancellationToken cancellationToken)
     {
         var existing = await campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
@@ -589,6 +605,11 @@ internal static class CatalogAssetAccess
         if (!membership.IsGameMaster)
         {
             return (false, null, ErrorCodes.CampaignForbidden, "Only a campaign manager can change campaign files.");
+        }
+
+        if (CampaignLifecycle.HasLaunched(existing, utcNow))
+        {
+            return (false, null, ErrorCodes.CampaignLocked, CampaignLifecycle.LockedMessage);
         }
 
         return (true, existing, null, null);

@@ -19,8 +19,10 @@
     <button type="button" class="button-secondary" (click)="zoomToFit()">Fit to panel</button>
     <p class="muted zoom-hint">
       Zoom is 10% to 800% of the map image size. 100% is the image at its actual size, centered. Fit to panel scales the
-      map to the view. Plus, minus, the buttons, or the wheel move 10% at a time. Arrow keys or drag to pan when the
-      image is larger than the panel. Drawing stays aligned to the full-size map; zoom in to trace fine coasts.
+      map to the view. Plus, minus, the buttons, or the wheel move 10% at a time. Hold right-click and drag to pan
+      without drawing, erasing, or selecting; the wheel still zooms. Arrow keys, space-drag, or middle-click also pan
+      when the image is larger than the panel. Left-click drag does not pan. Drawing stays aligned to the full-size map;
+      zoom in to trace fine coasts.
     </p>
   </div>
   <div
@@ -32,11 +34,17 @@
       'Campaign map at ' +
       zoomPercent() +
       ' percent of image size. Plus and minus zoom by 10 percent. Zero sets 100 percent. ' +
-      'Fit to panel fits the image in the view. Arrow keys pan when the image is larger than the panel. ' +
+      'Fit to panel fits the image in the view. Hold right-click or middle-click and drag to pan. ' +
+      'Arrow keys and space-drag also pan when the image is larger than the panel. Left-click does not pan. ' +
       'Zoom up to 800 percent to trace fine coasts. Drawing requires a pointer.'
     "
+    [class.is-panning]="panning()"
     (wheel)="onWheel($event)"
     (pointerdown)="onViewportPointerDown($event)"
+    (pointermove)="onPointerMove($event)"
+    (pointerup)="onPointerUp($event)"
+    (pointercancel)="onPointerUp($event)"
+    (contextmenu)="onContextMenu($event)"
     (keydown)="onViewportKeydown($event)"
     (keyup)="onViewportKeyup($event)"
   >
@@ -55,8 +63,9 @@
         aria-label="Territory overlay"
         (pointermove)="onPointerMove($event)"
         (pointerdown)="onPointerDown($event)"
-        (pointerup)="onPointerUp()"
-        (pointercancel)="onPointerUp()"
+        (pointerup)="onPointerUp($event)"
+        (pointercancel)="onPointerUp($event)"
+        (contextmenu)="onContextMenu($event)"
         (pointerleave)="clearHovers()"
       >
         @for (item of overlayTerritories(); track item.territory.id) {
@@ -103,6 +112,7 @@
           <g
             class="adjacency"
             [class.is-highlighted]="item.highlighted"
+            [class.is-interactive]="adjacenciesInteractive()"
             [attr.data-kind]="'adjacency'"
             [attr.data-id]="item.edge.id"
             (pointerenter)="onAdjacencyEnter(item.edge.id)"
@@ -118,18 +128,30 @@
               [attr.data-kind]="'adjacency'"
               [attr.data-id]="item.edge.id"
             />
-            <line
-              class="adjacency-line"
-              [attr.x1]="item.geometry.x1"
-              [attr.y1]="item.geometry.y1"
-              [attr.x2]="item.geometry.x2"
-              [attr.y2]="item.geometry.y2"
-              [attr.stroke-width]="item.strokeWidth"
+            <polygon
+              class="adjacency-hit-head"
+              [attr.points]="item.geometry.headA"
               [attr.data-kind]="'adjacency'"
               [attr.data-id]="item.edge.id"
             />
-            <polygon class="adjacency-head" [attr.points]="item.geometry.headA" />
-            <polygon class="adjacency-head" [attr.points]="item.geometry.headB" />
+            <polygon
+              class="adjacency-hit-head"
+              [attr.points]="item.geometry.headB"
+              [attr.data-kind]="'adjacency'"
+              [attr.data-id]="item.edge.id"
+            />
+            <g class="adjacency-visual" [attr.transform]="adjacencyVisualTransform(item)">
+              <line
+                class="adjacency-line"
+                [attr.x1]="item.geometry.x1"
+                [attr.y1]="item.geometry.y1"
+                [attr.x2]="item.geometry.x2"
+                [attr.y2]="item.geometry.y2"
+                [attr.stroke-width]="item.strokeWidth"
+              />
+              <polygon class="adjacency-head" [attr.points]="item.geometry.headA" />
+              <polygon class="adjacency-head" [attr.points]="item.geometry.headB" />
+            </g>
           </g>
         }
       </svg>
@@ -170,5 +192,14 @@
         }
       }
     </div>
+    @if (marqueeBox(); as box) {
+      <div
+        class="selection-marquee"
+        [style.left.px]="box.left"
+        [style.top.px]="box.top"
+        [style.width.px]="box.width"
+        [style.height.px]="box.height"
+      ></div>
+    }
   </div>
 </div>

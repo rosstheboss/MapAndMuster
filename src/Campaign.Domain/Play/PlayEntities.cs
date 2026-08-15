@@ -1,0 +1,517 @@
+using Campaign.Domain.Campaigns;
+
+namespace Campaign.Domain.Play;
+
+/// <summary>
+/// One stored action or battle window in a launched campaign.
+/// </summary>
+public sealed class PhaseWindow
+{
+    /// <summary>
+    /// Initializes a phase window.
+    /// </summary>
+    public PhaseWindow(
+        Guid id,
+        int roundNumber,
+        int phaseNumber,
+        RoundPhaseKind kind,
+        int plannedAmount,
+        DurationUnit plannedUnit,
+        DateTimeOffset startsUtc,
+        DateTimeOffset endsUtc,
+        PhaseWindowStatus status)
+    {
+        Id = id;
+        RoundNumber = roundNumber;
+        PhaseNumber = phaseNumber;
+        Kind = kind;
+        PlannedAmount = plannedAmount;
+        PlannedUnit = plannedUnit;
+        StartsUtc = startsUtc;
+        EndsUtc = endsUtc;
+        Status = status;
+    }
+
+    /// <summary>Gets the window identifier.</summary>
+    public Guid Id { get; }
+
+    /// <summary>Gets the 1-based round.</summary>
+    public int RoundNumber { get; }
+
+    /// <summary>Gets the 1-based phase index in the round.</summary>
+    public int PhaseNumber { get; }
+
+    /// <summary>Gets the phase kind.</summary>
+    public RoundPhaseKind Kind { get; }
+
+    /// <summary>Gets the originally configured duration amount.</summary>
+    public int PlannedAmount { get; }
+
+    /// <summary>Gets the originally configured duration unit.</summary>
+    public DurationUnit PlannedUnit { get; }
+
+    /// <summary>Gets when the window opens, in UTC.</summary>
+    public DateTimeOffset StartsUtc { get; }
+
+    /// <summary>Gets when the window closes, in UTC.</summary>
+    public DateTimeOffset EndsUtc { get; }
+
+    /// <summary>Gets the window status.</summary>
+    public PhaseWindowStatus Status { get; }
+
+    /// <summary>
+    /// Returns a copy with updated timing or status.
+    /// </summary>
+    public PhaseWindow With(
+        DateTimeOffset? startsUtc = null,
+        DateTimeOffset? endsUtc = null,
+        PhaseWindowStatus? status = null)
+    {
+        return new PhaseWindow(
+            Id,
+            RoundNumber,
+            PhaseNumber,
+            Kind,
+            PlannedAmount,
+            PlannedUnit,
+            startsUtc ?? StartsUtc,
+            endsUtc ?? EndsUtc,
+            status ?? Status);
+    }
+}
+
+/// <summary>
+/// A player-controlled force on the campaign map.
+/// </summary>
+public sealed class CampaignForce
+{
+    /// <summary>
+    /// Initializes a force.
+    /// </summary>
+    public CampaignForce(Guid id, Guid controllerUserId, Guid factionId, Guid territoryId, bool inBattle)
+    {
+        Id = id;
+        ControllerUserId = controllerUserId;
+        FactionId = factionId;
+        TerritoryId = territoryId;
+        InBattle = inBattle;
+    }
+
+    /// <summary>Gets the force identifier.</summary>
+    public Guid Id { get; }
+
+    /// <summary>Gets the controlling player's user identifier.</summary>
+    public Guid ControllerUserId { get; }
+
+    /// <summary>Gets the force faction.</summary>
+    public Guid FactionId { get; }
+
+    /// <summary>Gets the current territory.</summary>
+    public Guid TerritoryId { get; }
+
+    /// <summary>Gets whether the force is locked in an unresolved battle.</summary>
+    public bool InBattle { get; }
+
+    /// <summary>
+    /// Returns a copy with a new location or battle flag.
+    /// </summary>
+    public CampaignForce With(Guid? territoryId = null, bool? inBattle = null)
+    {
+        return new CampaignForce(Id, ControllerUserId, FactionId, territoryId ?? TerritoryId, inBattle ?? InBattle);
+    }
+}
+
+/// <summary>
+/// The latest saved player intent for one force in one action window.
+/// </summary>
+public sealed class OrderDraft
+{
+    /// <summary>
+    /// Initializes a draft.
+    /// </summary>
+    public OrderDraft(
+        Guid windowId,
+        Guid forceId,
+        ActionKind kind,
+        Guid? targetTerritoryId,
+        Guid? structureTypeId,
+        DateTimeOffset updatedUtc)
+    {
+        WindowId = windowId;
+        ForceId = forceId;
+        Kind = kind;
+        TargetTerritoryId = targetTerritoryId;
+        StructureTypeId = structureTypeId;
+        UpdatedUtc = updatedUtc;
+    }
+
+    /// <summary>Gets the action window.</summary>
+    public Guid WindowId { get; }
+
+    /// <summary>Gets the force.</summary>
+    public Guid ForceId { get; }
+
+    /// <summary>Gets the drafted action.</summary>
+    public ActionKind Kind { get; }
+
+    /// <summary>Gets the destination or build/pillage target territory.</summary>
+    public Guid? TargetTerritoryId { get; }
+
+    /// <summary>Gets the structure type for Build.</summary>
+    public Guid? StructureTypeId { get; }
+
+    /// <summary>Gets when the draft was last saved, in UTC.</summary>
+    public DateTimeOffset UpdatedUtc { get; }
+}
+
+/// <summary>
+/// An immutable submitted order. Later corrections append a new row.
+/// </summary>
+public sealed class OrderSubmission
+{
+    /// <summary>
+    /// Initializes a submission.
+    /// </summary>
+    public OrderSubmission(
+        Guid id,
+        Guid windowId,
+        Guid forceId,
+        ActionKind kind,
+        Guid? targetTerritoryId,
+        Guid? structureTypeId,
+        OrderSource source,
+        DateTimeOffset submittedUtc,
+        Guid actorUserId)
+    {
+        Id = id;
+        WindowId = windowId;
+        ForceId = forceId;
+        Kind = kind;
+        TargetTerritoryId = targetTerritoryId;
+        StructureTypeId = structureTypeId;
+        Source = source;
+        SubmittedUtc = submittedUtc;
+        ActorUserId = actorUserId;
+    }
+
+    /// <summary>Gets the submission identifier.</summary>
+    public Guid Id { get; }
+
+    /// <summary>Gets the action window.</summary>
+    public Guid WindowId { get; }
+
+    /// <summary>Gets the force.</summary>
+    public Guid ForceId { get; }
+
+    /// <summary>Gets the submitted action.</summary>
+    public ActionKind Kind { get; }
+
+    /// <summary>Gets the destination or structure target.</summary>
+    public Guid? TargetTerritoryId { get; }
+
+    /// <summary>Gets the structure type for Build.</summary>
+    public Guid? StructureTypeId { get; }
+
+    /// <summary>Gets how the order entered history.</summary>
+    public OrderSource Source { get; }
+
+    /// <summary>Gets when the order was submitted, in UTC.</summary>
+    public DateTimeOffset SubmittedUtc { get; }
+
+    /// <summary>Gets the user who submitted or whose deadline produced the order.</summary>
+    public Guid ActorUserId { get; }
+}
+
+/// <summary>
+/// A player's declaration that required orders for a window are ready.
+/// </summary>
+public sealed class PlayerCommitment
+{
+    /// <summary>
+    /// Initializes a commitment.
+    /// </summary>
+    public PlayerCommitment(Guid windowId, Guid userId, DateTimeOffset committedUtc)
+    {
+        WindowId = windowId;
+        UserId = userId;
+        CommittedUtc = committedUtc;
+    }
+
+    /// <summary>Gets the action window.</summary>
+    public Guid WindowId { get; }
+
+    /// <summary>Gets the player.</summary>
+    public Guid UserId { get; }
+
+    /// <summary>Gets when the player committed, in UTC.</summary>
+    public DateTimeOffset CommittedUtc { get; }
+}
+
+/// <summary>
+/// An engagement created by resolved campaign actions.
+/// </summary>
+public sealed class CampaignBattle
+{
+    /// <summary>
+    /// Initializes a battle.
+    /// </summary>
+    public CampaignBattle(
+        Guid id,
+        Guid territoryId,
+        Guid sourceWindowId,
+        Guid? battleWindowId,
+        BattleStatus status,
+        IReadOnlyList<Guid> participantForceIds,
+        Guid? winnerForceId,
+        bool isDraw,
+        DateTimeOffset createdUtc)
+    {
+        ArgumentNullException.ThrowIfNull(participantForceIds);
+        Id = id;
+        TerritoryId = territoryId;
+        SourceWindowId = sourceWindowId;
+        BattleWindowId = battleWindowId;
+        Status = status;
+        ParticipantForceIds = participantForceIds;
+        WinnerForceId = winnerForceId;
+        IsDraw = isDraw;
+        CreatedUtc = createdUtc;
+    }
+
+    /// <summary>Gets the battle identifier.</summary>
+    public Guid Id { get; }
+
+    /// <summary>Gets the territory where the engagement occurs.</summary>
+    public Guid TerritoryId { get; }
+
+    /// <summary>Gets the action window that created the battle.</summary>
+    public Guid SourceWindowId { get; }
+
+    /// <summary>Gets the battle window that collects results, when assigned.</summary>
+    public Guid? BattleWindowId { get; }
+
+    /// <summary>Gets the battle status.</summary>
+    public BattleStatus Status { get; }
+
+    /// <summary>Gets participating force identifiers.</summary>
+    public IReadOnlyList<Guid> ParticipantForceIds { get; }
+
+    /// <summary>Gets the winning force when finalized.</summary>
+    public Guid? WinnerForceId { get; }
+
+    /// <summary>Gets whether the authoritative result is a draw.</summary>
+    public bool IsDraw { get; }
+
+    /// <summary>Gets when the battle was created, in UTC.</summary>
+    public DateTimeOffset CreatedUtc { get; }
+
+    /// <summary>
+    /// Returns a copy with an updated result or window assignment.
+    /// </summary>
+    public CampaignBattle With(
+        Guid? battleWindowId = null,
+        BattleStatus? status = null,
+        Guid? winnerForceId = null,
+        bool? isDraw = null,
+        bool assignWindow = false)
+    {
+        return new CampaignBattle(
+            Id,
+            TerritoryId,
+            SourceWindowId,
+            assignWindow ? battleWindowId : battleWindowId ?? BattleWindowId,
+            status ?? Status,
+            ParticipantForceIds,
+            winnerForceId ?? WinnerForceId,
+            isDraw ?? IsDraw,
+            CreatedUtc);
+    }
+}
+
+/// <summary>
+/// One participant's structured battle report. History is append-only.
+/// </summary>
+public sealed class BattleResultSubmission
+{
+    /// <summary>
+    /// Initializes a result submission.
+    /// </summary>
+    public BattleResultSubmission(
+        Guid id,
+        Guid battleId,
+        Guid submitterUserId,
+        Guid? winnerForceId,
+        bool isDraw,
+        Guid? acceptedSubmissionId,
+        DateTimeOffset submittedUtc)
+    {
+        Id = id;
+        BattleId = battleId;
+        SubmitterUserId = submitterUserId;
+        WinnerForceId = winnerForceId;
+        IsDraw = isDraw;
+        AcceptedSubmissionId = acceptedSubmissionId;
+        SubmittedUtc = submittedUtc;
+    }
+
+    /// <summary>Gets the submission identifier.</summary>
+    public Guid Id { get; }
+
+    /// <summary>Gets the battle.</summary>
+    public Guid BattleId { get; }
+
+    /// <summary>Gets the submitting participant.</summary>
+    public Guid SubmitterUserId { get; }
+
+    /// <summary>Gets the reported winner, when not a draw.</summary>
+    public Guid? WinnerForceId { get; }
+
+    /// <summary>Gets whether the reporter called a draw.</summary>
+    public bool IsDraw { get; }
+
+    /// <summary>Gets the opponent submission this report accepted, if any.</summary>
+    public Guid? AcceptedSubmissionId { get; }
+
+    /// <summary>Gets when the report was submitted, in UTC.</summary>
+    public DateTimeOffset SubmittedUtc { get; }
+}
+
+/// <summary>
+/// Structure occupancy and condition for one territory during play.
+/// </summary>
+public sealed class TerritoryStructureState
+{
+    /// <summary>
+    /// Initializes structure state.
+    /// </summary>
+    public TerritoryStructureState(Guid territoryId, Guid? structureTypeId, StructureCondition condition)
+    {
+        TerritoryId = territoryId;
+        StructureTypeId = structureTypeId;
+        Condition = condition;
+    }
+
+    /// <summary>Gets the territory.</summary>
+    public Guid TerritoryId { get; }
+
+    /// <summary>Gets the structure type, if any.</summary>
+    public Guid? StructureTypeId { get; }
+
+    /// <summary>Gets the condition.</summary>
+    public StructureCondition Condition { get; }
+}
+
+/// <summary>
+/// An append-only public fact recorded after orders are revealed or battles resolve.
+/// Unresolved secret orders are never written here.
+/// </summary>
+public sealed class PlayLogEntry
+{
+    /// <summary>
+    /// Initializes a play-log entry.
+    /// </summary>
+    public PlayLogEntry(
+        Guid id,
+        DateTimeOffset occurredUtc,
+        PlayLogKind kind,
+        Guid? windowId,
+        Guid? forceId,
+        Guid? actorUserId,
+        Guid? territoryId,
+        Guid? targetTerritoryId,
+        Guid? battleId,
+        ActionKind? actionKind,
+        IReadOnlyList<Guid> relatedForceIds)
+    {
+        ArgumentNullException.ThrowIfNull(relatedForceIds);
+        Id = id;
+        OccurredUtc = occurredUtc;
+        Kind = kind;
+        WindowId = windowId;
+        ForceId = forceId;
+        ActorUserId = actorUserId;
+        TerritoryId = territoryId;
+        TargetTerritoryId = targetTerritoryId;
+        BattleId = battleId;
+        ActionKind = actionKind;
+        RelatedForceIds = relatedForceIds;
+    }
+
+    /// <summary>Gets the entry identifier.</summary>
+    public Guid Id { get; }
+
+    /// <summary>Gets when the fact was recorded, in UTC.</summary>
+    public DateTimeOffset OccurredUtc { get; }
+
+    /// <summary>Gets the fact kind.</summary>
+    public PlayLogKind Kind { get; }
+
+    /// <summary>Gets the related phase window, when any.</summary>
+    public Guid? WindowId { get; }
+
+    /// <summary>Gets the related force, when any.</summary>
+    public Guid? ForceId { get; }
+
+    /// <summary>Gets the acting player, when any.</summary>
+    public Guid? ActorUserId { get; }
+
+    /// <summary>Gets the related territory, when any.</summary>
+    public Guid? TerritoryId { get; }
+
+    /// <summary>Gets the destination territory, when any.</summary>
+    public Guid? TargetTerritoryId { get; }
+
+    /// <summary>Gets the related battle, when any.</summary>
+    public Guid? BattleId { get; }
+
+    /// <summary>Gets the resolved or attempted action, when any.</summary>
+    public ActionKind? ActionKind { get; }
+
+    /// <summary>Gets related forces, such as battle participants.</summary>
+    public IReadOnlyList<Guid> RelatedForceIds { get; }
+
+    /// <summary>Gets whether the application substituted or interrupted a player choice.</summary>
+    public bool IsSystemAdjustment => Kind is PlayLogKind.DeadlineDraftSubmitted
+        or PlayLogKind.MissingOrderHold
+        or PlayLogKind.InvalidOrderHold
+        or PlayLogKind.ConflictingBuildHold
+        or PlayLogKind.DefaultRetreat
+        or PlayLogKind.UnresolvedBattleHeldOpen;
+}
+
+/// <summary>
+/// A retreat after a lost battle.
+/// </summary>
+public sealed class RetreatOrder
+{
+    /// <summary>
+    /// Initializes a retreat.
+    /// </summary>
+    public RetreatOrder(Guid id, Guid battleId, Guid forceId, Guid targetTerritoryId, bool isDefault, DateTimeOffset submittedUtc)
+    {
+        Id = id;
+        BattleId = battleId;
+        ForceId = forceId;
+        TargetTerritoryId = targetTerritoryId;
+        IsDefault = isDefault;
+        SubmittedUtc = submittedUtc;
+    }
+
+    /// <summary>Gets the retreat identifier.</summary>
+    public Guid Id { get; }
+
+    /// <summary>Gets the battle.</summary>
+    public Guid BattleId { get; }
+
+    /// <summary>Gets the retreating force.</summary>
+    public Guid ForceId { get; }
+
+    /// <summary>Gets the destination.</summary>
+    public Guid TargetTerritoryId { get; }
+
+    /// <summary>Gets whether this was the spawn-fallback default.</summary>
+    public bool IsDefault { get; }
+
+    /// <summary>Gets when the retreat was recorded, in UTC.</summary>
+    public DateTimeOffset SubmittedUtc { get; }
+}

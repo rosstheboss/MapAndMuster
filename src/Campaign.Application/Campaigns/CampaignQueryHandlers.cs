@@ -180,7 +180,12 @@ public sealed class DeleteCampaignHandler
 
         foreach (var key in CatalogFileBinder.CollectCampaignStorageKeys(campaign))
         {
-            await _maps.DeleteAsync(key, cancellationToken).ConfigureAwait(false);
+            await CampaignAssetRetention.DeleteIfUnreferencedAsync(
+                _campaigns,
+                _maps.DeleteAsync,
+                key,
+                campaignId,
+                cancellationToken).ConfigureAwait(false);
         }
 
         return OperationResult.Success();
@@ -246,6 +251,11 @@ public sealed class UploadCampaignMapHandler
                 "Only a campaign manager can replace the campaign map.");
         }
 
+        if (CampaignLifecycle.HasLaunched(existing, _clock.UtcNow))
+        {
+            return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignLocked, CampaignLifecycle.LockedMessage);
+        }
+
         var processed = await _processor
             .ProcessAsync(command.Content, command.ContentType, command.Length, cancellationToken)
             .ConfigureAwait(false);
@@ -270,7 +280,12 @@ public sealed class UploadCampaignMapHandler
 
         if (CatalogFileBinder.IsUserUploadedFileKey(previousKey))
         {
-            await _maps.DeleteAsync(previousKey, cancellationToken).ConfigureAwait(false);
+            await CampaignAssetRetention.DeleteIfUnreferencedAsync(
+                _campaigns,
+                _maps.DeleteAsync,
+                previousKey,
+                command.CampaignId,
+                cancellationToken).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
@@ -369,6 +384,7 @@ internal static class CampaignMapClone
             MapGraph = existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
+            PlayState = existing.PlayState,
         };
     }
 
@@ -410,6 +426,7 @@ internal static class CampaignMapClone
             MapGraph = existing.MapGraph,
             TerrainTypes = terrainTypes,
             StructureTypes = structureTypes,
+            PlayState = existing.PlayState,
         };
     }
 
@@ -450,6 +467,7 @@ internal static class CampaignMapClone
             MapGraph = existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
+            PlayState = existing.PlayState,
         };
     }
 
@@ -490,6 +508,7 @@ internal static class CampaignMapClone
             MapGraph = existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
+            PlayState = existing.PlayState,
         };
     }
 }

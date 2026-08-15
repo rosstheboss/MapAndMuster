@@ -27,6 +27,7 @@ function item(
     currentRound: null,
     currentPhaseLabel: null,
     currentPhaseEndsUtc: null,
+    canPlay: false,
     ...overrides,
   };
 }
@@ -77,10 +78,35 @@ describe('CampaignListComponent', () => {
     ).toContain('Edit');
     expect(compiled.textContent).not.toContain('Join');
     expect(compiled.textContent).not.toContain('Leave');
+    expect(compiled.textContent).not.toContain('Duplicate campaign');
 
     toggle?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('.campaign-body')).toBeNull();
+  });
+
+  it('shows duplicate campaign on Your Campaigns listings', async () => {
+    const fixture = TestBed.createComponent(CampaignListComponent);
+    fixture.componentRef.setInput('allowDuplicate', true);
+    fixture.componentRef.setInput('campaigns', [
+      item({
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        name: 'Border War',
+        canManage: true,
+        isParticipant: true,
+        canView: true,
+        status: 'Scheduled',
+        startsUtc: '2099-01-05T12:00:00+00:00',
+        endsUtc: '2099-03-02T12:00:00+00:00',
+      }),
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('button.campaign-toggle')?.click();
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Duplicate campaign');
   });
 
   it('collapses a campaign group without removing the group heading', async () => {
@@ -227,6 +253,7 @@ describe('CampaignListComponent', () => {
         currentRound: 2,
         currentPhaseLabel: 'Action 1',
         currentPhaseEndsUtc: '2099-05-02T12:00:00+00:00',
+        canPlay: true,
       }),
     ]);
     await fixture.whenStable();
@@ -236,9 +263,9 @@ describe('CampaignListComponent', () => {
     compiled.querySelector<HTMLButtonElement>('button.campaign-toggle')?.click();
     fixture.detectChanges();
 
-    expect(compiled.querySelector('a[href="/campaigns/dddddddd-dddd-dddd-dddd-dddddddddddd"]')?.textContent).toContain(
-      'Play',
-    );
+    expect(
+      compiled.querySelector('a[href="/campaigns/dddddddd-dddd-dddd-dddd-dddddddddddd/play"]')?.textContent,
+    ).toContain('Play');
     expect(compiled.textContent).toContain('Round 2 · Action 1');
     expect(compiled.textContent).toContain('Phase ends in');
     const leave = [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Leave');

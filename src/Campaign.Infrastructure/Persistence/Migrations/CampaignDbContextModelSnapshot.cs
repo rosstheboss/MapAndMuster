@@ -283,6 +283,13 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsPlayer")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("FactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Subfaction")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
@@ -344,6 +351,9 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb");
 
                     b.Property<string>("MapGraphJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PlayStateJson")
                         .HasColumnType("jsonb");
 
                     b.Property<string>("Name")

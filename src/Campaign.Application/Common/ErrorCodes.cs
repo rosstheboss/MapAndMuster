@@ -79,4 +79,7 @@ public static class ErrorCodes
 
     /// <summary>The caller is already a member of the campaign.</summary>
     public const string CampaignAlreadyMember = "campaign.join.already_member";
+
+    /// <summary>The campaign has launched and the requested setup field is locked.</summary>
+    public const string CampaignLocked = "campaign.locked";
 }

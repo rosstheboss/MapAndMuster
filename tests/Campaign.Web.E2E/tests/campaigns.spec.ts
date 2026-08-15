@@ -158,8 +158,233 @@ test('managers can open the map editor after setup', async ({ page }) => {
 
   await page.goto(`/campaigns/${campaignId}/map`);
   await expect(page.getByRole('heading', { level: 1, name: 'Map editor' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Generate Connections' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Clear connections' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Auto Generate Connections' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Clear Connections' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Download map' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download SVG data' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Upload SVG' })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Draw' })).toBeVisible();
+});
+
+test('players can duplicate a campaign from Your campaigns', async ({ page }) => {
+  const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const copyId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profile) });
+  });
+  await page.route('**/api/campaigns', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: campaignId,
+          name: 'Border War',
+          description: null,
+          playerSlotCount: 8,
+          occupiedPlayerSlots: 1,
+          isPrivate: false,
+          isPubliclyViewable: true,
+          canManage: true,
+          isParticipant: true,
+          canView: true,
+          canJoin: false,
+          canLeave: false,
+          city: null,
+          region: null,
+          country: null,
+          currentRound: null,
+          currentPhaseLabel: null,
+          currentPhaseEndsUtc: null,
+          canPlay: false,
+          status: 'Scheduled',
+          startsUtc: '2099-01-05T12:00:00+00:00',
+          endsUtc: '2099-03-02T12:00:00+00:00',
+        },
+      ]),
+    });
+  });
+  await page.route(`**/api/campaigns/${campaignId}/duplicate`, async (route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: copyId,
+        name: 'Border War',
+        description: null,
+        playerSlotCount: 8,
+        occupiedPlayerSlots: 1,
+        isPrivate: false,
+        isPubliclyViewable: true,
+        creatorIsParticipant: true,
+        city: null,
+        region: null,
+        country: null,
+        hasMap: true,
+        canManage: true,
+        isParticipant: true,
+        revision: 1,
+        createdUtc: '2026-08-14T00:00:00+00:00',
+        updatedUtc: '2026-08-14T00:00:00+00:00',
+        factions: [],
+        allyGroups: [],
+        links: [],
+        terrainTypes: [],
+        structureTypes: [],
+        timeZoneId: 'UTC',
+        startsAtLocal: '2026-08-21T00:00',
+        startsUtc: '2026-08-21T00:00:00+00:00',
+        endsUtc: '2026-10-16T00:00:00+00:00',
+        roundCount: 8,
+        roundLengthAmount: 1,
+        roundLengthUnit: 'Weeks',
+        phases: [],
+        status: 'Scheduled',
+        currentRound: null,
+        currentPhaseNumber: null,
+        currentPhaseKind: null,
+        currentPhaseStartsUtc: null,
+        currentPhaseEndsUtc: null,
+      }),
+    });
+  });
+  await page.route(`**/api/campaigns/${copyId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: copyId,
+        name: 'Border War',
+        description: null,
+        playerSlotCount: 8,
+        occupiedPlayerSlots: 1,
+        isPrivate: false,
+        isPubliclyViewable: true,
+        creatorIsParticipant: true,
+        city: null,
+        region: null,
+        country: null,
+        hasMap: true,
+        canManage: true,
+        isParticipant: true,
+        revision: 1,
+        createdUtc: '2026-08-14T00:00:00+00:00',
+        updatedUtc: '2026-08-14T00:00:00+00:00',
+        factions: [],
+        allyGroups: [],
+        links: [],
+        terrainTypes: [],
+        structureTypes: [],
+        timeZoneId: 'UTC',
+        startsAtLocal: '2026-08-21T00:00',
+        startsUtc: '2026-08-21T00:00:00+00:00',
+        endsUtc: '2026-10-16T00:00:00+00:00',
+        roundCount: 8,
+        roundLengthAmount: 1,
+        roundLengthUnit: 'Weeks',
+        phases: [],
+        status: 'Scheduled',
+        currentRound: null,
+        currentPhaseNumber: null,
+        currentPhaseKind: null,
+        currentPhaseStartsUtc: null,
+        currentPhaseEndsUtc: null,
+      }),
+    });
+  });
+
+  await page.goto('/campaigns');
+  await page.getByRole('button', { name: 'Border War' }).click();
+  await page.getByRole('button', { name: 'Duplicate campaign' }).click();
+  await expect(page).toHaveURL(`/campaigns/${copyId}/edit`);
+});
+
+test('players can open the campaign log during play', async ({ page }) => {
+  const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profile) });
+  });
+  await page.route(`**/api/campaigns/${campaignId}/play`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: campaignId,
+        name: 'Border War',
+        revision: 2,
+        canManage: true,
+        isParticipant: true,
+        status: 'InProgress',
+        currentRound: 1,
+        currentPhaseNumber: 1,
+        currentPhaseKind: 'Action',
+        currentPhaseLabel: 'Action 1',
+        currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+        currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+        currentWindowId: 'window-1',
+        hasMap: false,
+        factionId: 'north',
+        canChooseFaction: false,
+        isCommitted: false,
+        roundCount: 3,
+        minRoundCount: 1,
+        remainingWindows: [],
+        factions: [
+          {
+            id: 'north',
+            name: 'North',
+            color: '#2563EB',
+            subfactions: [],
+            allyGroupName: null,
+            requiresSubfaction: false,
+            hasFlagImage: false,
+          },
+        ],
+        structureTypes: [],
+        forces: [],
+        myDrafts: [],
+        orders: [],
+        commitments: [],
+        battles: [],
+        log: [
+          {
+            id: 'log-1',
+            occurredUtc: '2026-08-14T12:00:00+00:00',
+            kind: 'ResolvedAction',
+            summary: 'North held in Coast.',
+            territoryId: 't1',
+            forceId: 'force-1',
+            battleId: null,
+            isSystemAdjustment: false,
+          },
+        ],
+        playersMissingFaction: [],
+      }),
+    });
+  });
+  await page.route(`**/api/campaigns/${campaignId}/map/graph`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        campaignId,
+        revision: 2,
+        canManage: true,
+        territories: [],
+        adjacencies: [],
+      }),
+    });
+  });
+
+  await page.goto(`/campaigns/${campaignId}/play`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Border War' })).toBeVisible();
+  await page.getByRole('button', { name: 'Campaign log' }).click();
+  await expect(page.getByRole('dialog', { name: 'Campaign log' })).toBeVisible();
+  await expect(page.getByText('North held in Coast.')).toBeVisible();
+  await expect(page.getByText('Unrevealed secret orders are omitted.')).toBeVisible();
 });

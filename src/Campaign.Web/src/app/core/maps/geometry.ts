@@ -20,7 +20,8 @@ export const STROKE_ADJACENT_SCREEN_PX = 1.85;
 export const DRAWING_STROKE_SCREEN_PX = 1.75;
 export const VERTEX_SCREEN_PX = 3.25;
 export const SNAP_RING_SCREEN_PX = 6;
-export const ARROW_HALF_SCREEN_PX = 14;
+export const ARROW_HEAD_SCREEN_PX = 10;
+export const ARROW_OVERHANG_LINE_SCREEN_PX = 10;
 export const ARROW_HIT_SCREEN_PX = 16;
 export const ARROW_HOVER_SCALE = 1.5;
 export const OVERLAY_FILL_OPACITY = 0.32;
@@ -198,6 +199,106 @@ export function pointOnPolygonBoundary(polygon: readonly MapPoint[], point: MapP
   return isOnBoundary(polygon, point);
 }
 
+export function segmentIntersection(
+  a1: MapPoint,
+  a2: MapPoint,
+  b1: MapPoint,
+  b2: MapPoint,
+): { t: number; u: number; point: MapPoint } | null {
+  const dx1 = a2.x - a1.x;
+  const dy1 = a2.y - a1.y;
+  const dx2 = b2.x - b1.x;
+  const dy2 = b2.y - b1.y;
+  const denom = dx1 * dy2 - dy1 * dx2;
+  if (Math.abs(denom) < GEOMETRY_EPSILON) {
+    return null;
+  }
+
+  const t = ((b1.x - a1.x) * dy2 - (b1.y - a1.y) * dx2) / denom;
+  const u = ((b1.x - a1.x) * dy1 - (b1.y - a1.y) * dx1) / denom;
+  if (t < -GEOMETRY_EPSILON || t > 1 + GEOMETRY_EPSILON || u < -GEOMETRY_EPSILON || u > 1 + GEOMETRY_EPSILON) {
+    return null;
+  }
+
+  return { t, u, point: { x: a1.x + t * dx1, y: a1.y + t * dy1 } };
+}
+
+export function segmentPolygonHits(
+  polygon: readonly MapPoint[],
+  start: MapPoint,
+  end: MapPoint,
+): { t: number; point: MapPoint }[] {
+  const hits: { t: number; point: MapPoint }[] = [];
+  const count = polygon.length;
+  for (let i = 0; i < count; i += 1) {
+    const a = polygon.at(i);
+    const b = polygon.at((i + 1) % count);
+    if (!a || !b) {
+      continue;
+    }
+
+    const hit = segmentIntersection(start, end, a, b);
+    if (hit) {
+      hits.push({ t: hit.t, point: hit.point });
+    }
+  }
+
+  return hits;
+}
+
+export function polygonIntersectsRect(
+  polygon: readonly MapPoint[],
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+): boolean {
+  const minX = Math.min(left, right);
+  const maxX = Math.max(left, right);
+  const minY = Math.min(top, bottom);
+  const maxY = Math.max(top, bottom);
+  for (const point of polygon) {
+    if (point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY) {
+      return true;
+    }
+  }
+
+  const corners: MapPoint[] = [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
+  for (const corner of corners) {
+    if (containsStrict(polygon, corner) || isOnBoundary(polygon, corner)) {
+      return true;
+    }
+  }
+
+  const rectEdges: [MapPoint, MapPoint][] = [
+    [corners[0], corners[1]],
+    [corners[1], corners[2]],
+    [corners[2], corners[3]],
+    [corners[3], corners[0]],
+  ];
+  const count = polygon.length;
+  for (let i = 0; i < count; i += 1) {
+    const a = polygon.at(i);
+    const b = polygon.at((i + 1) % count);
+    if (!a || !b) {
+      continue;
+    }
+
+    for (const [start, end] of rectEdges) {
+      if (segmentsProperlyIntersect(a, b, start, end) || collinearOverlap(a, b, start, end)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export function snapToExistingGeometry(
   cursor: MapPoint,
   vertices: readonly MapPoint[],
@@ -258,6 +359,91 @@ export function clampTranslation(polygons: readonly (readonly MapPoint[])[], dx:
 
 export function translatePolygon(polygon: readonly MapPoint[], dx: number, dy: number): MapPoint[] {
   return polygon.map((point) => ({ x: point.x + dx, y: point.y + dy }));
+}
+
+export function closestPolygonPoints(
+  left: readonly MapPoint[],
+  right: readonly MapPoint[],
+): { from: MapPoint; to: MapPoint } {
+  const shared = sharedBorderMidpoint(left, right);
+  if (shared) {
+    return { from: shared, to: shared };
+  }
+
+  let best = Number.POSITIVE_INFINITY;
+  let from = centroid(left);
+  let to = centroid(right);
+  const consider = (a: MapPoint, b: MapPoint): void => {
+    const distance = distanceSquared(a, b);
+    if (distance < best) {
+      best = distance;
+      from = a;
+      to = b;
+    }
+  };
+
+  for (const vertex of left) {
+    for (const point of closestPointsOnEdges(right, vertex)) {
+      consider(vertex, point);
+    }
+  }
+
+  for (const vertex of right) {
+    for (const point of closestPointsOnEdges(left, vertex)) {
+      consider(point, vertex);
+    }
+  }
+
+  for (const leftVertex of left) {
+    for (const rightVertex of right) {
+      consider(leftVertex, rightVertex);
+    }
+  }
+
+  return { from, to };
+}
+
+export function resolveTerritoryTranslation(
+  selectedPolygons: readonly (readonly MapPoint[])[],
+  otherPolygons: readonly (readonly MapPoint[])[],
+  dx: number,
+  dy: number,
+  snapDistance = SNAP_DISTANCE,
+): MapPoint | null {
+  const clamped = clampTranslation(selectedPolygons, dx, dy);
+  const candidates: MapPoint[] = [];
+  const aligned = alignTranslationToNeighborEdges(selectedPolygons, otherPolygons, clamped, snapDistance);
+  if (aligned) {
+    candidates.push(aligned);
+  }
+
+  candidates.push(clamped);
+  for (const candidate of candidates) {
+    const next = clampTranslation(selectedPolygons, candidate.x, candidate.y);
+    if (translationFits(selectedPolygons, otherPolygons, next)) {
+      return next;
+    }
+  }
+
+  let lo = 0;
+  let hi = 1;
+  let best: MapPoint | null = translationFits(selectedPolygons, otherPolygons, { x: 0, y: 0 }) ? { x: 0, y: 0 } : null;
+  for (let step = 0; step < 18; step += 1) {
+    const mid = (lo + hi) / 2;
+    const trial = clampTranslation(selectedPolygons, clamped.x * mid, clamped.y * mid);
+    if (translationFits(selectedPolygons, otherPolygons, trial)) {
+      best = trial;
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+
+  return best;
+}
+
+export function segmentsCross(a1: MapPoint, a2: MapPoint, b1: MapPoint, b2: MapPoint): boolean {
+  return segmentsProperlyIntersect(a1, a2, b1, b2);
 }
 
 export function snapToNearestEdge(
@@ -771,7 +957,24 @@ function hasInteriorSampleInside(source: readonly MapPoint[], other: readonly Ma
     return true;
   }
 
-  return source.some((vertex) => containsStrict(other, { x: (vertex.x + center.x) / 2, y: (vertex.y + center.y) / 2 }));
+  const count = source.length;
+  for (let i = 0; i < count; i += 1) {
+    const vertex = source.at(i);
+    const next = source.at((i + 1) % count);
+    if (!vertex) {
+      continue;
+    }
+
+    if (containsStrict(other, { x: (vertex.x + center.x) / 2, y: (vertex.y + center.y) / 2 })) {
+      return true;
+    }
+
+    if (next && containsStrict(other, { x: (vertex.x + next.x) / 2, y: (vertex.y + next.y) / 2 })) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function projectPointOnSegment(a: MapPoint, b: MapPoint, p: MapPoint, snapDistance = SNAP_DISTANCE): MapPoint | null {
@@ -1011,4 +1214,102 @@ function collinearOverlap(
     start: { x: a1.x + ux * start, y: a1.y + uy * start },
     end: { x: a1.x + ux * end, y: a1.y + uy * end },
   };
+}
+
+function closestPointsOnEdges(polygon: readonly MapPoint[], point: MapPoint): MapPoint[] {
+  const points: MapPoint[] = [];
+  const count = polygon.length;
+  for (let i = 0; i < count; i += 1) {
+    const a = polygon.at(i);
+    const b = polygon.at((i + 1) % count);
+    if (a && b) {
+      points.push(closestPointOnSegment(a, b, point));
+    }
+  }
+
+  return points;
+}
+
+function closestPointOnSegment(a: MapPoint, b: MapPoint, point: MapPoint): MapPoint {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared < GEOMETRY_EPSILON * GEOMETRY_EPSILON) {
+    return a;
+  }
+
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared));
+  return { x: a.x + dx * t, y: a.y + dy * t };
+}
+
+function translationFits(
+  selectedPolygons: readonly (readonly MapPoint[])[],
+  otherPolygons: readonly (readonly MapPoint[])[],
+  delta: MapPoint,
+): boolean {
+  const moved = selectedPolygons.map((polygon) => translatePolygon(polygon, delta.x, delta.y));
+  if (moved.some((polygon) => !isValidTerritoryPolygon(polygon))) {
+    return false;
+  }
+
+  return !moved.some((polygon) => otherPolygons.some((other) => interiorsOverlap(polygon, other)));
+}
+
+function alignTranslationToNeighborEdges(
+  selectedPolygons: readonly (readonly MapPoint[])[],
+  otherPolygons: readonly (readonly MapPoint[])[],
+  delta: MapPoint,
+  snapDistance: number,
+): MapPoint | null {
+  let bestDistance = snapDistance;
+  let best: MapPoint | null = null;
+  for (const polygon of selectedPolygons) {
+    const count = polygon.length;
+    for (let i = 0; i < count; i += 1) {
+      const a1 = polygon.at(i);
+      const a2 = polygon.at((i + 1) % count);
+      if (!a1 || !a2) {
+        continue;
+      }
+
+      const movedA = { x: a1.x + delta.x, y: a1.y + delta.y };
+      for (const other of otherPolygons) {
+        const otherCount = other.length;
+        for (let j = 0; j < otherCount; j += 1) {
+          const b1 = other.at(j);
+          const b2 = other.at((j + 1) % otherCount);
+          if (!b1 || !b2) {
+            continue;
+          }
+
+          const edgeDx = b2.x - b1.x;
+          const edgeDy = b2.y - b1.y;
+          const edgeLength = Math.hypot(edgeDx, edgeDy);
+          if (edgeLength < GEOMETRY_EPSILON) {
+            continue;
+          }
+
+          const nx = -edgeDy / edgeLength;
+          const ny = edgeDx / edgeLength;
+          const gap = (movedA.x - b1.x) * nx + (movedA.y - b1.y) * ny;
+          const distance = Math.abs(gap);
+          if (distance > bestDistance) {
+            continue;
+          }
+
+          const aligned = { x: delta.x - nx * gap, y: delta.y - ny * gap };
+          const trialA = { x: a1.x + aligned.x, y: a1.y + aligned.y };
+          const trialB = { x: a2.x + aligned.x, y: a2.y + aligned.y };
+          if (!collinearOverlap(trialA, trialB, b1, b2)) {
+            continue;
+          }
+
+          bestDistance = distance;
+          best = aligned;
+        }
+      }
+    }
+  }
+
+  return best;
 }

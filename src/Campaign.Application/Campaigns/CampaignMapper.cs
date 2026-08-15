@@ -24,7 +24,7 @@ public static class CampaignMapper
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
-        var progress = ToSchedule(campaign).Evaluate(utcNow);
+        var progress = CampaignLifecycle.Progress(campaign, utcNow);
         return new CampaignListItem
         {
             Id = campaign.Id,
@@ -48,6 +48,8 @@ public static class CampaignMapper
             CurrentRound = progress.CurrentRound,
             CurrentPhaseLabel = FormatCurrentPhaseLabel(campaign, progress),
             CurrentPhaseEndsUtc = progress.CurrentPhaseEndsUtc,
+            CanPlay = (membership?.IsPlayer == true || membership?.IsGameMaster == true)
+                && progress.Status == CampaignStatus.InProgress,
         };
     }
 
@@ -63,7 +65,7 @@ public static class CampaignMapper
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
         var schedule = ToSchedule(campaign);
-        var progress = schedule.Evaluate(utcNow);
+        var progress = CampaignLifecycle.Progress(campaign, utcNow);
         return new CampaignDetail
         {
             Id = campaign.Id,
@@ -141,6 +143,13 @@ public static class CampaignMapper
             CurrentPhaseKind = progress.CurrentPhaseKind?.ToString(),
             CurrentPhaseStartsUtc = progress.CurrentPhaseStartsUtc,
             CurrentPhaseEndsUtc = progress.CurrentPhaseEndsUtc,
+            FactionId = membership?.FactionId,
+            Subfaction = membership?.Subfaction,
+            CanPlay = (membership?.IsPlayer == true || membership?.IsGameMaster == true)
+                && progress.Status == CampaignStatus.InProgress,
+            CanChooseFaction = membership?.IsPlayer == true
+                && membership.FactionId is null
+                && progress.Status != CampaignStatus.Completed,
         };
     }
 

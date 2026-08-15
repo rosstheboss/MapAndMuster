@@ -139,6 +139,11 @@ public sealed class UpdateCampaignHandler
                 "Only a campaign manager can change this campaign.");
         }
 
+        if (CampaignLifecycle.HasLaunched(existing, _clock.UtcNow))
+        {
+            return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignLocked, CampaignLifecycle.LockedMessage);
+        }
+
         var occupiedExcludingCreator = existing.Memberships.Count(member =>
             member.IsPlayer && member.UserId != existing.CreatedByUserId);
 
@@ -185,6 +190,8 @@ public sealed class UpdateCampaignHandler
                     UserId = member.UserId,
                     IsGameMaster = true,
                     IsPlayer = setup.CreatorIsParticipant,
+                    FactionId = member.FactionId,
+                    Subfaction = member.Subfaction,
                 }
                 : member)
             .ToArray();
@@ -230,7 +237,12 @@ public sealed class UpdateCampaignHandler
 
         foreach (var key in CatalogFileBinder.UnusedStorageKeys(existing, outcome.Campaign))
         {
-            await _assets.DeleteAsync(key, cancellationToken).ConfigureAwait(false);
+            await CampaignAssetRetention.DeleteIfUnreferencedAsync(
+                _campaigns,
+                _assets.DeleteAsync,
+                key,
+                existing.Id,
+                cancellationToken).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));

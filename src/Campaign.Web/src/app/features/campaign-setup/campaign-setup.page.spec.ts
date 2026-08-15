@@ -17,6 +17,28 @@ function clickNamedButton(compiled: HTMLElement, name: string): void {
   button!.click();
 }
 
+function setSelectValue(element: HTMLElement | null, value: string): void {
+  expect(element).toBeTruthy();
+  const select = element as HTMLSelectElement;
+  select.value = value;
+  select.dispatchEvent(new Event('change'));
+}
+
+function setInputValue(element: HTMLElement | null, value: string): void {
+  expect(element).toBeTruthy();
+  const input = element as HTMLInputElement;
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+}
+
+function phaseKinds(compiled: HTMLElement): string[] {
+  return [...compiled.querySelectorAll<HTMLSelectElement>('select[id^="phase-kind-"]')].map((select) => select.value);
+}
+
+function phaseAmounts(compiled: HTMLElement): string[] {
+  return [...compiled.querySelectorAll<HTMLInputElement>('input[id^="phase-amount-"]')].map((input) => input.value);
+}
+
 describe('CampaignSetupPage', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -304,6 +326,10 @@ describe('CampaignSetupPage edit', () => {
       currentPhaseKind: null,
       currentPhaseStartsUtc: null,
       currentPhaseEndsUtc: null,
+      factionId: null,
+      subfaction: null,
+      canPlay: false,
+      canChooseFaction: false,
     });
     await fixture.whenStable();
     fixture.detectChanges();
@@ -321,6 +347,130 @@ describe('CampaignSetupPage edit', () => {
     expect(compiled.querySelector('app-campaign-map-preview img')?.getAttribute('src')).toContain(
       `/api/campaigns/${campaignId}/map?v=2`,
     );
+    http.verify();
+  });
+
+  it('keeps phase kinds, lengths, and order in sync after add, remove, move, and kind changes', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      id: campaignId,
+      name: 'Border War',
+      description: 'A contested frontier.',
+      playerSlotCount: 8,
+      occupiedPlayerSlots: 1,
+      isPrivate: false,
+      isPubliclyViewable: true,
+      creatorIsParticipant: true,
+      city: null,
+      region: null,
+      country: null,
+      hasMap: true,
+      canManage: true,
+      isParticipant: true,
+      revision: 2,
+      createdUtc: '2026-08-13T00:00:00+00:00',
+      updatedUtc: '2026-08-13T00:00:00+00:00',
+      factions: [
+        {
+          id: '1',
+          name: 'North',
+          color: '#2563EB',
+          subfactions: [],
+          allyGroupName: null,
+          requiresSubfaction: false,
+          hasFlagImage: false,
+        },
+        {
+          id: '2',
+          name: 'South',
+          color: '#DC2626',
+          subfactions: [],
+          allyGroupName: null,
+          requiresSubfaction: false,
+          hasFlagImage: false,
+        },
+      ],
+      allyGroups: [],
+      links: [],
+      terrainTypes: [],
+      structureTypes: [],
+      timeZoneId: 'UTC',
+      startsAtLocal: '2099-01-05T12:00',
+      startsUtc: '2099-01-05T12:00:00+00:00',
+      endsUtc: '2099-03-02T12:00:00+00:00',
+      roundCount: 8,
+      roundLengthAmount: 1,
+      roundLengthUnit: 'Hours',
+      phases: [
+        { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+        { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+        { kind: 'Battle', durationAmount: 1, durationUnit: 'Days' },
+      ],
+      status: 'Scheduled',
+      currentRound: null,
+      currentPhaseNumber: null,
+      currentPhaseKind: null,
+      currentPhaseStartsUtc: null,
+      currentPhaseEndsUtc: null,
+      factionId: null,
+      subfaction: null,
+      canPlay: false,
+      canChooseFaction: false,
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      form: { getRawValue: () => { phases: { kind: string; durationAmount: number; durationUnit: string }[] } };
+    };
+
+    clickNamedButton(compiled, 'Add action');
+    fixture.detectChanges();
+    const firstRemove = compiled.querySelector('#phase-kind-0')?.closest('.nested-card')?.querySelectorAll('button');
+    const remove = [...(firstRemove ?? [])].find((button) => button.textContent.trim() === 'Remove');
+    expect(remove).toBeTruthy();
+    remove!.click();
+    fixture.detectChanges();
+    clickNamedButton(compiled, 'Add action');
+    fixture.detectChanges();
+
+    setSelectValue(compiled.querySelector('#phase-kind-1'), 'Action');
+    fixture.detectChanges();
+    setSelectValue(compiled.querySelector('#phase-kind-2'), 'Battle');
+    fixture.detectChanges();
+
+    setSelectValue(compiled.querySelector('#roundLengthUnit'), 'Hours');
+    fixture.detectChanges();
+    for (const index of [0, 1, 2, 3]) {
+      setSelectValue(compiled.querySelector(`#phase-unit-${index}`), 'Minutes');
+      fixture.detectChanges();
+    }
+
+    setInputValue(compiled.querySelector('#phase-amount-0'), '2');
+    setInputValue(compiled.querySelector('#phase-amount-1'), '2');
+    setInputValue(compiled.querySelector('#phase-amount-2'), '54');
+    setInputValue(compiled.querySelector('#phase-amount-3'), '2');
+    fixture.detectChanges();
+
+    const battleRowButtons = compiled
+      .querySelector('#phase-kind-2')
+      ?.closest('.nested-card')
+      ?.querySelectorAll('button');
+    const moveDown = [...(battleRowButtons ?? [])].find((button) => button.textContent.trim() === 'Move down');
+    expect(moveDown).toBeTruthy();
+    moveDown!.click();
+    fixture.detectChanges();
+
+    expect(phaseKinds(compiled)).toEqual(['Action', 'Action', 'Action', 'Battle']);
+    expect(phaseAmounts(compiled)).toEqual(['2', '2', '2', '54']);
+    expect(page.form.getRawValue().phases).toEqual([
+      { kind: 'Action', durationAmount: 2, durationUnit: 'Minutes' },
+      { kind: 'Action', durationAmount: 2, durationUnit: 'Minutes' },
+      { kind: 'Action', durationAmount: 2, durationUnit: 'Minutes' },
+      { kind: 'Battle', durationAmount: 54, durationUnit: 'Minutes' },
+    ]);
     http.verify();
   });
 });

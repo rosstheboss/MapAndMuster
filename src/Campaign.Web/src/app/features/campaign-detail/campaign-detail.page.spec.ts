@@ -67,6 +67,10 @@ const campaign = {
   currentPhaseKind: null,
   currentPhaseStartsUtc: null,
   currentPhaseEndsUtc: null,
+  factionId: null,
+  subfaction: null,
+  canPlay: false,
+  canChooseFaction: true,
 };
 
 describe('CampaignDetailPage', () => {
@@ -111,6 +115,9 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('1 week');
     expect(compiled.textContent).toContain('Action 1 · 3 days');
     expect(compiled.textContent).toContain('Battle phase · 1 day');
+    expect(compiled.textContent).toContain('Choose your faction');
+    expect(compiled.querySelector('#faction')).toBeTruthy();
+    expect(compiled.textContent).toContain("Your force starts at that faction's spawn");
     expect(compiled.querySelector('a.button')?.textContent).toContain('Edit campaign');
     expect(compiled.textContent).toContain('Edit map');
 
@@ -146,6 +153,66 @@ describe('CampaignDetailPage', () => {
     expect(preview).toBeTruthy();
     expect(preview?.getAttribute('src')).toContain(`/api/campaigns/${campaign.id}/map?v=4`);
     expect(compiled.textContent).toContain('Download map');
+    http.verify();
+  });
+
+  it('lets a scheduled player save a faction choice', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      factionChoice: { set(value: string): void };
+    };
+    page.factionChoice.set('1');
+    fixture.detectChanges();
+
+    const save = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Save faction',
+    );
+    expect(save).toBeTruthy();
+    save!.click();
+
+    const posted = http.expectOne(`/api/campaigns/${campaign.id}/play/faction`);
+    expect(posted.request.method).toBe('POST');
+    expect((posted.request.body as { factionId: string }).factionId).toBe('1');
+    posted.flush({ ...campaign, factionId: '1', canChooseFaction: false, revision: 2 });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(compiled.textContent).toContain('Your faction');
+    expect(compiled.textContent).toContain('North');
+    expect(compiled.querySelector('#faction')).toBeNull();
+
+    for (const request of http.match(() => true)) {
+      if (request.request.url.endsWith('/map/graph')) {
+        request.flush({
+          campaignId: campaign.id,
+          revision: 2,
+          canManage: true,
+          territories: [],
+          adjacencies: [],
+        });
+      } else {
+        request.flush({
+          ...campaign,
+          factionId: '1',
+          canChooseFaction: false,
+          revision: 2,
+        });
+      }
+    }
+    await fixture.whenStable();
     http.verify();
   });
 });

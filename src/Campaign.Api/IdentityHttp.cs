@@ -115,7 +115,7 @@ public static class IdentityHttp
             ErrorCodes.Unauthorized or ErrorCodes.InvalidCredentials => StatusCodes.Status401Unauthorized,
             ErrorCodes.LockedOut or ErrorCodes.EmailNotConfirmed => StatusCodes.Status403Forbidden,
             ErrorCodes.ProfileNotFound or ErrorCodes.CampaignNotFound => StatusCodes.Status404NotFound,
-            ErrorCodes.CampaignForbidden => StatusCodes.Status403Forbidden,
+            ErrorCodes.CampaignForbidden or ErrorCodes.CampaignLocked => StatusCodes.Status403Forbidden,
             ErrorCodes.EmailTaken or ErrorCodes.UsernameTaken or ErrorCodes.ConcurrencyConflict
                 or ErrorCodes.ExternalLinkRequired
                 or ErrorCodes.CampaignAlreadyMember

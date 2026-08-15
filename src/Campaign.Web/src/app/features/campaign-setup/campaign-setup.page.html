@@ -168,8 +168,8 @@
           </div>
           <p class="muted">This round has {{ actionCount() }} action{{ actionCount() === 1 ? '' : 's' }}.</p>
           <div formArrayName="phases" class="stack">
-            @for (_phase of phases.controls; track $index; let index = $index) {
-              <div class="nested-card nested-row" [formGroupName]="index">
+            @for (phase of phaseGroups(); track phase; let index = $index) {
+              <div class="nested-card nested-row" [formGroup]="phase">
                 <div class="field">
                   <label [attr.for]="'phase-kind-' + index">Step {{ index + 1 }}</label>
                   <select [id]="'phase-kind-' + index" formControlName="kind">
@@ -184,7 +184,7 @@
                     [id]="'phase-amount-' + index"
                     type="number"
                     min="1"
-                    [max]="maxAmountFor(phases.at(index).controls.durationUnit.value)"
+                    [max]="maxAmountFor(phase.controls.durationUnit.value)"
                     formControlName="durationAmount"
                   />
                 </div>
@@ -300,7 +300,7 @@
             <button type="button" class="button-secondary" (click)="clearAllyGroups()">Clear allies</button>
           </div>
           <div formArrayName="allyGroups" class="stack">
-            @for (group of allyGroups.controls; track $index; let index = $index) {
+            @for (group of allyGroups.controls; track group; let index = $index) {
               <div class="nested-row" [formGroupName]="index">
                 <div class="field grow">
                   <label [attr.for]="'ally-group-' + index">Ally group {{ index + 1 }} name</label>
@@ -844,7 +844,7 @@
         <div [hidden]="!isOpen('links')">
           <p class="muted">Up to 20 labeled http or https links.</p>
           <div formArrayName="links" class="stack">
-            @for (_link of links.controls; track $index; let index = $index) {
+            @for (link of links.controls; track link; let index = $index) {
               <div class="nested-card stack" [formGroupName]="index">
                 <div class="nested-row">
                   <div class="field grow">

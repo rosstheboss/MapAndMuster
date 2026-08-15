@@ -3,6 +3,7 @@ using Campaign.Api.Contracts;
 using Campaign.Application.Campaigns;
 using Campaign.Application.Common;
 using Campaign.Application.Maps;
+using Campaign.Application.Play;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Campaign.Api.Endpoints;
@@ -51,6 +52,12 @@ public static class CampaignEndpoints
             .WithName("LeaveCampaign")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/duplicate", DuplicateAsync)
+            .WithName("DuplicateCampaign")
+            .Produces<CampaignDetailResponse>(StatusCodes.Status201Created)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
         group.MapPut("/{campaignId:guid}", UpdateAsync)
@@ -135,6 +142,84 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/play", GetPlayAsync)
+            .WithName("GetCampaignPlay")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/play/faction", ChooseFactionAsync)
+            .WithName("ChooseCampaignFaction")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/draft", SaveDraftAsync)
+            .WithName("SaveCampaignOrderDraft")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/commit", CommitAsync)
+            .WithName("CommitCampaignOrders")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/uncommit", UncommitAsync)
+            .WithName("UncommitCampaignOrders")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/battle-result", SubmitBattleResultAsync)
+            .WithName("SubmitCampaignBattleResult")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/accept-result", AcceptBattleResultAsync)
+            .WithName("AcceptCampaignBattleResult")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/retreat", SubmitRetreatAsync)
+            .WithName("SubmitCampaignRetreat")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/gm-resolve-battle", ResolveBattleAsync)
+            .WithName("ResolveCampaignBattle")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/extend-schedule", ExtendScheduleAsync)
+            .WithName("ExtendCampaignSchedule")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
     }
 
     private static async Task<IResult> ListAsync(
@@ -380,6 +465,34 @@ public static class CampaignEndpoints
         }
 
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> DuplicateAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        DuplicateCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new DuplicateCampaignCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Created($"/api/campaigns/{result.Value.Id}", CampaignResponses.FromDetail(result.Value));
     }
 
     private static async Task<IResult> GetMapAsync(
@@ -764,5 +877,292 @@ public static class CampaignEndpoints
         }
 
         return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetPlayAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        GetCampaignPlayHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler
+            .HandleAsync(campaignId, userId.Value, principal.IsAdministrator(), cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(PlayResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> ChooseFactionAsync(
+        Guid campaignId,
+        ChooseFactionRequest request,
+        ClaimsPrincipal principal,
+        ChooseFactionHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ChooseFactionCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    FactionId = request.FactionId,
+                    Subfaction = request.Subfaction,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> SaveDraftAsync(
+        Guid campaignId,
+        SaveOrderDraftRequest request,
+        ClaimsPrincipal principal,
+        SaveOrderDraftHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SaveOrderDraftCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    ForceId = request.ForceId,
+                    Kind = request.Kind,
+                    TargetTerritoryId = request.TargetTerritoryId,
+                    StructureTypeId = request.StructureTypeId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> CommitAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        CommitOrdersHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> UncommitAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        UncommitOrdersHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> SubmitBattleResultAsync(
+        Guid campaignId,
+        SubmitBattleResultRequest request,
+        ClaimsPrincipal principal,
+        SubmitBattleResultHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SubmitBattleResultCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                    WinnerForceId = request.WinnerForceId,
+                    IsDraw = request.IsDraw,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> AcceptBattleResultAsync(
+        Guid campaignId,
+        BattleActionRequest request,
+        ClaimsPrincipal principal,
+        AcceptBattleResultHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new BattleActionCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> SubmitRetreatAsync(
+        Guid campaignId,
+        SubmitRetreatRequest request,
+        ClaimsPrincipal principal,
+        SubmitRetreatHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SubmitRetreatCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                    TargetTerritoryId = request.TargetTerritoryId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ResolveBattleAsync(
+        Guid campaignId,
+        SubmitBattleResultRequest request,
+        ClaimsPrincipal principal,
+        ResolveBattleHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SubmitBattleResultCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                    WinnerForceId = request.WinnerForceId,
+                    IsDraw = request.IsDraw,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ExtendScheduleAsync(
+        Guid campaignId,
+        ExtendCampaignScheduleRequest request,
+        ClaimsPrincipal principal,
+        ExtendCampaignScheduleHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ExtendCampaignScheduleCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    RoundCount = request.RoundCount,
+                    Extensions =
+                    [
+                        .. (request.Extensions ?? []).Select(static item => new PhaseExtensionInput
+                        {
+                            WindowId = item.WindowId,
+                            DurationAmount = item.DurationAmount,
+                            DurationUnit = item.DurationUnit,
+                        }),
+                    ],
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> PlayCommandAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        Func<PlayCommand, CancellationToken, Task<Campaign.Application.Common.OperationResult<Campaign.Application.Play.CampaignPlayDetail>>> handle,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handle(
+                new PlayCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static IResult PlayResult(Campaign.Application.Common.OperationResult<Campaign.Application.Play.CampaignPlayDetail> result)
+    {
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(PlayResponses.FromDetail(result.Value));
     }
 }

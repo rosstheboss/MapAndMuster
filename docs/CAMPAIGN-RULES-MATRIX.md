@@ -20,9 +20,10 @@ for the campaign rules.
 
 | Rule area                            | Classification                | Initial software responsibility                                                                                                |
 | ------------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Campaign length and round schedule   | Configure, Enforce, Audit     | Configure rounds/deadlines; allow audited extension and reopening.                                                             |
+| Campaign length and round schedule   | Configure, Enforce, Audit     | Configure rounds/deadlines; after launch allow round-count increase and lengthening remaining windows, not shortening them.   |
 | Two action windows and battle phase  | Enforce                       | Maintain explicit timed states; Action 1 battle can force later Battle action.                                                 |
-| Draft, commit, uncommit, early close | Enforce, Audit                | Allow changes until all required participants commit; close atomically.                                                        |
+| Draft, commit, uncommit, early close | Enforce, Audit                | Allow changes until all required participants commit; close atomically. Unused battle time flows into the next window.         |
+| Campaign play log                    | Audit, Display                | Record campaign start, schedule extensions, revealed actions including Hold, and resolved battles; never log unrevealed orders. |
 | Missing order                        | Enforce                       | Create Hold for every missing required force/action slot.                                                                      |
 | Move                                 | Enforce, Calculate            | Validate controller, origin, destination, adjacency, spawn restrictions, and faction modifiers. Invalid Move becomes Hold.     |
 | Hold                                 | Enforce, Calculate            | Preserve location and trigger configured rest/status effects.                                                                  |
@@ -36,7 +37,7 @@ for the campaign rules.
 | Surrender                            | Enforce, Calculate            | Record decisive result, territory consequence, and required retreat without secondary rewards.                                 |
 | Multiple combatants                  | Configure, Calculate          | Assign a compatible multi-party mission/result schema; do not assume two-party scoring.                                        |
 | Allied co-location                   | Calculate                     | Determine territory claimant using configured ranking/tie-break rules.                                                         |
-| Map image and territories            | Configure                     | Upload raster, draw/import polygons, assign IDs, terrain, ownership, spawn, structures, and adjacency.                         |
+| Map image and territories            | Configure                     | Upload raster, draw/import polygons, assign IDs, terrain, ownership, spawn, structures, and adjacency. A pair of territories has at most one connection. |
 | Spawn behavior                       | Enforce, Calculate            | Prohibit enemy entry/battle/build, provide base supply, combine same-player split forces, and handle forced return/relic drop. |
 | Terrain types                        | Configure, Display            | Select mission/layout candidates and show tabletop rules.                                                                      |
 | Tabletop terrain features            | Display                       | Present woods, water, river, bridge, cliff, castle, and similar rules with the mission; do not simulate tabletop movement.     |

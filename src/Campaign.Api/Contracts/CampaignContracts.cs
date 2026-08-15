@@ -264,6 +264,9 @@ public sealed class CampaignListItemResponse
 
     /// <summary>Gets when the current phase closes, in UTC.</summary>
     public DateTimeOffset? CurrentPhaseEndsUtc { get; init; }
+
+    /// <summary>Gets whether the viewer may open the play page.</summary>
+    public required bool CanPlay { get; init; }
 }
 
 /// <summary>
@@ -378,6 +381,18 @@ public sealed class CampaignDetailResponse
 
     /// <summary>Gets when the current phase closes, in UTC.</summary>
     public DateTimeOffset? CurrentPhaseEndsUtc { get; init; }
+
+    /// <summary>Gets the viewer's chosen faction, when they are a player who has picked one.</summary>
+    public Guid? FactionId { get; init; }
+
+    /// <summary>Gets the viewer's chosen subfaction, when one is selected.</summary>
+    public string? Subfaction { get; init; }
+
+    /// <summary>Gets whether the viewer may open the play page.</summary>
+    public required bool CanPlay { get; init; }
+
+    /// <summary>Gets whether the viewer still needs to pick a faction.</summary>
+    public required bool CanChooseFaction { get; init; }
 }
 
 /// <summary>
@@ -554,6 +569,7 @@ public static class CampaignResponses
             CurrentRound = item.CurrentRound,
             CurrentPhaseLabel = item.CurrentPhaseLabel,
             CurrentPhaseEndsUtc = item.CurrentPhaseEndsUtc,
+            CanPlay = item.CanPlay,
         };
     }
 
@@ -677,6 +693,10 @@ public static class CampaignResponses
             CurrentPhaseKind = detail.CurrentPhaseKind,
             CurrentPhaseStartsUtc = detail.CurrentPhaseStartsUtc,
             CurrentPhaseEndsUtc = detail.CurrentPhaseEndsUtc,
+            FactionId = detail.FactionId,
+            Subfaction = detail.Subfaction,
+            CanPlay = detail.CanPlay,
+            CanChooseFaction = detail.CanChooseFaction,
         };
     }
 

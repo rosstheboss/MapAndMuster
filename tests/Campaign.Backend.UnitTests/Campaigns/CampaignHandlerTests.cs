@@ -1,8 +1,11 @@
 using Campaign.Application.Campaigns;
 using Campaign.Application.Common;
+using Campaign.Application.Identity;
 using Campaign.Application.Maps;
+using Campaign.Application.Play;
 using Campaign.Application.Ports;
 using Campaign.Domain.Campaigns;
+using Campaign.Domain.Identity;
 
 namespace Campaign.Backend.UnitTests.Campaigns;
 
@@ -197,6 +200,175 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task UpdateRejectsSetupChangesAfterLaunch()
+    {
+        var campaign = WithCopied(
+            StoredCampaignFor(UserId),
+            startsUtc: Now.AddHours(-1),
+            endsUtc: Now.AddDays(40));
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new UpdateCampaignHandler(store, new FakeClock(), new FakeSecretHasher(), new FakeAssetStorage());
+
+        var result = await handler.HandleAsync(
+            new UpdateCampaignCommand
+            {
+                UserId = UserId,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+                Name = "Renamed",
+                PlayerCount = 8,
+                IsPrivate = false,
+                IsPubliclyViewable = true,
+                CreatorIsParticipant = true,
+                Factions =
+                [
+                    new FactionInput { Name = "North" },
+                    new FactionInput { Name = "South" },
+                ],
+                Schedule = ValidSchedule(),
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignLocked, result.ErrorCode);
+        Assert.Null(store.Updated);
+    }
+
+    [Fact]
+    public async Task GetPlaySeedsForcesAndHidesOtherPlayersDrafts()
+    {
+        var northSpawn = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var southSpawn = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var midland = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var plainsId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var graph = new StoredMapGraph
+        {
+            Territories =
+            [
+                SquareTerritory(northSpawn, 1, 0.05, 0.05, 0.2, NorthFactionId, plainsId),
+                SquareTerritory(midland, 2, 0.30, 0.05, 0.2, null, plainsId),
+                SquareTerritory(southSpawn, 3, 0.55, 0.05, 0.2, SouthFactionId, plainsId),
+            ],
+            Adjacencies =
+            [
+                new AdjacencyDetail
+                {
+                    Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01"),
+                    TerritoryAId = northSpawn,
+                    TerritoryBId = midland,
+                    Origin = "Manual",
+                    MarkerX = 0.27,
+                    MarkerY = 0.15,
+                },
+                new AdjacencyDetail
+                {
+                    Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02"),
+                    TerritoryAId = midland,
+                    TerritoryBId = southSpawn,
+                    Origin = "Manual",
+                    MarkerX = 0.52,
+                    MarkerY = 0.15,
+                },
+            ],
+        };
+        var campaign = WithCopied(
+            StoredCampaignFor(UserId),
+            memberships:
+            [
+                new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                },
+                new StoredCampaignMembership
+                {
+                    UserId = OtherUserId,
+                    IsGameMaster = false,
+                    IsPlayer = true,
+                    FactionId = SouthFactionId,
+                },
+            ],
+            startsUtc: Now,
+            endsUtc: Now.AddDays(40),
+            mapGraph: graph);
+        campaign = new StoredCampaign
+        {
+            Id = campaign.Id,
+            Name = campaign.Name,
+            Description = campaign.Description,
+            PlayerSlotCount = campaign.PlayerSlotCount,
+            IsPrivate = campaign.IsPrivate,
+            IsPubliclyViewable = campaign.IsPubliclyViewable,
+            JoinPasswordHash = campaign.JoinPasswordHash,
+            CreatorIsParticipant = campaign.CreatorIsParticipant,
+            City = campaign.City,
+            Region = campaign.Region,
+            Country = campaign.Country,
+            MapStorageKey = campaign.MapStorageKey,
+            Revision = campaign.Revision,
+            CreatedUtc = campaign.CreatedUtc,
+            UpdatedUtc = campaign.UpdatedUtc,
+            CreatedByUserId = campaign.CreatedByUserId,
+            Memberships = campaign.Memberships,
+            Factions = campaign.Factions,
+            AllyGroups = campaign.AllyGroups,
+            Links = campaign.Links,
+            TimeZoneId = campaign.TimeZoneId,
+            StartsUtc = campaign.StartsUtc,
+            EndsUtc = campaign.EndsUtc,
+            RoundCount = campaign.RoundCount,
+            RoundLengthAmount = campaign.RoundLengthAmount,
+            RoundLengthUnit = campaign.RoundLengthUnit,
+            Phases = campaign.Phases,
+            MapGraph = campaign.MapGraph,
+            TerrainTypes =
+            [
+                new StoredTerrainType
+                {
+                    Id = plainsId,
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [],
+                },
+            ],
+            StructureTypes = campaign.StructureTypes,
+            PlayState = campaign.PlayState,
+        };
+        var store = new FakeCampaignStore { Existing = campaign };
+        var accounts = new FakeAccounts();
+        var get = new GetCampaignPlayHandler(store, new FakeClock(), accounts);
+        var seeded = await get.HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+        Assert.True(seeded.IsSuccess);
+        Assert.NotNull(seeded.Value);
+        Assert.Equal(2, seeded.Value.Forces.Count);
+        Assert.Contains(midland, seeded.Value.Forces.Single(force => force.IsMine).MoveTargets);
+
+        var northForce = seeded.Value.Forces.Single(force => force.IsMine);
+        var draft = new SaveOrderDraftHandler(store, new FakeClock(), accounts);
+        var saved = await draft.HandleAsync(
+            new SaveOrderDraftCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = seeded.Value.Revision,
+                ForceId = northForce.Id,
+                Kind = "Hold",
+            },
+            CancellationToken.None);
+        Assert.True(saved.IsSuccess);
+        Assert.Single(saved.Value!.MyDrafts);
+
+        var otherView = await get.HandleAsync(campaign.Id, OtherUserId, false, CancellationToken.None);
+        Assert.True(otherView.IsSuccess);
+        Assert.Empty(otherView.Value!.MyDrafts);
+        Assert.Empty(otherView.Value.Orders);
+        Assert.DoesNotContain(otherView.Value.Commitments, item => item.IsCommitted);
+    }
+
+    [Fact]
     public async Task DeleteRemovesCampaignForManagersOnly()
     {
         var campaign = StoredCampaignFor(UserId);
@@ -222,6 +394,119 @@ public sealed class CampaignHandlerTests
         Assert.Contains("structures/town.png", maps.DeletedKeys);
         Assert.DoesNotContain("Town", maps.DeletedKeys);
         Assert.DoesNotContain("Castle", maps.DeletedKeys);
+    }
+
+    [Fact]
+    public async Task DuplicateCopiesSetupSharesAssetsAndStartsInOneWeek()
+    {
+        var plainsId = Guid.Parse("eeeeee01-eeee-eeee-eeee-eeeeeeeeeeee");
+        var source = StoredCampaignFor(UserId);
+        source = WithCopied(
+            source,
+            mapGraph: new StoredMapGraph
+            {
+                Territories =
+                [
+                    SquareTerritory(
+                        Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                        1,
+                        0.1,
+                        0.1,
+                        0.2,
+                        NorthFactionId,
+                        plainsId),
+                ],
+                Adjacencies = [],
+            });
+        var store = new FakeCampaignStore { Existing = source };
+        var handler = new DuplicateCampaignHandler(store, new FakeClock());
+
+        var result = await handler.HandleAsync(
+            new DuplicateCampaignCommand { UserId = UserId, CampaignId = source.Id },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.NotEqual(source.Id, result.Value.Id);
+        Assert.Equal("Border War", result.Value.Name);
+        Assert.True(result.Value.CanManage);
+        Assert.True(result.Value.IsParticipant);
+        Assert.Equal(Now.AddDays(7), result.Value.StartsUtc);
+        Assert.NotNull(store.Added);
+        Assert.Equal(source.MapStorageKey, store.Added.MapStorageKey);
+        Assert.Equal("flags/north.png", store.Added.Factions[0].FlagImageStorageKey);
+        Assert.NotEqual(source.Factions[0].Id, store.Added.Factions[0].Id);
+        Assert.Equal(source.Factions[0].Name, store.Added.Factions[0].Name);
+        Assert.Equal("structures/town.png", store.Added.StructureTypes[0].ImageStorageKey);
+        Assert.Null(store.Added.PlayState);
+        Assert.Equal(source.JoinPasswordHash, store.Added.JoinPasswordHash);
+        Assert.Single(store.Added.Memberships);
+        Assert.Equal(UserId, store.Added.CreatedByUserId);
+        Assert.NotNull(store.Added.MapGraph);
+        Assert.Single(store.Added.MapGraph.Territories);
+    }
+
+    [Fact]
+    public async Task DuplicateRejectsNonMembers()
+    {
+        var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
+        var handler = new DuplicateCampaignHandler(store, new FakeClock());
+
+        var result = await handler.HandleAsync(
+            new DuplicateCampaignCommand { UserId = OtherUserId, CampaignId = store.Existing!.Id },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignNotFound, result.ErrorCode);
+        Assert.Null(store.Added);
+    }
+
+    [Fact]
+    public async Task DeleteKeepsSharedAssetsStillUsedByADuplicate()
+    {
+        var source = StoredCampaignFor(UserId);
+        var duplicate = new StoredCampaign
+        {
+            Id = Guid.Parse("99999999-9999-9999-9999-999999999999"),
+            Name = source.Name,
+            Description = source.Description,
+            PlayerSlotCount = source.PlayerSlotCount,
+            IsPrivate = source.IsPrivate,
+            IsPubliclyViewable = source.IsPubliclyViewable,
+            JoinPasswordHash = source.JoinPasswordHash,
+            CreatorIsParticipant = source.CreatorIsParticipant,
+            City = source.City,
+            Region = source.Region,
+            Country = source.Country,
+            MapStorageKey = source.MapStorageKey,
+            Revision = 1,
+            CreatedUtc = source.CreatedUtc,
+            UpdatedUtc = source.UpdatedUtc,
+            CreatedByUserId = OtherUserId,
+            Memberships = [new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = true, IsPlayer = true }],
+            Factions = source.Factions,
+            AllyGroups = source.AllyGroups,
+            Links = source.Links,
+            TimeZoneId = source.TimeZoneId,
+            StartsUtc = source.StartsUtc,
+            EndsUtc = source.EndsUtc,
+            RoundCount = source.RoundCount,
+            RoundLengthAmount = source.RoundLengthAmount,
+            RoundLengthUnit = source.RoundLengthUnit,
+            Phases = source.Phases,
+            MapGraph = source.MapGraph,
+            TerrainTypes = source.TerrainTypes,
+            StructureTypes = source.StructureTypes,
+        };
+        var store = new FakeCampaignStore { Existing = source };
+        store.ForUser.Add(duplicate);
+        var maps = new FakeMapStorage();
+        var handler = new DeleteCampaignHandler(store, maps);
+
+        var deleted = await handler.HandleAsync(source.Id, UserId, CancellationToken.None);
+
+        Assert.True(deleted.IsSuccess);
+        Assert.Empty(maps.DeletedKeys);
     }
 
     [Fact]
@@ -517,6 +802,7 @@ public sealed class CampaignHandlerTests
             MapGraph = campaign.MapGraph,
             TerrainTypes = campaign.TerrainTypes,
             StructureTypes = campaign.StructureTypes,
+            PlayState = campaign.PlayState,
         };
     }
 
@@ -526,7 +812,10 @@ public sealed class CampaignHandlerTests
         IReadOnlyList<StoredStructureType>? structures = null,
         bool? isPubliclyViewable = null,
         bool? isPrivate = null,
-        string? joinPasswordHash = null)
+        string? joinPasswordHash = null,
+        DateTimeOffset? startsUtc = null,
+        DateTimeOffset? endsUtc = null,
+        StoredMapGraph? mapGraph = null)
     {
         return new StoredCampaign
         {
@@ -551,15 +840,16 @@ public sealed class CampaignHandlerTests
             AllyGroups = campaign.AllyGroups,
             Links = campaign.Links,
             TimeZoneId = campaign.TimeZoneId,
-            StartsUtc = campaign.StartsUtc,
-            EndsUtc = campaign.EndsUtc,
+            StartsUtc = startsUtc ?? campaign.StartsUtc,
+            EndsUtc = endsUtc ?? campaign.EndsUtc,
             RoundCount = campaign.RoundCount,
             RoundLengthAmount = campaign.RoundLengthAmount,
             RoundLengthUnit = campaign.RoundLengthUnit,
             Phases = campaign.Phases,
-            MapGraph = campaign.MapGraph,
+            MapGraph = mapGraph ?? campaign.MapGraph,
             TerrainTypes = campaign.TerrainTypes,
             StructureTypes = structures ?? campaign.StructureTypes,
+            PlayState = campaign.PlayState,
         };
     }
 
@@ -573,6 +863,33 @@ public sealed class CampaignHandlerTests
         return WithCopied(campaign, structures: structures);
     }
 
+    private static TerritoryDetail SquareTerritory(
+        Guid id,
+        int number,
+        double x,
+        double y,
+        double size,
+        Guid? spawnFactionId,
+        Guid terrainTypeId,
+        Guid? owner = null)
+    {
+        return new TerritoryDetail
+        {
+            Id = id,
+            DisplayNumber = number,
+            Polygon =
+            [
+                new MapPointDetail { X = x, Y = y },
+                new MapPointDetail { X = x + size, Y = y },
+                new MapPointDetail { X = x + size, Y = y + size },
+                new MapPointDetail { X = x, Y = y + size },
+            ],
+            TerrainTypeId = terrainTypeId,
+            OwnerFactionId = owner ?? spawnFactionId,
+            SpawnFactionId = spawnFactionId,
+        };
+    }
+
     private static object? GetHashProperty(CampaignDetail detail)
     {
         return detail.GetType().GetProperty("JoinPasswordHash")?.GetValue(detail);
@@ -581,6 +898,55 @@ public sealed class CampaignHandlerTests
     private sealed class FakeClock : IClock
     {
         public DateTimeOffset UtcNow => Now;
+    }
+
+    private sealed class FakeAccounts : IUserAccountStore
+    {
+        public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task<bool> UsernameExistsAsync(string username, Guid? userIdToIgnore, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task<CreateLocalAccountOutcome> CreateLocalAccountAsync(CreateLocalAccountRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<CreateLocalAccountOutcome> CreateExternalAccountAsync(CreateExternalAccountRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<UserAccount?> FindByIdAsync(Guid userId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<UserAccount?>(new UserAccount
+            {
+                Id = userId,
+                Email = $"{userId:N}@example.test",
+                Username = userId == UserId ? "northplayer" : "southplayer",
+                FirstName = "Test",
+                LastName = "User",
+                City = "Halifax",
+                Country = "Canada",
+                DisplayNameMode = DisplayNameMode.Username,
+                CreatedUtc = Now,
+                UpdatedUtc = Now,
+                ProfileRevision = 1,
+                EmailConfirmed = true,
+            });
+        }
+
+        public Task<UserAccount?> FindByUsernameAsync(string username, CancellationToken cancellationToken) =>
+            Task.FromResult<UserAccount?>(null);
+
+        public Task<UpdateProfileOutcome> UpdateProfileAsync(UpdateStoredProfileRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ChangePasswordOutcome> ChangePasswordAsync(
+            Guid userId,
+            string currentPassword,
+            string newPassword,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<string?> ReplaceAvatarKeyAsync(Guid userId, string? avatarStorageKey, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(null);
     }
 
     private sealed class FakeSecretHasher : ISecretHasher
@@ -649,6 +1015,31 @@ public sealed class CampaignHandlerTests
             return Task.FromResult(Deleted);
         }
 
+        public Task<bool> IsStorageKeyInUseAsync(
+            string storageKey,
+            Guid? excludingCampaignId,
+            CancellationToken cancellationToken)
+        {
+            var campaigns = new List<StoredCampaign>();
+            if (Existing is not null && Existing.Id != excludingCampaignId)
+            {
+                campaigns.Add(Existing);
+            }
+
+            if (Added is not null && Added.Id != excludingCampaignId)
+            {
+                campaigns.Add(Added);
+            }
+
+            campaigns.AddRange(ForUser.Where(item => item.Id != excludingCampaignId));
+            return Task.FromResult(campaigns.Any(item =>
+                item.MapStorageKey == storageKey
+                || item.Factions.Any(faction => faction.FlagImageStorageKey == storageKey)
+                || item.StructureTypes.Any(type => type.ImageStorageKey == storageKey)
+                || item.TerrainTypes.SelectMany(type => type.Missions).Any(mission => mission.FileStorageKey == storageKey)
+                || item.StructureTypes.SelectMany(type => type.Missions).Any(mission => mission.FileStorageKey == storageKey)));
+        }
+
         public Task<UpdateStoredCampaignOutcome> UpdateMapGraphAsync(
             Guid campaignId,
             StoredMapGraph graph,
@@ -708,7 +1099,76 @@ public sealed class CampaignHandlerTests
                 MapGraph = graph,
                 TerrainTypes = Existing.TerrainTypes,
                 StructureTypes = Existing.StructureTypes,
+                PlayState = Existing.PlayState,
             };
+            return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });
+        }
+
+        public Task<UpdateStoredCampaignOutcome> UpdatePlayStateAsync(
+            Guid campaignId,
+            Campaign.Domain.Play.CampaignPlayState playState,
+            StoredMapGraph? mapGraph,
+            DateTimeOffset endsUtc,
+            int roundCount,
+            int expectedRevision,
+            DateTimeOffset updatedUtc,
+            CancellationToken cancellationToken)
+        {
+            if (Existing is null || Existing.Id != campaignId)
+            {
+                return Task.FromResult(new UpdateStoredCampaignOutcome
+                {
+                    IsSuccess = false,
+                    ErrorCode = ErrorCodes.CampaignNotFound,
+                    Message = "The campaign was not found.",
+                });
+            }
+
+            if (Existing.Revision != expectedRevision)
+            {
+                return Task.FromResult(new UpdateStoredCampaignOutcome
+                {
+                    IsSuccess = false,
+                    ErrorCode = ErrorCodes.ConcurrencyConflict,
+                    Message = "The campaign was changed by another request. Reload and try again.",
+                });
+            }
+
+            Existing = new StoredCampaign
+            {
+                Id = Existing.Id,
+                Name = Existing.Name,
+                Description = Existing.Description,
+                PlayerSlotCount = Existing.PlayerSlotCount,
+                IsPrivate = Existing.IsPrivate,
+                IsPubliclyViewable = Existing.IsPubliclyViewable,
+                JoinPasswordHash = Existing.JoinPasswordHash,
+                CreatorIsParticipant = Existing.CreatorIsParticipant,
+                City = Existing.City,
+                Region = Existing.Region,
+                Country = Existing.Country,
+                MapStorageKey = Existing.MapStorageKey,
+                Revision = expectedRevision + 1,
+                CreatedUtc = Existing.CreatedUtc,
+                UpdatedUtc = updatedUtc,
+                CreatedByUserId = Existing.CreatedByUserId,
+                Memberships = Existing.Memberships,
+                Factions = Existing.Factions,
+                AllyGroups = Existing.AllyGroups,
+                Links = Existing.Links,
+                TimeZoneId = Existing.TimeZoneId,
+                StartsUtc = Existing.StartsUtc,
+                EndsUtc = endsUtc,
+                RoundCount = roundCount,
+                RoundLengthAmount = Existing.RoundLengthAmount,
+                RoundLengthUnit = Existing.RoundLengthUnit,
+                Phases = Existing.Phases,
+                MapGraph = mapGraph ?? Existing.MapGraph,
+                TerrainTypes = Existing.TerrainTypes,
+                StructureTypes = Existing.StructureTypes,
+                PlayState = playState,
+            };
+            Updated = Existing;
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });
         }
     }

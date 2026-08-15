@@ -124,6 +124,11 @@ export class CampaignSetupPage {
   protected readonly mapFileName = signal<string | null>(null);
   protected readonly mapPreviewUrl = signal<string | null>(null);
   private readonly sectionOpen = signal<Record<string, boolean>>({});
+  private readonly phasesTick = signal(0);
+  protected readonly phaseGroups = computed(() => {
+    this.phasesTick();
+    return this.phases.controls;
+  });
   private mapFile: File | null = null;
   private mapObjectUrl: string | null = null;
   private revision = 0;
@@ -510,6 +515,7 @@ export class CampaignSetupPage {
 
     const unit = this.form.controls.roundLengthUnit.value;
     this.phases.push(this.createPhaseGroup(kind, 1, unit));
+    this.refreshPhases();
   }
 
   protected removePhase(index: number): void {
@@ -518,6 +524,7 @@ export class CampaignSetupPage {
     }
 
     this.phases.removeAt(index);
+    this.refreshPhases();
   }
 
   protected movePhase(index: number, offset: number): void {
@@ -529,6 +536,7 @@ export class CampaignSetupPage {
     const current = this.phases.at(index);
     this.phases.removeAt(index);
     this.phases.insert(target, current);
+    this.refreshPhases();
   }
 
   protected onMapSelected(event: Event): void {
@@ -733,6 +741,11 @@ export class CampaignSetupPage {
         return;
       }
 
+      if (campaign.status !== 'Scheduled') {
+        await this.router.navigate(['/campaigns', id, 'play']);
+        return;
+      }
+
       this.revision = campaign.revision;
       this.hasExistingMap.set(campaign.hasMap);
       this.setStoredMapPreview(id, campaign.revision, campaign.hasMap);
@@ -786,6 +799,7 @@ export class CampaignSetupPage {
         this.phases,
         campaign.phases.map((phase) => this.createPhaseGroup(phase.kind, phase.durationAmount, phase.durationUnit)),
       );
+      this.refreshPhases();
       if (this.factions.length < 2) {
         while (this.factions.length < 2) {
           this.factions.push(this.createFactionGroup());
@@ -904,6 +918,10 @@ export class CampaignSetupPage {
     return defaultStructureCatalog().map((entry) =>
       this.createStructureGroup(undefined, entry.name, entry.builtinSymbol),
     );
+  }
+
+  private refreshPhases(): void {
+    this.phasesTick.update((value) => value + 1);
   }
 
   private createLinkGroup(label = '', url = ''): LinkGroup {

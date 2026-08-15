@@ -61,6 +61,8 @@ public sealed class CampaignEndpointTests
         Assert.NotEqual(created.Factions[0].Color, created.Factions[1].Color);
         Assert.True(created.IsPubliclyViewable);
         Assert.Null(created.City);
+        Assert.True(created.CanChooseFaction);
+        Assert.Null(created.FactionId);
 
         var list = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
         Assert.NotNull(list);
@@ -92,6 +94,37 @@ public sealed class CampaignEndpointTests
         var afterDelete = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
         Assert.NotNull(afterDelete);
         Assert.DoesNotContain(afterDelete, item => item.Id == created.Id);
+    }
+
+    [Fact]
+    public async Task DuplicateCampaignCopiesSetupAndStartsOneWeekLater()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("gm");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Border War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var duplicateResponse = await client.PostAsJsonAsync($"/api/campaigns/{created.Id}/duplicate", new { });
+        Assert.Equal(HttpStatusCode.Created, duplicateResponse.StatusCode);
+        var copy = await duplicateResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(copy);
+        Assert.NotEqual(created.Id, copy.Id);
+        Assert.Equal(created.Name, copy.Name);
+        Assert.True(copy.CanManage);
+        Assert.True(copy.IsParticipant);
+        Assert.Equal(created.Factions.Count, copy.Factions.Count);
+        Assert.Equal(created.TerrainTypes.Count, copy.TerrainTypes.Count);
+        Assert.True(copy.StartsUtc - DateTimeOffset.UtcNow > TimeSpan.FromDays(6));
+        Assert.True(copy.StartsUtc - DateTimeOffset.UtcNow < TimeSpan.FromDays(8));
+
+        using var stranger = _factory.CreateClient();
+        var strangerName = UniqueName("stranger");
+        await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
+        using var forbidden = await stranger.PostAsJsonAsync($"/api/campaigns/{created.Id}/duplicate", new { });
+        Assert.Equal(HttpStatusCode.NotFound, forbidden.StatusCode);
     }
 
     [Fact]
@@ -375,6 +408,63 @@ public sealed class CampaignEndpointTests
         Assert.Contains(HttpStatusCode.Conflict, statuses);
     }
 
+    [Fact]
+    public async Task PlaySeedsAndRejectsSetupAfterLaunch()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("play");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+        var started = DateTime.UtcNow.AddHours(-1);
+        using var createdResponse = await client.PostAsJsonAsync(
+            "/api/campaigns",
+            ValidCampaignBody("Live War", startsAtLocal: started.ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture)));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        Assert.True(created.CanPlay);
+
+        var play = await client.GetFromJsonAsync<CampaignPlayResponse>($"/api/campaigns/{created.Id}/play", JsonOptions);
+        Assert.NotNull(play);
+        Assert.Equal("InProgress", play.Status);
+        Assert.Equal(1, play.CurrentRound);
+        Assert.Equal("Action", play.CurrentPhaseKind);
+        Assert.Contains(play.Log, item => item.Kind == "CampaignStarted");
+        Assert.DoesNotContain(play.Log, item => item.Kind == "ResolvedAction");
+
+        using var update = await client.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}",
+            ValidCampaignBody("Renamed Live War", play.Revision));
+        Assert.Equal(HttpStatusCode.Forbidden, update.StatusCode);
+        var error = await update.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.Equal("campaign.locked", error?.Code);
+    }
+
+    [Fact]
+    public async Task PlayerChoosesFactionBeforeTheCampaignStarts()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("pick");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Faction War"));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        Assert.True(created.CanChooseFaction);
+        Assert.Equal("Scheduled", created.Status);
+
+        var south = created.Factions.Single(faction => faction.Name == "South");
+        using var chosen = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/faction",
+            new ChooseFactionRequest { Revision = created.Revision, FactionId = south.Id });
+        Assert.Equal(HttpStatusCode.OK, chosen.StatusCode);
+
+        var detail = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(detail);
+        Assert.Equal(south.Id, detail.FactionId);
+        Assert.False(detail.CanChooseFaction);
+        Assert.Equal("South", detail.Factions.Single(faction => faction.Id == detail.FactionId).Name);
+    }
+
     private async Task RegisterConfirmAndLoginAsync(HttpClient client, string email, string username)
     {
         using var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new
@@ -422,7 +512,8 @@ public sealed class CampaignEndpointTests
         bool creatorIsParticipant = true,
         bool isPrivate = false,
         string? joinPassword = null,
-        bool isPubliclyViewable = true)
+        bool isPubliclyViewable = true,
+        string? startsAtLocal = null)
     {
         return new SaveCampaignRequest
         {
@@ -440,7 +531,7 @@ public sealed class CampaignEndpointTests
             ],
             Revision = revision,
             TimeZoneId = "UTC",
-            StartsAtLocal = "2099-01-05T12:00",
+            StartsAtLocal = startsAtLocal ?? "2099-01-05T12:00",
             RoundCount = 8,
             RoundLengthAmount = 1,
             RoundLengthUnit = "Weeks",

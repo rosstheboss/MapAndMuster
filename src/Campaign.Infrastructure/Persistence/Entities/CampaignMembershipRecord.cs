@@ -20,6 +20,12 @@ public sealed class CampaignMembershipRecord
     /// <summary>Gets or sets whether the member occupies a player slot.</summary>
     public bool IsPlayer { get; set; }
 
+    /// <summary>Gets or sets the chosen faction identifier.</summary>
+    public Guid? FactionId { get; set; }
+
+    /// <summary>Gets or sets the chosen subfaction name.</summary>
+    public string? Subfaction { get; set; }
+
     /// <summary>Gets or sets the campaign.</summary>
     public CampaignRecord? Campaign { get; set; }
 }

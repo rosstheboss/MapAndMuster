@@ -10,11 +10,69 @@
     @if (error()) {
       <p class="error error-banner" role="alert">{{ error() }}</p>
     }
+    @if (successMessage()) {
+      <p class="success-banner" role="status">{{ successMessage() }}</p>
+    }
+
+    @if (campaign.canChooseFaction) {
+      <form class="panel stack" (ngSubmit)="chooseFaction()">
+        <h2>Choose your faction</h2>
+        <p>
+          Players, including managers who occupy a player slot, must pick a faction. You cannot play a round until you
+          do. Your force starts at that faction's spawn; subfactions use the same spawn.
+        </p>
+        <div class="field">
+          <label for="faction">Faction</label>
+          <select id="faction" [ngModel]="factionChoice()" (ngModelChange)="factionChoice.set($event)" name="faction">
+            <option value="">Select a faction</option>
+            @for (faction of campaign.factions; track faction.id) {
+              <option [value]="faction.id">{{ faction.name }}</option>
+            }
+          </select>
+        </div>
+        @if (selectedFaction()?.requiresSubfaction) {
+          <div class="field">
+            <label for="subfaction">Subfaction</label>
+            <select
+              id="subfaction"
+              [ngModel]="subfactionChoice()"
+              (ngModelChange)="subfactionChoice.set($event)"
+              name="subfaction"
+            >
+              <option value="">Select a subfaction</option>
+              @for (name of selectedFaction()?.subfactions ?? []; track name) {
+                <option [value]="name">{{ name }}</option>
+              }
+            </select>
+          </div>
+        }
+        <button type="submit" class="button">Save faction</button>
+      </form>
+    } @else if (campaign.isParticipant && chosenFaction(); as faction) {
+      <div class="panel stack">
+        <h2>Your faction</h2>
+        <p>
+          {{ faction.name }}
+          @if (campaign.subfaction) {
+            · {{ campaign.subfaction }}
+          }
+        </p>
+        <p class="muted">Your force will start at this faction's spawn location.</p>
+      </div>
+    }
+
+    @if (campaign.canPlay) {
+      <div class="actions">
+        <a class="button" [routerLink]="['/campaigns', campaign.id, 'play']">Play</a>
+      </div>
+    }
 
     @if (campaign.canManage) {
       <div class="actions">
-        <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
-        <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'map']">Edit map</a>
+        @if (campaign.status === 'Scheduled') {
+          <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
+          <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'map']">Edit map</a>
+        }
         <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
       </div>
     }
@@ -137,6 +195,9 @@
           <button type="button" class="button-secondary" (click)="downloadMap()" [disabled]="downloading()">
             Download map
           </button>
+          <button type="button" class="button-secondary" (click)="downloadSvg()" [disabled]="downloading()">
+            Download SVG data
+          </button>
         }
       </div>
       @if (mapSrc(); as src) {
@@ -150,7 +211,6 @@
             [adjacentTerritoryIds]="adjacentTerritoryIds()"
             [showAdjacencies]="false"
             [interactive]="true"
-            [pointerPan]="true"
             [factions]="campaign.factions"
             [structures]="campaign.structureTypes"
             [structureImageUrl]="structureImageUrl"

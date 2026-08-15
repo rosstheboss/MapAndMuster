@@ -20,6 +20,7 @@ export interface CampaignListItem {
   currentRound: number | null;
   currentPhaseLabel: string | null;
   currentPhaseEndsUtc: string | null;
+  canPlay: boolean;
 }
 
 export interface CampaignDetail {
@@ -57,6 +58,10 @@ export interface CampaignDetail {
   currentPhaseKind: string | null;
   currentPhaseStartsUtc: string | null;
   currentPhaseEndsUtc: string | null;
+  factionId: string | null;
+  subfaction: string | null;
+  canPlay: boolean;
+  canChooseFaction: boolean;
   terrainTypes: CampaignTerrainType[];
   structureTypes: CampaignStructureType[];
 }
@@ -222,6 +227,151 @@ export interface SaveMapGraphPayload {
   revision: number;
   territories: MapTerritoryPayload[];
   adjacencies: MapAdjacencyPayload[];
+}
+
+export interface CampaignPlayDetail {
+  id: string;
+  name: string;
+  revision: number;
+  canManage: boolean;
+  isParticipant: boolean;
+  status: string;
+  currentRound: number | null;
+  currentPhaseNumber: number | null;
+  currentPhaseKind: string | null;
+  currentPhaseLabel: string | null;
+  currentPhaseStartsUtc: string | null;
+  currentPhaseEndsUtc: string | null;
+  currentWindowId: string | null;
+  hasMap: boolean;
+  factionId: string | null;
+  canChooseFaction: boolean;
+  isCommitted: boolean;
+  roundCount: number;
+  minRoundCount: number;
+  remainingWindows: PlayWindow[];
+  factions: CampaignFaction[];
+  structureTypes: CampaignStructureType[];
+  forces: PlayForce[];
+  myDrafts: PlayDraft[];
+  orders: PlayOrder[];
+  commitments: PlayCommitment[];
+  battles: PlayBattle[];
+  log: PlayLogEntry[];
+  playersMissingFaction: string[];
+}
+
+export interface PlayWindow {
+  id: string;
+  roundNumber: number;
+  phaseNumber: number;
+  kind: string;
+  label: string;
+  endsUtc: string;
+}
+
+export interface PlayForce {
+  id: string;
+  controllerUserId: string;
+  controllerUsername: string | null;
+  factionId: string;
+  territoryId: string;
+  isMine: boolean;
+  inBattle: boolean;
+  moveTargets: string[];
+}
+
+export interface PlayDraft {
+  forceId: string;
+  kind: string;
+  targetTerritoryId: string | null;
+  structureTypeId: string | null;
+}
+
+export interface PlayOrder {
+  forceId: string;
+  kind: string;
+  targetTerritoryId: string | null;
+  isRevealed: boolean;
+}
+
+export interface PlayCommitment {
+  userId: string;
+  username: string | null;
+  isCommitted: boolean;
+}
+
+export interface PlayBattle {
+  id: string;
+  territoryId: string;
+  status: string;
+  participantForceIds: string[];
+  isMine: boolean;
+  mySubmission: PlayBattleSubmission | null;
+  opponentSubmission: PlayBattleSubmission | null;
+  winnerForceId: string | null;
+  isDraw: boolean;
+  needsRetreat: boolean;
+  retreatTargets: string[];
+}
+
+export interface PlayBattleSubmission {
+  submitterUserId: string;
+  winnerForceId: string | null;
+  isDraw: boolean;
+}
+
+export interface PlayLogEntry {
+  id: string;
+  occurredUtc: string;
+  kind: string;
+  summary: string;
+  territoryId: string | null;
+  forceId: string | null;
+  battleId: string | null;
+  isSystemAdjustment: boolean;
+}
+
+export interface SaveOrderDraftPayload {
+  revision: number;
+  forceId: string;
+  kind: string;
+  targetTerritoryId?: string | null;
+  structureTypeId?: string | null;
+}
+
+export interface PlayRevisionPayload {
+  revision: number;
+}
+
+export interface SubmitBattleResultPayload {
+  revision: number;
+  battleId: string;
+  winnerForceId?: string | null;
+  isDraw: boolean;
+}
+
+export interface BattleActionPayload {
+  revision: number;
+  battleId: string;
+}
+
+export interface SubmitRetreatPayload {
+  revision: number;
+  battleId: string;
+  targetTerritoryId: string;
+}
+
+export interface ExtendCampaignSchedulePayload {
+  revision: number;
+  roundCount: number;
+  extensions: { windowId: string; durationAmount: number; durationUnit: string }[];
+}
+
+export interface ChooseFactionPayload {
+  revision: number;
+  factionId: string;
+  subfaction?: string | null;
 }
 
 export function terrainTypeById(

@@ -83,8 +83,11 @@ Modules may initially share a database and process. Keep public module interacti
   structure icons stay in the application. Structure logos and faction flags are re-encoded and shrunk
   to at most 50×50 pixels.
 - Adjacency is explicit and validated; geometry may suggest but not silently establish it.
-- Generate Connections may propose edges from shared borders; user-created edges persist across
-  regeneration.
+- Auto Generate Connections may propose edges from shared borders; user-created edges persist across
+  regeneration. A pair of territories has at most one connection, and every connection is between
+  exactly two territories. Connection arrows follow the shortest gap between territories, overhang
+  each territory by the arrow head plus up to 10 pixels of shaft, and avoid crossing when the
+  connections are planar.
 - The client renders an SVG overlay on the rectangular map image. Leaflet is not required for this
   overlay editor. Appearance (light or dark) is a cookie-backed client preference, not campaign
   state.
