@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal, viewChild, type ElementRef } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal, viewChild, type ElementRef } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, type FormArray, type FormControl, type FormGroup } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -30,6 +30,7 @@ import {
 } from '../../core/campaigns/faction-presets';
 import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
+import { CampaignMapPreviewComponent } from '../../shared/campaign-map-preview/campaign-map-preview.component';
 import { STRUCTURE_TYPES } from '../../core/maps/structures';
 import {
   describeControlError,
@@ -94,7 +95,13 @@ const TOP_LEVEL_SECTION_IDS = [
 
 @Component({
   selector: 'app-campaign-setup-page',
-  imports: [ReactiveFormsModule, RouterLink, FilterableComboboxComponent, MapSymbolComponent],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    FilterableComboboxComponent,
+    MapSymbolComponent,
+    CampaignMapPreviewComponent,
+  ],
   templateUrl: './campaign-setup.page.html',
   styleUrl: './campaign-setup.page.css',
 })
@@ -104,6 +111,7 @@ export class CampaignSetupPage {
   private readonly formBuilder = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly formAlert = viewChild<ElementRef<HTMLElement>>('formAlert');
 
   protected readonly loading = signal(true);
@@ -114,8 +122,10 @@ export class CampaignSetupPage {
   protected readonly campaignId = signal<string | null>(null);
   protected readonly hasExistingMap = signal(false);
   protected readonly mapFileName = signal<string | null>(null);
+  protected readonly mapPreviewUrl = signal<string | null>(null);
   private readonly sectionOpen = signal<Record<string, boolean>>({});
   private mapFile: File | null = null;
+  private mapObjectUrl: string | null = null;
   private revision = 0;
   private readonly structureImages = new Map<string, File>();
   private readonly flagImages = new Map<string, File>();
@@ -184,6 +194,8 @@ export class CampaignSetupPage {
     } else {
       this.loading.set(false);
     }
+
+    this.destroyRef.onDestroy(() => this.revokeMapObjectUrl());
   }
 
   protected get factions(): FormArray<FactionGroup> {
@@ -526,6 +538,9 @@ export class CampaignSetupPage {
       input.value = '';
       this.mapFile = null;
       this.mapFileName.set(null);
+      this.revokeMapObjectUrl();
+      const id = this.campaignId();
+      this.mapPreviewUrl.set(this.hasExistingMap() && id ? this.campaignsApi.mapUrl(id, this.revision) : null);
       this.successMessage.set(null);
       this.errorMessages.set(['Campaign maps must be 20 MB or smaller.']);
       return;
@@ -533,6 +548,27 @@ export class CampaignSetupPage {
 
     this.mapFile = file;
     this.mapFileName.set(file?.name ?? null);
+    this.revokeMapObjectUrl();
+    if (file) {
+      this.mapObjectUrl = URL.createObjectURL(file);
+      this.mapPreviewUrl.set(this.mapObjectUrl);
+      return;
+    }
+
+    const id = this.campaignId();
+    this.mapPreviewUrl.set(this.hasExistingMap() && id ? this.campaignsApi.mapUrl(id, this.revision) : null);
+  }
+
+  private revokeMapObjectUrl(): void {
+    if (this.mapObjectUrl) {
+      URL.revokeObjectURL(this.mapObjectUrl);
+      this.mapObjectUrl = null;
+    }
+  }
+
+  private setStoredMapPreview(campaignId: string, revision: number, hasMap: boolean): void {
+    this.revokeMapObjectUrl();
+    this.mapPreviewUrl.set(hasMap ? this.campaignsApi.mapUrl(campaignId, revision) : null);
   }
 
   protected onStructureImageSelected(structureId: string, event: Event): void {
@@ -669,6 +705,7 @@ export class CampaignSetupPage {
       this.hasExistingMap.set(created.detail.hasMap);
       this.mapFile = null;
       this.mapFileName.set(null);
+      this.setStoredMapPreview(created.detail.id, created.detail.revision, created.detail.hasMap);
       this.structureImages.clear();
       this.flagImages.clear();
       this.missionFiles.clear();
@@ -698,6 +735,7 @@ export class CampaignSetupPage {
 
       this.revision = campaign.revision;
       this.hasExistingMap.set(campaign.hasMap);
+      this.setStoredMapPreview(id, campaign.revision, campaign.hasMap);
       this.rememberStoredFiles(campaign);
       this.form.patchValue({
         name: campaign.name,

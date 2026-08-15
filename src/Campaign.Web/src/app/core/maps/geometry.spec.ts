@@ -1,4 +1,4 @@
-import { adjacentTerritoryIds, generateAdjacencies } from './adjacency';
+import { adjacentTerritoryIds, adjacencyArrowGeometry, generateAdjacencies } from './adjacency';
 import {
   clampTranslation,
   encloseAlongImageEdge,
@@ -7,6 +7,7 @@ import {
   fitSquareInPolygon,
   interiorsOverlap,
   isValidTerritoryPolygon,
+  normalizedFromPixels,
   sharedBorderMidpoint,
   traceSharedBorder,
   translatePolygon,
@@ -50,6 +51,45 @@ describe('map geometry', () => {
       x: 0.2,
       y: 0.2,
     });
+  });
+
+  it('converts screen pixels to normalized map units using zoom', () => {
+    expect(normalizedFromPixels(8, 4000, 1)).toBeCloseTo(0.002, 6);
+    expect(normalizedFromPixels(8, 4000, 4)).toBeCloseTo(0.0005, 6);
+  });
+
+  it('uses a tighter snap radius when one is supplied', () => {
+    expect(
+      findSnapTarget(
+        { x: 0.21, y: 0.2 },
+        [
+          { x: 0.2, y: 0.2 },
+          { x: 0.8, y: 0.8 },
+        ],
+        0.005,
+      ),
+    ).toBeNull();
+    expect(
+      findSnapTarget(
+        { x: 0.202, y: 0.2 },
+        [
+          { x: 0.2, y: 0.2 },
+          { x: 0.8, y: 0.8 },
+        ],
+        0.005,
+      ),
+    ).toEqual({ x: 0.2, y: 0.2 });
+  });
+
+  it('enlarges a hovered adjacency arrow by half around its marker', () => {
+    const marker = { x: 0.5, y: 0.5 };
+    const from = { x: 0.2, y: 0.5 };
+    const to = { x: 0.8, y: 0.5 };
+    const rest = adjacencyArrowGeometry(marker, from, to, 0.02);
+    const hovered = adjacencyArrowGeometry(marker, from, to, 0.03);
+    expect(hovered.x2 - hovered.x1).toBeCloseTo((rest.x2 - rest.x1) * 1.5, 6);
+    expect(hovered.x1).toBeGreaterThan(0.4);
+    expect(hovered.x2).toBeLessThan(0.6);
   });
 
   it('traces an unobstructed shared border between two endpoints', () => {

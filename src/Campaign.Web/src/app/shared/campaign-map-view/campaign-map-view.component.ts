@@ -11,16 +11,27 @@ import {
 } from '@angular/core';
 
 import type { CampaignFaction, CampaignStructureType } from '../../core/campaigns/campaign.models';
+import { adjacencyArrowGeometry } from '../../core/maps/adjacency';
 import {
+  ARROW_HALF_SCREEN_PX,
+  ARROW_HIT_SCREEN_PX,
+  ARROW_HOVER_SCALE,
   centroid,
   clampPoint,
   containsStrict,
+  DRAWING_STROKE_SCREEN_PX,
   fitSquareInPolygon,
   MARKER_MAX_PX,
   MAX_ZOOM,
   MIN_ZOOM,
+  normalizedFromPixels,
   pointOnPolygonBoundary,
   polygonPointsAttribute,
+  SNAP_RING_SCREEN_PX,
+  STROKE_ADJACENT_SCREEN_PX,
+  STROKE_SCREEN_PX,
+  STROKE_SELECTED_SCREEN_PX,
+  VERTEX_SCREEN_PX,
   ZOOM_STEP,
 } from '../../core/maps/geometry';
 import type { FittedSquare, MapPoint } from '../../core/maps/geometry';
@@ -110,6 +121,13 @@ export class CampaignMapViewComponent {
         structureImage: structure?.hasImage ? this.structureImageUrl()(structure.id) : null,
         selected,
         adjacent: !selected && this.isAdjacent(territory.id),
+        strokeWidth: this.screenToMap(
+          selected
+            ? STROKE_SELECTED_SCREEN_PX
+            : this.isAdjacent(territory.id)
+              ? STROKE_ADJACENT_SCREEN_PX
+              : STROKE_SCREEN_PX,
+        ),
         glowColor: territory.overlayColor ?? 'var(--color-glow)',
       };
     });
@@ -130,12 +148,15 @@ export class CampaignMapViewComponent {
 
       const from = centroid(left.polygon);
       const to = centroid(right.polygon);
+      const hovered = edge.id === this.hoveredAdjacencyId();
+      const half = this.screenToMap(ARROW_HALF_SCREEN_PX * (hovered ? ARROW_HOVER_SCALE : 1));
       return [
         {
           edge,
-          geometry: doubleArrow(edge.marker, from, to),
-          highlighted: edge.id === this.hoveredAdjacencyId() || this.isSelected(edge.territoryAId),
-          transform: this.hoverScale(edge.marker, edge.id === this.hoveredAdjacencyId()),
+          geometry: adjacencyArrowGeometry(edge.marker, from, to, half),
+          highlighted: hovered || this.isSelected(edge.territoryAId),
+          hitWidth: this.screenToMap(ARROW_HIT_SCREEN_PX),
+          strokeWidth: this.screenToMap(STROKE_SELECTED_SCREEN_PX * (hovered ? ARROW_HOVER_SCALE : 1)),
         },
       ];
     });
@@ -160,6 +181,27 @@ export class CampaignMapViewComponent {
   protected markerSize(fit: FittedSquare): { width: number; height: number } {
     const image = this.imageSize();
     return { width: fit.width * image.width, height: fit.height * image.height };
+  }
+
+  screenToMap(pixels: number): number {
+    const width = this.imageSize().width;
+    if (width <= 1) {
+      return normalizedFromPixels(pixels, 1000, 1);
+    }
+
+    return normalizedFromPixels(pixels, width, this.currentScale());
+  }
+
+  protected drawingStrokeWidth(): number {
+    return this.screenToMap(DRAWING_STROKE_SCREEN_PX);
+  }
+
+  protected vertexRadius(): number {
+    return this.screenToMap(VERTEX_SCREEN_PX);
+  }
+
+  protected snapRadius(): number {
+    return this.screenToMap(SNAP_RING_SCREEN_PX);
   }
 
   protected onImageLoad(event: Event): void {
@@ -194,6 +236,12 @@ export class CampaignMapViewComponent {
     }
 
     this.mapHover.emit(point);
+  }
+
+  protected onViewportPointerDown(event: PointerEvent): void {
+    if (event.target === event.currentTarget && event.button === 0) {
+      this.backgroundSelect.emit();
+    }
   }
 
   protected onPointerDown(event: PointerEvent): void {
@@ -377,14 +425,6 @@ export class CampaignMapViewComponent {
     return this.adjacentTerritoryIds().includes(territoryId);
   }
 
-  private hoverScale(marker: MapPoint, highlighted: boolean): string | null {
-    if (!highlighted) {
-      return null;
-    }
-
-    return `translate(${marker.x} ${marker.y}) scale(1.5) translate(${-marker.x} ${-marker.y})`;
-  }
-
   private pointFromEvent(event: PointerEvent): MapPoint | null {
     const svg = (event.currentTarget as SVGElement).closest('svg');
     if (!svg) {
@@ -540,27 +580,4 @@ function clampAxis(pan: number, viewport: number, scaled: number): number {
   }
 
   return pan < min ? min : pan;
-}
-
-function doubleArrow(
-  marker: MapPoint,
-  from: MapPoint,
-  to: MapPoint,
-): { x1: number; y1: number; x2: number; y2: number; headA: string; headB: string } {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const length = Math.hypot(dx, dy) || 1;
-  const ux = dx / length;
-  const uy = dy / length;
-  const half = 0.028;
-  const head = 0.012;
-  const x1 = marker.x - ux * half;
-  const y1 = marker.y - uy * half;
-  const x2 = marker.x + ux * half;
-  const y2 = marker.y + uy * half;
-  const px = -uy;
-  const py = ux;
-  const headA = `${x1},${y1} ${x1 + ux * head + px * head * 0.55},${y1 + uy * head + py * head * 0.55} ${x1 + ux * head - px * head * 0.55},${y1 + uy * head - py * head * 0.55}`;
-  const headB = `${x2},${y2} ${x2 - ux * head + px * head * 0.55},${y2 - uy * head + py * head * 0.55} ${x2 - ux * head - px * head * 0.55},${y2 - uy * head - py * head * 0.55}`;
-  return { x1, y1, x2, y2, headA, headB };
 }

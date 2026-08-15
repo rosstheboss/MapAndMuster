@@ -9,14 +9,16 @@ import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 import { actionNumberAt, formatDuration, formatPhaseLabel, statusLabel } from '../../core/campaigns/campaign-schedule';
 import { formatLocation } from '../../core/location/location';
 import { adjacentTerritoryIds } from '../../core/maps/adjacency';
+import { downloadBlob, mapDownloadFilename, rasterizeMapPng } from '../../core/maps/map-export';
 import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
 import { territoryLabel } from '../../core/maps/map-graph.models';
+import { CampaignMapPreviewComponent } from '../../shared/campaign-map-preview/campaign-map-preview.component';
 import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 
 @Component({
   selector: 'app-campaign-detail-page',
-  imports: [RouterLink, InstantDatePipe, CampaignMapViewComponent, MapSymbolComponent],
+  imports: [RouterLink, InstantDatePipe, CampaignMapViewComponent, CampaignMapPreviewComponent, MapSymbolComponent],
   templateUrl: './campaign-detail.page.html',
   styleUrl: './campaign-detail.page.css',
 })
@@ -34,6 +36,7 @@ export class CampaignDetailPage {
   protected readonly selectedIds = signal<string[]>([]);
   protected readonly confirmingDelete = signal(false);
   protected readonly deleting = signal(false);
+  protected readonly downloading = signal(false);
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
@@ -45,14 +48,14 @@ export class CampaignDetailPage {
     }
   }
 
-  protected mapSrc(): string | null {
+  protected readonly mapSrc = computed(() => {
     const campaign = this.campaign();
     if (!campaign?.hasMap) {
       return null;
     }
 
     return this.campaignsApi.mapUrl(campaign.id, campaign.revision);
-  }
+  });
 
   protected hoveredTerritory = computed(() => {
     const id = this.hoveredTerritoryId() ?? this.selectedIds().at(-1) ?? null;
@@ -157,6 +160,25 @@ export class CampaignDetailPage {
     return this.campaignsApi.missionFileUrl(campaign.id, mission.id);
   }
 
+  protected async downloadMap(): Promise<void> {
+    const campaign = this.campaign();
+    const imageUrl = this.mapSrc();
+    if (!campaign || !imageUrl) {
+      return;
+    }
+
+    this.downloading.set(true);
+    this.error.set(null);
+    try {
+      const blob = await rasterizeMapPng(imageUrl, this.graph().territories);
+      downloadBlob(blob, mapDownloadFilename(campaign.name));
+    } catch {
+      this.error.set('Unable to download the map.');
+    } finally {
+      this.downloading.set(false);
+    }
+  }
+
   protected timeZoneId(): string | null {
     return this.auth.currentUser()?.timeZoneId ?? null;
   }
@@ -235,10 +257,9 @@ export class CampaignDetailPage {
 
   private async load(id: string): Promise<void> {
     try {
-      const campaign = await this.campaignsApi.get(id);
+      const [campaign, graph] = await Promise.all([this.campaignsApi.get(id), this.campaignsApi.getMapGraph(id)]);
       this.campaign.set(campaign);
       if (campaign.hasMap) {
-        const graph = await this.campaignsApi.getMapGraph(id);
         this.graph.set({
           territories: graph.territories.map((territory) => ({
             id: territory.id,

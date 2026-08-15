@@ -42,6 +42,9 @@
     }
 
     <div class="panel stack">
+      @if (mapSrc(); as src) {
+        <app-campaign-map-preview [imageUrl]="src" />
+      }
       @if (campaign.description) {
         <p>{{ campaign.description }}</p>
       }
@@ -128,7 +131,14 @@
     }
 
     <div class="panel stack">
-      <h2>Map</h2>
+      <div class="map-heading">
+        <h2>Map</h2>
+        @if (mapSrc()) {
+          <button type="button" class="button-secondary" (click)="downloadMap()" [disabled]="downloading()">
+            Download map
+          </button>
+        }
+      </div>
       @if (mapSrc(); as src) {
         <div class="map-view">
           <app-campaign-map-view

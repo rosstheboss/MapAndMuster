@@ -1,4 +1,4 @@
-import { Component, computed, HostListener, inject, signal } from '@angular/core';
+import { Component, computed, HostListener, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
@@ -18,17 +18,21 @@ import {
 import {
   clampPoint,
   clampTranslation,
+  CLOSE_POLYGON_SCREEN_PX,
   containsStrict,
   encloseAlongImageEdge,
   encloseAlongTouchedBorders,
   interiorsOverlap,
   isValidTerritoryPolygon,
+  MIN_DRAW_SCREEN_PX,
   MIN_DRAW_STEP,
+  SNAP_SCREEN_PX,
   snapToExistingGeometry,
   traceSharedBorder,
   translatePolygon,
   type MapPoint,
 } from '../../core/maps/geometry';
+import { downloadBlob, mapDownloadFilename, rasterizeMapPng } from '../../core/maps/map-export';
 import {
   cloneGraph,
   createId,
@@ -68,6 +72,8 @@ export class MapEditorPage {
   protected readonly hoveredAdjacencyId = signal<string | null>(null);
   protected readonly connectPendingId = signal<string | null>(null);
   protected readonly drawingActive = signal(false);
+  protected readonly confirmingDownload = signal(false);
+  protected readonly downloading = signal(false);
 
   protected readonly tools: MapEditorTool[] = ['draw', 'erase', 'select', 'connect'];
 
@@ -77,6 +83,9 @@ export class MapEditorPage {
   private readonly campaignId = this.route.snapshot.paramMap.get('id');
   private moveBaseline: MapGraph | null = null;
   private moveDidMove = false;
+  private savedSnapshot = signal('');
+  private savedGraph: MapGraph = { territories: [], adjacencies: [] };
+  private readonly mapView = viewChild(CampaignMapViewComponent);
 
   protected readonly canManage = computed(() => this.campaign()?.canManage === true);
   protected readonly mapSrc = computed(() => {
@@ -129,6 +138,9 @@ export class MapEditorPage {
   protected readonly catalogStructures = computed(() =>
     [...(this.campaign()?.structureTypes ?? [])].sort((left, right) => left.name.localeCompare(right.name)),
   );
+  protected readonly hasUnsavedEdits = computed(
+    () => this.drawing().length > 0 || JSON.stringify(this.graph()) !== this.savedSnapshot(),
+  );
 
   constructor() {
     if (this.campaignId) {
@@ -163,7 +175,9 @@ export class MapEditorPage {
 
   protected onMapHover(point: MapPoint): void {
     if (this.tool() === 'draw' && this.canManage()) {
-      this.snapTarget.set(snapToExistingGeometry(point, this.snapVertices(), this.polygons()));
+      this.snapTarget.set(
+        snapToExistingGeometry(point, this.snapVertices(), this.polygons(), this.interactionDistance(SNAP_SCREEN_PX)),
+      );
       if (this.drawingActive()) {
         this.appendDrawPoint(point);
       }
@@ -261,9 +275,8 @@ export class MapEditorPage {
   }
 
   protected onBackground(): void {
-    if (this.tool() === 'select') {
-      this.selectedIds.set([]);
-    }
+    this.selectedIds.set([]);
+    this.connectPendingId.set(null);
   }
 
   protected onTerritorySelect(event: { id: string; additive: boolean } | string): void {
@@ -603,10 +616,10 @@ export class MapEditorPage {
     }
   }
 
-  protected async save(): Promise<void> {
+  protected async save(): Promise<boolean> {
     const campaign = this.campaign();
     if (!campaign || !this.canManage()) {
-      return;
+      return false;
     }
 
     const names = this.graph()
@@ -614,12 +627,12 @@ export class MapEditorPage {
       .filter((name): name is string => !!name);
     if (new Set(names).size !== names.length) {
       this.revealErrors(['Territory names must be unique for the campaign.']);
-      return;
+      return false;
     }
 
     if (this.graph().territories.some((territory) => !territory.terrainTypeId)) {
       this.revealErrors(['Every territory needs a terrain type.']);
-      return;
+      return false;
     }
 
     const spawnIds = this.graph()
@@ -627,7 +640,7 @@ export class MapEditorPage {
       .filter((id): id is string => !!id);
     if (new Set(spawnIds).size !== spawnIds.length) {
       this.revealErrors(['Each faction can have only one spawn location.']);
-      return;
+      return false;
     }
 
     this.saving.set(true);
@@ -660,13 +673,47 @@ export class MapEditorPage {
         }),
       );
       this.revision = saved.revision;
-      this.graph.set(fromApi(saved));
+      const graph = fromApi(saved);
+      this.graph.set(graph);
+      this.rememberSaved(graph);
       this.campaign.update((current) => (current ? { ...current, revision: saved.revision } : current));
       this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
+      return true;
     } catch (error: unknown) {
       this.revealErrors(readApiErrorMessages(error, 'Unable to save the map.'));
+      return false;
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  protected async requestDownload(): Promise<void> {
+    if (!this.mapSrc()) {
+      return;
+    }
+
+    if (this.hasUnsavedEdits()) {
+      this.confirmingDownload.set(true);
+      return;
+    }
+
+    await this.downloadGraph(this.savedGraph);
+  }
+
+  protected cancelDownloadPrompt(): void {
+    this.confirmingDownload.set(false);
+  }
+
+  protected async downloadLastSaved(): Promise<void> {
+    this.confirmingDownload.set(false);
+    await this.downloadGraph(this.savedGraph);
+  }
+
+  protected async saveAndDownload(): Promise<void> {
+    this.confirmingDownload.set(false);
+    const saved = await this.save();
+    if (saved) {
+      await this.downloadGraph(this.savedGraph);
     }
   }
 
@@ -675,7 +722,9 @@ export class MapEditorPage {
       const [campaign, graph] = await Promise.all([this.campaignsApi.get(id), this.campaignsApi.getMapGraph(id)]);
       this.campaign.set(campaign);
       this.revision = graph.revision;
-      this.graph.set(fromApi(graph));
+      const loaded = fromApi(graph);
+      this.graph.set(loaded);
+      this.rememberSaved(loaded);
       if (!campaign.canManage) {
         this.tool.set('select');
       }
@@ -687,20 +736,26 @@ export class MapEditorPage {
   }
 
   private appendDrawPoint(point: MapPoint, options?: { force?: boolean }): void {
-    const snap = snapToExistingGeometry(point, this.snapVertices(), this.polygons()) ?? clampPoint(point);
+    const snapDistance = this.interactionDistance(SNAP_SCREEN_PX);
+    const snap = snapToExistingGeometry(point, this.snapVertices(), this.polygons(), snapDistance) ?? clampPoint(point);
     const current = this.drawing();
     const first = current.at(0);
-    if (current.length >= 3 && first && distanceClose(snap, first) && options?.force) {
+    if (
+      current.length >= 3 &&
+      first &&
+      distanceClose(snap, first, this.interactionDistance(CLOSE_POLYGON_SCREEN_PX)) &&
+      options?.force
+    ) {
       this.closePolygon();
       return;
     }
 
     const last = current.at(-1);
-    if (last && !options?.force && !farEnough(last, snap)) {
+    if (last && !options?.force && !farEnough(last, snap, this.interactionDistance(MIN_DRAW_SCREEN_PX))) {
       return;
     }
 
-    if (last && distanceClose(last, snap)) {
+    if (last && distanceClose(last, snap, this.interactionDistance(MIN_DRAW_SCREEN_PX))) {
       return;
     }
 
@@ -840,6 +895,34 @@ export class MapEditorPage {
     }
   }
 
+  private rememberSaved(graph: MapGraph): void {
+    this.savedGraph = cloneGraph(graph);
+    this.savedSnapshot.set(JSON.stringify(graph));
+  }
+
+  private interactionDistance(pixels: number): number {
+    return this.mapView()?.screenToMap(pixels) ?? pixels / 1000;
+  }
+
+  private async downloadGraph(graph: MapGraph): Promise<void> {
+    const campaign = this.campaign();
+    const imageUrl = this.mapSrc();
+    if (!campaign || !imageUrl) {
+      return;
+    }
+
+    this.downloading.set(true);
+    this.errorMessages.set([]);
+    try {
+      const blob = await rasterizeMapPng(imageUrl, graph.territories);
+      downloadBlob(blob, mapDownloadFilename(campaign.name));
+    } catch (error: unknown) {
+      this.revealErrors(readApiErrorMessages(error, 'Unable to download the map.'));
+    } finally {
+      this.downloading.set(false);
+    }
+  }
+
   private revealErrors(messages: readonly string[]): void {
     this.successMessage.set(null);
     this.errorMessages.set([...messages]);
@@ -910,16 +993,16 @@ function moveSelection(baseline: MapGraph, ids: readonly string[], dx: number, d
   return { territories, adjacencies };
 }
 
-function distanceClose(left: MapPoint, right: MapPoint): boolean {
+function distanceClose(left: MapPoint, right: MapPoint, threshold: number): boolean {
   const dx = left.x - right.x;
   const dy = left.y - right.y;
-  return dx * dx + dy * dy <= 0.018 * 0.018;
+  return dx * dx + dy * dy <= threshold * threshold;
 }
 
-function farEnough(left: MapPoint, right: MapPoint): boolean {
+function farEnough(left: MapPoint, right: MapPoint, threshold: number): boolean {
   const dx = left.x - right.x;
   const dy = left.y - right.y;
-  return dx * dx + dy * dy >= MIN_DRAW_STEP * MIN_DRAW_STEP;
+  return dx * dx + dy * dy >= threshold * threshold;
 }
 
 function randomOverlayColor(): string {

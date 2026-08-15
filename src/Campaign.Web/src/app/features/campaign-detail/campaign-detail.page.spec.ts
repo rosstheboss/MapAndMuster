@@ -90,6 +90,13 @@ describe('CampaignDetailPage', () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
     http.expectOne(`/api/campaigns/${campaign.id}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -114,6 +121,31 @@ describe('CampaignDetailPage', () => {
     deleteButton!.click();
     fixture.detectChanges();
     expect(compiled.querySelector('[role="alertdialog"]')?.textContent).toContain('Delete this campaign?');
+    expect(compiled.querySelector('app-campaign-map-preview')).toBeNull();
+    expect(compiled.textContent).not.toContain('Download map');
+    http.verify();
+  });
+
+  it('shows a static map preview and a download control when a map exists', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({ ...campaign, hasMap: true, revision: 4 });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: 4,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('h1')?.textContent).toContain('Border War');
+    const preview = compiled.querySelector('app-campaign-map-preview img');
+    expect(preview).toBeTruthy();
+    expect(preview?.getAttribute('src')).toContain(`/api/campaigns/${campaign.id}/map?v=4`);
+    expect(compiled.textContent).toContain('Download map');
     http.verify();
   });
 });

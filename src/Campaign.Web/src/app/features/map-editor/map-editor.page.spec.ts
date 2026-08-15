@@ -109,9 +109,11 @@ describe('MapEditorPage', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('Map editor');
     expect(compiled.textContent).toContain('Generate Connections');
     expect(compiled.textContent).toContain('Clear connections');
+    expect(compiled.textContent).toContain('Download map');
     expect(compiled.textContent).toContain('100%');
     expect(compiled.textContent).toContain('Fit to panel');
     expect(compiled.textContent).toContain('Zoom in');
+    expect(compiled.textContent).toContain('800%');
     const zoomInput = compiled.querySelector<HTMLInputElement>('input[aria-label="Zoom percent"]');
     expect(zoomInput?.value).toBe('100');
     const zoomIn = [...compiled.querySelectorAll('button')].find((button) => button.textContent.includes('Zoom in'));
@@ -201,6 +203,60 @@ describe('MapEditorPage', () => {
     page.onBackground();
     fixture.detectChanges();
     expect(page.selectedIds()).toEqual([]);
+    http.verify();
+  });
+
+  it('clears the selection when empty map is clicked outside select mode', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        {
+          id: 't1',
+          displayNumber: 1,
+          name: 'Northmarch',
+          description: null,
+          polygon: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.4, y: 0.1 },
+            { x: 0.4, y: 0.4 },
+            { x: 0.1, y: 0.4 },
+          ],
+          terrainTypeId: 'plains',
+          structureTypeId: null,
+          overlayColor: null,
+          ownerFactionId: null,
+          spawnFactionId: null,
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onToolChange: (tool: string) => void;
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      onBackground: () => void;
+      requestDownload: () => Promise<void>;
+      colorRandom: () => void;
+      selectedIds: () => string[];
+      confirmingDownload: () => boolean;
+    };
+    page.onToolChange('draw');
+    page.onTerritorySelect({ id: 't1', additive: false });
+    fixture.detectChanges();
+    expect(page.selectedIds()).toEqual(['t1']);
+    page.onBackground();
+    fixture.detectChanges();
+    expect(page.selectedIds()).toEqual([]);
+
+    page.colorRandom();
+    await page.requestDownload();
+    fixture.detectChanges();
+    expect(page.confirmingDownload()).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Save map before downloading?');
     http.verify();
   });
 

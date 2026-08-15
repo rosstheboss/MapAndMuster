@@ -318,6 +318,9 @@ describe('CampaignSetupPage edit', () => {
     expect(toolbar?.textContent).toContain('Collapse All');
     expect(toolbar?.querySelector('button.button')?.textContent).toContain('Save campaign');
     expect(toolbar ? getComputedStyle(toolbar).position : '').toBe('sticky');
+    expect(compiled.querySelector('app-campaign-map-preview img')?.getAttribute('src')).toContain(
+      `/api/campaigns/${campaignId}/map?v=2`,
+    );
     http.verify();
   });
 });

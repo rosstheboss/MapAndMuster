@@ -3,6 +3,11 @@
     <h1>Map editor</h1>
     <div class="actions">
       @if (campaign(); as campaign) {
+        @if (mapSrc()) {
+          <button type="button" class="button-secondary" (click)="requestDownload()" [disabled]="downloading()">
+            Download map
+          </button>
+        }
         <a class="button-secondary" [routerLink]="['/campaigns', campaign.id]">Back to campaign</a>
       }
     </div>
@@ -11,6 +16,32 @@
   @if (loading()) {
     <p>Loading map…</p>
   } @else {
+    @if (confirmingDownload()) {
+      <div class="dialog-backdrop">
+        <div
+          class="dialog panel stack"
+          role="alertdialog"
+          aria-labelledby="download-title"
+          aria-describedby="download-desc"
+        >
+          <h2 id="download-title">Save map before downloading?</h2>
+          <p id="download-desc">
+            This map has unsaved edits. Save to download the current overlay, or download the last saved map.
+          </p>
+          <div class="actions">
+            <button type="button" class="button" (click)="saveAndDownload()" [disabled]="saving() || downloading()">
+              Save and download
+            </button>
+            <button type="button" class="button-secondary" (click)="downloadLastSaved()" [disabled]="downloading()">
+              Download last saved
+            </button>
+            <button type="button" class="button-secondary" (click)="cancelDownloadPrompt()" [disabled]="downloading()">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    }
     @if (errorMessages().length > 0 || successMessage()) {
       <div
         class="form-banner"
@@ -83,7 +114,8 @@
           you release the mouse. If both endpoints sit on the map image edge, the shape closes along that edge. Press
           Enter to close a territory, Escape to cancel, Delete to remove selected territories, and Ctrl+Z to undo.
           Ctrl+click selects multiple territories; drag them together in Select mode. Zoom starts fitted to the panel;
-          drawing stays aligned to the full-size map. Use the territory list to select without a pointer.
+          zoom in to trace coasts and province borders. Drawing stays aligned to the full-size map. Click empty map to
+          clear the selection. Use the territory list to select without a pointer.
         </p>
       }
 

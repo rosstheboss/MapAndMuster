@@ -182,8 +182,8 @@ optional spawn faction (at most one spawn per faction), and apply a transparent 
 Generate Connections suggests adjacency arrows from shared borders. User-created (manual) arrows
 are kept on regenerate, and those pairs are skipped. Generated arrows may be replaced. Managers may
 add or delete arrows, including generated ones, and may clear all arrows. Arrow markers are editor
-aids and are not part of the published map image. Hovering an arrow enlarges it by half and
-highlights both connected territories.
+aids and are not part of the published map image. Hovering an arrow enlarges it by half of its on-screen
+size and highlights both connected territories.
 
 Campaign setup owns the terrain-type and structure catalogs. The initial terrain types,
 alphabetically, are Beach, Cave, Desert, Forest, Highlands, Jungle, Lake, Mountain, Plains, Riverlands, Sea,
@@ -217,13 +217,23 @@ territories stay selected and every other connected territory uses the half-glow
 has an overlay color, that color is the glow, strongest around the territory border. Overlay
 colors may be assigned randomly, removed, taken from terrain, or set manually.
 
-The map overlay starts fitted to the panel. Zoom is 10% to 200% of the map image's actual pixel size,
+The map overlay starts fitted to the panel. Zoom is 10% to 800% of the map image's actual pixel size,
 in 10% steps, with a typed percent field, a 100% control, and a Fit to panel control. 100% shows the
 image at its native size and centers it. Fit to panel scales the image to the view and recenters it.
-Drawing coordinates stay normalized to the
-full-size image. When the zoomed image is larger than the panel, it can be panned
+Drawing coordinates stay normalized to the full-size image. Snap distance, minimum draw spacing, and
+overlay stroke widths are measured in screen pixels so zooming in lets a manager trace fine coasts and
+province borders. When the zoomed image is larger than the panel, it can be panned
 but not dragged past the image bounds. Drawing territories requires a pointer; other map controls,
 including zoom, pan, tool choice, and the territory list, are keyboard accessible.
+A click on empty map, including the letterboxed panel around a fitted image, clears the territory
+selection. Hovered adjacency arrows stay a modest on-screen size and enlarge by half relative to that
+resting size; they do not scale with the map image.
+
+Edit campaign and the campaign page show a static 200×113 map preview of the current image. It is not
+zoomable or selectable. The campaign page and map editor can download a PNG of the latest saved map
+image with the unselected territory overlay rasterized on top. Adjacency arrows are omitted. If the
+map editor has unsaved edits, downloading asks whether to save first; declining downloads the last
+saved overlay.
 
 If two endpoints of a new drawing land on the same border of an existing territory, and no other
 lines, endpoints, or territories lie between those points on that border, a line matching that

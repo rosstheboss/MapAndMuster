@@ -9,8 +9,25 @@ export const SNAP_DISTANCE = 0.018;
 export const MIN_DRAW_STEP = 0.008;
 export const MARKER_MAX_PX = 50;
 export const MIN_ZOOM = 0.1;
-export const MAX_ZOOM = 2;
+export const MAX_ZOOM = 8;
 export const ZOOM_STEP = 0.1;
+export const SNAP_SCREEN_PX = 10;
+export const MIN_DRAW_SCREEN_PX = 2;
+export const CLOSE_POLYGON_SCREEN_PX = 12;
+export const STROKE_SCREEN_PX = 1.25;
+export const STROKE_SELECTED_SCREEN_PX = 2.5;
+export const STROKE_ADJACENT_SCREEN_PX = 1.85;
+export const DRAWING_STROKE_SCREEN_PX = 1.75;
+export const VERTEX_SCREEN_PX = 3.25;
+export const SNAP_RING_SCREEN_PX = 6;
+export const ARROW_HALF_SCREEN_PX = 14;
+export const ARROW_HIT_SCREEN_PX = 16;
+export const ARROW_HOVER_SCALE = 1.5;
+export const OVERLAY_FILL_OPACITY = 0.32;
+
+export function normalizedFromPixels(pixels: number, imageWidth: number, scale: number): number {
+  return pixels / Math.max(imageWidth * scale, Number.EPSILON);
+}
 
 export function clamp01(value: number): number {
   if (value < 0) {
@@ -30,9 +47,13 @@ export function distanceSquared(left: MapPoint, right: MapPoint): number {
   return dx * dx + dy * dy;
 }
 
-export function findSnapTarget(cursor: MapPoint, vertices: readonly MapPoint[]): MapPoint | null {
+export function findSnapTarget(
+  cursor: MapPoint,
+  vertices: readonly MapPoint[],
+  snapDistance = SNAP_DISTANCE,
+): MapPoint | null {
   let best: MapPoint | null = null;
-  let bestDistance = SNAP_DISTANCE * SNAP_DISTANCE;
+  let bestDistance = snapDistance * snapDistance;
   for (const vertex of vertices) {
     const distance = distanceSquared(cursor, vertex);
     if (distance <= bestDistance) {
@@ -181,13 +202,14 @@ export function snapToExistingGeometry(
   cursor: MapPoint,
   vertices: readonly MapPoint[],
   polygons: readonly (readonly MapPoint[])[],
+  snapDistance = SNAP_DISTANCE,
 ): MapPoint | null {
-  const vertex = findSnapTarget(cursor, vertices);
+  const vertex = findSnapTarget(cursor, vertices, snapDistance);
   if (vertex) {
     return vertex;
   }
 
-  return snapToNearestEdge(cursor, polygons);
+  return snapToNearestEdge(cursor, polygons, snapDistance);
 }
 
 export const MAP_FRAME: readonly MapPoint[] = [
@@ -238,9 +260,13 @@ export function translatePolygon(polygon: readonly MapPoint[], dx: number, dy: n
   return polygon.map((point) => ({ x: point.x + dx, y: point.y + dy }));
 }
 
-export function snapToNearestEdge(cursor: MapPoint, polygons: readonly (readonly MapPoint[])[]): MapPoint | null {
+export function snapToNearestEdge(
+  cursor: MapPoint,
+  polygons: readonly (readonly MapPoint[])[],
+  snapDistance = SNAP_DISTANCE,
+): MapPoint | null {
   let best: MapPoint | null = null;
-  let bestDistance = SNAP_DISTANCE * SNAP_DISTANCE;
+  let bestDistance = snapDistance * snapDistance;
   for (const polygon of [...polygons, MAP_FRAME]) {
     const count = polygon.length;
     for (let i = 0; i < count; i += 1) {
@@ -250,7 +276,7 @@ export function snapToNearestEdge(cursor: MapPoint, polygons: readonly (readonly
         continue;
       }
 
-      const projected = projectPointOnSegment(a, b, cursor);
+      const projected = projectPointOnSegment(a, b, cursor, snapDistance);
       if (!projected) {
         continue;
       }
@@ -748,12 +774,12 @@ function hasInteriorSampleInside(source: readonly MapPoint[], other: readonly Ma
   return source.some((vertex) => containsStrict(other, { x: (vertex.x + center.x) / 2, y: (vertex.y + center.y) / 2 }));
 }
 
-function projectPointOnSegment(a: MapPoint, b: MapPoint, p: MapPoint): MapPoint | null {
+function projectPointOnSegment(a: MapPoint, b: MapPoint, p: MapPoint, snapDistance = SNAP_DISTANCE): MapPoint | null {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const lengthSquared = dx * dx + dy * dy;
   if (lengthSquared < GEOMETRY_EPSILON * GEOMETRY_EPSILON) {
-    return distanceSquared(a, p) <= SNAP_DISTANCE * SNAP_DISTANCE ? a : null;
+    return distanceSquared(a, p) <= snapDistance * snapDistance ? a : null;
   }
 
   const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared));

@@ -160,5 +160,6 @@ test('managers can open the map editor after setup', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Map editor' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Generate Connections' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Clear connections' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download map' })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Draw' })).toBeVisible();
 });

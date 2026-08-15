@@ -6,7 +6,7 @@
       <input
         type="number"
         min="10"
-        max="200"
+        max="800"
         step="10"
         [value]="zoomPercent()"
         (change)="onZoomInput($event)"
@@ -18,9 +18,9 @@
     <button type="button" class="button-secondary" (click)="zoomIn()">Zoom in</button>
     <button type="button" class="button-secondary" (click)="zoomToFit()">Fit to panel</button>
     <p class="muted zoom-hint">
-      Zoom is 10% to 200% of the map image size. 100% is the image at its actual size, centered. Fit to panel scales the
+      Zoom is 10% to 800% of the map image size. 100% is the image at its actual size, centered. Fit to panel scales the
       map to the view. Plus, minus, the buttons, or the wheel move 10% at a time. Arrow keys or drag to pan when the
-      image is larger than the panel. Drawing stays aligned to the full-size map.
+      image is larger than the panel. Drawing stays aligned to the full-size map; zoom in to trace fine coasts.
     </p>
   </div>
   <div
@@ -33,9 +33,10 @@
       zoomPercent() +
       ' percent of image size. Plus and minus zoom by 10 percent. Zero sets 100 percent. ' +
       'Fit to panel fits the image in the view. Arrow keys pan when the image is larger than the panel. ' +
-      'Drawing requires a pointer.'
+      'Zoom up to 800 percent to trace fine coasts. Drawing requires a pointer.'
     "
     (wheel)="onWheel($event)"
+    (pointerdown)="onViewportPointerDown($event)"
     (keydown)="onViewportKeydown($event)"
     (keyup)="onViewportKeyup($event)"
   >
@@ -65,6 +66,7 @@
             [class.is-adjacent]="item.adjacent"
             [attr.points]="item.points"
             [attr.fill]="item.territory.overlayColor ? item.territory.overlayColor : 'transparent'"
+            [attr.stroke-width]="item.strokeWidth"
             [style.--glow-color]="item.glowColor"
             [attr.data-kind]="'territory'"
             [attr.data-id]="item.territory.id"
@@ -75,21 +77,32 @@
         }
 
         @if (drawingPath()) {
-          <path class="drawing-path" [attr.d]="drawingPath()" />
+          <path class="drawing-path" [attr.d]="drawingPath()" [attr.stroke-width]="drawingStrokeWidth()" />
           @for (point of drawingPoints(); track $index) {
-            <circle class="drawing-vertex" [attr.cx]="point.x" [attr.cy]="point.y" r="0.008" />
+            <circle
+              class="drawing-vertex"
+              [attr.cx]="point.x"
+              [attr.cy]="point.y"
+              [attr.r]="vertexRadius()"
+              [attr.stroke-width]="drawingStrokeWidth()"
+            />
           }
         }
 
         @if (snapTarget(); as snap) {
-          <circle class="snap-target app-glow" [attr.cx]="snap.x" [attr.cy]="snap.y" r="0.014" />
+          <circle
+            class="snap-target app-glow"
+            [attr.cx]="snap.x"
+            [attr.cy]="snap.y"
+            [attr.r]="snapRadius()"
+            [attr.stroke-width]="drawingStrokeWidth()"
+          />
         }
 
         @for (item of overlayAdjacencies(); track item.edge.id) {
           <g
             class="adjacency"
             [class.is-highlighted]="item.highlighted"
-            [attr.transform]="item.transform"
             [attr.data-kind]="'adjacency'"
             [attr.data-id]="item.edge.id"
             (pointerenter)="onAdjacencyEnter(item.edge.id)"
@@ -101,6 +114,7 @@
               [attr.y1]="item.geometry.y1"
               [attr.x2]="item.geometry.x2"
               [attr.y2]="item.geometry.y2"
+              [attr.stroke-width]="item.hitWidth"
               [attr.data-kind]="'adjacency'"
               [attr.data-id]="item.edge.id"
             />
@@ -110,6 +124,7 @@
               [attr.y1]="item.geometry.y1"
               [attr.x2]="item.geometry.x2"
               [attr.y2]="item.geometry.y2"
+              [attr.stroke-width]="item.strokeWidth"
               [attr.data-kind]="'adjacency'"
               [attr.data-id]="item.edge.id"
             />

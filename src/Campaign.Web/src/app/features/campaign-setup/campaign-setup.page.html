@@ -882,6 +882,9 @@
             <label for="map">Campaign map image</label>
             <input id="map" type="file" accept="image/jpeg,image/png,image/webp" (change)="onMapSelected($event)" />
             <p class="muted">A map image is required to create a campaign. JPEG, PNG, or WebP, up to 20 MB.</p>
+            @if (mapPreviewUrl(); as src) {
+              <app-campaign-map-preview [imageUrl]="src" />
+            }
             @if (mapFileName()) {
               <p class="muted">Selected: {{ mapFileName() }}</p>
             } @else if (hasExistingMap()) {

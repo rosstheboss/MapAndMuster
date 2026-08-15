@@ -1,0 +1,18 @@
+:host {
+  display: block;
+  width: 200px;
+  max-width: 100%;
+}
+
+.map-preview {
+  display: block;
+  width: 200px;
+  height: 113px;
+  max-width: 100%;
+  object-fit: contain;
+  background: var(--color-nested);
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+  pointer-events: none;
+  user-select: none;
+}
