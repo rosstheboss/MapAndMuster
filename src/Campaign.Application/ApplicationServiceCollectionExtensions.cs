@@ -57,6 +57,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<SubmitRetreatHandler>();
         services.AddScoped<ExtendCampaignScheduleHandler>();
         services.AddScoped<ChooseFactionHandler>();
+        services.AddScoped<EnterCampaignDebugHandler>();
+        services.AddScoped<ExitCampaignDebugHandler>();
+        services.AddScoped<DebugCorrectOrderHandler>();
 
         return services;
     }

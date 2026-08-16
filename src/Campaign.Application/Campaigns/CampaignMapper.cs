@@ -156,9 +156,7 @@ public static class CampaignMapper
             Subfaction = membership?.Subfaction,
             CanPlay = (membership?.IsPlayer == true || membership?.IsGameMaster == true)
                 && progress.Status == CampaignStatus.InProgress,
-            CanChooseFaction = membership?.IsPlayer == true
-                && membership.FactionId is null
-                && progress.Status != CampaignStatus.Completed,
+            CanChooseFaction = CanChooseFaction(membership, progress.Status),
             CanChat = membership is not null,
             MentionableMembers = mentionableMembers ?? [],
             Log = log ?? [],
@@ -174,6 +172,23 @@ public static class CampaignMapper
     {
         ArgumentNullException.ThrowIfNull(campaign);
         return campaign.Memberships.Count(static membership => membership.IsPlayer);
+    }
+
+    /// <summary>
+    /// Whether a player may still choose or change their faction.
+    /// Players may change until the campaign starts; after launch a chosen faction is locked.
+    /// </summary>
+    /// <param name="membership">The viewer's membership, if any.</param>
+    /// <param name="status">The campaign lifecycle status.</param>
+    /// <returns><see langword="true"/> when the faction picker should be offered.</returns>
+    internal static bool CanChooseFaction(StoredCampaignMembership? membership, CampaignStatus status)
+    {
+        if (membership?.IsPlayer != true || status == CampaignStatus.Completed)
+        {
+            return false;
+        }
+
+        return membership.FactionId is null || status == CampaignStatus.Scheduled;
     }
 
     /// <summary>

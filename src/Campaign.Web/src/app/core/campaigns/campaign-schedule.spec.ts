@@ -3,6 +3,7 @@ import {
   durationRangeMessage,
   formatCountdown,
   formatDuration,
+  formatPhaseEndTimestamp,
   formatPhaseLabel,
   maxAmountForUnit,
   statusLabel,
@@ -16,6 +17,10 @@ describe('campaign-schedule helpers', () => {
     expect(formatPhaseLabel('Battle', 1)).toBe('Battle phase');
     expect(statusLabel('InProgress')).toBe('In progress');
     expect(statusLabel('Scheduled')).toBe('Scheduled');
+  });
+
+  it('formats a phase-end timestamp with a short time zone name', () => {
+    expect(formatPhaseEndTimestamp('2026-08-15T22:30:00.000Z', 'America/New_York')).toBe('(2026-08-15 6:30:00 PM EDT)');
   });
 
   it('formats a remaining phase countdown from a server end instant', () => {

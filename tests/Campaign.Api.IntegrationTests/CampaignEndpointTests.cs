@@ -543,8 +543,56 @@ public sealed class CampaignEndpointTests
         var detail = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
         Assert.NotNull(detail);
         Assert.Equal(south.Id, detail.FactionId);
-        Assert.False(detail.CanChooseFaction);
+        Assert.True(detail.CanChooseFaction);
         Assert.Equal("South", detail.Factions.Single(faction => faction.Id == detail.FactionId).Name);
+
+        var north = detail.Factions.Single(faction => faction.Name == "North");
+        using var changed = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/faction",
+            new ChooseFactionRequest { Revision = detail.Revision, FactionId = north.Id });
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+
+        var updated = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(updated);
+        Assert.Equal(north.Id, updated.FactionId);
+        Assert.True(updated.CanChooseFaction);
+        Assert.Equal("North", updated.Factions.Single(faction => faction.Id == updated.FactionId).Name);
+    }
+
+    [Fact]
+    public async Task PlayerCannotChangeFactionAfterTheCampaignStarts()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("lock");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+        var started = DateTime.UtcNow.AddHours(-1);
+        using var createdResponse = await client.PostAsJsonAsync(
+            "/api/campaigns",
+            ValidCampaignBody("Started War", startsAtLocal: started.ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture)));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        Assert.Equal("InProgress", created.Status);
+        Assert.True(created.CanChooseFaction);
+
+        var south = created.Factions.Single(faction => faction.Name == "South");
+        using var chosen = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/faction",
+            new ChooseFactionRequest { Revision = created.Revision, FactionId = south.Id });
+        Assert.Equal(HttpStatusCode.OK, chosen.StatusCode);
+
+        var play = await client.GetFromJsonAsync<CampaignPlayResponse>($"/api/campaigns/{created.Id}/play", JsonOptions);
+        Assert.NotNull(play);
+        Assert.Equal(south.Id, play.FactionId);
+        Assert.False(play.CanChooseFaction);
+
+        var north = created.Factions.Single(faction => faction.Name == "North");
+        using var changed = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/faction",
+            new ChooseFactionRequest { Revision = play.Revision, FactionId = north.Id });
+        Assert.Equal(HttpStatusCode.BadRequest, changed.StatusCode);
+        var error = await changed.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.Equal("faction.already_chosen", error?.Code);
     }
 
     private async Task RegisterConfirmAndLoginAsync(HttpClient client, string email, string username)

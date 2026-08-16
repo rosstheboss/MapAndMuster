@@ -1,6 +1,5 @@
 <div class="map-shell">
   <div class="map-toolbar" role="toolbar" aria-label="Map zoom">
-    <button type="button" class="button-secondary" (click)="zoomOut()">Zoom out</button>
     <label class="zoom-input">
       Zoom
       <input
@@ -14,16 +13,10 @@
       />
       <span aria-hidden="true">%</span>
     </label>
+    <button type="button" class="button-secondary" (click)="zoomIn()" aria-label="Zoom in">+</button>
+    <button type="button" class="button-secondary" (click)="zoomOut()" aria-label="Zoom out">-</button>
+    <button type="button" class="button-secondary" (click)="zoomToFit()">Fit</button>
     <button type="button" class="button-secondary" (click)="zoomToActualSize()">100%</button>
-    <button type="button" class="button-secondary" (click)="zoomIn()">Zoom in</button>
-    <button type="button" class="button-secondary" (click)="zoomToFit()">Fit to panel</button>
-    <p class="muted zoom-hint">
-      Zoom is 10% to 800% of the map image size. 100% is the image at its actual size, centered. Fit to panel scales the
-      map to the view. Plus, minus, the buttons, or the wheel move 10% at a time. Hold right-click and drag to pan
-      without drawing, erasing, or selecting; the wheel still zooms. Arrow keys, space-drag, or middle-click also pan
-      when the image is larger than the panel. Left-click drag does not pan. Drawing stays aligned to the full-size map;
-      zoom in to trace fine coasts.
-    </p>
   </div>
   <div
     #viewport
@@ -34,7 +27,7 @@
       'Campaign map at ' +
       zoomPercent() +
       ' percent of image size. Plus and minus zoom by 10 percent. Zero sets 100 percent. ' +
-      'Fit to panel fits the image in the view. Hold right-click or middle-click and drag to pan. ' +
+      'Fit scales the image to the view. Hold right-click or middle-click and drag to pan. ' +
       'Arrow keys and space-drag also pan when the image is larger than the panel. Left-click does not pan. ' +
       'Zoom up to 800 percent to trace fine coasts. Drawing requires a pointer.'
     "

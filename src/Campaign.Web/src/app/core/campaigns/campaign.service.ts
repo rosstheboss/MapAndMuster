@@ -272,4 +272,30 @@ export class CampaignService {
       ),
     );
   }
+
+  async enterDebug(campaignId: string, payload: PlayRevisionPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/debug/enter`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async exitDebug(campaignId: string, payload: PlayRevisionPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/debug/exit`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async debugCorrectOrder(campaignId: string, payload: SaveOrderDraftPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/debug/correct-order`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
 }

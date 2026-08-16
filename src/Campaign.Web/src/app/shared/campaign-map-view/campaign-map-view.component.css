@@ -1,6 +1,7 @@
 :host {
   display: grid;
   gap: 0.65rem;
+  width: 100%;
 }
 
 .map-toolbar {
@@ -8,11 +9,6 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
-}
-
-.zoom-hint {
-  margin: 0;
-  flex: 1 1 16rem;
 }
 
 .zoom-input {

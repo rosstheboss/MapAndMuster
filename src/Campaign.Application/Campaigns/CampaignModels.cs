@@ -71,7 +71,7 @@ public sealed class CampaignListItem
     /// <summary>Gets when the current phase closes, in UTC.</summary>
     public DateTimeOffset? CurrentPhaseEndsUtc { get; init; }
 
-    /// <summary>Gets whether the viewer may open the play page.</summary>
+    /// <summary>Gets whether the viewer may act on the live campaign board.</summary>
     public required bool CanPlay { get; init; }
 }
 
@@ -194,7 +194,7 @@ public sealed class CampaignDetail
     /// <summary>Gets the viewer's chosen subfaction, when one is selected.</summary>
     public string? Subfaction { get; init; }
 
-    /// <summary>Gets whether the viewer may open the play page.</summary>
+    /// <summary>Gets whether the viewer may act on the live campaign board.</summary>
     public required bool CanPlay { get; init; }
 
     /// <summary>Gets whether the viewer still needs to pick a faction.</summary>

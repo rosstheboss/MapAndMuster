@@ -300,6 +300,108 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
+    public void DebugSessionIsLoggedAndExclusive()
+    {
+        var (state, _, schedule) = Seeded();
+        var now = schedule.StartsUtc.AddMinutes(1);
+        Assert.True(CampaignPlayRules.TryEnterDebug(state, PlayerOne, now, out var entered, out _));
+        Assert.Equal(PlayerOne, entered!.DebugActorUserId);
+        Assert.Contains(entered.Log, item => item.Kind == PlayLogKind.DebugEntered && item.ActorUserId == PlayerOne);
+        Assert.True(CampaignPlayRules.TryEnterDebug(entered, PlayerOne, now, out var again, out _));
+        Assert.Equal(entered.Log.Count, again!.Log.Count);
+        Assert.False(CampaignPlayRules.TryEnterDebug(entered, PlayerTwo, now, out _, out var busy));
+        Assert.Equal("debug.busy", busy!.Code);
+        Assert.True(CampaignPlayRules.TryExitDebug(entered, PlayerTwo, now, out var exited, out _));
+        Assert.Null(exited!.DebugActorUserId);
+        Assert.Contains(exited.Log, item => item.Kind == PlayLogKind.DebugExited && item.ActorUserId == PlayerTwo);
+    }
+
+    [Fact]
+    public void DebugCorrectsOpenWindowDraftWithoutRevealingTheAction()
+    {
+        var (state, map, schedule) = Seeded();
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var now = schedule.StartsUtc.AddMinutes(1);
+        Assert.True(CampaignPlayRules.TryEnterDebug(state, PlayerOne, now, out state, out _));
+        Assert.True(CampaignPlayRules.TryDebugCorrectOrder(
+            state!,
+            PlayerOne,
+            northForce.Id,
+            ActionKind.Move,
+            Midland,
+            null,
+            map,
+            AllyGroups(),
+            null,
+            now,
+            out var outcome,
+            out _));
+
+        Assert.NotNull(outcome);
+        Assert.Contains(
+            outcome.State.Drafts,
+            item => item.ForceId == northForce.Id && item.Kind == ActionKind.Move && item.TargetTerritoryId == Midland);
+        var correction = outcome.State.Log.Single(item => item.Kind == PlayLogKind.DebugOrderCorrected);
+        Assert.Null(correction.ActionKind);
+        Assert.DoesNotContain(outcome.State.Log, item => item.Kind == PlayLogKind.DebugActionReresolved);
+    }
+
+    [Fact]
+    public void DebugReresolvesTheLastActionWhileTheFollowingPhaseIsOpen()
+    {
+        var (state, map, schedule) = Seeded();
+        state = ForceBattle(state, map, schedule);
+        var southForce = state.Forces.Single(force => force.FactionId == South);
+        var now = schedule.StartsUtc.AddMinutes(7);
+        Assert.True(CampaignPlayRules.TryEnterDebug(state, PlayerOne, now, out state, out _));
+        Assert.True(CampaignPlayRules.TryDebugCorrectOrder(
+            state!,
+            PlayerOne,
+            southForce.Id,
+            ActionKind.Hold,
+            null,
+            null,
+            map,
+            AllyGroups(),
+            null,
+            now,
+            out var outcome,
+            out _));
+
+        Assert.NotNull(outcome);
+        Assert.Contains(outcome.State.Log, item => item.Kind == PlayLogKind.DebugOrderCorrected && item.ActionKind == ActionKind.Hold);
+        Assert.Contains(outcome.State.Log, item => item.Kind == PlayLogKind.DebugActionReresolved);
+        Assert.Contains(
+            outcome.State.Submissions,
+            item => item.ForceId == southForce.Id && item.Kind == ActionKind.Hold && item.Source == OrderSource.StaffCorrection);
+        Assert.Empty(outcome.State.Battles);
+        Assert.Equal(SouthSpawn, outcome.State.Forces.Single(force => force.FactionId == South).TerritoryId);
+        Assert.Equal(Midland, outcome.State.Forces.Single(force => force.FactionId == North).TerritoryId);
+    }
+
+    [Fact]
+    public void BattleOverrideRequiresTheActiveDebugActor()
+    {
+        var (state, map, schedule) = Seeded();
+        state = ForceBattle(state, map, schedule);
+        var battle = state.Battles[0];
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var now = schedule.StartsUtc.AddMinutes(7);
+        Assert.False(CampaignPlayRules.TryResolveBattle(
+            state, PlayerOne, battle.Id, northForce.Id, false, now, out _, out var required));
+        Assert.Equal("debug.required", required!.Code);
+        Assert.True(CampaignPlayRules.TryEnterDebug(state, PlayerOne, now, out state, out _));
+        Assert.False(CampaignPlayRules.TryResolveBattle(
+            state!, PlayerTwo, battle.Id, northForce.Id, false, now, out _, out var other));
+        Assert.Equal("debug.other_actor", other!.Code);
+        Assert.True(CampaignPlayRules.TryResolveBattle(
+            state!, PlayerOne, battle.Id, northForce.Id, false, now, out var resolved, out _));
+        Assert.Equal(BattleStatus.GMResolved, resolved!.Battles[0].Status);
+        Assert.Equal(northForce.Id, resolved.Battles[0].WinnerForceId);
+        _ = map;
+    }
+
+    [Fact]
     public void CannotReduceRoundsBelowCurrentRound()
     {
         var (state, map, schedule) = Seeded();

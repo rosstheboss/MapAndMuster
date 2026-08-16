@@ -13,7 +13,8 @@ internal static class CampaignPlayMapper
         Guid viewerUserId,
         DateTimeOffset utcNow,
         IUserAccountStore? accounts,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isAdministrator = false)
     {
         var membership = CampaignMapper.MembershipFor(campaign, viewerUserId);
         var progress = CampaignLifecycle.Progress(campaign, utcNow);
@@ -40,6 +41,9 @@ internal static class CampaignPlayMapper
             })
             .ToArray();
         var myForces = play.Forces.Where(force => force.ControllerUserId == viewerUserId).ToArray();
+        var canDebug = membership?.IsGameMaster == true || isAdministrator;
+        var isDebugActive = play.DebugActorUserId is not null;
+        var staffView = canDebug && isDebugActive;
         var revealed = window is null || window.Status == PhaseWindowStatus.Resolved || window.Kind != RoundPhaseKind.Action;
         var currentActionId = window is { Kind: RoundPhaseKind.Action, Status: PhaseWindowStatus.Open } ? window.Id : (Guid?)null;
         var orders = new List<PlayOrderDetail>();
@@ -110,6 +114,9 @@ internal static class CampaignPlayMapper
             Name = campaign.Name,
             Revision = campaign.Revision,
             CanManage = membership?.IsGameMaster == true,
+            CanDebug = canDebug,
+            IsDebugActive = isDebugActive,
+            DebugActorUserId = play.DebugActorUserId,
             IsParticipant = membership?.IsPlayer == true,
             CanChat = membership is not null,
             MentionableMembers = mentionable,
@@ -128,8 +135,7 @@ internal static class CampaignPlayMapper
             CurrentWindowId = window?.Id,
             HasMap = !string.IsNullOrWhiteSpace(campaign.MapStorageKey),
             FactionId = membership?.FactionId,
-            CanChooseFaction = membership?.IsPlayer == true
-                && membership.FactionId is null,
+            CanChooseFaction = CampaignMapper.CanChooseFaction(membership, progress.Status),
             IsCommitted = currentActionId is { } id
                 && play.Commitments.Any(item => item.WindowId == id && item.UserId == viewerUserId),
             RoundCount = campaign.RoundCount,
@@ -148,10 +154,10 @@ internal static class CampaignPlayMapper
                     TerritoryId = force.TerritoryId,
                     IsMine = force.ControllerUserId == viewerUserId,
                     InBattle = force.InBattle,
-                    MoveTargets = force.ControllerUserId == viewerUserId
+                    MoveTargets = force.ControllerUserId == viewerUserId || staffView
                         ? CampaignPlayRules.EligibleMoves(map, force)
                         : [],
-                    AvailableActions = force.ControllerUserId == viewerUserId
+                    AvailableActions = force.ControllerUserId == viewerUserId || staffView
                         ? [.. ActionResolution.EligibleActions(
                             play,
                             map,
@@ -176,6 +182,7 @@ internal static class CampaignPlayMapper
                 ]
                 : [],
             Orders = orders,
+            DebugDrafts = DebugDraftsFor(play, staffView),
             Commitments = commitments,
             Battles = battles,
             Log =
@@ -192,6 +199,59 @@ internal static class CampaignPlayMapper
                     .Select(member => names.GetValueOrDefault(member.UserId) ?? member.UserId.ToString()),
             ],
         };
+    }
+
+    private static IReadOnlyList<PlayDraftDetail> DebugDraftsFor(CampaignPlayState play, bool staffView)
+    {
+        if (!staffView)
+        {
+            return [];
+        }
+
+        var window = play.CurrentWindow();
+        if (window is { Kind: RoundPhaseKind.Action, Status: PhaseWindowStatus.Open })
+        {
+            return
+            [
+                .. play.Drafts
+                    .Where(draft => draft.WindowId == window.Id)
+                    .Select(draft => new PlayDraftDetail
+                    {
+                        ForceId = draft.ForceId,
+                        Kind = draft.Kind.ToString(),
+                        TargetTerritoryId = draft.TargetTerritoryId,
+                        StructureTypeId = draft.StructureTypeId,
+                    }),
+            ];
+        }
+
+        var lastAction = play.Windows.LastOrDefault(item =>
+            item.Kind == RoundPhaseKind.Action && item.Status == PhaseWindowStatus.Resolved);
+        if (lastAction is null || window is null || window.Status != PhaseWindowStatus.Open)
+        {
+            return [];
+        }
+
+        var lastIndex = play.Windows.ToList().FindIndex(item => item.Id == lastAction.Id);
+        if (lastIndex < 0 || lastIndex + 1 >= play.Windows.Count || play.Windows[lastIndex + 1].Id != window.Id)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. play.Forces.Select(force =>
+            {
+                var submission = play.LatestSubmission(lastAction.Id, force.Id);
+                return new PlayDraftDetail
+                {
+                    ForceId = force.Id,
+                    Kind = (submission?.Kind ?? ActionKind.Hold).ToString(),
+                    TargetTerritoryId = submission?.TargetTerritoryId,
+                    StructureTypeId = submission?.StructureTypeId,
+                };
+            }),
+        ];
     }
 
     private static PlayBattleDetail ToBattle(
@@ -375,8 +435,8 @@ internal static class CampaignPlayMapper
                 $"Battle in {territory} is disputed because the submitted results conflict.",
             PlayLogKind.BattleGmResolved =>
                 entry.ForceId is { } gmWinner
-                    ? $"A manager overrode the battle result in {territory}. Winner: {ForceController(play, gmWinner, names)}."
-                    : $"A manager overrode the battle result in {territory} as a draw.",
+                    ? $"{actor} overrode the battle result in {territory}. Winner: {ForceController(play, gmWinner, names)}."
+                    : $"{actor} overrode the battle result in {territory} as a draw.",
             PlayLogKind.PlayerRetreat =>
                 $"{actor} retreated from {territory} to {target}.",
             PlayLogKind.DefaultRetreat =>
@@ -393,6 +453,16 @@ internal static class CampaignPlayMapper
                 $"{actor}'s forces rejoined in {territory} and now share one action.",
             PlayLogKind.PlayerChat =>
                 entry.Message ?? string.Empty,
+            PlayLogKind.DebugEntered =>
+                $"{actor} entered debug mode.",
+            PlayLogKind.DebugExited =>
+                $"{actor} exited debug mode.",
+            PlayLogKind.DebugOrderCorrected =>
+                entry.ActionKind is { } corrected
+                    ? $"{actor} corrected an order to {corrected}."
+                    : $"{actor} corrected an order in debug mode.",
+            PlayLogKind.DebugActionReresolved =>
+                $"{actor} re-resolved the previous action window.",
             _ => $"{actor} recorded a campaign change in {territory}.",
         };
     }

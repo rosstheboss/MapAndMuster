@@ -21,7 +21,10 @@ public sealed class CampaignPlayState
         IReadOnlyList<RetreatOrder> retreats,
         IReadOnlyList<Guid> brokenAllyFactionIds,
         IReadOnlyList<TerritoryStructureState> structures,
-        IReadOnlyList<PlayLogEntry> log)
+        IReadOnlyList<PlayLogEntry> log,
+        IReadOnlyList<ActionWindowSnapshot>? snapshots = null,
+        Guid? debugActorUserId = null,
+        DateTimeOffset? debugStartedUtc = null)
     {
         ArgumentNullException.ThrowIfNull(windows);
         ArgumentNullException.ThrowIfNull(forces);
@@ -45,6 +48,9 @@ public sealed class CampaignPlayState
         BrokenAllyFactionIds = brokenAllyFactionIds;
         Structures = structures;
         Log = log;
+        Snapshots = snapshots ?? [];
+        DebugActorUserId = debugActorUserId;
+        DebugStartedUtc = debugStartedUtc;
     }
 
     /// <summary>Gets an empty play state.</summary>
@@ -83,6 +89,15 @@ public sealed class CampaignPlayState
     /// <summary>Gets public resolved-action and battle facts. Secret unrevealed orders are omitted.</summary>
     public IReadOnlyList<PlayLogEntry> Log { get; }
 
+    /// <summary>Gets pre-resolution snapshots used by debug re-resolve.</summary>
+    public IReadOnlyList<ActionWindowSnapshot> Snapshots { get; }
+
+    /// <summary>Gets the manager currently in debug mode, if any.</summary>
+    public Guid? DebugActorUserId { get; }
+
+    /// <summary>Gets when the current debug session started, in UTC.</summary>
+    public DateTimeOffset? DebugStartedUtc { get; }
+
     /// <summary>
     /// Returns a copy with replaced collections.
     /// </summary>
@@ -97,7 +112,11 @@ public sealed class CampaignPlayState
         IReadOnlyList<RetreatOrder>? retreats = null,
         IReadOnlyList<Guid>? brokenAllyFactionIds = null,
         IReadOnlyList<TerritoryStructureState>? structures = null,
-        IReadOnlyList<PlayLogEntry>? log = null)
+        IReadOnlyList<PlayLogEntry>? log = null,
+        IReadOnlyList<ActionWindowSnapshot>? snapshots = null,
+        Guid? debugActorUserId = null,
+        DateTimeOffset? debugStartedUtc = null,
+        bool clearDebug = false)
     {
         return new CampaignPlayState(
             windows ?? Windows,
@@ -110,7 +129,10 @@ public sealed class CampaignPlayState
             retreats ?? Retreats,
             brokenAllyFactionIds ?? BrokenAllyFactionIds,
             structures ?? Structures,
-            log ?? Log);
+            log ?? Log,
+            snapshots ?? Snapshots,
+            clearDebug ? null : debugActorUserId ?? DebugActorUserId,
+            clearDebug ? null : debugStartedUtc ?? DebugStartedUtc);
     }
 
     /// <summary>

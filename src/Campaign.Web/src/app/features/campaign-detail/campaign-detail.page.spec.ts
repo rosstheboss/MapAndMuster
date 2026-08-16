@@ -6,6 +6,7 @@ import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 
 import { CampaignDetailPage } from './campaign-detail.page';
+import type { CampaignPlayDetail } from '../../core/campaigns/campaign.models';
 
 const campaign = {
   id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
@@ -85,6 +86,59 @@ function flushPlayUnavailable(http: HttpTestingController): void {
     );
 }
 
+function playState(overrides: Partial<CampaignPlayDetail> = {}): CampaignPlayDetail {
+  return {
+    id: campaign.id,
+    name: campaign.name,
+    revision: campaign.revision,
+    canManage: true,
+    canDebug: true,
+    isDebugActive: false,
+    debugActorUserId: null,
+    isParticipant: true,
+    canChat: true,
+    mentionableMembers: campaign.mentionableMembers,
+    status: 'InProgress',
+    currentRound: 1,
+    currentPhaseNumber: 1,
+    currentPhaseKind: 'Action',
+    currentPhaseLabel: 'Action 1',
+    currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+    currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+    currentWindowId: 'window-1',
+    hasMap: true,
+    factionId: '1',
+    canChooseFaction: false,
+    isCommitted: false,
+    roundCount: 8,
+    minRoundCount: 1,
+    remainingWindows: [],
+    factions: campaign.factions,
+    structureTypes: [],
+    forces: [
+      {
+        id: 'force-1',
+        controllerUserId: 'user-1',
+        controllerUsername: 'northplayer',
+        factionId: '1',
+        territoryId: 't1',
+        isMine: true,
+        inBattle: false,
+        moveTargets: ['t2'],
+        availableActions: ['Hold', 'Move'],
+      },
+    ],
+    myDrafts: [],
+    orders: [],
+    debugDrafts: [],
+    commitments: [{ userId: 'user-1', username: 'northplayer', isCommitted: false }],
+    battles: [],
+    log: [],
+    playersMissingFaction: [],
+    ...overrides,
+  };
+}
+
 describe('CampaignDetailPage', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -132,12 +186,18 @@ describe('CampaignDetailPage', () => {
     expect(compiled.querySelector('#faction')).toBeTruthy();
     expect(compiled.textContent).toContain('Campaign log');
     expect(compiled.textContent).toContain("Your force starts at that faction's spawn");
+    expect(compiled.textContent).toContain('Expand All');
+    expect(compiled.textContent).toContain('Collapse All');
     expect(compiled.querySelector('a.button')?.textContent).toContain('Edit campaign');
     expect(compiled.textContent).toContain('Edit map');
-
-    const deleteButton = [...compiled.querySelectorAll('button')].find((button) =>
-      button.textContent.includes('Delete campaign'),
+    expect([...compiled.querySelectorAll('a, button')].some((element) => element.textContent.trim() === 'Play')).toBe(
+      false,
     );
+    expect([...compiled.querySelectorAll('a, button')].some((element) => element.textContent.trim() === 'View')).toBe(
+      false,
+    );
+
+    const deleteButton = compiled.querySelector<HTMLButtonElement>('button.button-danger');
     expect(deleteButton).toBeTruthy();
     deleteButton!.click();
     fixture.detectChanges();
@@ -263,7 +323,7 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
-  it('shows a read-only play board with the campaign log during an active campaign', async () => {
+  it('shows orders on the campaign page during an active campaign', async () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
     http.expectOne(`/api/campaigns/${campaign.id}`).flush({
@@ -318,51 +378,23 @@ describe('CampaignDetailPage', () => {
       ],
       adjacencies: [],
     });
-    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush({
-      id: campaign.id,
-      name: campaign.name,
-      revision: campaign.revision,
-      canManage: true,
-      isParticipant: true,
-      canChat: true,
-      mentionableMembers: campaign.mentionableMembers,
-      status: 'InProgress',
-      currentRound: 1,
-      currentPhaseNumber: 1,
-      currentPhaseKind: 'Action',
-      currentPhaseLabel: 'Action 1',
-      currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
-      currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
-      currentWindowId: 'window-1',
-      hasMap: true,
-      factionId: '1',
-      canChooseFaction: false,
-      isCommitted: false,
-      roundCount: 8,
-      minRoundCount: 1,
-      remainingWindows: [],
-      factions: campaign.factions,
-      structureTypes: [],
-      forces: [
-        {
-          id: 'force-1',
-          controllerUserId: 'user-1',
-          controllerUsername: 'northplayer',
-          factionId: '1',
-          territoryId: 't1',
-          isMine: true,
-          inBattle: false,
-          moveTargets: [],
-          availableActions: ['Hold'],
-        },
-      ],
-      myDrafts: [],
-      orders: [],
-      commitments: [{ userId: 'user-1', username: 'northplayer', isCommitted: false }],
-      battles: [],
-      log: [],
-      playersMissingFaction: [],
-    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        log: [
+          {
+            id: 'log-1',
+            occurredUtc: '2026-08-14T12:00:00+00:00',
+            kind: 'CampaignStarted',
+            originator: 'Campaign',
+            summary: 'The campaign started.',
+            territoryId: null,
+            forceId: null,
+            battleId: null,
+            isSystemAdjustment: false,
+          },
+        ],
+      }),
+    );
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -371,11 +403,14 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('The campaign started.');
     expect(compiled.textContent).toContain('Campaign:');
     expect(compiled.textContent).toContain('Phase ends in');
-    expect(compiled.textContent).toContain('Round 1 · Action 1');
-    expect(compiled.querySelector('a.button')?.textContent).toContain('Play');
-    expect(compiled.textContent).not.toContain('Commit orders');
+    expect(compiled.textContent).toContain('Round 1 - Action 1');
+    expect(compiled.textContent).toContain('Commit orders');
+    expect(compiled.textContent).toContain('Debug');
+    expect(compiled.textContent).toContain('Spawn location is at Coast');
     expect(compiled.textContent).not.toContain('Choose your faction');
-    expect(compiled.textContent).not.toContain('Download map');
+    expect([...compiled.querySelectorAll('a, button')].some((element) => element.textContent.trim() === 'Play')).toBe(
+      false,
+    );
     const page = fixture.componentInstance as unknown as { hoveredTerritoryId: { set(id: string): void } };
     page.hoveredTerritoryId.set('t1');
     fixture.detectChanges();
@@ -383,7 +418,7 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
-  it('shows a static map preview and a download control when a map exists', async () => {
+  it('shows a full-width map and a download control when a map exists', async () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
     http.expectOne(`/api/campaigns/${campaign.id}`).flush({ ...campaign, hasMap: true, revision: 4 });
@@ -400,9 +435,8 @@ describe('CampaignDetailPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Border War');
-    const preview = compiled.querySelector('app-campaign-map-preview img');
-    expect(preview).toBeTruthy();
-    expect(preview?.getAttribute('src')).toContain(`/api/campaigns/${campaign.id}/map?v=4`);
+    expect(compiled.querySelector('app-campaign-map-view')).toBeTruthy();
+    expect(compiled.querySelector('app-campaign-map-preview')).toBeNull();
     expect(compiled.textContent).toContain('Download map');
     http.verify();
   });
@@ -438,13 +472,14 @@ describe('CampaignDetailPage', () => {
     const posted = http.expectOne(`/api/campaigns/${campaign.id}/play/faction`);
     expect(posted.request.method).toBe('POST');
     expect((posted.request.body as { factionId: string }).factionId).toBe('1');
-    posted.flush({ ...campaign, factionId: '1', canChooseFaction: false, revision: 2 });
+    posted.flush({ ...campaign, factionId: '1', canChooseFaction: true, revision: 2 });
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(compiled.textContent).toContain('Your faction');
+    expect(compiled.textContent).toContain('You can change your faction until the campaign starts');
     expect(compiled.textContent).toContain('North');
-    expect(compiled.querySelector('#faction')).toBeNull();
+    expect(compiled.querySelector('#faction')).toBeTruthy();
 
     for (const request of http.match(() => true)) {
       if (request.request.url.endsWith('/map/graph')) {
@@ -464,12 +499,88 @@ describe('CampaignDetailPage', () => {
         request.flush({
           ...campaign,
           factionId: '1',
-          canChooseFaction: false,
+          canChooseFaction: true,
           revision: 2,
         });
       }
     }
     await fixture.whenStable();
+    http.verify();
+  });
+
+  it('saves a draft and commits orders on the campaign page', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: false,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+      currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(playState({ hasMap: false }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Commit orders');
+    const saveDraft = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Save draft',
+    );
+    saveDraft?.click();
+    const draft = http.expectOne(`/api/campaigns/${campaign.id}/play/draft`);
+    expect((draft.request.body as { kind: string }).kind).toBe('Hold');
+    draft.flush(
+      playState({
+        hasMap: false,
+        revision: 3,
+        myDrafts: [{ forceId: 'force-1', kind: 'Hold', targetTerritoryId: null, structureTypeId: null }],
+      }),
+    );
+    await fixture.whenStable();
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: 3,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Successfully saved changes.');
+    expect(compiled.textContent).toContain('Saved draft: Hold');
+
+    const commit = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Commit orders',
+    );
+    commit?.click();
+    http
+      .expectOne(`/api/campaigns/${campaign.id}/play/commit`)
+      .flush(playState({ hasMap: false, revision: 4, isCommitted: true }));
+    await fixture.whenStable();
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: 4,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('return them to draft until this action window closes');
     http.verify();
   });
 });

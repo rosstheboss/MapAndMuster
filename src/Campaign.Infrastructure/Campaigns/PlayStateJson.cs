@@ -141,6 +141,35 @@ internal static class PlayStateJson
                 Message = item.Message,
                 ActorDisplayName = item.ActorDisplayName,
             })],
+            Snapshots = [.. state.Snapshots.Select(static item => new SnapshotDocument
+            {
+                WindowId = item.WindowId,
+                Forces = [.. item.Forces.Select(static force => new ForceDocument
+                {
+                    Id = force.Id,
+                    ControllerUserId = force.ControllerUserId,
+                    FactionId = force.FactionId,
+                    TerritoryId = force.TerritoryId,
+                    InBattle = force.InBattle,
+                })],
+                Structures = [.. item.Structures.Select(static structure => new StructureDocument
+                {
+                    TerritoryId = structure.TerritoryId,
+                    StructureTypeId = structure.StructureTypeId,
+                    Condition = structure.Condition.ToString(),
+                })],
+                BrokenAllyFactionIds = [.. item.BrokenAllyFactionIds],
+                Territories = [.. item.Territories.Select(static territory => new TerritorySnapshotDocument
+                {
+                    TerritoryId = territory.TerritoryId,
+                    OwnerFactionId = territory.OwnerFactionId,
+                    StructureTypeId = territory.StructureTypeId,
+                    StructureName = territory.StructureName,
+                    Condition = territory.Condition.ToString(),
+                })],
+            })],
+            DebugActorUserId = state.DebugActorUserId,
+            DebugStartedUtc = state.DebugStartedUtc,
         };
     }
 
@@ -224,7 +253,36 @@ internal static class PlayStateJson
                 string.IsNullOrWhiteSpace(item.ActionKind) ? null : Enum.Parse<ActionKind>(item.ActionKind, true),
                 item.RelatedForceIds,
                 item.Message,
-                item.ActorDisplayName))]);
+                item.ActorDisplayName))],
+            ToSnapshots(document),
+            document.DebugActorUserId,
+            document.DebugStartedUtc);
+    }
+
+    private static IReadOnlyList<ActionWindowSnapshot> ToSnapshots(PlayDocument document)
+    {
+        return
+        [
+            .. (document.Snapshots ?? []).Select(static item => new ActionWindowSnapshot(
+                item.WindowId,
+                [.. item.Forces.Select(static force => new CampaignForce(
+                    force.Id,
+                    force.ControllerUserId,
+                    force.FactionId,
+                    force.TerritoryId,
+                    force.InBattle))],
+                [.. item.Structures.Select(static structure => new TerritoryStructureState(
+                    structure.TerritoryId,
+                    structure.StructureTypeId,
+                    Enum.Parse<StructureCondition>(structure.Condition, true)))],
+                item.BrokenAllyFactionIds,
+                [.. item.Territories.Select(static territory => new TerritorySnapshot(
+                    territory.TerritoryId,
+                    territory.OwnerFactionId,
+                    territory.StructureTypeId,
+                    territory.StructureName,
+                    Enum.Parse<StructureCondition>(territory.Condition, true)))])),
+        ];
     }
 
     private sealed class PlayDocument
@@ -240,6 +298,9 @@ internal static class PlayStateJson
         public List<Guid> BrokenAllyFactionIds { get; set; } = [];
         public List<StructureDocument> Structures { get; set; } = [];
         public List<LogDocument> Log { get; set; } = [];
+        public List<SnapshotDocument>? Snapshots { get; set; }
+        public Guid? DebugActorUserId { get; set; }
+        public DateTimeOffset? DebugStartedUtc { get; set; }
     }
 
     private sealed class WindowDocument
@@ -350,5 +411,23 @@ internal static class PlayStateJson
         public List<Guid> RelatedForceIds { get; set; } = [];
         public string? Message { get; set; }
         public string? ActorDisplayName { get; set; }
+    }
+
+    private sealed class SnapshotDocument
+    {
+        public Guid WindowId { get; set; }
+        public List<ForceDocument> Forces { get; set; } = [];
+        public List<StructureDocument> Structures { get; set; } = [];
+        public List<Guid> BrokenAllyFactionIds { get; set; } = [];
+        public List<TerritorySnapshotDocument> Territories { get; set; } = [];
+    }
+
+    private sealed class TerritorySnapshotDocument
+    {
+        public Guid TerritoryId { get; set; }
+        public Guid? OwnerFactionId { get; set; }
+        public Guid? StructureTypeId { get; set; }
+        public string? StructureName { get; set; }
+        public string Condition { get; set; } = "";
     }
 }

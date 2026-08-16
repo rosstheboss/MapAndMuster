@@ -526,3 +526,83 @@ public sealed class RetreatOrder
     /// <summary>Gets when the retreat was recorded, in UTC.</summary>
     public DateTimeOffset SubmittedUtc { get; }
 }
+
+/// <summary>
+/// Ownership and structure facts for one territory at the start of an action window.
+/// </summary>
+public sealed class TerritorySnapshot
+{
+    /// <summary>
+    /// Initializes a territory snapshot.
+    /// </summary>
+    public TerritorySnapshot(
+        Guid territoryId,
+        Guid? ownerFactionId,
+        Guid? structureTypeId,
+        string? structureName,
+        StructureCondition condition)
+    {
+        TerritoryId = territoryId;
+        OwnerFactionId = ownerFactionId;
+        StructureTypeId = structureTypeId;
+        StructureName = structureName;
+        Condition = condition;
+    }
+
+    /// <summary>Gets the territory.</summary>
+    public Guid TerritoryId { get; }
+
+    /// <summary>Gets the controlling faction, or null when neutral.</summary>
+    public Guid? OwnerFactionId { get; }
+
+    /// <summary>Gets the structure type, if any.</summary>
+    public Guid? StructureTypeId { get; }
+
+    /// <summary>Gets the structure display name, if any.</summary>
+    public string? StructureName { get; }
+
+    /// <summary>Gets the structure condition.</summary>
+    public StructureCondition Condition { get; }
+}
+
+/// <summary>
+/// Map and force facts captured before an action window resolved, so debug can re-resolve.
+/// </summary>
+public sealed class ActionWindowSnapshot
+{
+    /// <summary>
+    /// Initializes a snapshot.
+    /// </summary>
+    public ActionWindowSnapshot(
+        Guid windowId,
+        IReadOnlyList<CampaignForce> forces,
+        IReadOnlyList<TerritoryStructureState> structures,
+        IReadOnlyList<Guid> brokenAllyFactionIds,
+        IReadOnlyList<TerritorySnapshot> territories)
+    {
+        ArgumentNullException.ThrowIfNull(forces);
+        ArgumentNullException.ThrowIfNull(structures);
+        ArgumentNullException.ThrowIfNull(brokenAllyFactionIds);
+        ArgumentNullException.ThrowIfNull(territories);
+        WindowId = windowId;
+        Forces = forces;
+        Structures = structures;
+        BrokenAllyFactionIds = brokenAllyFactionIds;
+        Territories = territories;
+    }
+
+    /// <summary>Gets the action window.</summary>
+    public Guid WindowId { get; }
+
+    /// <summary>Gets forces before resolution.</summary>
+    public IReadOnlyList<CampaignForce> Forces { get; }
+
+    /// <summary>Gets structure state before resolution.</summary>
+    public IReadOnlyList<TerritoryStructureState> Structures { get; }
+
+    /// <summary>Gets broken-alliance factions before resolution.</summary>
+    public IReadOnlyList<Guid> BrokenAllyFactionIds { get; }
+
+    /// <summary>Gets territory ownership and structures before resolution.</summary>
+    public IReadOnlyList<TerritorySnapshot> Territories { get; }
+}

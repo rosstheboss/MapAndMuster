@@ -71,7 +71,7 @@ describe('CampaignListComponent', () => {
     expect(compiled.textContent).toContain('1 of 8 players');
     expect(compiled.textContent).toContain('Halifax, Nova Scotia, Canada');
     expect(compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]')?.textContent).toContain(
-      'View',
+      'Open',
     );
     expect(
       compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/edit"]')?.textContent,
@@ -157,7 +157,7 @@ describe('CampaignListComponent', () => {
     fixture.detectChanges();
 
     expect(compiled.querySelector('a[href="/campaigns/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]')?.textContent).toContain(
-      'View',
+      'Open',
     );
     const join = [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Join');
     expect(join).toBeTruthy();
@@ -263,9 +263,9 @@ describe('CampaignListComponent', () => {
     compiled.querySelector<HTMLButtonElement>('button.campaign-toggle')?.click();
     fixture.detectChanges();
 
-    expect(
-      compiled.querySelector('a[href="/campaigns/dddddddd-dddd-dddd-dddd-dddddddddddd/play"]')?.textContent,
-    ).toContain('Play');
+    expect(compiled.querySelector('a[href="/campaigns/dddddddd-dddd-dddd-dddd-dddddddddddd"]')?.textContent).toContain(
+      'Open',
+    );
     expect(compiled.textContent).toContain('Round 2 · Action 1');
     expect(compiled.textContent).toContain('Phase ends in');
     const leave = [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Leave');

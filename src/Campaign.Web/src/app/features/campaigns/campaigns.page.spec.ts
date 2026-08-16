@@ -139,7 +139,7 @@ describe('CampaignsPage', () => {
     expect(upcoming?.getAttribute('aria-expanded')).toBe('true');
     expect(compiled.textContent).toContain('1 of 8 players');
     expect(compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]')?.textContent).toContain(
-      'View',
+      'Open',
     );
     expect(
       compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/edit"]')?.textContent,

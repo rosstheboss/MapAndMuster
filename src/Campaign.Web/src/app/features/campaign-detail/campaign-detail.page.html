@@ -2,13 +2,25 @@
   @if (loading()) {
     <p>Loading campaign…</p>
   } @else if (campaign(); as campaign) {
-    <div class="page-header">
-      <h1>{{ campaign.name }}</h1>
-      <div class="choice-row">
-        @if (campaign.canPlay) {
-          <a class="button" [routerLink]="['/campaigns', campaign.id, 'play']">Play</a>
-        }
+    <div class="setup-toolbar">
+      <div class="page-header">
+        <h1>{{ campaign.name }}</h1>
+      </div>
+      <div class="setup-toolbar-actions">
         <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+        <button type="button" class="button-secondary" (click)="expandAllSections()">Expand All</button>
+        <button type="button" class="button-secondary" (click)="collapseAllSections()">Collapse All</button>
+        @if (canDebug() && play(); as play) {
+          @if (play.isDebugActive) {
+            <button type="button" class="button" (click)="exitDebug()">Exit debug</button>
+          } @else {
+            <button type="button" class="button" (click)="enterDebug()">Debug</button>
+          }
+        }
+        @if (campaign.canManage && campaign.status === 'Scheduled') {
+          <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
+          <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'map']">Edit map</a>
+        }
       </div>
     </div>
 
@@ -19,6 +31,22 @@
       <p class="success-banner" role="status">{{ successMessage() }}</p>
     }
 
+    <div class="panel status-panel stack">
+      @if (currentPhaseHeading(campaign); as heading) {
+        <p>{{ heading }}</p>
+      }
+      <p>{{ statusText(campaign.status) }}</p>
+      @if (campaign.currentPhaseEndsUtc; as endsUtc) {
+        <p class="phase-timer">
+          <span>
+            Phase ends in
+            <app-phase-countdown [endsUtc]="endsUtc" (expired)="onPhaseExpired()" />
+          </span>
+          <span class="phase-end-at">{{ phaseEndTimestamp(endsUtc) }}</span>
+        </p>
+      }
+    </div>
+
     <app-campaign-log
       [entries]="campaign.log"
       [members]="campaign.mentionableMembers"
@@ -26,121 +54,35 @@
       [timeZoneId]="timeZoneId()"
       [sending]="chatBusy()"
       [sendError]="chatError()"
+      [expanded]="isOpen('log')"
+      (expandedChange)="setSection('log', $event)"
       (send)="postChat($event)"
     />
 
-    @if (isLiveBoard()) {
-      <div class="panel stack">
-        <p>Status: {{ statusText(campaign) }}</p>
-        @if (campaign.currentRound !== null && currentPhaseText(campaign)) {
-          <p>{{ currentPhaseText(campaign) }}</p>
-        }
-        @if (campaign.currentPhaseEndsUtc) {
-          <p>
-            Phase ends in
-            <app-phase-countdown [endsUtc]="campaign.currentPhaseEndsUtc" />
-          </p>
-        }
-      </div>
-
-      @if (campaign.canManage && play(); as play) {
-        @if (play.playersMissingFaction.length > 0) {
-          <div class="panel stack">
-            <h2>Players without a faction</h2>
-            <p>These players cannot order until they choose a faction.</p>
-            <ul class="plain-list">
-              @for (name of play.playersMissingFaction; track name) {
-                <li>{{ name }}</li>
-              }
-            </ul>
-          </div>
-        }
-      }
-
-      @if (mapSrc(); as src) {
-        <div class="panel stack">
-          <h2>Map</h2>
-          <div class="map-view">
-            <app-campaign-map-view
-              [imageUrl]="src"
-              [territories]="graph().territories"
-              [adjacencies]="graph().adjacencies"
-              [selectedTerritoryIds]="focusTerritoryIds()"
-              [hoveredTerritoryId]="hoveredTerritoryId()"
-              [adjacentTerritoryIds]="adjacentTerritoryIds()"
-              [showAdjacencies]="false"
-              [interactive]="true"
-              [factions]="campaign.factions"
-              [structures]="campaign.structureTypes"
-              [structureImageUrl]="structureImageUrl"
-              [flagImageUrl]="flagImageUrl"
-              [forces]="mapForces()"
-              (territoryHover)="hoveredTerritoryId.set($event)"
-              (territorySelect)="onTerritorySelect($event)"
-              (backgroundSelect)="selectedIds.set([])"
-            />
-            <aside class="map-meta panel stack" aria-live="polite">
-              @if (hoveredTerritory(); as territory) {
-                <h3>{{ labelFor(territory) }}</h3>
-                <p>Ownership: {{ factionName(territory.ownerFactionId) }}</p>
-                <p>Spawn: {{ territory.spawnFactionId ? factionName(territory.spawnFactionId) : 'None' }}</p>
-                <p>Forces: {{ forcesInTerritory(territory.id).join(', ') || 'None' }}</p>
-                <p>
-                  Structure:
-                  {{
-                    territory.structureTypeId
-                      ? structureName(territory.structureTypeId) +
-                        ' (' +
-                        structureConditionLabel(territory.structureCondition) +
-                        ')'
-                      : 'None'
-                  }}
-                </p>
-              } @else {
-                <p class="muted">Hover a territory to see its details.</p>
-              }
-            </aside>
-          </div>
-        </div>
-      }
-
-      @if (play(); as play) {
-        @if (play.currentPhaseKind === 'Action' && play.commitments.length > 0) {
-          <div class="panel stack">
-            <h2>Commitments</h2>
-            <ul class="plain-list">
-              @for (item of play.commitments; track item.userId) {
-                <li>{{ item.username ?? item.userId }} · {{ item.isCommitted ? 'Committed' : 'Drafting' }}</li>
-              }
-            </ul>
-          </div>
-        }
-        @if (play.currentPhaseKind === 'Battle') {
-          <div class="panel stack">
-            <h2>Battles</h2>
-            @if (play.battles.length === 0) {
-              <p class="muted">No battles this phase.</p>
-            }
-            @for (battle of play.battles; track battle.id) {
-              <p>{{ territoryName(battle.territoryId) }} · {{ battle.status }}</p>
-            }
-          </div>
-        }
-      }
-
-      @if (campaign.canManage) {
-        <div class="actions">
-          <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
-        </div>
-      }
-    } @else {
-      @if (campaign.canChooseFaction) {
-        <form class="panel stack" (ngSubmit)="chooseFaction()">
-          <h2>Choose your faction</h2>
-          <p>
-            Players, including managers who occupy a player slot, must pick a faction. You cannot play a round until you
-            do. Your force starts at that faction's spawn; subfactions use the same spawn.
-          </p>
+    @if (campaign.canChooseFaction) {
+      <form class="panel stack" (ngSubmit)="chooseFaction()">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('faction')"
+            (click)="toggleSection('faction')"
+          >
+            {{ campaign.factionId ? 'Your faction' : 'Choose your faction' }}
+          </button>
+        </h2>
+        @if (isOpen('faction')) {
+          @if (campaign.factionId) {
+            <p>
+              You can change your faction until the campaign starts. Your force starts at that faction's spawn;
+              subfactions use the same spawn.
+            </p>
+          } @else {
+            <p>
+              Players, including managers who occupy a player slot, must pick a faction. You cannot play a round until
+              you do. Your force starts at that faction's spawn; subfactions use the same spawn.
+            </p>
+          }
           <div class="field">
             <label for="faction">Faction</label>
             <select id="faction" [ngModel]="factionChoice()" (ngModelChange)="factionChoice.set($event)" name="faction">
@@ -166,132 +108,85 @@
               </select>
             </div>
           }
+          @if (showSpawnLocation() && spawnLocationName(); as spawn) {
+            <p>Spawn location is at {{ spawn }}</p>
+          }
           <button type="submit" class="button">Save faction</button>
-        </form>
-      } @else if (campaign.isParticipant && chosenFaction(); as faction) {
-        <div class="panel stack">
-          <h2>Your faction</h2>
+        }
+      </form>
+    } @else if (campaign.isParticipant && chosenFaction(); as faction) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('faction')"
+            (click)="toggleSection('faction')"
+          >
+            Your faction
+          </button>
+        </h2>
+        @if (isOpen('faction')) {
           <p>
             {{ faction.name }}
             @if (campaign.subfaction) {
               · {{ campaign.subfaction }}
             }
           </p>
-          <p class="muted">Your force will start at this faction's spawn location.</p>
-        </div>
-      }
-
-      @if (campaign.canManage) {
-        <div class="actions">
-          @if (campaign.status === 'Scheduled') {
-            <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
-            <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'map']">Edit map</a>
-          }
-          <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
-        </div>
-      }
-
-      <div class="panel stack">
-        @if (mapSrc(); as src) {
-          <app-campaign-map-preview [imageUrl]="src" />
-        }
-        @if (campaign.description) {
-          <p>{{ campaign.description }}</p>
-        }
-        @if (locationText(campaign); as location) {
-          <p>Location: {{ location }}</p>
-        }
-        <p>Players: {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} occupied</p>
-        <p>{{ campaign.isPrivate ? 'Private campaign' : 'Public campaign' }}</p>
-        <p>
-          Creator role:
-          {{ campaign.creatorIsParticipant ? 'Manager and participant' : 'Manager only' }}
-        </p>
-        <p>Your role: {{ roleLabel(campaign) }}</p>
-        <p>Status: {{ statusText(campaign) }}</p>
-        <p>Start: {{ campaign.startsUtc | instantDate: timeZoneId() }}</p>
-        <p>End: {{ campaign.endsUtc | instantDate: timeZoneId() }}</p>
-        <p>Rounds: {{ campaign.roundCount }} · each {{ roundLengthText(campaign) }}</p>
-        <p class="muted">Schedule time zone: {{ campaign.timeZoneId }}</p>
-        @if (currentPhaseText(campaign)) {
-          <p>Current: {{ currentPhaseText(campaign) }}</p>
-          @if (campaign.currentPhaseStartsUtc && campaign.currentPhaseEndsUtc) {
-            <p class="muted">
-              {{ campaign.currentPhaseStartsUtc | instantDate: timeZoneId() }} –
-              {{ campaign.currentPhaseEndsUtc | instantDate: timeZoneId() }}
-            </p>
+          @if (showSpawnLocation() && spawnLocationName(); as spawn) {
+            <p>Spawn location is at {{ spawn }}</p>
           }
         }
-        <p class="muted">Created {{ campaign.createdUtc | instantDate: timeZoneId() }}</p>
-        <p class="muted">Last edited {{ campaign.updatedUtc | instantDate: timeZoneId() }}</p>
       </div>
+    }
 
-      <div class="panel stack">
-        <h2>Round structure</h2>
-        <ol class="plain-list">
-          @for (phase of campaign.phases; track $index; let index = $index) {
-            <li>{{ phaseText(campaign, index) }}</li>
-          }
-        </ol>
-      </div>
-
-      <div class="panel stack">
-        <h2>Factions</h2>
-        <ul class="plain-list">
-          @for (faction of campaign.factions; track faction.id) {
-            <li>
-              <strong>{{ faction.name }}</strong>
-              <span class="faction-swatch" [style.background]="faction.color" aria-hidden="true"></span>
-              @if (faction.requiresSubfaction) {
-                <span class="muted"> · Subfaction required</span>
-              }
-              @if (faction.allyGroupName) {
-                <span class="muted"> · Ally group: {{ faction.allyGroupName }}</span>
-              }
-              @if (faction.subfactions.length > 0) {
-                <p class="muted">Subfactions: {{ faction.subfactions.join(', ') }}</p>
-              }
-            </li>
-          }
-        </ul>
-      </div>
-
-      @if (campaign.allyGroups.length > 0) {
+    @if (campaign.canManage && play(); as play) {
+      @if (play.playersMissingFaction.length > 0) {
         <div class="panel stack">
-          <h2>Ally groups</h2>
-          <ul class="plain-list">
-            @for (group of campaign.allyGroups; track group.id) {
-              <li>{{ group.name }}</li>
-            }
-          </ul>
-        </div>
-      }
-
-      @if (campaign.links.length > 0) {
-        <div class="panel stack">
-          <h2>Links</h2>
-          <ul class="plain-list">
-            @for (link of campaign.links; track link.id) {
-              <li>
-                <a [href]="link.url" rel="noopener noreferrer" target="_blank">{{ link.label }}</a>
-              </li>
-            }
-          </ul>
-        </div>
-      }
-
-      <div class="panel stack">
-        <div class="map-heading">
-          <h2>Map</h2>
-          @if (mapSrc()) {
-            <button type="button" class="button-secondary" (click)="downloadMap()" [disabled]="downloading()">
-              Download map
+          <h2>
+            <button
+              type="button"
+              class="section-toggle"
+              [attr.aria-expanded]="isOpen('missingFaction')"
+              (click)="toggleSection('missingFaction')"
+            >
+              Players without a faction
             </button>
-            <button type="button" class="button-secondary" (click)="downloadSvg()" [disabled]="downloading()">
-              Download SVG data
-            </button>
+          </h2>
+          @if (isOpen('missingFaction')) {
+            <p>These players cannot order until they choose a faction.</p>
+            <ul class="plain-list">
+              @for (name of play.playersMissingFaction; track name) {
+                <li>{{ name }}</li>
+              }
+            </ul>
           }
         </div>
+      }
+    }
+
+    <div class="panel stack">
+      <div class="map-heading">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('map')"
+            (click)="toggleSection('map')"
+          >
+            Map
+          </button>
+        </h2>
+        @if (isOpen('map') && mapSrc()) {
+          <button type="button" class="button-secondary" (click)="downloadMap()" [disabled]="downloading()">
+            Download map
+          </button>
+          <button type="button" class="button-secondary" (click)="downloadSvg()" [disabled]="downloading()">
+            Download SVG data
+          </button>
+        }
+      </div>
+      @if (isOpen('map')) {
         @if (mapSrc(); as src) {
           <div class="map-view">
             <app-campaign-map-view
@@ -307,6 +202,7 @@
               [structures]="campaign.structureTypes"
               [structureImageUrl]="structureImageUrl"
               [flagImageUrl]="flagImageUrl"
+              [forces]="mapForces()"
               (territoryHover)="hoveredTerritoryId.set($event)"
               (territorySelect)="onTerritorySelect($event)"
               (backgroundSelect)="selectedIds.set([])"
@@ -366,6 +262,7 @@
                   Spawn location faction:
                   {{ territory.spawnFactionId ? factionName(territory.spawnFactionId) : 'None' }}
                 </p>
+                <p>Forces: {{ forcesInTerritory(territory.id).join(', ') || 'None' }}</p>
                 <p>Adjacent territories: {{ adjacentLabels(territory) }}</p>
               } @else {
                 <p class="muted">Hover a territory to see its details.</p>
@@ -374,6 +271,530 @@
           </div>
         } @else {
           <p class="muted">No map has been uploaded yet.</p>
+        }
+      }
+    </div>
+
+    @if (isActionPhase() && play(); as play) {
+      @if (play.isParticipant && !play.canChooseFaction) {
+        <div class="panel stack">
+          <h2>
+            <button
+              type="button"
+              class="section-toggle"
+              [attr.aria-expanded]="isOpen('orders')"
+              (click)="toggleSection('orders')"
+            >
+              Orders
+            </button>
+          </h2>
+          @if (isOpen('orders')) {
+            <p>
+              Choose an action for each of your forces. The latest saved draft is what commits if time runs out. Missing
+              drafts become Hold.
+            </p>
+            @if (play.isCommitted) {
+              <p>
+                Your orders are committed. You can return them to draft until this action window closes. After it closes
+                they resolve and cannot be backed out.
+              </p>
+              <button type="button" class="button-secondary" (click)="uncommit()">Uncommit</button>
+            } @else {
+              @for (force of myForces(); track force.id) {
+                <fieldset class="stack">
+                  <legend>{{ forceLabel(force) }} · {{ territoryName(force.territoryId) }}</legend>
+                  @if (draftKindsFor(force).length === 0) {
+                    <p class="muted">This force is in battle and cannot submit an action.</p>
+                  } @else {
+                    <div class="field">
+                      <label [attr.for]="'kind-' + force.id">Action</label>
+                      <select
+                        [id]="'kind-' + force.id"
+                        [ngModel]="draftFor(force.id).kind"
+                        (ngModelChange)="onDraftKind(force.id, $event)"
+                        [name]="'kind-' + force.id"
+                      >
+                        @for (kind of draftKindsFor(force); track kind) {
+                          <option [value]="kind">{{ kind }}</option>
+                        }
+                      </select>
+                    </div>
+                    @if (draftFor(force.id).kind === 'Move' || draftFor(force.id).kind === 'Split') {
+                      <div class="field">
+                        <label [attr.for]="'target-' + force.id">Destination</label>
+                        <select
+                          [id]="'target-' + force.id"
+                          [ngModel]="draftFor(force.id).targetTerritoryId"
+                          (ngModelChange)="onDraftTarget(force.id, $event)"
+                          [name]="'target-' + force.id"
+                        >
+                          <option value="">Select a territory</option>
+                          @for (target of force.moveTargets; track target) {
+                            <option [value]="target">{{ territoryName(target) }}</option>
+                          }
+                        </select>
+                      </div>
+                    }
+                    @if (draftFor(force.id).kind === 'Build') {
+                      <div class="field">
+                        <label [attr.for]="'structure-' + force.id">Structure</label>
+                        <select
+                          [id]="'structure-' + force.id"
+                          [ngModel]="draftFor(force.id).structureTypeId"
+                          (ngModelChange)="onDraftStructure(force.id, $event)"
+                          [name]="'structure-' + force.id"
+                        >
+                          <option value="">Select a structure</option>
+                          @for (type of play.structureTypes; track type.id) {
+                            <option [value]="type.id">{{ type.name }}</option>
+                          }
+                        </select>
+                      </div>
+                    }
+                    @if (draftFor(force.id).kind === 'Pillage') {
+                      <p class="muted">
+                        @if (structureAt(force.territoryId); as structure) {
+                          Pillage the {{ structure.condition }} {{ structure.name }} in
+                          {{ territoryName(force.territoryId) }}. Operational structures become pillaged; pillaged
+                          non-cities become destroyed.
+                        } @else {
+                          Pillage requires an intact enemy or unowned structure in this territory.
+                        }
+                      </p>
+                    }
+                    @if (draftFor(force.id).kind === 'Repair') {
+                      <p class="muted">Repair the pillaged structure in {{ territoryName(force.territoryId) }}.</p>
+                    }
+                    @if (draftFor(force.id).kind === 'Backstab') {
+                      <p class="muted">
+                        End your alliance. If you share a territory with a former ally after resolution, a battle is
+                        created.
+                      </p>
+                    }
+                    @if (draftFor(force.id).kind === 'Move' || draftFor(force.id).kind === 'Split') {
+                      <p class="muted">
+                        Choose a destination from the list, or click an adjacent eligible territory on the map.
+                      </p>
+                    }
+                    <button type="button" class="button-secondary" (click)="saveDraft(force)">Save draft</button>
+                    @if (savedDraft(force.id); as saved) {
+                      <p class="muted">
+                        Saved draft: {{ saved.kind
+                        }}{{ saved.targetTerritoryId ? ' to ' + territoryName(saved.targetTerritoryId) : '' }}. This is
+                        the action that commits when time runs out.
+                      </p>
+                    } @else {
+                      <p class="muted">No draft saved yet. If time runs out, this force Holds.</p>
+                    }
+                  }
+                </fieldset>
+              }
+              <button type="button" class="button" (click)="commit()">Commit orders</button>
+            }
+            <h3>Commitments</h3>
+            <ul class="plain-list">
+              @for (item of play.commitments; track item.userId) {
+                <li>{{ item.username ?? item.userId }} · {{ item.isCommitted ? 'Committed' : 'Drafting' }}</li>
+              }
+            </ul>
+          }
+        </div>
+      }
+    }
+
+    @if (isBattlePhase() && play(); as play) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('battles')"
+            (click)="toggleSection('battles')"
+          >
+            Battles
+          </button>
+        </h2>
+        @if (isOpen('battles')) {
+          @if (play.battles.length === 0) {
+            <p class="muted">No battles this phase.</p>
+          }
+          @for (battle of play.battles; track battle.id) {
+            <article class="stack">
+              <h3>{{ territoryName(battle.territoryId) }} · {{ battle.status }}</h3>
+              @if (battle.isMine && battle.status === 'AwaitingResults') {
+                <div class="field">
+                  <label [attr.for]="'winner-' + battle.id">Winner</label>
+                  <select
+                    [id]="'winner-' + battle.id"
+                    [ngModel]="battleWinnerId(battle.id)"
+                    (ngModelChange)="onBattleWinner(battle.id, $event)"
+                    [name]="'winner-' + battle.id"
+                  >
+                    <option value="">Select a winner</option>
+                    @for (forceId of battle.participantForceIds; track forceId) {
+                      <option [value]="forceId">{{ forceLabelById(forceId) }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="choice-row">
+                  <button type="button" class="button" (click)="submitBattle(battle, false)">Submit result</button>
+                  <button type="button" class="button-secondary" (click)="submitBattle(battle, true)">
+                    Submit draw
+                  </button>
+                  @if (battle.opponentSubmission) {
+                    <button type="button" class="button-secondary" (click)="acceptBattle(battle)">
+                      Accept opponent result
+                    </button>
+                  }
+                </div>
+              }
+              @if (battle.needsRetreat) {
+                <div class="field">
+                  <label [attr.for]="'retreat-' + battle.id">Retreat destination</label>
+                  <select
+                    [id]="'retreat-' + battle.id"
+                    [ngModel]="retreatTargetId(battle.id)"
+                    (ngModelChange)="onRetreatTarget(battle.id, $event)"
+                    [name]="'retreat-' + battle.id"
+                  >
+                    <option value="">Select a territory</option>
+                    @for (target of battle.retreatTargets; track target) {
+                      <option [value]="target">{{ territoryName(target) }}</option>
+                    }
+                  </select>
+                </div>
+                <button type="button" class="button" (click)="submitRetreat(battle)">Submit retreat</button>
+              }
+            </article>
+          }
+        }
+      </div>
+    }
+
+    @if (canDebug() && isDebugActive() && play(); as play) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('debug')"
+            (click)="toggleSection('debug')"
+          >
+            Debug
+          </button>
+        </h2>
+        @if (isOpen('debug')) {
+          <p>
+            Debug mode is active and recorded in the campaign log. Corrections append new facts; original orders are
+            never overwritten.
+          </p>
+          @for (force of play.forces; track force.id) {
+            <fieldset class="stack">
+              <legend>{{ forceLabel(force) }} · {{ territoryName(force.territoryId) }}</legend>
+              <div class="field">
+                <label [attr.for]="'debug-kind-' + force.id">Action</label>
+                <select
+                  [id]="'debug-kind-' + force.id"
+                  [ngModel]="debugDraftFor(force.id).kind"
+                  (ngModelChange)="onDebugDraftKind(force.id, $event)"
+                  [name]="'debug-kind-' + force.id"
+                >
+                  @for (kind of debugKindsFor(force); track kind) {
+                    <option [value]="kind">{{ kind }}</option>
+                  }
+                </select>
+              </div>
+              @if (debugDraftFor(force.id).kind === 'Move' || debugDraftFor(force.id).kind === 'Split') {
+                <div class="field">
+                  <label [attr.for]="'debug-target-' + force.id">Destination</label>
+                  <select
+                    [id]="'debug-target-' + force.id"
+                    [ngModel]="debugDraftFor(force.id).targetTerritoryId"
+                    (ngModelChange)="onDebugDraftTarget(force.id, $event)"
+                    [name]="'debug-target-' + force.id"
+                  >
+                    <option value="">Select a territory</option>
+                    @for (target of force.moveTargets; track target) {
+                      <option [value]="target">{{ territoryName(target) }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              @if (debugDraftFor(force.id).kind === 'Build') {
+                <div class="field">
+                  <label [attr.for]="'debug-structure-' + force.id">Structure</label>
+                  <select
+                    [id]="'debug-structure-' + force.id"
+                    [ngModel]="debugDraftFor(force.id).structureTypeId"
+                    (ngModelChange)="onDebugDraftStructure(force.id, $event)"
+                    [name]="'debug-structure-' + force.id"
+                  >
+                    <option value="">Select a structure</option>
+                    @for (type of play.structureTypes; track type.id) {
+                      <option [value]="type.id">{{ type.name }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              <button type="button" class="button" (click)="applyDebugCorrection(force)">
+                {{ play.currentPhaseKind === 'Action' ? 'Apply correction' : 'Apply and re-resolve' }}
+              </button>
+            </fieldset>
+          }
+          @if (play.battles.length > 0) {
+            <h3>Battle results</h3>
+            @for (battle of play.battles; track battle.id) {
+              @if (battle.status === 'Disputed' || battle.status === 'AwaitingResults') {
+                <article class="stack">
+                  <h4>{{ territoryName(battle.territoryId) }} · {{ battle.status }}</h4>
+                  <div class="field">
+                    <label [attr.for]="'debug-winner-' + battle.id">Winner</label>
+                    <select
+                      [id]="'debug-winner-' + battle.id"
+                      [ngModel]="battleWinnerId(battle.id)"
+                      (ngModelChange)="onBattleWinner(battle.id, $event)"
+                      [name]="'debug-winner-' + battle.id"
+                    >
+                      <option value="">Select a winner</option>
+                      @for (forceId of battle.participantForceIds; track forceId) {
+                        <option [value]="forceId">{{ forceLabelById(forceId) }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="choice-row">
+                    <button type="button" class="button" (click)="resolveBattle(battle, false)">Override result</button>
+                    <button type="button" class="button-secondary" (click)="resolveBattle(battle, true)">
+                      Confirm draw
+                    </button>
+                  </div>
+                </article>
+              }
+            }
+          }
+        }
+      </div>
+    }
+
+    @if (campaign.canManage && play(); as play) {
+      <form class="panel stack" (ngSubmit)="extendSchedule()">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('schedule')"
+            (click)="toggleSection('schedule')"
+          >
+            Extend schedule
+          </button>
+        </h2>
+        @if (isOpen('schedule')) {
+          <p class="muted">
+            Round count cannot drop below the current round. Remaining windows can only be lengthened.
+          </p>
+          <div class="field">
+            <label for="round-count">Rounds</label>
+            <input
+              id="round-count"
+              type="number"
+              [min]="play.minRoundCount"
+              max="52"
+              [ngModel]="roundCount()"
+              (ngModelChange)="roundCount.set(asNumber($event))"
+              name="roundCount"
+            />
+          </div>
+          @if (play.remainingWindows.length > 0) {
+            <div class="field">
+              <label for="extend-window">Add time to</label>
+              <select
+                id="extend-window"
+                [ngModel]="extensionWindowId()"
+                (ngModelChange)="extensionWindowId.set($event)"
+                name="window"
+              >
+                @for (window of play.remainingWindows; track window.id) {
+                  <option [value]="window.id">Round {{ window.roundNumber }} · {{ window.label }}</option>
+                }
+              </select>
+            </div>
+            <div class="field">
+              <label for="extend-amount">Additional duration</label>
+              <input
+                id="extend-amount"
+                type="number"
+                min="1"
+                [ngModel]="extensionAmount()"
+                (ngModelChange)="extensionAmount.set(asNumber($event))"
+                name="amount"
+              />
+            </div>
+            <div class="field">
+              <label for="extend-unit">Unit</label>
+              <select
+                id="extend-unit"
+                [ngModel]="extensionUnit()"
+                (ngModelChange)="extensionUnit.set($event)"
+                name="unit"
+              >
+                @for (unit of durationUnits; track unit) {
+                  <option [value]="unit">{{ unit }}</option>
+                }
+              </select>
+            </div>
+          }
+          <button type="submit" class="button">Save schedule</button>
+        }
+      </form>
+    }
+
+    <div class="panel stack">
+      <h2>
+        <button
+          type="button"
+          class="section-toggle"
+          [attr.aria-expanded]="isOpen('details')"
+          (click)="toggleSection('details')"
+        >
+          Campaign details
+        </button>
+      </h2>
+      @if (isOpen('details')) {
+        @if (campaign.description) {
+          <p>{{ campaign.description }}</p>
+        }
+        @if (locationText(campaign); as location) {
+          <p>Location: {{ location }}</p>
+        }
+        <p>Players: {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} occupied</p>
+        <p>{{ campaign.isPrivate ? 'Private campaign' : 'Public campaign' }}</p>
+        <p>
+          Creator role:
+          {{ campaign.creatorIsParticipant ? 'Manager and participant' : 'Manager only' }}
+        </p>
+        <p>Your role: {{ roleLabel(campaign) }}</p>
+        <p>Start: {{ campaign.startsUtc | instantDate: timeZoneId() }}</p>
+        <p>End: {{ campaign.endsUtc | instantDate: timeZoneId() }}</p>
+        <p>Rounds: {{ campaign.roundCount }} · each {{ roundLengthText(campaign) }}</p>
+        <p class="muted">Schedule time zone: {{ campaign.timeZoneId }}</p>
+        <p class="muted">Created {{ campaign.createdUtc | instantDate: timeZoneId() }}</p>
+        <p class="muted">Last edited {{ campaign.updatedUtc | instantDate: timeZoneId() }}</p>
+      }
+    </div>
+
+    <div class="panel stack">
+      <h2>
+        <button
+          type="button"
+          class="section-toggle"
+          [attr.aria-expanded]="isOpen('round')"
+          (click)="toggleSection('round')"
+        >
+          Round structure
+        </button>
+      </h2>
+      @if (isOpen('round')) {
+        <ol class="plain-list">
+          @for (phase of campaign.phases; track $index; let index = $index) {
+            <li>{{ phaseText(campaign, index) }}</li>
+          }
+        </ol>
+      }
+    </div>
+
+    <div class="panel stack">
+      <h2>
+        <button
+          type="button"
+          class="section-toggle"
+          [attr.aria-expanded]="isOpen('factions')"
+          (click)="toggleSection('factions')"
+        >
+          Factions
+        </button>
+      </h2>
+      @if (isOpen('factions')) {
+        <ul class="plain-list">
+          @for (faction of campaign.factions; track faction.id) {
+            <li>
+              <strong>{{ faction.name }}</strong>
+              <span class="faction-swatch" [style.background]="faction.color" aria-hidden="true"></span>
+              @if (faction.requiresSubfaction) {
+                <span class="muted"> · Subfaction required</span>
+              }
+              @if (faction.allyGroupName) {
+                <span class="muted"> · Ally group: {{ faction.allyGroupName }}</span>
+              }
+              @if (faction.subfactions.length > 0) {
+                <p class="muted">Subfactions: {{ faction.subfactions.join(', ') }}</p>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </div>
+
+    @if (campaign.allyGroups.length > 0) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('allies')"
+            (click)="toggleSection('allies')"
+          >
+            Ally groups
+          </button>
+        </h2>
+        @if (isOpen('allies')) {
+          <ul class="plain-list">
+            @for (group of campaign.allyGroups; track group.id) {
+              <li>{{ group.name }}</li>
+            }
+          </ul>
+        }
+      </div>
+    }
+
+    @if (campaign.links.length > 0) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('links')"
+            (click)="toggleSection('links')"
+          >
+            Links
+          </button>
+        </h2>
+        @if (isOpen('links')) {
+          <ul class="plain-list">
+            @for (link of campaign.links; track link.id) {
+              <li>
+                <a [href]="link.url" rel="noopener noreferrer" target="_blank">{{ link.label }}</a>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    }
+
+    @if (campaign.canManage) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('delete')"
+            (click)="toggleSection('delete')"
+          >
+            Delete campaign
+          </button>
+        </h2>
+        @if (isOpen('delete')) {
+          <div class="actions">
+            <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
+          </div>
         }
       </div>
     }
@@ -400,9 +821,13 @@
       </div>
     }
   } @else {
-    <div class="page-header">
-      <h1>Campaign</h1>
-      <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+    <div class="setup-toolbar">
+      <div class="page-header">
+        <h1>Campaign</h1>
+      </div>
+      <div class="setup-toolbar-actions">
+        <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+      </div>
     </div>
     @if (error()) {
       <p class="error error-banner" role="alert">{{ error() }}</p>

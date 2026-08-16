@@ -68,7 +68,7 @@ describe('AllCampaignsPage', () => {
     fixture.detectChanges();
     expect(compiled.textContent).toContain('Austin, Texas, United States');
     expect(compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]')?.textContent).toContain(
-      'View',
+      'Open',
     );
     expect([...compiled.querySelectorAll('button')].some((button) => button.textContent.trim() === 'Join')).toBe(true);
     http.verify();

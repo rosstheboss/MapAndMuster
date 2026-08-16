@@ -747,6 +747,112 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public void DetailAllowsFactionChangeWhileScheduled()
+    {
+        var campaign = WithMemberships(
+            StoredCampaignFor(UserId),
+            [new StoredCampaignMembership
+            {
+                UserId = UserId,
+                IsGameMaster = true,
+                IsPlayer = true,
+                FactionId = NorthFactionId,
+            }]);
+
+        var detail = CampaignMapper.ToDetail(campaign, UserId, Now);
+
+        Assert.True(detail.CanChooseFaction);
+        Assert.Equal(NorthFactionId, detail.FactionId);
+    }
+
+    [Fact]
+    public void DetailLocksChosenFactionAfterLaunch()
+    {
+        var campaign = WithCopied(
+            WithMemberships(
+                StoredCampaignFor(UserId),
+                [new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                }]),
+            startsUtc: Now.AddHours(-1),
+            endsUtc: Now.AddDays(40));
+
+        var detail = CampaignMapper.ToDetail(campaign, UserId, Now);
+
+        Assert.False(detail.CanChooseFaction);
+        Assert.Equal(NorthFactionId, detail.FactionId);
+    }
+
+    [Fact]
+    public async Task PlayerCanChangeFactionBeforeTheCampaignStarts()
+    {
+        var campaign = WithMemberships(
+            StoredCampaignFor(UserId),
+            [new StoredCampaignMembership
+            {
+                UserId = UserId,
+                IsGameMaster = true,
+                IsPlayer = true,
+                FactionId = NorthFactionId,
+            }]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new ChooseFactionHandler(store, new FakeClock(), new FakeAccounts());
+
+        var result = await handler.HandleAsync(
+            new ChooseFactionCommand
+            {
+                UserId = UserId,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+                FactionId = SouthFactionId,
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Equal(SouthFactionId, store.Updated!.Memberships.Single().FactionId);
+        Assert.Equal(SouthFactionId, result.Value.FactionId);
+        Assert.True(result.Value.CanChooseFaction);
+    }
+
+    [Fact]
+    public async Task PlayerCannotChangeFactionAfterTheCampaignStarts()
+    {
+        var campaign = WithCopied(
+            WithMemberships(
+                StoredCampaignFor(UserId),
+                [new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                }]),
+            startsUtc: Now.AddHours(-1),
+            endsUtc: Now.AddDays(40));
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new ChooseFactionHandler(store, new FakeClock(), new FakeAccounts());
+
+        var result = await handler.HandleAsync(
+            new ChooseFactionCommand
+            {
+                UserId = UserId,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+                FactionId = SouthFactionId,
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("faction.already_chosen", result.ErrorCode);
+        Assert.Null(store.Updated);
+    }
+
+    [Fact]
     public async Task ListReturnsOnlyMappedViewerFields()
     {
         var store = new FakeCampaignStore();

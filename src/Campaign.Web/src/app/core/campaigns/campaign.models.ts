@@ -240,6 +240,9 @@ export interface CampaignPlayDetail {
   name: string;
   revision: number;
   canManage: boolean;
+  canDebug: boolean;
+  isDebugActive: boolean;
+  debugActorUserId: string | null;
   isParticipant: boolean;
   canChat: boolean;
   mentionableMembers: CampaignLogMember[];
@@ -263,6 +266,7 @@ export interface CampaignPlayDetail {
   forces: PlayForce[];
   myDrafts: PlayDraft[];
   orders: PlayOrder[];
+  debugDrafts: PlayDraft[];
   commitments: PlayCommitment[];
   battles: PlayBattle[];
   log: PlayLogEntry[];

@@ -207,14 +207,15 @@ public static class CampaignPlayRules
         IReadOnlySet<Guid>? knownStructureTypeIds,
         DateTimeOffset utcNow,
         [NotNullWhen(true)] out CampaignPlayState? next,
-        [NotNullWhen(false)] out DomainError? error)
+        [NotNullWhen(false)] out DomainError? error,
+        bool requireUncommitted = true)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(factionAllyGroups);
         next = null;
         error = null;
-        if (!TryOpenAction(state, userId, forceId, utcNow, requireUncommitted: true, out var window, out var force, out error))
+        if (!TryOpenAction(state, userId, forceId, utcNow, requireUncommitted, out var window, out var force, out error))
         {
             return false;
         }
@@ -494,9 +495,11 @@ public static class CampaignPlayRules
 
     /// <summary>
     /// Records a manager's authoritative battle result without erasing prior submissions.
+    /// Requires an active debug session owned by <paramref name="actorUserId"/>.
     /// </summary>
     public static bool TryResolveBattle(
         CampaignPlayState state,
+        Guid actorUserId,
         Guid battleId,
         Guid? winnerForceId,
         bool isDraw,
@@ -506,6 +509,11 @@ public static class CampaignPlayRules
     {
         ArgumentNullException.ThrowIfNull(state);
         next = null;
+        if (!TryRequireDebugActor(state, actorUserId, out error))
+        {
+            return false;
+        }
+
         var battle = state.Battles.FirstOrDefault(item => item.Id == battleId);
         if (battle is null)
         {
@@ -536,7 +544,7 @@ public static class CampaignPlayRules
         }
 
         var logged = state.With(battles: ReplaceBattle(state.Battles, updated))
-            .AppendLog(BattleEntry(PlayLogKind.BattleGmResolved, updated, utcNow));
+            .AppendLog(BattleEntry(PlayLogKind.BattleGmResolved, updated, utcNow, actorUserId));
         (next, _) = CloseCompletedBattlePhase(logged, MapUnchanged, utcNow);
         return true;
     }
@@ -898,9 +906,11 @@ public static class CampaignPlayRules
             }
         }
 
+        var snapshot = CaptureWindowSnapshot(state, map, window.Id);
         var withOrders = state.With(submissions: submissions);
         var (resolved, resolvedMap) = ActionResolution.Resolve(withOrders, map, window, factionAllyGroups, closeAt);
-        return FinishWindow(resolved, resolvedMap, window, closeAt, due);
+        var snapshots = resolved.Snapshots.Where(item => item.WindowId != window.Id).Append(snapshot).ToArray();
+        return FinishWindow(resolved.With(snapshots: snapshots), resolvedMap, window, closeAt, due);
     }
 
     private static (CampaignPlayState State, PlayMap Map) CloseBattleWindow(
@@ -1173,7 +1183,261 @@ public static class CampaignPlayRules
         return [.. battles.Select(item => item.Id == updated.Id ? updated : item)];
     }
 
-    private static PlayLogEntry BattleEntry(PlayLogKind kind, CampaignBattle battle, DateTimeOffset utcNow)
+    /// <summary>
+    /// Starts a debug session for a manager or administrator. Logged publicly.
+    /// </summary>
+    public static bool TryEnterDebug(
+        CampaignPlayState state,
+        Guid userId,
+        DateTimeOffset utcNow,
+        [NotNullWhen(true)] out CampaignPlayState? next,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        next = null;
+        if (state.Windows.Count == 0)
+        {
+            error = new DomainError("debug.not_started", "Debug is available after the campaign starts.");
+            return false;
+        }
+
+        if (state.DebugActorUserId is { } existing && existing != userId)
+        {
+            error = new DomainError("debug.busy", "Another manager is already in debug mode.");
+            return false;
+        }
+
+        error = null;
+        if (state.DebugActorUserId == userId)
+        {
+            next = state;
+            return true;
+        }
+
+        next = state
+            .With(debugActorUserId: userId, debugStartedUtc: utcNow)
+            .AppendLog(DebugEntry(PlayLogKind.DebugEntered, userId, utcNow));
+        return true;
+    }
+
+    /// <summary>
+    /// Ends the current debug session. Logged publicly so every player is notified.
+    /// </summary>
+    public static bool TryExitDebug(
+        CampaignPlayState state,
+        Guid userId,
+        DateTimeOffset utcNow,
+        [NotNullWhen(true)] out CampaignPlayState? next,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        next = null;
+        if (state.DebugActorUserId is null)
+        {
+            error = new DomainError("debug.inactive", "Debug mode is not active.");
+            return false;
+        }
+
+        error = null;
+        next = state
+            .With(clearDebug: true)
+            .AppendLog(DebugEntry(PlayLogKind.DebugExited, userId, utcNow));
+        return true;
+    }
+
+    /// <summary>
+    /// While in debug, corrects a force's order. Open windows save a staff draft without revealing
+    /// the order. The last resolved action window can be re-resolved while the following phase is open.
+    /// Original submissions are never overwritten.
+    /// </summary>
+    public static bool TryDebugCorrectOrder(
+        CampaignPlayState state,
+        Guid actorUserId,
+        Guid forceId,
+        ActionKind kind,
+        Guid? targetTerritoryId,
+        Guid? structureTypeId,
+        PlayMap map,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlySet<Guid>? knownStructureTypeIds,
+        DateTimeOffset utcNow,
+        [NotNullWhen(true)] out PlayOutcome? outcome,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(factionAllyGroups);
+        outcome = null;
+        if (!TryRequireDebugActor(state, actorUserId, out error))
+        {
+            return false;
+        }
+
+        var force = state.Forces.FirstOrDefault(item => item.Id == forceId);
+        if (force is null)
+        {
+            error = new DomainError("order.force.invalid", "That force was not found.");
+            return false;
+        }
+
+        var current = state.CurrentWindow();
+        if (current is { Kind: RoundPhaseKind.Action, Status: PhaseWindowStatus.Open })
+        {
+            if (!TrySaveDraft(
+                state,
+                force.ControllerUserId,
+                forceId,
+                kind,
+                targetTerritoryId,
+                structureTypeId,
+                map,
+                factionAllyGroups,
+                knownStructureTypeIds,
+                utcNow,
+                out var drafted,
+                out error,
+                requireUncommitted: false))
+            {
+                return false;
+            }
+
+            var logged = drafted.AppendLog(DebugEntry(
+                PlayLogKind.DebugOrderCorrected,
+                actorUserId,
+                utcNow,
+                current.Id,
+                force.Id,
+                force.TerritoryId,
+                targetTerritoryId,
+                actionKind: null));
+            outcome = new PlayOutcome(logged, map, default, 0, preserveSchedule: true) { PreserveMap = true };
+            return true;
+        }
+
+        var lastAction = state.Windows.LastOrDefault(item =>
+            item.Kind == RoundPhaseKind.Action && item.Status == PhaseWindowStatus.Resolved);
+        if (lastAction is null)
+        {
+            error = new DomainError("debug.no_action", "There is no resolved action window to correct.");
+            return false;
+        }
+
+        var windows = state.Windows.ToList();
+        var lastIndex = windows.FindIndex(item => item.Id == lastAction.Id);
+        if (current is null
+            || lastIndex < 0
+            || lastIndex + 1 >= windows.Count
+            || current.Id != windows[lastIndex + 1].Id
+            || current.Status != PhaseWindowStatus.Open)
+        {
+            error = new DomainError(
+                "debug.window.locked",
+                "The previous action can only be re-resolved while the following phase is still open.");
+            return false;
+        }
+
+        var snapshot = state.Snapshots.LastOrDefault(item => item.WindowId == lastAction.Id);
+        if (snapshot is null)
+        {
+            error = new DomainError("debug.snapshot.missing", "That action window cannot be re-resolved.");
+            return false;
+        }
+
+        if (kind == ActionKind.Battle || kind == ActionKind.Retreat)
+        {
+            error = new DomainError("order.kind.invalid", "Choose a player-submittable action.", "kind");
+            return false;
+        }
+
+        var restoredMap = RestoreMap(map, snapshot);
+        var removedBattleIds = state.Battles
+            .Where(item => item.SourceWindowId == lastAction.Id)
+            .Select(item => item.Id)
+            .ToHashSet();
+        var restored = state.With(
+            forces: snapshot.Forces,
+            structures: snapshot.Structures,
+            brokenAllyFactionIds: snapshot.BrokenAllyFactionIds,
+            battles: [.. state.Battles.Where(item => item.SourceWindowId != lastAction.Id)],
+            battleSubmissions: [.. state.BattleSubmissions.Where(item => !removedBattleIds.Contains(item.BattleId))],
+            retreats: [.. state.Retreats.Where(item => !removedBattleIds.Contains(item.BattleId))]);
+        var snapshotForce = restored.Forces.FirstOrDefault(item => item.Id == forceId);
+        if (snapshotForce is null)
+        {
+            error = new DomainError("order.force.invalid", "That force was not found in the restored window.");
+            return false;
+        }
+
+        var validationWindows = restored.Windows
+            .Select(item => item.Id == lastAction.Id
+                ? item.With(status: PhaseWindowStatus.Open)
+                : item.Id == current.Id
+                    ? item.With(status: PhaseWindowStatus.Pending)
+                    : item)
+            .ToArray();
+        if (!TrySaveDraft(
+            restored.With(windows: validationWindows),
+            snapshotForce.ControllerUserId,
+            forceId,
+            kind,
+            targetTerritoryId,
+            structureTypeId,
+            restoredMap,
+            factionAllyGroups,
+            knownStructureTypeIds,
+            lastAction.EndsUtc.AddTicks(-1),
+            out _,
+            out error,
+            requireUncommitted: false))
+        {
+            return false;
+        }
+
+        var submission = new OrderSubmission(
+            Guid.NewGuid(),
+            lastAction.Id,
+            forceId,
+            kind,
+            targetTerritoryId,
+            structureTypeId,
+            OrderSource.StaffCorrection,
+            utcNow,
+            actorUserId);
+        var withOrders = restored
+            .With(submissions: [.. restored.Submissions, submission])
+            .AppendLog(DebugEntry(
+                PlayLogKind.DebugOrderCorrected,
+                actorUserId,
+                utcNow,
+                lastAction.Id,
+                forceId,
+                snapshotForce.TerritoryId,
+                targetTerritoryId,
+                kind));
+        var (resolved, resolvedMap) = ActionResolution.Resolve(
+            withOrders,
+            restoredMap,
+            lastAction,
+            factionAllyGroups,
+            utcNow);
+        var battles = resolved.Battles
+            .Select(item =>
+                item.SourceWindowId == lastAction.Id && item.Status == BattleStatus.Pending
+                    ? item.With(battleWindowId: current.Id, status: BattleStatus.AwaitingResults, assignWindow: true)
+                    : item)
+            .ToArray();
+        var next = resolved
+            .With(battles: battles)
+            .AppendLog(DebugEntry(PlayLogKind.DebugActionReresolved, actorUserId, utcNow, lastAction.Id));
+        outcome = new PlayOutcome(next, resolvedMap, LastEnd(next, current.EndsUtc), RoundCountOf(next));
+        return true;
+    }
+
+    private static PlayLogEntry BattleEntry(
+        PlayLogKind kind,
+        CampaignBattle battle,
+        DateTimeOffset utcNow,
+        Guid? actorUserId = null)
     {
         return new PlayLogEntry(
             Guid.NewGuid(),
@@ -1181,7 +1445,7 @@ public static class CampaignPlayRules
             kind,
             battle.BattleWindowId ?? battle.SourceWindowId,
             forceId: battle.WinnerForceId,
-            actorUserId: null,
+            actorUserId,
             battle.TerritoryId,
             targetTerritoryId: null,
             battle.Id,
@@ -1299,6 +1563,93 @@ public static class CampaignPlayRules
     internal static IReadOnlyList<TerritoryStructureState> CaptureStructures(PlayMap map)
     {
         return ActionResolution.CaptureStructures(map);
+    }
+
+    private static bool TryRequireDebugActor(
+        CampaignPlayState state,
+        Guid userId,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        if (state.DebugActorUserId is null)
+        {
+            error = new DomainError("debug.required", "Enter debug mode to correct orders or battle results.");
+            return false;
+        }
+
+        if (state.DebugActorUserId != userId)
+        {
+            error = new DomainError("debug.other_actor", "Another manager is already in debug mode.");
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static PlayLogEntry DebugEntry(
+        PlayLogKind kind,
+        Guid actorUserId,
+        DateTimeOffset utcNow,
+        Guid? windowId = null,
+        Guid? forceId = null,
+        Guid? territoryId = null,
+        Guid? targetTerritoryId = null,
+        ActionKind? actionKind = null)
+    {
+        return new PlayLogEntry(
+            Guid.NewGuid(),
+            utcNow,
+            kind,
+            windowId,
+            forceId,
+            actorUserId,
+            territoryId,
+            targetTerritoryId,
+            battleId: null,
+            actionKind,
+            forceId is { } id ? [id] : []);
+    }
+
+    private static ActionWindowSnapshot CaptureWindowSnapshot(CampaignPlayState state, PlayMap map, Guid windowId)
+    {
+        return new ActionWindowSnapshot(
+            windowId,
+            [.. state.Forces.Select(static force => new CampaignForce(
+                force.Id,
+                force.ControllerUserId,
+                force.FactionId,
+                force.TerritoryId,
+                force.InBattle))],
+            state.Structures,
+            state.BrokenAllyFactionIds,
+            [.. map.Territories.Select(static territory => new TerritorySnapshot(
+                territory.Id,
+                territory.OwnerFactionId,
+                territory.StructureTypeId,
+                territory.StructureName,
+                territory.StructureCondition))]);
+    }
+
+    private static PlayMap RestoreMap(PlayMap map, ActionWindowSnapshot snapshot)
+    {
+        var byId = snapshot.Territories.ToDictionary(static item => item.TerritoryId);
+        var next = map.Territories.Select(territory =>
+        {
+            if (!byId.TryGetValue(territory.Id, out var captured))
+            {
+                return territory;
+            }
+
+            return new PlayTerritory(
+                territory.Id,
+                territory.DisplayNumber,
+                captured.OwnerFactionId,
+                territory.SpawnFactionId,
+                captured.StructureTypeId,
+                captured.StructureName,
+                captured.Condition);
+        }).ToArray();
+        return map.WithTerritories(next);
     }
 }
 

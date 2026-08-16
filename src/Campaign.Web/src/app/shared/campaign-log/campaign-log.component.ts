@@ -24,8 +24,10 @@ export class CampaignLogComponent {
   readonly timeZoneId = input<string | null>(null);
   readonly sending = input(false);
   readonly sendError = input<string | null>(null);
+  readonly expanded = input(true);
 
   readonly send = output<string>();
+  readonly expandedChange = output<boolean>();
 
   protected readonly draft = signal('');
   protected readonly highlight = signal(0);
@@ -86,6 +88,11 @@ export class CampaignLogComponent {
         }
       });
     });
+  }
+
+  protected onToggle(event: Event): void {
+    const details = event.currentTarget as HTMLDetailsElement;
+    this.expandedChange.emit(details.open);
   }
 
   protected formatTimestamp(value: string): string {

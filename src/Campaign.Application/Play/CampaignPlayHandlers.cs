@@ -57,7 +57,8 @@ public sealed class GetCampaignPlayHandler
         }
 
         return OperationResults.Success(
-            await CampaignPlayMapper.ToDetailAsync(persisted.Campaign, userId, _clock.UtcNow, _accounts, cancellationToken)
+            await CampaignPlayMapper.ToDetailAsync(
+                persisted.Campaign, userId, _clock.UtcNow, _accounts, cancellationToken, isAdministrator)
                 .ConfigureAwait(false));
     }
 }
@@ -385,15 +386,16 @@ public sealed class ResolveBattleHandler
             (state, map, campaign, utcNow) =>
             {
                 var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
-                if (membership?.IsGameMaster != true)
+                if (membership?.IsGameMaster != true && !command.IsAdministrator)
                 {
                     return PlayMutation.Fail(new Domain.Common.DomainError(
                         ErrorCodes.CampaignForbidden,
-                        "Only a campaign manager can override battle results."));
+                        "Only a campaign manager or administrator can override battle results."));
                 }
 
                 if (!CampaignPlayRules.TryResolveBattle(
                     state,
+                    command.UserId,
                     command.BattleId,
                     command.WinnerForceId,
                     command.IsDraw,
@@ -560,7 +562,7 @@ public sealed class ChooseFactionHandler
         _accounts = accounts;
     }
 
-    /// <summary>Records the faction choice and seeds a force when the campaign is in progress.</summary>
+    /// <summary>Records or changes the faction choice before launch, and seeds a force when the campaign is in progress.</summary>
     public async Task<OperationResult<CampaignPlayDetail>> HandleAsync(
         ChooseFactionCommand command,
         CancellationToken cancellationToken)
@@ -573,7 +575,7 @@ public sealed class ChooseFactionHandler
             return OperationResults.Failure<CampaignPlayDetail>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
-        if (membership.FactionId is not null)
+        if (membership.FactionId is not null && CampaignLifecycle.HasLaunched(existing, _clock.UtcNow))
         {
             return OperationResults.Failure<CampaignPlayDetail>("faction.already_chosen", "Your faction cannot be changed.");
         }
@@ -669,5 +671,207 @@ public sealed class ChooseFactionHandler
             StructureTypes = existing.StructureTypes,
             PlayState = play,
         };
+    }
+}
+
+/// <summary>
+/// Starts a manager debug session.
+/// </summary>
+public sealed class EnterCampaignDebugHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+
+    /// <summary>Initializes a new handler.</summary>
+    public EnterCampaignDebugHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+    }
+
+    /// <summary>Enters debug mode.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(PlayCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignDebugAccess.MutateDebugAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command,
+            (state, _, utcNow) =>
+            {
+                if (!CampaignPlayRules.TryEnterDebug(state, command.UserId, utcNow, out var next, out var error))
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
+            },
+            cancellationToken);
+    }
+}
+
+/// <summary>
+/// Ends a manager debug session.
+/// </summary>
+public sealed class ExitCampaignDebugHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+
+    /// <summary>Initializes a new handler.</summary>
+    public ExitCampaignDebugHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+    }
+
+    /// <summary>Exits debug mode.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(PlayCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignDebugAccess.MutateDebugAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command,
+            (state, _, utcNow) =>
+            {
+                if (!CampaignPlayRules.TryExitDebug(state, command.UserId, utcNow, out var next, out var error))
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
+            },
+            cancellationToken);
+    }
+}
+
+/// <summary>
+/// Corrects a force order while in debug mode, re-resolving when the prior action window is already closed.
+/// </summary>
+public sealed class DebugCorrectOrderHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+
+    /// <summary>Initializes a new handler.</summary>
+    public DebugCorrectOrderHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+    }
+
+    /// <summary>Applies a debug order correction.</summary>
+    public async Task<OperationResult<CampaignPlayDetail>> HandleAsync(
+        SaveOrderDraftCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (!Enum.TryParse<ActionKind>(command.Kind, ignoreCase: true, out var kind) || !Enum.IsDefined(kind))
+        {
+            return OperationResults.Failure<CampaignPlayDetail>("order.kind.invalid", "Choose a valid action.");
+        }
+
+        return await CampaignDebugAccess.MutateDebugAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            new PlayCommand
+            {
+                UserId = command.UserId,
+                IsAdministrator = command.IsAdministrator,
+                CampaignId = command.CampaignId,
+                ExpectedRevision = command.ExpectedRevision,
+            },
+            (state, map, utcNow, campaign) =>
+            {
+                if (!CampaignPlayRules.TryDebugCorrectOrder(
+                    state,
+                    command.UserId,
+                    command.ForceId,
+                    kind,
+                    command.TargetTerritoryId,
+                    command.StructureTypeId,
+                    map,
+                    CampaignPlayPipeline.AllyGroups(campaign),
+                    campaign.StructureTypes.Select(static type => type.Id).ToHashSet(),
+                    utcNow,
+                    out var outcome,
+                    out var error))
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.FromOutcome(outcome!);
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+}
+
+internal static class CampaignDebugAccess
+{
+    public static Task<OperationResult<CampaignPlayDetail>> MutateDebugAsync(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        PlayCommand command,
+        Func<CampaignPlayState, PlayMap, DateTimeOffset, PlayMutation> mutate,
+        CancellationToken cancellationToken)
+    {
+        return CampaignDebugAccess.MutateDebugAsync(
+            campaigns,
+            clock,
+            accounts,
+            command,
+            (state, map, utcNow, _) => mutate(state, map, utcNow),
+            cancellationToken);
+    }
+
+    public static Task<OperationResult<CampaignPlayDetail>> MutateDebugAsync(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        PlayCommand command,
+        Func<CampaignPlayState, PlayMap, DateTimeOffset, StoredCampaign, PlayMutation> mutate,
+        CancellationToken cancellationToken)
+    {
+        return CampaignPlayPipeline.MutateAsync(
+            campaigns,
+            clock,
+            accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, map, campaign, utcNow) =>
+            {
+                var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
+                if (membership?.IsGameMaster != true && !command.IsAdministrator)
+                {
+                    return PlayMutation.Fail(new Domain.Common.DomainError(
+                        ErrorCodes.CampaignForbidden,
+                        "Only a campaign manager or administrator can use debug mode."));
+                }
+
+                return mutate(state, map, utcNow, campaign);
+            },
+            cancellationToken);
     }
 }

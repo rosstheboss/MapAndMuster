@@ -410,9 +410,25 @@ test('players can read and chat in the campaign log', async ({ page }) => {
         remainingWindows: [],
         factions: campaign.factions,
         structureTypes: [],
-        forces: [],
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: profile.id,
+            controllerUsername: 'ada',
+            factionId: 'north',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: false,
+            moveTargets: [],
+            availableActions: ['Hold', 'Move'],
+          },
+        ],
         myDrafts: [],
         orders: [],
+        debugDrafts: [],
+        canDebug: true,
+        isDebugActive: false,
+        debugActorUserId: null,
         commitments: [],
         battles: [],
         log: campaign.log,
@@ -473,8 +489,9 @@ test('players can read and chat in the campaign log', async ({ page }) => {
   await expect(page.getByText('Campaign:')).toBeVisible();
   await expect(page.getByText('North held in Coast.')).toBeVisible();
   await expect(page.getByText('Phase ends in')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Play' })).toBeVisible();
-  await expect(page.getByText('Commit orders')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Expand All' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Commit orders' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Play' })).toHaveCount(0);
   await page.getByLabel('Message').fill('Hey, everybody! This is a message to all of you.');
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.getByText('ada:')).toBeVisible();

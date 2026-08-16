@@ -61,10 +61,8 @@
                     }
                   }
                   <div class="choice-row">
-                    @if (campaign.canPlay) {
-                      <a class="button" [routerLink]="['/campaigns', campaign.id, 'play']">Play</a>
-                    } @else if (campaign.canView) {
-                      <a class="button" [routerLink]="['/campaigns', campaign.id]">View</a>
+                    @if (campaign.canView || campaign.canPlay) {
+                      <a class="button" [routerLink]="['/campaigns', campaign.id]">Open</a>
                     }
                     @if (campaign.canManage && campaign.status === 'Scheduled') {
                       <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit</a>

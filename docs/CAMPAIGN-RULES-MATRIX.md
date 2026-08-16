@@ -56,12 +56,13 @@ for the campaign rules.
 | Relic discovery/transfer             | Calculate, Audit              | Reveal after applicable action; resolve contested/allied discovery and battle transfer; keep public after reveal.              |
 | Relic choices/effects                | Configure, Secret, TBD        | Provide a versioned choice/effect mechanism after rules are supplied.                                                          |
 | Force statuses                       | Calculate, Display            | Track one status per force; apply transition/recovery rules and show tabletop effects.                                         |
+| Faction choice                       | Configure, Enforce            | Players pick a faction (and required subfaction) before they can play; they may change it until the campaign starts, then it is locked. |
 | Faction alignments                   | Configure                     | Model alliance groups and unaligned factions per campaign.                                                                     |
 | Faction map rules                    | Configure, Enforce/Calculate  | Structured modifiers may affect movement, supply, spawn, relic sensing, status, pillage, or retreat.                           |
 | Faction tabletop rules               | Configure, Display            | Show assigned rules with mission/battle; do not simulate tabletop dice/unit effects.                                           |
 | Rule/version changes                 | Configure, Audit              | Record source/version/effective round; activate approved changes at a round boundary.                                          |
-| GM order inspection                  | Secret, Audit                 | Permit authorized inspection, record it, and notify affected player in-app/email.                                              |
-| GM corrections                       | Enforce, Audit                | Append correction and new revision; notify everyone affected; reopen dependent current orders when required.                   |
+| GM order inspection                  | Secret, Audit                 | Permit inspection only inside a logged debug session; unrevealed orders stay out of the public log. Notify affected players when debug ends. |
+| GM corrections                       | Enforce, Audit                | Enter debug (logged), append staff corrections without overwriting originals, re-resolve the last action only while the following phase is open, then exit debug (logged, notifying players). |
 | Multiple GMs                         | Enforce, Audit                | Support concurrent campaign memberships and optimistic concurrency.                                                            |
 | Neutral intervention                 | Configure, Audit              | GM controls a neutral force; record purpose and scoring/ownership permissions.                                                 |
 

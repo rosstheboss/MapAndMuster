@@ -3,7 +3,7 @@ using Campaign.Application.Play;
 namespace Campaign.Api.Contracts;
 
 /// <summary>
-/// Play-page payload. Other players' drafts are omitted.
+/// Campaign-page play payload. Other players' drafts are omitted.
 /// </summary>
 public sealed class CampaignPlayResponse
 {
@@ -18,6 +18,15 @@ public sealed class CampaignPlayResponse
 
     /// <summary>Gets whether the viewer can manage.</summary>
     public required bool CanManage { get; init; }
+
+    /// <summary>Gets whether the viewer may enter campaign debug mode.</summary>
+    public required bool CanDebug { get; init; }
+
+    /// <summary>Gets whether a debug session is active.</summary>
+    public required bool IsDebugActive { get; init; }
+
+    /// <summary>Gets the user currently in debug mode, if any.</summary>
+    public Guid? DebugActorUserId { get; init; }
 
     /// <summary>Gets whether the viewer is a player.</summary>
     public required bool IsParticipant { get; init; }
@@ -87,6 +96,9 @@ public sealed class CampaignPlayResponse
 
     /// <summary>Gets revealed or own submitted orders.</summary>
     public required IReadOnlyList<PlayOrderResponse> Orders { get; init; }
+
+    /// <summary>Gets every force's draft while the viewer is in debug mode.</summary>
+    public required IReadOnlyList<PlayDraftResponse> DebugDrafts { get; init; }
 
     /// <summary>Gets commitment flags without secret orders.</summary>
     public required IReadOnlyList<PlayCommitmentResponse> Commitments { get; init; }
@@ -199,7 +211,7 @@ public sealed class PlayCommitmentResponse
     public required bool IsCommitted { get; init; }
 }
 
-/// <summary>A battle on the play page.</summary>
+/// <summary>A battle on the campaign page.</summary>
 public sealed class PlayBattleResponse
 {
     /// <summary>Gets the battle identifier.</summary>
@@ -401,6 +413,9 @@ public static class PlayResponses
             Name = detail.Name,
             Revision = detail.Revision,
             CanManage = detail.CanManage,
+            CanDebug = detail.CanDebug,
+            IsDebugActive = detail.IsDebugActive,
+            DebugActorUserId = detail.DebugActorUserId,
             IsParticipant = detail.IsParticipant,
             CanChat = detail.CanChat,
             MentionableMembers =
@@ -506,6 +521,16 @@ public static class PlayResponses
                     Kind = order.Kind,
                     TargetTerritoryId = order.TargetTerritoryId,
                     IsRevealed = order.IsRevealed,
+                }),
+            ],
+            DebugDrafts =
+            [
+                .. detail.DebugDrafts.Select(static draft => new PlayDraftResponse
+                {
+                    ForceId = draft.ForceId,
+                    Kind = draft.Kind,
+                    TargetTerritoryId = draft.TargetTerritoryId,
+                    StructureTypeId = draft.StructureTypeId,
                 }),
             ],
             Commitments =

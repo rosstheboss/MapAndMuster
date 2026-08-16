@@ -82,6 +82,9 @@ public enum OrderSource
 
     /// <summary>The deadline created Hold because no draft existed.</summary>
     DeadlineHold = 2,
+
+    /// <summary>A manager in debug mode appended a corrected order without erasing the original.</summary>
+    StaffCorrection = 3,
 }
 
 /// <summary>
@@ -136,6 +139,18 @@ public enum PlayLogKind
 
     /// <summary>A campaign member posted a public chat message.</summary>
     PlayerChat = 15,
+
+    /// <summary>A manager or administrator entered debug mode.</summary>
+    DebugEntered = 16,
+
+    /// <summary>A manager or administrator left debug mode.</summary>
+    DebugExited = 17,
+
+    /// <summary>A manager in debug mode corrected a force's order.</summary>
+    DebugOrderCorrected = 18,
+
+    /// <summary>A manager in debug mode re-resolved a prior action window.</summary>
+    DebugActionReresolved = 19,
 }
 
 /// <summary>

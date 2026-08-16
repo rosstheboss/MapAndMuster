@@ -181,7 +181,7 @@ public sealed class ChooseFactionCommand
 }
 
 /// <summary>
-/// Play-page payload. Secret drafts belonging to other players are omitted.
+/// Campaign-page play payload. Secret drafts belonging to other players are omitted.
 /// </summary>
 public sealed class CampaignPlayDetail
 {
@@ -196,6 +196,15 @@ public sealed class CampaignPlayDetail
 
     /// <summary>Gets whether the viewer can manage.</summary>
     public required bool CanManage { get; init; }
+
+    /// <summary>Gets whether the viewer may enter campaign debug mode.</summary>
+    public required bool CanDebug { get; init; }
+
+    /// <summary>Gets whether a debug session is active.</summary>
+    public required bool IsDebugActive { get; init; }
+
+    /// <summary>Gets the user currently in debug mode, if any.</summary>
+    public Guid? DebugActorUserId { get; init; }
 
     /// <summary>Gets whether the viewer is a player.</summary>
     public required bool IsParticipant { get; init; }
@@ -265,6 +274,9 @@ public sealed class CampaignPlayDetail
 
     /// <summary>Gets revealed or own submitted orders.</summary>
     public required IReadOnlyList<PlayOrderDetail> Orders { get; init; }
+
+    /// <summary>Gets every force's draft while the viewer is in debug mode. Empty otherwise.</summary>
+    public required IReadOnlyList<PlayDraftDetail> DebugDrafts { get; init; }
 
     /// <summary>Gets other players' commitment flags without their orders.</summary>
     public required IReadOnlyList<PlayCommitmentDetail> Commitments { get; init; }
@@ -377,7 +389,7 @@ public sealed class PlayCommitmentDetail
     public required bool IsCommitted { get; init; }
 }
 
-/// <summary>A battle on the play page.</summary>
+/// <summary>A battle on the campaign page.</summary>
 public sealed class PlayBattleDetail
 {
     /// <summary>Gets the battle identifier.</summary>

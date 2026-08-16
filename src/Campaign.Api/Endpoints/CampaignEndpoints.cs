@@ -242,6 +242,30 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/debug/enter", EnterDebugAsync)
+            .WithName("EnterCampaignDebug")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/debug/exit", ExitDebugAsync)
+            .WithName("ExitCampaignDebug")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/debug/correct-order", DebugCorrectOrderAsync)
+            .WithName("DebugCorrectCampaignOrder")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
     }
 
     private static async Task<IResult> ListAsync(
@@ -1224,6 +1248,58 @@ public static class CampaignEndpoints
                             DurationUnit = item.DurationUnit,
                         }),
                     ],
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> EnterDebugAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        EnterCampaignDebugHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> ExitDebugAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        ExitCampaignDebugHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> DebugCorrectOrderAsync(
+        Guid campaignId,
+        SaveOrderDraftRequest request,
+        ClaimsPrincipal principal,
+        DebugCorrectOrderHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SaveOrderDraftCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    ForceId = request.ForceId,
+                    Kind = request.Kind,
+                    TargetTerritoryId = request.TargetTerritoryId,
+                    StructureTypeId = request.StructureTypeId,
                 },
                 cancellationToken)
             .ConfigureAwait(false);

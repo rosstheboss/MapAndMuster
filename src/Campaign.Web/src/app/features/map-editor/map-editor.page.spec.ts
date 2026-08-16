@@ -125,12 +125,13 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Save Map');
     expect(compiled.textContent).toContain('Download map');
     expect(compiled.textContent).toContain('100%');
-    expect(compiled.textContent).toContain('Fit to panel');
-    expect(compiled.textContent).toContain('Zoom in');
-    expect(compiled.textContent).toContain('800%');
+    expect(compiled.textContent).toContain('Fit');
+    expect(compiled.textContent).not.toContain('Fit to panel');
+    expect(compiled.querySelector('button[aria-label="Zoom in"]')?.textContent).toContain('+');
+    expect(compiled.querySelector('.map-viewport')?.getAttribute('aria-label')).toContain('800');
     const zoomInput = compiled.querySelector<HTMLInputElement>('input[aria-label="Zoom percent"]');
     expect(zoomInput?.value).toBe('100');
-    const zoomIn = [...compiled.querySelectorAll('button')].find((button) => button.textContent.includes('Zoom in'));
+    const zoomIn = compiled.querySelector<HTMLButtonElement>('button[aria-label="Zoom in"]');
     zoomIn?.click();
     fixture.detectChanges();
     expect(compiled.querySelector<HTMLInputElement>('input[aria-label="Zoom percent"]')?.value).toBe('110');
@@ -138,7 +139,7 @@ describe('MapEditorPage', () => {
     hundred?.click();
     fixture.detectChanges();
     expect(compiled.querySelector<HTMLInputElement>('input[aria-label="Zoom percent"]')?.value).toBe('100');
-    const fit = [...compiled.querySelectorAll('button')].find((button) => button.textContent.includes('Fit to panel'));
+    const fit = [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Fit');
     expect(fit).toBeTruthy();
     fit?.click();
     fixture.detectChanges();
@@ -494,7 +495,7 @@ describe('MapEditorPage', () => {
     expect(save?.disabled).toBe(true);
     expect(discard?.disabled).toBe(true);
 
-    const zoomIn = [...compiled.querySelectorAll('button')].find((button) => button.textContent.includes('Zoom in'));
+    const zoomIn = compiled.querySelector<HTMLButtonElement>('button[aria-label="Zoom in"]');
     zoomIn?.click();
     fixture.detectChanges();
     expect(compiled.querySelector<HTMLInputElement>('input[aria-label="Zoom percent"]')?.value).toBe('110');

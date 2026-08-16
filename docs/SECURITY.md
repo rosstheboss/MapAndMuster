@@ -36,7 +36,9 @@ separate response models for public, participant, and staff views.
 - Use named permission policies. Do not assume a GM is neutral or is not also a player.
 - Every command revalidates membership, effective actor, entity ownership, campaign state,
   revision, and deadline.
-- Staff inspection of unrevealed data is purposeful, audited, and notified.
+- Staff inspection of unrevealed data is purposeful, audited, and notified. Campaign debug mode
+  is that inspection path: entering, each correction, and exiting are logged. Unrevealed order
+  kinds are omitted from public debug-correction summaries while an action window is still open.
 
 ## Auditing
 

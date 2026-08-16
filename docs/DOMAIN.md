@@ -68,13 +68,14 @@ Battle N when a round has more than one battle), and a countdown until the curre
 
 A signed-in user may join an upcoming campaign that still has an open player slot. Public
 campaigns join without a password; private campaigns require the join password. Members who are
-not managers may leave. Managers edit instead of joining. Players and managers open an
-in-progress campaign with Play. Upcoming and completed campaigns, and viewers who are not
-playing, use View. During an in-progress campaign, View is the same live map and public log as
-Play, without order, battle, or schedule controls. The campaign page also includes a collapsible
-public log and member chat for upcoming and completed campaigns. The Play page is the live map,
-order, battle, schedule-extension, and log surface. Your Campaigns also offers Duplicate
-campaign on every listed campaign. Duplication copies the map overlay, factions, missions, ally
+not managers may leave. Managers edit instead of joining. Listings open the campaign page with
+Open. There is one campaign page: a member's role and involvement decide which controls appear.
+Players submit orders and battle results there. Managers also see schedule extension, and
+managers or administrators can enter a logged debug session to correct orders, re-resolve the
+previous action while the following phase is still open, or override battle results. Upcoming
+and completed campaigns use the same page without live order controls. The campaign page includes
+a collapsible public log and member chat for upcoming, in-progress, and completed campaigns.
+Your Campaigns also offers Duplicate campaign on every listed campaign. Duplication copies the map overlay, factions, missions, ally
 groups, links, visibility, location, and schedule template into a new campaign whose start is one
 week after the duplication instant in the campaign time zone. The duplicating user becomes the
 manager of the copy and occupies a player slot only when they were a player on the source.
@@ -93,6 +94,14 @@ with their section. Invalid sections expand automatically when save validation f
 start expanded. Setup keeps Back to campaigns, Expand All, Collapse All, and Save or Create in a
 sticky toolbar. Edit campaign also includes Edit map, which opens the map editor without saving
 the current form.
+
+The campaign page keeps Back to campaigns, Expand All, Collapse All, and (when allowed) Debug,
+Edit campaign, and Edit map in a sticky toolbar. Every panel except the status strip can be
+expanded or collapsed. Status sits above the other panels and shows the current round and phase,
+lifecycle status, remaining phase time, and the phase-end timestamp. The live map, orders,
+battles, and schedule controls appear on this same page according to the viewer's role. The
+campaign page refreshes round, phase, and status when the server clock advances a window; a
+refresh is not required.
 
 ## Campaign schedule and lifecycle
 
@@ -156,10 +165,11 @@ rejoin into one surviving force and therefore one later action. Only users/force
 order participate in the early-close calculation.
 
 Players pick a faction, and a required subfaction when the faction demands one, before they
-receive a starting force. On the campaign View page, every player (including a manager who occupies
+receive a starting force. On the campaign page, every player (including a manager who occupies
 a player slot) must choose that faction before they can play. A participant who has not chosen a
-faction may do so until they have one and cannot submit orders for a round until they do. After a
-faction is chosen it cannot be changed. Each player force starts at that faction's spawn territory
+faction may do so until they have one and cannot submit orders for a round until they do. A player
+may change their chosen faction until the campaign starts. After the campaign has started, a chosen
+faction cannot be changed. Each player force starts at that faction's spawn territory
 when the campaign launches or when they join play later; subfactions use the same spawn.
 
 Orders resolve simultaneously against the window's starting map state. Processing order is
@@ -298,9 +308,10 @@ mode is Random Colors, Color By Terrain, or Manual Colors. Switching to Random C
 Terrain recolors every territory. A new territory, or a terrain change while Color By Terrain is on,
 uses that mode's color. Remove Colors switches to Manual Colors and clears every overlay color.
 
-The map overlay starts fitted to the panel. Zoom is 10% to 800% of the map image's actual pixel size,
-in 10% steps, with a typed percent field, a 100% control, and a Fit to panel control. 100% shows the
-image at its native size and centers it. Fit to panel scales the image to the view and recenters it.
+The map overlay starts fitted to the panel. Map panels are full width in their parent. Zoom
+controls sit across the top of the map in this order: zoom percent field, +, -, Fit, and 100%.
+Zoom is 10% to 800% of the map image's actual pixel size, in 10% steps. 100% shows the
+image at its native size and centers it. Fit scales the image to the view and recenters it.
 Drawing coordinates stay normalized to the full-size image. Snap distance, minimum draw spacing, and
 overlay stroke widths are measured in screen pixels so zooming in lets a manager trace fine coasts and
 province borders. When the zoomed image is larger than the panel, it can be panned
@@ -315,8 +326,9 @@ save, the green banner "Successfully saved changes." is followed by the last-sav
 Unsaved Changes is disabled until there are unsaved overlay edits; it discards those edits and
 restores the last saved graph without resetting zoom or pan.
 
-Edit campaign and the campaign page show a static 200×113 map preview of the current image. It is not
-zoomable or selectable. The campaign page and map editor can download a PNG of the latest saved map
+Edit campaign shows a static 200×113 map preview of the current image. It is not
+zoomable or selectable. The campaign page shows the interactive map at full width, with territory
+details under the map. The campaign page and map editor can download a PNG of the latest saved map
 image with the unselected territory overlay rasterized on top. Adjacency arrows are omitted. If the
 map editor has unsaved edits, downloading asks whether to save first; declining downloads the last
 saved overlay. The same prompt applies to Download SVG data, which downloads the overlay polygons
@@ -376,6 +388,16 @@ Relics cannot return to spawn under the supplied rules.
 
 ## Corrections
 
+A GM or administrator enters campaign debug mode from the campaign page. Entering debug, each
+correction, and exiting debug are public log facts. Original orders, results, and audit events are
+never overwritten. While the current action window is open, a debug correction saves a staff draft
+without revealing the secret action in the log. After that window has resolved, the previous action
+can be re-resolved only while the following phase is still open, by restoring the captured
+pre-resolution snapshot and appending a staff correction. Manager battle-result overrides also
+require the active debug session. Concurrent debug sessions are not allowed; any manager or
+administrator may exit the current session. Downstream invalidation of later rounds remains in
+`docs/DECISIONS-NEEDED.md`.
+
 A GM reopening or correcting a prior state never mutates history in place. It creates a new
 campaign revision, identifies downstream state requiring recomputation/review, and notifies
 affected users in-app and by email. Concurrent corrections must fail safely rather than use
@@ -384,8 +406,7 @@ last-write-wins.
 ## Play log
 
 The campaign page shows a collapsible, scrollable public log at full page width near the top
-for upcoming, in-progress, and completed campaigns. During an in-progress campaign the same log
-also appears on Play. Each entry is formatted as
+for upcoming, in-progress, and completed campaigns. Each entry is formatted as
 `(local-timestamp) originator: text`. Campaign-generated facts use the originator name
 `Campaign`. Member chat uses the author's display name snapshotted when the message was posted.
 The log refreshes while the page is open. Sending chat is not a form save: it does not show the
@@ -394,7 +415,7 @@ saving overlay or the success banner. Failed sends show an error on the log.
 The log records campaign start, manager extensions of remaining phases or rounds, resolved
 actions after an action window closes (including Hold for every force), attempted actions that
 were invalid or conflicted and became Hold, battles created or finalized, manager battle-result
-overrides, player retreats, automatic force rejoins when the same player's forces occupy one
+overrides, debug enter/exit and debug order corrections, player retreats, automatic force rejoins when the same player's forces occupy one
 territory, and automatic substitutions: missing orders become Hold, deadline-submitted drafts,
 missing retreats using the spawn fallback, and battles held open when resolution cannot finish.
 Unresolved secret orders, including drafts and unrevealed commitments, are never written to or

@@ -188,7 +188,7 @@ internal static class CampaignPlayPipeline
         }
 
         return OperationResults.Success(
-            await CampaignPlayMapper.ToDetailAsync(outcome.Campaign, userId, clock.UtcNow, accounts, cancellationToken)
+            await CampaignPlayMapper.ToDetailAsync(outcome.Campaign, userId, clock.UtcNow, accounts, cancellationToken, isAdministrator)
                 .ConfigureAwait(false));
     }
 
