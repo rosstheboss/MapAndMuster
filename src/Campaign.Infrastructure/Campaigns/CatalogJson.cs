@@ -67,6 +67,7 @@ internal static class CatalogJson
             Name = type.Name,
             BuiltinSymbol = type.BuiltinSymbol,
             ImageStorageKey = type.ImageStorageKey,
+            PillagedImageStorageKey = type.PillagedImageStorageKey,
             Missions = [.. type.Missions.Select(ToDocument)],
         };
     }
@@ -102,6 +103,7 @@ internal static class CatalogJson
             Name = type.Name,
             BuiltinSymbol = type.BuiltinSymbol,
             ImageStorageKey = type.ImageStorageKey,
+            PillagedImageStorageKey = type.PillagedImageStorageKey,
             Missions = [.. type.Missions.Select(FromDocument)],
         };
     }
@@ -145,6 +147,8 @@ internal static class CatalogJson
         public string? BuiltinSymbol { get; set; }
 
         public string? ImageStorageKey { get; set; }
+
+        public string? PillagedImageStorageKey { get; set; }
 
         public List<MissionDocument> Missions { get; set; } = [];
     }

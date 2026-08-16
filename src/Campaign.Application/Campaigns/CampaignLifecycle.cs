@@ -55,7 +55,9 @@ internal static class CampaignLifecycle
             conditions.TryGetValue(territory.Id, out var structure);
             var structureTypeId = structure?.StructureTypeId ?? territory.StructureTypeId;
             names.TryGetValue(structureTypeId ?? Guid.Empty, out var structureName);
-            var condition = structure?.Condition ?? StructureCondition.Operational;
+            var condition = structure?.Condition
+                ?? ParseCondition(territory.StructureCondition)
+                ?? StructureCondition.Operational;
             return new PlayTerritory(
                 territory.Id,
                 territory.DisplayNumber,
@@ -97,6 +99,7 @@ internal static class CampaignLifecycle
                 Polygon = territory.Polygon,
                 TerrainTypeId = territory.TerrainTypeId,
                 StructureTypeId = play.StructureTypeId,
+                StructureCondition = play.StructureCondition.ToString(),
                 OverlayColor = territory.OverlayColor,
                 OwnerFactionId = play.OwnerFactionId,
                 SpawnFactionId = territory.SpawnFactionId,
@@ -107,5 +110,17 @@ internal static class CampaignLifecycle
             Territories = territories,
             Adjacencies = graph.Adjacencies,
         };
+    }
+
+    private static StructureCondition? ParseCondition(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return Enum.TryParse<StructureCondition>(value, ignoreCase: true, out var condition) && Enum.IsDefined(condition)
+            ? condition
+            : null;
     }
 }

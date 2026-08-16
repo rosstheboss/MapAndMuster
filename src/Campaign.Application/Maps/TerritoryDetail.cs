@@ -26,6 +26,9 @@ public sealed class TerritoryDetail
     /// <summary>Gets the optional campaign structure type identifier.</summary>
     public Guid? StructureTypeId { get; init; }
 
+    /// <summary>Gets the structure condition name when a structure is present.</summary>
+    public string? StructureCondition { get; init; }
+
     /// <summary>Gets the optional overlay color as #RRGGBB.</summary>
     public string? OverlayColor { get; init; }
 

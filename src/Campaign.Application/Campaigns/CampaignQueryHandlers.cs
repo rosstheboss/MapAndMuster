@@ -1,4 +1,5 @@
 using Campaign.Application.Common;
+using Campaign.Application.Play;
 using Campaign.Application.Ports;
 
 namespace Campaign.Application.Campaigns;
@@ -92,18 +93,22 @@ public sealed class GetCampaignHandler
 {
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
 
     /// <summary>
     /// Initializes a new handler.
     /// </summary>
     /// <param name="campaigns">The campaign store.</param>
     /// <param name="clock">The clock.</param>
-    public GetCampaignHandler(ICampaignStore campaigns, IClock clock)
+    /// <param name="accounts">The user account store.</param>
+    public GetCampaignHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
         _campaigns = campaigns;
         _clock = clock;
+        _accounts = accounts;
     }
 
     /// <summary>
@@ -126,7 +131,15 @@ public sealed class GetCampaignHandler
             return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
-        return OperationResults.Success(CampaignMapper.ToDetail(campaign, userId, _clock.UtcNow));
+        var names = await CampaignPlayMapper.UsernamesAsync(campaign, _accounts, cancellationToken).ConfigureAwait(false);
+        var members = await CampaignPlayMapper.ChatMembersAsync(campaign, _accounts, cancellationToken)
+            .ConfigureAwait(false);
+        return OperationResults.Success(CampaignMapper.ToDetail(
+            campaign,
+            userId,
+            _clock.UtcNow,
+            CampaignPlayMapper.ToLogEntries(campaign, names),
+            members));
     }
 }
 

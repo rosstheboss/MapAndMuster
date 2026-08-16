@@ -24,12 +24,6 @@ internal static class CampaignPlayPipeline
             return PlayLoad.Fail(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
-        var membership = CampaignMapper.MembershipFor(campaign, userId);
-        if (membership is null || (!membership.IsPlayer && !membership.IsGameMaster && !isAdministrator))
-        {
-            return PlayLoad.Fail(ErrorCodes.CampaignForbidden, "Only players and managers can play this campaign.");
-        }
-
         var utcNow = clock.UtcNow;
         if (CampaignLifecycle.Progress(campaign, utcNow).Status == CampaignStatus.Scheduled)
         {
@@ -129,6 +123,14 @@ internal static class CampaignPlayPipeline
             return OperationResults.Failure<CampaignPlayDetail>(
                 loaded.ErrorCode ?? ErrorCodes.CampaignNotFound,
                 loaded.Message ?? "The campaign was not found.");
+        }
+
+        var membership = CampaignMapper.MembershipFor(loaded.Campaign, userId);
+        if (membership is null || (!membership.IsPlayer && !membership.IsGameMaster && !isAdministrator))
+        {
+            return OperationResults.Failure<CampaignPlayDetail>(
+                ErrorCodes.CampaignForbidden,
+                "Only players and managers can play this campaign.");
         }
 
         if (loaded.OriginalRevision != expectedRevision && loaded.Campaign.Revision != expectedRevision)

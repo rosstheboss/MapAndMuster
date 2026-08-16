@@ -4,6 +4,9 @@ namespace Campaign.Domain.Play;
 
 /// <summary>
 /// Resolves one action window simultaneously against the starting map.
+/// Movement and splits apply first, then backstab alliance breaks, then battles from
+/// enemy co-location. Build, Pillage, and Repair apply afterward for forces not in battle.
+/// Competing structure actions on the same territory become Hold.
 /// </summary>
 public static class ActionResolution
 {
@@ -36,7 +39,7 @@ public static class ActionResolution
             resolved[force.Id] = Normalize(state, map, window, force, factionAllyGroups);
         }
 
-        DisallowConflictingBuilds(resolved);
+        DisallowConflictingStructureActions(resolved);
         var log = new List<PlayLogEntry>(state.Log);
         foreach (var force in acting)
         {
@@ -81,7 +84,7 @@ public static class ActionResolution
             AddOccupied(occupied, destination, moved.Id);
         }
 
-        nextForces = Rejoin(nextForces);
+        nextForces = Rejoin(nextForces, window, utcNow, log);
         occupied = [];
         foreach (var force in nextForces)
         {
@@ -153,6 +156,61 @@ public static class ActionResolution
             nextMap);
     }
 
+    /// <summary>
+    /// Player-submittable actions available for a force in an open action window, in documented order:
+    /// Hold, Move, Build, Pillage, Repair, Split, then Backstab.
+    /// </summary>
+    public static IReadOnlyList<ActionKind> EligibleActions(
+        CampaignPlayState state,
+        PlayMap map,
+        CampaignForce force,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        bool catalogHasStructures)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(force);
+        ArgumentNullException.ThrowIfNull(factionAllyGroups);
+        if (force.InBattle)
+        {
+            return [];
+        }
+
+        var kinds = new List<ActionKind> { ActionKind.Hold };
+        var moves = CampaignPlayRules.EligibleMoves(map, force);
+        if (moves.Count > 0)
+        {
+            kinds.Add(ActionKind.Move);
+        }
+
+        if (catalogHasStructures && CanBuildInTerritory(map, force))
+        {
+            kinds.Add(ActionKind.Build);
+        }
+
+        if (IsValidPillage(map, force))
+        {
+            kinds.Add(ActionKind.Pillage);
+        }
+
+        if (IsValidRepair(map, force))
+        {
+            kinds.Add(ActionKind.Repair);
+        }
+
+        if (moves.Any(target => IsValidSplit(state, map, force, target)))
+        {
+            kinds.Add(ActionKind.Split);
+        }
+
+        if (IsValidBackstab(force, factionAllyGroups, state.BrokenAllyFactionIds))
+        {
+            kinds.Add(ActionKind.Backstab);
+        }
+
+        return kinds;
+    }
+
     internal static IReadOnlyList<TerritoryStructureState> CaptureStructures(PlayMap map)
     {
         return
@@ -213,15 +271,20 @@ public static class ActionResolution
             return new ResolvedOrder(force.Id, kind, force.TerritoryId, structureTypeId);
         }
 
+        if (kind is ActionKind.Hold or ActionKind.Pillage or ActionKind.Repair or ActionKind.Backstab)
+        {
+            return new ResolvedOrder(force.Id, kind, force.TerritoryId, structureTypeId);
+        }
+
         return new ResolvedOrder(force.Id, kind, target, structureTypeId);
     }
 
-    private static void DisallowConflictingBuilds(Dictionary<Guid, ResolvedOrder> resolved)
+    private static void DisallowConflictingStructureActions(Dictionary<Guid, ResolvedOrder> resolved)
     {
-        var builds = resolved.Values
-            .Where(static order => order.Kind == ActionKind.Build)
+        var structureActions = resolved.Values
+            .Where(static order => order.Kind is ActionKind.Build or ActionKind.Pillage or ActionKind.Repair)
             .GroupBy(static order => order.TargetTerritoryId);
-        foreach (var group in builds)
+        foreach (var group in structureActions)
         {
             if (group.Count() <= 1)
             {
@@ -282,7 +345,12 @@ public static class ActionResolution
         return territory.StructureTypeId is null || territory.StructureCondition == StructureCondition.Destroyed;
     }
 
-    private static bool IsValidPillage(PlayMap map, CampaignForce force)
+    internal static bool CanBuildInTerritory(PlayMap map, CampaignForce force)
+    {
+        return IsValidBuild(map, force, Guid.NewGuid());
+    }
+
+    internal static bool IsValidPillage(PlayMap map, CampaignForce force)
     {
         var territory = map.Territory(force.TerritoryId);
         if (territory?.StructureTypeId is null || territory.StructureCondition == StructureCondition.Destroyed)
@@ -298,7 +366,7 @@ public static class ActionResolution
         return true;
     }
 
-    private static bool IsValidRepair(PlayMap map, CampaignForce force)
+    internal static bool IsValidRepair(PlayMap map, CampaignForce force)
     {
         var territory = map.Territory(force.TerritoryId);
         return territory is not null
@@ -307,7 +375,7 @@ public static class ActionResolution
             && territory.OwnerFactionId == force.FactionId;
     }
 
-    private static bool IsValidBackstab(
+    internal static bool IsValidBackstab(
         CampaignForce force,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyList<Guid> broken)
@@ -366,12 +434,32 @@ public static class ActionResolution
             || !string.Equals(leftGroup, rightGroup, StringComparison.Ordinal);
     }
 
-    private static List<CampaignForce> Rejoin(List<CampaignForce> forces)
+    private static List<CampaignForce> Rejoin(
+        List<CampaignForce> forces,
+        PhaseWindow window,
+        DateTimeOffset utcNow,
+        List<PlayLogEntry> log)
     {
         var result = new List<CampaignForce>();
         foreach (var group in forces.GroupBy(static force => (force.ControllerUserId, force.TerritoryId)))
         {
-            result.Add(group.OrderBy(static force => force.Id).First());
+            var members = group.OrderBy(static force => force.Id).ToArray();
+            result.Add(members[0]);
+            if (members.Length > 1)
+            {
+                log.Add(new PlayLogEntry(
+                    Guid.NewGuid(),
+                    utcNow,
+                    PlayLogKind.ForcesRejoined,
+                    window.Id,
+                    members[0].Id,
+                    members[0].ControllerUserId,
+                    members[0].TerritoryId,
+                    targetTerritoryId: null,
+                    battleId: null,
+                    actionKind: null,
+                    [.. members.Select(static force => force.Id)]));
+            }
         }
 
         return [.. result.OrderBy(static force => force.Id)];

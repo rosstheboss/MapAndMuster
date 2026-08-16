@@ -34,4 +34,7 @@ public sealed class TerritoryInput
 
     /// <summary>Gets the spawn-location faction, when this territory is a spawn.</summary>
     public Guid? SpawnFactionId { get; init; }
+
+    /// <summary>Gets the structure condition name when a structure is present.</summary>
+    public string? StructureCondition { get; init; }
 }

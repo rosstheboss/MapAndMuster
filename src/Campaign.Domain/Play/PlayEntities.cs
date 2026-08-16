@@ -402,7 +402,7 @@ public sealed class TerritoryStructureState
 }
 
 /// <summary>
-/// An append-only public fact recorded after orders are revealed or battles resolve.
+/// An append-only public fact recorded for chat, revealed orders, or battle resolution.
 /// Unresolved secret orders are never written here.
 /// </summary>
 public sealed class PlayLogEntry
@@ -421,7 +421,9 @@ public sealed class PlayLogEntry
         Guid? targetTerritoryId,
         Guid? battleId,
         ActionKind? actionKind,
-        IReadOnlyList<Guid> relatedForceIds)
+        IReadOnlyList<Guid> relatedForceIds,
+        string? message = null,
+        string? actorDisplayName = null)
     {
         ArgumentNullException.ThrowIfNull(relatedForceIds);
         Id = id;
@@ -435,6 +437,8 @@ public sealed class PlayLogEntry
         BattleId = battleId;
         ActionKind = actionKind;
         RelatedForceIds = relatedForceIds;
+        Message = message;
+        ActorDisplayName = actorDisplayName;
     }
 
     /// <summary>Gets the entry identifier.</summary>
@@ -470,13 +474,20 @@ public sealed class PlayLogEntry
     /// <summary>Gets related forces, such as battle participants.</summary>
     public IReadOnlyList<Guid> RelatedForceIds { get; }
 
+    /// <summary>Gets the chat text for a player message.</summary>
+    public string? Message { get; }
+
+    /// <summary>Gets the actor's display name snapshotted when a chat message was posted.</summary>
+    public string? ActorDisplayName { get; }
+
     /// <summary>Gets whether the application substituted or interrupted a player choice.</summary>
     public bool IsSystemAdjustment => Kind is PlayLogKind.DeadlineDraftSubmitted
         or PlayLogKind.MissingOrderHold
         or PlayLogKind.InvalidOrderHold
         or PlayLogKind.ConflictingBuildHold
         or PlayLogKind.DefaultRetreat
-        or PlayLogKind.UnresolvedBattleHeldOpen;
+        or PlayLogKind.UnresolvedBattleHeldOpen
+        or PlayLogKind.ForcesRejoined;
 }
 
 /// <summary>

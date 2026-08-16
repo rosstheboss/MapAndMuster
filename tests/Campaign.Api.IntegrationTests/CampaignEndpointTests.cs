@@ -361,6 +361,58 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task MembersCanChatInAnUpcomingCampaignLog()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("host");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Chat War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        Assert.True(created.CanChat);
+
+        using var stranger = _factory.CreateClient();
+        var strangerName = UniqueName("watch");
+        await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
+        using var forbidden = await stranger.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/chat",
+            new PostCampaignChatRequest { Revision = created.Revision, Message = "Hello" });
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        using var player = _factory.CreateClient();
+        var playerName = UniqueName("joiner");
+        await RegisterConfirmAndLoginAsync(player, $"{playerName}@example.test", playerName);
+        using var joined = await player.PostAsJsonAsync($"/api/campaigns/{created.Id}/join", new JoinCampaignRequest());
+        Assert.Equal(HttpStatusCode.OK, joined.StatusCode);
+
+        var beforeChat = await owner.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(beforeChat);
+        Assert.Contains(beforeChat.MentionableMembers, member => member.Username == ownerName);
+        Assert.Contains(beforeChat.MentionableMembers, member => member.Username == playerName);
+        Assert.DoesNotContain(beforeChat.MentionableMembers, member => member.Username == strangerName);
+
+        using var posted = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/chat",
+            new PostCampaignChatRequest
+            {
+                Revision = beforeChat.Revision,
+                Message = $"Hey, everybody! Hello @{playerName}.",
+            });
+        Assert.Equal(HttpStatusCode.OK, posted.StatusCode);
+        var afterPost = await posted.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(afterPost);
+        var chat = Assert.Single(afterPost.Log);
+        Assert.Equal("PlayerChat", chat.Kind);
+        Assert.Equal(ownerName, chat.Originator);
+        Assert.Equal($"Hey, everybody! Hello @{playerName}.", chat.Summary);
+
+        using var unknown = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/chat",
+            new PostCampaignChatRequest { Revision = afterPost.Revision, Message = "Hi @stranger" });
+        Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+    }
+
+    [Fact]
     public async Task HiddenCampaignsCanBeJoinedButNotViewedByStrangers()
     {
         using var owner = _factory.CreateClient();
@@ -437,6 +489,36 @@ public sealed class CampaignEndpointTests
         Assert.Equal(HttpStatusCode.Forbidden, update.StatusCode);
         var error = await update.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
         Assert.Equal("campaign.locked", error?.Code);
+    }
+
+    [Fact]
+    public async Task PublicViewersCanReadPlayWithoutDrafting()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("host");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        var started = DateTime.UtcNow.AddHours(-1);
+        using var createdResponse = await owner.PostAsJsonAsync(
+            "/api/campaigns",
+            ValidCampaignBody("Open Live", startsAtLocal: started.ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture)));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var stranger = _factory.CreateClient();
+        var strangerName = UniqueName("watch");
+        await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
+
+        var play = await stranger.GetFromJsonAsync<CampaignPlayResponse>($"/api/campaigns/{created.Id}/play", JsonOptions);
+        Assert.NotNull(play);
+        Assert.Equal("InProgress", play.Status);
+        Assert.False(play.CanChat);
+        Assert.False(play.IsParticipant);
+        Assert.Empty(play.MyDrafts);
+
+        using var draft = await stranger.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/draft",
+            new { revision = play.Revision, forceId = Guid.NewGuid(), kind = "Hold" });
+        Assert.Equal(HttpStatusCode.Forbidden, draft.StatusCode);
     }
 
     [Fact]

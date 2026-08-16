@@ -305,9 +305,11 @@
                           kind="structure"
                           [name]="symbol"
                           [label]="structureName(territory.structureTypeId)"
+                          [pillaged]="territory.structureCondition === 'Pillaged'"
                         />
                       }
-                      {{ structureName(territory.structureTypeId) }}
+                      {{ structureName(territory.structureTypeId)
+                      }}{{ territory.structureCondition === 'Pillaged' ? ' (pillaged)' : '' }}
                     } @else {
                       None
                     }
@@ -406,6 +408,20 @@
                       }
                     </select>
                   </div>
+                  @if (selected.structureTypeId) {
+                    <div class="field">
+                      <label for="territory-structure-condition">Structure condition</label>
+                      <select
+                        id="territory-structure-condition"
+                        [ngModel]="selected.structureCondition"
+                        [ngModelOptions]="{ standalone: true }"
+                        (ngModelChange)="setStructureCondition($event)"
+                      >
+                        <option value="Operational">Operational</option>
+                        <option value="Pillaged">Pillaged</option>
+                      </select>
+                    </div>
+                  }
                   <div class="field">
                     <label for="territory-owner">Ownership</label>
                     <select

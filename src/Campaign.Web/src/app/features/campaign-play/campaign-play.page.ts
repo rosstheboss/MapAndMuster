@@ -1,25 +1,27 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type { CampaignPlayDetail, PlayBattle, PlayForce } from '../../core/campaigns/campaign.models';
+import { CAMPAIGN_LOG_POLL_MS, mergeCampaignLog, type CampaignLogSync } from '../../core/campaigns/campaign-log';
 import { DURATION_UNITS, statusLabel } from '../../core/campaigns/campaign-schedule';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { adjacentTerritoryIds } from '../../core/maps/adjacency';
 import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
-import { territoryLabel } from '../../core/maps/map-graph.models';
-import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
+import { normalizeStructureCondition, territoryLabel } from '../../core/maps/map-graph.models';
+import { CampaignLogComponent } from '../../shared/campaign-log/campaign-log.component';
+import {
+  CampaignMapViewComponent,
+  type MapForceMarker,
+} from '../../shared/campaign-map-view/campaign-map-view.component';
 import { PhaseCountdownComponent } from '../../shared/phase-countdown/phase-countdown.component';
-import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
-
-const DRAFT_KINDS = ['Hold', 'Move', 'Build', 'Pillage', 'Repair', 'Split', 'Backstab'] as const;
 
 @Component({
   selector: 'app-campaign-play-page',
-  imports: [FormsModule, RouterLink, CampaignMapViewComponent, PhaseCountdownComponent, InstantDatePipe],
+  imports: [FormsModule, RouterLink, CampaignLogComponent, CampaignMapViewComponent, PhaseCountdownComponent],
   templateUrl: './campaign-play.page.html',
   styleUrl: './campaign-play.page.css',
 })
@@ -28,6 +30,7 @@ export class CampaignPlayPage {
   private readonly overlay = inject(FormSubmitOverlayService);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
@@ -36,7 +39,10 @@ export class CampaignPlayPage {
   protected readonly graph = signal<MapGraph>({ territories: [], adjacencies: [] });
   protected readonly hoveredTerritoryId = signal<string | null>(null);
   protected readonly selectedIds = signal<string[]>([]);
-  protected readonly draftKinds = DRAFT_KINDS;
+  protected readonly chatBusy = signal(false);
+  protected readonly chatError = signal<string | null>(null);
+  private readonly mapRevision = signal(0);
+  private logPollStarted = false;
   protected readonly durationUnits = DURATION_UNITS;
   protected readonly factionChoice = signal('');
   protected readonly subfactionChoice = signal('');
@@ -49,7 +55,6 @@ export class CampaignPlayPage {
   >({});
   protected readonly battleWinner = signal<Record<string, string>>({});
   protected readonly retreatTarget = signal<Record<string, string>>({});
-  protected readonly showingLog = signal(false);
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
@@ -63,7 +68,7 @@ export class CampaignPlayPage {
 
   protected readonly mapSrc = computed(() => {
     const play = this.play();
-    return play?.hasMap ? this.campaignsApi.mapUrl(play.id, play.revision) : null;
+    return play?.hasMap ? this.campaignsApi.mapUrl(play.id, this.mapRevision()) : null;
   });
 
   protected readonly myForces = computed(() => this.play()?.forces.filter((force) => force.isMine) ?? []);
@@ -92,6 +97,22 @@ export class CampaignPlayPage {
     adjacentTerritoryIds(this.graph().adjacencies, this.focusTerritoryIds()),
   );
 
+  protected readonly mapForces = computed((): MapForceMarker[] => {
+    const play = this.play();
+    if (!play) {
+      return [];
+    }
+
+    return play.forces.map((force) => ({
+      id: force.id,
+      territoryId: force.territoryId,
+      factionId: force.factionId,
+      isMine: force.isMine,
+      inBattle: force.inBattle,
+      label: `${this.forceLabel(force)} in ${this.territoryName(force.territoryId)}`,
+    }));
+  });
+
   protected asNumber(value: string | number): number {
     return Number(value);
   }
@@ -102,6 +123,24 @@ export class CampaignPlayPage {
 
   protected statusText(status: string): string {
     return statusLabel(status);
+  }
+
+  protected async postChat(message: string): Promise<void> {
+    const play = this.play();
+    if (!play) {
+      return;
+    }
+
+    this.chatError.set(null);
+    this.chatBusy.set(true);
+    try {
+      const next = await this.campaignsApi.postChat(play.id, { revision: play.revision, message });
+      this.applyLog(next, true);
+    } catch (error: unknown) {
+      this.chatError.set(readApiError(error, 'Unable to send that chat message.'));
+    } finally {
+      this.chatBusy.set(false);
+    }
   }
 
   protected labelFor(territory: MapTerritory): string {
@@ -135,8 +174,44 @@ export class CampaignPlayPage {
     return territory ? territoryLabel(territory) : id;
   }
 
+  protected draftKindsFor(force: PlayForce): readonly string[] {
+    return force.availableActions;
+  }
+
   protected draftFor(forceId: string): { kind: string; targetTerritoryId: string; structureTypeId: string } {
     return this.drafts()[forceId] ?? { kind: 'Hold', targetTerritoryId: '', structureTypeId: '' };
+  }
+
+  protected structureName(id: string | null | undefined): string {
+    if (!id) {
+      return 'None';
+    }
+
+    return this.play()?.structureTypes.find((type) => type.id === id)?.name ?? 'Unknown structure';
+  }
+
+  protected structureAt(territoryId: string): { name: string; condition: string } | null {
+    const territory = this.graph().territories.find((item) => item.id === territoryId);
+    if (!territory?.structureTypeId) {
+      return null;
+    }
+
+    return {
+      name: this.structureName(territory.structureTypeId),
+      condition: this.structureConditionLabel(territory.structureCondition),
+    };
+  }
+
+  protected structureConditionLabel(condition: string | null | undefined): string {
+    if (condition === 'Pillaged') {
+      return 'pillaged';
+    }
+
+    if (condition === 'Destroyed') {
+      return 'destroyed';
+    }
+
+    return 'operational';
   }
 
   protected battleWinnerId(battleId: string): string {
@@ -157,17 +232,27 @@ export class CampaignPlayPage {
 
   protected onDraftKind(forceId: string, kind: string): void {
     const current = this.draftFor(forceId);
-    this.drafts.update((drafts) => ({ ...drafts, [forceId]: { ...current, kind } }));
+    this.drafts.update((drafts) => ({
+      ...drafts,
+      [forceId]: {
+        kind,
+        targetTerritoryId: kind === 'Move' || kind === 'Split' ? current.targetTerritoryId : '',
+        structureTypeId: kind === 'Build' ? current.structureTypeId : '',
+      },
+    }));
+    void this.persistDraftIfReady(forceId);
   }
 
   protected onDraftTarget(forceId: string, targetTerritoryId: string): void {
     const current = this.draftFor(forceId);
     this.drafts.update((drafts) => ({ ...drafts, [forceId]: { ...current, targetTerritoryId } }));
+    void this.persistDraftIfReady(forceId);
   }
 
   protected onDraftStructure(forceId: string, structureTypeId: string): void {
     const current = this.draftFor(forceId);
     this.drafts.update((drafts) => ({ ...drafts, [forceId]: { ...current, structureTypeId } }));
+    void this.persistDraftIfReady(forceId);
   }
 
   protected flagImageUrl = (factionId: string): string | null => {
@@ -180,10 +265,20 @@ export class CampaignPlayPage {
     return this.campaignsApi.flagImageUrl(play.id, factionId, play.revision);
   };
 
-  protected structureImageUrl = (structureTypeId: string): string | null => {
+  protected structureImageUrl = (structureTypeId: string, pillaged = false): string | null => {
     const play = this.play();
     const structure = play?.structureTypes.find((item) => item.id === structureTypeId);
-    if (!play || !structure?.hasImage) {
+    if (!play || !structure) {
+      return null;
+    }
+
+    if (pillaged) {
+      return structure.hasPillagedImage
+        ? this.campaignsApi.structureImageUrl(play.id, structureTypeId, play.revision, true)
+        : null;
+    }
+
+    if (!structure.hasImage) {
       return null;
     }
 
@@ -200,6 +295,15 @@ export class CampaignPlayPage {
 
     this.selectedIds.set([event.id]);
     this.hoveredTerritoryId.set(event.id);
+    const force = this.myForces().find((item) => !item.inBattle);
+    if (!force || this.play()?.isCommitted) {
+      return;
+    }
+
+    const draft = this.draftFor(force.id);
+    if ((draft.kind === 'Move' || draft.kind === 'Split') && force.moveTargets.includes(event.id)) {
+      this.onDraftTarget(force.id, event.id);
+    }
   }
 
   protected async chooseFaction(): Promise<void> {
@@ -242,7 +346,30 @@ export class CampaignPlayPage {
       return;
     }
 
-    await this.runPlay(() => this.campaignsApi.commitOrders(play.id, { revision: play.revision }));
+    const local = { ...this.drafts() };
+    await this.runPlay(async () => {
+      let current = this.play();
+      if (!current) {
+        return play;
+      }
+
+      for (const force of current.forces.filter((item) => item.isMine)) {
+        const draft = local[force.id];
+        if (!this.isDraftReady(force, draft) || this.draftMatchesSaved(current, force.id, draft)) {
+          continue;
+        }
+
+        current = await this.campaignsApi.saveDraft(current.id, {
+          revision: current.revision,
+          forceId: force.id,
+          kind: draft.kind,
+          targetTerritoryId: draft.targetTerritoryId || null,
+          structureTypeId: draft.structureTypeId || null,
+        });
+      }
+
+      return this.campaignsApi.commitOrders(current.id, { revision: current.revision });
+    });
   }
 
   protected async uncommit(): Promise<void> {
@@ -331,6 +458,65 @@ export class CampaignPlayPage {
     );
   }
 
+  protected savedDraft(forceId: string): { kind: string; targetTerritoryId: string | null } | null {
+    return this.play()?.myDrafts.find((draft) => draft.forceId === forceId) ?? null;
+  }
+
+  protected forcesInTerritory(territoryId: string): string[] {
+    return (this.play()?.forces.filter((force) => force.territoryId === territoryId) ?? []).map((force) =>
+      this.forceLabel(force),
+    );
+  }
+
+  private async persistDraftIfReady(forceId: string): Promise<void> {
+    const play = this.play();
+    const force = play?.forces.find((item) => item.id === forceId);
+    const draft = this.draftFor(forceId);
+    if (
+      !play ||
+      play.isCommitted ||
+      !force ||
+      !this.isDraftReady(force, draft) ||
+      this.draftMatchesSaved(play, forceId, draft)
+    ) {
+      return;
+    }
+
+    await this.saveDraft(force);
+  }
+
+  private isDraftReady(
+    force: PlayForce,
+    draft: { kind: string; targetTerritoryId: string; structureTypeId: string },
+  ): boolean {
+    if (force.availableActions.length === 0 || !force.availableActions.includes(draft.kind)) {
+      return false;
+    }
+
+    if (draft.kind === 'Move' || draft.kind === 'Split') {
+      return draft.targetTerritoryId.length > 0;
+    }
+
+    if (draft.kind === 'Build') {
+      return draft.structureTypeId.length > 0;
+    }
+
+    return true;
+  }
+
+  private draftMatchesSaved(
+    play: CampaignPlayDetail,
+    forceId: string,
+    draft: { kind: string; targetTerritoryId: string; structureTypeId: string },
+  ): boolean {
+    const saved = play.myDrafts.find((item) => item.forceId === forceId);
+    return (
+      saved?.kind === draft.kind &&
+      (saved.targetTerritoryId ?? '') === draft.targetTerritoryId &&
+      (saved.structureTypeId ?? '') === draft.structureTypeId
+    );
+  }
+
   private async runPlay(work: () => Promise<CampaignPlayDetail>): Promise<void> {
     this.error.set(null);
     this.successMessage.set(null);
@@ -360,10 +546,42 @@ export class CampaignPlayPage {
     this.drafts.set(drafts);
   }
 
+  private applyLog(snapshot: CampaignLogSync, force = false): void {
+    this.play.update((current) =>
+      current && (force || snapshot.revision > current.revision) ? mergeCampaignLog(current, snapshot) : current,
+    );
+  }
+
+  private startLogPolling(): void {
+    if (this.logPollStarted) {
+      return;
+    }
+
+    this.logPollStarted = true;
+    const timer = globalThis.setInterval(() => void this.pullLog(), CAMPAIGN_LOG_POLL_MS);
+    this.destroyRef.onDestroy(() => globalThis.clearInterval(timer));
+  }
+
+  protected async pullLog(): Promise<void> {
+    const play = this.play();
+    if (!play || this.chatBusy() || globalThis.document.visibilityState === 'hidden') {
+      return;
+    }
+
+    try {
+      const next = await this.campaignsApi.get(play.id);
+      this.applyLog(next);
+    } catch {
+      // Keep the visible log; the next poll retries.
+    }
+  }
+
   private async load(id: string): Promise<void> {
     try {
       const [play, graph] = await Promise.all([this.campaignsApi.getPlay(id), this.campaignsApi.getMapGraph(id)]);
+      this.mapRevision.set(play.revision);
       this.applyPlay(play);
+      this.startLogPolling();
       this.graph.set({
         territories: graph.territories.map((territory) => ({
           id: territory.id,
@@ -373,6 +591,7 @@ export class CampaignPlayPage {
           polygon: territory.polygon.map((point) => ({ x: point.x, y: point.y })),
           terrainTypeId: territory.terrainTypeId,
           structureTypeId: territory.structureTypeId,
+          structureCondition: normalizeStructureCondition(territory.structureTypeId, territory.structureCondition),
           overlayColor: territory.overlayColor,
           ownerFactionId: territory.ownerFactionId,
           spawnFactionId: territory.spawnFactionId,

@@ -17,6 +17,9 @@ public sealed class StructureTypeInput
     /// <summary>Gets whether an existing uploaded logo should be removed.</summary>
     public bool ClearImage { get; init; }
 
+    /// <summary>Gets whether an existing uploaded pillaged logo should be removed.</summary>
+    public bool ClearPillagedImage { get; init; }
+
     /// <summary>Gets nested missions. Missions are optional for structures.</summary>
     public IReadOnlyList<MissionInput>? Missions { get; init; }
 }

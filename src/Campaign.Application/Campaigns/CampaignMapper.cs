@@ -1,3 +1,4 @@
+using Campaign.Application.Play;
 using Campaign.Domain.Campaigns;
 using Campaign.Domain.Identity;
 
@@ -59,8 +60,15 @@ public static class CampaignMapper
     /// <param name="campaign">The stored campaign.</param>
     /// <param name="viewerUserId">The viewing user's identifier.</param>
     /// <param name="utcNow">The current UTC instant.</param>
+    /// <param name="log">The public campaign log, when already mapped.</param>
+    /// <param name="mentionableMembers">Current members who may be tagged in chat.</param>
     /// <returns>The detail.</returns>
-    public static CampaignDetail ToDetail(StoredCampaign campaign, Guid viewerUserId, DateTimeOffset utcNow)
+    public static CampaignDetail ToDetail(
+        StoredCampaign campaign,
+        Guid viewerUserId,
+        DateTimeOffset utcNow,
+        IReadOnlyList<PlayLogEntryDetail>? log = null,
+        IReadOnlyList<CampaignLogMemberDetail>? mentionableMembers = null)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
@@ -108,6 +116,7 @@ public static class CampaignMapper
                 Name = type.Name,
                 BuiltinSymbol = type.ImageStorageKey is null ? type.BuiltinSymbol : null,
                 HasImage = !string.IsNullOrWhiteSpace(type.ImageStorageKey),
+                HasPillagedImage = !string.IsNullOrWhiteSpace(type.PillagedImageStorageKey),
                 Missions = [.. type.Missions.Select(ToMission)],
             })],
             AllyGroups = [.. campaign.AllyGroups.Select(static group => new AllyGroupDetail
@@ -150,6 +159,9 @@ public static class CampaignMapper
             CanChooseFaction = membership?.IsPlayer == true
                 && membership.FactionId is null
                 && progress.Status != CampaignStatus.Completed,
+            CanChat = membership is not null,
+            MentionableMembers = mentionableMembers ?? [],
+            Log = log ?? [],
         };
     }
 

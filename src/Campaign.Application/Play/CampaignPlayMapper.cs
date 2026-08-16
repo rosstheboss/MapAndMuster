@@ -1,4 +1,5 @@
 using Campaign.Application.Campaigns;
+using Campaign.Application.Identity;
 using Campaign.Application.Ports;
 using Campaign.Domain.Campaigns;
 using Campaign.Domain.Play;
@@ -20,6 +21,9 @@ internal static class CampaignPlayMapper
         var map = CampaignLifecycle.ToPlayMap(campaign);
         var window = play.CurrentWindow();
         var names = await UsernamesAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
+        var mentionable = accounts is null
+            ? (IReadOnlyList<CampaignLogMemberDetail>)[]
+            : await ChatMembersAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
         var remaining = play.Windows
             .Where(item => item.Status != PhaseWindowStatus.Resolved)
             .Select(item => new PlayWindowDetail
@@ -107,6 +111,8 @@ internal static class CampaignPlayMapper
             Revision = campaign.Revision,
             CanManage = membership?.IsGameMaster == true,
             IsParticipant = membership?.IsPlayer == true,
+            CanChat = membership is not null,
+            MentionableMembers = mentionable,
             Status = progress.Status.ToString(),
             CurrentRound = progress.CurrentRound,
             CurrentPhaseNumber = progress.CurrentPhaseNumber,
@@ -145,6 +151,14 @@ internal static class CampaignPlayMapper
                     MoveTargets = force.ControllerUserId == viewerUserId
                         ? CampaignPlayRules.EligibleMoves(map, force)
                         : [],
+                    AvailableActions = force.ControllerUserId == viewerUserId
+                        ? [.. ActionResolution.EligibleActions(
+                            play,
+                            map,
+                            force,
+                            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName),
+                            campaign.StructureTypes.Count > 0).Select(static kind => kind.ToString())]
+                        : [],
                 }),
             ],
             MyDrafts = currentActionId is { } draftWindow
@@ -169,17 +183,7 @@ internal static class CampaignPlayMapper
                 .. play.Log
                     .OrderBy(static item => item.OccurredUtc)
                     .ThenBy(static item => item.Id)
-                    .Select(item => new PlayLogEntryDetail
-                    {
-                        Id = item.Id,
-                        OccurredUtc = item.OccurredUtc,
-                        Kind = item.Kind.ToString(),
-                        Summary = FormatLog(item, campaign, map, play, names),
-                        TerritoryId = item.TerritoryId,
-                        ForceId = item.ForceId,
-                        BattleId = item.BattleId,
-                        IsSystemAdjustment = item.IsSystemAdjustment,
-                    }),
+                    .Select(item => ToLogEntry(item, campaign, map, play, names)),
             ],
             PlayersMissingFaction =
             [
@@ -239,7 +243,22 @@ internal static class CampaignPlayMapper
         };
     }
 
-    private static async Task<Dictionary<Guid, string>> UsernamesAsync(
+    internal static IReadOnlyList<PlayLogEntryDetail> ToLogEntries(
+        StoredCampaign campaign,
+        IReadOnlyDictionary<Guid, string> names)
+    {
+        var play = campaign.PlayState ?? CampaignPlayState.Empty;
+        var map = CampaignLifecycle.ToPlayMap(campaign);
+        return
+        [
+            .. play.Log
+                .OrderBy(static item => item.OccurredUtc)
+                .ThenBy(static item => item.Id)
+                .Select(item => ToLogEntry(item, campaign, map, play, names)),
+        ];
+    }
+
+    internal static async Task<Dictionary<Guid, string>> UsernamesAsync(
         StoredCampaign campaign,
         IUserAccountStore? accounts,
         CancellationToken cancellationToken)
@@ -260,6 +279,57 @@ internal static class CampaignPlayMapper
         }
 
         return names;
+    }
+
+    internal static async Task<IReadOnlyList<CampaignLogMemberDetail>> ChatMembersAsync(
+        StoredCampaign campaign,
+        IUserAccountStore accounts,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        ArgumentNullException.ThrowIfNull(accounts);
+        var members = new List<CampaignLogMemberDetail>();
+        foreach (var membership in campaign.Memberships.OrderBy(static member => member.UserId))
+        {
+            var account = await accounts.FindByIdAsync(membership.UserId, cancellationToken).ConfigureAwait(false);
+            if (account is null)
+            {
+                continue;
+            }
+
+            var profile = ProfileMapper.ToPublic(account);
+            members.Add(new CampaignLogMemberDetail
+            {
+                UserId = membership.UserId,
+                Username = profile.Username,
+                DisplayName = profile.DisplayName,
+            });
+        }
+
+        return members;
+    }
+
+    private static PlayLogEntryDetail ToLogEntry(
+        PlayLogEntry entry,
+        StoredCampaign campaign,
+        PlayMap map,
+        CampaignPlayState play,
+        IReadOnlyDictionary<Guid, string> names)
+    {
+        return new PlayLogEntryDetail
+        {
+            Id = entry.Id,
+            OccurredUtc = entry.OccurredUtc,
+            Kind = entry.Kind.ToString(),
+            Originator = entry.Kind == PlayLogKind.PlayerChat
+                ? entry.ActorDisplayName ?? ActorName(entry.ActorUserId, names)
+                : CampaignChatRules.CampaignOriginator,
+            Summary = FormatLog(entry, campaign, map, play, names),
+            TerritoryId = entry.TerritoryId,
+            ForceId = entry.ForceId,
+            BattleId = entry.BattleId,
+            IsSystemAdjustment = entry.IsSystemAdjustment,
+        };
     }
 
     private static string FormatLog(
@@ -289,7 +359,7 @@ internal static class CampaignPlayMapper
             PlayLogKind.InvalidOrderHold =>
                 $"{actor}'s submitted {action} was invalid and became Hold.",
             PlayLogKind.ConflictingBuildHold =>
-                $"Competing builds in {territory} became Hold for {actor}.",
+                $"Competing structure actions in {territory} became Hold for {actor}.",
             PlayLogKind.ResolvedAction =>
                 $"{actor} resolved {action} in {territory}"
                     + (entry.TargetTerritoryId is null || entry.TargetTerritoryId == entry.TerritoryId
@@ -305,8 +375,8 @@ internal static class CampaignPlayMapper
                 $"Battle in {territory} is disputed because the submitted results conflict.",
             PlayLogKind.BattleGmResolved =>
                 entry.ForceId is { } gmWinner
-                    ? $"A manager resolved the battle in {territory}. Winner: {ForceController(play, gmWinner, names)}."
-                    : $"A manager resolved the battle in {territory} as a draw.",
+                    ? $"A manager overrode the battle result in {territory}. Winner: {ForceController(play, gmWinner, names)}."
+                    : $"A manager overrode the battle result in {territory} as a draw.",
             PlayLogKind.PlayerRetreat =>
                 $"{actor} retreated from {territory} to {target}.",
             PlayLogKind.DefaultRetreat =>
@@ -319,6 +389,10 @@ internal static class CampaignPlayMapper
                 actor == "A force"
                     ? "A manager lengthened remaining phases or added rounds."
                     : $"{actor} lengthened remaining phases or added rounds.",
+            PlayLogKind.ForcesRejoined =>
+                $"{actor}'s forces rejoined in {territory} and now share one action.",
+            PlayLogKind.PlayerChat =>
+                entry.Message ?? string.Empty,
             _ => $"{actor} recorded a campaign change in {territory}.",
         };
     }

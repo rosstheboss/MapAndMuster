@@ -1,4 +1,5 @@
 using Campaign.Domain.Maps;
+using Campaign.Domain.Play;
 
 namespace Campaign.Backend.UnitTests.Maps;
 
@@ -58,6 +59,46 @@ public sealed class CampaignMapGraphRulesTests
         Assert.Equal("Northmarch", graph.Territories[0].Name);
         Assert.Equal("2", graph.Territories[1].DisplayLabel);
         Assert.Equal(AdjacencyOrigin.Manual, graph.Adjacencies[0].Origin);
+    }
+
+    [Fact]
+    public void AcceptsAPillagedStartingStructure()
+    {
+        var territoryId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var ok = CampaignMapGraphRules.TryCreate(
+            [
+                Territory(territoryId, 1, "Northmarch", Square(0.1, 0.1, 0.3), PlainsId, TownId, null, null, null, "Pillaged"),
+            ],
+            [],
+            new HashSet<Guid> { NorthId },
+            TerrainIds,
+            StructureIds,
+            out var graph,
+            out var errors);
+
+        Assert.True(ok);
+        Assert.Empty(errors);
+        Assert.Equal(StructureCondition.Pillaged, graph!.Territories[0].StructureCondition);
+        Assert.Equal(TownId, graph.Territories[0].StructureTypeId);
+    }
+
+    [Fact]
+    public void RejectsAnUnknownStructureCondition()
+    {
+        var ok = CampaignMapGraphRules.TryCreate(
+            [
+                Territory(Guid.NewGuid(), 1, null, Square(0.1, 0.1, 0.3), PlainsId, TownId, null, null, null, "Ruined"),
+            ],
+            [],
+            new HashSet<Guid> { NorthId },
+            TerrainIds,
+            StructureIds,
+            out var graph,
+            out var errors);
+
+        Assert.False(ok);
+        Assert.Null(graph);
+        Assert.Contains(errors, error => error.Code == "territories.structureCondition.invalid");
     }
 
     [Fact]
@@ -183,7 +224,8 @@ public sealed class CampaignMapGraphRulesTests
         Guid? structureTypeId,
         string? overlayColor,
         Guid? ownerFactionId,
-        Guid? spawnFactionId)
+        Guid? spawnFactionId,
+        string? structureCondition = null)
     {
         return new TerritoryInput
         {
@@ -196,6 +238,7 @@ public sealed class CampaignMapGraphRulesTests
             OverlayColor = overlayColor,
             OwnerFactionId = ownerFactionId,
             SpawnFactionId = spawnFactionId,
+            StructureCondition = structureCondition,
         };
     }
 

@@ -39,6 +39,15 @@ import type { FittedSquare, MapPoint } from '../../core/maps/geometry';
 import type { MapAdjacency, MapTerritory } from '../../core/maps/map-graph.models';
 import { MapSymbolComponent } from '../map-symbol/map-symbol.component';
 
+export interface MapForceMarker {
+  id: string;
+  territoryId: string;
+  factionId: string;
+  isMine: boolean;
+  inBattle: boolean;
+  label: string;
+}
+
 @Component({
   selector: 'app-campaign-map-view',
   imports: [MapSymbolComponent],
@@ -63,8 +72,9 @@ export class CampaignMapViewComponent {
   readonly marqueeSelect = input(false);
   readonly factions = input<readonly CampaignFaction[]>([]);
   readonly structures = input<readonly CampaignStructureType[]>([]);
-  readonly structureImageUrl = input<(structureTypeId: string) => string | null>(() => null);
+  readonly structureImageUrl = input<(structureTypeId: string, pillaged?: boolean) => string | null>(() => null);
   readonly flagImageUrl = input<(factionId: string) => string | null>(() => null);
+  readonly forces = input<readonly MapForceMarker[]>([]);
 
   readonly mapPoint = output<MapPoint>();
   readonly mapHover = output<MapPoint>();
@@ -104,13 +114,45 @@ export class CampaignMapViewComponent {
     return this.territories().map((territory) => {
       const center = centroid(territory.polygon);
       const structure = this.structures().find((item) => item.id === territory.structureTypeId) ?? null;
+      const destroyed = territory.structureCondition === 'Destroyed';
+      const pillaged = territory.structureCondition === 'Pillaged';
       const owner = this.factions().find((faction) => faction.id === territory.ownerFactionId) ?? null;
       const selected = this.isSelected(territory.id);
-      const structureFit = structure ? fitSquareInPolygon(territory.polygon, center, maxWidth, maxHeight) : null;
+      const structureFit =
+        structure && !destroyed ? fitSquareInPolygon(territory.polygon, center, maxWidth, maxHeight) : null;
       const flagPreferred = structureFit ? { x: structureFit.x + structureFit.width * 0.7, y: structureFit.y } : center;
       const flagFit = owner
-        ? fitSquareInPolygon(territory.polygon, flagPreferred, maxWidth, maxHeight, structureFit)
+        ? fitSquareInPolygon(
+            territory.polygon,
+            flagPreferred,
+            maxWidth,
+            maxHeight,
+            structureFit ? [structureFit] : null,
+          )
         : null;
+      const avoided: FittedSquare[] = [];
+      if (structureFit) {
+        avoided.push(structureFit);
+      }
+
+      if (flagFit) {
+        avoided.push(flagFit);
+      }
+
+      const present = this.forces().filter((force) => force.territoryId === territory.id);
+      const forcePins = present.map((force, index) => {
+        const preferred = {
+          x: center.x + (index - (present.length - 1) / 2) * maxWidth * 0.6,
+          y: center.y + maxHeight * 0.38,
+        };
+        const fit = fitSquareInPolygon(territory.polygon, preferred, maxWidth, maxHeight, avoided);
+        avoided.push(fit);
+        return {
+          force,
+          fit,
+          color: this.factions().find((faction) => faction.id === force.factionId)?.color ?? '#44403c',
+        };
+      });
       return {
         territory,
         points: polygonPointsAttribute(territory.polygon),
@@ -124,8 +166,15 @@ export class CampaignMapViewComponent {
                 image: owner.hasFlagImage ? this.flagImageUrl()(owner.id) : null,
               }
             : null,
+        forces: forcePins,
         structure,
-        structureImage: structure?.hasImage ? this.structureImageUrl()(structure.id) : null,
+        structureImage: structure
+          ? pillaged && structure.hasPillagedImage
+            ? this.structureImageUrl()(structure.id, true)
+            : !pillaged && structure.hasImage
+              ? this.structureImageUrl()(structure.id, false)
+              : null
+          : null,
         selected,
         adjacent: !selected && this.isAdjacent(territory.id),
         strokeWidth: this.screenToMap(

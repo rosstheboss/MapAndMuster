@@ -10,6 +10,7 @@ import type {
   ExtendCampaignSchedulePayload,
   MapGraphDetail,
   PlayRevisionPayload,
+  PostCampaignChatPayload,
   SaveCampaignPayload,
   SaveMapGraphPayload,
   SaveOrderDraftPayload,
@@ -48,6 +49,14 @@ export class CampaignService {
   async get(campaignId: string): Promise<CampaignDetail> {
     return firstValueFrom(
       this.http.get<CampaignDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}`, { withCredentials: true }),
+    );
+  }
+
+  async postChat(campaignId: string, payload: PostCampaignChatPayload): Promise<CampaignDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/chat`, payload, {
+        withCredentials: true,
+      }),
     );
   }
 
@@ -112,8 +121,9 @@ export class CampaignService {
     );
   }
 
-  structureImageUrl(campaignId: string, structureTypeId: string, revision: number): string {
-    return `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/image?v=${revision}`;
+  structureImageUrl(campaignId: string, structureTypeId: string, revision: number, pillaged = false): string {
+    const kind = pillaged ? 'pillaged-image' : 'image';
+    return `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/${kind}?v=${revision}`;
   }
 
   flagImageUrl(campaignId: string, factionId: string, revision: number): string {
@@ -129,13 +139,15 @@ export class CampaignService {
     structureTypeId: string,
     file: File,
     revision: number,
+    pillaged = false,
   ): Promise<CampaignDetail> {
     const form = new FormData();
     form.set('image', file);
     form.set('revision', String(revision));
+    const kind = pillaged ? 'pillaged-image' : 'image';
     return firstValueFrom(
       this.http.post<CampaignDetail>(
-        `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/image`,
+        `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/${kind}`,
         form,
         { withCredentials: true },
       ),

@@ -56,7 +56,9 @@ const campaign = {
       missions: [{ id: 'm1', name: 'Plains control', url: null, hasFile: false, fileName: null }],
     },
   ],
-  structureTypes: [{ id: 'town', name: 'Town', builtinSymbol: 'Town', hasImage: false, missions: [] }],
+  structureTypes: [
+    { id: 'town', name: 'Town', builtinSymbol: 'Town', hasImage: false, hasPillagedImage: false, missions: [] },
+  ],
   timeZoneId: 'UTC',
   startsAtLocal: '2099-01-05T12:00',
   startsUtc: '2099-01-05T12:00:00+00:00',
@@ -75,6 +77,9 @@ const campaign = {
   subfaction: null,
   canPlay: false,
   canChooseFaction: false,
+  canChat: true,
+  mentionableMembers: [],
+  log: [],
 };
 
 const emptyGraph = {
@@ -189,6 +194,7 @@ describe('MapEditorPage', () => {
           ],
           terrainTypeId: 'plains',
           structureTypeId: null,
+          structureCondition: 'Operational',
           overlayColor: null,
           ownerFactionId: null,
           spawnFactionId: null,
@@ -215,6 +221,55 @@ describe('MapEditorPage', () => {
     http.verify();
   });
 
+  it('lets a manager mark a placed structure as pillaged', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        {
+          id: 't1',
+          displayNumber: 1,
+          name: 'Northmarch',
+          description: null,
+          polygon: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.4, y: 0.1 },
+            { x: 0.4, y: 0.4 },
+            { x: 0.1, y: 0.4 },
+          ],
+          terrainTypeId: 'plains',
+          structureTypeId: 'town',
+          structureCondition: 'Pillaged',
+          overlayColor: null,
+          ownerFactionId: null,
+          spawnFactionId: null,
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onToolChange: (tool: string) => void;
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      selected: () => { structureTypeId: string | null; structureCondition: string } | null;
+    };
+    page.onToolChange('select');
+    page.onTerritorySelect({ id: 't1', additive: false });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(page.selected()?.structureCondition).toBe('Pillaged');
+    const condition = compiled.querySelector<HTMLSelectElement>('#territory-structure-condition');
+    expect(condition).toBeTruthy();
+    expect(condition?.value).toBe('Pillaged');
+    http.verify();
+  });
+
   it('clears the selection when empty map is clicked outside select mode', async () => {
     const fixture = TestBed.createComponent(MapEditorPage);
     const http = TestBed.inject(HttpTestingController);
@@ -235,6 +290,7 @@ describe('MapEditorPage', () => {
           ],
           terrainTypeId: 'plains',
           structureTypeId: null,
+          structureCondition: 'Operational',
           overlayColor: null,
           ownerFactionId: null,
           spawnFactionId: null,
@@ -289,6 +345,7 @@ describe('MapEditorPage', () => {
           ],
           terrainTypeId: 'plains',
           structureTypeId: null,
+          structureCondition: 'Operational',
           overlayColor: null,
           ownerFactionId: null,
           spawnFactionId: null,
@@ -306,6 +363,7 @@ describe('MapEditorPage', () => {
           ],
           terrainTypeId: 'plains',
           structureTypeId: null,
+          structureCondition: 'Operational',
           overlayColor: null,
           ownerFactionId: null,
           spawnFactionId: null,
@@ -323,6 +381,7 @@ describe('MapEditorPage', () => {
           ],
           terrainTypeId: 'plains',
           structureTypeId: null,
+          structureCondition: 'Operational',
           overlayColor: null,
           ownerFactionId: null,
           spawnFactionId: null,
@@ -637,6 +696,7 @@ function namedSquare(id: string, displayNumber: number, name: string, x: number)
     ],
     terrainTypeId: 'plains',
     structureTypeId: null,
+    structureCondition: 'Operational',
     overlayColor: null,
     ownerFactionId: null,
     spawnFactionId: null,

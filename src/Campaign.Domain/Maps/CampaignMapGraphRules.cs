@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using Campaign.Domain.Campaigns;
 using Campaign.Domain.Common;
 using Campaign.Domain.Identity;
+using Campaign.Domain.Play;
 
 namespace Campaign.Domain.Maps;
 
@@ -207,7 +208,8 @@ public static class CampaignMapGraphRules
                 structureTypeId,
                 overlayColor,
                 input.OwnerFactionId,
-                input.SpawnFactionId));
+                input.SpawnFactionId,
+                ParseStructureCondition(input.StructureCondition, structureTypeId.HasValue, field, displayNumber, errors)));
         }
 
         for (var i = 0; i < parsed.Count; i++)
@@ -409,6 +411,41 @@ public static class CampaignMapGraphRules
         }
 
         return trimmed;
+    }
+
+    private static StructureCondition ParseStructureCondition(
+        string? raw,
+        bool hasStructure,
+        string field,
+        int displayNumber,
+        List<DomainError> errors)
+    {
+        if (!hasStructure)
+        {
+            return StructureCondition.Operational;
+        }
+
+        if (string.IsNullOrWhiteSpace(raw)
+            || string.Equals(raw, nameof(StructureCondition.Operational), StringComparison.OrdinalIgnoreCase))
+        {
+            return StructureCondition.Operational;
+        }
+
+        if (string.Equals(raw, nameof(StructureCondition.Pillaged), StringComparison.OrdinalIgnoreCase))
+        {
+            return StructureCondition.Pillaged;
+        }
+
+        if (string.Equals(raw, nameof(StructureCondition.Destroyed), StringComparison.OrdinalIgnoreCase))
+        {
+            return StructureCondition.Destroyed;
+        }
+
+        errors.Add(new DomainError(
+            "territories.structureCondition.invalid",
+            $"Territory {displayNumber} structure condition must be Operational, Pillaged, or Destroyed.",
+            $"{field}.structureCondition"));
+        return StructureCondition.Operational;
     }
 
     private static string? ParseOverlayColor(string? raw, string field, int displayNumber, List<DomainError> errors)

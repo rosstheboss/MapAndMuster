@@ -22,6 +22,12 @@ public sealed class CampaignPlayResponse
     /// <summary>Gets whether the viewer is a player.</summary>
     public required bool IsParticipant { get; init; }
 
+    /// <summary>Gets whether the viewer may chat in the public log.</summary>
+    public required bool CanChat { get; init; }
+
+    /// <summary>Gets current members who may be tagged in chat.</summary>
+    public required IReadOnlyList<CampaignLogMemberResponse> MentionableMembers { get; init; }
+
     /// <summary>Gets the lifecycle status.</summary>
     public required string Status { get; init; }
 
@@ -143,6 +149,9 @@ public sealed class PlayForceResponse
 
     /// <summary>Gets adjacent eligible move destinations.</summary>
     public required IReadOnlyList<Guid> MoveTargets { get; init; }
+
+    /// <summary>Gets player-submittable action kinds available for this force.</summary>
+    public required IReadOnlyList<string> AvailableActions { get; init; }
 }
 
 /// <summary>The viewer's draft.</summary>
@@ -356,7 +365,10 @@ public sealed class PlayLogEntryResponse
     /// <summary>Gets the fact kind name.</summary>
     public required string Kind { get; init; }
 
-    /// <summary>Gets a player-visible summary.</summary>
+    /// <summary>Gets "Campaign" for game events, or the member's display name for chat.</summary>
+    public required string Originator { get; init; }
+
+    /// <summary>Gets a player-visible summary or chat body.</summary>
     public required string Summary { get; init; }
 
     /// <summary>Gets the related territory, when any.</summary>
@@ -390,6 +402,16 @@ public static class PlayResponses
             Revision = detail.Revision,
             CanManage = detail.CanManage,
             IsParticipant = detail.IsParticipant,
+            CanChat = detail.CanChat,
+            MentionableMembers =
+            [
+                .. detail.MentionableMembers.Select(static member => new CampaignLogMemberResponse
+                {
+                    UserId = member.UserId,
+                    Username = member.Username,
+                    DisplayName = member.DisplayName,
+                }),
+            ],
             Status = detail.Status,
             CurrentRound = detail.CurrentRound,
             CurrentPhaseNumber = detail.CurrentPhaseNumber,
@@ -437,6 +459,7 @@ public static class PlayResponses
                     Name = type.Name,
                     BuiltinSymbol = type.BuiltinSymbol,
                     HasImage = type.HasImage,
+                    HasPillagedImage = type.HasPillagedImage,
                     Missions =
                     [
                         .. type.Missions.Select(static mission => new MissionResponse
@@ -462,6 +485,7 @@ public static class PlayResponses
                     IsMine = force.IsMine,
                     InBattle = force.InBattle,
                     MoveTargets = force.MoveTargets,
+                    AvailableActions = force.AvailableActions,
                 }),
             ],
             MyDrafts =
@@ -517,6 +541,7 @@ public static class PlayResponses
                     Id = item.Id,
                     OccurredUtc = item.OccurredUtc,
                     Kind = item.Kind,
+                    Originator = item.Originator,
                     Summary = item.Summary,
                     TerritoryId = item.TerritoryId,
                     ForceId = item.ForceId,

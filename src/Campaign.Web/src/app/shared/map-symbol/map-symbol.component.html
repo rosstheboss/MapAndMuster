@@ -7,6 +7,7 @@
   stroke-linecap="round"
   stroke-linejoin="round"
   [class.decorative]="!label()"
+  [class.pillaged]="pillaged()"
   [attr.aria-hidden]="label() ? null : true"
   [attr.aria-label]="label()"
   [attr.role]="label() ? 'img' : null"
@@ -77,33 +78,75 @@
   } @else {
     @switch (name()) {
       @case ('Town') {
-        <path d="M4 20V11l4-3 4 3v9H4z" />
-        <path d="M12 20V12l4-3 4 3v8h-8z" />
-        <path d="M7 20v-4h2v4M15 20v-3h2v3" />
+        @if (pillaged()) {
+          <path d="M4 20V12l4-2 2 1v9H4z" />
+          <path d="M12 20v-7l3-2 5 3v6h-8z" />
+          <path d="M7 20v-3h2M15 20v-2h2" />
+          <path d="M6 9l3-4 2 3" />
+          <path d="M4 7l16 12" />
+        } @else {
+          <path d="M4 20V11l4-3 4 3v9H4z" />
+          <path d="M12 20V12l4-3 4 3v8h-8z" />
+          <path d="M7 20v-4h2v4M15 20v-3h2v3" />
+        }
       }
       @case ('City') {
-        <path d="M3 20V8h5v12H3z" />
-        <path d="M8 20V4h8v16H8z" />
-        <path d="M16 20v-9h5v9h-5z" />
-        <path d="M10 8h2M10 12h2M18 14h1" />
+        @if (pillaged()) {
+          <path d="M3 20V10h5v10H3z" />
+          <path d="M8 20V7h5l3 4v9H8z" />
+          <path d="M16 20v-6h5v6h-5z" />
+          <path d="M10 11h2M18 16h1" />
+          <path d="M5 6l14 13" />
+        } @else {
+          <path d="M3 20V8h5v12H3z" />
+          <path d="M8 20V4h8v16H8z" />
+          <path d="M16 20v-9h5v9h-5z" />
+          <path d="M10 8h2M10 12h2M18 14h1" />
+        }
       }
       @case ('CapitalCity') {
-        <path d="M4 20V9l4-3 4 3v11H4z" />
-        <path d="M12 20V7l4-3 4 3v13h-8z" />
-        <path d="M12 4l1.2 2.4H16l-2 1.6.8 2.5L12 9.3 9.2 10.5l.8-2.5-2-1.6h2.8L12 4z" />
+        @if (pillaged()) {
+          <path d="M4 20V11l4-2 4 2v9H4z" />
+          <path d="M12 20V9l3-2 5 3v10h-8z" />
+          <path d="M11 5l1.2 2.2h2.4L13 8.6l.7 2.2L11 9.5 8.9 10.8l.7-2.2-1.6-1.4h2.4L11 5z" />
+          <path d="M5 8l14 11" />
+        } @else {
+          <path d="M4 20V9l4-3 4 3v11H4z" />
+          <path d="M12 20V7l4-3 4 3v13h-8z" />
+          <path d="M12 4l1.2 2.4H16l-2 1.6.8 2.5L12 9.3 9.2 10.5l.8-2.5-2-1.6h2.8L12 4z" />
+        }
       }
       @case ('Fortification') {
-        <path d="M4 20V9l2-2h2v2h2V7h4v2h2V7h2l2 2v11H4z" />
-        <path d="M4 9h16" />
+        @if (pillaged()) {
+          <path d="M4 20V11l2-2h2v2h2V9h3l5 4v7H4z" />
+          <path d="M4 11h10" />
+          <path d="M6 7l13 12" />
+        } @else {
+          <path d="M4 20V9l2-2h2v2h2V7h4v2h2V7h2l2 2v11H4z" />
+          <path d="M4 9h16" />
+        }
       }
       @case ('Castle') {
-        <path d="M4 20V10l2-2h2v2h2V6h4v4h2V8h2l2 2v10H4z" />
-        <path d="M10 20v-5h4v5" />
+        @if (pillaged()) {
+          <path d="M4 20V12l2-2h2v2h2V8h3l5 4v8H4z" />
+          <path d="M10 20v-4h3v4" />
+          <path d="M5 8l14 11" />
+        } @else {
+          <path d="M4 20V10l2-2h2v2h2V6h4v4h2V8h2l2 2v10H4z" />
+          <path d="M10 20v-5h4v5" />
+        }
       }
       @case ('SupplyDepot') {
-        <path d="M5 10h14l-1 10H6L5 10z" />
-        <path d="M8 10V7h8v3" />
-        <path d="M9 14h6M9 17h4" />
+        @if (pillaged()) {
+          <path d="M5 11h14l-1 9H7L5 11z" />
+          <path d="M9 11V8h6" />
+          <path d="M8 15h5M8 18h3" />
+          <path d="M4 7l16 12" />
+        } @else {
+          <path d="M5 10h14l-1 10H6L5 10z" />
+          <path d="M8 10V7h8v3" />
+          <path d="M9 14h6M9 17h4" />
+        }
       }
     }
   }

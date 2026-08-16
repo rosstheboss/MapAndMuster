@@ -138,6 +138,8 @@ internal static class PlayStateJson
                 BattleId = item.BattleId,
                 ActionKind = item.ActionKind?.ToString(),
                 RelatedForceIds = [.. item.RelatedForceIds],
+                Message = item.Message,
+                ActorDisplayName = item.ActorDisplayName,
             })],
         };
     }
@@ -220,7 +222,9 @@ internal static class PlayStateJson
                 item.TargetTerritoryId,
                 item.BattleId,
                 string.IsNullOrWhiteSpace(item.ActionKind) ? null : Enum.Parse<ActionKind>(item.ActionKind, true),
-                item.RelatedForceIds))]);
+                item.RelatedForceIds,
+                item.Message,
+                item.ActorDisplayName))]);
     }
 
     private sealed class PlayDocument
@@ -344,5 +348,7 @@ internal static class PlayStateJson
         public Guid? BattleId { get; set; }
         public string? ActionKind { get; set; }
         public List<Guid> RelatedForceIds { get; set; } = [];
+        public string? Message { get; set; }
+        public string? ActorDisplayName { get; set; }
     }
 }

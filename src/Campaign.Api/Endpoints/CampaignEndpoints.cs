@@ -41,6 +41,14 @@ public static class CampaignEndpoints
             .Produces<CampaignDetailResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/{campaignId:guid}/chat", PostChatAsync)
+            .WithName("PostCampaignChat")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
         group.MapPost("/{campaignId:guid}/join", JoinAsync)
             .WithName("JoinCampaign")
             .Produces<CampaignListItemResponse>()
@@ -110,6 +118,20 @@ public static class CampaignEndpoints
             .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
             .DisableAntiforgery()
             .WithName("UploadCampaignStructureImage")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/structures/{structureTypeId:guid}/pillaged-image", GetPillagedStructureImageAsync)
+            .WithName("GetCampaignPillagedStructureImage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/structures/{structureTypeId:guid}/pillaged-image", UploadPillagedStructureImageAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignPillagedStructureImage")
             .Produces<CampaignDetailResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
@@ -325,6 +347,38 @@ public static class CampaignEndpoints
                 userId.Value,
                 cancellationToken,
                 principal.IsAdministrator())
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> PostChatAsync(
+        Guid campaignId,
+        PostCampaignChatRequest request,
+        ClaimsPrincipal principal,
+        PostCampaignChatHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new PostCampaignChatCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    Message = request.Message,
+                },
+                cancellationToken)
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
@@ -632,11 +686,54 @@ public static class CampaignEndpoints
         return Results.Ok(CampaignResponses.FromMapGraph(result.Value));
     }
 
-    private static async Task<IResult> GetStructureImageAsync(
+    private static Task<IResult> GetStructureImageAsync(
         Guid campaignId,
         Guid structureTypeId,
         ClaimsPrincipal principal,
         GetStructureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return GetStructureImageCoreAsync(campaignId, structureTypeId, principal, handler, pillaged: false, cancellationToken);
+    }
+
+    private static Task<IResult> UploadStructureImageAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadStructureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return UploadStructureImageCoreAsync(campaignId, structureTypeId, principal, request, handler, pillaged: false, cancellationToken);
+    }
+
+    private static Task<IResult> GetPillagedStructureImageAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        GetStructureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return GetStructureImageCoreAsync(campaignId, structureTypeId, principal, handler, pillaged: true, cancellationToken);
+    }
+
+    private static Task<IResult> UploadPillagedStructureImageAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadStructureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return UploadStructureImageCoreAsync(campaignId, structureTypeId, principal, request, handler, pillaged: true, cancellationToken);
+    }
+
+    private static async Task<IResult> GetStructureImageCoreAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        GetStructureImageHandler handler,
+        bool pillaged,
         CancellationToken cancellationToken)
     {
         var userId = principal.GetUserId();
@@ -650,7 +747,8 @@ public static class CampaignEndpoints
                 structureTypeId,
                 userId.Value,
                 cancellationToken,
-                principal.IsAdministrator())
+                principal.IsAdministrator(),
+                pillaged)
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
@@ -660,12 +758,13 @@ public static class CampaignEndpoints
         return Results.File(result.Value.Content, result.Value.ContentType);
     }
 
-    private static async Task<IResult> UploadStructureImageAsync(
+    private static async Task<IResult> UploadStructureImageCoreAsync(
         Guid campaignId,
         Guid structureTypeId,
         ClaimsPrincipal principal,
         HttpRequest request,
         UploadStructureImageHandler handler,
+        bool pillaged,
         CancellationToken cancellationToken)
     {
         var userId = principal.GetUserId();
@@ -702,6 +801,7 @@ public static class CampaignEndpoints
                     Content = stream,
                     ContentType = file.ContentType,
                     Length = file.Length,
+                    Pillaged = pillaged,
                 },
                 cancellationToken)
             .ConfigureAwait(false);

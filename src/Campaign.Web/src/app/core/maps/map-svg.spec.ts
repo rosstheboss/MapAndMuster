@@ -16,6 +16,7 @@ const graph: MapGraph = {
       ],
       terrainTypeId: 'plains',
       structureTypeId: null,
+      structureCondition: 'Operational',
       overlayColor: '#00AA00',
       ownerFactionId: null,
       spawnFactionId: null,
@@ -44,8 +45,26 @@ describe('map svg', () => {
     expect(parsed.graph.territories).toHaveLength(1);
     expect(parsed.graph.territories[0]?.name).toBe('Coast');
     expect(parsed.graph.territories[0]?.terrainTypeId).toBe('plains');
+    expect(parsed.graph.territories[0]?.structureCondition).toBe('Operational');
     expect(parsed.graph.adjacencies).toHaveLength(1);
     expect(parsed.graph.adjacencies[0]?.origin).toBe('Manual');
+  });
+
+  it('round-trips a pillaged structure condition', () => {
+    const svg = serializeMapSvg({
+      ...graph,
+      territories: [
+        {
+          ...graph.territories[0],
+          structureTypeId: 'town',
+          structureCondition: 'Pillaged',
+        },
+      ],
+    });
+    const parsed = parseMapSvg(svg, { defaultTerrainTypeId: 'sea' });
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.graph.territories[0]?.structureTypeId).toBe('town');
+    expect(parsed.graph.territories[0]?.structureCondition).toBe('Pillaged');
   });
 
   it('creates territories from generic SVG polygons', () => {

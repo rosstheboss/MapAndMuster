@@ -304,10 +304,82 @@ test('players can duplicate a campaign from Your campaigns', async ({ page }) =>
   await expect(page).toHaveURL(`/campaigns/${copyId}/edit`);
 });
 
-test('players can open the campaign log during play', async ({ page }) => {
+test('players can read and chat in the campaign log', async ({ page }) => {
   const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const campaign = {
+    id: campaignId,
+    name: 'Border War',
+    description: 'A contested frontier.',
+    playerSlotCount: 8,
+    occupiedPlayerSlots: 1,
+    isPrivate: false,
+    isPubliclyViewable: true,
+    creatorIsParticipant: true,
+    city: null,
+    region: null,
+    country: null,
+    hasMap: false,
+    canManage: true,
+    isParticipant: true,
+    revision: 2,
+    createdUtc: '2026-08-13T00:00:00+00:00',
+    updatedUtc: '2026-08-13T00:00:00+00:00',
+    factions: [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+    ],
+    allyGroups: [],
+    links: [],
+    terrainTypes: [],
+    structureTypes: [],
+    timeZoneId: 'UTC',
+    startsAtLocal: '2026-08-14T12:00',
+    startsUtc: '2026-08-14T12:00:00+00:00',
+    endsUtc: '2026-08-16T12:00:00+00:00',
+    roundCount: 3,
+    roundLengthAmount: 1,
+    roundLengthUnit: 'Days',
+    phases: [],
+    status: 'InProgress',
+    currentRound: 1,
+    currentPhaseNumber: 1,
+    currentPhaseKind: 'Action',
+    currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+    currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+    factionId: 'north',
+    subfaction: null,
+    canPlay: true,
+    canChooseFaction: false,
+    canChat: true,
+    mentionableMembers: [{ userId: profile.id, username: 'ada', displayName: 'ada' }],
+    log: [
+      {
+        id: 'log-1',
+        occurredUtc: '2026-08-15T20:45:23-04:00',
+        kind: 'ResolvedAction',
+        originator: 'Campaign',
+        summary: 'North held in Coast.',
+        territoryId: 't1',
+        forceId: 'force-1',
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+    ],
+  };
+
   await page.route('**/api/auth/me', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profile) });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...profile, timeZoneId: 'America/New_York' }),
+    });
   });
   await page.route(`**/api/campaigns/${campaignId}/play`, async (route) => {
     await route.fulfill({
@@ -319,6 +391,8 @@ test('players can open the campaign log during play', async ({ page }) => {
         revision: 2,
         canManage: true,
         isParticipant: true,
+        canChat: true,
+        mentionableMembers: campaign.mentionableMembers,
         status: 'InProgress',
         currentRound: 1,
         currentPhaseNumber: 1,
@@ -334,36 +408,40 @@ test('players can open the campaign log during play', async ({ page }) => {
         roundCount: 3,
         minRoundCount: 1,
         remainingWindows: [],
-        factions: [
-          {
-            id: 'north',
-            name: 'North',
-            color: '#2563EB',
-            subfactions: [],
-            allyGroupName: null,
-            requiresSubfaction: false,
-            hasFlagImage: false,
-          },
-        ],
+        factions: campaign.factions,
         structureTypes: [],
         forces: [],
         myDrafts: [],
         orders: [],
         commitments: [],
         battles: [],
+        log: campaign.log,
+        playersMissingFaction: [],
+      }),
+    });
+  });
+  await page.route(`**/api/campaigns/${campaignId}/chat`, async (route) => {
+    const body = route.request().postDataJSON() as { message: string };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...campaign,
+        revision: 3,
         log: [
+          ...campaign.log,
           {
-            id: 'log-1',
-            occurredUtc: '2026-08-14T12:00:00+00:00',
-            kind: 'ResolvedAction',
-            summary: 'North held in Coast.',
-            territoryId: 't1',
-            forceId: 'force-1',
+            id: 'log-2',
+            occurredUtc: '2026-08-15T20:46:23-04:00',
+            kind: 'PlayerChat',
+            originator: 'ada',
+            summary: body.message,
+            territoryId: null,
+            forceId: null,
             battleId: null,
             isSystemAdjustment: false,
           },
         ],
-        playersMissingFaction: [],
       }),
     });
   });
@@ -380,11 +458,27 @@ test('players can open the campaign log during play', async ({ page }) => {
       }),
     });
   });
+  await page.route(`**/api/campaigns/${campaignId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(campaign),
+    });
+  });
 
-  await page.goto(`/campaigns/${campaignId}/play`);
+  await page.goto(`/campaigns/${campaignId}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Border War' })).toBeVisible();
-  await page.getByRole('button', { name: 'Campaign log' }).click();
-  await expect(page.getByRole('dialog', { name: 'Campaign log' })).toBeVisible();
+  await expect(page.getByText('Campaign log')).toBeVisible();
+  await expect(page.getByText('(2026-08-15 08:45:23 PM EDT)')).toBeVisible();
+  await expect(page.getByText('Campaign:')).toBeVisible();
   await expect(page.getByText('North held in Coast.')).toBeVisible();
-  await expect(page.getByText('Unrevealed secret orders are omitted.')).toBeVisible();
+  await expect(page.getByText('Phase ends in')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Play' })).toBeVisible();
+  await expect(page.getByText('Commit orders')).toHaveCount(0);
+  await page.getByLabel('Message').fill('Hey, everybody! This is a message to all of you.');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.getByText('ada:')).toBeVisible();
+  await expect(page.getByText('Hey, everybody! This is a message to all of you.')).toBeVisible();
+  await expect(page.getByText('Successfully saved changes.')).toHaveCount(0);
+  await expect(page.getByText('Saving')).toHaveCount(0);
 });

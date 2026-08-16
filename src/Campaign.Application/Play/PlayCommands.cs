@@ -200,6 +200,12 @@ public sealed class CampaignPlayDetail
     /// <summary>Gets whether the viewer is a player.</summary>
     public required bool IsParticipant { get; init; }
 
+    /// <summary>Gets whether the viewer may chat in the public log.</summary>
+    public required bool CanChat { get; init; }
+
+    /// <summary>Gets current members who may be tagged in chat.</summary>
+    public required IReadOnlyList<Campaigns.CampaignLogMemberDetail> MentionableMembers { get; init; }
+
     /// <summary>Gets the lifecycle status.</summary>
     public required string Status { get; init; }
 
@@ -321,6 +327,9 @@ public sealed class PlayForceDetail
 
     /// <summary>Gets adjacent eligible move destinations.</summary>
     public required IReadOnlyList<Guid> MoveTargets { get; init; }
+
+    /// <summary>Gets player-submittable action kinds available for this force.</summary>
+    public required IReadOnlyList<string> AvailableActions { get; init; }
 }
 
 /// <summary>The viewer's draft.</summary>
@@ -430,7 +439,10 @@ public sealed class PlayLogEntryDetail
     /// <summary>Gets the fact kind name.</summary>
     public required string Kind { get; init; }
 
-    /// <summary>Gets a player-visible summary.</summary>
+    /// <summary>Gets "Campaign" for game events, or the member's display name for chat.</summary>
+    public required string Originator { get; init; }
+
+    /// <summary>Gets a player-visible summary or chat body.</summary>
     public required string Summary { get; init; }
 
     /// <summary>Gets the related territory, when any.</summary>

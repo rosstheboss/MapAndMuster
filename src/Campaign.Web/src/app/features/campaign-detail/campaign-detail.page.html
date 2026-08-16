@@ -4,7 +4,12 @@
   } @else if (campaign(); as campaign) {
     <div class="page-header">
       <h1>{{ campaign.name }}</h1>
-      <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+      <div class="choice-row">
+        @if (campaign.canPlay) {
+          <a class="button" [routerLink]="['/campaigns', campaign.id, 'play']">Play</a>
+        }
+        <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+      </div>
     </div>
 
     @if (error()) {
@@ -14,66 +19,362 @@
       <p class="success-banner" role="status">{{ successMessage() }}</p>
     }
 
-    @if (campaign.canChooseFaction) {
-      <form class="panel stack" (ngSubmit)="chooseFaction()">
-        <h2>Choose your faction</h2>
-        <p>
-          Players, including managers who occupy a player slot, must pick a faction. You cannot play a round until you
-          do. Your force starts at that faction's spawn; subfactions use the same spawn.
-        </p>
-        <div class="field">
-          <label for="faction">Faction</label>
-          <select id="faction" [ngModel]="factionChoice()" (ngModelChange)="factionChoice.set($event)" name="faction">
-            <option value="">Select a faction</option>
-            @for (faction of campaign.factions; track faction.id) {
-              <option [value]="faction.id">{{ faction.name }}</option>
-            }
-          </select>
+    <app-campaign-log
+      [entries]="campaign.log"
+      [members]="campaign.mentionableMembers"
+      [canChat]="campaign.canChat"
+      [timeZoneId]="timeZoneId()"
+      [sending]="chatBusy()"
+      [sendError]="chatError()"
+      (send)="postChat($event)"
+    />
+
+    @if (isLiveBoard()) {
+      <div class="panel stack">
+        <p>Status: {{ statusText(campaign) }}</p>
+        @if (campaign.currentRound !== null && currentPhaseText(campaign)) {
+          <p>{{ currentPhaseText(campaign) }}</p>
+        }
+        @if (campaign.currentPhaseEndsUtc) {
+          <p>
+            Phase ends in
+            <app-phase-countdown [endsUtc]="campaign.currentPhaseEndsUtc" />
+          </p>
+        }
+      </div>
+
+      @if (campaign.canManage && play(); as play) {
+        @if (play.playersMissingFaction.length > 0) {
+          <div class="panel stack">
+            <h2>Players without a faction</h2>
+            <p>These players cannot order until they choose a faction.</p>
+            <ul class="plain-list">
+              @for (name of play.playersMissingFaction; track name) {
+                <li>{{ name }}</li>
+              }
+            </ul>
+          </div>
+        }
+      }
+
+      @if (mapSrc(); as src) {
+        <div class="panel stack">
+          <h2>Map</h2>
+          <div class="map-view">
+            <app-campaign-map-view
+              [imageUrl]="src"
+              [territories]="graph().territories"
+              [adjacencies]="graph().adjacencies"
+              [selectedTerritoryIds]="focusTerritoryIds()"
+              [hoveredTerritoryId]="hoveredTerritoryId()"
+              [adjacentTerritoryIds]="adjacentTerritoryIds()"
+              [showAdjacencies]="false"
+              [interactive]="true"
+              [factions]="campaign.factions"
+              [structures]="campaign.structureTypes"
+              [structureImageUrl]="structureImageUrl"
+              [flagImageUrl]="flagImageUrl"
+              [forces]="mapForces()"
+              (territoryHover)="hoveredTerritoryId.set($event)"
+              (territorySelect)="onTerritorySelect($event)"
+              (backgroundSelect)="selectedIds.set([])"
+            />
+            <aside class="map-meta panel stack" aria-live="polite">
+              @if (hoveredTerritory(); as territory) {
+                <h3>{{ labelFor(territory) }}</h3>
+                <p>Ownership: {{ factionName(territory.ownerFactionId) }}</p>
+                <p>Spawn: {{ territory.spawnFactionId ? factionName(territory.spawnFactionId) : 'None' }}</p>
+                <p>Forces: {{ forcesInTerritory(territory.id).join(', ') || 'None' }}</p>
+                <p>
+                  Structure:
+                  {{
+                    territory.structureTypeId
+                      ? structureName(territory.structureTypeId) +
+                        ' (' +
+                        structureConditionLabel(territory.structureCondition) +
+                        ')'
+                      : 'None'
+                  }}
+                </p>
+              } @else {
+                <p class="muted">Hover a territory to see its details.</p>
+              }
+            </aside>
+          </div>
         </div>
-        @if (selectedFaction()?.requiresSubfaction) {
+      }
+
+      @if (play(); as play) {
+        @if (play.currentPhaseKind === 'Action' && play.commitments.length > 0) {
+          <div class="panel stack">
+            <h2>Commitments</h2>
+            <ul class="plain-list">
+              @for (item of play.commitments; track item.userId) {
+                <li>{{ item.username ?? item.userId }} · {{ item.isCommitted ? 'Committed' : 'Drafting' }}</li>
+              }
+            </ul>
+          </div>
+        }
+        @if (play.currentPhaseKind === 'Battle') {
+          <div class="panel stack">
+            <h2>Battles</h2>
+            @if (play.battles.length === 0) {
+              <p class="muted">No battles this phase.</p>
+            }
+            @for (battle of play.battles; track battle.id) {
+              <p>{{ territoryName(battle.territoryId) }} · {{ battle.status }}</p>
+            }
+          </div>
+        }
+      }
+
+      @if (campaign.canManage) {
+        <div class="actions">
+          <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
+        </div>
+      }
+    } @else {
+      @if (campaign.canChooseFaction) {
+        <form class="panel stack" (ngSubmit)="chooseFaction()">
+          <h2>Choose your faction</h2>
+          <p>
+            Players, including managers who occupy a player slot, must pick a faction. You cannot play a round until you
+            do. Your force starts at that faction's spawn; subfactions use the same spawn.
+          </p>
           <div class="field">
-            <label for="subfaction">Subfaction</label>
-            <select
-              id="subfaction"
-              [ngModel]="subfactionChoice()"
-              (ngModelChange)="subfactionChoice.set($event)"
-              name="subfaction"
-            >
-              <option value="">Select a subfaction</option>
-              @for (name of selectedFaction()?.subfactions ?? []; track name) {
-                <option [value]="name">{{ name }}</option>
+            <label for="faction">Faction</label>
+            <select id="faction" [ngModel]="factionChoice()" (ngModelChange)="factionChoice.set($event)" name="faction">
+              <option value="">Select a faction</option>
+              @for (faction of campaign.factions; track faction.id) {
+                <option [value]="faction.id">{{ faction.name }}</option>
               }
             </select>
           </div>
-        }
-        <button type="submit" class="button">Save faction</button>
-      </form>
-    } @else if (campaign.isParticipant && chosenFaction(); as faction) {
-      <div class="panel stack">
-        <h2>Your faction</h2>
-        <p>
-          {{ faction.name }}
-          @if (campaign.subfaction) {
-            · {{ campaign.subfaction }}
+          @if (selectedFaction()?.requiresSubfaction) {
+            <div class="field">
+              <label for="subfaction">Subfaction</label>
+              <select
+                id="subfaction"
+                [ngModel]="subfactionChoice()"
+                (ngModelChange)="subfactionChoice.set($event)"
+                name="subfaction"
+              >
+                <option value="">Select a subfaction</option>
+                @for (name of selectedFaction()?.subfactions ?? []; track name) {
+                  <option [value]="name">{{ name }}</option>
+                }
+              </select>
+            </div>
           }
-        </p>
-        <p class="muted">Your force will start at this faction's spawn location.</p>
-      </div>
-    }
+          <button type="submit" class="button">Save faction</button>
+        </form>
+      } @else if (campaign.isParticipant && chosenFaction(); as faction) {
+        <div class="panel stack">
+          <h2>Your faction</h2>
+          <p>
+            {{ faction.name }}
+            @if (campaign.subfaction) {
+              · {{ campaign.subfaction }}
+            }
+          </p>
+          <p class="muted">Your force will start at this faction's spawn location.</p>
+        </div>
+      }
 
-    @if (campaign.canPlay) {
-      <div class="actions">
-        <a class="button" [routerLink]="['/campaigns', campaign.id, 'play']">Play</a>
-      </div>
-    }
+      @if (campaign.canManage) {
+        <div class="actions">
+          @if (campaign.status === 'Scheduled') {
+            <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
+            <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'map']">Edit map</a>
+          }
+          <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
+        </div>
+      }
 
-    @if (campaign.canManage) {
-      <div class="actions">
-        @if (campaign.status === 'Scheduled') {
-          <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
-          <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'map']">Edit map</a>
+      <div class="panel stack">
+        @if (mapSrc(); as src) {
+          <app-campaign-map-preview [imageUrl]="src" />
         }
-        <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
+        @if (campaign.description) {
+          <p>{{ campaign.description }}</p>
+        }
+        @if (locationText(campaign); as location) {
+          <p>Location: {{ location }}</p>
+        }
+        <p>Players: {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} occupied</p>
+        <p>{{ campaign.isPrivate ? 'Private campaign' : 'Public campaign' }}</p>
+        <p>
+          Creator role:
+          {{ campaign.creatorIsParticipant ? 'Manager and participant' : 'Manager only' }}
+        </p>
+        <p>Your role: {{ roleLabel(campaign) }}</p>
+        <p>Status: {{ statusText(campaign) }}</p>
+        <p>Start: {{ campaign.startsUtc | instantDate: timeZoneId() }}</p>
+        <p>End: {{ campaign.endsUtc | instantDate: timeZoneId() }}</p>
+        <p>Rounds: {{ campaign.roundCount }} · each {{ roundLengthText(campaign) }}</p>
+        <p class="muted">Schedule time zone: {{ campaign.timeZoneId }}</p>
+        @if (currentPhaseText(campaign)) {
+          <p>Current: {{ currentPhaseText(campaign) }}</p>
+          @if (campaign.currentPhaseStartsUtc && campaign.currentPhaseEndsUtc) {
+            <p class="muted">
+              {{ campaign.currentPhaseStartsUtc | instantDate: timeZoneId() }} –
+              {{ campaign.currentPhaseEndsUtc | instantDate: timeZoneId() }}
+            </p>
+          }
+        }
+        <p class="muted">Created {{ campaign.createdUtc | instantDate: timeZoneId() }}</p>
+        <p class="muted">Last edited {{ campaign.updatedUtc | instantDate: timeZoneId() }}</p>
+      </div>
+
+      <div class="panel stack">
+        <h2>Round structure</h2>
+        <ol class="plain-list">
+          @for (phase of campaign.phases; track $index; let index = $index) {
+            <li>{{ phaseText(campaign, index) }}</li>
+          }
+        </ol>
+      </div>
+
+      <div class="panel stack">
+        <h2>Factions</h2>
+        <ul class="plain-list">
+          @for (faction of campaign.factions; track faction.id) {
+            <li>
+              <strong>{{ faction.name }}</strong>
+              <span class="faction-swatch" [style.background]="faction.color" aria-hidden="true"></span>
+              @if (faction.requiresSubfaction) {
+                <span class="muted"> · Subfaction required</span>
+              }
+              @if (faction.allyGroupName) {
+                <span class="muted"> · Ally group: {{ faction.allyGroupName }}</span>
+              }
+              @if (faction.subfactions.length > 0) {
+                <p class="muted">Subfactions: {{ faction.subfactions.join(', ') }}</p>
+              }
+            </li>
+          }
+        </ul>
+      </div>
+
+      @if (campaign.allyGroups.length > 0) {
+        <div class="panel stack">
+          <h2>Ally groups</h2>
+          <ul class="plain-list">
+            @for (group of campaign.allyGroups; track group.id) {
+              <li>{{ group.name }}</li>
+            }
+          </ul>
+        </div>
+      }
+
+      @if (campaign.links.length > 0) {
+        <div class="panel stack">
+          <h2>Links</h2>
+          <ul class="plain-list">
+            @for (link of campaign.links; track link.id) {
+              <li>
+                <a [href]="link.url" rel="noopener noreferrer" target="_blank">{{ link.label }}</a>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      <div class="panel stack">
+        <div class="map-heading">
+          <h2>Map</h2>
+          @if (mapSrc()) {
+            <button type="button" class="button-secondary" (click)="downloadMap()" [disabled]="downloading()">
+              Download map
+            </button>
+            <button type="button" class="button-secondary" (click)="downloadSvg()" [disabled]="downloading()">
+              Download SVG data
+            </button>
+          }
+        </div>
+        @if (mapSrc(); as src) {
+          <div class="map-view">
+            <app-campaign-map-view
+              [imageUrl]="src"
+              [territories]="graph().territories"
+              [adjacencies]="graph().adjacencies"
+              [selectedTerritoryIds]="focusTerritoryIds()"
+              [hoveredTerritoryId]="hoveredTerritoryId()"
+              [adjacentTerritoryIds]="adjacentTerritoryIds()"
+              [showAdjacencies]="false"
+              [interactive]="true"
+              [factions]="campaign.factions"
+              [structures]="campaign.structureTypes"
+              [structureImageUrl]="structureImageUrl"
+              [flagImageUrl]="flagImageUrl"
+              (territoryHover)="hoveredTerritoryId.set($event)"
+              (territorySelect)="onTerritorySelect($event)"
+              (backgroundSelect)="selectedIds.set([])"
+            />
+            <aside class="map-meta panel stack" aria-live="polite">
+              @if (hoveredTerritory(); as territory) {
+                <h3>{{ labelFor(territory) }}</h3>
+                <p>{{ territory.description || 'No description.' }}</p>
+                <p>
+                  Terrain:
+                  @if (terrainSymbol(territory.terrainTypeId); as symbol) {
+                    <app-map-symbol kind="terrain" [name]="symbol" />
+                    {{ terrainName(territory.terrainTypeId) }}
+                  } @else {
+                    None
+                  }
+                </p>
+                <p>
+                  Structure:
+                  @if (territory.structureTypeId) {
+                    @if (structureSymbol(territory.structureTypeId); as symbol) {
+                      <app-map-symbol
+                        kind="structure"
+                        [name]="symbol"
+                        [pillaged]="territory.structureCondition === 'Pillaged'"
+                      />
+                    }
+                    {{ structureName(territory.structureTypeId)
+                    }}{{ territory.structureCondition === 'Pillaged' ? ' (pillaged)' : '' }}
+                  } @else {
+                    None
+                  }
+                </p>
+                <p>
+                  Missions:
+                  @if (inspectedMissions().length > 0) {
+                    @for (mission of inspectedMissions(); track mission.id) {
+                      @if (mission.url) {
+                        <a [href]="mission.url" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
+                      } @else if (missionFileUrl(mission); as href) {
+                        <a [href]="href" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
+                      } @else {
+                        {{ mission.name }}
+                      }
+                      @if (!$last) {
+                        <span>, </span>
+                      }
+                    }
+                  } @else {
+                    None
+                  }
+                </p>
+                <p [class.app-glow]="!!territory.ownerFactionId" [style.--glow-color]="territory.overlayColor || null">
+                  Ownership: {{ factionName(territory.ownerFactionId) }}
+                </p>
+                <p [class.app-glow]="!!territory.spawnFactionId">
+                  Spawn location faction:
+                  {{ territory.spawnFactionId ? factionName(territory.spawnFactionId) : 'None' }}
+                </p>
+                <p>Adjacent territories: {{ adjacentLabels(territory) }}</p>
+              } @else {
+                <p class="muted">Hover a territory to see its details.</p>
+              }
+            </aside>
+          </div>
+        } @else {
+          <p class="muted">No map has been uploaded yet.</p>
+        }
       </div>
     }
 
@@ -98,187 +399,6 @@
         </div>
       </div>
     }
-
-    <div class="panel stack">
-      @if (mapSrc(); as src) {
-        <app-campaign-map-preview [imageUrl]="src" />
-      }
-      @if (campaign.description) {
-        <p>{{ campaign.description }}</p>
-      }
-      @if (locationText(campaign); as location) {
-        <p>Location: {{ location }}</p>
-      }
-      <p>Players: {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} occupied</p>
-      <p>{{ campaign.isPrivate ? 'Private campaign' : 'Public campaign' }}</p>
-      <p>
-        Creator role:
-        {{ campaign.creatorIsParticipant ? 'Manager and participant' : 'Manager only' }}
-      </p>
-      <p>Your role: {{ roleLabel(campaign) }}</p>
-      <p>Status: {{ statusText(campaign) }}</p>
-      <p>Start: {{ campaign.startsUtc | instantDate: timeZoneId() }}</p>
-      <p>End: {{ campaign.endsUtc | instantDate: timeZoneId() }}</p>
-      <p>Rounds: {{ campaign.roundCount }} · each {{ roundLengthText(campaign) }}</p>
-      <p class="muted">Schedule time zone: {{ campaign.timeZoneId }}</p>
-      @if (currentPhaseText(campaign)) {
-        <p>Current: {{ currentPhaseText(campaign) }}</p>
-        @if (campaign.currentPhaseStartsUtc && campaign.currentPhaseEndsUtc) {
-          <p class="muted">
-            {{ campaign.currentPhaseStartsUtc | instantDate: timeZoneId() }} –
-            {{ campaign.currentPhaseEndsUtc | instantDate: timeZoneId() }}
-          </p>
-        }
-      }
-      <p class="muted">Created {{ campaign.createdUtc | instantDate: timeZoneId() }}</p>
-      <p class="muted">Last edited {{ campaign.updatedUtc | instantDate: timeZoneId() }}</p>
-    </div>
-
-    <div class="panel stack">
-      <h2>Round structure</h2>
-      <ol class="plain-list">
-        @for (phase of campaign.phases; track $index; let index = $index) {
-          <li>{{ phaseText(campaign, index) }}</li>
-        }
-      </ol>
-    </div>
-
-    <div class="panel stack">
-      <h2>Factions</h2>
-      <ul class="plain-list">
-        @for (faction of campaign.factions; track faction.id) {
-          <li>
-            <strong>{{ faction.name }}</strong>
-            <span class="faction-swatch" [style.background]="faction.color" aria-hidden="true"></span>
-            @if (faction.requiresSubfaction) {
-              <span class="muted"> · Subfaction required</span>
-            }
-            @if (faction.allyGroupName) {
-              <span class="muted"> · Ally group: {{ faction.allyGroupName }}</span>
-            }
-            @if (faction.subfactions.length > 0) {
-              <p class="muted">Subfactions: {{ faction.subfactions.join(', ') }}</p>
-            }
-          </li>
-        }
-      </ul>
-    </div>
-
-    @if (campaign.allyGroups.length > 0) {
-      <div class="panel stack">
-        <h2>Ally groups</h2>
-        <ul class="plain-list">
-          @for (group of campaign.allyGroups; track group.id) {
-            <li>{{ group.name }}</li>
-          }
-        </ul>
-      </div>
-    }
-
-    @if (campaign.links.length > 0) {
-      <div class="panel stack">
-        <h2>Links</h2>
-        <ul class="plain-list">
-          @for (link of campaign.links; track link.id) {
-            <li>
-              <a [href]="link.url" rel="noopener noreferrer" target="_blank">{{ link.label }}</a>
-            </li>
-          }
-        </ul>
-      </div>
-    }
-
-    <div class="panel stack">
-      <div class="map-heading">
-        <h2>Map</h2>
-        @if (mapSrc()) {
-          <button type="button" class="button-secondary" (click)="downloadMap()" [disabled]="downloading()">
-            Download map
-          </button>
-          <button type="button" class="button-secondary" (click)="downloadSvg()" [disabled]="downloading()">
-            Download SVG data
-          </button>
-        }
-      </div>
-      @if (mapSrc(); as src) {
-        <div class="map-view">
-          <app-campaign-map-view
-            [imageUrl]="src"
-            [territories]="graph().territories"
-            [adjacencies]="graph().adjacencies"
-            [selectedTerritoryIds]="focusTerritoryIds()"
-            [hoveredTerritoryId]="hoveredTerritoryId()"
-            [adjacentTerritoryIds]="adjacentTerritoryIds()"
-            [showAdjacencies]="false"
-            [interactive]="true"
-            [factions]="campaign.factions"
-            [structures]="campaign.structureTypes"
-            [structureImageUrl]="structureImageUrl"
-            [flagImageUrl]="flagImageUrl"
-            (territoryHover)="hoveredTerritoryId.set($event)"
-            (territorySelect)="onTerritorySelect($event)"
-            (backgroundSelect)="selectedIds.set([])"
-          />
-          <aside class="map-meta panel stack" aria-live="polite">
-            @if (hoveredTerritory(); as territory) {
-              <h3>{{ labelFor(territory) }}</h3>
-              <p>{{ territory.description || 'No description.' }}</p>
-              <p>
-                Terrain:
-                @if (terrainSymbol(territory.terrainTypeId); as symbol) {
-                  <app-map-symbol kind="terrain" [name]="symbol" />
-                  {{ terrainName(territory.terrainTypeId) }}
-                } @else {
-                  None
-                }
-              </p>
-              <p>
-                Structure:
-                @if (territory.structureTypeId) {
-                  @if (structureSymbol(territory.structureTypeId); as symbol) {
-                    <app-map-symbol kind="structure" [name]="symbol" />
-                  }
-                  {{ structureName(territory.structureTypeId) }}
-                } @else {
-                  None
-                }
-              </p>
-              <p>
-                Missions:
-                @if (inspectedMissions().length > 0) {
-                  @for (mission of inspectedMissions(); track mission.id) {
-                    @if (mission.url) {
-                      <a [href]="mission.url" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
-                    } @else if (missionFileUrl(mission); as href) {
-                      <a [href]="href" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
-                    } @else {
-                      {{ mission.name }}
-                    }
-                    @if (!$last) {
-                      <span>, </span>
-                    }
-                  }
-                } @else {
-                  None
-                }
-              </p>
-              <p [class.app-glow]="!!territory.ownerFactionId" [style.--glow-color]="territory.overlayColor || null">
-                Ownership: {{ factionName(territory.ownerFactionId) }}
-              </p>
-              <p [class.app-glow]="!!territory.spawnFactionId">
-                Spawn location faction:
-                {{ territory.spawnFactionId ? factionName(territory.spawnFactionId) : 'None' }}
-              </p>
-              <p>Adjacent territories: {{ adjacentLabels(territory) }}</p>
-            } @else {
-              <p class="muted">Hover a territory to see its details.</p>
-            }
-          </aside>
-        </div>
-      } @else {
-        <p class="muted">No map has been uploaded yet.</p>
-      }
-    </div>
   } @else {
     <div class="page-header">
       <h1>Campaign</h1>

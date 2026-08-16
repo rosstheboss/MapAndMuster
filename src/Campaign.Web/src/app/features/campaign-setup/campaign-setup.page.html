@@ -655,8 +655,9 @@
         </legend>
         <div [hidden]="!isOpen('structures')">
           <p class="muted">
-            Choose a built-in icon or upload a logo image for each structure. Territory missions come from the structure
-            when it has any, otherwise from the terrain type.
+            Choose a built-in icon or upload a logo image for each structure. Each structure also has a pillaged icon
+            used when that structure is pillaged on the map. Territory missions come from the structure when it has any,
+            otherwise from the terrain type.
           </p>
           <div formArrayName="structureTypes" class="stack">
             @for (structure of structureTypes.controls; track structure; let index = $index) {
@@ -730,6 +731,61 @@
                           <p class="muted">Selected: {{ fileName }}</p>
                         } @else if (structureImageUrl(structure.controls.id.value); as src) {
                           <p class="muted">A logo is already stored.</p>
+                          <img class="structure-logo-preview" [src]="src" alt="" />
+                        }
+                      </div>
+                    }
+                  </fieldset>
+                  <fieldset class="field">
+                    <legend>Pillaged icon</legend>
+                    <div class="choice-row">
+                      <label>
+                        <input
+                          type="radio"
+                          [attr.name]="'structure-pillaged-icon-' + index"
+                          [checked]="structure.controls.pillagedIconSource.value === 'symbol'"
+                          (change)="setPillagedIconSource(structure, 'symbol')"
+                        />
+                        Built-in pillaged icon
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          [attr.name]="'structure-pillaged-icon-' + index"
+                          [checked]="structure.controls.pillagedIconSource.value === 'image'"
+                          (change)="setPillagedIconSource(structure, 'image')"
+                        />
+                        Uploaded image
+                      </label>
+                    </div>
+                    @if (structure.controls.pillagedIconSource.value === 'symbol') {
+                      <div class="nested-row">
+                        @if (structure.controls.builtinSymbol.value) {
+                          <app-map-symbol
+                            kind="structure"
+                            [name]="structure.controls.builtinSymbol.value"
+                            [pillaged]="true"
+                          />
+                        }
+                        <p class="muted">Uses the ruined version of the operational built-in icon.</p>
+                      </div>
+                    } @else {
+                      <div class="field">
+                        <label [attr.for]="'structure-pillaged-image-' + index">Pillaged logo image</label>
+                        <input
+                          [id]="'structure-pillaged-image-' + index"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          (change)="onStructurePillagedImageSelected(structure.controls.id.value, $event)"
+                        />
+                        <p class="muted">
+                          Maximum size {{ structureImageMaxPx }}px × {{ structureImageMaxPx }}px. Larger images are
+                          shrunk to that size.
+                        </p>
+                        @if (structurePillagedImageName(structure.controls.id.value); as fileName) {
+                          <p class="muted">Selected: {{ fileName }}</p>
+                        } @else if (structurePillagedImageUrl(structure.controls.id.value); as src) {
+                          <p class="muted">A pillaged logo is already stored.</p>
                           <img class="structure-logo-preview" [src]="src" alt="" />
                         }
                       </div>

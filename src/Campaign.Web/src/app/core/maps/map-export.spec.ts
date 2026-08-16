@@ -40,6 +40,7 @@ describe('map export', () => {
         ],
         terrainTypeId: 'sea',
         structureTypeId: null,
+        structureCondition: 'Operational',
         overlayColor: '#00AA00',
         ownerFactionId: null,
         spawnFactionId: null,

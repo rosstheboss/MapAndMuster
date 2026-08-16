@@ -62,6 +62,9 @@ export interface CampaignDetail {
   subfaction: string | null;
   canPlay: boolean;
   canChooseFaction: boolean;
+  canChat: boolean;
+  mentionableMembers: CampaignLogMember[];
+  log: PlayLogEntry[];
   terrainTypes: CampaignTerrainType[];
   structureTypes: CampaignStructureType[];
 }
@@ -113,6 +116,7 @@ export interface CampaignStructureType {
   name: string;
   builtinSymbol: string | null;
   hasImage: boolean;
+  hasPillagedImage: boolean;
   missions: CampaignMission[];
 }
 
@@ -178,6 +182,7 @@ export interface SaveStructureTypePayload {
   name: string;
   builtinSymbol?: string | null;
   clearImage?: boolean;
+  clearPillagedImage?: boolean;
   missions: SaveMissionPayload[];
 }
 
@@ -204,6 +209,7 @@ export interface MapTerritoryPayload {
   polygon: MapPointPayload[];
   terrainTypeId: string;
   structureTypeId: string | null;
+  structureCondition?: string | null;
   overlayColor: string | null;
   ownerFactionId: string | null;
   spawnFactionId: string | null;
@@ -235,6 +241,8 @@ export interface CampaignPlayDetail {
   revision: number;
   canManage: boolean;
   isParticipant: boolean;
+  canChat: boolean;
+  mentionableMembers: CampaignLogMember[];
   status: string;
   currentRound: number | null;
   currentPhaseNumber: number | null;
@@ -279,6 +287,7 @@ export interface PlayForce {
   isMine: boolean;
   inBattle: boolean;
   moveTargets: string[];
+  availableActions: string[];
 }
 
 export interface PlayDraft {
@@ -325,11 +334,18 @@ export interface PlayLogEntry {
   id: string;
   occurredUtc: string;
   kind: string;
+  originator: string;
   summary: string;
   territoryId: string | null;
   forceId: string | null;
   battleId: string | null;
   isSystemAdjustment: boolean;
+}
+
+export interface CampaignLogMember {
+  userId: string;
+  username: string;
+  displayName: string;
 }
 
 export interface SaveOrderDraftPayload {
@@ -342,6 +358,11 @@ export interface SaveOrderDraftPayload {
 
 export interface PlayRevisionPayload {
   revision: number;
+}
+
+export interface PostCampaignChatPayload {
+  revision: number;
+  message: string;
 }
 
 export interface SubmitBattleResultPayload {

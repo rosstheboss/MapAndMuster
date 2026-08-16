@@ -1,4 +1,5 @@
 using Campaign.Application.Maps;
+using Campaign.Application.Play;
 
 namespace Campaign.Application.Campaigns;
 
@@ -198,6 +199,30 @@ public sealed class CampaignDetail
 
     /// <summary>Gets whether the viewer still needs to pick a faction.</summary>
     public required bool CanChooseFaction { get; init; }
+
+    /// <summary>Gets whether the viewer may post in the public campaign log.</summary>
+    public required bool CanChat { get; init; }
+
+    /// <summary>Gets current members who may be tagged in chat.</summary>
+    public required IReadOnlyList<CampaignLogMemberDetail> MentionableMembers { get; init; }
+
+    /// <summary>Gets the public campaign log, including chat. Unrevealed orders are omitted.</summary>
+    public required IReadOnlyList<PlayLogEntryDetail> Log { get; init; }
+}
+
+/// <summary>
+/// A current campaign member who may be tagged in the public log.
+/// </summary>
+public sealed class CampaignLogMemberDetail
+{
+    /// <summary>Gets the user identifier.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the unique username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the name shown to other users.</summary>
+    public required string DisplayName { get; init; }
 }
 
 /// <summary>
@@ -511,6 +536,9 @@ public sealed class StructureTypeDetail
     /// <summary>Gets whether a custom logo image is stored.</summary>
     public required bool HasImage { get; init; }
 
+    /// <summary>Gets whether a custom pillaged logo image is stored.</summary>
+    public required bool HasPillagedImage { get; init; }
+
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<MissionDetail> Missions { get; init; }
 }
@@ -570,6 +598,9 @@ public sealed class StoredStructureType
 
     /// <summary>Gets the stored logo key, when a custom image was uploaded.</summary>
     public string? ImageStorageKey { get; init; }
+
+    /// <summary>Gets the stored pillaged logo key, when a custom pillaged image was uploaded.</summary>
+    public string? PillagedImageStorageKey { get; init; }
 
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<StoredMission> Missions { get; init; }

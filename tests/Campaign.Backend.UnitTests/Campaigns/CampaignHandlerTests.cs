@@ -65,7 +65,7 @@ public sealed class CampaignHandlerTests
     public async Task GetReturnsNotFoundForNonMembers()
     {
         var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
-        var handler = new GetCampaignHandler(store, new FakeClock());
+        var handler = new GetCampaignHandler(store, new FakeClock(), new FakeAccounts());
 
         var result = await handler.HandleAsync(store.Existing.Id, OtherUserId, CancellationToken.None);
 
@@ -79,7 +79,7 @@ public sealed class CampaignHandlerTests
         var campaign = StoredCampaignFor(UserId);
         campaign = WithPublicView(campaign, isPubliclyViewable: true);
         var store = new FakeCampaignStore { Existing = campaign };
-        var handler = new GetCampaignHandler(store, new FakeClock());
+        var handler = new GetCampaignHandler(store, new FakeClock(), new FakeAccounts());
 
         var result = await handler.HandleAsync(store.Existing.Id, OtherUserId, CancellationToken.None);
 
@@ -89,6 +89,115 @@ public sealed class CampaignHandlerTests
         Assert.False(result.Value.CanManage);
         Assert.False(result.Value.IsParticipant);
         Assert.True(result.Value.IsPubliclyViewable);
+        Assert.False(result.Value.CanChat);
+        Assert.Contains(result.Value.MentionableMembers, member => member.Username == "northplayer");
+    }
+
+    [Fact]
+    public async Task PublicViewerCanReadPlayStateButCannotDraft()
+    {
+        var campaign = WithCopied(
+            WithPublicView(StoredCampaignFor(UserId), isPubliclyViewable: true),
+            isPrivate: false,
+            joinPasswordHash: null,
+            startsUtc: Now.AddHours(-1),
+            endsUtc: Now.AddDays(40));
+        var store = new FakeCampaignStore { Existing = campaign };
+        var accounts = new FakeAccounts();
+        var get = new GetCampaignPlayHandler(store, new FakeClock(), accounts);
+
+        var viewed = await get.HandleAsync(campaign.Id, OtherUserId, false, CancellationToken.None);
+
+        Assert.True(viewed.IsSuccess);
+        Assert.NotNull(viewed.Value);
+        Assert.False(viewed.Value.CanChat);
+        Assert.False(viewed.Value.IsParticipant);
+        Assert.Empty(viewed.Value.MyDrafts);
+
+        var draft = new SaveOrderDraftHandler(store, new FakeClock(), accounts);
+        var saved = await draft.HandleAsync(
+            new SaveOrderDraftCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = viewed.Value.Revision,
+                ForceId = Guid.NewGuid(),
+                Kind = "Hold",
+            },
+            CancellationToken.None);
+
+        Assert.False(saved.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignForbidden, saved.ErrorCode);
+    }
+
+    [Fact]
+    public async Task MemberCanPostChatOnAnUpcomingCampaign()
+    {
+        var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
+        var handler = new PostCampaignChatHandler(store, new FakeClock(), new FakeAccounts());
+
+        var result = await handler.HandleAsync(
+            new PostCampaignChatCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = store.Existing.Id,
+                ExpectedRevision = 1,
+                Message = "Hey, everybody! This is a message to all of you.",
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        var entry = Assert.Single(result.Value.Log);
+        Assert.Equal("PlayerChat", entry.Kind);
+        Assert.Equal("northplayer", entry.Originator);
+        Assert.Equal("Hey, everybody! This is a message to all of you.", entry.Summary);
+        Assert.True(result.Value.CanChat);
+    }
+
+    [Fact]
+    public async Task NonMemberCannotPostChat()
+    {
+        var campaign = WithPublicView(StoredCampaignFor(UserId), isPubliclyViewable: true);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new PostCampaignChatHandler(store, new FakeClock(), new FakeAccounts());
+
+        var result = await handler.HandleAsync(
+            new PostCampaignChatCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+                Message = "Hello",
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignForbidden, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ChatRejectsMentionsOfPeopleWhoHaveNotJoined()
+    {
+        var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
+        var handler = new PostCampaignChatHandler(store, new FakeClock(), new FakeAccounts());
+
+        var result = await handler.HandleAsync(
+            new PostCampaignChatCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = store.Existing.Id,
+                ExpectedRevision = 1,
+                Message = "Hi @stranger",
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("chat.mention.unknown", result.ErrorCode);
     }
 
     [Fact]

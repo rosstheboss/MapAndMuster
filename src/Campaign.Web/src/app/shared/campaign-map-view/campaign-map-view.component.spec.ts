@@ -19,6 +19,7 @@ const territory = {
   ],
   terrainTypeId: null,
   structureTypeId: null,
+  structureCondition: 'Operational',
   overlayColor: '#2563EB',
   ownerFactionId: null,
   spawnFactionId: null,
@@ -71,6 +72,38 @@ describe('CampaignMapViewComponent', () => {
     const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
     viewport.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('renders a force marker for a force in a territory', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+    ]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'North force in Coast',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin.is-mine');
+    expect(pin).toBeTruthy();
+    expect(pin?.getAttribute('aria-label')).toBe('North force in Coast');
   });
 
   it('does not pan on left-click drag', () => {
@@ -243,6 +276,7 @@ function squareTerritory(id: string, x: number, y: number): typeof territory {
     ],
     terrainTypeId: null,
     structureTypeId: null,
+    structureCondition: 'Operational',
     overlayColor: '#2563EB',
     ownerFactionId: null,
     spawnFactionId: null,

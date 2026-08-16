@@ -79,13 +79,14 @@ public sealed class UploadStructureImageHandler
         var newKey = await _assets
             .SaveAsync("structures", processed.Content, processed.FileExtension, "image/png", cancellationToken)
             .ConfigureAwait(false);
-        var previousKey = structures[index].ImageStorageKey;
+        var previousKey = command.Pillaged ? structures[index].PillagedImageStorageKey : structures[index].ImageStorageKey;
         structures[index] = new StoredStructureType
         {
             Id = structures[index].Id,
             Name = structures[index].Name,
             BuiltinSymbol = structures[index].BuiltinSymbol,
-            ImageStorageKey = newKey,
+            ImageStorageKey = command.Pillaged ? structures[index].ImageStorageKey : newKey,
+            PillagedImageStorageKey = command.Pillaged ? newKey : structures[index].PillagedImageStorageKey,
             Missions = structures[index].Missions,
         };
 
@@ -142,13 +143,15 @@ public sealed class GetStructureImageHandler
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <param name="pillaged">Whether to return the pillaged logo instead of the operational logo.</param>
     /// <returns>The stored image.</returns>
     public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
         Guid campaignId,
         Guid structureTypeId,
         Guid userId,
         CancellationToken cancellationToken,
-        bool isAdministrator = false)
+        bool isAdministrator = false,
+        bool pillaged = false)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
         if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
@@ -157,12 +160,13 @@ public sealed class GetStructureImageHandler
         }
 
         var structure = campaign.StructureTypes.FirstOrDefault(type => type.Id == structureTypeId);
-        if (structure is null || string.IsNullOrWhiteSpace(structure.ImageStorageKey))
+        var storageKey = pillaged ? structure?.PillagedImageStorageKey : structure?.ImageStorageKey;
+        if (structure is null || string.IsNullOrWhiteSpace(storageKey))
         {
             return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The structure image was not found.");
         }
 
-        var file = await _assets.OpenReadAsync(structure.ImageStorageKey, cancellationToken).ConfigureAwait(false);
+        var file = await _assets.OpenReadAsync(storageKey, cancellationToken).ConfigureAwait(false);
         return file is null
             ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The structure image was not found.")
             : OperationResults.Success(file);
@@ -517,6 +521,7 @@ public sealed class UploadMissionFileHandler
                     Name = structures[i].Name,
                     BuiltinSymbol = structures[i].BuiltinSymbol,
                     ImageStorageKey = structures[i].ImageStorageKey,
+                    PillagedImageStorageKey = structures[i].PillagedImageStorageKey,
                     Missions = missions,
                 };
             }
@@ -641,6 +646,9 @@ public sealed class UploadStructureImageCommand
 
     /// <summary>Gets the declared length, if known.</summary>
     public long? Length { get; init; }
+
+    /// <summary>Gets whether this upload replaces the pillaged logo.</summary>
+    public bool Pillaged { get; init; }
 }
 
 /// <summary>

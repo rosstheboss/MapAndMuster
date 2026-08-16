@@ -17,8 +17,11 @@ in an ADR or the relevant domain document and update tests.
 
 ## Resolution details
 
-5. Define full simultaneous-action precedence, including Move, Split, Build, Pillage, Repair,
-   Backstab, Retreat, and multiple arrivals.
+5. Resolved: simultaneous action processing order is movement and splits, then backstab alliance
+   breaks, then battles from enemy co-location, then Build/Pillage/Repair for forces not in
+   battle. Player-facing action order is Hold, Move, Build, Pillage, Repair, Split, Backstab.
+   Competing Build, Pillage, or Repair on the same territory, and other collisions that still
+   lack a documented ranking, become Hold. Retreat is battle-phase only. See `docs/DOMAIN.md`.
 6. In a retreat collision, define “strongest” and every tie-break step.
 7. Define territory/control outcomes for three or more combatants and unresolved battles.
 8. Define surrender timing and whether a submitted surrender can be withdrawn.

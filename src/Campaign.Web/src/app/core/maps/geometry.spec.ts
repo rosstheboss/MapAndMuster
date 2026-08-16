@@ -178,6 +178,19 @@ describe('map geometry', () => {
     expect(fitted.width).toBeCloseTo(0.05, 3);
   });
 
+  it('places a later marker away from occupied squares', () => {
+    const occupied = { x: 0.3, y: 0.3, width: 0.08, height: 0.08 };
+    const preferred = { x: 0.36, y: 0.3 };
+    const polygon = square(0.1, 0.1, 0.4);
+    const overlapping = fitSquareInPolygon(polygon, preferred, 0.08, 0.08);
+    const fitted = fitSquareInPolygon(polygon, preferred, 0.08, 0.08, [occupied]);
+    const overlapsOccupied = (marker: { x: number; y: number; width: number; height: number }): boolean =>
+      Math.abs(marker.x - occupied.x) < (marker.width + occupied.width) / 2 &&
+      Math.abs(marker.y - occupied.y) < (marker.height + occupied.height) / 2;
+    expect(overlapsOccupied(overlapping)).toBe(true);
+    expect(overlapsOccupied(fitted)).toBe(false);
+  });
+
   it('encloses a drawn line along the map image edge', () => {
     const enclosed = encloseAlongImageEdge(
       [
@@ -303,6 +316,7 @@ function territory(id: string, displayNumber: number, polygon: MapPoint[]): MapT
     polygon,
     terrainTypeId: 'plains',
     structureTypeId: null,
+    structureCondition: 'Operational',
     overlayColor: null,
     ownerFactionId: null,
     spawnFactionId: null,

@@ -61,12 +61,14 @@ internal static class CatalogFileBinder
             {
                 previousById.TryGetValue(type.Id, out var existing);
                 var imageKey = type.ClearImage ? null : existing?.ImageStorageKey;
+                var pillagedKey = type.ClearPillagedImage ? null : existing?.PillagedImageStorageKey;
                 return new StoredStructureType
                 {
                     Id = type.Id,
                     Name = type.Name,
                     BuiltinSymbol = imageKey is null ? type.BuiltinSymbol : existing?.BuiltinSymbol ?? type.BuiltinSymbol,
                     ImageStorageKey = imageKey,
+                    PillagedImageStorageKey = pillagedKey,
                     Missions = BindMissions(type.Missions, previousMissions),
                 };
             }),
@@ -96,6 +98,11 @@ internal static class CatalogFileBinder
                 if (IsUserUploadedFileKey(structure.ImageStorageKey))
                 {
                     yield return structure.ImageStorageKey;
+                }
+
+                if (IsUserUploadedFileKey(structure.PillagedImageStorageKey))
+                {
+                    yield return structure.PillagedImageStorageKey;
                 }
 
                 foreach (var mission in structure.Missions)

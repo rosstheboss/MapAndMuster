@@ -97,17 +97,37 @@
     drop-shadow(0 0 4px var(--glow-color, var(--color-glow)));
 }
 
-.structure-pin {
+.structure-pin,
+.force-pin {
   position: absolute;
   z-index: 1;
   display: grid;
   place-items: center;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 92%);
-  color: #1c1917;
   pointer-events: none;
-  box-shadow: 0 0 0 1px rgb(28 25 23 / 35%);
-  overflow: hidden;
+}
+
+.force-pin {
+  z-index: 2;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
+}
+
+.force-pin.is-mine {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 3px rgb(28 25 23 / 80%);
+}
+
+.force-pin.is-battle {
+  box-shadow:
+    0 0 0 2px #7c2d12,
+    0 0 0 4px rgb(254 243 226 / 90%);
+}
+
+.structure-pin.is-pillaged {
+  background: rgb(254 243 226 / 94%);
+  color: #7c2d12;
+  box-shadow: 0 0 0 1px rgb(124 45 18 / 45%);
 }
 
 .structure-pin app-map-symbol,

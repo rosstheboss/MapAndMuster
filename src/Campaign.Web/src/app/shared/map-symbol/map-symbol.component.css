@@ -14,3 +14,7 @@ svg {
 .decorative {
   pointer-events: none;
 }
+
+.pillaged {
+  color: #7c2d12;
+}

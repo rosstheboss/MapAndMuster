@@ -1,5 +1,12 @@
 import { interiorsOverlap, isValidTerritoryPolygon, type MapPoint } from './geometry';
-import { createId, nextDisplayNumber, type MapAdjacency, type MapGraph, type MapTerritory } from './map-graph.models';
+import {
+  createId,
+  nextDisplayNumber,
+  normalizeStructureCondition,
+  type MapAdjacency,
+  type MapGraph,
+  type MapTerritory,
+} from './map-graph.models';
 
 export function svgDownloadFilename(campaignName: string): string {
   const slug =
@@ -22,6 +29,9 @@ export function serializeMapSvg(graph: MapGraph): string {
         'data-terrain-type-id',
         territory.terrainTypeId,
       )}${attr('data-structure-type-id', territory.structureTypeId)}${attr(
+        'data-structure-condition',
+        territory.structureTypeId ? territory.structureCondition : null,
+      )}${attr(
         'data-overlay-color',
         territory.overlayColor,
       )}${attr('data-owner-faction-id', territory.ownerFactionId)}${attr(
@@ -109,6 +119,10 @@ function parseNativeOverlay(
       polygon: points,
       terrainTypeId: polygon.getAttribute('data-terrain-type-id') ?? '',
       structureTypeId: emptyToNull(polygon.getAttribute('data-structure-type-id')),
+      structureCondition: normalizeStructureCondition(
+        emptyToNull(polygon.getAttribute('data-structure-type-id')),
+        polygon.getAttribute('data-structure-condition'),
+      ),
       overlayColor: emptyToNull(polygon.getAttribute('data-overlay-color')),
       ownerFactionId: emptyToNull(polygon.getAttribute('data-owner-faction-id')),
       spawnFactionId: emptyToNull(polygon.getAttribute('data-spawn-faction-id')),
@@ -169,6 +183,7 @@ function parseGenericShapes(
       polygon,
       terrainTypeId: defaultTerrainTypeId,
       structureTypeId: null,
+      structureCondition: 'Operational',
       overlayColor: null,
       ownerFactionId: null,
       spawnFactionId: null,

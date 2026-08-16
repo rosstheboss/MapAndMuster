@@ -71,7 +71,19 @@ const campaign = {
   subfaction: null,
   canPlay: false,
   canChooseFaction: true,
+  canChat: true,
+  mentionableMembers: [{ userId: 'user-1', username: 'northplayer', displayName: 'northplayer' }],
+  log: [],
 };
+
+function flushPlayUnavailable(http: HttpTestingController): void {
+  http
+    .expectOne(`/api/campaigns/${campaign.id}/play`)
+    .flush(
+      { code: 'play.not_started', message: 'This campaign has not started yet.' },
+      { status: 400, statusText: 'Bad Request' },
+    );
+}
 
 describe('CampaignDetailPage', () => {
   beforeEach(async () => {
@@ -101,6 +113,7 @@ describe('CampaignDetailPage', () => {
       territories: [],
       adjacencies: [],
     });
+    flushPlayUnavailable(http);
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -117,6 +130,7 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('Battle phase · 1 day');
     expect(compiled.textContent).toContain('Choose your faction');
     expect(compiled.querySelector('#faction')).toBeTruthy();
+    expect(compiled.textContent).toContain('Campaign log');
     expect(compiled.textContent).toContain("Your force starts at that faction's spawn");
     expect(compiled.querySelector('a.button')?.textContent).toContain('Edit campaign');
     expect(compiled.textContent).toContain('Edit map');
@@ -133,6 +147,242 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
+  it('shows the campaign log and posts chat from an upcoming campaign', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      log: [
+        {
+          id: 'log-1',
+          occurredUtc: '2026-08-15T20:45:23-04:00',
+          kind: 'PlayerChat',
+          originator: 'northplayer',
+          summary: 'Hey, everybody! This is a message to all of you.',
+          territoryId: null,
+          forceId: null,
+          battleId: null,
+          isSystemAdjustment: false,
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('northplayer:');
+    expect(compiled.textContent).toContain('Hey, everybody! This is a message to all of you.');
+    const page = fixture.componentInstance as unknown as { postChat(message: string): Promise<void> };
+    const pending = page.postChat('Ready to play');
+    const posted = http.expectOne(`/api/campaigns/${campaign.id}/chat`);
+    expect((posted.request.body as { message: string }).message).toBe('Ready to play');
+    posted.flush({
+      ...campaign,
+      revision: 2,
+      log: [
+        {
+          id: 'log-2',
+          occurredUtc: '2026-08-15T20:46:23-04:00',
+          kind: 'PlayerChat',
+          originator: 'northplayer',
+          summary: 'Ready to play',
+          territoryId: null,
+          forceId: null,
+          battleId: null,
+          isSystemAdjustment: false,
+        },
+      ],
+    });
+    await pending;
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Ready to play');
+    expect(compiled.textContent).not.toContain('Successfully saved changes.');
+    expect(compiled.textContent).not.toContain('Saving');
+
+    const pageLog = fixture.componentInstance as unknown as { pullLog(): Promise<void> };
+    const pendingLog = pageLog.pullLog();
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      revision: 3,
+      log: [
+        {
+          id: 'log-3',
+          occurredUtc: '2026-08-15T20:47:23-04:00',
+          kind: 'PlayerChat',
+          originator: 'southplayer',
+          summary: 'See you on the map.',
+          territoryId: null,
+          forceId: null,
+          battleId: null,
+          isSystemAdjustment: false,
+        },
+      ],
+    });
+    await pendingLog;
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('See you on the map.');
+    http.verify();
+  });
+
+  it('shows a chat error without the save success banner', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as { postChat(message: string): Promise<void> };
+    const pending = page.postChat('Ready to play');
+    http
+      .expectOne(`/api/campaigns/${campaign.id}/chat`)
+      .flush(
+        { code: 'campaign.concurrency', message: 'This campaign changed. Reload and try again.' },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await pending;
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('This campaign changed. Reload and try again.');
+    expect(compiled.textContent).not.toContain('Successfully saved changes.');
+    http.verify();
+  });
+
+  it('shows a read-only play board with the campaign log during an active campaign', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+      currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+      log: [
+        {
+          id: 'log-1',
+          occurredUtc: '2026-08-14T12:00:00+00:00',
+          kind: 'CampaignStarted',
+          originator: 'Campaign',
+          summary: 'The campaign started.',
+          territoryId: null,
+          forceId: null,
+          battleId: null,
+          isSystemAdjustment: false,
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [
+        {
+          id: 't1',
+          displayNumber: 1,
+          name: 'Coast',
+          description: null,
+          polygon: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.4, y: 0.1 },
+            { x: 0.4, y: 0.4 },
+            { x: 0.1, y: 0.4 },
+          ],
+          terrainTypeId: 'plains',
+          structureTypeId: null,
+          structureCondition: 'Operational',
+          overlayColor: null,
+          ownerFactionId: '1',
+          spawnFactionId: '1',
+        },
+      ],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush({
+      id: campaign.id,
+      name: campaign.name,
+      revision: campaign.revision,
+      canManage: true,
+      isParticipant: true,
+      canChat: true,
+      mentionableMembers: campaign.mentionableMembers,
+      status: 'InProgress',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      currentPhaseLabel: 'Action 1',
+      currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+      currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+      currentWindowId: 'window-1',
+      hasMap: true,
+      factionId: '1',
+      canChooseFaction: false,
+      isCommitted: false,
+      roundCount: 8,
+      minRoundCount: 1,
+      remainingWindows: [],
+      factions: campaign.factions,
+      structureTypes: [],
+      forces: [
+        {
+          id: 'force-1',
+          controllerUserId: 'user-1',
+          controllerUsername: 'northplayer',
+          factionId: '1',
+          territoryId: 't1',
+          isMine: true,
+          inBattle: false,
+          moveTargets: [],
+          availableActions: ['Hold'],
+        },
+      ],
+      myDrafts: [],
+      orders: [],
+      commitments: [{ userId: 'user-1', username: 'northplayer', isCommitted: false }],
+      battles: [],
+      log: [],
+      playersMissingFaction: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Campaign log');
+    expect(compiled.textContent).toContain('The campaign started.');
+    expect(compiled.textContent).toContain('Campaign:');
+    expect(compiled.textContent).toContain('Phase ends in');
+    expect(compiled.textContent).toContain('Round 1 · Action 1');
+    expect(compiled.querySelector('a.button')?.textContent).toContain('Play');
+    expect(compiled.textContent).not.toContain('Commit orders');
+    expect(compiled.textContent).not.toContain('Choose your faction');
+    expect(compiled.textContent).not.toContain('Download map');
+    const page = fixture.componentInstance as unknown as { hoveredTerritoryId: { set(id: string): void } };
+    page.hoveredTerritoryId.set('t1');
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Forces: northplayer · North');
+    http.verify();
+  });
+
   it('shows a static map preview and a download control when a map exists', async () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
@@ -144,6 +394,7 @@ describe('CampaignDetailPage', () => {
       territories: [],
       adjacencies: [],
     });
+    flushPlayUnavailable(http);
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -167,6 +418,7 @@ describe('CampaignDetailPage', () => {
       territories: [],
       adjacencies: [],
     });
+    flushPlayUnavailable(http);
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -203,6 +455,11 @@ describe('CampaignDetailPage', () => {
           territories: [],
           adjacencies: [],
         });
+      } else if (request.request.url.endsWith('/play')) {
+        request.flush(
+          { code: 'play.not_started', message: 'This campaign has not started yet.' },
+          { status: 400, statusText: 'Bad Request' },
+        );
       } else {
         request.flush({
           ...campaign,

@@ -1,12 +1,17 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
-import type { CampaignDetail, CampaignMission } from '../../core/campaigns/campaign.models';
+import type {
+  CampaignDetail,
+  CampaignMission,
+  CampaignPlayDetail,
+  PlayForce,
+} from '../../core/campaigns/campaign.models';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
-import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
+import { CAMPAIGN_LOG_POLL_MS, mergeCampaignLog, type CampaignLogSync } from '../../core/campaigns/campaign-log';
 import { actionNumberAt, formatDuration, formatPhaseLabel, statusLabel } from '../../core/campaigns/campaign-schedule';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
@@ -15,10 +20,16 @@ import { adjacentTerritoryIds } from '../../core/maps/adjacency';
 import { downloadBlob, mapDownloadFilename, rasterizeMapPng } from '../../core/maps/map-export';
 import { serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
 import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
-import { territoryLabel } from '../../core/maps/map-graph.models';
+import { normalizeStructureCondition, territoryLabel } from '../../core/maps/map-graph.models';
+import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
+import { CampaignLogComponent } from '../../shared/campaign-log/campaign-log.component';
 import { CampaignMapPreviewComponent } from '../../shared/campaign-map-preview/campaign-map-preview.component';
-import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
+import {
+  CampaignMapViewComponent,
+  type MapForceMarker,
+} from '../../shared/campaign-map-view/campaign-map-view.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
+import { PhaseCountdownComponent } from '../../shared/phase-countdown/phase-countdown.component';
 
 @Component({
   selector: 'app-campaign-detail-page',
@@ -26,9 +37,11 @@ import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component
     FormsModule,
     RouterLink,
     InstantDatePipe,
+    CampaignLogComponent,
     CampaignMapViewComponent,
     CampaignMapPreviewComponent,
     MapSymbolComponent,
+    PhaseCountdownComponent,
   ],
   templateUrl: './campaign-detail.page.html',
   styleUrl: './campaign-detail.page.css',
@@ -39,17 +52,23 @@ export class CampaignDetailPage {
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
   protected readonly campaign = signal<CampaignDetail | null>(null);
+  protected readonly play = signal<CampaignPlayDetail | null>(null);
   protected readonly graph = signal<MapGraph>({ territories: [], adjacencies: [] });
   protected readonly hoveredTerritoryId = signal<string | null>(null);
   protected readonly selectedIds = signal<string[]>([]);
   protected readonly confirmingDelete = signal(false);
   protected readonly deleting = signal(false);
   protected readonly downloading = signal(false);
+  protected readonly chatBusy = signal(false);
+  protected readonly chatError = signal<string | null>(null);
+  private readonly mapRevision = signal(0);
+  private logPollStarted = false;
   protected readonly factionChoice = signal('');
   protected readonly subfactionChoice = signal('');
 
@@ -69,7 +88,7 @@ export class CampaignDetailPage {
       return null;
     }
 
-    return this.campaignsApi.mapUrl(campaign.id, campaign.revision);
+    return this.campaignsApi.mapUrl(campaign.id, this.mapRevision());
   });
 
   protected hoveredTerritory = computed(() => {
@@ -99,6 +118,40 @@ export class CampaignDetailPage {
 
     return campaign.factions.find((faction) => faction.id === campaign.factionId) ?? null;
   });
+  protected readonly isLiveBoard = computed(() => this.campaign()?.status === 'InProgress');
+  protected readonly mapForces = computed((): MapForceMarker[] => {
+    const play = this.play();
+    if (!play) {
+      return [];
+    }
+
+    return play.forces.map((force) => ({
+      id: force.id,
+      territoryId: force.territoryId,
+      factionId: force.factionId,
+      isMine: force.isMine,
+      inBattle: force.inBattle,
+      label: `${this.forceLabel(force)} in ${this.territoryName(force.territoryId)}`,
+    }));
+  });
+
+  protected async postChat(message: string): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return;
+    }
+
+    this.chatError.set(null);
+    this.chatBusy.set(true);
+    try {
+      const next = await this.campaignsApi.postChat(campaign.id, { revision: campaign.revision, message });
+      this.applyLog(next, true);
+    } catch (error: unknown) {
+      this.chatError.set(readApiError(error, 'Unable to send that chat message.'));
+    } finally {
+      this.chatBusy.set(false);
+    }
+  }
 
   protected async chooseFaction(): Promise<void> {
     const campaign = this.campaign();
@@ -170,6 +223,38 @@ export class CampaignDetailPage {
     return territoryLabel(territory);
   }
 
+  protected forceLabel(force: PlayForce): string {
+    const name = force.controllerUsername ?? 'Player';
+    return `${name} · ${this.factionName(force.factionId)}`;
+  }
+
+  protected territoryName(id: string | null | undefined): string {
+    if (!id) {
+      return 'None';
+    }
+
+    const territory = this.graph().territories.find((item) => item.id === id);
+    return territory ? territoryLabel(territory) : id;
+  }
+
+  protected forcesInTerritory(territoryId: string): string[] {
+    return (this.play()?.forces.filter((force) => force.territoryId === territoryId) ?? []).map((force) =>
+      this.forceLabel(force),
+    );
+  }
+
+  protected structureConditionLabel(condition: string | null | undefined): string {
+    if (condition === 'Pillaged') {
+      return 'pillaged';
+    }
+
+    if (condition === 'Destroyed') {
+      return 'destroyed';
+    }
+
+    return 'operational';
+  }
+
   protected terrainName(id: string | null): string {
     return terrainTypeById(this.campaign(), id)?.name ?? 'None';
   }
@@ -191,10 +276,20 @@ export class CampaignDetailPage {
     return missionsForTerritory(this.campaign(), territory?.terrainTypeId, territory?.structureTypeId);
   }
 
-  protected structureImageUrl = (structureTypeId: string): string | null => {
+  protected structureImageUrl = (structureTypeId: string, pillaged = false): string | null => {
     const campaign = this.campaign();
     const structure = structureTypeById(campaign, structureTypeId);
-    if (!campaign || !structure?.hasImage) {
+    if (!campaign || !structure) {
+      return null;
+    }
+
+    if (pillaged) {
+      return structure.hasPillagedImage
+        ? this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.revision, true)
+        : null;
+    }
+
+    if (!structure.hasImage) {
       return null;
     }
 
@@ -325,10 +420,54 @@ export class CampaignDetailPage {
     }
   }
 
+  private applyLog(snapshot: CampaignLogSync, force = false): void {
+    this.campaign.update((current) =>
+      current && (force || snapshot.revision > current.revision) ? mergeCampaignLog(current, snapshot) : current,
+    );
+    this.play.update((current) =>
+      current && (force || snapshot.revision > current.revision) ? mergeCampaignLog(current, snapshot) : current,
+    );
+  }
+
+  private startLogPolling(): void {
+    if (this.logPollStarted) {
+      return;
+    }
+
+    this.logPollStarted = true;
+    const timer = globalThis.setInterval(() => void this.pullLog(), CAMPAIGN_LOG_POLL_MS);
+    this.destroyRef.onDestroy(() => globalThis.clearInterval(timer));
+  }
+
+  protected async pullLog(): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign || this.chatBusy() || globalThis.document.visibilityState === 'hidden') {
+      return;
+    }
+
+    try {
+      const next = await this.campaignsApi.get(campaign.id);
+      this.applyLog(next);
+    } catch {
+      // Keep the visible log; the next poll retries.
+    }
+  }
+
   private async load(id: string): Promise<void> {
     try {
-      const [campaign, graph] = await Promise.all([this.campaignsApi.get(id), this.campaignsApi.getMapGraph(id)]);
+      const playRequest = this.campaignsApi.getPlay(id).then(
+        (play) => play,
+        () => null,
+      );
+      const [campaign, graph, play] = await Promise.all([
+        this.campaignsApi.get(id),
+        this.campaignsApi.getMapGraph(id),
+        playRequest,
+      ]);
       this.campaign.set(campaign);
+      this.play.set(campaign.status === 'InProgress' ? play : null);
+      this.mapRevision.set(campaign.revision);
+      this.startLogPolling();
       if (campaign.hasMap) {
         this.graph.set({
           territories: graph.territories.map((territory) => ({
@@ -339,6 +478,7 @@ export class CampaignDetailPage {
             polygon: territory.polygon.map((point) => ({ x: point.x, y: point.y })),
             terrainTypeId: territory.terrainTypeId,
             structureTypeId: territory.structureTypeId,
+            structureCondition: normalizeStructureCondition(territory.structureTypeId, territory.structureCondition),
             overlayColor: territory.overlayColor,
             ownerFactionId: territory.ownerFactionId,
             spawnFactionId: territory.spawnFactionId,

@@ -53,7 +53,18 @@ public static class CampaignPlayRules
             forces.Add(new CampaignForce(Guid.NewGuid(), player.UserId, player.FactionId.Value, spawn.Id, false));
         }
 
-        var started = new CampaignPlayState(windows, forces, [], [], [], [], [], [], [], CaptureStructures(seededMap), [])
+        var started = new CampaignPlayState(
+            windows,
+            forces,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            CaptureStructures(seededMap),
+            state.Log)
             .AppendLog(new PlayLogEntry(
                 Guid.NewGuid(),
                 utcNow,
@@ -166,8 +177,41 @@ public static class CampaignPlayRules
         [NotNullWhen(true)] out CampaignPlayState? next,
         [NotNullWhen(false)] out DomainError? error)
     {
+        return TrySaveDraft(
+            state,
+            userId,
+            forceId,
+            kind,
+            targetTerritoryId,
+            structureTypeId,
+            map,
+            new Dictionary<Guid, string?>(),
+            knownStructureTypeIds: null,
+            utcNow,
+            out next,
+            out error);
+    }
+
+    /// <summary>
+    /// Saves a draft while the action window is open and the player is uncommitted.
+    /// </summary>
+    public static bool TrySaveDraft(
+        CampaignPlayState state,
+        Guid userId,
+        Guid forceId,
+        ActionKind kind,
+        Guid? targetTerritoryId,
+        Guid? structureTypeId,
+        PlayMap map,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlySet<Guid>? knownStructureTypeIds,
+        DateTimeOffset utcNow,
+        [NotNullWhen(true)] out CampaignPlayState? next,
+        [NotNullWhen(false)] out DomainError? error)
+    {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(factionAllyGroups);
         next = null;
         error = null;
         if (!TryOpenAction(state, userId, forceId, utcNow, requireUncommitted: true, out var window, out var force, out error))
@@ -178,6 +222,12 @@ public static class CampaignPlayRules
         if (kind == ActionKind.Battle)
         {
             error = new DomainError("order.kind.invalid", "Players cannot submit the Battle action directly.", "kind");
+            return false;
+        }
+
+        if (kind == ActionKind.Retreat)
+        {
+            error = new DomainError("order.kind.invalid", "Retreat is submitted after a battle, not during an action window.", "kind");
             return false;
         }
 
@@ -205,9 +255,48 @@ public static class CampaignPlayRules
             }
         }
 
-        if (kind == ActionKind.Build && structureTypeId is null)
+        if (kind == ActionKind.Split && state.Forces.Count(item => item.ControllerUserId == force.ControllerUserId) >= ActionResolution.MaxForcesPerPlayer)
         {
-            error = new DomainError("order.structure.required", "Choose a structure to build.", "structureTypeId");
+            error = new DomainError("order.split.limit", "A player may have at most two forces.", "kind");
+            return false;
+        }
+
+        if (kind == ActionKind.Build)
+        {
+            if (structureTypeId is null)
+            {
+                error = new DomainError("order.structure.required", "Choose a structure to build.", "structureTypeId");
+                return false;
+            }
+
+            if (knownStructureTypeIds is { Count: > 0 } && !knownStructureTypeIds.Contains(structureTypeId.Value))
+            {
+                error = new DomainError("order.structure.invalid", "Choose a structure type from this campaign.", "structureTypeId");
+                return false;
+            }
+
+            if (!ActionResolution.CanBuildInTerritory(map, force))
+            {
+                error = new DomainError("order.build.invalid", "A structure can only be built in a non-spawn territory without an intact structure.", "kind");
+                return false;
+            }
+        }
+
+        if (kind == ActionKind.Pillage && !ActionResolution.IsValidPillage(map, force))
+        {
+            error = new DomainError("order.pillage.invalid", "Pillage requires an enemy or unowned intact structure in this territory.", "kind");
+            return false;
+        }
+
+        if (kind == ActionKind.Repair && !ActionResolution.IsValidRepair(map, force))
+        {
+            error = new DomainError("order.repair.invalid", "Repair requires a pillaged structure you control.", "kind");
+            return false;
+        }
+
+        if (kind == ActionKind.Backstab && !ActionResolution.IsValidBackstab(force, factionAllyGroups, state.BrokenAllyFactionIds))
+        {
+            error = new DomainError("order.backstab.invalid", "Backstab requires an active alliance.", "kind");
             return false;
         }
 

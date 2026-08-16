@@ -722,6 +722,7 @@ public static class CampaignSetupRules
                 name,
                 builtin,
                 input.ClearImage,
+                input.ClearPillagedImage,
                 missionsForType));
         }
 

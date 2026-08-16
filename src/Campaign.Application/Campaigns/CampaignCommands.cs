@@ -165,6 +165,27 @@ public sealed class JoinCampaignCommand
 }
 
 /// <summary>
+/// Command to post a public chat message in a campaign log.
+/// </summary>
+public sealed class PostCampaignChatCommand
+{
+    /// <summary>Gets the authenticated user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is a system administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the chat message.</summary>
+    public required string Message { get; init; }
+}
+
+/// <summary>
 /// Command to leave a campaign the caller plays in but does not manage.
 /// </summary>
 public sealed class LeaveCampaignCommand

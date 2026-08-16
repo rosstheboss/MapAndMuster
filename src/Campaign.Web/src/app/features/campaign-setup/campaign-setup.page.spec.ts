@@ -240,6 +240,7 @@ describe('CampaignSetupPage', () => {
     fixture.detectChanges();
     expect(detailsToggle?.getAttribute('aria-expanded')).toBe('true');
     expect(compiled.querySelector('#name')?.closest('[hidden]')).toBeNull();
+    expect(compiled.textContent).toContain('Pillaged icon');
     TestBed.inject(HttpTestingController).verify();
   });
 });
@@ -330,6 +331,9 @@ describe('CampaignSetupPage edit', () => {
       subfaction: null,
       canPlay: false,
       canChooseFaction: false,
+      canChat: true,
+      mentionableMembers: [],
+      log: [],
     });
     await fixture.whenStable();
     fixture.detectChanges();
@@ -417,6 +421,9 @@ describe('CampaignSetupPage edit', () => {
       subfaction: null,
       canPlay: false,
       canChooseFaction: false,
+      canChat: true,
+      mentionableMembers: [],
+      log: [],
     });
     await fixture.whenStable();
     fixture.detectChanges();

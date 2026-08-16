@@ -633,10 +633,11 @@ export function fitSquareInPolygon(
   preferred: MapPoint,
   maxWidth: number,
   maxHeight: number,
-  avoid: FittedSquare | null = null,
+  avoid: readonly FittedSquare[] | null = null,
 ): FittedSquare {
   const minWidth = Math.max(maxWidth * 0.2, 0.004);
   const minHeight = Math.max(maxHeight * 0.2, 0.004);
+  const avoided = avoid ?? [];
   let best: FittedSquare = {
     x: preferred.x,
     y: preferred.y,
@@ -655,7 +656,7 @@ export function fitSquareInPolygon(
         width,
         height,
       };
-      if (!squareFitsPolygon(polygon, candidate, avoid)) {
+      if (!squareFitsPolygon(polygon, candidate, avoided)) {
         continue;
       }
 
@@ -700,8 +701,12 @@ function markerOffsets(): MapPoint[] {
   ];
 }
 
-function squareFitsPolygon(polygon: readonly MapPoint[], square: FittedSquare, avoid: FittedSquare | null): boolean {
-  if (avoid && rectanglesOverlap(square, avoid)) {
+function squareFitsPolygon(
+  polygon: readonly MapPoint[],
+  square: FittedSquare,
+  avoid: readonly FittedSquare[],
+): boolean {
+  if (avoid.some((item) => rectanglesOverlap(square, item))) {
     return false;
   }
 

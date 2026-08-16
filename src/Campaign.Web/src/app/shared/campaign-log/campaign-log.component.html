@@ -1,0 +1,70 @@
+<details class="campaign-log" open>
+  <summary>Campaign log</summary>
+  <div class="log-scroll" #scroller tabindex="0" role="log" aria-live="polite" aria-relevant="additions">
+    @if (entries().length === 0) {
+      <p class="muted">No messages yet.</p>
+    } @else {
+      <ol class="log-list">
+        @for (entry of entries(); track entry.id) {
+          <li>
+            <p>
+              <time [attr.datetime]="entry.occurredUtc">{{ formatTimestamp(entry.occurredUtc) }}</time>
+              {{ entry.originator }}:
+              @for (part of parts(entry.summary); track $index) {
+                @if (part.mention) {
+                  <strong>{{ part.text }}</strong>
+                } @else {
+                  {{ part.text }}
+                }
+              }
+            </p>
+          </li>
+        }
+      </ol>
+    }
+  </div>
+  @if (canChat()) {
+    <div class="chat-compose">
+      <label class="field">
+        Message
+        <textarea
+          #composer
+          rows="1"
+          [ngModel]="draft()"
+          (ngModelChange)="onDraftInput($event)"
+          (keydown)="onKeydown($event)"
+          [disabled]="sending()"
+          maxlength="2000"
+          aria-autocomplete="list"
+          [attr.aria-expanded]="suggestions().length > 0"
+          aria-controls="chat-suggest"
+        ></textarea>
+      </label>
+      @if (suggestions().length > 0) {
+        <ul id="chat-suggest" class="suggest" role="listbox">
+          @for (member of suggestions(); track member.userId; let index = $index) {
+            <li>
+              <button
+                type="button"
+                role="option"
+                [class.is-active]="index === highlight()"
+                [attr.aria-selected]="index === highlight()"
+                (mousedown)="complete(member)"
+              >
+                {{ suggestionLabel(member) }}
+              </button>
+            </li>
+          }
+        </ul>
+      }
+      @if (sendError()) {
+        <p class="error" role="alert">{{ sendError() }}</p>
+      }
+      <button type="button" class="button" (click)="submit()" [disabled]="sending() || draft().trim().length === 0">
+        Send
+      </button>
+    </div>
+  } @else {
+    <p class="muted">Join this campaign to chat in the log.</p>
+  }
+</details>

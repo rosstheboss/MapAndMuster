@@ -130,6 +130,12 @@ public enum PlayLogKind
 
     /// <summary>A manager lengthened remaining phases or added rounds.</summary>
     ScheduleExtended = 13,
+
+    /// <summary>Same-player forces occupying one territory rejoined.</summary>
+    ForcesRejoined = 14,
+
+    /// <summary>A campaign member posted a public chat message.</summary>
+    PlayerChat = 15,
 }
 
 /// <summary>

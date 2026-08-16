@@ -9,4 +9,5 @@ export class MapSymbolComponent {
   readonly kind = input.required<'terrain' | 'structure'>();
   readonly name = input.required<string>();
   readonly label = input<string | undefined>(undefined);
+  readonly pillaged = input(false);
 }

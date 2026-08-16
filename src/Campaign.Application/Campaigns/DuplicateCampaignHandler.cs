@@ -205,6 +205,7 @@ public sealed class DuplicateCampaignHandler
                     OverlayColor = territory.OverlayColor,
                     OwnerFactionId = Remap(territory.OwnerFactionId, factionIds),
                     SpawnFactionId = Remap(territory.SpawnFactionId, factionIds),
+                    StructureCondition = territory.StructureCondition,
                 }),
             ],
             Adjacencies =

@@ -14,9 +14,9 @@ useful.
 Required early suites:
 
 - Required-participant calculation and final-commit race behavior.
-- Commit, uncommit, deadline auto-submit, and default Hold.
+- Commit, uncommit only while the action window is open, deadline auto-submit, and default Hold.
 - Action validity and precedence, especially Battle overriding later actions.
-- Move adjacency, spawn restrictions, split/rejoin, backstab, pillage/repair, and retreat.
+- Move adjacency, spawn restrictions, split/rejoin with a play-log entry, backstab, pillage/repair, and retreat.
 - Supply graph traversal, alliance inclusion, temporary supply, and split forces.
 - Status transitions and faction exceptions.
 - Public/private objective visibility and completion.
@@ -40,6 +40,7 @@ Cover:
 - GM inspection/correction audit events and transactional notification outbox.
 - Idempotent deadline workers and retry behavior.
 - File metadata and upload authorization.
+- Public campaign-log chat on an upcoming campaign, including outsider rejection and unknown `@` mentions.
 
 ## Angular tests
 
@@ -47,11 +48,13 @@ Use Angular's Vitest integration.
 
 Cover components/services for:
 
-- Order drafting, validation messages, commit/uncommit, and locked state.
+- Order drafting (selection saves a draft), validation messages, commit of unsaved drafts, uncommit, and locked state.
 - Countdown display without treating the browser clock as authoritative.
-- Map territory selection, polygon editing, keyboard alternatives, and metadata forms.
+- Map territory selection, force markers, polygon editing, keyboard alternatives, and metadata forms.
 - Permission-based navigation without relying on it as backend security.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
+- Campaign log display, member chat, live log refresh, chat send errors without the save success
+  banner, and `@` mention autocomplete limited to current members.
 - API error and concurrency-conflict recovery.
 
 ## End-to-end tests

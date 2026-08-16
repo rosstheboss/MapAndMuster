@@ -73,6 +73,8 @@ type StructureGroup = FormGroup<{
   builtinSymbol: FormControl<string>;
   iconSource: FormControl<'symbol' | 'image'>;
   clearImage: FormControl<boolean>;
+  pillagedIconSource: FormControl<'symbol' | 'image'>;
+  clearPillagedImage: FormControl<boolean>;
   missions: FormArray<MissionGroup>;
 }>;
 type PhaseGroup = FormGroup<{
@@ -133,9 +135,11 @@ export class CampaignSetupPage {
   private mapObjectUrl: string | null = null;
   private revision = 0;
   private readonly structureImages = new Map<string, File>();
+  private readonly structurePillagedImages = new Map<string, File>();
   private readonly flagImages = new Map<string, File>();
   private readonly missionFiles = new Map<string, File>();
   private readonly storedStructureImages = signal<ReadonlySet<string>>(new Set());
+  private readonly storedPillagedImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedFlagImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedMissionFiles = signal<ReadonlySet<string>>(new Set());
 
@@ -414,6 +418,7 @@ export class CampaignSetupPage {
   protected removeStructureType(index: number): void {
     const id = this.structureTypes.at(index).controls.id.value;
     this.structureImages.delete(id);
+    this.structurePillagedImages.delete(id);
     this.removeMissionsFiles(this.structureTypes.at(index));
     this.structureTypes.removeAt(index);
   }
@@ -472,6 +477,16 @@ export class CampaignSetupPage {
     }
 
     return [...seen.values()].sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  protected setPillagedIconSource(structure: StructureGroup, source: 'symbol' | 'image'): void {
+    structure.controls.pillagedIconSource.setValue(source);
+    if (source === 'symbol') {
+      this.structurePillagedImages.delete(structure.controls.id.value);
+      structure.controls.clearPillagedImage.setValue(true);
+    } else {
+      structure.controls.clearPillagedImage.setValue(false);
+    }
   }
 
   protected setIconSource(structure: StructureGroup, source: 'symbol' | 'image'): void {
@@ -589,6 +604,16 @@ export class CampaignSetupPage {
     }
   }
 
+  protected onStructurePillagedImageSelected(structureId: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    if (file) {
+      this.structurePillagedImages.set(structureId, file);
+      const group = this.structureTypes.controls.find((item) => item.controls.id.value === structureId);
+      group?.controls.clearPillagedImage.setValue(false);
+    }
+  }
+
   protected onFlagImageSelected(factionId: string, event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
@@ -635,12 +660,20 @@ export class CampaignSetupPage {
     return this.structureImages.get(structureId)?.name ?? null;
   }
 
+  protected structurePillagedImageName(structureId: string): string | null {
+    return this.structurePillagedImages.get(structureId)?.name ?? null;
+  }
+
   protected missionFileName(missionId: string): string | null {
     return this.missionFiles.get(missionId)?.name ?? null;
   }
 
   protected hasStoredStructureImage(structureId: string): boolean {
     return this.storedStructureImages().has(structureId);
+  }
+
+  protected hasStoredPillagedImage(structureId: string): boolean {
+    return this.storedPillagedImages().has(structureId);
   }
 
   protected hasStoredMissionFile(missionId: string): boolean {
@@ -654,6 +687,15 @@ export class CampaignSetupPage {
     }
 
     return this.campaignsApi.structureImageUrl(campaignId, structureId, this.revision);
+  }
+
+  protected structurePillagedImageUrl(structureId: string): string | null {
+    const campaignId = this.campaignId();
+    if (!campaignId || !this.hasStoredPillagedImage(structureId)) {
+      return null;
+    }
+
+    return this.campaignsApi.structureImageUrl(campaignId, structureId, this.revision, true);
   }
 
   protected async save(): Promise<void> {
@@ -693,6 +735,15 @@ export class CampaignSetupPage {
           detail = await this.campaignsApi.uploadStructureImage(detail.id, structureId, file, detail.revision);
         }
 
+        for (const [structureId, file] of this.structurePillagedImages) {
+          const structure = this.structureTypes.controls.find((item) => item.controls.id.value === structureId);
+          if (structure?.controls.pillagedIconSource.value !== 'image') {
+            continue;
+          }
+
+          detail = await this.campaignsApi.uploadStructureImage(detail.id, structureId, file, detail.revision, true);
+        }
+
         for (const [factionId, file] of this.flagImages) {
           const faction = this.factions.controls.find((item) => item.controls.id.value === factionId);
           if (faction?.controls.flagSource.value !== 'image') {
@@ -715,6 +766,7 @@ export class CampaignSetupPage {
       this.mapFileName.set(null);
       this.setStoredMapPreview(created.detail.id, created.detail.revision, created.detail.hasMap);
       this.structureImages.clear();
+      this.structurePillagedImages.clear();
       this.flagImages.clear();
       this.missionFiles.clear();
       this.rememberStoredFiles(created.detail);
@@ -883,6 +935,7 @@ export class CampaignSetupPage {
     builtinSymbol = '',
     missions?: MissionGroup[],
     iconSource: 'symbol' | 'image' = 'symbol',
+    pillagedIconSource: 'symbol' | 'image' = 'symbol',
   ): StructureGroup {
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
@@ -890,6 +943,8 @@ export class CampaignSetupPage {
       builtinSymbol: [builtinSymbol],
       iconSource: this.formBuilder.nonNullable.control<'symbol' | 'image'>(iconSource),
       clearImage: [false],
+      pillagedIconSource: this.formBuilder.nonNullable.control<'symbol' | 'image'>(pillagedIconSource),
+      clearPillagedImage: [false],
       missions: this.formBuilder.array<MissionGroup>(missions ?? []),
     });
   }
@@ -903,6 +958,7 @@ export class CampaignSetupPage {
       type.builtinSymbol ?? '',
       missions,
       type.hasImage ? 'image' : 'symbol',
+      type.hasPillagedImage ? 'image' : 'symbol',
     );
   }
 
@@ -977,6 +1033,7 @@ export class CampaignSetupPage {
       name: type.name.trim(),
       builtinSymbol: type.builtinSymbol.trim() || null,
       clearImage: type.iconSource === 'symbol' || type.clearImage,
+      clearPillagedImage: type.pillagedIconSource === 'symbol' || type.clearPillagedImage,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toMissionPayload(mission)),
@@ -1180,6 +1237,15 @@ export class CampaignSetupPage {
           sections.add(`structure-item-${index}`);
         }
       }
+
+      if (structure.controls.pillagedIconSource.value === 'image') {
+        const id = structure.controls.id.value;
+        if (!this.structurePillagedImages.has(id) && !this.hasStoredPillagedImage(id)) {
+          failures.push(`Structure ${index + 1} needs a pillaged logo image or the built-in pillaged icon.`);
+          sections.add('structures');
+          sections.add(`structure-item-${index}`);
+        }
+      }
     });
 
     const roundLengthError = describeControlError(this.form.controls.roundLengthAmount, 'Round length');
@@ -1339,6 +1405,9 @@ export class CampaignSetupPage {
   private rememberStoredFiles(campaign: CampaignDetail): void {
     this.storedStructureImages.set(
       new Set(campaign.structureTypes.filter((type) => type.hasImage).map((type) => type.id)),
+    );
+    this.storedPillagedImages.set(
+      new Set(campaign.structureTypes.filter((type) => type.hasPillagedImage).map((type) => type.id)),
     );
     this.storedFlagImages.set(
       new Set(campaign.factions.filter((faction) => faction.hasFlagImage).map((faction) => faction.id)),

@@ -143,7 +143,10 @@ public sealed class CampaignPlayRulesTests
         Assert.True(CampaignPlayRules.TrySaveDraft(
             state, PlayerOne, force.Id, ActionKind.Hold, null, null, map, schedule.StartsUtc, out state, out _));
         Assert.True(CampaignPlayRules.TryCommit(state, map, PlayerOne, AllyGroups(), schedule.StartsUtc, out var committed, out _));
-        Assert.True(CampaignPlayRules.TryUncommit(committed!.State, PlayerOne, schedule.StartsUtc, out var open, out _));
+        var window = committed!.State.CurrentWindow()!;
+        Assert.False(CampaignPlayRules.TryUncommit(committed.State, PlayerOne, window.EndsUtc, out _, out var closedError));
+        Assert.Equal("order.window.closed", closedError!.Code);
+        Assert.True(CampaignPlayRules.TryUncommit(committed.State, PlayerOne, schedule.StartsUtc, out var open, out _));
         Assert.DoesNotContain(open!.Commitments, item => item.UserId == PlayerOne);
     }
 
@@ -329,6 +332,67 @@ public sealed class CampaignPlayRulesTests
             out _));
         Assert.Contains(outcome!.State.Log, item => item.Kind == PlayLogKind.ScheduleExtended && item.ActorUserId == PlayerOne);
         Assert.Equal(4, outcome.RoundCount);
+    }
+
+    [Fact]
+    public void DraftRejectsPillageRepairBackstabAndRetreatWhenTheyAreNotLegal()
+    {
+        var (state, map, schedule) = Seeded();
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var now = schedule.StartsUtc;
+
+        Assert.False(CampaignPlayRules.TrySaveDraft(
+            state, PlayerOne, northForce.Id, ActionKind.Pillage, null, null, map, now, out _, out var pillageError));
+        Assert.Equal("order.pillage.invalid", pillageError!.Code);
+
+        Assert.False(CampaignPlayRules.TrySaveDraft(
+            state, PlayerOne, northForce.Id, ActionKind.Repair, null, null, map, now, out _, out var repairError));
+        Assert.Equal("order.repair.invalid", repairError!.Code);
+
+        Assert.False(CampaignPlayRules.TrySaveDraft(
+            state,
+            PlayerOne,
+            northForce.Id,
+            ActionKind.Backstab,
+            null,
+            null,
+            map,
+            AllyGroups(),
+            null,
+            now,
+            out _,
+            out var backstabError));
+        Assert.Equal("order.backstab.invalid", backstabError!.Code);
+
+        Assert.False(CampaignPlayRules.TrySaveDraft(
+            state, PlayerOne, northForce.Id, ActionKind.Retreat, NorthSpawn, null, map, now, out _, out var retreatError));
+        Assert.Equal("order.kind.invalid", retreatError!.Code);
+
+        Assert.False(CampaignPlayRules.TrySaveDraft(
+            state, PlayerOne, northForce.Id, ActionKind.Build, null, null, map, now, out _, out var buildError));
+        Assert.Equal("order.structure.required", buildError!.Code);
+    }
+
+    [Fact]
+    public void DraftAcceptsPillageOfAnUnownedStructure()
+    {
+        var (state, map, schedule) = Seeded();
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var relocated = northForce.With(territoryId: Midland);
+        state = state.With(forces: [relocated, .. state.Forces.Where(force => force.Id != northForce.Id)]);
+        map = map.Replace(map.Territory(Midland)!.With(structureTypeId: Guid.NewGuid(), structureName: "Town"));
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state,
+            PlayerOne,
+            relocated.Id,
+            ActionKind.Pillage,
+            null,
+            null,
+            map,
+            schedule.StartsUtc,
+            out var drafted,
+            out _));
+        Assert.Equal(ActionKind.Pillage, drafted!.Drafts.Single(item => item.ForceId == relocated.Id).Kind);
     }
 
     private static CampaignPlayState ForceBattle(CampaignPlayState state, PlayMap map, CampaignSchedule schedule)

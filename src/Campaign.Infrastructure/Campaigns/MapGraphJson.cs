@@ -59,6 +59,7 @@ internal static class MapGraphJson
             OverlayColor = territory.OverlayColor,
             OwnerFactionId = territory.OwnerFactionId,
             SpawnFactionId = territory.SpawnFactionId,
+            StructureCondition = territory.StructureCondition,
         };
     }
 
@@ -89,6 +90,7 @@ internal static class MapGraphJson
             OverlayColor = territory.OverlayColor,
             OwnerFactionId = territory.OwnerFactionId,
             SpawnFactionId = territory.SpawnFactionId,
+            StructureCondition = territory.StructureCondition,
         };
     }
 
@@ -135,6 +137,8 @@ internal static class MapGraphJson
         public Guid? OwnerFactionId { get; set; }
 
         public Guid? SpawnFactionId { get; set; }
+
+        public string? StructureCondition { get; set; }
     }
 
     private sealed class MapPointDocument

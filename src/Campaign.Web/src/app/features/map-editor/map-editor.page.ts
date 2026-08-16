@@ -38,6 +38,7 @@ import {
   cloneGraph,
   createId,
   nextDisplayNumber,
+  normalizeStructureCondition,
   territoryLabel,
   type MapAdjacency,
   type MapGraph,
@@ -448,6 +449,7 @@ export class MapEditorPage {
       polygon: points.map((point) => ({ ...point })),
       terrainTypeId: defaultTerrain.id,
       structureTypeId: null,
+      structureCondition: 'Operational',
       overlayColor: this.overlayColorForNew(defaultTerrain.id),
       ownerFactionId: null,
       spawnFactionId: null,
@@ -577,7 +579,18 @@ export class MapEditorPage {
   }
 
   protected setStructure(value: string): void {
-    this.patchSelected((territory) => ({ ...territory, structureTypeId: value || null }));
+    this.patchSelected((territory) => ({
+      ...territory,
+      structureTypeId: value || null,
+      structureCondition: value ? territory.structureCondition : 'Operational',
+    }));
+  }
+
+  protected setStructureCondition(value: string): void {
+    this.patchSelected((territory) => ({
+      ...territory,
+      structureCondition: value === 'Pillaged' ? 'Pillaged' : 'Operational',
+    }));
   }
 
   protected setOwner(value: string): void {
@@ -620,10 +633,20 @@ export class MapEditorPage {
     );
   }
 
-  protected structureImageUrl = (structureTypeId: string): string | null => {
+  protected structureImageUrl = (structureTypeId: string, pillaged = false): string | null => {
     const campaign = this.campaign();
     const structure = structureTypeById(campaign, structureTypeId);
-    if (!campaign || !structure?.hasImage) {
+    if (!campaign || !structure) {
+      return null;
+    }
+
+    if (pillaged) {
+      return structure.hasPillagedImage
+        ? this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.revision, true)
+        : null;
+    }
+
+    if (!structure.hasImage) {
       return null;
     }
 
@@ -774,6 +797,7 @@ export class MapEditorPage {
             polygon: territory.polygon,
             terrainTypeId: territory.terrainTypeId,
             structureTypeId: territory.structureTypeId,
+            structureCondition: territory.structureCondition,
             overlayColor: territory.overlayColor,
             ownerFactionId: territory.ownerFactionId,
             spawnFactionId: territory.spawnFactionId,
@@ -1229,6 +1253,7 @@ function fromApi(detail: MapGraphDetail): MapGraph {
       polygon: territory.polygon.map((point) => ({ x: point.x, y: point.y })),
       terrainTypeId: territory.terrainTypeId,
       structureTypeId: territory.structureTypeId,
+      structureCondition: normalizeStructureCondition(territory.structureTypeId, territory.structureCondition),
       overlayColor: territory.overlayColor,
       ownerFactionId: territory.ownerFactionId,
       spawnFactionId: territory.spawnFactionId,

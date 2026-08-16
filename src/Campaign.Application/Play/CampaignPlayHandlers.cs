@@ -8,7 +8,7 @@ using Campaign.Domain.Play;
 namespace Campaign.Application.Play;
 
 /// <summary>
-/// Loads and advances the play page for a participant or manager.
+/// Loads and advances the public play board for a viewer who can see the campaign.
 /// </summary>
 public sealed class GetCampaignPlayHandler
 {
@@ -101,7 +101,7 @@ public sealed class SaveOrderDraftHandler
             command.UserId,
             command.IsAdministrator,
             command.ExpectedRevision,
-            (state, map, _, utcNow) =>
+            (state, map, campaign, utcNow) =>
             {
                 if (!CampaignPlayRules.TrySaveDraft(
                     state,
@@ -111,6 +111,8 @@ public sealed class SaveOrderDraftHandler
                     command.TargetTerritoryId,
                     command.StructureTypeId,
                     map,
+                    CampaignPlayPipeline.AllyGroups(campaign),
+                    campaign.StructureTypes.Select(static type => type.Id).ToHashSet(),
                     utcNow,
                     out var next,
                     out var error))

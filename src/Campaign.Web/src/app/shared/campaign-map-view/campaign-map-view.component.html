@@ -176,6 +176,7 @@
         @if (item.structureFit; as fit) {
           <div
             class="structure-pin"
+            [class.is-pillaged]="item.territory.structureCondition === 'Pillaged'"
             [style.left.%]="fit.x * 100"
             [style.top.%]="fit.y * 100"
             [style.width.px]="markerSize(fit).width"
@@ -186,9 +187,29 @@
             @if (item.structureImage; as src) {
               <img [src]="src" alt="" />
             } @else if (item.structure?.builtinSymbol) {
-              <app-map-symbol kind="structure" [name]="item.structure.builtinSymbol" />
+              <app-map-symbol
+                kind="structure"
+                [name]="item.structure.builtinSymbol"
+                [pillaged]="item.territory.structureCondition === 'Pillaged'"
+              />
             }
           </div>
+        }
+        @for (pin of item.forces; track pin.force.id) {
+          <div
+            class="force-pin"
+            [class.is-mine]="pin.force.isMine"
+            [class.is-battle]="pin.force.inBattle"
+            [style.left.%]="pin.fit.x * 100"
+            [style.top.%]="pin.fit.y * 100"
+            [style.width.px]="markerSize(pin.fit).width"
+            [style.height.px]="markerSize(pin.fit).height"
+            [style.margin-left.px]="-markerSize(pin.fit).width / 2"
+            [style.margin-top.px]="-markerSize(pin.fit).height / 2"
+            [style.background]="pin.color"
+            role="img"
+            [attr.aria-label]="pin.force.label"
+          ></div>
         }
       }
     </div>

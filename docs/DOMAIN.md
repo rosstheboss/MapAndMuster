@@ -68,9 +68,12 @@ Battle N when a round has more than one battle), and a countdown until the curre
 
 A signed-in user may join an upcoming campaign that still has an open player slot. Public
 campaigns join without a password; private campaigns require the join password. Members who are
-not managers may leave. Managers edit instead of joining. Players and managers open an in-progress campaign with Play.
-Upcoming and completed campaigns, and viewers who are not playing, use View. The Play page is
-the live map, order, battle, and schedule-extension surface. Your Campaigns also offers Duplicate
+not managers may leave. Managers edit instead of joining. Players and managers open an
+in-progress campaign with Play. Upcoming and completed campaigns, and viewers who are not
+playing, use View. During an in-progress campaign, View is the same live map and public log as
+Play, without order, battle, or schedule controls. The campaign page also includes a collapsible
+public log and member chat for upcoming and completed campaigns. The Play page is the live map,
+order, battle, schedule-extension, and log surface. Your Campaigns also offers Duplicate
 campaign on every listed campaign. Duplication copies the map overlay, factions, missions, ally
 groups, links, visibility, location, and schedule template into a new campaign whose start is one
 week after the duplication instant in the campaign time zone. The duplicating user becomes the
@@ -146,8 +149,11 @@ When staff act for another party, record:
 6. `Reopened`: staff correction creates a new revision and a new controlled editing window.
 
 The final required commitment closes an open window atomically. Before that instant, a player
-may uncommit. At the deadline, the latest valid draft is submitted. Missing slots become
-`Hold`. Only users/forces that owe an order participate in the early-close calculation.
+may uncommit a committed order back to draft. At the deadline, the latest valid draft is
+submitted. Missing slots become `Hold`. After the window closes, orders resolve and cannot be
+returned to draft. Each force requires an action; same-player forces that occupy one territory
+rejoin into one surviving force and therefore one later action. Only users/forces that owe an
+order participate in the early-close calculation.
 
 Players pick a faction, and a required subfaction when the faction demands one, before they
 receive a starting force. On the campaign View page, every player (including a manager who occupies
@@ -156,25 +162,37 @@ faction may do so until they have one and cannot submit orders for a round until
 faction is chosen it cannot be changed. Each player force starts at that faction's spawn territory
 when the campaign launches or when they join play later; subfactions use the same spawn.
 
-Orders resolve simultaneously against the window's starting map state. An invalid `Move`
-becomes `Hold`. A force may not enter or claim another faction's spawn. After movement, enemy
-forces that occupy the same territory create a battle; later action slots for those forces
-become `Battle`. Same-player forces that share a territory rejoin. Uncontested occupation by a
-single faction claims the territory and plants that faction's flag, except that a spawn always
-keeps its faction's flag. Collisions that still lack a documented ranking, including competing
-builds on the same empty slot, become `Hold` rather than an invented winner.
+Orders resolve simultaneously against the window's starting map state. Processing order is
+movement and splits, then backstab alliance breaks, then battles from enemy co-location, then
+`Build`, `Pillage`, and `Repair` for forces that are not in battle. An invalid `Move`, `Split`,
+`Build`, `Pillage`, `Repair`, or `Backstab` becomes `Hold`. A force may not enter or claim
+another faction's spawn. After movement, enemy forces that occupy the same territory create a
+battle; later action slots for those forces become `Battle`. Same-player forces that share a
+territory rejoin. Uncontested occupation by a single faction claims the territory and plants
+that faction's flag, except that a spawn always keeps its faction's flag. Collisions that still
+lack a documented ranking, including competing `Build`, `Pillage`, or `Repair` actions on the
+same territory and competing arrivals, become `Hold` rather than an invented winner.
 
 ## Initial action vocabulary
 
-- `Move`: travel to an allowed adjacent territory; invalid move becomes Hold.
+Player-submittable actions in an open action window are listed in this order:
+
 - `Hold`: remain and receive applicable resting effects.
-- `Build`: create an allowed structure in the current territory.
-- `Pillage`: progress an allowed structure from operational to pillaged to destroyed.
-- `Repair`: restore an eligible pillaged structure.
+- `Move`: travel to an allowed adjacent territory; invalid move becomes Hold.
+- `Build`: create an allowed structure in a non-spawn territory that has no intact structure.
+- `Pillage`: progress an enemy or unowned intact structure from operational to pillaged, then
+  from pillaged to destroyed. Cities may be pillaged but not destroyed. A force cannot pillage a
+  structure it already owns.
+- `Repair`: restore a pillaged structure the force's faction owns.
 - `Split`: create a second force in an eligible adjacent territory; maximum two per player in
   the supplied rules.
-- `Backstab`: terminate an alliance relationship and force battle under documented conditions.
-- `Retreat`: move a losing/withdrawing force to an eligible territory or spawn fallback.
+- `Backstab`: terminate an alliance relationship. If the force shares a territory with a former
+  ally after resolution, a battle is created.
+
+Battle-phase and system actions:
+
+- `Retreat`: move a losing/withdrawing force to an eligible territory or spawn fallback. Players
+  submit retreat after a battle, not during an action window.
 - `Battle`: automatic system action created by resolution; players do not submit it directly.
 
 Battle overrides incompatible orders. If Action 1 puts a force in battle, later action slots for
@@ -207,8 +225,13 @@ that force become Battle.
 - A faction that controls a non-spawn territory displays its flag there.
 - At most one structure occupies a territory under the supplied rules.
 - Structure type, owner/controller, and condition are separate concepts.
-- Conditions initially include `Operational`, `Pillaged`, and `Destroyed` where allowed.
+- Conditions are `Operational`, `Pillaged`, and `Destroyed`. Setup and the map editor may place
+  a structure as Operational or Pillaged. Play may set Destroyed when a non-city is pillaged a
+  second time. Destroyed structures leave the type on the territory so a later Build can replace
+  them, but they are not shown as a pin.
 - Cities may be pillaged but not destroyed in the supplied rules.
+- Each structure type has a built-in operational icon and a built-in pillaged icon. Campaign
+  setup may replace either with a user-uploaded 50×50 logo.
 
 ### Map overlay editor
 
@@ -218,8 +241,9 @@ normalized to the unit square. Drawing stays inside the image rectangle. Territo
 border but their interiors must not overlap. The drawing cursor highlights when it is about to snap
 to an existing vertex. Managers may undo or erase segments, assign an optional unique name and
 description (otherwise the display number 1, 2, 3… is used), select a required terrain type,
-select at most one optional structure, assign optional ownership (otherwise Neutral), assign an
-optional spawn faction (at most one spawn per faction), and apply a transparent overlay color.
+select at most one optional structure and whether that structure starts Operational or Pillaged,
+assign optional ownership (otherwise Neutral), assign an optional spawn faction (at most one
+spawn per faction), and apply a transparent overlay color.
 
 Auto Generate Connections suggests adjacency arrows from shared borders. User-created (manual) arrows
 are kept on regenerate, and those pairs are skipped. Generated arrows may be replaced. Managers may
@@ -325,7 +349,8 @@ Completed campaigns are ordered by most recently finished.
 - A force has location, controller, faction, supply context, current status, battle history,
   and optional relic possession.
 - Split forces have independent orders, locations, supply paths, battles, and statuses.
-- Two forces belonging to the same player rejoin when they occupy the same territory.
+- Two forces belonging to the same player rejoin when they occupy the same territory. The
+  surviving force keeps one action slot afterward, and the rejoin is recorded in the play log.
 - A force has at most one status: Normal, Diseased, Exhausted, Well Rested, Shaken, or
   Confident, subject to faction exceptions.
 - Neutral forces are forces, not user roles, and every neutral action identifies the GM actor.
@@ -358,11 +383,28 @@ last-write-wins.
 
 ## Play log
 
-Players and managers can open the campaign log from the Play page at any time. The log records
-campaign start, manager extensions of remaining phases or rounds, resolved actions after an
-action window closes (including Hold for every force), battles created or finalized, manager
-battle resolutions, player retreats, and automatic substitutions: missing orders become Hold,
-invalid orders become Hold, competing builds become Hold, deadline-submitted drafts, missing
-retreats using the spawn fallback, and battles held open when resolution cannot finish.
+The campaign page shows a collapsible, scrollable public log at full page width near the top
+for upcoming, in-progress, and completed campaigns. During an in-progress campaign the same log
+also appears on Play. Each entry is formatted as
+`(local-timestamp) originator: text`. Campaign-generated facts use the originator name
+`Campaign`. Member chat uses the author's display name snapshotted when the message was posted.
+The log refreshes while the page is open. Sending chat is not a form save: it does not show the
+saving overlay or the success banner. Failed sends show an error on the log.
+
+The log records campaign start, manager extensions of remaining phases or rounds, resolved
+actions after an action window closes (including Hold for every force), attempted actions that
+were invalid or conflicted and became Hold, battles created or finalized, manager battle-result
+overrides, player retreats, automatic force rejoins when the same player's forces occupy one
+territory, and automatic substitutions: missing orders become Hold, deadline-submitted drafts,
+missing retreats using the spawn fallback, and battles held open when resolution cannot finish.
 Unresolved secret orders, including drafts and unrevealed commitments, are never written to or
-returned in the log.
+returned in the log. A player may uncommit a committed draft only while the action window is
+still open; after the window closes, orders resolve and cannot be returned to draft.
+
+Current members may also post public chat in this log, including before launch. Chat and
+`@` tags are limited to people who currently belong to the campaign. An unescaped `@` followed
+by a member's username, or by a display name that uniquely identifies one member, is a tag.
+`\@` is a literal `@`. Email-like text such as `ada@example.test` is not a tag. People who have
+not joined cannot chat, cannot be tagged, and are omitted from mention autocomplete. Leaving
+removes the ability to chat or be tagged; earlier messages keep the display name recorded at
+post time.

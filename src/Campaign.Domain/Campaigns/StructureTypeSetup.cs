@@ -12,12 +12,14 @@ public sealed class StructureTypeSetup
     /// <param name="name">The structure name.</param>
     /// <param name="builtinSymbol">The built-in logo key used until a custom image is uploaded.</param>
     /// <param name="clearImage">Whether an existing uploaded logo should be removed.</param>
+    /// <param name="clearPillagedImage">Whether an existing uploaded pillaged logo should be removed.</param>
     /// <param name="missions">The optional missions.</param>
     public StructureTypeSetup(
         Guid id,
         string name,
         string? builtinSymbol,
         bool clearImage,
+        bool clearPillagedImage,
         IReadOnlyList<MissionSetup> missions)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -26,6 +28,7 @@ public sealed class StructureTypeSetup
         Name = name;
         BuiltinSymbol = builtinSymbol;
         ClearImage = clearImage;
+        ClearPillagedImage = clearPillagedImage;
         Missions = missions;
     }
 
@@ -40,6 +43,9 @@ public sealed class StructureTypeSetup
 
     /// <summary>Gets whether an existing uploaded logo should be removed.</summary>
     public bool ClearImage { get; }
+
+    /// <summary>Gets whether an existing uploaded pillaged logo should be removed.</summary>
+    public bool ClearPillagedImage { get; }
 
     /// <summary>Gets the optional missions.</summary>
     public IReadOnlyList<MissionSetup> Missions { get; }

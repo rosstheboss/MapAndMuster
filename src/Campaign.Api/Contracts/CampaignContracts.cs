@@ -175,6 +175,9 @@ public sealed class StructureTypeRequest
     /// <summary>Gets whether an existing uploaded logo should be removed.</summary>
     public bool ClearImage { get; init; }
 
+    /// <summary>Gets whether an existing uploaded pillaged logo should be removed.</summary>
+    public bool ClearPillagedImage { get; init; }
+
     /// <summary>Gets nested missions.</summary>
     public IReadOnlyList<MissionRequest>? Missions { get; init; }
 }
@@ -393,6 +396,42 @@ public sealed class CampaignDetailResponse
 
     /// <summary>Gets whether the viewer still needs to pick a faction.</summary>
     public required bool CanChooseFaction { get; init; }
+
+    /// <summary>Gets whether the viewer may post in the public campaign log.</summary>
+    public required bool CanChat { get; init; }
+
+    /// <summary>Gets current members who may be tagged in chat.</summary>
+    public required IReadOnlyList<CampaignLogMemberResponse> MentionableMembers { get; init; }
+
+    /// <summary>Gets the public campaign log, including chat.</summary>
+    public required IReadOnlyList<PlayLogEntryResponse> Log { get; init; }
+}
+
+/// <summary>
+/// A current campaign member who may be tagged in chat.
+/// </summary>
+public sealed class CampaignLogMemberResponse
+{
+    /// <summary>Gets the user identifier.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the unique username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the name shown to other users.</summary>
+    public required string DisplayName { get; init; }
+}
+
+/// <summary>
+/// Request to post a public chat message.
+/// </summary>
+public sealed class PostCampaignChatRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the chat message.</summary>
+    public required string Message { get; init; }
 }
 
 /// <summary>
@@ -498,6 +537,9 @@ public sealed class StructureTypeResponse
 
     /// <summary>Gets whether a custom logo image is stored.</summary>
     public required bool HasImage { get; init; }
+
+    /// <summary>Gets whether a custom pillaged logo image is stored.</summary>
+    public required bool HasPillagedImage { get; init; }
 
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<MissionResponse> Missions { get; init; }
@@ -641,6 +683,7 @@ public static class CampaignResponses
                     Name = type.Name,
                     BuiltinSymbol = type.BuiltinSymbol,
                     HasImage = type.HasImage,
+                    HasPillagedImage = type.HasPillagedImage,
                     Missions =
                     [
                         .. type.Missions.Select(static mission => new MissionResponse
@@ -697,6 +740,31 @@ public static class CampaignResponses
             Subfaction = detail.Subfaction,
             CanPlay = detail.CanPlay,
             CanChooseFaction = detail.CanChooseFaction,
+            CanChat = detail.CanChat,
+            MentionableMembers =
+            [
+                .. detail.MentionableMembers.Select(static member => new CampaignLogMemberResponse
+                {
+                    UserId = member.UserId,
+                    Username = member.Username,
+                    DisplayName = member.DisplayName,
+                }),
+            ],
+            Log =
+            [
+                .. detail.Log.Select(static item => new PlayLogEntryResponse
+                {
+                    Id = item.Id,
+                    OccurredUtc = item.OccurredUtc,
+                    Kind = item.Kind,
+                    Originator = item.Originator,
+                    Summary = item.Summary,
+                    TerritoryId = item.TerritoryId,
+                    ForceId = item.ForceId,
+                    BattleId = item.BattleId,
+                    IsSystemAdjustment = item.IsSystemAdjustment,
+                }),
+            ],
         };
     }
 
@@ -730,6 +798,7 @@ public static class CampaignResponses
                     OverlayColor = territory.OverlayColor,
                     OwnerFactionId = territory.OwnerFactionId,
                     SpawnFactionId = territory.SpawnFactionId,
+                    StructureCondition = territory.StructureCondition,
                 }),
             ],
             Adjacencies =
@@ -776,6 +845,7 @@ public static class CampaignResponses
                 OverlayColor = territory.OverlayColor,
                 OwnerFactionId = territory.OwnerFactionId,
                 SpawnFactionId = territory.SpawnFactionId,
+                StructureCondition = territory.StructureCondition,
             }),
         ];
     }
@@ -877,6 +947,7 @@ public static class CampaignResponses
                 Name = type.Name,
                 BuiltinSymbol = type.BuiltinSymbol,
                 ClearImage = type.ClearImage,
+                ClearPillagedImage = type.ClearPillagedImage,
                 Missions = ToMissionInputs(type.Missions),
             })
             .ToArray();
@@ -975,6 +1046,9 @@ public sealed class TerritoryRequest
     /// <summary>Gets the optional campaign structure type identifier.</summary>
     public Guid? StructureTypeId { get; init; }
 
+    /// <summary>Gets the structure condition when a structure is present.</summary>
+    public string? StructureCondition { get; init; }
+
     /// <summary>Gets the optional overlay color as #RRGGBB.</summary>
     public string? OverlayColor { get; init; }
 
@@ -1067,6 +1141,9 @@ public sealed class TerritoryResponse
 
     /// <summary>Gets the optional campaign structure type identifier.</summary>
     public Guid? StructureTypeId { get; init; }
+
+    /// <summary>Gets the structure condition when a structure is present.</summary>
+    public string? StructureCondition { get; init; }
 
     /// <summary>Gets the optional overlay color as #RRGGBB.</summary>
     public string? OverlayColor { get; init; }

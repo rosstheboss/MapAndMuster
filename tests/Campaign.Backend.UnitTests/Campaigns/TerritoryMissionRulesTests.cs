@@ -17,6 +17,7 @@ public sealed class TerritoryMissionRulesTests
             "Town",
             "Town",
             false,
+            false,
             [new MissionSetup(Guid.NewGuid(), "Town hold", "https://example.test/town", false)]);
 
         var missions = TerritoryMissionRules.Resolve(terrain, structure);
@@ -33,7 +34,7 @@ public sealed class TerritoryMissionRulesTests
             "Plains",
             "#7CB342",
             [new MissionSetup(Guid.NewGuid(), "Plains control", null, false)]);
-        var structure = new StructureTypeSetup(Guid.NewGuid(), "Town", "Town", false, []);
+        var structure = new StructureTypeSetup(Guid.NewGuid(), "Town", "Town", false, false, []);
 
         var missions = TerritoryMissionRules.Resolve(terrain, structure);
 

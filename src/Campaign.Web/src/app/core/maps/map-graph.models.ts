@@ -1,6 +1,7 @@
 import type { MapPoint } from './geometry';
 
 export type AdjacencyOrigin = 'Generated' | 'Manual';
+export type StructureCondition = 'Operational' | 'Pillaged' | 'Destroyed';
 
 export interface MapTerritory {
   id: string;
@@ -10,6 +11,7 @@ export interface MapTerritory {
   polygon: MapPoint[];
   terrainTypeId: string;
   structureTypeId: string | null;
+  structureCondition: StructureCondition;
   overlayColor: string | null;
   ownerFactionId: string | null;
   spawnFactionId: string | null;
@@ -43,6 +45,21 @@ export function nextDisplayNumber(territories: readonly MapTerritory[]): number 
 
 export function createId(): string {
   return crypto.randomUUID();
+}
+
+export function normalizeStructureCondition(
+  structureTypeId: string | null | undefined,
+  condition: string | null | undefined,
+): StructureCondition {
+  if (!structureTypeId) {
+    return 'Operational';
+  }
+
+  if (condition === 'Pillaged' || condition === 'Destroyed') {
+    return condition;
+  }
+
+  return 'Operational';
 }
 
 export function cloneGraph(graph: MapGraph): MapGraph {

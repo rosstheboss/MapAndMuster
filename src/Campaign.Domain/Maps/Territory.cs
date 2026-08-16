@@ -1,3 +1,5 @@
+using Campaign.Domain.Play;
+
 namespace Campaign.Domain.Maps;
 
 /// <summary>
@@ -18,6 +20,7 @@ public sealed class Territory
     /// <param name="overlayColor">The optional #RRGGBB overlay color.</param>
     /// <param name="ownerFactionId">The owning faction, or null when neutral.</param>
     /// <param name="spawnFactionId">The spawn-location faction, if any.</param>
+    /// <param name="structureCondition">The structure condition when a structure is present.</param>
     public Territory(
         Guid id,
         int displayNumber,
@@ -28,7 +31,8 @@ public sealed class Territory
         Guid? structureTypeId,
         string? overlayColor,
         Guid? ownerFactionId,
-        Guid? spawnFactionId)
+        Guid? spawnFactionId,
+        StructureCondition structureCondition = StructureCondition.Operational)
     {
         ArgumentNullException.ThrowIfNull(polygon);
         Id = id;
@@ -41,6 +45,7 @@ public sealed class Territory
         OverlayColor = overlayColor;
         OwnerFactionId = ownerFactionId;
         SpawnFactionId = spawnFactionId;
+        StructureCondition = structureTypeId is null ? StructureCondition.Operational : structureCondition;
     }
 
     /// <summary>Gets the territory identifier.</summary>
@@ -72,6 +77,9 @@ public sealed class Territory
 
     /// <summary>Gets the spawn-location faction, if any.</summary>
     public Guid? SpawnFactionId { get; }
+
+    /// <summary>Gets the structure condition when a structure is present.</summary>
+    public StructureCondition StructureCondition { get; }
 
     /// <summary>
     /// Gets the name when present; otherwise the display number as a decimal string.
