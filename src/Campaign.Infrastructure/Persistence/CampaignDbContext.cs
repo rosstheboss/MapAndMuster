@@ -128,6 +128,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.ToTable("CampaignAllyGroups");
             entity.HasKey(group => group.Id);
             entity.Property(group => group.Name).HasMaxLength(60).IsRequired();
+            entity.Property(group => group.Color).HasMaxLength(7).IsRequired();
         });
 
         builder.Entity<CampaignFactionRecord>(entity =>

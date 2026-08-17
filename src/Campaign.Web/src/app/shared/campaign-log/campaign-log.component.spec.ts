@@ -195,4 +195,26 @@ describe('CampaignLogComponent', () => {
     expect(page.draft()).toBe('Hello from the frontier');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Unable to send that chat message.');
   });
+
+  it('restores the last chat recipient from the initial channel key', () => {
+    const fixture = TestBed.createComponent(CampaignLogComponent);
+    fixture.componentRef.setInput('canChat', true);
+    fixture.componentRef.setInput('members', [{ userId: '2', username: 'bobisthebest', displayName: 'Bob' }]);
+    fixture.componentRef.setInput('channels', [
+      { kind: 'Public', targetId: null, label: 'Everyone' },
+      { kind: 'Direct', targetId: '2', label: 'Bob' },
+    ]);
+    fixture.componentRef.setInput('initialChannelKey', 'Direct:2');
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      recipientQuery: () => string;
+      selectedChannel: () => { kind: string; targetId: string | null };
+    };
+    expect(page.selectedChannel()).toEqual({ kind: 'Direct', targetId: '2', label: 'Bob' });
+    expect(page.recipientQuery()).toBe('bobisthebest');
+    expect((fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('#chat-recipient')?.value).toBe(
+      'bobisthebest',
+    );
+  });
 });

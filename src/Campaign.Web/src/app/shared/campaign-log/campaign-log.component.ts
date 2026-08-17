@@ -33,9 +33,13 @@ export class CampaignLogComponent {
   readonly sending = input(false);
   readonly sendError = input<string | null>(null);
   readonly expanded = input(true);
+  readonly initialChannelKey = input('Public:');
+  readonly initialScrollTop = input<number | null>(null);
 
   readonly send = output<CampaignChatSend>();
   readonly expandedChange = output<boolean>();
+  readonly channelChange = output<string>();
+  readonly scrollChange = output<number>();
 
   protected readonly draft = signal('');
   protected readonly highlight = signal(0);
@@ -51,6 +55,8 @@ export class CampaignLogComponent {
   private readonly recipientInput = viewChild<ElementRef<HTMLInputElement>>('recipient');
   private heldMessage = '';
   private sawSending = false;
+  private appliedInitialChannel = false;
+  private restoredScroll = false;
   protected readonly availableChannels = computed(() => {
     const listed = this.channels();
     return listed.length > 0 ? listed : [{ kind: 'Public', targetId: null, label: 'Everyone' }];
@@ -85,12 +91,39 @@ export class CampaignLogComponent {
 
   constructor() {
     effect(() => {
+      const key = this.initialChannelKey();
+      const channels = this.availableChannels();
+      const members = this.members();
+      if (this.appliedInitialChannel || channels.length === 0) {
+        return;
+      }
+
+      this.appliedInitialChannel = true;
+      const match = channels.find((channel) => this.channelOptionValue(channel) === key) ?? channels[0];
+      this.channelKey.set(this.channelOptionValue(match));
+      this.recipientQuery.set(recipientFieldLabel(match, members));
+      if (match.kind !== 'Public') {
+        this.showPrivateChat.set(true);
+      }
+    });
+    effect(() => {
       this.visibleEntries();
       queueMicrotask(() => {
         const element = this.scroller()?.nativeElement;
-        if (element) {
-          element.scrollTop = element.scrollHeight;
+        if (!element) {
+          return;
         }
+
+        if (!this.restoredScroll) {
+          this.restoredScroll = true;
+          const initial = this.initialScrollTop();
+          if (initial !== null) {
+            element.scrollTop = initial;
+            return;
+          }
+        }
+
+        element.scrollTop = element.scrollHeight;
       });
     });
     effect(() => {
@@ -125,6 +158,10 @@ export class CampaignLogComponent {
   protected onToggle(event: Event): void {
     const details = event.currentTarget as HTMLDetailsElement;
     this.expandedChange.emit(details.open);
+  }
+
+  protected onScroll(event: Event): void {
+    this.scrollChange.emit((event.currentTarget as HTMLElement).scrollTop);
   }
 
   protected originatorText(entry: PlayLogEntry): string {
@@ -221,6 +258,7 @@ export class CampaignLogComponent {
     this.recipientQuery.set(recipientFieldLabel(channel, this.members()));
     this.recipientOpen.set(false);
     this.recipientHighlight.set(0);
+    this.channelChange.emit(this.channelKey());
     if (channel.kind !== 'Public') {
       this.showPrivateChat.set(true);
     }

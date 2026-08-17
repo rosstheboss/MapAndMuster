@@ -9,6 +9,7 @@ namespace Campaign.Domain.Play;
 /// </summary>
 public static class CampaignPlayRules
 {
+    private const int MaxBattleScore = 9999;
     /// <summary>
     /// Materializes windows, spawn flags, and starting forces when the campaign is in progress.
     /// </summary>
@@ -443,7 +444,9 @@ public static class CampaignPlayRules
         bool isDraw,
         DateTimeOffset utcNow,
         [NotNullWhen(true)] out PlayOutcome? outcome,
-        [NotNullWhen(false)] out DomainError? error)
+        [NotNullWhen(false)] out DomainError? error,
+        int? winnerScore = null,
+        int? loserScore = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         outcome = null;
@@ -464,7 +467,21 @@ public static class CampaignPlayRules
             return false;
         }
 
-        var submission = new BattleResultSubmission(Guid.NewGuid(), battle.Id, userId, winnerForceId, isDraw, null, utcNow);
+        if (!TryNormalizeBattleScores(isDraw, winnerScore, loserScore, out var parsedWinnerScore, out var parsedLoserScore, out error))
+        {
+            return false;
+        }
+
+        var submission = new BattleResultSubmission(
+            Guid.NewGuid(),
+            battle.Id,
+            userId,
+            winnerForceId,
+            isDraw,
+            null,
+            utcNow,
+            parsedWinnerScore,
+            parsedLoserScore);
         var next = AppendBattleSubmission(state, battle, submission, utcNow, notifyManagers: out var notify);
         outcome = BattleMutationOutcome(next, utcNow, notify);
         return true;
@@ -512,7 +529,9 @@ public static class CampaignPlayRules
             theirs.WinnerForceId,
             theirs.IsDraw,
             theirs.Id,
-            utcNow);
+            utcNow,
+            theirs.WinnerScore,
+            theirs.LoserScore);
         var next = AppendBattleSubmission(state, battle, submission, utcNow, out var notify);
         outcome = BattleMutationOutcome(next, utcNow, notify);
         return true;
@@ -530,7 +549,9 @@ public static class CampaignPlayRules
         bool isDraw,
         DateTimeOffset utcNow,
         [NotNullWhen(true)] out CampaignPlayState? next,
-        [NotNullWhen(false)] out DomainError? error)
+        [NotNullWhen(false)] out DomainError? error,
+        int? winnerScore = null,
+        int? loserScore = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         next = null;
@@ -553,20 +574,19 @@ public static class CampaignPlayRules
         }
 
         error = null;
-        var updated = battle.With(status: BattleStatus.GMResolved, winnerForceId: winnerForceId, isDraw: isDraw);
-        if (isDraw)
+        if (!TryNormalizeBattleScores(isDraw, winnerScore, loserScore, out var parsedWinnerScore, out var parsedLoserScore, out error))
         {
-            updated = new CampaignBattle(
-                battle.Id,
-                battle.TerritoryId,
-                battle.SourceWindowId,
-                battle.BattleWindowId,
-                BattleStatus.GMResolved,
-                battle.ParticipantForceIds,
-                null,
-                true,
-                battle.CreatedUtc);
+            return false;
         }
+
+        var updated = battle.With(
+            status: BattleStatus.GMResolved,
+            winnerForceId: winnerForceId,
+            isDraw: isDraw,
+            clearWinner: isDraw,
+            winnerScore: parsedWinnerScore,
+            loserScore: parsedLoserScore,
+            assignScores: true);
 
         var logged = ApplyBattleSpoils(
             state.With(battles: ReplaceBattle(state.Battles, updated)),
@@ -963,7 +983,14 @@ public static class CampaignPlayRules
             if (current.Count == 1 && due)
             {
                 var only = current[0];
-                var finalized = battle.With(status: BattleStatus.Finalized, winnerForceId: only.WinnerForceId, isDraw: only.IsDraw);
+                var finalized = battle.With(
+                    status: BattleStatus.Finalized,
+                    winnerForceId: only.WinnerForceId,
+                    isDraw: only.IsDraw,
+                    clearWinner: only.IsDraw,
+                    winnerScore: only.WinnerScore,
+                    loserScore: only.LoserScore,
+                    assignScores: true);
                 ReplaceInPlace(battles, finalized);
                 log.Add(BattleEntry(PlayLogKind.BattleFinalized, finalized, closeAt));
                 nextItems = ItemObjectiveRules.AwardBattleSpoils(nextItems, finalized, state.Forces, closeAt, log);
@@ -1177,6 +1204,46 @@ public static class CampaignPlayRules
         return true;
     }
 
+    private static bool TryNormalizeBattleScores(
+        bool isDraw,
+        int? winnerScore,
+        int? loserScore,
+        out int? parsedWinnerScore,
+        out int? parsedLoserScore,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        _ = isDraw;
+        parsedWinnerScore = null;
+        parsedLoserScore = null;
+        error = null;
+        if (winnerScore is null && loserScore is null)
+        {
+            return true;
+        }
+
+        if (winnerScore is null || loserScore is null)
+        {
+            error = new DomainError(
+                "battle.score.invalid",
+                "Report both the winner and loser scores, or omit both.",
+                "winnerScore");
+            return false;
+        }
+
+        if (winnerScore < 0 || winnerScore > MaxBattleScore || loserScore < 0 || loserScore > MaxBattleScore)
+        {
+            error = new DomainError(
+                "battle.score.invalid",
+                $"Battle scores must be between 0 and {MaxBattleScore}.",
+                "winnerScore");
+            return false;
+        }
+
+        parsedWinnerScore = winnerScore;
+        parsedLoserScore = loserScore;
+        return true;
+    }
+
     private static CampaignPlayState AppendBattleSubmission(
         CampaignPlayState state,
         CampaignBattle battle,
@@ -1192,10 +1259,21 @@ public static class CampaignPlayRules
         if (current.Count >= 2)
         {
             var first = current[0];
-            var equivalent = current.All(item => item.IsDraw == first.IsDraw && item.WinnerForceId == first.WinnerForceId);
+            var equivalent = current.All(item =>
+                item.IsDraw == first.IsDraw
+                && item.WinnerForceId == first.WinnerForceId
+                && item.WinnerScore == first.WinnerScore
+                && item.LoserScore == first.LoserScore);
             if (equivalent)
             {
-                var resolved = battle.With(status: BattleStatus.Finalized, winnerForceId: first.WinnerForceId, isDraw: first.IsDraw);
+                var resolved = battle.With(
+                    status: BattleStatus.Finalized,
+                    winnerForceId: first.WinnerForceId,
+                    isDraw: first.IsDraw,
+                    clearWinner: first.IsDraw,
+                    winnerScore: first.WinnerScore,
+                    loserScore: first.LoserScore,
+                    assignScores: true);
                 return ApplyBattleSpoils(nextState.With(battles: ReplaceBattle(nextState.Battles, resolved)), resolved, utcNow)
                     .AppendLog(BattleEntry(PlayLogKind.BattleFinalized, resolved, utcNow));
             }

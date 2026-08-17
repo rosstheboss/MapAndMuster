@@ -15,7 +15,15 @@
       Game log
     </label>
   </fieldset>
-  <div class="log-scroll" #scroller tabindex="0" role="log" aria-live="polite" aria-relevant="additions">
+  <div
+    class="log-scroll"
+    #scroller
+    tabindex="0"
+    role="log"
+    aria-live="polite"
+    aria-relevant="additions"
+    (scroll)="onScroll($event)"
+  >
     @if (visibleEntries().length === 0) {
       <p class="muted">No messages yet.</p>
     } @else {

@@ -135,6 +135,9 @@ public sealed class PostCampaignChatHandler
     {
         var inspect = CampaignChatContext.CanInspectPrivateChat(isAdministrator, userId, campaign.PlayState);
         var names = members.ToDictionary(static member => member.UserId, static member => member.Username);
+        var membership = CampaignMapper.MembershipFor(campaign, userId);
+        var staffView = (membership?.IsGameMaster == true || isAdministrator)
+            && campaign.PlayState?.DebugActorUserId is not null;
         return CampaignMapper.ToDetail(
             campaign,
             userId,
@@ -143,6 +146,7 @@ public sealed class PostCampaignChatHandler
             members,
             CampaignChatContext.Channels(campaign, userId, members),
             inspect,
-            participants);
+            participants,
+            staffView);
     }
 }

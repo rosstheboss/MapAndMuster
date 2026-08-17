@@ -123,6 +123,20 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/{campaignId:guid}/item-objectives/{itemObjectiveTypeId:guid}/image", GetItemObjectiveImageAsync)
+            .WithName("GetCampaignItemObjectiveImage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/item-objectives/{itemObjectiveTypeId:guid}/image", UploadItemObjectiveImageAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignItemObjectiveImage")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
         group.MapGet("/{campaignId:guid}/structures/{structureTypeId:guid}/pillaged-image", GetPillagedStructureImageAsync)
             .WithName("GetCampaignPillagedStructureImage")
             .Produces(StatusCodes.Status200OK)
@@ -274,6 +288,14 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/public-objectives/awards", SetPublicObjectiveAwardAsync)
+            .WithName("SetPublicObjectiveAward")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
     }
 
     private static async Task<IResult> ListAsync(
@@ -351,6 +373,17 @@ public static class CampaignEndpoints
                     TerrainTypes = CampaignResponses.ToTerrainTypeInputs(request.TerrainTypes),
                     StructureTypes = CampaignResponses.ToStructureTypeInputs(request.StructureTypes),
                     ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
+                    PublicObjectiveTypes = CampaignResponses.ToPublicObjectiveTypeInputs(request.PublicObjectiveTypes),
+                    PointsPerBattleWon = request.PointsPerBattleWon,
+                    PointsPerBattleDraw = request.PointsPerBattleDraw,
+                    UseDifferentialBattleScoring = request.UseDifferentialBattleScoring,
+                    DifferentialMultiplier = request.DifferentialMultiplier,
+                    DifferentialMinimum = request.DifferentialMinimum,
+                    DifferentialMaximum = request.DifferentialMaximum,
+                    AllowNegativeDifferential = request.AllowNegativeDifferential,
+                    MostTerritoriesCampaignPoints = request.MostTerritoriesCampaignPoints,
+                    LongestTerritoryChainCampaignPoints = request.LongestTerritoryChainCampaignPoints,
+                    MostBattlesWonCampaignPoints = request.MostBattlesWonCampaignPoints,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -524,6 +557,17 @@ public static class CampaignEndpoints
                     TerrainTypes = CampaignResponses.ToTerrainTypeInputs(request.TerrainTypes),
                     StructureTypes = CampaignResponses.ToStructureTypeInputs(request.StructureTypes),
                     ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
+                    PublicObjectiveTypes = CampaignResponses.ToPublicObjectiveTypeInputs(request.PublicObjectiveTypes),
+                    PointsPerBattleWon = request.PointsPerBattleWon,
+                    PointsPerBattleDraw = request.PointsPerBattleDraw,
+                    UseDifferentialBattleScoring = request.UseDifferentialBattleScoring,
+                    DifferentialMultiplier = request.DifferentialMultiplier,
+                    DifferentialMinimum = request.DifferentialMinimum,
+                    DifferentialMaximum = request.DifferentialMaximum,
+                    AllowNegativeDifferential = request.AllowNegativeDifferential,
+                    MostTerritoriesCampaignPoints = request.MostTerritoriesCampaignPoints,
+                    LongestTerritoryChainCampaignPoints = request.LongestTerritoryChainCampaignPoints,
+                    MostBattlesWonCampaignPoints = request.MostBattlesWonCampaignPoints,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -857,6 +901,87 @@ public static class CampaignEndpoints
         return Results.Ok(CampaignResponses.FromDetail(result.Value));
     }
 
+    private static async Task<IResult> GetItemObjectiveImageAsync(
+        Guid campaignId,
+        Guid itemObjectiveTypeId,
+        ClaimsPrincipal principal,
+        GetItemObjectiveImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                itemObjectiveTypeId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(result.Value.Content, result.Value.ContentType);
+    }
+
+    private static async Task<IResult> UploadItemObjectiveImageAsync(
+        Guid campaignId,
+        Guid itemObjectiveTypeId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadItemObjectiveImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Upload a JPEG, PNG, or WebP image.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("image") ?? form.Files.GetFile("file");
+        if (file is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Choose an item objective image to upload.");
+        }
+
+        if (!int.TryParse(form["revision"].ToString(), out var revision))
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await handler.HandleAsync(
+                new UploadItemObjectiveImageCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    ItemObjectiveTypeId = itemObjectiveTypeId,
+                    ExpectedRevision = revision,
+                    Content = stream,
+                    ContentType = file.ContentType,
+                    Length = file.Length,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
     private static async Task<IResult> GetFactionFlagAsync(
         Guid campaignId,
         Guid factionId,
@@ -1148,6 +1273,8 @@ public static class CampaignEndpoints
                     BattleId = request.BattleId,
                     WinnerForceId = request.WinnerForceId,
                     IsDraw = request.IsDraw,
+                    WinnerScore = request.WinnerScore,
+                    LoserScore = request.LoserScore,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -1232,6 +1359,8 @@ public static class CampaignEndpoints
                     BattleId = request.BattleId,
                     WinnerForceId = request.WinnerForceId,
                     IsDraw = request.IsDraw,
+                    WinnerScore = request.WinnerScore,
+                    LoserScore = request.LoserScore,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -1335,6 +1464,36 @@ public static class CampaignEndpoints
     {
         return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> SetPublicObjectiveAwardAsync(
+        Guid campaignId,
+        SetPublicObjectiveAwardRequest request,
+        ClaimsPrincipal principal,
+        SetPublicObjectiveAwardHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SetPublicObjectiveAwardCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    ObjectiveId = request.ObjectiveId,
+                    PlayerUserId = request.PlayerUserId,
+                    Awarded = request.Awarded,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
     }
 
     private static async Task<IResult> PlayCommandAsync(

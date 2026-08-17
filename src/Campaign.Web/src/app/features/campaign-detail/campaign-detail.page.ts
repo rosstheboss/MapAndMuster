@@ -14,7 +14,19 @@ import type {
   PlayBattle,
   PlayForce,
   PlayItemObjective,
+  PublicObjectiveLeader,
 } from '../../core/campaigns/campaign.models';
+import {
+  CampaignViewPrefsService,
+  DEFAULT_STANDINGS_SORT,
+  defaultCampaignViewPrefs,
+  nextStandingsSort,
+  readStoredPrefs,
+  sortStandings,
+  type MapHighlightMode,
+  type StandingsSort,
+  type StandingsSortColumn,
+} from '../../core/campaigns/campaign-view-prefs.service';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { CAMPAIGN_LOG_POLL_MS, mergeCampaignLog, type CampaignLogSync } from '../../core/campaigns/campaign-log';
 import {
@@ -38,6 +50,7 @@ import { CampaignLogComponent } from '../../shared/campaign-log/campaign-log.com
 import {
   CampaignMapViewComponent,
   type MapForceMarker,
+  type MapHeldItem,
   type MapItemMarker,
 } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
@@ -59,6 +72,7 @@ const CAMPAIGN_SECTIONS = [
   'factions',
   'allies',
   'links',
+  'standings',
   'delete',
 ] as const;
 
@@ -105,6 +119,7 @@ export class CampaignDetailPage {
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly viewPrefs = inject(CampaignViewPrefsService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly mapBoard = viewChild<ElementRef<HTMLElement>>('mapBoard');
 
@@ -122,6 +137,14 @@ export class CampaignDetailPage {
   protected readonly chatBusy = signal(false);
   protected readonly chatError = signal<string | null>(null);
   protected readonly openSections = signal(openSections());
+  protected readonly highlightMode = signal<MapHighlightMode>('configured');
+  protected readonly standingsSort = signal<StandingsSort>({ ...DEFAULT_STANDINGS_SORT });
+  protected readonly chatChannelKey = signal(defaultCampaignViewPrefs().chatChannelKey);
+  protected readonly restoreChatScroll = signal<number | null>(null);
+  protected readonly awardObjectiveId = signal('');
+  protected readonly awardPlayerUserId = signal('');
+  private prefsHydrated = false;
+  private lastChatScrollTop = 0;
   protected readonly durationUnits = DURATION_UNITS;
   protected readonly factionChoice = signal('');
   protected readonly subfactionChoice = signal('');
@@ -133,12 +156,16 @@ export class CampaignDetailPage {
   protected readonly debugDrafts = signal<Record<string, OrderDraft>>({});
   protected readonly mapAction = signal<MapActionFlow | null>(null);
   protected readonly battleWinner = signal<Record<string, string>>({});
+  protected readonly battleScores = signal<Record<string, { winnerScore: number | null; loserScore: number | null }>>(
+    {},
+  );
   protected readonly retreatTarget = signal<Record<string, string>>({});
   private readonly mapRevision = signal(0);
   private logPollStarted = false;
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
+    this.destroyRef.onDestroy(() => this.persistViewPrefs());
     if (id) {
       void this.load(id);
     } else {
@@ -215,10 +242,12 @@ export class CampaignDetailPage {
   });
   protected readonly mapForces = computed((): MapForceMarker[] => {
     const play = this.play();
+    const campaign = this.campaign();
     if (!play) {
       return [];
     }
 
+    const items = play.itemObjectives ?? [];
     return play.forces.map((force) => ({
       id: force.id,
       territoryId: force.territoryId,
@@ -226,30 +255,33 @@ export class CampaignDetailPage {
       isMine: force.isMine,
       inBattle: force.inBattle,
       label: `${this.forceLabel(force)} in ${this.territoryName(force.territoryId)}`,
+      heldItems: items
+        .filter((item) => item.possessorForceId === force.id)
+        .map((item) => this.toHeldMapItem(item, campaign)),
     }));
   });
   protected readonly mapItems = computed((): MapItemMarker[] => {
     const play = this.play();
+    const campaign = this.campaign();
     if (!play) {
       return [];
     }
 
-    const forces = new Map(play.forces.map((force) => [force.id, force]));
     return (play.itemObjectives ?? []).flatMap((item) => {
-      const territoryId = item.possessorForceId
-        ? (forces.get(item.possessorForceId)?.territoryId ?? null)
-        : item.territoryId;
-      if (!territoryId) {
+      if (item.possessorForceId || !item.territoryId) {
         return [];
       }
 
       return [
         {
           id: item.id,
-          territoryId,
+          territoryId: item.territoryId,
           name: item.name,
-          carried: !!item.possessorForceId,
+          carried: false,
           hidden: !item.isRevealed,
+          builtinSymbol: item.builtinSymbol ?? 'Crown',
+          color: item.color ?? '#C45C26',
+          imageUrl: this.itemObjectiveImageSrc(item, campaign),
         },
       ];
     });
@@ -258,6 +290,18 @@ export class CampaignDetailPage {
   protected readonly hiddenItemCount = computed(
     () => (this.play()?.itemObjectives ?? []).filter((item) => !item.isRevealed).length,
   );
+  protected readonly sortedStandings = computed(() =>
+    sortStandings(this.play()?.standings ?? this.campaign()?.standings ?? [], this.standingsSort()),
+  );
+  protected readonly leaderboards = computed(
+    () => this.play()?.publicObjectiveLeaderboards ?? this.campaign()?.publicObjectiveLeaderboards ?? [],
+  );
+  protected readonly awardableObjectives = computed(() =>
+    (this.campaign()?.publicObjectiveTypes ?? []).filter((objective) => objective.campaignPoints > 0),
+  );
+  protected readonly usesDifferentialScoring = computed(
+    () => this.play()?.useDifferentialBattleScoring ?? this.campaign()?.useDifferentialBattleScoring ?? true,
+  );
 
   protected isOpen(id: CampaignSection): boolean {
     return this.openSections()[id] !== false;
@@ -265,10 +309,12 @@ export class CampaignDetailPage {
 
   protected toggleSection(id: CampaignSection): void {
     this.openSections.update((current) => ({ ...current, [id]: !current[id] }));
+    this.persistViewPrefs();
   }
 
   protected setSection(id: CampaignSection, open: boolean): void {
     this.openSections.update((current) => ({ ...current, [id]: open }));
+    this.persistViewPrefs();
   }
 
   protected profileFrom(): { from: string } {
@@ -294,12 +340,47 @@ export class CampaignDetailPage {
 
   protected expandAllSections(): void {
     this.openSections.set(openSections());
+    this.persistViewPrefs();
   }
 
   protected collapseAllSections(): void {
     this.openSections.set(
       Object.fromEntries(CAMPAIGN_SECTIONS.map((id) => [id, false])) as Record<CampaignSection, boolean>,
     );
+    this.persistViewPrefs();
+  }
+
+  protected setHighlightMode(mode: string): void {
+    if (mode !== 'configured' && mode !== 'faction' && mode !== 'alliance') {
+      return;
+    }
+
+    this.highlightMode.set(mode);
+    this.persistViewPrefs();
+  }
+
+  protected sortBy(column: StandingsSortColumn): void {
+    this.standingsSort.set(nextStandingsSort(this.standingsSort(), column));
+    this.persistViewPrefs();
+  }
+
+  protected sortDirection(column: StandingsSortColumn): 'ascending' | 'descending' | 'none' {
+    const sort = this.standingsSort();
+    if (sort.column !== column) {
+      return 'none';
+    }
+
+    return sort.direction === 'asc' ? 'ascending' : 'descending';
+  }
+
+  protected onChatChannelChange(key: string): void {
+    this.chatChannelKey.set(key);
+    this.persistViewPrefs();
+  }
+
+  protected onChatScrollChange(scrollTop: number): void {
+    this.lastChatScrollTop = scrollTop;
+    this.persistViewPrefs();
   }
 
   protected asNumber(value: string | number): number {
@@ -327,6 +408,24 @@ export class CampaignDetailPage {
     } finally {
       this.chatBusy.set(false);
     }
+  }
+
+  protected async setPublicObjectiveAward(awarded: boolean): Promise<void> {
+    const campaign = this.campaign();
+    const objectiveId = this.awardObjectiveId();
+    const playerUserId = this.awardPlayerUserId();
+    if (!campaign || !objectiveId || !playerUserId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.setPublicObjectiveAward(campaign.id, {
+        revision: campaign.revision,
+        objectiveId,
+        playerUserId,
+        awarded,
+      }),
+    );
   }
 
   protected async chooseFaction(): Promise<void> {
@@ -535,6 +634,25 @@ export class CampaignDetailPage {
     return this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.revision);
   };
 
+  protected itemObjectiveImageUrl = (typeId: string): string | null => {
+    const campaign = this.campaign();
+    const type = campaign?.itemObjectiveTypes?.find((item) => item.id === typeId);
+    if (!campaign || !type?.hasImage) {
+      return null;
+    }
+
+    return this.campaignsApi.itemObjectiveImageUrl(campaign.id, typeId, campaign.revision);
+  };
+
+  protected standingItemImageUrl(item: { typeId: string; hasImage?: boolean }): string | null {
+    const campaign = this.campaign();
+    if (!campaign || !item.hasImage) {
+      return null;
+    }
+
+    return this.campaignsApi.itemObjectiveImageUrl(campaign.id, item.typeId, campaign.revision);
+  }
+
   protected flagImageUrl = (factionId: string): string | null => {
     const campaign = this.campaign();
     const faction = campaign?.factions.find((item) => item.id === factionId);
@@ -632,6 +750,49 @@ export class CampaignDetailPage {
     this.battleWinner.update((current) => ({ ...current, [battleId]: winnerForceId }));
   }
 
+  protected battleWinnerScore(battleId: string): number | null {
+    const scores = this.battleScores()[battleId];
+    return scores ? scores.winnerScore : null;
+  }
+
+  protected battleLoserScore(battleId: string): number | null {
+    const scores = this.battleScores()[battleId];
+    return scores ? scores.loserScore : null;
+  }
+
+  protected onBattleWinnerScore(battleId: string, value: string | number | null): void {
+    this.patchBattleScore(battleId, 'winnerScore', value);
+  }
+
+  protected onBattleLoserScore(battleId: string, value: string | number | null): void {
+    this.patchBattleScore(battleId, 'loserScore', value);
+  }
+
+  protected leaderboardTitle(kind: string): string {
+    switch (kind) {
+      case 'MostTerritories':
+        return 'Most territories';
+      case 'LongestTerritoryChain':
+        return 'Longest territory chain';
+      case 'MostBattlesWon':
+        return 'Most battles won';
+      default:
+        return kind;
+    }
+  }
+
+  protected leaderboardMetric(kind: string, leader: PublicObjectiveLeader): string {
+    if (kind === 'MostBattlesWon') {
+      return `${leader.metric} wins, ${leader.tieBreakMetric} draws`;
+    }
+
+    if (kind === 'LongestTerritoryChain') {
+      return `${leader.metric} territories in chain`;
+    }
+
+    return `${leader.metric} territories`;
+  }
+
   protected onRetreatTarget(battleId: string, targetTerritoryId: string): void {
     this.retreatTarget.update((current) => ({ ...current, [battleId]: targetTerritoryId }));
   }
@@ -679,12 +840,15 @@ export class CampaignDetailPage {
     }
 
     const winnerForceId = isDraw ? null : this.battleWinner()[battle.id] || null;
+    const scores = this.battleScorePair(battle.id);
     await this.runPlay(() =>
       this.campaignsApi.submitBattleResult(play.id, {
         revision: play.revision,
         battleId: battle.id,
         winnerForceId,
         isDraw,
+        winnerScore: this.usesDifferentialScoring() ? scores.winnerScore : null,
+        loserScore: this.usesDifferentialScoring() ? scores.loserScore : null,
       }),
     );
   }
@@ -704,12 +868,15 @@ export class CampaignDetailPage {
       return;
     }
 
+    const scores = this.battleScorePair(battle.id);
     await this.runPlay(() =>
       this.campaignsApi.resolveBattle(play.id, {
         revision: play.revision,
         battleId: battle.id,
         winnerForceId: isDraw ? null : this.battleWinner()[battle.id] || null,
         isDraw,
+        winnerScore: this.usesDifferentialScoring() ? scores.winnerScore : null,
+        loserScore: this.usesDifferentialScoring() ? scores.loserScore : null,
       }),
     );
   }
@@ -1147,6 +1314,9 @@ export class CampaignDetailPage {
             mentionableMembers: play.mentionableMembers,
             chatChannels: play.chatChannels,
             log: play.log,
+            standings: play.standings ?? current.standings,
+            publicObjectiveLeaderboards: play.publicObjectiveLeaderboards ?? current.publicObjectiveLeaderboards,
+            brokenAllyFactionIds: play.brokenAllyFactionIds ?? current.brokenAllyFactionIds,
           }
         : current,
     );
@@ -1243,6 +1413,7 @@ export class CampaignDetailPage {
   }
 
   private async load(id: string): Promise<void> {
+    this.restoreViewPrefs(id);
     try {
       const playRequest = this.campaignsApi.getPlay(id).then(
         (play) => play,
@@ -1264,10 +1435,96 @@ export class CampaignDetailPage {
       } else {
         this.play.set(null);
       }
+      this.seedAwardDefaults();
     } catch (error: unknown) {
       this.error.set(readApiError(error, 'Unable to load this campaign.'));
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private restoreViewPrefs(campaignId: string): void {
+    const stored = readStoredPrefs(campaignId);
+    const prefs = stored ?? defaultCampaignViewPrefs();
+    this.highlightMode.set(prefs.highlightMode);
+    this.standingsSort.set(prefs.standingsSort);
+    this.chatChannelKey.set(prefs.chatChannelKey);
+    this.lastChatScrollTop = prefs.chatScrollTop;
+    this.restoreChatScroll.set(stored ? stored.chatScrollTop : null);
+    if (stored?.sections) {
+      const next = openSections();
+      for (const id of CAMPAIGN_SECTIONS) {
+        if (typeof stored.sections[id] === 'boolean') {
+          next[id] = stored.sections[id]!;
+        }
+      }
+
+      this.openSections.set(next);
+    }
+
+    this.prefsHydrated = true;
+  }
+
+  private persistViewPrefs(): void {
+    const campaign = this.campaign();
+    if (!campaign || !this.prefsHydrated) {
+      return;
+    }
+
+    this.viewPrefs.write(campaign.id, {
+      highlightMode: this.highlightMode(),
+      sections: { ...this.openSections() },
+      standingsSort: { ...this.standingsSort() },
+      chatChannelKey: this.chatChannelKey(),
+      chatScrollTop: this.lastChatScrollTop,
+    });
+  }
+
+  private battleScorePair(battleId: string): { winnerScore: number | null; loserScore: number | null } {
+    return this.battleScores()[battleId] ?? { winnerScore: null, loserScore: null };
+  }
+
+  private patchBattleScore(battleId: string, field: 'winnerScore' | 'loserScore', value: string | number | null): void {
+    const parsed = value === null || value === '' ? null : Number(value);
+    this.battleScores.update((current) => {
+      const existing = current[battleId] ?? { winnerScore: null, loserScore: null };
+      return {
+        ...current,
+        [battleId]: {
+          ...existing,
+          [field]: parsed === null || Number.isNaN(parsed) ? null : parsed,
+        },
+      };
+    });
+  }
+
+  private seedAwardDefaults(): void {
+    if (!this.awardObjectiveId()) {
+      this.awardObjectiveId.set(this.awardableObjectives()[0]?.id ?? '');
+    }
+
+    if (!this.awardPlayerUserId()) {
+      this.awardPlayerUserId.set(this.sortedStandings()[0]?.userId ?? '');
+    }
+  }
+
+  private toHeldMapItem(item: PlayItemObjective, campaign: CampaignDetail | null): MapHeldItem {
+    return {
+      name: item.name,
+      builtinSymbol: item.builtinSymbol ?? 'Crown',
+      color: item.color ?? '#C45C26',
+      imageUrl: this.itemObjectiveImageSrc(item, campaign),
+    };
+  }
+
+  private itemObjectiveImageSrc(
+    item: { typeId: string; hasImage?: boolean },
+    campaign: CampaignDetail | null,
+  ): string | null {
+    if (!campaign || !item.hasImage) {
+      return null;
+    }
+
+    return this.campaignsApi.itemObjectiveImageUrl(campaign.id, item.typeId, campaign.revision);
   }
 }

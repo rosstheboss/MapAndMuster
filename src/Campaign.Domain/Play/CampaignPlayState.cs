@@ -25,7 +25,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<PlayLogEntry> log,
         IReadOnlyList<ActionWindowSnapshot>? snapshots = null,
         Guid? debugActorUserId = null,
-        DateTimeOffset? debugStartedUtc = null)
+        DateTimeOffset? debugStartedUtc = null,
+        IReadOnlyList<PublicObjectiveAward>? publicObjectiveAwards = null)
     {
         ArgumentNullException.ThrowIfNull(windows);
         ArgumentNullException.ThrowIfNull(forces);
@@ -54,6 +55,7 @@ public sealed class CampaignPlayState
         Snapshots = snapshots ?? [];
         DebugActorUserId = debugActorUserId;
         DebugStartedUtc = debugStartedUtc;
+        PublicObjectiveAwards = publicObjectiveAwards ?? [];
     }
 
     /// <summary>Gets an empty play state.</summary>
@@ -104,6 +106,9 @@ public sealed class CampaignPlayState
     /// <summary>Gets when the current debug session started, in UTC.</summary>
     public DateTimeOffset? DebugStartedUtc { get; }
 
+    /// <summary>Gets public-objective award facts. Original awards are never overwritten.</summary>
+    public IReadOnlyList<PublicObjectiveAward> PublicObjectiveAwards { get; }
+
     /// <summary>
     /// Returns a copy with replaced collections.
     /// </summary>
@@ -123,7 +128,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<ActionWindowSnapshot>? snapshots = null,
         Guid? debugActorUserId = null,
         DateTimeOffset? debugStartedUtc = null,
-        bool clearDebug = false)
+        bool clearDebug = false,
+        IReadOnlyList<PublicObjectiveAward>? publicObjectiveAwards = null)
     {
         return new CampaignPlayState(
             windows ?? Windows,
@@ -140,7 +146,8 @@ public sealed class CampaignPlayState
             log ?? Log,
             snapshots ?? Snapshots,
             clearDebug ? null : debugActorUserId ?? DebugActorUserId,
-            clearDebug ? null : debugStartedUtc ?? DebugStartedUtc);
+            clearDebug ? null : debugStartedUtc ?? DebugStartedUtc,
+            publicObjectiveAwards ?? PublicObjectiveAwards);
     }
 
     /// <summary>

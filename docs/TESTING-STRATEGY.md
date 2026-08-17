@@ -22,6 +22,7 @@ Required early suites:
 - Public/private objective visibility and completion.
 - Relic discovery, transfer, drop, tie-breaking, and secrecy.
 - Campaign-point components and graph objectives.
+- Public-objective award/revoke facts and hidden item-objective standings secrecy.
 - Battle-submission equivalence, single submission, disagreement, and GM resolution.
 
 ## Backend integration tests

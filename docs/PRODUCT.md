@@ -29,7 +29,9 @@ Player and Game Master in the same campaign.
   optional Google/Facebook/Discord sign-in.
 - Campaign creation, membership, factions, alliances, forces, rounds, deadlines, and roles.
 - Raster-map upload with polygon territories, adjacency, terrain, structures, spawn locations,
-  ownership, and force/relic markers.
+  ownership, force/relic markers, and viewer-selected map highlight colors.
+- Campaign-point standings with sortable current-holdings totals, ranking public-objective
+  leaderboards, named public-objective awards, and relic logos.
 - Secret draft/commit/uncommit order entry with deadline and early-close behavior.
 - Simultaneous action reveal and deterministic, explainable resolution.
 - Battle creation, mission assignment, dual result submissions, disputes, retreats, and scoring.

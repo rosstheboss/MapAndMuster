@@ -49,8 +49,8 @@ for the campaign rules.
 | Army escalation                      | Configure, Calculate          | Configure per-round points, free supply, and free-character allowances.                                                        |
 | Army composition                     | Calculate, Display            | Calculate campaign-level supply allowance/cost; full army-list legality is outside initial scope.                              |
 | Army-list submission                 | Configure, Secret             | Store file/link and declared temporary supply; expose to participant, opponent, and staff as configured.                       |
-| Campaign points                      | Calculate, Audit              | Maintain current and historical components; expose public totals while concealing secret sources.                              |
-| Longest connected territory chain    | Calculate                     | Calculate from player-owned territory graph; allied territories excluded in supplied rules.                                    |
+| Campaign points                      | Configure, Calculate, Display | Show a running per-player table of current structure holdings, cumulative battle campaign points, awarded and ranking public objectives, and visible held item-objective points; omit hidden item sources from unauthorized totals. Ranking objectives show a top five; 0-point objectives are ignored. |
+| Longest connected territory chain    | Calculate                     | Calculate from player-owned territory graph; allied territories excluded. Friendly first-place ties each receive the configured campaign points. |
 | Structure-control objective          | Calculate                     | Calculate qualified structures and configured tie behavior.                                                                    |
 | Public objectives                    | Configure, Calculate, Display | Track progress and show criteria/results.                                                                                      |
 | Private objectives                   | Configure, Secret, Calculate  | Assign at player/faction/alliance scope; conceal progress and award until reveal policy permits.                               |
@@ -106,7 +106,7 @@ These remain in `DECISIONS-NEEDED.md` and must not be silently resolved by an ag
 - Castle gates, walls, battering rams, scaling, and inside-the-walls rules are headings only.
 - Relic choices and state-changing effects are intentionally unrevealed.
 - Several armies-of-infamy entries are placeholders.
-- Exact battle-point conversion is delegated to another guide.
+- Exact proprietary battle-point conversion charts are out of scope; managers enter already-converted
+  scores or raw victory points and configure multiplier, clamp, and negative-loser behavior.
 - Several scoring rows do not fully define whether points are current, cumulative, or both.
-- Tie handling is not defined for every objective.
 - Some retreat, inactivity, no-result, and campaign-removal cases need confirmation.

@@ -103,6 +103,7 @@ public sealed class DuplicateCampaignHandler
                 {
                     Id = Guid.NewGuid(),
                     Name = group.Name,
+                    Color = group.Color,
                 }),
             ],
             Links =
@@ -126,6 +127,9 @@ public sealed class DuplicateCampaignHandler
             TerrainTypes = [.. source.TerrainTypes],
             StructureTypes = [.. source.StructureTypes],
             ItemObjectiveTypes = [.. source.ItemObjectiveTypes],
+            PublicObjectiveTypes = [.. source.PublicObjectiveTypes],
+            BattleScoring = source.BattleScoring,
+            RankingObjectivePoints = source.RankingObjectivePoints,
         };
 
         var created = await _campaigns.AddAsync(copy, cancellationToken).ConfigureAwait(false);

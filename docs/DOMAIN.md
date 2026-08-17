@@ -50,7 +50,7 @@ http/https URLs), a raster map image, and at least two factions. Each faction ha
 color and may have subfactions. A faction may require players who choose it to pick a
 subfaction; that flag may only be enabled when at least one subfaction is listed. Optional
 ally groups may include two or more factions; every faction cannot belong to a single ally
-group.
+group. Each ally group has a unique color used for alliance map highlighting.
 
 Setup may apply a faction preset. Applying a preset replaces the current faction and subfaction
 list with an alphabetically sorted copy of that catalog entry, including colors and whether a
@@ -70,9 +70,20 @@ name field is empty.
 
 Optional item objectives may be none, one, or many (at most 50), each with a unique name.
 Defaults are hidden until found, randomly placed, and not allowed on a spawn territory. A
-Placed item is assigned to a territory in the map editor. Hidden items stay off player views
-until a force finds them or a manager or administrator in debug mode clicks Reveal hidden
-objectives. Found or staff-revealed items stay revealed.
+Placed item is assigned to a territory in the map editor. Each item has campaign points (0–999)
+awarded while a force currently holds it, a built-in logo chosen from ten generic symbols
+(Crown, Sword, Shield, Chalice, Gem, Banner, Ring, Orb, Horn, Tome) with a color, or an optional
+50×50 uploaded logo. Hidden items stay off player views until a force finds them or a manager or
+administrator in debug mode clicks Reveal hidden objectives. Found or staff-revealed items stay
+revealed. On the campaign map, uncarried items use the same pin treatment as structures. A force
+that currently holds an item always shows that logo on its pin until the item is dropped or
+transferred.
+
+Setup also configures campaign points on each terrain type (territory capture) and each structure
+type (current holdings; destroyed structures do not count). Named public objectives live in their
+own setup section (name, optional description, and points). Points per finalized battle win are
+configured there as well (default 0). Battle Point Difference conversion remains in
+`docs/DECISIONS-NEEDED.md`.
 
 The creating user is always a campaign manager (Game Master). If they also participate, they
 occupy one player slot. Private campaigns store a hashed join password; the plaintext password
@@ -84,6 +95,34 @@ and faction names reject the same prohibited-language terms as usernames.
 The campaign page lists attached members in a Participants panel: each player's display name
 (linked to their public profile), selected faction and subfaction when chosen, and roles
 Manager, Player, and/or Admin when those apply.
+
+Near the bottom of the campaign page, a Campaign points panel lists every player occupying a
+slot. Default order is highest total to lowest, then display name. Columns are display name
+(with currently held visible item-objective logos), faction logo, alliance group, Structures
+captured, Battles Won, Public Objectives, Other, and Total. The four point columns sum to
+Total. The table sorts by any of those columns. Structure points are the current holdings
+(destroyed structures do not count). Battles Won is cumulative campaign points from resolved
+battles: by default the score differential (winner minus loser, times a multiplier, clamped to
+a configured range, default 0 to 10) with draw participants each receiving configured draw
+points (default 1). When differential scoring is off, a win awards configured win points
+(default 2) and a draw still awards draw points. The loser receives negative points only when
+that option is enabled. Public Objectives include manager-awarded named catalog items (award
+and revoke are append-only facts; originals are never overwritten) plus ranking objectives
+that currently award points to every player tied for first: most territories controlled,
+longest unbroken chain of the player's own territories, and most battle wins (draws break
+win-count ties). A named or ranking objective configured at 0 campaign points is ignored.
+The panel also shows a top five for each enabled ranking objective. Other is currently held
+visible item-objective points. Hidden items are omitted from unauthorized standings and logos
+so the columns still add up for that viewer; the holder and staff in an active debug session
+see their own hidden items.
+
+While a campaign is in progress, the map toolbar offers a display-only highlight mode for the
+current viewer: configured overlay colors, faction colors, or alliance colors (unaligned
+factions, and factions whose alliance was broken by Backstab, use their faction color). The
+browser stores that highlight mode, which panels were expanded or collapsed, standings sort,
+last chat recipient, and last chat scroll position in a per-campaign cookie (`cv-{campaignId}`,
+Path=/, Max-Age one year, SameSite=Lax), following the same pattern as the color-theme cookie.
+Game state still refreshes from the server; only the viewer's layout is restored.
 
 Your Campaigns lists campaigns the user manages or plays in. All Campaigns lists upcoming
 campaigns plus publicly viewable active and completed campaigns, using the same grouping and
@@ -102,10 +141,10 @@ previous action while the following phase is still open, or override battle resu
 and completed campaigns use the same page without live order controls. The campaign page includes
 a collapsible public log and member chat for upcoming, in-progress, and completed campaigns.
 Your Campaigns also offers Duplicate campaign on every listed campaign. Duplication copies the map overlay, factions, missions, ally
-groups, links, visibility, location, and schedule template into a new campaign whose start is one
+groups and their colors, public objectives, battle scoring, ranking public objectives, item-objective types, links, visibility, location, and schedule template into a new campaign whose start is one
 week after the duplication instant in the campaign time zone. The duplicating user becomes the
 manager of the copy and occupies a player slot only when they were a player on the source.
-Raster maps, flags, structure logos, and mission files are reused until the copy replaces them;
+Raster maps, flags, structure logos, item-objective logos, and mission files are reused until the copy replaces them;
 the overlay SVG data is copied. Play state, memberships, and unresolved orders are not copied.
 
 Only a manager may edit or delete a campaign. Deletion removes the campaign from every member's
@@ -424,6 +463,10 @@ Completed campaigns are ordered by most recently finished.
 Objective visibility scopes: Public, Player, Faction, Alliance, Backstabber, and Staff.
 Completion and awarded points are separate so a secret objective can be completed without
 publicly revealing it.
+
+Named public objectives are a campaign catalog. A manager or administrator awards or revokes
+them during play; each change appends a public log fact. Relic choice options and effects remain
+in `docs/DECISIONS-NEEDED.md`.
 
 Item objectives are named catalog items (none, one, or many). Launch placement is Random or
 Placed. Hidden-until-found items are omitted from player play payloads, including location and

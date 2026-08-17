@@ -73,6 +73,12 @@ public sealed class SubmitBattleResultCommand
 
     /// <summary>Gets whether the result is a draw.</summary>
     public required bool IsDraw { get; init; }
+
+    /// <summary>Gets the winner's tabletop or converted battle score.</summary>
+    public int? WinnerScore { get; init; }
+
+    /// <summary>Gets the loser's tabletop or converted battle score.</summary>
+    public int? LoserScore { get; init; }
 }
 
 /// <summary>
@@ -272,8 +278,26 @@ public sealed class CampaignPlayDetail
     /// <summary>Gets structure types.</summary>
     public required IReadOnlyList<Campaigns.StructureTypeDetail> StructureTypes { get; init; }
 
-    /// <summary>Gets visible item objectives. Hidden items are omitted unless the viewer is in debug mode.</summary>
+    /// <summary>Gets visible item objectives. Hidden items are omitted unless the viewer holds them or is in debug mode.</summary>
     public IReadOnlyList<PlayItemObjectiveDetail> ItemObjectives { get; init; } = [];
+
+    /// <summary>Gets factions that left their ally group through Backstab.</summary>
+    public IReadOnlyList<Guid> BrokenAllyFactionIds { get; init; } = [];
+
+    /// <summary>Gets current campaign-point standings for players.</summary>
+    public IReadOnlyList<Campaigns.CampaignPointStandingDetail> Standings { get; init; } = [];
+
+    /// <summary>Gets current top-five leaders for enabled ranking public objectives.</summary>
+    public IReadOnlyList<Campaigns.PublicObjectiveLeaderboardDetail> PublicObjectiveLeaderboards { get; init; } = [];
+
+    /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
+    public int PointsPerBattleWon { get; init; }
+
+    /// <summary>Gets campaign points awarded to each participant of a draw.</summary>
+    public int PointsPerBattleDraw { get; init; }
+
+    /// <summary>Gets whether battle campaign points use score differential.</summary>
+    public bool UseDifferentialBattleScoring { get; init; }
 
     /// <summary>Gets forces on the map.</summary>
     public required IReadOnlyList<PlayForceDetail> Forces { get; init; }
@@ -320,6 +344,15 @@ public sealed class PlayItemObjectiveDetail
 
     /// <summary>Gets whether players can see this item.</summary>
     public required bool IsRevealed { get; init; }
+
+    /// <summary>Gets the built-in logo key.</summary>
+    public string BuiltinSymbol { get; init; } = "Crown";
+
+    /// <summary>Gets the logo color as #RRGGBB.</summary>
+    public string Color { get; init; } = "#C45C26";
+
+    /// <summary>Gets whether a custom logo image is stored.</summary>
+    public bool HasImage { get; init; }
 }
 
 /// <summary>A remaining phase window.</summary>
@@ -450,6 +483,12 @@ public sealed class PlayBattleDetail
     /// <summary>Gets whether the result is a draw.</summary>
     public required bool IsDraw { get; init; }
 
+    /// <summary>Gets the recorded winner score when known.</summary>
+    public int? WinnerScore { get; init; }
+
+    /// <summary>Gets the recorded loser score when known.</summary>
+    public int? LoserScore { get; init; }
+
     /// <summary>Gets whether the viewer must retreat.</summary>
     public required bool NeedsRetreat { get; init; }
 
@@ -468,6 +507,12 @@ public sealed class PlayBattleSubmissionDetail
 
     /// <summary>Gets whether the report is a draw.</summary>
     public required bool IsDraw { get; init; }
+
+    /// <summary>Gets the reported winner score.</summary>
+    public int? WinnerScore { get; init; }
+
+    /// <summary>Gets the reported loser score.</summary>
+    public int? LoserScore { get; init; }
 }
 
 /// <summary>A public resolved-action or battle fact. Unrevealed orders are never included.</summary>
@@ -511,4 +556,31 @@ public sealed class PlayLogEntryDetail
 
     /// <summary>Gets whether this is a private member chat.</summary>
     public bool IsPrivate { get; init; }
+}
+
+/// <summary>
+/// Command for a manager to award or revoke a public campaign objective.
+/// </summary>
+public sealed class SetPublicObjectiveAwardCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the public objective.</summary>
+    public required Guid ObjectiveId { get; init; }
+
+    /// <summary>Gets the player receiving or losing the award.</summary>
+    public required Guid PlayerUserId { get; init; }
+
+    /// <summary>Gets whether to award (<see langword="true"/>) or revoke (<see langword="false"/>).</summary>
+    public required bool Awarded { get; init; }
 }

@@ -264,6 +264,9 @@ internal static class CampaignPlayPipeline
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
+            PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            BattleScoring = existing.BattleScoring,
+            RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = play,
         };
     }

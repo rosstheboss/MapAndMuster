@@ -126,6 +126,71 @@ describe('CampaignMapViewComponent', () => {
     expect(pin?.getAttribute('aria-label')).toBe('Crown');
   });
 
+  it('fills owned territories with faction or alliance colors', () => {
+    const owned = { ...territory, ownerFactionId: 'f1' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'f1',
+        name: 'North',
+        color: '#DC2626',
+        subfactions: [],
+        allyGroupName: 'Pact',
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+    ]);
+    fixture.componentRef.setInput('allyGroups', [{ id: 'a1', name: 'Pact', color: '#111111' }]);
+    fixture.componentRef.setInput('colorMode', 'faction');
+    fixture.detectChanges();
+
+    const polygon = (): Element | null => (fixture.nativeElement as HTMLElement).querySelector('polygon.territory');
+    expect(polygon()?.getAttribute('fill')).toBe('#DC2626');
+
+    fixture.componentRef.setInput('colorMode', 'alliance');
+    fixture.detectChanges();
+    expect(polygon()?.getAttribute('fill')).toBe('#111111');
+
+    fixture.componentRef.setInput('brokenAllyFactionIds', ['f1']);
+    fixture.detectChanges();
+    expect(polygon()?.getAttribute('fill')).toBe('#DC2626');
+  });
+
+  it('shows carried item objectives on the possessing force instead of a ground pin', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'f1',
+        isMine: true,
+        inBattle: false,
+        label: 'North force in Coast',
+        heldItems: [{ name: 'Crown', builtinSymbol: 'Crown', color: '#C45C26', imageUrl: null }],
+      },
+    ]);
+    fixture.componentRef.setInput('items', [
+      {
+        id: 'item-1',
+        territoryId: 't1',
+        name: 'Crown',
+        carried: true,
+        hidden: false,
+        builtinSymbol: 'Crown',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.item-pin')).toBeNull();
+    expect(compiled.querySelector('.held-item')).toBeTruthy();
+    expect(compiled.querySelector('.force-pin')?.getAttribute('aria-label')).toContain('Crown');
+  });
+
   it('does not pan on left-click drag', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);

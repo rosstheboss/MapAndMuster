@@ -136,6 +136,9 @@ public sealed class GetCampaignHandler
             .ConfigureAwait(false);
         var members = CampaignPlayMapper.ToChatMembers(participants);
         var inspect = CampaignChatContext.CanInspectPrivateChat(isAdministrator, userId, campaign.PlayState);
+        var membership = CampaignMapper.MembershipFor(campaign, userId);
+        var staffView = (membership?.IsGameMaster == true || isAdministrator)
+            && campaign.PlayState?.DebugActorUserId is not null;
         return OperationResults.Success(CampaignMapper.ToDetail(
             campaign,
             userId,
@@ -144,7 +147,8 @@ public sealed class GetCampaignHandler
             members,
             CampaignChatContext.Channels(campaign, userId, members),
             inspect,
-            participants));
+            participants,
+            staffView));
     }
 }
 
@@ -403,6 +407,9 @@ internal static class CampaignMapClone
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
+            PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            BattleScoring = existing.BattleScoring,
+            RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = existing.PlayState,
         };
     }
@@ -411,7 +418,8 @@ internal static class CampaignMapClone
         StoredCampaign existing,
         IReadOnlyList<StoredTerrainType> terrainTypes,
         IReadOnlyList<StoredStructureType> structureTypes,
-        DateTimeOffset updatedUtc)
+        DateTimeOffset updatedUtc,
+        IReadOnlyList<StoredItemObjectiveType>? itemObjectiveTypes = null)
     {
         return new StoredCampaign
         {
@@ -445,7 +453,10 @@ internal static class CampaignMapClone
             MapGraph = existing.MapGraph,
             TerrainTypes = terrainTypes,
             StructureTypes = structureTypes,
-            ItemObjectiveTypes = existing.ItemObjectiveTypes,
+            ItemObjectiveTypes = itemObjectiveTypes ?? existing.ItemObjectiveTypes,
+            PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            BattleScoring = existing.BattleScoring,
+            RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = existing.PlayState,
         };
     }
@@ -488,6 +499,9 @@ internal static class CampaignMapClone
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
+            PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            BattleScoring = existing.BattleScoring,
+            RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = existing.PlayState,
         };
     }
@@ -530,6 +544,9 @@ internal static class CampaignMapClone
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
+            PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            BattleScoring = existing.BattleScoring,
+            RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = existing.PlayState,
         };
     }

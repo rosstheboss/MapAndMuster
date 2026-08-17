@@ -279,6 +279,19 @@ describe('CampaignSetupPage', () => {
     };
     expect(itemPage.itemObjectiveTypes.at(0).controls.isHiddenUntilFound.value).toBe(true);
     expect(itemPage.itemObjectiveTypes.at(0).controls.allowOnSpawn.value).toBe(false);
+    expect(compiled.querySelector('#item-objective-points-0')).toBeTruthy();
+    expect(compiled.querySelector('#item-objective-symbol-0')).toBeTruthy();
+    expect(compiled.querySelector('#pointsPerBattleWon')).toBeTruthy();
+    expect(compiled.querySelector('#pointsPerBattleDraw')).toBeTruthy();
+    expect(compiled.querySelector('#mostTerritoriesCampaignPoints')).toBeTruthy();
+    clickNamedButton(compiled, 'Add public objective');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(compiled.querySelector('#public-objective-name-0')).toBeTruthy();
+    expect(compiled.querySelector('#public-objective-points-0')).toBeTruthy();
+    clickNamedButton(compiled, 'Add ally group');
+    fixture.detectChanges();
+    expect(compiled.querySelector('#ally-group-color-0')).toBeTruthy();
     TestBed.inject(HttpTestingController).verify();
   });
 

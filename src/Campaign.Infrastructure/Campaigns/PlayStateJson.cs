@@ -98,6 +98,8 @@ internal static class PlayStateJson
                 WinnerForceId = battle.WinnerForceId,
                 IsDraw = battle.IsDraw,
                 CreatedUtc = battle.CreatedUtc,
+                WinnerScore = battle.WinnerScore,
+                LoserScore = battle.LoserScore,
             })],
             BattleSubmissions = [.. state.BattleSubmissions.Select(static item => new BattleSubmissionDocument
             {
@@ -108,6 +110,8 @@ internal static class PlayStateJson
                 IsDraw = item.IsDraw,
                 AcceptedSubmissionId = item.AcceptedSubmissionId,
                 SubmittedUtc = item.SubmittedUtc,
+                WinnerScore = item.WinnerScore,
+                LoserScore = item.LoserScore,
             })],
             Retreats = [.. state.Retreats.Select(static item => new RetreatDocument
             {
@@ -197,6 +201,15 @@ internal static class PlayStateJson
             })],
             DebugActorUserId = state.DebugActorUserId,
             DebugStartedUtc = state.DebugStartedUtc,
+            PublicObjectiveAwards = [.. state.PublicObjectiveAwards.Select(static item => new PublicObjectiveAwardDocument
+            {
+                Id = item.Id,
+                ObjectiveId = item.ObjectiveId,
+                PlayerUserId = item.PlayerUserId,
+                IsActive = item.IsActive,
+                ActorUserId = item.ActorUserId,
+                AwardedUtc = item.AwardedUtc,
+            })],
         };
     }
 
@@ -246,7 +259,9 @@ internal static class PlayStateJson
                 battle.ParticipantForceIds,
                 battle.WinnerForceId,
                 battle.IsDraw,
-                battle.CreatedUtc))],
+                battle.CreatedUtc,
+                battle.WinnerScore,
+                battle.LoserScore))],
             [.. document.BattleSubmissions.Select(static item => new BattleResultSubmission(
                 item.Id,
                 item.BattleId,
@@ -254,7 +269,9 @@ internal static class PlayStateJson
                 item.WinnerForceId,
                 item.IsDraw,
                 item.AcceptedSubmissionId,
-                item.SubmittedUtc))],
+                item.SubmittedUtc,
+                item.WinnerScore,
+                item.LoserScore))],
             [.. document.Retreats.Select(static item => new RetreatOrder(
                 item.Id,
                 item.BattleId,
@@ -291,7 +308,14 @@ internal static class PlayStateJson
                 item.ChatTargetLabel))],
             ToSnapshots(document),
             document.DebugActorUserId,
-            document.DebugStartedUtc);
+            document.DebugStartedUtc,
+            [.. (document.PublicObjectiveAwards ?? []).Select(static item => new PublicObjectiveAward(
+                item.Id,
+                item.ObjectiveId,
+                item.PlayerUserId,
+                item.IsActive,
+                item.ActorUserId,
+                item.AwardedUtc))]);
     }
 
     private static IReadOnlyList<ActionWindowSnapshot> ToSnapshots(PlayDocument document)
@@ -351,6 +375,7 @@ internal static class PlayStateJson
         public List<SnapshotDocument>? Snapshots { get; set; }
         public Guid? DebugActorUserId { get; set; }
         public DateTimeOffset? DebugStartedUtc { get; set; }
+        public List<PublicObjectiveAwardDocument>? PublicObjectiveAwards { get; set; }
     }
 
     private sealed class WindowDocument
@@ -416,6 +441,8 @@ internal static class PlayStateJson
         public Guid? WinnerForceId { get; set; }
         public bool IsDraw { get; set; }
         public DateTimeOffset CreatedUtc { get; set; }
+        public int? WinnerScore { get; set; }
+        public int? LoserScore { get; set; }
     }
 
     private sealed class BattleSubmissionDocument
@@ -427,6 +454,8 @@ internal static class PlayStateJson
         public bool IsDraw { get; set; }
         public Guid? AcceptedSubmissionId { get; set; }
         public DateTimeOffset SubmittedUtc { get; set; }
+        public int? WinnerScore { get; set; }
+        public int? LoserScore { get; set; }
     }
 
     private sealed class RetreatDocument
@@ -444,6 +473,16 @@ internal static class PlayStateJson
         public Guid TerritoryId { get; set; }
         public Guid? StructureTypeId { get; set; }
         public string Condition { get; set; } = "";
+    }
+
+    private sealed class PublicObjectiveAwardDocument
+    {
+        public Guid Id { get; set; }
+        public Guid ObjectiveId { get; set; }
+        public Guid PlayerUserId { get; set; }
+        public bool IsActive { get; set; }
+        public Guid ActorUserId { get; set; }
+        public DateTimeOffset AwardedUtc { get; set; }
     }
 
     private sealed class ItemObjectiveDocument

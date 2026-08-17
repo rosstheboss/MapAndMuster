@@ -45,6 +45,8 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<SaveCampaignMapGraphHandler>();
         services.AddScoped<UploadStructureImageHandler>();
         services.AddScoped<GetStructureImageHandler>();
+        services.AddScoped<UploadItemObjectiveImageHandler>();
+        services.AddScoped<GetItemObjectiveImageHandler>();
         services.AddScoped<UploadFactionFlagHandler>();
         services.AddScoped<GetFactionFlagHandler>();
         services.AddScoped<UploadMissionFileHandler>();
@@ -63,6 +65,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<ExitCampaignDebugHandler>();
         services.AddScoped<DebugCorrectOrderHandler>();
         services.AddScoped<RevealHiddenItemObjectivesHandler>();
+        services.AddScoped<SetPublicObjectiveAwardHandler>();
 
         services.AddScoped<CampaignNotificationPublisher>();
         services.AddScoped<GetHomeBoardHandler>();

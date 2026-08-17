@@ -109,7 +109,13 @@ public sealed class CampaignStore : ICampaignStore
 
         // Apply scalars and replace children in SQL. Graph-replace through the change tracker
         // raises false concurrency conflicts on faction rows.
-        var catalogJson = CatalogJson.Serialize(campaign.TerrainTypes, campaign.StructureTypes, campaign.ItemObjectiveTypes);
+        var catalogJson = CatalogJson.Serialize(
+            campaign.TerrainTypes,
+            campaign.StructureTypes,
+            campaign.ItemObjectiveTypes,
+            campaign.PublicObjectiveTypes,
+            campaign.BattleScoring,
+            campaign.RankingObjectivePoints);
         var playJson = PlayStateJson.Serialize(campaign.PlayState);
         var affected = await _dbContext.Campaigns
             .Where(item => item.Id == campaign.Id && item.Revision == expectedRevision)
@@ -397,7 +403,13 @@ public sealed class CampaignStore : ICampaignStore
             MapStorageKey = campaign.MapStorageKey,
             MapGraphJson = campaign.MapGraph is null ? null : MapGraphJson.Serialize(campaign.MapGraph),
             PlayStateJson = PlayStateJson.Serialize(campaign.PlayState),
-            CatalogJson = CatalogJson.Serialize(campaign.TerrainTypes, campaign.StructureTypes, campaign.ItemObjectiveTypes),
+            CatalogJson = CatalogJson.Serialize(
+                campaign.TerrainTypes,
+                campaign.StructureTypes,
+                campaign.ItemObjectiveTypes,
+                campaign.PublicObjectiveTypes,
+                campaign.BattleScoring,
+                campaign.RankingObjectivePoints),
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
@@ -459,6 +471,7 @@ public sealed class CampaignStore : ICampaignStore
             {
                 CampaignId = record.Id,
                 Name = group.Name,
+                Color = group.Color,
                 SortOrder = groupOrder++,
             };
             record.AllyGroups.Add(groupRecord);
@@ -563,6 +576,9 @@ public sealed class CampaignStore : ICampaignStore
             TerrainTypes = catalogs.TerrainTypes,
             StructureTypes = catalogs.StructureTypes,
             ItemObjectiveTypes = catalogs.ItemObjectiveTypes,
+            PublicObjectiveTypes = catalogs.PublicObjectiveTypes,
+            BattleScoring = catalogs.BattleScoring,
+            RankingObjectivePoints = catalogs.RankingObjectivePoints,
             Memberships =
             [
                 .. record.Memberships.Select(membership => new StoredCampaignMembership
@@ -578,7 +594,12 @@ public sealed class CampaignStore : ICampaignStore
             [
                 .. record.AllyGroups
                     .OrderBy(group => group.SortOrder)
-                    .Select(group => new StoredAllyGroup { Id = group.Id, Name = group.Name }),
+                    .Select(group => new StoredAllyGroup
+                    {
+                        Id = group.Id,
+                        Name = group.Name,
+                        Color = string.IsNullOrWhiteSpace(group.Color) ? "#4B5563" : group.Color,
+                    }),
             ],
             Factions =
             [

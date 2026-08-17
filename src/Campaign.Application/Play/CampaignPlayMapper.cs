@@ -22,9 +22,12 @@ internal static class CampaignPlayMapper
         var map = CampaignLifecycle.ToPlayMap(campaign);
         var window = play.CurrentWindow();
         var names = await UsernamesAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
+        var participants = accounts is null
+            ? (IReadOnlyList<CampaignParticipantDetail>)[]
+            : await ParticipantsAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
         var mentionable = accounts is null
             ? (IReadOnlyList<CampaignLogMemberDetail>)[]
-            : await ChatMembersAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
+            : ToChatMembers(participants);
         var remaining = play.Windows
             .Where(item => item.Status != PhaseWindowStatus.Resolved)
             .Select(item => new PlayWindowDetail
@@ -44,6 +47,7 @@ internal static class CampaignPlayMapper
         var canDebug = membership?.IsGameMaster == true || isAdministrator;
         var isDebugActive = play.DebugActorUserId is not null;
         var staffView = canDebug && isDebugActive;
+        var scoring = CampaignPointStandingsMapper.ToScoring(campaign, participants, viewerUserId, staffView);
         var revealed = window is null || window.Status == PhaseWindowStatus.Resolved || window.Kind != RoundPhaseKind.Action;
         var currentActionId = window is { Kind: RoundPhaseKind.Action, Status: PhaseWindowStatus.Open } ? window.Id : (Guid?)null;
         var orders = new List<PlayOrderDetail>();
@@ -145,20 +149,13 @@ internal static class CampaignPlayMapper
             RemainingWindows = remaining,
             Factions = CampaignMapper.ToDetail(campaign, viewerUserId, utcNow).Factions,
             StructureTypes = CampaignMapper.ToDetail(campaign, viewerUserId, utcNow).StructureTypes,
-            ItemObjectives =
-            [
-                .. play.ItemObjectives
-                    .Where(item => item.IsRevealed || staffView)
-                    .Select(item => new PlayItemObjectiveDetail
-                    {
-                        Id = item.Id,
-                        TypeId = item.TypeId,
-                        Name = item.Name,
-                        TerritoryId = item.IsRevealed || staffView ? item.TerritoryId : null,
-                        PossessorForceId = item.IsRevealed || staffView ? item.PossessorForceId : null,
-                        IsRevealed = item.IsRevealed,
-                    }),
-            ],
+            ItemObjectives = VisibleItems(play, campaign, viewerUserId, staffView),
+            BrokenAllyFactionIds = play.BrokenAllyFactionIds,
+            Standings = scoring.Standings,
+            PublicObjectiveLeaderboards = scoring.Leaderboards,
+            PointsPerBattleWon = campaign.BattleScoring.PointsPerWin,
+            PointsPerBattleDraw = campaign.BattleScoring.PointsPerDraw,
+            UseDifferentialBattleScoring = campaign.BattleScoring.UseDifferential,
             Forces =
             [
                 .. play.Forces.Select(force => new PlayForceDetail
@@ -298,6 +295,8 @@ internal static class CampaignPlayMapper
                     SubmitterUserId = mine.SubmitterUserId,
                     WinnerForceId = mine.WinnerForceId,
                     IsDraw = mine.IsDraw,
+                    WinnerScore = mine.WinnerScore,
+                    LoserScore = mine.LoserScore,
                 },
             OpponentSubmission = theirs is null || myForce is null
                 ? null
@@ -306,9 +305,13 @@ internal static class CampaignPlayMapper
                     SubmitterUserId = theirs.SubmitterUserId,
                     WinnerForceId = theirs.WinnerForceId,
                     IsDraw = theirs.IsDraw,
+                    WinnerScore = theirs.WinnerScore,
+                    LoserScore = theirs.LoserScore,
                 },
             WinnerForceId = battle.WinnerForceId,
             IsDraw = battle.IsDraw,
+            WinnerScore = battle.WinnerScore,
+            LoserScore = battle.LoserScore,
             NeedsRetreat = needsRetreat,
             RetreatTargets = needsRetreat && myForce is not null
                 ? CampaignPlayRules.EligibleRetreats(map, myForce)
@@ -436,6 +439,10 @@ internal static class CampaignPlayMapper
                 IsAdministrator = administratorIds.Contains(membership.UserId),
                 FactionName = faction?.Name,
                 Subfaction = membership.Subfaction,
+                FactionId = faction?.Id,
+                FactionColor = faction?.Color,
+                HasFlagImage = !string.IsNullOrWhiteSpace(faction?.FlagImageStorageKey),
+                AllyGroupName = faction?.AllyGroupName,
             });
         }
 
@@ -443,6 +450,47 @@ internal static class CampaignPlayMapper
         [
             .. participants.OrderBy(static participant => participant.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static participant => participant.Username, StringComparer.OrdinalIgnoreCase),
+        ];
+    }
+
+    private static IReadOnlyList<PlayItemObjectiveDetail> VisibleItems(
+        CampaignPlayState play,
+        StoredCampaign campaign,
+        Guid viewerUserId,
+        bool staffView)
+    {
+        var types = campaign.ItemObjectiveTypes.ToDictionary(static type => type.Id);
+        var forcesById = play.Forces.ToDictionary(static force => force.Id);
+        return
+        [
+            .. play.ItemObjectives
+                .Where(item => item.IsRevealed
+                    || staffView
+                    || (item.PossessorForceId is { } forceId
+                        && forcesById.TryGetValue(forceId, out var possessor)
+                        && possessor.ControllerUserId == viewerUserId))
+                .Select(item =>
+                {
+                    types.TryGetValue(item.TypeId, out var type);
+                    var locationVisible = item.IsRevealed || staffView;
+                    return new PlayItemObjectiveDetail
+                    {
+                        Id = item.Id,
+                        TypeId = item.TypeId,
+                        Name = item.Name,
+                        TerritoryId = locationVisible ? item.TerritoryId : null,
+                        PossessorForceId = item.PossessorForceId is { } possessorId
+                            && (locationVisible
+                                || (forcesById.TryGetValue(possessorId, out var holder)
+                                    && holder.ControllerUserId == viewerUserId))
+                            ? item.PossessorForceId
+                            : null,
+                        IsRevealed = item.IsRevealed,
+                        BuiltinSymbol = type?.BuiltinSymbol ?? "Crown",
+                        Color = type?.Color ?? "#C45C26",
+                        HasImage = !string.IsNullOrWhiteSpace(type?.ImageStorageKey),
+                    };
+                }),
         ];
     }
 
@@ -554,6 +602,10 @@ internal static class CampaignPlayMapper
                 $"{(entry.ForceId is { } droppedId ? ForceController(play, droppedId, names) : actor)} dropped {entry.Message ?? "an item objective"} in {territory}.",
             PlayLogKind.ItemObjectivesStaffRevealed =>
                 $"{actor} revealed hidden item objectives.",
+            PlayLogKind.PublicObjectiveAwarded =>
+                $"{actor} awarded {PublicObjectiveName(campaign, entry.Message)}.",
+            PlayLogKind.PublicObjectiveRevoked =>
+                $"{actor} revoked {PublicObjectiveName(campaign, entry.Message)}.",
             _ => $"{actor} recorded a campaign change in {territory}.",
         };
     }
@@ -572,6 +624,20 @@ internal static class CampaignPlayMapper
     {
         var force = play.Forces.FirstOrDefault(item => item.Id == forceId);
         return ActorName(force?.ControllerUserId, names);
+    }
+
+    private static string PublicObjectiveName(StoredCampaign campaign, string? objectiveId)
+    {
+        if (Guid.TryParse(objectiveId, out var id))
+        {
+            var type = campaign.PublicObjectiveTypes.FirstOrDefault(item => item.Id == id);
+            if (type is not null)
+            {
+                return type.Name;
+            }
+        }
+
+        return "a public objective";
     }
 
     private static string TerritoryLabel(StoredCampaign campaign, PlayMap map, Guid? territoryId)

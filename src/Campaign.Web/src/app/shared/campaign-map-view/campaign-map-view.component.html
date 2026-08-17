@@ -69,7 +69,7 @@
             [class.is-move-valid]="item.moveValid"
             [class.is-move-invalid]="item.moveInvalid"
             [attr.points]="item.points"
-            [attr.fill]="item.territory.overlayColor ? item.territory.overlayColor : 'transparent'"
+            [attr.fill]="item.fill"
             [attr.stroke-width]="item.strokeWidth"
             [style.--glow-color]="item.glowColor"
             [attr.data-kind]="'territory'"
@@ -203,13 +203,27 @@
             [style.margin-top.px]="-markerSize(pin.fit).height / 2"
             [style.background]="pin.color"
             role="img"
-            [attr.aria-label]="pin.force.label"
-          ></div>
+            [attr.aria-label]="forceLabel(pin.force)"
+            [title]="forceLabel(pin.force)"
+          >
+            @if (pin.force.heldItems?.length) {
+              <div class="force-held-items">
+                @for (held of pin.force.heldItems; track held.name) {
+                  <span class="held-item" [style.color]="held.color">
+                    @if (held.imageUrl; as src) {
+                      <img [src]="src" alt="" />
+                    } @else {
+                      <app-map-symbol kind="item" [name]="held.builtinSymbol" [label]="held.name" />
+                    }
+                  </span>
+                }
+              </div>
+            }
+          </div>
         }
         @for (pin of item.items; track pin.item.id) {
           <div
             class="item-pin"
-            [class.is-carried]="pin.item.carried"
             [class.is-hidden]="pin.item.hidden"
             [style.left.%]="pin.fit.x * 100"
             [style.top.%]="pin.fit.y * 100"
@@ -217,9 +231,16 @@
             [style.height.px]="markerSize(pin.fit).height"
             [style.margin-left.px]="-markerSize(pin.fit).width / 2"
             [style.margin-top.px]="-markerSize(pin.fit).height / 2"
+            [style.color]="pin.item.color || '#C45C26'"
             role="img"
             [attr.aria-label]="pin.item.name"
-          ></div>
+          >
+            @if (pin.item.imageUrl; as src) {
+              <img [src]="src" alt="" />
+            } @else {
+              <app-map-symbol kind="item" [name]="pin.item.builtinSymbol || 'Crown'" [label]="pin.item.name" />
+            }
+          </div>
         }
       }
       @if (moveDropMarker(); as marker) {

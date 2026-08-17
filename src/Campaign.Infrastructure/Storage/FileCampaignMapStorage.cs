@@ -15,6 +15,7 @@ public sealed class FileCampaignMapStorage : ICampaignMapStorage, ICampaignAsset
         "structures",
         "flags",
         "missions",
+        "items",
     };
 
     private readonly string _rootPath;
@@ -31,6 +32,7 @@ public sealed class FileCampaignMapStorage : ICampaignMapStorage, ICampaignAsset
         Directory.CreateDirectory(Path.Combine(_rootPath, "structures"));
         Directory.CreateDirectory(Path.Combine(_rootPath, "flags"));
         Directory.CreateDirectory(Path.Combine(_rootPath, "missions"));
+        Directory.CreateDirectory(Path.Combine(_rootPath, "items"));
     }
 
     /// <inheritdoc />

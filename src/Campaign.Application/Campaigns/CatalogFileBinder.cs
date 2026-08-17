@@ -73,22 +73,50 @@ internal static class CatalogFileBinder
                     IsPillageable = type.IsPillageable,
                     IsDestructible = type.IsDestructible,
                     Missions = BindMissions(type.Missions, previousMissions),
+                    CampaignPoints = type.CampaignPoints,
                 };
             }),
         ];
     }
 
-    public static IReadOnlyList<StoredItemObjectiveType> BindItemObjectives(IReadOnlyList<ItemObjectiveTypeSetup> incoming)
+    public static IReadOnlyList<StoredItemObjectiveType> BindItemObjectives(
+        IReadOnlyList<ItemObjectiveTypeSetup> incoming,
+        IReadOnlyList<StoredItemObjectiveType>? previous = null)
+    {
+        var previousById = previous?.ToDictionary(static type => type.Id) ?? [];
+        return
+        [
+            .. incoming.Select(type =>
+            {
+                previousById.TryGetValue(type.Id, out var existing);
+                var imageKey = type.ClearImage ? null : existing?.ImageStorageKey;
+                return new StoredItemObjectiveType
+                {
+                    Id = type.Id,
+                    Name = type.Name,
+                    IsHiddenUntilFound = type.IsHiddenUntilFound,
+                    Placement = type.Placement.ToString(),
+                    AllowOnSpawn = type.AllowOnSpawn,
+                    BuiltinSymbol = imageKey is null ? type.BuiltinSymbol : existing?.BuiltinSymbol ?? type.BuiltinSymbol,
+                    Color = type.Color,
+                    ImageStorageKey = imageKey,
+                    CampaignPoints = type.CampaignPoints,
+                };
+            }),
+        ];
+    }
+
+    public static IReadOnlyList<StoredPublicObjectiveType> BindPublicObjectives(
+        IReadOnlyList<PublicObjectiveTypeSetup> incoming)
     {
         return
         [
-            .. incoming.Select(static type => new StoredItemObjectiveType
+            .. incoming.Select(static type => new StoredPublicObjectiveType
             {
                 Id = type.Id,
                 Name = type.Name,
-                IsHiddenUntilFound = type.IsHiddenUntilFound,
-                Placement = type.Placement.ToString(),
-                AllowOnSpawn = type.AllowOnSpawn,
+                Description = type.Description,
+                CampaignPoints = type.CampaignPoints,
             }),
         ];
     }
@@ -96,7 +124,8 @@ internal static class CatalogFileBinder
     public static IEnumerable<string> CollectStorageKeys(
         IReadOnlyList<StoredTerrainType>? terrains,
         IReadOnlyList<StoredStructureType>? structures,
-        IReadOnlyList<StoredFaction>? factions = null)
+        IReadOnlyList<StoredFaction>? factions = null,
+        IReadOnlyList<StoredItemObjectiveType>? itemObjectives = null)
     {
         if (terrains is not null)
         {
@@ -143,6 +172,17 @@ internal static class CatalogFileBinder
                 }
             }
         }
+
+        if (itemObjectives is not null)
+        {
+            foreach (var item in itemObjectives)
+            {
+                if (IsUserUploadedFileKey(item.ImageStorageKey))
+                {
+                    yield return item.ImageStorageKey;
+                }
+            }
+        }
     }
 
     public static IEnumerable<string> CollectCampaignStorageKeys(StoredCampaign campaign)
@@ -153,7 +193,11 @@ internal static class CatalogFileBinder
             yield return campaign.MapStorageKey;
         }
 
-        foreach (var key in CollectStorageKeys(campaign.TerrainTypes, campaign.StructureTypes, campaign.Factions))
+        foreach (var key in CollectStorageKeys(
+            campaign.TerrainTypes,
+            campaign.StructureTypes,
+            campaign.Factions,
+            campaign.ItemObjectiveTypes))
         {
             yield return key;
         }
@@ -191,7 +235,7 @@ internal static class CatalogFileBinder
             return false;
         }
 
-        return storageKey[..slash] is "maps" or "structures" or "flags" or "missions";
+        return storageKey[..slash] is "maps" or "structures" or "flags" or "missions" or "items";
     }
 
     private static IReadOnlyList<StoredMission> BindMissions(

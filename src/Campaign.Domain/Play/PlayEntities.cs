@@ -264,7 +264,9 @@ public sealed class CampaignBattle
         IReadOnlyList<Guid> participantForceIds,
         Guid? winnerForceId,
         bool isDraw,
-        DateTimeOffset createdUtc)
+        DateTimeOffset createdUtc,
+        int? winnerScore = null,
+        int? loserScore = null)
     {
         ArgumentNullException.ThrowIfNull(participantForceIds);
         Id = id;
@@ -276,6 +278,8 @@ public sealed class CampaignBattle
         WinnerForceId = winnerForceId;
         IsDraw = isDraw;
         CreatedUtc = createdUtc;
+        WinnerScore = winnerScore;
+        LoserScore = loserScore;
     }
 
     /// <summary>Gets the battle identifier.</summary>
@@ -305,6 +309,12 @@ public sealed class CampaignBattle
     /// <summary>Gets when the battle was created, in UTC.</summary>
     public DateTimeOffset CreatedUtc { get; }
 
+    /// <summary>Gets the winner's reported tabletop or converted battle score.</summary>
+    public int? WinnerScore { get; }
+
+    /// <summary>Gets the loser's reported tabletop or converted battle score.</summary>
+    public int? LoserScore { get; }
+
     /// <summary>
     /// Returns a copy with an updated result or window assignment.
     /// </summary>
@@ -313,7 +323,11 @@ public sealed class CampaignBattle
         BattleStatus? status = null,
         Guid? winnerForceId = null,
         bool? isDraw = null,
-        bool assignWindow = false)
+        bool assignWindow = false,
+        bool clearWinner = false,
+        int? winnerScore = null,
+        int? loserScore = null,
+        bool assignScores = false)
     {
         return new CampaignBattle(
             Id,
@@ -322,9 +336,11 @@ public sealed class CampaignBattle
             assignWindow ? battleWindowId : battleWindowId ?? BattleWindowId,
             status ?? Status,
             ParticipantForceIds,
-            winnerForceId ?? WinnerForceId,
+            clearWinner ? null : winnerForceId ?? WinnerForceId,
             isDraw ?? IsDraw,
-            CreatedUtc);
+            CreatedUtc,
+            assignScores ? winnerScore : winnerScore ?? WinnerScore,
+            assignScores ? loserScore : loserScore ?? LoserScore);
     }
 }
 
@@ -343,7 +359,9 @@ public sealed class BattleResultSubmission
         Guid? winnerForceId,
         bool isDraw,
         Guid? acceptedSubmissionId,
-        DateTimeOffset submittedUtc)
+        DateTimeOffset submittedUtc,
+        int? winnerScore = null,
+        int? loserScore = null)
     {
         Id = id;
         BattleId = battleId;
@@ -352,6 +370,8 @@ public sealed class BattleResultSubmission
         IsDraw = isDraw;
         AcceptedSubmissionId = acceptedSubmissionId;
         SubmittedUtc = submittedUtc;
+        WinnerScore = winnerScore;
+        LoserScore = loserScore;
     }
 
     /// <summary>Gets the submission identifier.</summary>
@@ -374,6 +394,12 @@ public sealed class BattleResultSubmission
 
     /// <summary>Gets when the report was submitted, in UTC.</summary>
     public DateTimeOffset SubmittedUtc { get; }
+
+    /// <summary>Gets the reported winner score used for differential campaign points.</summary>
+    public int? WinnerScore { get; }
+
+    /// <summary>Gets the reported loser score used for differential campaign points.</summary>
+    public int? LoserScore { get; }
 }
 
 /// <summary>

@@ -17,6 +17,7 @@ public sealed class StructureTypeSetup
     /// <param name="isPillageable">Whether players may Pillage this structure.</param>
     /// <param name="isDestructible">Whether a second Pillage may destroy and remove this structure.</param>
     /// <param name="missions">The optional missions.</param>
+    /// <param name="campaignPoints">Campaign points awarded for currently controlling this structure.</param>
     public StructureTypeSetup(
         Guid id,
         string name,
@@ -26,10 +27,12 @@ public sealed class StructureTypeSetup
         bool isBuildable,
         bool isPillageable,
         bool isDestructible,
-        IReadOnlyList<MissionSetup> missions)
+        IReadOnlyList<MissionSetup> missions,
+        int campaignPoints = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(missions);
+        ArgumentOutOfRangeException.ThrowIfNegative(campaignPoints);
         Id = id;
         Name = name;
         BuiltinSymbol = builtinSymbol;
@@ -39,6 +42,7 @@ public sealed class StructureTypeSetup
         IsPillageable = isPillageable;
         IsDestructible = isDestructible;
         Missions = missions;
+        CampaignPoints = campaignPoints;
     }
 
     /// <summary>Gets the structure type identifier.</summary>
@@ -67,4 +71,7 @@ public sealed class StructureTypeSetup
 
     /// <summary>Gets the optional missions.</summary>
     public IReadOnlyList<MissionSetup> Missions { get; }
+
+    /// <summary>Gets campaign points awarded for currently controlling this structure when it is not destroyed.</summary>
+    public int CampaignPoints { get; }
 }

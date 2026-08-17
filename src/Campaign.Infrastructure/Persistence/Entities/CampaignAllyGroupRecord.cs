@@ -14,6 +14,9 @@ public sealed class CampaignAllyGroupRecord
     /// <summary>Gets or sets the group name.</summary>
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the unique overlay color as #RRGGBB.</summary>
+    public string Color { get; set; } = "#4B5563";
+
     /// <summary>Gets or sets the display order.</summary>
     public int SortOrder { get; set; }
 

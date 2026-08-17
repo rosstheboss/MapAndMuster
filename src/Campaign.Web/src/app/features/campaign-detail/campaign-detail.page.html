@@ -56,7 +56,11 @@
       [sending]="chatBusy()"
       [sendError]="chatError()"
       [expanded]="isOpen('log')"
+      [initialChannelKey]="chatChannelKey()"
+      [initialScrollTop]="restoreChatScroll()"
       (expandedChange)="setSection('log', $event)"
+      (channelChange)="onChatChannelChange($event)"
+      (scrollChange)="onChatScrollChange($event)"
       (send)="postChat($event)"
     />
 
@@ -224,6 +228,18 @@
           <button type="button" class="button-secondary" (click)="downloadSvg()" [disabled]="downloading()">
             Download SVG data
           </button>
+          <label class="highlight-mode">
+            Map colors
+            <select
+              [ngModel]="highlightMode()"
+              (ngModelChange)="setHighlightMode($event)"
+              aria-label="Map highlight colors"
+            >
+              <option value="configured">Configured colors</option>
+              <option value="faction">Faction colors</option>
+              <option value="alliance">Alliance colors</option>
+            </select>
+          </label>
         }
       </div>
       @if (isOpen('map')) {
@@ -245,6 +261,10 @@
                 [flagImageUrl]="flagImageUrl"
                 [forces]="mapForces()"
                 [items]="mapItems()"
+                [colorMode]="highlightMode()"
+                [allyGroups]="campaign.allyGroups"
+                [brokenAllyFactionIds]="campaign.brokenAllyFactionIds ?? play()?.brokenAllyFactionIds ?? []"
+                [itemImageUrl]="itemObjectiveImageUrl"
                 (territoryHover)="hoveredTerritoryId.set($event)"
                 (territorySelect)="onTerritorySelect($event)"
                 (backgroundSelect)="onMapBackgroundSelect()"
@@ -568,6 +588,32 @@
                     }
                   </select>
                 </div>
+                @if (usesDifferentialScoring()) {
+                  <div class="nested-row">
+                    <div class="field">
+                      <label [attr.for]="'winner-score-' + battle.id">Winner score</label>
+                      <input
+                        [id]="'winner-score-' + battle.id"
+                        type="number"
+                        min="0"
+                        [ngModel]="battleWinnerScore(battle.id)"
+                        (ngModelChange)="onBattleWinnerScore(battle.id, $event)"
+                        [name]="'winner-score-' + battle.id"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'loser-score-' + battle.id">Loser score</label>
+                      <input
+                        [id]="'loser-score-' + battle.id"
+                        type="number"
+                        min="0"
+                        [ngModel]="battleLoserScore(battle.id)"
+                        (ngModelChange)="onBattleLoserScore(battle.id, $event)"
+                        [name]="'loser-score-' + battle.id"
+                      />
+                    </div>
+                  </div>
+                }
                 <div class="choice-row">
                   <button type="button" class="button" (click)="submitBattle(battle, false)">Submit result</button>
                   <button type="button" class="button-secondary" (click)="submitBattle(battle, true)">
@@ -701,6 +747,32 @@
                       }
                     </select>
                   </div>
+                  @if (usesDifferentialScoring()) {
+                    <div class="nested-row">
+                      <div class="field">
+                        <label [attr.for]="'debug-winner-score-' + battle.id">Winner score</label>
+                        <input
+                          [id]="'debug-winner-score-' + battle.id"
+                          type="number"
+                          min="0"
+                          [ngModel]="battleWinnerScore(battle.id)"
+                          (ngModelChange)="onBattleWinnerScore(battle.id, $event)"
+                          [name]="'debug-winner-score-' + battle.id"
+                        />
+                      </div>
+                      <div class="field">
+                        <label [attr.for]="'debug-loser-score-' + battle.id">Loser score</label>
+                        <input
+                          [id]="'debug-loser-score-' + battle.id"
+                          type="number"
+                          min="0"
+                          [ngModel]="battleLoserScore(battle.id)"
+                          (ngModelChange)="onBattleLoserScore(battle.id, $event)"
+                          [name]="'debug-loser-score-' + battle.id"
+                        />
+                      </div>
+                    </div>
+                  }
                   <div class="choice-row">
                     <button type="button" class="button" (click)="resolveBattle(battle, false)">Override result</button>
                     <button type="button" class="button-secondary" (click)="resolveBattle(battle, true)">
@@ -918,6 +990,147 @@
         }
       </div>
     }
+
+    <div class="panel stack">
+      <h2>
+        <button
+          type="button"
+          class="section-toggle"
+          [attr.aria-expanded]="isOpen('standings')"
+          (click)="toggleSection('standings')"
+        >
+          Campaign points
+        </button>
+      </h2>
+      @if (isOpen('standings')) {
+        @if (sortedStandings().length === 0) {
+          <p class="muted">No players are attached to this campaign yet.</p>
+        } @else {
+          <div class="standings-wrap">
+            <table class="standings-table">
+              <caption class="sr-only">
+                Campaign point standings
+              </caption>
+              <thead>
+                <tr>
+                  <th [attr.aria-sort]="sortDirection('displayName')">
+                    <button type="button" (click)="sortBy('displayName')">Display name</button>
+                  </th>
+                  <th [attr.aria-sort]="sortDirection('faction')">
+                    <button type="button" (click)="sortBy('faction')">Faction</button>
+                  </th>
+                  <th [attr.aria-sort]="sortDirection('allyGroup')">
+                    <button type="button" (click)="sortBy('allyGroup')">Alliance group</button>
+                  </th>
+                  <th [attr.aria-sort]="sortDirection('territory')">
+                    <button type="button" (click)="sortBy('territory')">Structures captured</button>
+                  </th>
+                  <th [attr.aria-sort]="sortDirection('battles')">
+                    <button type="button" (click)="sortBy('battles')">Battles Won</button>
+                  </th>
+                  <th [attr.aria-sort]="sortDirection('public')">
+                    <button type="button" (click)="sortBy('public')">Public Objectives</button>
+                  </th>
+                  <th [attr.aria-sort]="sortDirection('other')">
+                    <button type="button" (click)="sortBy('other')">Other</button>
+                  </th>
+                  <th [attr.aria-sort]="sortDirection('total')">
+                    <button type="button" (click)="sortBy('total')">Total</button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of sortedStandings(); track row.userId) {
+                  <tr>
+                    <td>
+                      <a class="profile-link" [routerLink]="['/users', row.username]" [queryParams]="profileFrom()">{{
+                        row.displayName
+                      }}</a>
+                      @for (item of row.heldItems ?? []; track item.typeId) {
+                        <span class="standing-item" [style.color]="item.color || '#C45C26'" [title]="item.name">
+                          @if (standingItemImageUrl(item); as src) {
+                            <img [src]="src" alt="" />
+                          } @else {
+                            <app-map-symbol kind="item" [name]="item.builtinSymbol || 'Crown'" [label]="item.name" />
+                          }
+                        </span>
+                      }
+                    </td>
+                    <td>
+                      @if (row.factionId && row.hasFlagImage && flagImageUrl(row.factionId); as src) {
+                        <img class="standing-faction-logo" [src]="src" [alt]="row.factionName || 'Faction'" />
+                      } @else if (row.factionColor) {
+                        <span
+                          class="faction-swatch standing-faction-logo"
+                          [style.background]="row.factionColor"
+                          [attr.aria-label]="row.factionName || 'Faction'"
+                        ></span>
+                      }
+                    </td>
+                    <td>{{ row.allyGroupName || '—' }}</td>
+                    <td>{{ row.territoryAndStructurePoints }}</td>
+                    <td>{{ row.battlesWonPoints }}</td>
+                    <td>{{ row.publicObjectivePoints }}</td>
+                    <td>{{ row.otherPoints }}</td>
+                    <td>{{ row.total }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+        @if (leaderboards().length > 0) {
+          <div class="leaderboards">
+            @for (board of leaderboards(); track board.kind) {
+              <section class="leaderboard">
+                <h3>{{ leaderboardTitle(board.kind) }} ({{ board.awardPoints }} CP)</h3>
+                <ol>
+                  @for (leader of board.leaders; track leader.userId) {
+                    <li>
+                      <span class="leader-rank">{{ leader.rank }}.</span>
+                      <a
+                        class="profile-link"
+                        [routerLink]="['/users', leader.username]"
+                        [queryParams]="profileFrom()"
+                        >{{ leader.displayName }}</a
+                      >
+                      <span class="muted">
+                        {{ leaderboardMetric(board.kind, leader) }}
+                        @if (leader.awardsPoints) {
+                          · leading
+                        }
+                      </span>
+                    </li>
+                  }
+                </ol>
+              </section>
+            }
+          </div>
+        }
+        @if (campaign.canManage && awardableObjectives().length > 0) {
+          <div class="award-row">
+            <label>
+              Player
+              <select [ngModel]="awardPlayerUserId()" (ngModelChange)="awardPlayerUserId.set($event)">
+                @for (row of sortedStandings(); track row.userId) {
+                  <option [value]="row.userId">{{ row.displayName }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              Public objective
+              <select [ngModel]="awardObjectiveId()" (ngModelChange)="awardObjectiveId.set($event)">
+                @for (objective of awardableObjectives(); track objective.id) {
+                  <option [value]="objective.id">{{ objective.name }} ({{ objective.campaignPoints }})</option>
+                }
+              </select>
+            </label>
+            <button type="button" class="button" (click)="setPublicObjectiveAward(true)">Award</button>
+            <button type="button" class="button-secondary" (click)="setPublicObjectiveAward(false)">Revoke</button>
+          </div>
+        }
+      }
+    </div>
 
     @if (campaign.canManage) {
       <div class="panel stack">

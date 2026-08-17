@@ -368,6 +368,9 @@ public sealed class MapGraphHandlerTests
                 TerrainTypes = Existing.TerrainTypes,
                 StructureTypes = Existing.StructureTypes,
                 ItemObjectiveTypes = Existing.ItemObjectiveTypes,
+                PublicObjectiveTypes = Existing.PublicObjectiveTypes,
+                BattleScoring = Existing.BattleScoring,
+                RankingObjectivePoints = Existing.RankingObjectivePoints,
                 PlayState = Existing.PlayState,
             };
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });
@@ -426,6 +429,9 @@ public sealed class MapGraphHandlerTests
                 TerrainTypes = Existing.TerrainTypes,
                 StructureTypes = Existing.StructureTypes,
                 ItemObjectiveTypes = Existing.ItemObjectiveTypes,
+                PublicObjectiveTypes = Existing.PublicObjectiveTypes,
+                BattleScoring = Existing.BattleScoring,
+                RankingObjectivePoints = Existing.RankingObjectivePoints,
                 PlayState = playState,
             };
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });

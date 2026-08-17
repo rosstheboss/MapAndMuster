@@ -31,4 +31,7 @@ public sealed class StructureTypeInput
 
     /// <summary>Gets nested missions. Missions are optional for structures.</summary>
     public IReadOnlyList<MissionInput>? Missions { get; init; }
+
+    /// <summary>Gets campaign points awarded for currently controlling this structure. Defaults to 0.</summary>
+    public int? CampaignPoints { get; init; }
 }

@@ -91,6 +91,7 @@ public sealed class UploadStructureImageHandler
             IsPillageable = structures[index].IsPillageable,
             IsDestructible = structures[index].IsDestructible,
             Missions = structures[index].Missions,
+            CampaignPoints = structures[index].CampaignPoints,
         };
 
         var updated = CampaignMapClone.CloneWithCatalogs(access.Campaign, access.Campaign.TerrainTypes, structures, _clock.UtcNow);
@@ -172,6 +173,166 @@ public sealed class GetStructureImageHandler
         var file = await _assets.OpenReadAsync(storageKey, cancellationToken).ConfigureAwait(false);
         return file is null
             ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The structure image was not found.")
+            : OperationResults.Success(file);
+    }
+}
+
+/// <summary>
+/// Uploads a custom item-objective logo for a campaign manager.
+/// </summary>
+public sealed class UploadItemObjectiveImageHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly ICampaignMapProcessor _processor;
+    private readonly ICampaignAssetStorage _assets;
+    private readonly IClock _clock;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    public UploadItemObjectiveImageHandler(
+        ICampaignStore campaigns,
+        ICampaignMapProcessor processor,
+        ICampaignAssetStorage assets,
+        IClock clock)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(processor);
+        ArgumentNullException.ThrowIfNull(assets);
+        ArgumentNullException.ThrowIfNull(clock);
+        _campaigns = campaigns;
+        _processor = processor;
+        _assets = assets;
+        _clock = clock;
+    }
+
+    /// <summary>
+    /// Replaces the item-objective logo after validating and re-encoding the upload.
+    /// </summary>
+    public async Task<OperationResult<CampaignDetail>> HandleAsync(
+        UploadItemObjectiveImageCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var access = await CatalogAssetAccess.RequireManagerAsync(_campaigns, command.CampaignId, command.UserId, _clock.UtcNow, cancellationToken)
+            .ConfigureAwait(false);
+        if (!access.IsSuccess || access.Campaign is null)
+        {
+            return OperationResults.Failure<CampaignDetail>(access.ErrorCode ?? ErrorCodes.CampaignNotFound, access.Message ?? "The campaign was not found.");
+        }
+
+        var processed = await _processor
+            .ProcessAsync(
+                command.Content,
+                command.ContentType,
+                command.Length,
+                cancellationToken,
+                ICampaignMapProcessor.StructureLogoMaxDimension)
+            .ConfigureAwait(false);
+        if (!processed.IsSuccess || processed.Content is null || processed.FileExtension is null)
+        {
+            return OperationResults.Failure<CampaignDetail>(
+                processed.ErrorCode ?? ErrorCodes.UploadInvalidImage,
+                processed.Message ?? "The item objective image could not be processed.");
+        }
+
+        var items = access.Campaign.ItemObjectiveTypes.ToList();
+        var index = items.FindIndex(type => type.Id == command.ItemObjectiveTypeId);
+        if (index < 0)
+        {
+            return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The item objective type was not found.");
+        }
+
+        var newKey = await _assets
+            .SaveAsync("items", processed.Content, processed.FileExtension, "image/png", cancellationToken)
+            .ConfigureAwait(false);
+        var previousKey = items[index].ImageStorageKey;
+        items[index] = new StoredItemObjectiveType
+        {
+            Id = items[index].Id,
+            Name = items[index].Name,
+            IsHiddenUntilFound = items[index].IsHiddenUntilFound,
+            Placement = items[index].Placement,
+            AllowOnSpawn = items[index].AllowOnSpawn,
+            BuiltinSymbol = items[index].BuiltinSymbol,
+            Color = items[index].Color,
+            ImageStorageKey = newKey,
+            CampaignPoints = items[index].CampaignPoints,
+        };
+
+        var updated = CampaignMapClone.CloneWithCatalogs(
+            access.Campaign,
+            access.Campaign.TerrainTypes,
+            access.Campaign.StructureTypes,
+            _clock.UtcNow,
+            items);
+        var outcome = await _campaigns.UpdateAsync(updated, command.ExpectedRevision, cancellationToken).ConfigureAwait(false);
+        if (!outcome.IsSuccess || outcome.Campaign is null)
+        {
+            await _assets.DeleteAsync(newKey, cancellationToken).ConfigureAwait(false);
+            return OperationResults.Failure<CampaignDetail>(
+                outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
+                outcome.Message ?? "The item objective image could not be saved.");
+        }
+
+        if (CatalogFileBinder.IsUserUploadedFileKey(previousKey))
+        {
+            await CampaignAssetRetention.DeleteIfUnreferencedAsync(
+                _campaigns,
+                _assets.DeleteAsync,
+                previousKey,
+                command.CampaignId,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
+    }
+}
+
+/// <summary>
+/// Opens a stored item-objective logo for a campaign member.
+/// </summary>
+public sealed class GetItemObjectiveImageHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly ICampaignAssetStorage _assets;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    public GetItemObjectiveImageHandler(ICampaignStore campaigns, ICampaignAssetStorage assets)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(assets);
+        _campaigns = campaigns;
+        _assets = assets;
+    }
+
+    /// <summary>
+    /// Returns the stored item-objective logo for a member.
+    /// </summary>
+    public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
+        Guid campaignId,
+        Guid itemObjectiveTypeId,
+        Guid userId,
+        CancellationToken cancellationToken,
+        bool isAdministrator = false)
+    {
+        var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
+        {
+            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+        }
+
+        var item = campaign.ItemObjectiveTypes.FirstOrDefault(type => type.Id == itemObjectiveTypeId);
+        if (item is null || string.IsNullOrWhiteSpace(item.ImageStorageKey))
+        {
+            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The item objective image was not found.");
+        }
+
+        var file = await _assets.OpenReadAsync(item.ImageStorageKey, cancellationToken).ConfigureAwait(false);
+        return file is null
+            ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The item objective image was not found.")
             : OperationResults.Success(file);
     }
 }
@@ -529,6 +690,7 @@ public sealed class UploadMissionFileHandler
                     IsPillageable = structures[i].IsPillageable,
                     IsDestructible = structures[i].IsDestructible,
                     Missions = missions,
+                    CampaignPoints = structures[i].CampaignPoints,
                 };
             }
         }
@@ -655,6 +817,33 @@ public sealed class UploadStructureImageCommand
 
     /// <summary>Gets whether this upload replaces the pillaged logo.</summary>
     public bool Pillaged { get; init; }
+}
+
+/// <summary>
+/// Command to replace an item-objective logo.
+/// </summary>
+public sealed class UploadItemObjectiveImageCommand
+{
+    /// <summary>Gets the authenticated user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the item objective type identifier.</summary>
+    public required Guid ItemObjectiveTypeId { get; init; }
+
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the uploaded image stream.</summary>
+    public required Stream Content { get; init; }
+
+    /// <summary>Gets the declared content type.</summary>
+    public required string ContentType { get; init; }
+
+    /// <summary>Gets the declared length, if known.</summary>
+    public long? Length { get; init; }
 }
 
 /// <summary>

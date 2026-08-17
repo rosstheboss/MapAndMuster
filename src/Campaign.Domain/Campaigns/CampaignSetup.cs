@@ -24,6 +24,9 @@ public sealed class CampaignSetup
     /// <param name="structureTypes">The structure types.</param>
     /// <param name="itemObjectiveTypes">The item objective types. Empty means none.</param>
     /// <param name="schedule">The validated round schedule.</param>
+    /// <param name="publicObjectiveTypes">The public campaign objectives. Empty means none.</param>
+    /// <param name="battleScoring">Conversion from resolved battles into campaign points.</param>
+    /// <param name="rankingObjectivePoints">Campaign points for built-in ranking public objectives.</param>
     public CampaignSetup(
         string name,
         string? description,
@@ -40,7 +43,10 @@ public sealed class CampaignSetup
         IReadOnlyList<TerrainTypeSetup> terrainTypes,
         IReadOnlyList<StructureTypeSetup> structureTypes,
         IReadOnlyList<ItemObjectiveTypeSetup> itemObjectiveTypes,
-        CampaignSchedule schedule)
+        CampaignSchedule schedule,
+        IReadOnlyList<PublicObjectiveTypeSetup>? publicObjectiveTypes = null,
+        BattleScoringSetup? battleScoring = null,
+        GeneralPublicObjectivePoints? rankingObjectivePoints = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factions);
@@ -66,6 +72,9 @@ public sealed class CampaignSetup
         StructureTypes = structureTypes;
         ItemObjectiveTypes = itemObjectiveTypes;
         Schedule = schedule;
+        PublicObjectiveTypes = publicObjectiveTypes ?? [];
+        BattleScoring = battleScoring ?? BattleScoringSetup.Default;
+        RankingObjectivePoints = rankingObjectivePoints ?? GeneralPublicObjectivePoints.None;
     }
 
     /// <summary>Gets the campaign name.</summary>
@@ -112,6 +121,18 @@ public sealed class CampaignSetup
 
     /// <summary>Gets the item objective types. Empty means the campaign has none.</summary>
     public IReadOnlyList<ItemObjectiveTypeSetup> ItemObjectiveTypes { get; }
+
+    /// <summary>Gets the public campaign objectives. Empty means none.</summary>
+    public IReadOnlyList<PublicObjectiveTypeSetup> PublicObjectiveTypes { get; }
+
+    /// <summary>Gets conversion from resolved battles into campaign points.</summary>
+    public BattleScoringSetup BattleScoring { get; }
+
+    /// <summary>Gets campaign points for the built-in ranking public objectives.</summary>
+    public GeneralPublicObjectivePoints RankingObjectivePoints { get; }
+
+    /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
+    public int PointsPerBattleWon => BattleScoring.PointsPerWin;
 
     /// <summary>Gets the validated round schedule.</summary>
     public CampaignSchedule Schedule { get; }

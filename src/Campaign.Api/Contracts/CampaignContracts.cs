@@ -78,6 +78,39 @@ public sealed class SaveCampaignRequest
 
     /// <summary>Gets the item objective types. Omitted or empty means none.</summary>
     public IReadOnlyList<ItemObjectiveTypeRequest>? ItemObjectiveTypes { get; init; }
+
+    /// <summary>Gets the public campaign objectives. Omitted or empty means none.</summary>
+    public IReadOnlyList<PublicObjectiveTypeRequest>? PublicObjectiveTypes { get; init; }
+
+    /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
+    public int? PointsPerBattleWon { get; init; }
+
+    /// <summary>Gets campaign points awarded to each participant of a draw.</summary>
+    public int? PointsPerBattleDraw { get; init; }
+
+    /// <summary>Gets whether battle campaign points use score differential.</summary>
+    public bool? UseDifferentialBattleScoring { get; init; }
+
+    /// <summary>Gets the multiplier applied to the winner-minus-loser score difference.</summary>
+    public decimal? DifferentialMultiplier { get; init; }
+
+    /// <summary>Gets the inclusive lower clamp for differential campaign points.</summary>
+    public int? DifferentialMinimum { get; init; }
+
+    /// <summary>Gets the inclusive upper clamp for differential campaign points.</summary>
+    public int? DifferentialMaximum { get; init; }
+
+    /// <summary>Gets whether the loser can receive negative campaign points.</summary>
+    public bool? AllowNegativeDifferential { get; init; }
+
+    /// <summary>Gets campaign points for most territories currently controlled.</summary>
+    public int? MostTerritoriesCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for the longest owned territory chain.</summary>
+    public int? LongestTerritoryChainCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for most battle wins.</summary>
+    public int? MostBattlesWonCampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -129,6 +162,9 @@ public sealed class AllyGroupRequest
 {
     /// <summary>Gets the ally-group name.</summary>
     public required string Name { get; init; }
+
+    /// <summary>Gets the unique overlay color as #RRGGBB.</summary>
+    public string? Color { get; init; }
 }
 
 /// <summary>
@@ -159,6 +195,9 @@ public sealed class TerrainTypeRequest
 
     /// <summary>Gets nested missions. At least one is required.</summary>
     public IReadOnlyList<MissionRequest>? Missions { get; init; }
+
+    /// <summary>Gets campaign points awarded for currently owning a territory of this terrain.</summary>
+    public int? CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -192,6 +231,9 @@ public sealed class StructureTypeRequest
 
     /// <summary>Gets nested missions.</summary>
     public IReadOnlyList<MissionRequest>? Missions { get; init; }
+
+    /// <summary>Gets campaign points awarded for currently controlling this structure when it is not destroyed.</summary>
+    public int? CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -213,6 +255,36 @@ public sealed class ItemObjectiveTypeRequest
 
     /// <summary>Gets whether the item may occupy a spawn territory. Defaults to false.</summary>
     public bool? AllowOnSpawn { get; init; }
+
+    /// <summary>Gets the built-in logo key. Defaults to Crown.</summary>
+    public string? BuiltinSymbol { get; init; }
+
+    /// <summary>Gets the logo color as #RRGGBB.</summary>
+    public string? Color { get; init; }
+
+    /// <summary>Gets whether an existing uploaded logo should be removed.</summary>
+    public bool ClearImage { get; init; }
+
+    /// <summary>Gets campaign points awarded while a force currently holds this item.</summary>
+    public int? CampaignPoints { get; init; }
+}
+
+/// <summary>
+/// Public campaign objective configuration in a save request.
+/// </summary>
+public sealed class PublicObjectiveTypeRequest
+{
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Gets the objective name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the optional description.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Gets campaign points awarded when this objective is completed.</summary>
+    public int? CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -373,6 +445,48 @@ public sealed class CampaignDetailResponse
     /// <summary>Gets the item objective types. Empty means none.</summary>
     public IReadOnlyList<ItemObjectiveTypeResponse> ItemObjectiveTypes { get; init; } = [];
 
+    /// <summary>Gets the public campaign objectives. Empty means none.</summary>
+    public IReadOnlyList<PublicObjectiveTypeResponse> PublicObjectiveTypes { get; init; } = [];
+
+    /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
+    public int PointsPerBattleWon { get; init; }
+
+    /// <summary>Gets campaign points awarded to each participant of a draw.</summary>
+    public int PointsPerBattleDraw { get; init; }
+
+    /// <summary>Gets whether battle campaign points use score differential.</summary>
+    public bool UseDifferentialBattleScoring { get; init; }
+
+    /// <summary>Gets the multiplier applied to the winner-minus-loser score difference.</summary>
+    public decimal DifferentialMultiplier { get; init; }
+
+    /// <summary>Gets the inclusive lower clamp for differential campaign points.</summary>
+    public int DifferentialMinimum { get; init; }
+
+    /// <summary>Gets the inclusive upper clamp for differential campaign points.</summary>
+    public int DifferentialMaximum { get; init; }
+
+    /// <summary>Gets whether the loser can receive negative campaign points.</summary>
+    public bool AllowNegativeDifferential { get; init; }
+
+    /// <summary>Gets campaign points for most territories currently controlled.</summary>
+    public int MostTerritoriesCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for the longest owned territory chain.</summary>
+    public int LongestTerritoryChainCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for most battle wins.</summary>
+    public int MostBattlesWonCampaignPoints { get; init; }
+
+    /// <summary>Gets current campaign-point standings for players.</summary>
+    public IReadOnlyList<CampaignPointStandingResponse> Standings { get; init; } = [];
+
+    /// <summary>Gets current top-five leaders for enabled ranking public objectives.</summary>
+    public IReadOnlyList<PublicObjectiveLeaderboardResponse> PublicObjectiveLeaderboards { get; init; } = [];
+
+    /// <summary>Gets factions that left their ally group through Backstab.</summary>
+    public IReadOnlyList<Guid> BrokenAllyFactionIds { get; init; } = [];
+
     /// <summary>Gets the ally groups.</summary>
     public required IReadOnlyList<AllyGroupResponse> AllyGroups { get; init; }
 
@@ -480,6 +594,18 @@ public sealed class CampaignParticipantResponse
 
     /// <summary>Gets the chosen subfaction name, when one is selected.</summary>
     public string? Subfaction { get; init; }
+
+    /// <summary>Gets the chosen faction identifier, when selected.</summary>
+    public Guid? FactionId { get; init; }
+
+    /// <summary>Gets the chosen faction color, when selected.</summary>
+    public string? FactionColor { get; init; }
+
+    /// <summary>Gets whether the chosen faction has an uploaded flag image.</summary>
+    public bool HasFlagImage { get; init; }
+
+    /// <summary>Gets the ally-group name for the chosen faction, when one applies.</summary>
+    public string? AllyGroupName { get; init; }
 }
 
 /// <summary>
@@ -582,6 +708,9 @@ public sealed class AllyGroupResponse
 
     /// <summary>Gets the ally-group name.</summary>
     public required string Name { get; init; }
+
+    /// <summary>Gets the unique overlay color as #RRGGBB.</summary>
+    public string Color { get; init; } = "#4B5563";
 }
 
 /// <summary>
@@ -615,6 +744,9 @@ public sealed class TerrainTypeResponse
 
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<MissionResponse> Missions { get; init; }
+
+    /// <summary>Gets campaign points awarded for currently owning a territory of this terrain.</summary>
+    public int CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -648,6 +780,9 @@ public sealed class StructureTypeResponse
 
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<MissionResponse> Missions { get; init; }
+
+    /// <summary>Gets campaign points awarded for currently controlling this structure when it is not destroyed.</summary>
+    public int CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -669,6 +804,147 @@ public sealed class ItemObjectiveTypeResponse
 
     /// <summary>Gets whether the item may occupy a spawn territory.</summary>
     public required bool AllowOnSpawn { get; init; }
+
+    /// <summary>Gets the built-in logo key.</summary>
+    public string BuiltinSymbol { get; init; } = "Crown";
+
+    /// <summary>Gets the logo color as #RRGGBB.</summary>
+    public string Color { get; init; } = "#C45C26";
+
+    /// <summary>Gets whether a custom logo image is stored.</summary>
+    public bool HasImage { get; init; }
+
+    /// <summary>Gets campaign points awarded while a force currently holds this item.</summary>
+    public int CampaignPoints { get; init; }
+}
+
+/// <summary>
+/// A public campaign objective in a campaign response.
+/// </summary>
+public sealed class PublicObjectiveTypeResponse
+{
+    /// <summary>Gets the objective identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the objective name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the optional description.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Gets campaign points awarded when this objective is completed.</summary>
+    public required int CampaignPoints { get; init; }
+}
+
+/// <summary>
+/// Current leaders for one ranking public objective.
+/// </summary>
+public sealed class PublicObjectiveLeaderboardResponse
+{
+    /// <summary>Gets the ranking objective kind.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets campaign points awarded to each current first-place player.</summary>
+    public required int AwardPoints { get; init; }
+
+    /// <summary>Gets players currently in the top five.</summary>
+    public required IReadOnlyList<PublicObjectiveLeaderResponse> Leaders { get; init; }
+}
+
+/// <summary>
+/// One player on a ranking public-objective leaderboard.
+/// </summary>
+public sealed class PublicObjectiveLeaderResponse
+{
+    /// <summary>Gets the player.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the unique username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the name shown to other users.</summary>
+    public required string DisplayName { get; init; }
+
+    /// <summary>Gets the 1-based rank after friendly ties.</summary>
+    public required int Rank { get; init; }
+
+    /// <summary>Gets the primary metric (territories, chain length, or wins).</summary>
+    public required int Metric { get; init; }
+
+    /// <summary>Gets the secondary metric used only for most battles won (draws).</summary>
+    public required int TieBreakMetric { get; init; }
+
+    /// <summary>Gets whether this player currently receives the objective's campaign points.</summary>
+    public required bool AwardsPoints { get; init; }
+}
+
+/// <summary>
+/// One player's current campaign-point standing.
+/// </summary>
+public sealed class CampaignPointStandingResponse
+{
+    /// <summary>Gets the player.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the unique username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the name shown to other users.</summary>
+    public required string DisplayName { get; init; }
+
+    /// <summary>Gets the chosen faction identifier, when selected.</summary>
+    public Guid? FactionId { get; init; }
+
+    /// <summary>Gets the chosen faction name, when selected.</summary>
+    public string? FactionName { get; init; }
+
+    /// <summary>Gets the chosen faction color, when selected.</summary>
+    public string? FactionColor { get; init; }
+
+    /// <summary>Gets whether the faction has an uploaded flag image.</summary>
+    public bool HasFlagImage { get; init; }
+
+    /// <summary>Gets the ally-group name, when the faction is aligned.</summary>
+    public string? AllyGroupName { get; init; }
+
+    /// <summary>Gets points from currently owned territories and non-destroyed structures.</summary>
+    public required int TerritoryAndStructurePoints { get; init; }
+
+    /// <summary>Gets points from finalized battle wins.</summary>
+    public required int BattlesWonPoints { get; init; }
+
+    /// <summary>Gets points from currently active public-objective awards.</summary>
+    public required int PublicObjectivePoints { get; init; }
+
+    /// <summary>Gets points from currently held visible item objectives.</summary>
+    public required int OtherPoints { get; init; }
+
+    /// <summary>Gets the sum of the four component columns.</summary>
+    public required int Total { get; init; }
+
+    /// <summary>Gets visible item objectives the player currently holds.</summary>
+    public IReadOnlyList<HeldItemObjectiveResponse> HeldItems { get; init; } = [];
+}
+
+/// <summary>
+/// A visible item objective currently held by a player.
+/// </summary>
+public sealed class HeldItemObjectiveResponse
+{
+    /// <summary>Gets the catalog type.</summary>
+    public required Guid TypeId { get; init; }
+
+    /// <summary>Gets the item name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the built-in logo key when no custom image is stored.</summary>
+    public string? BuiltinSymbol { get; init; }
+
+    /// <summary>Gets the logo color.</summary>
+    public string Color { get; init; } = "#C45C26";
+
+    /// <summary>Gets whether a custom logo image is stored.</summary>
+    public bool HasImage { get; init; }
 }
 
 /// <summary>
@@ -788,6 +1064,7 @@ public static class CampaignResponses
                     Id = type.Id,
                     Name = type.Name,
                     Color = type.Color,
+                    CampaignPoints = type.CampaignPoints,
                     Missions =
                     [
                         .. type.Missions.Select(static mission => new MissionResponse
@@ -813,6 +1090,7 @@ public static class CampaignResponses
                     IsBuildable = type.IsBuildable,
                     IsPillageable = type.IsPillageable,
                     IsDestructible = type.IsDestructible,
+                    CampaignPoints = type.CampaignPoints,
                     Missions =
                     [
                         .. type.Missions.Select(static mission => new MissionResponse
@@ -835,14 +1113,42 @@ public static class CampaignResponses
                     IsHiddenUntilFound = type.IsHiddenUntilFound,
                     Placement = type.Placement,
                     AllowOnSpawn = type.AllowOnSpawn,
+                    BuiltinSymbol = type.BuiltinSymbol,
+                    Color = type.Color,
+                    HasImage = type.HasImage,
+                    CampaignPoints = type.CampaignPoints,
                 }),
             ],
+            PublicObjectiveTypes =
+            [
+                .. detail.PublicObjectiveTypes.Select(static type => new PublicObjectiveTypeResponse
+                {
+                    Id = type.Id,
+                    Name = type.Name,
+                    Description = type.Description,
+                    CampaignPoints = type.CampaignPoints,
+                }),
+            ],
+            PointsPerBattleWon = detail.PointsPerBattleWon,
+            PointsPerBattleDraw = detail.PointsPerBattleDraw,
+            UseDifferentialBattleScoring = detail.UseDifferentialBattleScoring,
+            DifferentialMultiplier = detail.DifferentialMultiplier,
+            DifferentialMinimum = detail.DifferentialMinimum,
+            DifferentialMaximum = detail.DifferentialMaximum,
+            AllowNegativeDifferential = detail.AllowNegativeDifferential,
+            MostTerritoriesCampaignPoints = detail.MostTerritoriesCampaignPoints,
+            LongestTerritoryChainCampaignPoints = detail.LongestTerritoryChainCampaignPoints,
+            MostBattlesWonCampaignPoints = detail.MostBattlesWonCampaignPoints,
+            Standings = [.. detail.Standings.Select(FromStanding)],
+            PublicObjectiveLeaderboards = [.. detail.PublicObjectiveLeaderboards.Select(FromLeaderboard)],
+            BrokenAllyFactionIds = detail.BrokenAllyFactionIds,
             AllyGroups =
             [
                 .. detail.AllyGroups.Select(static group => new AllyGroupResponse
                 {
                     Id = group.Id,
                     Name = group.Name,
+                    Color = group.Color,
                 }),
             ],
             Links =
@@ -894,6 +1200,10 @@ public static class CampaignResponses
                     IsAdministrator = participant.IsAdministrator,
                     FactionName = participant.FactionName,
                     Subfaction = participant.Subfaction,
+                    FactionId = participant.FactionId,
+                    FactionColor = participant.FactionColor,
+                    HasFlagImage = participant.HasFlagImage,
+                    AllyGroupName = participant.AllyGroupName,
                 }),
             ],
             MentionableMembers =
@@ -1072,7 +1382,7 @@ public static class CampaignResponses
     public static IReadOnlyList<AllyGroupInput>? ToAllyGroupInputs(IReadOnlyList<AllyGroupRequest>? groups)
     {
         return groups?
-            .Select(static group => new AllyGroupInput { Name = group.Name })
+            .Select(static group => new AllyGroupInput { Name = group.Name, Color = group.Color })
             .ToArray();
     }
 
@@ -1113,6 +1423,7 @@ public static class CampaignResponses
                 IsPillageable = type.IsPillageable,
                 IsDestructible = type.IsDestructible,
                 Missions = ToMissionInputs(type.Missions),
+                CampaignPoints = type.CampaignPoints,
             })
             .ToArray();
     }
@@ -1131,8 +1442,88 @@ public static class CampaignResponses
                 IsHiddenUntilFound = type.IsHiddenUntilFound,
                 Placement = type.Placement,
                 AllowOnSpawn = type.AllowOnSpawn,
+                BuiltinSymbol = type.BuiltinSymbol,
+                Color = type.Color,
+                ClearImage = type.ClearImage,
+                CampaignPoints = type.CampaignPoints,
             })
             .ToArray();
+    }
+
+    /// <summary>
+    /// Maps HTTP public-objective requests onto domain inputs.
+    /// </summary>
+    public static IReadOnlyList<PublicObjectiveTypeInput>? ToPublicObjectiveTypeInputs(
+        IReadOnlyList<PublicObjectiveTypeRequest>? types)
+    {
+        return types?
+            .Select(static type => new PublicObjectiveTypeInput
+            {
+                Id = type.Id,
+                Name = type.Name,
+                Description = type.Description,
+                CampaignPoints = type.CampaignPoints,
+            })
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Maps a campaign-point standing onto an HTTP response.
+    /// </summary>
+    public static CampaignPointStandingResponse FromStanding(CampaignPointStandingDetail standing)
+    {
+        return new CampaignPointStandingResponse
+        {
+            UserId = standing.UserId,
+            Username = standing.Username,
+            DisplayName = standing.DisplayName,
+            FactionId = standing.FactionId,
+            FactionName = standing.FactionName,
+            FactionColor = standing.FactionColor,
+            HasFlagImage = standing.HasFlagImage,
+            AllyGroupName = standing.AllyGroupName,
+            TerritoryAndStructurePoints = standing.TerritoryAndStructurePoints,
+            BattlesWonPoints = standing.BattlesWonPoints,
+            PublicObjectivePoints = standing.PublicObjectivePoints,
+            OtherPoints = standing.OtherPoints,
+            Total = standing.Total,
+            HeldItems =
+            [
+                .. standing.HeldItems.Select(static item => new HeldItemObjectiveResponse
+                {
+                    TypeId = item.TypeId,
+                    Name = item.Name,
+                    BuiltinSymbol = item.BuiltinSymbol,
+                    Color = item.Color,
+                    HasImage = item.HasImage,
+                }),
+            ],
+        };
+    }
+
+    /// <summary>
+    /// Maps a ranking public-objective leaderboard onto an HTTP response.
+    /// </summary>
+    public static PublicObjectiveLeaderboardResponse FromLeaderboard(PublicObjectiveLeaderboardDetail board)
+    {
+        return new PublicObjectiveLeaderboardResponse
+        {
+            Kind = board.Kind,
+            AwardPoints = board.AwardPoints,
+            Leaders =
+            [
+                .. board.Leaders.Select(static leader => new PublicObjectiveLeaderResponse
+                {
+                    UserId = leader.UserId,
+                    Username = leader.Username,
+                    DisplayName = leader.DisplayName,
+                    Rank = leader.Rank,
+                    Metric = leader.Metric,
+                    TieBreakMetric = leader.TieBreakMetric,
+                    AwardsPoints = leader.AwardsPoints,
+                }),
+            ],
+        };
     }
 
     private static MissionInput[]? ToMissionInputs(IReadOnlyList<MissionRequest>? missions)

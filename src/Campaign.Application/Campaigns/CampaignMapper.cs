@@ -65,6 +65,7 @@ public static class CampaignMapper
     /// <param name="chatChannels">Compose targets for the viewer.</param>
     /// <param name="inspectPrivateChat">Whether the viewer may inspect all private chats.</param>
     /// <param name="participants">Members attached to the campaign, when already mapped.</param>
+    /// <param name="staffView">Whether hidden item objectives are visible to the viewer.</param>
     /// <returns>The detail.</returns>
     public static CampaignDetail ToDetail(
         StoredCampaign campaign,
@@ -74,12 +75,15 @@ public static class CampaignMapper
         IReadOnlyList<CampaignLogMemberDetail>? mentionableMembers = null,
         IReadOnlyList<ChatChannelDetail>? chatChannels = null,
         bool inspectPrivateChat = false,
-        IReadOnlyList<CampaignParticipantDetail>? participants = null)
+        IReadOnlyList<CampaignParticipantDetail>? participants = null,
+        bool staffView = false)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
         var schedule = ToSchedule(campaign);
         var progress = CampaignLifecycle.Progress(campaign, utcNow);
+        var mappedParticipants = participants ?? [];
+        var scoring = CampaignPointStandingsMapper.ToScoring(campaign, mappedParticipants, viewerUserId, staffView);
         return new CampaignDetail
         {
             Id = campaign.Id,
@@ -115,6 +119,7 @@ public static class CampaignMapper
                 Name = type.Name,
                 Color = type.Color,
                 Missions = [.. type.Missions.Select(ToMission)],
+                CampaignPoints = type.CampaignPoints,
             })],
             StructureTypes = [.. campaign.StructureTypes.Select(static type => new StructureTypeDetail
             {
@@ -127,6 +132,7 @@ public static class CampaignMapper
                 IsPillageable = type.IsPillageable,
                 IsDestructible = type.IsDestructible,
                 Missions = [.. type.Missions.Select(ToMission)],
+                CampaignPoints = type.CampaignPoints,
             })],
             ItemObjectiveTypes = [.. campaign.ItemObjectiveTypes.Select(static type => new ItemObjectiveTypeDetail
             {
@@ -135,11 +141,34 @@ public static class CampaignMapper
                 IsHiddenUntilFound = type.IsHiddenUntilFound,
                 Placement = type.Placement,
                 AllowOnSpawn = type.AllowOnSpawn,
+                BuiltinSymbol = type.BuiltinSymbol,
+                Color = type.Color,
+                HasImage = !string.IsNullOrWhiteSpace(type.ImageStorageKey),
+                CampaignPoints = type.CampaignPoints,
             })],
+            PublicObjectiveTypes = [.. campaign.PublicObjectiveTypes.Select(static type => new PublicObjectiveTypeDetail
+            {
+                Id = type.Id,
+                Name = type.Name,
+                Description = type.Description,
+                CampaignPoints = type.CampaignPoints,
+            })],
+            PointsPerBattleWon = campaign.BattleScoring.PointsPerWin,
+            PointsPerBattleDraw = campaign.BattleScoring.PointsPerDraw,
+            UseDifferentialBattleScoring = campaign.BattleScoring.UseDifferential,
+            DifferentialMultiplier = campaign.BattleScoring.DifferentialMultiplier,
+            DifferentialMinimum = campaign.BattleScoring.DifferentialMinimum,
+            DifferentialMaximum = campaign.BattleScoring.DifferentialMaximum,
+            AllowNegativeDifferential = campaign.BattleScoring.AllowNegativeDifferential,
+            MostTerritoriesCampaignPoints = campaign.RankingObjectivePoints.MostTerritories,
+            LongestTerritoryChainCampaignPoints = campaign.RankingObjectivePoints.LongestTerritoryChain,
+            MostBattlesWonCampaignPoints = campaign.RankingObjectivePoints.MostBattlesWon,
+            BrokenAllyFactionIds = campaign.PlayState?.BrokenAllyFactionIds ?? [],
             AllyGroups = [.. campaign.AllyGroups.Select(static group => new AllyGroupDetail
             {
                 Id = group.Id,
                 Name = group.Name,
+                Color = group.Color,
             })],
             Links = [.. campaign.Links.Select(static link => new CampaignLinkDetail
             {
@@ -176,10 +205,12 @@ public static class CampaignMapper
             CanChooseFaction = CanChooseFaction(membership, progress.Status),
             CanChat = membership is not null,
             CanInspectPrivateChat = inspectPrivateChat,
-            Participants = participants ?? [],
+            Participants = mappedParticipants,
             MentionableMembers = mentionableMembers ?? [],
             ChatChannels = chatChannels ?? [],
             Log = log ?? [],
+            Standings = scoring.Standings,
+            PublicObjectiveLeaderboards = scoring.Leaderboards,
         };
     }
 

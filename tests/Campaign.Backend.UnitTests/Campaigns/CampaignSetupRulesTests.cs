@@ -290,6 +290,39 @@ public sealed class CampaignSetupRulesTests
         Assert.Equal("Riders", setup.Factions[0].Subfactions[0]);
         Assert.Null(setup.Factions[2].AllyGroupName);
         Assert.Equal("https://example.test/rules", setup.Links[0].Url);
+        Assert.False(string.IsNullOrWhiteSpace(setup.AllyGroups[0].Color));
+    }
+
+    [Fact]
+    public void RejectsDuplicateAllyGroupColors()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Two Sides",
+            null,
+            4,
+            false,
+            null,
+            false,
+            true,
+            0,
+            [
+                new FactionInput { Name = "North", AllyGroupName = "Pact" },
+                new FactionInput { Name = "East", AllyGroupName = "Pact" },
+                new FactionInput { Name = "South", AllyGroupName = "League" },
+                new FactionInput { Name = "West", AllyGroupName = "League" },
+            ],
+            [
+                new AllyGroupInput { Name = "Pact", Color = "#2563EB" },
+                new AllyGroupInput { Name = "League", Color = "#2563EB" },
+            ],
+            [],
+            WeekSchedule(),
+            out _,
+            out _,
+            out var errors);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Code == "allyGroups[1].color.duplicate");
     }
 
     [Fact]
@@ -889,6 +922,9 @@ public sealed class CampaignSetupRulesTests
         Assert.True(item.IsHiddenUntilFound);
         Assert.Equal(ItemObjectivePlacementKind.Random, item.Placement);
         Assert.False(item.AllowOnSpawn);
+        Assert.Equal("Crown", item.BuiltinSymbol);
+        Assert.Equal(ItemObjectiveCatalog.DefaultColor, item.Color);
+        Assert.Equal(0, item.CampaignPoints);
 
         var duplicate = CampaignSetupRules.TryCreate(
             "Border War",
@@ -940,6 +976,96 @@ public sealed class CampaignSetupRulesTests
             ]);
         Assert.False(invalid);
         Assert.Contains(placementErrors, error => error.Code == "itemObjectiveTypes.placement.invalid");
+    }
+
+    [Fact]
+    public void ParsesCampaignPointConfigurationAndPublicObjectives()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            [
+                new TerrainTypeInput
+                {
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [new MissionInput { Name = "Plains control" }],
+                },
+            ],
+            [
+                new StructureTypeInput { Name = "Town", BuiltinSymbol = "Town", CampaignPoints = 3 },
+            ],
+            out var setup,
+            out _,
+            out var errors,
+            itemObjectiveTypes:
+            [
+                new ItemObjectiveTypeInput
+                {
+                    Name = "Crown",
+                    BuiltinSymbol = "Crown",
+                    Color = "#CA8A04",
+                    CampaignPoints = 5,
+                },
+            ],
+            publicObjectiveTypes:
+            [
+                new PublicObjectiveTypeInput { Name = "Longest chain", CampaignPoints = 4 },
+            ],
+            pointsPerBattleWon: 1,
+            mostTerritoriesCampaignPoints: 6,
+            longestTerritoryChainCampaignPoints: 8,
+            mostBattlesWonCampaignPoints: 9);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        Assert.Equal(3, setup.StructureTypes[0].CampaignPoints);
+        Assert.Equal(5, setup.ItemObjectiveTypes[0].CampaignPoints);
+        Assert.Equal("#CA8A04", setup.ItemObjectiveTypes[0].Color);
+        Assert.Equal(4, Assert.Single(setup.PublicObjectiveTypes).CampaignPoints);
+        Assert.Equal(1, setup.BattleScoring.PointsPerWin);
+        Assert.True(setup.BattleScoring.UseDifferential);
+        Assert.Equal(1, setup.BattleScoring.PointsPerDraw);
+        Assert.Equal(6, setup.RankingObjectivePoints.MostTerritories);
+        Assert.Equal(8, setup.RankingObjectivePoints.LongestTerritoryChain);
+        Assert.Equal(9, setup.RankingObjectivePoints.MostBattlesWon);
+    }
+
+    [Fact]
+    public void RejectsAZeroDifferentialMultiplier()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var errors,
+            differentialMultiplier: 0m);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Field == "differentialMultiplier");
     }
 
     private static IReadOnlyList<FactionInput> TwoFactions()

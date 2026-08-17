@@ -1,4 +1,21 @@
-export type ItemObjectivePlacement = 'Random' | 'Placed';
+import type { ItemObjectivePlacement } from './campaign.models';
+
+export type { ItemObjectivePlacement };
+
+export const ITEM_OBJECTIVE_SYMBOLS = [
+  { id: 'Banner', label: 'Banner' },
+  { id: 'Chalice', label: 'Chalice' },
+  { id: 'Crown', label: 'Crown' },
+  { id: 'Gem', label: 'Gem' },
+  { id: 'Horn', label: 'Horn' },
+  { id: 'Orb', label: 'Orb' },
+  { id: 'Ring', label: 'Ring' },
+  { id: 'Shield', label: 'Shield' },
+  { id: 'Sword', label: 'Sword' },
+  { id: 'Tome', label: 'Tome' },
+] as const;
+
+export const ITEM_OBJECTIVE_DEFAULT_COLOR = '#C45C26';
 
 export interface ItemObjectivePresetItem {
   name: string;

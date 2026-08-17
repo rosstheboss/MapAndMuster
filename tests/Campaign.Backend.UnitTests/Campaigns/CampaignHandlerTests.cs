@@ -699,6 +699,132 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task GetPlayOmitsHiddenItemPointsFromUnauthorizedStandings()
+    {
+        var northSpawn = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var southSpawn = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var midland = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var plainsId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var itemTypeId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var graph = new StoredMapGraph
+        {
+            Territories =
+            [
+                SquareTerritory(northSpawn, 1, 0.05, 0.05, 0.2, NorthFactionId, plainsId, NorthFactionId),
+                SquareTerritory(midland, 2, 0.30, 0.05, 0.2, null, plainsId),
+                SquareTerritory(southSpawn, 3, 0.55, 0.05, 0.2, SouthFactionId, plainsId, SouthFactionId),
+            ],
+            Adjacencies =
+            [
+                new AdjacencyDetail
+                {
+                    Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01"),
+                    TerritoryAId = northSpawn,
+                    TerritoryBId = midland,
+                    Origin = "Manual",
+                    MarkerX = 0.27,
+                    MarkerY = 0.15,
+                },
+                new AdjacencyDetail
+                {
+                    Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02"),
+                    TerritoryAId = midland,
+                    TerritoryBId = southSpawn,
+                    Origin = "Manual",
+                    MarkerX = 0.52,
+                    MarkerY = 0.15,
+                },
+            ],
+        };
+        var campaign = WithCopied(
+            StoredCampaignFor(UserId),
+            memberships:
+            [
+                new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                },
+                new StoredCampaignMembership
+                {
+                    UserId = OtherUserId,
+                    IsGameMaster = false,
+                    IsPlayer = true,
+                    FactionId = SouthFactionId,
+                },
+            ],
+            startsUtc: Now,
+            endsUtc: Now.AddDays(40),
+            mapGraph: graph,
+            terrainTypes:
+            [
+                new StoredTerrainType
+                {
+                    Id = plainsId,
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [],
+                    CampaignPoints = 0,
+                },
+            ],
+            itemObjectiveTypes:
+            [
+                new StoredItemObjectiveType
+                {
+                    Id = itemTypeId,
+                    Name = "Crown",
+                    IsHiddenUntilFound = true,
+                    Placement = "Random",
+                    AllowOnSpawn = true,
+                    CampaignPoints = 7,
+                },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var accounts = new FakeAccounts();
+        var get = new GetCampaignPlayHandler(store, new FakeClock(), accounts);
+        var seeded = await get.HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+        Assert.True(seeded.IsSuccess);
+        var northForceId = store.Existing!.PlayState!.Forces.Single(force => force.ControllerUserId == UserId).Id;
+        store.Existing = WithCopied(
+            store.Existing,
+            playState: store.Existing.PlayState.With(
+                itemObjectives:
+                [
+                    new Campaign.Domain.Play.CampaignItemObjective(
+                        Guid.Parse("66666666-6666-6666-6666-666666666666"),
+                        itemTypeId,
+                        "Crown",
+                        null,
+                        northForceId,
+                        false,
+                        northSpawn,
+                        true),
+                ]));
+
+        var holderView = await get.HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+        Assert.True(holderView.IsSuccess);
+        var holderRow = Assert.Single(holderView.Value!.Standings, row => row.UserId == UserId);
+        Assert.Equal(7, holderRow.OtherPoints);
+        Assert.Equal(holderRow.TerritoryAndStructurePoints + holderRow.BattlesWonPoints + holderRow.PublicObjectivePoints + holderRow.OtherPoints, holderRow.Total);
+        Assert.Equal("Crown", Assert.Single(holderRow.HeldItems).Name);
+
+        var otherView = await get.HandleAsync(campaign.Id, OtherUserId, false, CancellationToken.None);
+        Assert.True(otherView.IsSuccess);
+        Assert.Empty(otherView.Value!.ItemObjectives);
+        var hiddenFromRival = Assert.Single(otherView.Value.Standings, row => row.UserId == UserId);
+        Assert.Equal(0, hiddenFromRival.OtherPoints);
+        Assert.Empty(hiddenFromRival.HeldItems);
+        Assert.Equal(
+            hiddenFromRival.TerritoryAndStructurePoints
+            + hiddenFromRival.BattlesWonPoints
+            + hiddenFromRival.PublicObjectivePoints
+            + hiddenFromRival.OtherPoints,
+            hiddenFromRival.Total);
+    }
+
+    [Fact]
     public async Task DeleteRemovesCampaignForManagersOnly()
     {
         var campaign = StoredCampaignFor(UserId);
@@ -1248,6 +1374,9 @@ public sealed class CampaignHandlerTests
             TerrainTypes = campaign.TerrainTypes,
             StructureTypes = campaign.StructureTypes,
             ItemObjectiveTypes = campaign.ItemObjectiveTypes,
+            PublicObjectiveTypes = campaign.PublicObjectiveTypes,
+            BattleScoring = campaign.BattleScoring,
+            RankingObjectivePoints = campaign.RankingObjectivePoints,
             PlayState = campaign.PlayState,
         };
     }
@@ -1299,6 +1428,9 @@ public sealed class CampaignHandlerTests
             TerrainTypes = terrainTypes ?? campaign.TerrainTypes,
             StructureTypes = structures ?? campaign.StructureTypes,
             ItemObjectiveTypes = itemObjectiveTypes ?? campaign.ItemObjectiveTypes,
+            PublicObjectiveTypes = campaign.PublicObjectiveTypes,
+            BattleScoring = campaign.BattleScoring,
+            RankingObjectivePoints = campaign.RankingObjectivePoints,
             PlayState = playState ?? campaign.PlayState,
         };
     }
@@ -1563,6 +1695,9 @@ public sealed class CampaignHandlerTests
                 TerrainTypes = Existing.TerrainTypes,
                 StructureTypes = Existing.StructureTypes,
                 ItemObjectiveTypes = Existing.ItemObjectiveTypes,
+                PublicObjectiveTypes = Existing.PublicObjectiveTypes,
+                BattleScoring = Existing.BattleScoring,
+                RankingObjectivePoints = Existing.RankingObjectivePoints,
                 PlayState = Existing.PlayState,
             };
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });
@@ -1631,6 +1766,9 @@ public sealed class CampaignHandlerTests
                 TerrainTypes = Existing.TerrainTypes,
                 StructureTypes = Existing.StructureTypes,
                 ItemObjectiveTypes = Existing.ItemObjectiveTypes,
+                PublicObjectiveTypes = Existing.PublicObjectiveTypes,
+                BattleScoring = Existing.BattleScoring,
+                RankingObjectivePoints = Existing.RankingObjectivePoints,
                 PlayState = playState,
             };
             Updated = Existing;

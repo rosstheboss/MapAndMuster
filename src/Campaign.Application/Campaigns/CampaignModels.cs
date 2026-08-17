@@ -143,6 +143,48 @@ public sealed class CampaignDetail
     /// <summary>Gets the item objective types. Empty means none.</summary>
     public IReadOnlyList<ItemObjectiveTypeDetail> ItemObjectiveTypes { get; init; } = [];
 
+    /// <summary>Gets the public campaign objectives. Empty means none.</summary>
+    public IReadOnlyList<PublicObjectiveTypeDetail> PublicObjectiveTypes { get; init; } = [];
+
+    /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
+    public int PointsPerBattleWon { get; init; }
+
+    /// <summary>Gets campaign points awarded to each participant of a draw.</summary>
+    public int PointsPerBattleDraw { get; init; }
+
+    /// <summary>Gets whether battle campaign points use score differential.</summary>
+    public bool UseDifferentialBattleScoring { get; init; } = true;
+
+    /// <summary>Gets the multiplier applied to the winner-minus-loser score difference.</summary>
+    public decimal DifferentialMultiplier { get; init; } = 1m;
+
+    /// <summary>Gets the inclusive lower clamp for differential campaign points.</summary>
+    public int DifferentialMinimum { get; init; }
+
+    /// <summary>Gets the inclusive upper clamp for differential campaign points.</summary>
+    public int DifferentialMaximum { get; init; } = 10;
+
+    /// <summary>Gets whether the loser can receive negative campaign points.</summary>
+    public bool AllowNegativeDifferential { get; init; }
+
+    /// <summary>Gets campaign points for most territories currently controlled. Zero ignores the objective.</summary>
+    public int MostTerritoriesCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for the longest owned territory chain. Zero ignores the objective.</summary>
+    public int LongestTerritoryChainCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for most battle wins. Zero ignores the objective.</summary>
+    public int MostBattlesWonCampaignPoints { get; init; }
+
+    /// <summary>Gets current campaign-point standings for players.</summary>
+    public IReadOnlyList<CampaignPointStandingDetail> Standings { get; init; } = [];
+
+    /// <summary>Gets current top-five leaders for enabled ranking public objectives.</summary>
+    public IReadOnlyList<PublicObjectiveLeaderboardDetail> PublicObjectiveLeaderboards { get; init; } = [];
+
+    /// <summary>Gets factions that left their ally group through Backstab.</summary>
+    public IReadOnlyList<Guid> BrokenAllyFactionIds { get; init; } = [];
+
     /// <summary>Gets the ally groups.</summary>
     public required IReadOnlyList<AllyGroupDetail> AllyGroups { get; init; }
 
@@ -250,6 +292,18 @@ public sealed class CampaignParticipantDetail
 
     /// <summary>Gets the chosen subfaction name, when one is selected.</summary>
     public string? Subfaction { get; init; }
+
+    /// <summary>Gets the chosen faction identifier, when selected.</summary>
+    public Guid? FactionId { get; init; }
+
+    /// <summary>Gets the chosen faction color, when selected.</summary>
+    public string? FactionColor { get; init; }
+
+    /// <summary>Gets whether the chosen faction has an uploaded flag image.</summary>
+    public bool HasFlagImage { get; init; }
+
+    /// <summary>Gets the ally-group name for the chosen faction, when one applies.</summary>
+    public string? AllyGroupName { get; init; }
 }
 
 /// <summary>
@@ -334,6 +388,9 @@ public sealed class AllyGroupDetail
 
     /// <summary>Gets the ally-group name.</summary>
     public required string Name { get; init; }
+
+    /// <summary>Gets the unique overlay color as #RRGGBB.</summary>
+    public string Color { get; init; } = "#4B5563";
 }
 
 /// <summary>
@@ -451,6 +508,20 @@ public sealed class StoredCampaign
 
     /// <summary>Gets the item objective types. Empty means the campaign has none.</summary>
     public IReadOnlyList<StoredItemObjectiveType> ItemObjectiveTypes { get; init; } = [];
+
+    /// <summary>Gets the public campaign objectives. Empty means none.</summary>
+    public IReadOnlyList<StoredPublicObjectiveType> PublicObjectiveTypes { get; init; } = [];
+
+    /// <summary>Gets conversion from resolved battles into campaign points.</summary>
+    public Campaign.Domain.Campaigns.BattleScoringSetup BattleScoring { get; init; } =
+        Campaign.Domain.Campaigns.BattleScoringSetup.Default;
+
+    /// <summary>Gets campaign points for the built-in ranking public objectives.</summary>
+    public Campaign.Domain.Campaigns.GeneralPublicObjectivePoints RankingObjectivePoints { get; init; } =
+        Campaign.Domain.Campaigns.GeneralPublicObjectivePoints.None;
+
+    /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
+    public int PointsPerBattleWon => BattleScoring.PointsPerWin;
 }
 
 /// <summary>
@@ -526,6 +597,9 @@ public sealed class StoredAllyGroup
 
     /// <summary>Gets the ally-group name.</summary>
     public required string Name { get; init; }
+
+    /// <summary>Gets the unique overlay color as #RRGGBB.</summary>
+    public string Color { get; init; } = "#4B5563";
 }
 
 /// <summary>
@@ -577,6 +651,9 @@ public sealed class TerrainTypeDetail
 
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<MissionDetail> Missions { get; init; }
+
+    /// <summary>Gets campaign points awarded for currently owning a territory of this terrain.</summary>
+    public int CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -610,6 +687,9 @@ public sealed class StructureTypeDetail
 
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<MissionDetail> Missions { get; init; }
+
+    /// <summary>Gets campaign points awarded for currently controlling this structure when it is not destroyed.</summary>
+    public int CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -631,6 +711,147 @@ public sealed class ItemObjectiveTypeDetail
 
     /// <summary>Gets whether the item may occupy a spawn territory.</summary>
     public required bool AllowOnSpawn { get; init; }
+
+    /// <summary>Gets the built-in logo key when no custom image is stored.</summary>
+    public string BuiltinSymbol { get; init; } = "Crown";
+
+    /// <summary>Gets the logo color as #RRGGBB.</summary>
+    public string Color { get; init; } = "#C45C26";
+
+    /// <summary>Gets whether a custom logo image is stored.</summary>
+    public bool HasImage { get; init; }
+
+    /// <summary>Gets campaign points awarded while a force currently holds this item.</summary>
+    public int CampaignPoints { get; init; }
+}
+
+/// <summary>
+/// A public campaign objective in a campaign detail response.
+/// </summary>
+public sealed class PublicObjectiveTypeDetail
+{
+    /// <summary>Gets the objective identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the objective name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the optional description.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Gets campaign points awarded when this objective is completed.</summary>
+    public required int CampaignPoints { get; init; }
+}
+
+/// <summary>
+/// One player's current campaign-point standing.
+/// </summary>
+public sealed class CampaignPointStandingDetail
+{
+    /// <summary>Gets the player.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the unique username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the name shown to other users.</summary>
+    public required string DisplayName { get; init; }
+
+    /// <summary>Gets the chosen faction identifier, when selected.</summary>
+    public Guid? FactionId { get; init; }
+
+    /// <summary>Gets the chosen faction name, when selected.</summary>
+    public string? FactionName { get; init; }
+
+    /// <summary>Gets the chosen faction color, when selected.</summary>
+    public string? FactionColor { get; init; }
+
+    /// <summary>Gets whether the faction has an uploaded flag image.</summary>
+    public bool HasFlagImage { get; init; }
+
+    /// <summary>Gets the ally-group name, when the faction is aligned.</summary>
+    public string? AllyGroupName { get; init; }
+
+    /// <summary>Gets points from currently owned non-destroyed structures.</summary>
+    public required int TerritoryAndStructurePoints { get; init; }
+
+    /// <summary>Gets points from resolved battles, including draws and differentials.</summary>
+    public required int BattlesWonPoints { get; init; }
+
+    /// <summary>Gets points from ranking objectives and currently active named awards.</summary>
+    public required int PublicObjectivePoints { get; init; }
+
+    /// <summary>Gets points from currently held visible item objectives.</summary>
+    public required int OtherPoints { get; init; }
+
+    /// <summary>Gets the sum of the four component columns.</summary>
+    public required int Total { get; init; }
+
+    /// <summary>Gets visible item objectives the player currently holds.</summary>
+    public IReadOnlyList<HeldItemObjectiveDetail> HeldItems { get; init; } = [];
+}
+
+/// <summary>
+/// A visible item objective currently held by a player.
+/// </summary>
+public sealed class HeldItemObjectiveDetail
+{
+    /// <summary>Gets the catalog type.</summary>
+    public required Guid TypeId { get; init; }
+
+    /// <summary>Gets the item name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the built-in logo key when no custom image is stored.</summary>
+    public string? BuiltinSymbol { get; init; }
+
+    /// <summary>Gets the logo color.</summary>
+    public string Color { get; init; } = "#C45C26";
+
+    /// <summary>Gets whether a custom logo image is stored.</summary>
+    public bool HasImage { get; init; }
+}
+
+/// <summary>
+/// Current leaders for one ranking public objective.
+/// </summary>
+public sealed class PublicObjectiveLeaderboardDetail
+{
+    /// <summary>Gets the ranking objective kind.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets campaign points awarded to each current first-place player.</summary>
+    public required int AwardPoints { get; init; }
+
+    /// <summary>Gets players currently in the top five.</summary>
+    public required IReadOnlyList<PublicObjectiveLeaderDetail> Leaders { get; init; }
+}
+
+/// <summary>
+/// One player on a ranking public-objective leaderboard.
+/// </summary>
+public sealed class PublicObjectiveLeaderDetail
+{
+    /// <summary>Gets the player.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the unique username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the name shown to other users.</summary>
+    public required string DisplayName { get; init; }
+
+    /// <summary>Gets the 1-based rank after friendly ties.</summary>
+    public required int Rank { get; init; }
+
+    /// <summary>Gets the primary metric (territories, chain length, or wins).</summary>
+    public required int Metric { get; init; }
+
+    /// <summary>Gets the secondary metric used only for most battles won (draws).</summary>
+    public required int TieBreakMetric { get; init; }
+
+    /// <summary>Gets whether this player currently receives the objective's campaign points.</summary>
+    public required bool AwardsPoints { get; init; }
 }
 
 /// <summary>
@@ -670,6 +891,9 @@ public sealed class StoredTerrainType
 
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<StoredMission> Missions { get; init; }
+
+    /// <summary>Gets campaign points awarded for currently owning a territory of this terrain.</summary>
+    public int CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -703,6 +927,9 @@ public sealed class StoredStructureType
 
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<StoredMission> Missions { get; init; }
+
+    /// <summary>Gets campaign points awarded for currently controlling this structure when it is not destroyed.</summary>
+    public int CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -724,6 +951,36 @@ public sealed class StoredItemObjectiveType
 
     /// <summary>Gets whether the item may occupy a spawn territory.</summary>
     public required bool AllowOnSpawn { get; init; }
+
+    /// <summary>Gets the built-in logo key.</summary>
+    public string BuiltinSymbol { get; init; } = "Crown";
+
+    /// <summary>Gets the logo color as #RRGGBB.</summary>
+    public string Color { get; init; } = "#C45C26";
+
+    /// <summary>Gets the stored logo key, when a custom image was uploaded.</summary>
+    public string? ImageStorageKey { get; init; }
+
+    /// <summary>Gets campaign points awarded while a force currently holds this item.</summary>
+    public int CampaignPoints { get; init; }
+}
+
+/// <summary>
+/// A persisted public campaign objective.
+/// </summary>
+public sealed class StoredPublicObjectiveType
+{
+    /// <summary>Gets the objective identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the objective name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the optional description.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Gets campaign points awarded when this objective is completed.</summary>
+    public required int CampaignPoints { get; init; }
 }
 
 /// <summary>

@@ -64,7 +64,18 @@ public sealed class CreateCampaignHandler
                 command.City,
                 command.Region,
                 command.Country,
-                command.ItemObjectiveTypes))
+                command.ItemObjectiveTypes,
+                command.PublicObjectiveTypes,
+                command.PointsPerBattleWon,
+                command.PointsPerBattleDraw,
+                command.UseDifferentialBattleScoring,
+                command.DifferentialMultiplier,
+                command.DifferentialMinimum,
+                command.DifferentialMaximum,
+                command.AllowNegativeDifferential,
+                command.MostTerritoriesCampaignPoints,
+                command.LongestTerritoryChainCampaignPoints,
+                command.MostBattlesWonCampaignPoints))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -170,7 +181,18 @@ public sealed class UpdateCampaignHandler
                 command.City,
                 command.Region,
                 command.Country,
-                command.ItemObjectiveTypes))
+                command.ItemObjectiveTypes,
+                command.PublicObjectiveTypes,
+                command.PointsPerBattleWon,
+                command.PointsPerBattleDraw,
+                command.UseDifferentialBattleScoring,
+                command.DifferentialMultiplier,
+                command.DifferentialMinimum,
+                command.DifferentialMaximum,
+                command.AllowNegativeDifferential,
+                command.MostTerritoriesCampaignPoints,
+                command.LongestTerritoryChainCampaignPoints,
+                command.MostBattlesWonCampaignPoints))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -225,7 +247,8 @@ public sealed class UpdateCampaignHandler
             existing.MapGraph,
             existing.TerrainTypes,
             existing.StructureTypes,
-            existing.Factions);
+            existing.Factions,
+            existing.ItemObjectiveTypes);
 
         var outcome = await _campaigns
             .UpdateAsync(updated, command.ExpectedRevision, cancellationToken)
@@ -269,10 +292,16 @@ internal static class CampaignPersistenceFactory
         StoredMapGraph? mapGraph = null,
         IReadOnlyList<StoredTerrainType>? previousTerrainTypes = null,
         IReadOnlyList<StoredStructureType>? previousStructureTypes = null,
-        IReadOnlyList<StoredFaction>? previousFactions = null)
+        IReadOnlyList<StoredFaction>? previousFactions = null,
+        IReadOnlyList<StoredItemObjectiveType>? previousItemObjectiveTypes = null)
     {
         var allyGroups = setup.AllyGroups
-            .Select(group => new StoredAllyGroup { Id = Guid.NewGuid(), Name = group.Name })
+            .Select(group => new StoredAllyGroup
+            {
+                Id = Guid.NewGuid(),
+                Name = group.Name,
+                Color = group.Color,
+            })
             .ToArray();
 
         return new StoredCampaign
@@ -331,7 +360,10 @@ internal static class CampaignPersistenceFactory
             MapGraph = mapGraph,
             TerrainTypes = CatalogFileBinder.BindTerrains(setup.TerrainTypes, previousTerrainTypes),
             StructureTypes = CatalogFileBinder.BindStructures(setup.StructureTypes, previousStructureTypes),
-            ItemObjectiveTypes = CatalogFileBinder.BindItemObjectives(setup.ItemObjectiveTypes),
+            ItemObjectiveTypes = CatalogFileBinder.BindItemObjectives(setup.ItemObjectiveTypes, previousItemObjectiveTypes),
+            PublicObjectiveTypes = CatalogFileBinder.BindPublicObjectives(setup.PublicObjectiveTypes),
+            BattleScoring = setup.BattleScoring,
+            RankingObjectivePoints = setup.RankingObjectivePoints,
         };
     }
 }

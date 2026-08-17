@@ -71,6 +71,20 @@ export interface CampaignDetail {
   terrainTypes: CampaignTerrainType[];
   structureTypes: CampaignStructureType[];
   itemObjectiveTypes?: CampaignItemObjectiveType[];
+  publicObjectiveTypes?: CampaignPublicObjectiveType[];
+  pointsPerBattleWon?: number;
+  pointsPerBattleDraw?: number;
+  useDifferentialBattleScoring?: boolean;
+  differentialMultiplier?: number;
+  differentialMinimum?: number;
+  differentialMaximum?: number;
+  allowNegativeDifferential?: boolean;
+  mostTerritoriesCampaignPoints?: number;
+  longestTerritoryChainCampaignPoints?: number;
+  mostBattlesWonCampaignPoints?: number;
+  standings?: CampaignPointStanding[];
+  publicObjectiveLeaderboards?: PublicObjectiveLeaderboard[];
+  brokenAllyFactionIds?: string[];
 }
 
 export interface RoundPhase {
@@ -92,6 +106,7 @@ export interface CampaignFaction {
 export interface CampaignAllyGroup {
   id: string;
   name: string;
+  color?: string;
 }
 
 export interface CampaignLink {
@@ -113,6 +128,7 @@ export interface CampaignTerrainType {
   name: string;
   color: string;
   missions: CampaignMission[];
+  campaignPoints?: number;
 }
 
 export interface CampaignStructureType {
@@ -125,6 +141,7 @@ export interface CampaignStructureType {
   isPillageable: boolean;
   isDestructible: boolean;
   missions: CampaignMission[];
+  campaignPoints?: number;
 }
 
 export interface CampaignItemObjectiveType {
@@ -133,6 +150,58 @@ export interface CampaignItemObjectiveType {
   isHiddenUntilFound: boolean;
   placement: ItemObjectivePlacement;
   allowOnSpawn: boolean;
+  builtinSymbol?: string;
+  color?: string;
+  hasImage?: boolean;
+  campaignPoints?: number;
+}
+
+export interface CampaignPublicObjectiveType {
+  id: string;
+  name: string;
+  description?: string | null;
+  campaignPoints: number;
+}
+
+export interface CampaignPointStanding {
+  userId: string;
+  username: string;
+  displayName: string;
+  factionId?: string | null;
+  factionName?: string | null;
+  factionColor?: string | null;
+  hasFlagImage?: boolean;
+  allyGroupName?: string | null;
+  territoryAndStructurePoints: number;
+  battlesWonPoints: number;
+  publicObjectivePoints: number;
+  otherPoints: number;
+  total: number;
+  heldItems?: HeldItemObjective[];
+}
+
+export interface PublicObjectiveLeaderboard {
+  kind: string;
+  awardPoints: number;
+  leaders: PublicObjectiveLeader[];
+}
+
+export interface PublicObjectiveLeader {
+  userId: string;
+  username: string;
+  displayName: string;
+  rank: number;
+  metric: number;
+  tieBreakMetric: number;
+  awardsPoints: boolean;
+}
+
+export interface HeldItemObjective {
+  typeId: string;
+  name: string;
+  builtinSymbol?: string | null;
+  color?: string;
+  hasImage?: boolean;
 }
 
 export type ItemObjectivePlacement = 'Random' | 'Placed';
@@ -161,6 +230,17 @@ export interface SaveCampaignPayload {
   terrainTypes: SaveTerrainTypePayload[];
   structureTypes: SaveStructureTypePayload[];
   itemObjectiveTypes: SaveItemObjectiveTypePayload[];
+  publicObjectiveTypes?: SavePublicObjectiveTypePayload[];
+  pointsPerBattleWon?: number;
+  pointsPerBattleDraw?: number;
+  useDifferentialBattleScoring?: boolean;
+  differentialMultiplier?: number;
+  differentialMinimum?: number;
+  differentialMaximum?: number;
+  allowNegativeDifferential?: boolean;
+  mostTerritoriesCampaignPoints?: number;
+  longestTerritoryChainCampaignPoints?: number;
+  mostBattlesWonCampaignPoints?: number;
 }
 
 export interface SaveRoundPhasePayload {
@@ -181,6 +261,7 @@ export interface SaveFactionPayload {
 
 export interface SaveAllyGroupPayload {
   name: string;
+  color?: string;
 }
 
 export interface SaveLinkPayload {
@@ -193,6 +274,7 @@ export interface SaveTerrainTypePayload {
   name: string;
   color: string;
   missions: SaveMissionPayload[];
+  campaignPoints?: number;
 }
 
 export interface SaveStructureTypePayload {
@@ -205,6 +287,7 @@ export interface SaveStructureTypePayload {
   isPillageable: boolean;
   isDestructible: boolean;
   missions: SaveMissionPayload[];
+  campaignPoints?: number;
 }
 
 export interface SaveItemObjectiveTypePayload {
@@ -213,6 +296,17 @@ export interface SaveItemObjectiveTypePayload {
   isHiddenUntilFound: boolean;
   placement: ItemObjectivePlacement;
   allowOnSpawn: boolean;
+  builtinSymbol?: string | null;
+  color?: string | null;
+  clearImage?: boolean;
+  campaignPoints?: number;
+}
+
+export interface SavePublicObjectiveTypePayload {
+  id?: string;
+  name: string;
+  description?: string | null;
+  campaignPoints?: number;
 }
 
 export interface SaveMissionPayload {
@@ -302,6 +396,12 @@ export interface CampaignPlayDetail {
   factions: CampaignFaction[];
   structureTypes: CampaignStructureType[];
   itemObjectives?: PlayItemObjective[];
+  brokenAllyFactionIds?: string[];
+  standings?: CampaignPointStanding[];
+  publicObjectiveLeaderboards?: PublicObjectiveLeaderboard[];
+  pointsPerBattleWon?: number;
+  pointsPerBattleDraw?: number;
+  useDifferentialBattleScoring?: boolean;
   forces: PlayForce[];
   myDrafts: PlayDraft[];
   orders: PlayOrder[];
@@ -340,6 +440,9 @@ export interface PlayItemObjective {
   territoryId: string | null;
   possessorForceId: string | null;
   isRevealed: boolean;
+  builtinSymbol?: string;
+  color?: string;
+  hasImage?: boolean;
 }
 
 export interface PlayDraft {
@@ -372,6 +475,8 @@ export interface PlayBattle {
   opponentSubmission: PlayBattleSubmission | null;
   winnerForceId: string | null;
   isDraw: boolean;
+  winnerScore?: number | null;
+  loserScore?: number | null;
   needsRetreat: boolean;
   retreatTargets: string[];
 }
@@ -380,6 +485,8 @@ export interface PlayBattleSubmission {
   submitterUserId: string;
   winnerForceId: string | null;
   isDraw: boolean;
+  winnerScore?: number | null;
+  loserScore?: number | null;
 }
 
 export interface PlayLogEntry {
@@ -425,6 +532,10 @@ export interface CampaignParticipant {
   isAdministrator: boolean;
   factionName?: string | null;
   subfaction?: string | null;
+  factionId?: string | null;
+  factionColor?: string | null;
+  hasFlagImage?: boolean;
+  allyGroupName?: string | null;
 }
 
 export interface SaveOrderDraftPayload {
@@ -439,6 +550,13 @@ export interface PlayRevisionPayload {
   revision: number;
 }
 
+export interface SetPublicObjectiveAwardPayload {
+  revision: number;
+  objectiveId: string;
+  playerUserId: string;
+  awarded: boolean;
+}
+
 export interface PostCampaignChatPayload {
   revision: number;
   message: string;
@@ -451,6 +569,8 @@ export interface SubmitBattleResultPayload {
   battleId: string;
   winnerForceId?: string | null;
   isDraw: boolean;
+  winnerScore?: number | null;
+  loserScore?: number | null;
 }
 
 export interface BattleActionPayload {

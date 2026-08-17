@@ -7,6 +7,7 @@ import { of } from 'rxjs';
 
 import { CampaignDetailPage } from './campaign-detail.page';
 import type { CampaignPlayDetail } from '../../core/campaigns/campaign.models';
+import { cookieNameFor, writeStoredPrefs } from '../../core/campaigns/campaign-view-prefs.service';
 
 const campaign = {
   id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
@@ -87,6 +88,40 @@ const campaign = {
     },
   ],
   log: [],
+  standings: [
+    {
+      userId: 'user-1',
+      username: 'northplayer',
+      displayName: 'northplayer',
+      factionId: '1',
+      factionName: 'North',
+      factionColor: '#2563EB',
+      hasFlagImage: false,
+      allyGroupName: null,
+      territoryAndStructurePoints: 4,
+      battlesWonPoints: 2,
+      publicObjectivePoints: 1,
+      otherPoints: 3,
+      total: 10,
+      heldItems: [{ typeId: 'crown', name: 'Crown', builtinSymbol: 'Crown', color: '#C45C26', hasImage: false }],
+    },
+    {
+      userId: 'user-2',
+      username: 'southplayer',
+      displayName: 'Ada',
+      factionId: '2',
+      factionName: 'South',
+      factionColor: '#DC2626',
+      hasFlagImage: false,
+      allyGroupName: null,
+      territoryAndStructurePoints: 1,
+      battlesWonPoints: 0,
+      publicObjectivePoints: 0,
+      otherPoints: 0,
+      total: 1,
+      heldItems: [],
+    },
+  ],
 };
 
 function flushPlayUnavailable(http: HttpTestingController): void {
@@ -153,6 +188,12 @@ function playState(overrides: Partial<CampaignPlayDetail> = {}): CampaignPlayDet
 
 describe('CampaignDetailPage', () => {
   beforeEach(async () => {
+    document.cookie.split(';').forEach((part) => {
+      const name = part.split('=')[0]?.trim();
+      if (name) {
+        document.cookie = `${name}=; Path=/; Max-Age=0`;
+      }
+    });
     await TestBed.configureTestingModule({
       imports: [CampaignDetailPage],
       providers: [
@@ -201,7 +242,10 @@ describe('CampaignDetailPage', () => {
     expect(compiled.querySelector('a[href^="/users/northplayer"]')?.textContent.trim()).toBe('northplayer');
     expect(compiled.textContent).toContain('Manager, Player');
     expect(compiled.textContent).toContain("Your force starts at that faction's spawn");
-    expect(compiled.textContent).toContain('Expand All');
+    expect(compiled.textContent).toContain('Campaign points');
+    expect(compiled.textContent).toContain('Structures captured');
+    expect(compiled.querySelector('.standings-table')?.textContent).toContain('northplayer');
+    expect(compiled.querySelector('.standings-table')?.textContent).toContain('Ada');
     expect(compiled.textContent).toContain('Collapse All');
     expect(compiled.querySelector('a.button')?.textContent).toContain('Edit campaign');
     expect(compiled.textContent).toContain('Edit map');
@@ -837,6 +881,73 @@ describe('CampaignDetailPage', () => {
     fixture.detectChanges();
     expect(compiled.textContent).toContain('Crown');
     expect(compiled.textContent).not.toContain('(hidden)');
+    http.verify();
+  });
+
+  it('sorts campaign point standings when a column header is clicked', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const names = (): (string | undefined)[] =>
+      [...compiled.querySelectorAll('.standings-table tbody tr')].map((row) =>
+        row.querySelector('.profile-link')?.textContent.trim(),
+      );
+    expect(names()).toEqual(['northplayer', 'Ada']);
+
+    const nameHeader = [...compiled.querySelectorAll<HTMLButtonElement>('.standings-table th button')].find(
+      (button) => button.textContent.trim() === 'Display name',
+    );
+    expect(nameHeader).toBeTruthy();
+    nameHeader!.click();
+    fixture.detectChanges();
+    expect(names()).toEqual(['Ada', 'northplayer']);
+    http.verify();
+  });
+
+  it('restores map highlight mode and collapsed panels from the view cookie', async () => {
+    writeStoredPrefs(campaign.id, {
+      highlightMode: 'faction',
+      sections: { map: false, standings: true },
+      standingsSort: { column: 'displayName', direction: 'asc' },
+      chatChannelKey: 'Public:',
+      chatScrollTop: 12,
+    });
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({ ...campaign, hasMap: true });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      highlightMode: () => string;
+      isOpen: (id: string) => boolean;
+      standingsSort: () => { column: string; direction: string };
+    };
+    expect(page.highlightMode()).toBe('faction');
+    expect(page.isOpen('map')).toBe(false);
+    expect(page.isOpen('standings')).toBe(true);
+    expect(page.standingsSort()).toEqual({ column: 'displayName', direction: 'asc' });
+    expect(document.cookie).toContain(cookieNameFor(campaign.id));
     http.verify();
   });
 });

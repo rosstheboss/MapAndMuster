@@ -52,6 +52,12 @@ public static class CampaignSetupRules
     /// <summary>Maximum number of item objective types.</summary>
     public const int MaxItemObjectiveTypeCount = 50;
 
+    /// <summary>Maximum number of public campaign objectives.</summary>
+    public const int MaxPublicObjectiveTypeCount = 50;
+
+    /// <summary>Maximum campaign points for one configured source.</summary>
+    public const int MaxCampaignPoints = 999;
+
     /// <summary>Maximum missions nested under one terrain type or structure.</summary>
     public const int MaxMissionsPerCatalogItem = 20;
 
@@ -172,6 +178,17 @@ public static class CampaignSetupRules
     /// <param name="terrainTypes">The terrain-type inputs. Defaults are used when omitted.</param>
     /// <param name="structureTypes">The structure-type inputs. Defaults are used when omitted.</param>
     /// <param name="itemObjectiveTypes">The item-objective inputs. Omitted or empty means none.</param>
+    /// <param name="publicObjectiveTypes">The public-objective inputs. Omitted or empty means none.</param>
+    /// <param name="pointsPerBattleWon">Straight campaign points for a battle win. Defaults to 2.</param>
+    /// <param name="pointsPerBattleDraw">Campaign points for each participant of a draw. Defaults to 1.</param>
+    /// <param name="useDifferentialBattleScoring">Whether battle campaign points use score differential. Defaults to true.</param>
+    /// <param name="differentialMultiplier">Multiplier applied to the winner-minus-loser score. Never 0. Defaults to 1.</param>
+    /// <param name="differentialMinimum">Inclusive lower clamp for differential campaign points. Defaults to 0.</param>
+    /// <param name="differentialMaximum">Inclusive upper clamp for differential campaign points. Defaults to 10.</param>
+    /// <param name="allowNegativeDifferential">Whether the loser can receive negative campaign points. Defaults to false.</param>
+    /// <param name="mostTerritoriesCampaignPoints">Points for most territories currently controlled. Zero ignores the objective.</param>
+    /// <param name="longestTerritoryChainCampaignPoints">Points for the longest owned territory chain. Zero ignores the objective.</param>
+    /// <param name="mostBattlesWonCampaignPoints">Points for most battle wins. Zero ignores the objective.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
@@ -202,7 +219,18 @@ public static class CampaignSetupRules
         string? city = null,
         string? region = null,
         string? country = null,
-        IReadOnlyList<ItemObjectiveTypeInput>? itemObjectiveTypes = null)
+        IReadOnlyList<ItemObjectiveTypeInput>? itemObjectiveTypes = null,
+        IReadOnlyList<PublicObjectiveTypeInput>? publicObjectiveTypes = null,
+        int? pointsPerBattleWon = null,
+        int? pointsPerBattleDraw = null,
+        bool? useDifferentialBattleScoring = null,
+        decimal? differentialMultiplier = null,
+        int? differentialMinimum = null,
+        int? differentialMaximum = null,
+        bool? allowNegativeDifferential = null,
+        int? mostTerritoriesCampaignPoints = null,
+        int? longestTerritoryChainCampaignPoints = null,
+        int? mostBattlesWonCampaignPoints = null)
     {
         var collected = new List<DomainError>();
         setup = null;
@@ -256,6 +284,21 @@ public static class CampaignSetupRules
         var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, collected);
         var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, collected);
         var parsedItems = ParseItemObjectiveTypes(itemObjectiveTypes, usedIds, collected);
+        var parsedPublic = ParsePublicObjectiveTypes(publicObjectiveTypes, usedIds, collected);
+        var parsedBattleScoring = ParseBattleScoring(
+            pointsPerBattleWon,
+            pointsPerBattleDraw,
+            useDifferentialBattleScoring,
+            differentialMultiplier,
+            differentialMinimum,
+            differentialMaximum,
+            allowNegativeDifferential,
+            collected);
+        var parsedRanking = ParseRankingObjectives(
+            mostTerritoriesCampaignPoints,
+            longestTerritoryChainCampaignPoints,
+            mostBattlesWonCampaignPoints,
+            collected);
         var parsedSchedule = ParseSchedule(schedule, collected);
 
         if (collected.Count > 0)
@@ -281,7 +324,10 @@ public static class CampaignSetupRules
             parsedTerrain,
             parsedStructures,
             parsedItems,
-            parsedSchedule!);
+            parsedSchedule!,
+            parsedPublic,
+            parsedBattleScoring,
+            parsedRanking);
         errors = collected;
         return true;
     }
@@ -402,6 +448,7 @@ public static class CampaignSetupRules
         }
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var usedColors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < allyGroups.Count; index++)
         {
             var field = $"allyGroups[{index}].name";
@@ -412,7 +459,14 @@ public static class CampaignSetupRules
                 minLength: 1,
                 NamedItemMaxLength,
                 errors);
-            if (name is null)
+            var color = ParseUniqueColor(
+                allyGroups[index].Color,
+                usedColors,
+                $"allyGroups[{index}].color",
+                $"Ally group {index + 1} color",
+                assignDefault: true,
+                errors);
+            if (name is null || color is null)
             {
                 continue;
             }
@@ -426,7 +480,7 @@ public static class CampaignSetupRules
                 continue;
             }
 
-            parsed.Add(new AllyGroupSetup(name));
+            parsed.Add(new AllyGroupSetup(name, color));
         }
 
         return parsed;
@@ -736,7 +790,12 @@ public static class CampaignSetupRules
                 input.IsBuildable ?? flags.IsBuildable,
                 input.IsPillageable ?? flags.IsPillageable,
                 input.IsDestructible ?? flags.IsDestructible,
-                missionsForType));
+                missionsForType,
+                ParseCampaignPoints(
+                    input.CampaignPoints,
+                    $"structureTypes[{index}].campaignPoints",
+                    $"Structure {index + 1} campaign points",
+                    errors)));
         }
 
         return parsed;
@@ -788,15 +847,261 @@ public static class CampaignSetupRules
                 continue;
             }
 
+            var builtin = ItemObjectiveCatalog.CanonicalSymbol(input.BuiltinSymbol) ?? nameof(ItemObjectiveSymbol.Crown);
+            if (!string.IsNullOrWhiteSpace(input.BuiltinSymbol) && ItemObjectiveCatalog.CanonicalSymbol(input.BuiltinSymbol) is null)
+            {
+                errors.Add(new DomainError(
+                    "itemObjectiveTypes.symbol.invalid",
+                    $"Item objective {index + 1} logo is not a recognized built-in symbol.",
+                    $"itemObjectiveTypes[{index}].builtinSymbol"));
+            }
+
+            var color = ParseOptionalItemColor(input.Color, $"itemObjectiveTypes[{index}].color", $"Item objective {index + 1} color", errors);
             parsed.Add(new ItemObjectiveTypeSetup(
                 ResolveId(input.Id, usedIds, $"itemObjectiveTypes[{index}].id", errors),
                 name,
                 input.IsHiddenUntilFound ?? true,
                 placement,
-                input.AllowOnSpawn ?? false));
+                input.AllowOnSpawn ?? false,
+                builtin,
+                color,
+                input.ClearImage,
+                ParseCampaignPoints(
+                    input.CampaignPoints,
+                    $"itemObjectiveTypes[{index}].campaignPoints",
+                    $"Item objective {index + 1} campaign points",
+                    errors)));
         }
 
         return parsed;
+    }
+
+    private static List<PublicObjectiveTypeSetup> ParsePublicObjectiveTypes(
+        IReadOnlyList<PublicObjectiveTypeInput>? publicObjectiveTypes,
+        HashSet<Guid> usedIds,
+        List<DomainError> errors)
+    {
+        var supplied = publicObjectiveTypes ?? [];
+        var parsed = new List<PublicObjectiveTypeSetup>();
+        if (supplied.Count > MaxPublicObjectiveTypeCount)
+        {
+            errors.Add(new DomainError(
+                "publicObjectiveTypes.invalid",
+                $"At most {MaxPublicObjectiveTypeCount} public objectives are allowed.",
+                "publicObjectiveTypes"));
+            return parsed;
+        }
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var name = ParseRequiredName(
+                input.Name,
+                $"publicObjectiveTypes[{index}].name",
+                $"Public objective {index + 1} name",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!seenNames.Add(name))
+            {
+                errors.Add(new DomainError(
+                    "publicObjectiveTypes.duplicate",
+                    "Public objective names must be unique.",
+                    $"publicObjectiveTypes[{index}].name"));
+                continue;
+            }
+
+            string? description = null;
+            if (!string.IsNullOrWhiteSpace(input.Description))
+            {
+                var trimmed = input.Description.Trim();
+                if (trimmed.Length > DescriptionMaxLength)
+                {
+                    errors.Add(new DomainError(
+                        $"publicObjectiveTypes[{index}].description.invalid",
+                        $"Public objective {index + 1} description is too long (maximum {DescriptionMaxLength} characters).",
+                        $"publicObjectiveTypes[{index}].description"));
+                }
+                else
+                {
+                    description = trimmed;
+                }
+            }
+
+            parsed.Add(new PublicObjectiveTypeSetup(
+                ResolveId(input.Id, usedIds, $"publicObjectiveTypes[{index}].id", errors),
+                name,
+                description,
+                ParseCampaignPoints(
+                    input.CampaignPoints,
+                    $"publicObjectiveTypes[{index}].campaignPoints",
+                    $"Public objective {index + 1} campaign points",
+                    errors)));
+        }
+
+        return parsed;
+    }
+
+    private static BattleScoringSetup ParseBattleScoring(
+        int? pointsPerWin,
+        int? pointsPerDraw,
+        bool? useDifferential,
+        decimal? multiplier,
+        int? minimum,
+        int? maximum,
+        bool? allowNegative,
+        List<DomainError> errors)
+    {
+        var parsedWin = ParseCampaignPoints(
+            pointsPerWin,
+            "pointsPerBattleWon",
+            "Points per battle won",
+            errors,
+            BattleScoringSetup.DefaultPointsPerWin);
+        var parsedDraw = ParseCampaignPoints(
+            pointsPerDraw,
+            "pointsPerBattleDraw",
+            "Points per battle draw",
+            errors,
+            BattleScoringSetup.DefaultPointsPerDraw);
+        var parsedMultiplier = ParseDifferentialMultiplier(multiplier, errors);
+        var parsedMinimum = ParseDifferentialBound(
+            minimum,
+            "differentialMinimum",
+            "Differential minimum",
+            errors,
+            0);
+        var parsedMaximum = ParseDifferentialBound(
+            maximum,
+            "differentialMaximum",
+            "Differential maximum",
+            errors,
+            10);
+        if (parsedMaximum < parsedMinimum)
+        {
+            errors.Add(new DomainError(
+                "differentialMaximum.invalid",
+                "The differential maximum cannot be below the minimum.",
+                "differentialMaximum"));
+            parsedMaximum = parsedMinimum;
+        }
+
+        return new BattleScoringSetup(
+            parsedWin,
+            parsedDraw,
+            useDifferential ?? true,
+            parsedMultiplier,
+            parsedMinimum,
+            parsedMaximum,
+            allowNegative ?? false);
+    }
+
+    private static GeneralPublicObjectivePoints ParseRankingObjectives(
+        int? mostTerritories,
+        int? longestChain,
+        int? mostBattlesWon,
+        List<DomainError> errors)
+    {
+        return new GeneralPublicObjectivePoints(
+            ParseCampaignPoints(
+                mostTerritories,
+                "mostTerritoriesCampaignPoints",
+                "Most territories campaign points",
+                errors),
+            ParseCampaignPoints(
+                longestChain,
+                "longestTerritoryChainCampaignPoints",
+                "Longest territory chain campaign points",
+                errors),
+            ParseCampaignPoints(
+                mostBattlesWon,
+                "mostBattlesWonCampaignPoints",
+                "Most battles won campaign points",
+                errors));
+    }
+
+    private static decimal ParseDifferentialMultiplier(decimal? value, List<DomainError> errors)
+    {
+        if (value is null)
+        {
+            return BattleScoringSetup.DefaultMultiplier;
+        }
+
+        if (value < BattleScoringSetup.MinMultiplier || value > BattleScoringSetup.MaxMultiplier)
+        {
+            errors.Add(new DomainError(
+                "differentialMultiplier.invalid",
+                $"The differential multiplier must be between {BattleScoringSetup.MinMultiplier} and {BattleScoringSetup.MaxMultiplier}.",
+                "differentialMultiplier"));
+            return BattleScoringSetup.DefaultMultiplier;
+        }
+
+        return value.Value;
+    }
+
+    private static int ParseDifferentialBound(int? value, string field, string label, List<DomainError> errors, int fallback)
+    {
+        if (value is null)
+        {
+            return fallback;
+        }
+
+        if (value < -MaxCampaignPoints || value > MaxCampaignPoints)
+        {
+            errors.Add(new DomainError(
+                $"{field}.invalid",
+                $"{label} must be between {-MaxCampaignPoints} and {MaxCampaignPoints}.",
+                field));
+            return fallback;
+        }
+
+        return value.Value;
+    }
+
+    private static int ParseCampaignPoints(
+        int? value,
+        string field,
+        string label,
+        List<DomainError> errors,
+        int fallback = 0)
+    {
+        if (value is null)
+        {
+            return fallback;
+        }
+
+        if (value < 0 || value > MaxCampaignPoints)
+        {
+            errors.Add(new DomainError(
+                $"{field}.invalid",
+                $"{label} must be between 0 and {MaxCampaignPoints}.",
+                field));
+            return fallback;
+        }
+
+        return value.Value;
+    }
+
+    private static string ParseOptionalItemColor(string? raw, string field, string label, List<DomainError> errors)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return ItemObjectiveCatalog.DefaultColor;
+        }
+
+        if (!HexColor.TryNormalize(raw, out var color) || color is null)
+        {
+            errors.Add(new DomainError($"{field}.invalid", $"{label} must be a six-digit hex value.", field));
+            return ItemObjectiveCatalog.DefaultColor;
+        }
+
+        return color;
     }
 
     private static bool TryParsePlacement(

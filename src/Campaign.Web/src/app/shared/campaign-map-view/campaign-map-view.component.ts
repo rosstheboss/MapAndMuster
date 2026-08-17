@@ -10,7 +10,8 @@ import {
   type ElementRef,
 } from '@angular/core';
 
-import type { CampaignFaction, CampaignStructureType } from '../../core/campaigns/campaign.models';
+import type { CampaignAllyGroup, CampaignFaction, CampaignStructureType } from '../../core/campaigns/campaign.models';
+import type { MapHighlightMode } from '../../core/campaigns/campaign-view-prefs.service';
 import { adjacencyArrowEndpoints, adjacencyArrowGeometry } from '../../core/maps/adjacency';
 import {
   ARROW_HEAD_SCREEN_PX,
@@ -49,6 +50,14 @@ export interface MapForceMarker {
   isMine: boolean;
   inBattle: boolean;
   label: string;
+  heldItems?: readonly MapHeldItem[];
+}
+
+export interface MapHeldItem {
+  name: string;
+  builtinSymbol: string;
+  color: string;
+  imageUrl: string | null;
 }
 
 export interface MapItemMarker {
@@ -57,6 +66,9 @@ export interface MapItemMarker {
   name: string;
   carried: boolean;
   hidden: boolean;
+  builtinSymbol?: string;
+  color?: string;
+  imageUrl?: string | null;
 }
 
 @Component({
@@ -88,6 +100,10 @@ export class CampaignMapViewComponent {
   readonly flagImageUrl = input<(factionId: string) => string | null>(() => null);
   readonly forces = input<readonly MapForceMarker[]>([]);
   readonly items = input<readonly MapItemMarker[]>([]);
+  readonly colorMode = input<MapHighlightMode>('configured');
+  readonly allyGroups = input<readonly CampaignAllyGroup[]>([]);
+  readonly brokenAllyFactionIds = input<readonly string[]>([]);
+  readonly itemImageUrl = input<(typeId: string) => string | null>(() => null);
 
   readonly mapPoint = output<MapPoint>();
   readonly mapHover = output<MapPoint>();
@@ -166,7 +182,7 @@ export class CampaignMapViewComponent {
           color: this.factions().find((faction) => faction.id === force.factionId)?.color ?? '#44403c',
         };
       });
-      const presentItems = this.items().filter((item) => item.territoryId === territory.id);
+      const presentItems = this.items().filter((item) => item.territoryId === territory.id && !item.carried);
       const itemPins = presentItems.map((item, index) => {
         const preferred = {
           x: center.x + (index - (presentItems.length - 1) / 2) * maxWidth * 0.55,
@@ -176,6 +192,7 @@ export class CampaignMapViewComponent {
         avoided.push(fit);
         return { item, fit };
       });
+      const fill = this.territoryFill(territory, owner);
       return {
         territory,
         points: polygonPointsAttribute(territory.polygon),
@@ -203,6 +220,7 @@ export class CampaignMapViewComponent {
         halfHighlighted: !selected && this.isHalfHighlighted(territory.id),
         moveValid: selected && this.movePlacement() === 'valid',
         moveInvalid: selected && this.movePlacement() === 'invalid',
+        fill,
         strokeWidth: this.screenToMap(
           selected
             ? STROKE_FULL_HIGHLIGHT_SCREEN_PX
@@ -210,7 +228,7 @@ export class CampaignMapViewComponent {
               ? STROKE_HALF_HIGHLIGHT_SCREEN_PX
               : STROKE_SCREEN_PX,
         ),
-        glowColor: territory.overlayColor ?? 'var(--color-glow)',
+        glowColor: fill === 'transparent' ? 'var(--color-glow)' : fill,
       };
     });
   });
@@ -299,6 +317,11 @@ export class CampaignMapViewComponent {
   protected markerSize(fit: FittedSquare): { width: number; height: number } {
     const image = this.imageSize();
     return { width: fit.width * image.width, height: fit.height * image.height };
+  }
+
+  protected forceLabel(force: MapForceMarker): string {
+    const held = force.heldItems?.map((item) => item.name).join(', ');
+    return held ? `${force.label}. Holding ${held}` : force.label;
   }
 
   screenToMap(pixels: number): number {
@@ -566,6 +589,26 @@ export class CampaignMapViewComponent {
 
   private isSelected(territoryId: string): boolean {
     return this.selectedTerritoryIds().includes(territoryId);
+  }
+
+  private territoryFill(territory: MapTerritory, owner: CampaignFaction | null): string {
+    const mode = this.colorMode();
+    if (mode === 'configured') {
+      return territory.overlayColor ?? 'transparent';
+    }
+
+    if (!owner) {
+      return 'transparent';
+    }
+
+    if (mode === 'alliance' && owner.allyGroupName && !this.brokenAllyFactionIds().includes(owner.id)) {
+      const group = this.allyGroups().find((item) => item.name.toLowerCase() === owner.allyGroupName?.toLowerCase());
+      if (group?.color) {
+        return group.color;
+      }
+    }
+
+    return owner.color;
   }
 
   private isHalfHighlighted(territoryId: string): boolean {

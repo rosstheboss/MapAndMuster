@@ -115,8 +115,10 @@
 
 .force-pin {
   z-index: 2;
+  overflow: visible;
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
+  pointer-events: auto;
 }
 
 .force-pin.is-mine {
@@ -131,17 +133,42 @@
     0 0 0 4px rgb(254 243 226 / 90%);
 }
 
+.force-held-items {
+  position: absolute;
+  right: -0.2rem;
+  top: -0.2rem;
+  display: flex;
+  gap: 0.1rem;
+}
+
+.held-item,
+.item-pin {
+  display: grid;
+  place-items: center;
+  color: #c45c26;
+}
+
+.held-item {
+  width: 0.7rem;
+  height: 0.7rem;
+  background: rgb(254 243 226 / 92%);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
+}
+
+.held-item img,
+.item-pin img,
+.held-item app-map-symbol,
+.item-pin app-map-symbol {
+  width: 100%;
+  height: 100%;
+}
+
 .item-pin {
   z-index: 3;
   border-radius: 2px;
-  background: #c45c26;
+  background: rgb(254 243 226 / 94%);
   box-shadow: 0 0 0 1px rgb(28 25 23 / 55%);
-  transform: rotate(45deg);
-}
-
-.item-pin.is-carried {
-  border-radius: 50%;
-  transform: none;
 }
 
 .item-pin.is-hidden {

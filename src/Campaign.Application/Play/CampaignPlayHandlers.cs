@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Campaign.Application.Campaigns;
 using Campaign.Application.Common;
 using Campaign.Application.Maps;
@@ -290,8 +291,13 @@ public sealed class SubmitBattleResultHandler
             command.UserId,
             command.IsAdministrator,
             command.ExpectedRevision,
-            (state, map, _, utcNow) =>
+            (state, map, campaign, utcNow) =>
             {
+                if (!BattleScoreRequirements.TryRequire(campaign, command, out var scoreError))
+                {
+                    return PlayMutation.Fail(scoreError);
+                }
+
                 if (!CampaignPlayRules.TrySubmitBattleResult(
                     state,
                     command.UserId,
@@ -300,7 +306,9 @@ public sealed class SubmitBattleResultHandler
                     command.IsDraw,
                     utcNow,
                     out var outcome,
-                    out var error))
+                    out var error,
+                    command.WinnerScore,
+                    command.LoserScore))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -424,6 +432,11 @@ public sealed class ResolveBattleHandler
                         "Only a campaign manager or administrator can override battle results."));
                 }
 
+                if (!BattleScoreRequirements.TryRequire(campaign, command, out var scoreError))
+                {
+                    return PlayMutation.Fail(scoreError);
+                }
+
                 if (!CampaignPlayRules.TryResolveBattle(
                     state,
                     command.UserId,
@@ -432,7 +445,9 @@ public sealed class ResolveBattleHandler
                     command.IsDraw,
                     utcNow,
                     out var next,
-                    out var error))
+                    out var error,
+                    command.WinnerScore,
+                    command.LoserScore))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -710,6 +725,9 @@ public sealed class ChooseFactionHandler
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
+            PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            BattleScoring = existing.BattleScoring,
+            RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = play,
         };
     }
@@ -920,6 +938,131 @@ public sealed class RevealHiddenItemObjectivesHandler
             },
             cancellationToken,
             _notifications);
+    }
+}
+
+/// <summary>
+/// Awards or revokes a public campaign objective for a player. Managers may do this without debug mode.
+/// </summary>
+public sealed class SetPublicObjectiveAwardHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public SetPublicObjectiveAwardHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Records an award or revocation.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(
+        SetPublicObjectiveAwardCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignPlayPipeline.MutateAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, _, campaign, utcNow) =>
+            {
+                var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
+                if (membership?.IsGameMaster != true && !command.IsAdministrator)
+                {
+                    return PlayMutation.Fail(new Domain.Common.DomainError(
+                        ErrorCodes.CampaignForbidden,
+                        "Only a campaign manager can award public objectives."));
+                }
+
+                var objectiveIds = campaign.PublicObjectiveTypes
+                    .Where(static type => type.CampaignPoints > 0)
+                    .Select(static type => type.Id)
+                    .ToHashSet();
+                var playerIds = campaign.Memberships
+                    .Where(static member => member.IsPlayer)
+                    .Select(static member => member.UserId)
+                    .ToHashSet();
+                CampaignPlayState? next;
+                Domain.Common.DomainError? error;
+                if (command.Awarded)
+                {
+                    if (!PublicObjectiveAwardRules.TryAward(
+                            state,
+                            command.ObjectiveId,
+                            command.PlayerUserId,
+                            command.UserId,
+                            utcNow,
+                            objectiveIds,
+                            playerIds,
+                            out next,
+                            out error)
+                        || next is null)
+                    {
+                        return PlayMutation.Fail(error);
+                    }
+                }
+                else if (!PublicObjectiveAwardRules.TryRevoke(
+                        state,
+                        command.ObjectiveId,
+                        command.PlayerUserId,
+                        command.UserId,
+                        utcNow,
+                        out next,
+                        out error)
+                    || next is null)
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
+            },
+            cancellationToken,
+            _notifications);
+    }
+}
+
+internal static class BattleScoreRequirements
+{
+    public static bool TryRequire(
+        StoredCampaign campaign,
+        SubmitBattleResultCommand command,
+        [NotNullWhen(false)] out Domain.Common.DomainError? error)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        ArgumentNullException.ThrowIfNull(command);
+        error = null;
+        if (!campaign.BattleScoring.UseDifferential || command.IsDraw)
+        {
+            return true;
+        }
+
+        if (command.WinnerScore is null || command.LoserScore is null)
+        {
+            error = new Domain.Common.DomainError(
+                "battle.score.required",
+                "Differential scoring requires both the winner and loser scores.",
+                "winnerScore");
+            return false;
+        }
+
+        return true;
     }
 }
 

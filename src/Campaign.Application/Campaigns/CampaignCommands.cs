@@ -60,6 +60,39 @@ public sealed class CreateCampaignCommand
 
     /// <summary>Gets the item objective types. Omitted or empty means none.</summary>
     public IReadOnlyList<ItemObjectiveTypeInput>? ItemObjectiveTypes { get; init; }
+
+    /// <summary>Gets the public campaign objectives. Omitted or empty means none.</summary>
+    public IReadOnlyList<PublicObjectiveTypeInput>? PublicObjectiveTypes { get; init; }
+
+    /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
+    public int? PointsPerBattleWon { get; init; }
+
+    /// <summary>Gets campaign points awarded to each participant of a draw.</summary>
+    public int? PointsPerBattleDraw { get; init; }
+
+    /// <summary>Gets whether battle campaign points use score differential.</summary>
+    public bool? UseDifferentialBattleScoring { get; init; }
+
+    /// <summary>Gets the multiplier applied to the winner-minus-loser score difference.</summary>
+    public decimal? DifferentialMultiplier { get; init; }
+
+    /// <summary>Gets the inclusive lower clamp for differential campaign points.</summary>
+    public int? DifferentialMinimum { get; init; }
+
+    /// <summary>Gets the inclusive upper clamp for differential campaign points.</summary>
+    public int? DifferentialMaximum { get; init; }
+
+    /// <summary>Gets whether the loser can receive negative campaign points.</summary>
+    public bool? AllowNegativeDifferential { get; init; }
+
+    /// <summary>Gets campaign points for most territories currently controlled.</summary>
+    public int? MostTerritoriesCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for the longest owned territory chain.</summary>
+    public int? LongestTerritoryChainCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for most battle wins.</summary>
+    public int? MostBattlesWonCampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -126,6 +159,39 @@ public sealed class UpdateCampaignCommand
 
     /// <summary>Gets the item objective types. Omitted or empty means none.</summary>
     public IReadOnlyList<ItemObjectiveTypeInput>? ItemObjectiveTypes { get; init; }
+
+    /// <summary>Gets the public campaign objectives. Omitted or empty means none.</summary>
+    public IReadOnlyList<PublicObjectiveTypeInput>? PublicObjectiveTypes { get; init; }
+
+    /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
+    public int? PointsPerBattleWon { get; init; }
+
+    /// <summary>Gets campaign points awarded to each participant of a draw.</summary>
+    public int? PointsPerBattleDraw { get; init; }
+
+    /// <summary>Gets whether battle campaign points use score differential.</summary>
+    public bool? UseDifferentialBattleScoring { get; init; }
+
+    /// <summary>Gets the multiplier applied to the winner-minus-loser score difference.</summary>
+    public decimal? DifferentialMultiplier { get; init; }
+
+    /// <summary>Gets the inclusive lower clamp for differential campaign points.</summary>
+    public int? DifferentialMinimum { get; init; }
+
+    /// <summary>Gets the inclusive upper clamp for differential campaign points.</summary>
+    public int? DifferentialMaximum { get; init; }
+
+    /// <summary>Gets whether the loser can receive negative campaign points.</summary>
+    public bool? AllowNegativeDifferential { get; init; }
+
+    /// <summary>Gets campaign points for most territories currently controlled.</summary>
+    public int? MostTerritoriesCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for the longest owned territory chain.</summary>
+    public int? LongestTerritoryChainCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for most battle wins.</summary>
+    public int? MostBattlesWonCampaignPoints { get; init; }
 }
 
 /// <summary>

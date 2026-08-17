@@ -14,6 +14,7 @@ import type {
   SaveCampaignPayload,
   SaveMapGraphPayload,
   SaveOrderDraftPayload,
+  SetPublicObjectiveAwardPayload,
   SubmitBattleResultPayload,
   SubmitRetreatPayload,
 } from './campaign.models';
@@ -126,6 +127,10 @@ export class CampaignService {
     return `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/${kind}?v=${revision}`;
   }
 
+  itemObjectiveImageUrl(campaignId: string, itemObjectiveTypeId: string, revision: number): string {
+    return `/api/campaigns/${encodeURIComponent(campaignId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image?v=${revision}`;
+  }
+
   flagImageUrl(campaignId: string, factionId: string, revision: number): string {
     return `/api/campaigns/${encodeURIComponent(campaignId)}/factions/${encodeURIComponent(factionId)}/flag?v=${revision}`;
   }
@@ -148,6 +153,24 @@ export class CampaignService {
     return firstValueFrom(
       this.http.post<CampaignDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/${kind}`,
+        form,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async uploadItemObjectiveImage(
+    campaignId: string,
+    itemObjectiveTypeId: string,
+    file: File,
+    revision: number,
+  ): Promise<CampaignDetail> {
+    const form = new FormData();
+    form.set('image', file);
+    form.set('revision', String(revision));
+    return firstValueFrom(
+      this.http.post<CampaignDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image`,
         form,
         { withCredentials: true },
       ),
@@ -303,6 +326,19 @@ export class CampaignService {
     return firstValueFrom(
       this.http.post<CampaignPlayDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/play/debug/reveal-hidden-objectives`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async setPublicObjectiveAward(
+    campaignId: string,
+    payload: SetPublicObjectiveAwardPayload,
+  ): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/public-objectives/awards`,
         payload,
         { withCredentials: true },
       ),

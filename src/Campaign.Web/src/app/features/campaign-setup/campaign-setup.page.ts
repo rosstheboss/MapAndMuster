@@ -10,6 +10,7 @@ import type {
   CampaignDetail,
   CampaignMission,
   CampaignItemObjectiveType,
+  CampaignPublicObjectiveType,
   CampaignStructureType,
   CampaignTerrainType,
   SaveCampaignPayload,
@@ -32,6 +33,8 @@ import {
 } from '../../core/campaigns/faction-presets';
 import {
   defaultItemObjective,
+  ITEM_OBJECTIVE_DEFAULT_COLOR,
+  ITEM_OBJECTIVE_SYMBOLS,
   type ItemObjectivePlacement,
   type ItemObjectivePresetItem,
 } from '../../core/campaigns/item-objective-presets';
@@ -53,6 +56,7 @@ import {
 } from '../../core/forms/validators';
 
 type NamedGroup = FormGroup<{ name: FormControl<string> }>;
+type AllyGroupForm = FormGroup<{ name: FormControl<string>; color: FormControl<string> }>;
 type LinkGroup = FormGroup<{ label: FormControl<string>; url: FormControl<string> }>;
 type MissionGroup = FormGroup<{
   id: FormControl<string>;
@@ -74,6 +78,7 @@ type TerrainGroup = FormGroup<{
   id: FormControl<string>;
   name: FormControl<string>;
   color: FormControl<string>;
+  campaignPoints: FormControl<number>;
   missions: FormArray<MissionGroup>;
 }>;
 type StructureGroup = FormGroup<{
@@ -87,6 +92,7 @@ type StructureGroup = FormGroup<{
   isBuildable: FormControl<boolean>;
   isPillageable: FormControl<boolean>;
   isDestructible: FormControl<boolean>;
+  campaignPoints: FormControl<number>;
   missions: FormArray<MissionGroup>;
 }>;
 type ItemObjectiveGroup = FormGroup<{
@@ -95,6 +101,17 @@ type ItemObjectiveGroup = FormGroup<{
   isHiddenUntilFound: FormControl<boolean>;
   placement: FormControl<ItemObjectivePlacement>;
   allowOnSpawn: FormControl<boolean>;
+  builtinSymbol: FormControl<string>;
+  color: FormControl<string>;
+  iconSource: FormControl<'symbol' | 'image'>;
+  clearImage: FormControl<boolean>;
+  campaignPoints: FormControl<number>;
+}>;
+type PublicObjectiveGroup = FormGroup<{
+  id: FormControl<string>;
+  name: FormControl<string>;
+  description: FormControl<string>;
+  campaignPoints: FormControl<number>;
 }>;
 type PhaseGroup = FormGroup<{
   kind: FormControl<string>;
@@ -111,6 +128,7 @@ const TOP_LEVEL_SECTION_IDS = [
   'terrain',
   'structures',
   'itemObjectives',
+  'publicObjectives',
   'links',
   'map',
 ] as const;
@@ -156,10 +174,12 @@ export class CampaignSetupPage {
   private revision = 0;
   private readonly structureImages = new Map<string, File>();
   private readonly structurePillagedImages = new Map<string, File>();
+  private readonly itemObjectiveImages = new Map<string, File>();
   private readonly flagImages = new Map<string, File>();
   private readonly missionFiles = new Map<string, File>();
   private readonly storedStructureImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedPillagedImages = signal<ReadonlySet<string>>(new Set());
+  private readonly storedItemObjectiveImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedFlagImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedMissionFiles = signal<ReadonlySet<string>>(new Set());
 
@@ -171,6 +191,7 @@ export class CampaignSetupPage {
   protected readonly structurePresets = STRUCTURE_PRESETS;
   protected readonly campaignPresets = CAMPAIGN_PRESETS;
   protected readonly structureSymbols = STRUCTURE_TYPES;
+  protected readonly itemObjectiveSymbols = ITEM_OBJECTIVE_SYMBOLS;
   protected readonly structureImageMaxPx = 50;
   protected readonly flagImageMaxPx = 50;
   protected readonly mapMaxBytes = 20 * 1024 * 1024;
@@ -211,11 +232,22 @@ export class CampaignSetupPage {
       this.createFactionGroup('', '', [''], { color: FACTION_COLOR_PALETTE[0] ?? '#2563EB' }),
       this.createFactionGroup('', '', [''], { color: FACTION_COLOR_PALETTE[1] ?? '#DC2626' }),
     ]),
-    allyGroups: this.formBuilder.array<NamedGroup>([]),
+    allyGroups: this.formBuilder.array<AllyGroupForm>([]),
     links: this.formBuilder.array<LinkGroup>([]),
     terrainTypes: this.formBuilder.array<TerrainGroup>(this.createDefaultTerrainGroups()),
     structureTypes: this.formBuilder.array<StructureGroup>(this.createDefaultStructureGroups()),
     itemObjectiveTypes: this.formBuilder.array<ItemObjectiveGroup>([]),
+    publicObjectiveTypes: this.formBuilder.array<PublicObjectiveGroup>([]),
+    pointsPerBattleWon: [2, [minValue(0), maxValue(999)]],
+    pointsPerBattleDraw: [1, [minValue(0), maxValue(999)]],
+    useDifferentialBattleScoring: [true],
+    differentialMultiplier: [1, [minValue(0.01), maxValue(999)]],
+    differentialMinimum: [0, [minValue(-999), maxValue(999)]],
+    differentialMaximum: [10, [minValue(-999), maxValue(999)]],
+    allowNegativeDifferential: [false],
+    mostTerritoriesCampaignPoints: [0, [minValue(0), maxValue(999)]],
+    longestTerritoryChainCampaignPoints: [0, [minValue(0), maxValue(999)]],
+    mostBattlesWonCampaignPoints: [0, [minValue(0), maxValue(999)]],
     phases: this.formBuilder.array<PhaseGroup>([
       this.createPhaseGroup('Action', 3, 'Days'),
       this.createPhaseGroup('Action', 3, 'Days'),
@@ -224,6 +256,9 @@ export class CampaignSetupPage {
   });
   protected readonly isPrivate = toSignal(this.form.controls.isPrivate.valueChanges, {
     initialValue: this.form.controls.isPrivate.value,
+  });
+  protected readonly useDifferential = toSignal(this.form.controls.useDifferentialBattleScoring.valueChanges, {
+    initialValue: this.form.controls.useDifferentialBattleScoring.value,
   });
   protected readonly countries = listCountries();
   protected readonly countryValue = toSignal(this.form.controls.country.valueChanges, {
@@ -247,7 +282,7 @@ export class CampaignSetupPage {
     return this.form.controls.factions;
   }
 
-  protected get allyGroups(): FormArray<NamedGroup> {
+  protected get allyGroups(): FormArray<AllyGroupForm> {
     return this.form.controls.allyGroups;
   }
 
@@ -269,6 +304,10 @@ export class CampaignSetupPage {
 
   protected get itemObjectiveTypes(): FormArray<ItemObjectiveGroup> {
     return this.form.controls.itemObjectiveTypes;
+  }
+
+  protected get publicObjectiveTypes(): FormArray<PublicObjectiveGroup> {
+    return this.form.controls.publicObjectiveTypes;
   }
 
   protected actionCount(): number {
@@ -448,6 +487,17 @@ export class CampaignSetupPage {
       this.itemObjectiveTypes,
       copy.itemObjectives.map((item) => this.createItemObjectiveGroup(item)),
     );
+    this.applyBattleScoringDefaults();
+  }
+
+  private applyBattleScoringDefaults(): void {
+    this.form.controls.pointsPerBattleWon.setValue(2);
+    this.form.controls.pointsPerBattleDraw.setValue(1);
+    this.form.controls.useDifferentialBattleScoring.setValue(true);
+    this.form.controls.differentialMultiplier.setValue(1);
+    this.form.controls.differentialMinimum.setValue(0);
+    this.form.controls.differentialMaximum.setValue(10);
+    this.form.controls.allowNegativeDifferential.setValue(false);
   }
 
   protected clearFactions(): void {
@@ -489,7 +539,7 @@ export class CampaignSetupPage {
   }
 
   protected addAllyGroup(): void {
-    this.allyGroups.push(this.createNamedGroup());
+    this.allyGroups.push(this.createAllyGroup());
   }
 
   protected removeAllyGroup(index: number): void {
@@ -556,7 +606,21 @@ export class CampaignSetupPage {
   }
 
   protected removeItemObjective(index: number): void {
+    const id = this.itemObjectiveTypes.at(index).controls.id.value;
+    this.itemObjectiveImages.delete(id);
     this.itemObjectiveTypes.removeAt(index);
+  }
+
+  protected addPublicObjective(): void {
+    if (this.publicObjectiveTypes.length >= 50) {
+      return;
+    }
+
+    this.publicObjectiveTypes.push(this.createPublicObjectiveGroup());
+  }
+
+  protected removePublicObjective(index: number): void {
+    this.publicObjectiveTypes.removeAt(index);
   }
 
   protected addMission(group: TerrainGroup | StructureGroup): void {
@@ -635,6 +699,19 @@ export class CampaignSetupPage {
       }
     } else {
       structure.controls.clearImage.setValue(false);
+    }
+  }
+
+  protected setItemIconSource(item: ItemObjectiveGroup, source: 'symbol' | 'image'): void {
+    item.controls.iconSource.setValue(source);
+    if (source === 'symbol') {
+      this.itemObjectiveImages.delete(item.controls.id.value);
+      item.controls.clearImage.setValue(true);
+      if (!item.controls.builtinSymbol.value) {
+        item.controls.builtinSymbol.setValue('Crown');
+      }
+    } else {
+      item.controls.clearImage.setValue(false);
     }
   }
 
@@ -740,6 +817,16 @@ export class CampaignSetupPage {
     }
   }
 
+  protected onItemObjectiveImageSelected(itemId: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    if (file) {
+      this.itemObjectiveImages.set(itemId, file);
+      const group = this.itemObjectiveTypes.controls.find((item) => item.controls.id.value === itemId);
+      group?.controls.clearImage.setValue(false);
+    }
+  }
+
   protected onStructurePillagedImageSelected(structureId: string, event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
@@ -834,6 +921,23 @@ export class CampaignSetupPage {
     return this.campaignsApi.structureImageUrl(campaignId, structureId, this.revision, true);
   }
 
+  protected hasStoredItemObjectiveImage(itemId: string): boolean {
+    return this.storedItemObjectiveImages().has(itemId);
+  }
+
+  protected itemObjectiveImageUrl(itemId: string): string | null {
+    const campaignId = this.campaignId();
+    if (!campaignId || !this.hasStoredItemObjectiveImage(itemId)) {
+      return null;
+    }
+
+    return this.campaignsApi.itemObjectiveImageUrl(campaignId, itemId, this.revision);
+  }
+
+  protected pendingItemObjectiveImageName(itemId: string): string | null {
+    return this.itemObjectiveImages.get(itemId)?.name ?? null;
+  }
+
   protected async save(): Promise<void> {
     this.form.markAllAsTouched();
     this.serverFields.set(new Set());
@@ -880,6 +984,15 @@ export class CampaignSetupPage {
           detail = await this.campaignsApi.uploadStructureImage(detail.id, structureId, file, detail.revision, true);
         }
 
+        for (const [itemId, file] of this.itemObjectiveImages) {
+          const item = this.itemObjectiveTypes.controls.find((entry) => entry.controls.id.value === itemId);
+          if (item?.controls.iconSource.value !== 'image') {
+            continue;
+          }
+
+          detail = await this.campaignsApi.uploadItemObjectiveImage(detail.id, itemId, file, detail.revision);
+        }
+
         for (const [factionId, file] of this.flagImages) {
           const faction = this.factions.controls.find((item) => item.controls.id.value === factionId);
           if (faction?.controls.flagSource.value !== 'image') {
@@ -903,6 +1016,7 @@ export class CampaignSetupPage {
       this.setStoredMapPreview(created.detail.id, created.detail.revision, created.detail.hasMap);
       this.structureImages.clear();
       this.structurePillagedImages.clear();
+      this.itemObjectiveImages.clear();
       this.flagImages.clear();
       this.missionFiles.clear();
       this.rememberStoredFiles(created.detail);
@@ -967,7 +1081,7 @@ export class CampaignSetupPage {
       );
       this.replaceArray(
         this.allyGroups,
-        campaign.allyGroups.map((group) => this.createNamedGroup(group.name)),
+        campaign.allyGroups.map((group) => this.createAllyGroup(group.name, group.color)),
       );
       this.replaceArray(
         this.links,
@@ -987,6 +1101,22 @@ export class CampaignSetupPage {
         this.itemObjectiveTypes,
         (campaign.itemObjectiveTypes ?? []).map((type) => this.createItemObjectiveGroupFromDetail(type)),
       );
+      this.replaceArray(
+        this.publicObjectiveTypes,
+        (campaign.publicObjectiveTypes ?? []).map((type) => this.createPublicObjectiveGroup(type, type.id)),
+      );
+      this.form.controls.pointsPerBattleWon.setValue(campaign.pointsPerBattleWon ?? 2);
+      this.form.controls.pointsPerBattleDraw.setValue(campaign.pointsPerBattleDraw ?? 1);
+      this.form.controls.useDifferentialBattleScoring.setValue(campaign.useDifferentialBattleScoring ?? true);
+      this.form.controls.differentialMultiplier.setValue(campaign.differentialMultiplier ?? 1);
+      this.form.controls.differentialMinimum.setValue(campaign.differentialMinimum ?? 0);
+      this.form.controls.differentialMaximum.setValue(campaign.differentialMaximum ?? 10);
+      this.form.controls.allowNegativeDifferential.setValue(campaign.allowNegativeDifferential ?? false);
+      this.form.controls.mostTerritoriesCampaignPoints.setValue(campaign.mostTerritoriesCampaignPoints ?? 0);
+      this.form.controls.longestTerritoryChainCampaignPoints.setValue(
+        campaign.longestTerritoryChainCampaignPoints ?? 0,
+      );
+      this.form.controls.mostBattlesWonCampaignPoints.setValue(campaign.mostBattlesWonCampaignPoints ?? 0);
       this.replaceArray(
         this.phases,
         campaign.phases.map((phase) => this.createPhaseGroup(phase.kind, phase.durationAmount, phase.durationUnit)),
@@ -1034,6 +1164,17 @@ export class CampaignSetupPage {
     });
   }
 
+  private createAllyGroup(name = '', color?: string): AllyGroupForm {
+    return this.formBuilder.nonNullable.group({
+      name: [name, maxLength(60)],
+      color: [color ?? this.nextAllyColor(), required],
+    });
+  }
+
+  private nextAllyColor(): string {
+    return nextUnusedFactionColor(this.allyGroups.controls.map((group) => group.controls.color.value));
+  }
+
   private newId(): string {
     return crypto.randomUUID();
   }
@@ -1047,11 +1188,18 @@ export class CampaignSetupPage {
     });
   }
 
-  private createTerrainGroup(id?: string, name = '', color = '#7CB342', missionName = ''): TerrainGroup {
+  private createTerrainGroup(
+    id?: string,
+    name = '',
+    color = '#7CB342',
+    missionName = '',
+    campaignPoints = 0,
+  ): TerrainGroup {
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
       name: [name, [required, maxLength(60)]],
       color: [color, required],
+      campaignPoints: [campaignPoints, [minValue(0), maxValue(999)]],
       missions: this.formBuilder.array<MissionGroup>([this.createMissionGroup(undefined, missionName)]),
     });
   }
@@ -1065,6 +1213,7 @@ export class CampaignSetupPage {
       id: [type.id],
       name: [type.name, [required, maxLength(60)]],
       color: [type.color, required],
+      campaignPoints: [type.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
       missions: this.formBuilder.array<MissionGroup>(missions),
     });
   }
@@ -1079,6 +1228,7 @@ export class CampaignSetupPage {
     isBuildable = true,
     isPillageable = true,
     isDestructible = true,
+    campaignPoints = 0,
   ): StructureGroup {
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
@@ -1091,6 +1241,7 @@ export class CampaignSetupPage {
       isBuildable: [isBuildable],
       isPillageable: [isPillageable],
       isDestructible: [isDestructible],
+      campaignPoints: [campaignPoints, [minValue(0), maxValue(999)]],
       missions: this.formBuilder.array<MissionGroup>(missions ?? []),
     });
   }
@@ -1108,6 +1259,7 @@ export class CampaignSetupPage {
       type.isBuildable,
       type.isPillageable,
       type.isDestructible,
+      type.campaignPoints ?? 0,
     );
   }
 
@@ -1115,7 +1267,11 @@ export class CampaignSetupPage {
     return this.createMissionGroup(mission.id, mission.name, mission.url ?? '', false);
   }
 
-  private createItemObjectiveGroup(item?: ItemObjectivePresetItem, id?: string): ItemObjectiveGroup {
+  private createItemObjectiveGroup(
+    item?: ItemObjectivePresetItem,
+    id?: string,
+    extra?: Partial<CampaignItemObjectiveType>,
+  ): ItemObjectiveGroup {
     const defaults = defaultItemObjective();
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
@@ -1123,6 +1279,11 @@ export class CampaignSetupPage {
       isHiddenUntilFound: [item?.isHiddenUntilFound ?? defaults.isHiddenUntilFound],
       placement: this.formBuilder.nonNullable.control<ItemObjectivePlacement>(item?.placement ?? defaults.placement),
       allowOnSpawn: [item?.allowOnSpawn ?? defaults.allowOnSpawn],
+      builtinSymbol: [extra?.builtinSymbol ?? 'Crown'],
+      color: [extra?.color ?? ITEM_OBJECTIVE_DEFAULT_COLOR, required],
+      iconSource: this.formBuilder.nonNullable.control<'symbol' | 'image'>(extra?.hasImage ? 'image' : 'symbol'),
+      clearImage: [false],
+      campaignPoints: [extra?.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
     });
   }
 
@@ -1135,7 +1296,17 @@ export class CampaignSetupPage {
         allowOnSpawn: type.allowOnSpawn,
       },
       type.id,
+      type,
     );
+  }
+
+  private createPublicObjectiveGroup(type?: Partial<CampaignPublicObjectiveType>, id?: string): PublicObjectiveGroup {
+    return this.formBuilder.nonNullable.group({
+      id: [id ?? type?.id ?? this.newId()],
+      name: [type?.name ?? '', [maxLength(60)]],
+      description: [type?.description ?? '', maxLength(240)],
+      campaignPoints: [type?.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
+    });
   }
 
   private createDefaultTerrainGroups(): TerrainGroup[] {
@@ -1187,9 +1358,8 @@ export class CampaignSetupPage {
   private toPayload(): SaveCampaignPayload {
     const value = this.form.getRawValue();
     const allyGroups = value.allyGroups
-      .map((group) => group.name.trim())
-      .filter((name) => name.length > 0)
-      .map((name) => ({ name }));
+      .filter((group) => group.name.trim().length > 0)
+      .map((group) => ({ name: group.name.trim(), color: group.color }));
     const factions = value.factions.map((faction) => ({
       id: faction.id,
       name: faction.name.trim(),
@@ -1206,6 +1376,7 @@ export class CampaignSetupPage {
       id: type.id,
       name: type.name.trim(),
       color: type.color,
+      campaignPoints: 0,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toMissionPayload(mission)),
@@ -1219,6 +1390,7 @@ export class CampaignSetupPage {
       isBuildable: type.isBuildable,
       isPillageable: type.isPillageable,
       isDestructible: type.isDestructible,
+      campaignPoints: Number(type.campaignPoints) || 0,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toMissionPayload(mission)),
@@ -1231,6 +1403,18 @@ export class CampaignSetupPage {
         isHiddenUntilFound: type.isHiddenUntilFound,
         placement: type.placement,
         allowOnSpawn: type.allowOnSpawn,
+        builtinSymbol: type.builtinSymbol,
+        color: type.color,
+        clearImage: type.iconSource === 'symbol' || type.clearImage,
+        campaignPoints: Number(type.campaignPoints) || 0,
+      }));
+    const publicObjectiveTypes = value.publicObjectiveTypes
+      .filter((type) => type.name.trim().length > 0)
+      .map((type) => ({
+        id: type.id,
+        name: type.name.trim(),
+        description: type.description.trim() || null,
+        campaignPoints: Number(type.campaignPoints) || 0,
       }));
 
     return {
@@ -1250,6 +1434,17 @@ export class CampaignSetupPage {
       terrainTypes,
       structureTypes,
       itemObjectiveTypes,
+      publicObjectiveTypes,
+      pointsPerBattleWon: Number(value.pointsPerBattleWon) || 0,
+      pointsPerBattleDraw: Number(value.pointsPerBattleDraw) || 0,
+      useDifferentialBattleScoring: Boolean(value.useDifferentialBattleScoring),
+      differentialMultiplier: Number(value.differentialMultiplier) || 1,
+      differentialMinimum: Number(value.differentialMinimum) || 0,
+      differentialMaximum: Number(value.differentialMaximum) || 0,
+      allowNegativeDifferential: Boolean(value.allowNegativeDifferential),
+      mostTerritoriesCampaignPoints: Number(value.mostTerritoriesCampaignPoints) || 0,
+      longestTerritoryChainCampaignPoints: Number(value.longestTerritoryChainCampaignPoints) || 0,
+      mostBattlesWonCampaignPoints: Number(value.mostBattlesWonCampaignPoints) || 0,
       timeZoneId: value.timeZoneId || 'UTC',
       startsAtLocal: value.startsAtLocal,
       roundCount: Number(value.roundCount),
@@ -1465,6 +1660,39 @@ export class CampaignSetupPage {
       }
 
       usedItemNames.add(key);
+
+      if (item.controls.iconSource.value === 'image') {
+        const id = item.controls.id.value;
+        if (!this.itemObjectiveImages.has(id) && !this.hasStoredItemObjectiveImage(id)) {
+          failures.push(`Item objective ${index + 1} needs a logo image or a built-in icon.`);
+          sections.add('itemObjectives');
+          sections.add(`item-objective-${index}`);
+        }
+      }
+    });
+
+    const usedPublicNames = new Set<string>();
+    this.publicObjectiveTypes.controls.forEach((item, index) => {
+      const name = item.controls.name.value.trim();
+      if (!name) {
+        return;
+      }
+
+      const nameMessage = describeControlError(item.controls.name, `Public objective ${index + 1} name`);
+      if (nameMessage) {
+        failures.push(nameMessage);
+        sections.add('publicObjectives');
+        sections.add(`public-objective-${index}`);
+      }
+
+      const key = name.toLowerCase();
+      if (usedPublicNames.has(key)) {
+        failures.push(`Public objective ${index + 1} name must be unique.`);
+        sections.add('publicObjectives');
+        sections.add(`public-objective-${index}`);
+      }
+
+      usedPublicNames.add(key);
     });
 
     const roundLengthError = describeControlError(this.form.controls.roundLengthAmount, 'Round length');
@@ -1633,6 +1861,9 @@ export class CampaignSetupPage {
     );
     this.storedFlagImages.set(
       new Set(campaign.factions.filter((faction) => faction.hasFlagImage).map((faction) => faction.id)),
+    );
+    this.storedItemObjectiveImages.set(
+      new Set((campaign.itemObjectiveTypes ?? []).filter((type) => type.hasImage).map((type) => type.id)),
     );
     this.storedMissionFiles.set(
       new Set(

@@ -163,6 +163,12 @@ public enum PlayLogKind
 
     /// <summary>A manager in debug mode revealed hidden item objectives to players.</summary>
     ItemObjectivesStaffRevealed = 23,
+
+    /// <summary>A manager awarded a public objective to a player.</summary>
+    PublicObjectiveAwarded = 24,
+
+    /// <summary>A manager revoked a public objective from a player.</summary>
+    PublicObjectiveRevoked = 25,
 }
 
 /// <summary>

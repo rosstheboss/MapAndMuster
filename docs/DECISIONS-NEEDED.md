@@ -30,11 +30,20 @@ in an ADR or the relevant domain document and update tests.
 
 ## Scoring and supply
 
-10. Is “Territory claimed” a cumulative one-time award, current territory value, or both?
-11. Are ordinary structure/territory campaign points recalculated each round or only at campaign
-    end? How are ties handled for most structures/longest chain?
-12. Define the Battle Point Difference to Campaign Point conversion and permitted negative
-    values/caps.
+10. Resolved: territory control does not award campaign points by itself. Most territories
+    currently controlled is a ranking public objective. See `docs/DOMAIN.md`.
+11. Resolved: structure campaign points are a running total of current holdings, recalculated
+    from live map state. Destroyed structures do not count; pillaged structures still count.
+    Ranking public objectives use friendly ties: every player currently tied for first after
+    documented tie-breaks receives the points. Most battles won ranks by wins, then draws.
+    See `docs/DOMAIN.md`.
+12. Resolved: battle campaign points default to differential scoring. The winner receives the
+    clamped (winner score minus loser score) times a multiplier (default 1, never 0), default
+    range 0 to 10. Draw participants each receive configured draw points (default 1). Straight
+    win points (default 2) apply only when differential scoring is off. Negative points for the
+    loser are off by default. Scores are reported tabletop or already-converted battle points;
+    the application does not copy a proprietary conversion chart. Wins and draws are still
+    recorded for ranking. See `docs/DOMAIN.md`.
 13. Confirm whether temporary supply belongs to player, faction, or earning force, and define
     allocation when multiple forces battle in one round.
 

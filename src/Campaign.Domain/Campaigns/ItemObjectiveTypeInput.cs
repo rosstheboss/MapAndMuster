@@ -19,4 +19,16 @@ public sealed class ItemObjectiveTypeInput
 
     /// <summary>Gets whether the item may spawn on a faction spawn territory. Defaults to false.</summary>
     public bool? AllowOnSpawn { get; init; }
+
+    /// <summary>Gets the built-in logo key. Defaults to Crown.</summary>
+    public string? BuiltinSymbol { get; init; }
+
+    /// <summary>Gets the logo color as #RRGGBB. Defaults to the catalog color.</summary>
+    public string? Color { get; init; }
+
+    /// <summary>Gets whether an existing uploaded logo should be removed.</summary>
+    public bool ClearImage { get; init; }
+
+    /// <summary>Gets campaign points awarded while a force currently holds this item. Defaults to 0.</summary>
+    public int? CampaignPoints { get; init; }
 }
