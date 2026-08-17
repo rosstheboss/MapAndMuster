@@ -402,8 +402,9 @@ public sealed class TerritoryStructureState
 }
 
 /// <summary>
-/// An append-only public fact recorded for chat, revealed orders, or battle resolution.
-/// Unresolved secret orders are never written here.
+/// An append-only log fact recorded for chat, revealed orders, or battle resolution.
+/// Unresolved secret orders are never written here. Private chat entries are stored
+/// with audience metadata and must be filtered before they are returned to a client.
 /// </summary>
 public sealed class PlayLogEntry
 {
@@ -423,7 +424,12 @@ public sealed class PlayLogEntry
         ActionKind? actionKind,
         IReadOnlyList<Guid> relatedForceIds,
         string? message = null,
-        string? actorDisplayName = null)
+        string? actorDisplayName = null,
+        ChatChannelKind chatChannelKind = ChatChannelKind.Public,
+        Guid? chatTargetUserId = null,
+        Guid? chatTargetFactionId = null,
+        Guid? chatTargetAllyGroupId = null,
+        string? chatTargetLabel = null)
     {
         ArgumentNullException.ThrowIfNull(relatedForceIds);
         Id = id;
@@ -439,6 +445,11 @@ public sealed class PlayLogEntry
         RelatedForceIds = relatedForceIds;
         Message = message;
         ActorDisplayName = actorDisplayName;
+        ChatChannelKind = kind == PlayLogKind.PlayerChat ? chatChannelKind : ChatChannelKind.Public;
+        ChatTargetUserId = ChatChannelKind == ChatChannelKind.Direct ? chatTargetUserId : null;
+        ChatTargetFactionId = ChatChannelKind == ChatChannelKind.Faction ? chatTargetFactionId : null;
+        ChatTargetAllyGroupId = ChatChannelKind == ChatChannelKind.AllyGroup ? chatTargetAllyGroupId : null;
+        ChatTargetLabel = ChatChannelKind == ChatChannelKind.Public ? null : chatTargetLabel;
     }
 
     /// <summary>Gets the entry identifier.</summary>
@@ -479,6 +490,24 @@ public sealed class PlayLogEntry
 
     /// <summary>Gets the actor's display name snapshotted when a chat message was posted.</summary>
     public string? ActorDisplayName { get; }
+
+    /// <summary>Gets the chat audience. Game-log facts are always public.</summary>
+    public ChatChannelKind ChatChannelKind { get; }
+
+    /// <summary>Gets the other member for a direct message.</summary>
+    public Guid? ChatTargetUserId { get; }
+
+    /// <summary>Gets the faction for a faction channel message.</summary>
+    public Guid? ChatTargetFactionId { get; }
+
+    /// <summary>Gets the ally group for an ally-group channel message.</summary>
+    public Guid? ChatTargetAllyGroupId { get; }
+
+    /// <summary>Gets a snapshot label for the private channel, such as a username or faction name.</summary>
+    public string? ChatTargetLabel { get; }
+
+    /// <summary>Gets whether this entry is a private member chat rather than a public log fact.</summary>
+    public bool IsPrivateChat => Kind == PlayLogKind.PlayerChat && ChatChannelKind != ChatChannelKind.Public;
 
     /// <summary>Gets whether the application substituted or interrupted a player choice.</summary>
     public bool IsSystemAdjustment => Kind is PlayLogKind.DeadlineDraftSubmitted

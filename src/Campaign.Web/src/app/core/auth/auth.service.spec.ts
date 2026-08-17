@@ -35,6 +35,9 @@ describe('AuthService', () => {
       updatedUtc: '2026-08-13T00:00:00+00:00',
       profileRevision: 1,
       emailConfirmed: true,
+      isAdministrator: false,
+      inAppNotificationsEnabled: true,
+      emailNotificationsEnabled: true,
     });
 
     await loginPromise;

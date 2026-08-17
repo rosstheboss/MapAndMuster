@@ -40,7 +40,9 @@ Cover:
 - GM inspection/correction audit events and transactional notification outbox.
 - Idempotent deadline workers and retry behavior.
 - File metadata and upload authorization.
-- Public campaign-log chat on an upcoming campaign, including outsider rejection and unknown `@` mentions.
+- Public campaign-log chat on an upcoming campaign, including outsider rejection, unknown `@` mentions, and private-channel omission from unauthorized payloads.
+- Public profile campaign lists that include shared or publicly viewable campaigns and omit hidden private campaigns the viewer does not share.
+- Home notification board empty and populated states, and administrator-only news edits.
 
 ## Angular tests
 
@@ -54,8 +56,11 @@ Cover components/services for:
   shared-border versus overhang checks, move drop validity, keyboard alternatives, and metadata forms.
 - Permission-based navigation without relying on it as backend security.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
-- Campaign log display, member chat, live log refresh, chat send errors without the save success
-  banner, and `@` mention autocomplete limited to current members.
+- Campaign log display, member chat including typable recipient autocomplete and public/private/game-log filters, live log refresh, chat send errors without the save success
+  banner, `@` mention autocomplete limited to current members, and clickable originator and mention names.
+- Participants panel names, factions, and Manager/Player/Admin roles.
+- Public profile campaign list, scores placeholder, and Back to the previous in-app screen.
+- Home notification board, including "No new notifications.", and paginated site news.
 - API error and concurrency-conflict recovery.
 
 ## End-to-end tests

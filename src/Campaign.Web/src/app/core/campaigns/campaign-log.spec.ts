@@ -1,11 +1,16 @@
 import {
   campaignLogComposerSize,
+  filterChatRecipients,
   formatLogTimestamp,
+  matchChatRecipient,
   mentionQuery,
   mergeCampaignLog,
+  recipientFieldLabel,
+  recipientSuggestionLabel,
   splitLogMessage,
   type CampaignLogSync,
 } from './campaign-log';
+import type { ChatChannel } from './campaign.models';
 
 describe('campaign log formatting', () => {
   it('formats a timestamp in the viewer time zone', () => {
@@ -19,7 +24,7 @@ describe('campaign log formatting', () => {
     ]);
     expect(parts).toEqual([
       { text: 'Hi ', mention: false },
-      { text: '@southplayer', mention: true },
+      { text: '@southplayer', mention: true, username: 'southplayer' },
       { text: ' and @stranger', mention: false },
     ]);
   });
@@ -67,5 +72,30 @@ describe('campaign log formatting', () => {
     expect(campaignLogComposerSize(76, line, chrome)).toEqual({ height: 76, overflowY: 'hidden' });
     expect(campaignLogComposerSize(116, line, chrome)).toEqual({ height: 116, overflowY: 'hidden' });
     expect(campaignLogComposerSize(140, line, chrome)).toEqual({ height: 116, overflowY: 'auto' });
+  });
+});
+
+describe('chat recipient matching', () => {
+  const members = [
+    { userId: '1', username: 'northplayer', displayName: 'northplayer' },
+    { userId: '2', username: 'bobisthebest', displayName: 'Bob' },
+  ];
+  const channels: ChatChannel[] = [
+    { kind: 'Public', targetId: null, label: 'Everyone' },
+    { kind: 'Direct', targetId: '2', label: 'Bob' },
+    { kind: 'Faction', targetId: 'north', label: 'North' },
+  ];
+
+  it('filters recipients by username, display name, and Everyone', () => {
+    expect(filterChatRecipients(channels, members, 'bobis').map((channel) => channel.kind)).toEqual(['Direct']);
+    expect(filterChatRecipients(channels, members, 'eve').map((channel) => channel.label)).toEqual(['Everyone']);
+    expect(filterChatRecipients(channels, members, 'public').map((channel) => channel.kind)).toEqual(['Public']);
+  });
+
+  it('resolves a unique typed recipient including Everyone', () => {
+    expect(matchChatRecipient(channels, members, 'Everyone')?.kind).toBe('Public');
+    expect(matchChatRecipient(channels, members, 'bobisthebest')?.targetId).toBe('2');
+    expect(recipientFieldLabel(channels[1], members)).toBe('bobisthebest');
+    expect(recipientSuggestionLabel(channels[1], members)).toBe('Bob (bobisthebest)');
   });
 });

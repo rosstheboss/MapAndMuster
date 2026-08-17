@@ -22,9 +22,63 @@ public sealed class CampaignChatRulesTests
             out _));
         var entry = Assert.Single(next!.Log);
         Assert.Equal(PlayLogKind.PlayerChat, entry.Kind);
+        Assert.Equal(ChatChannelKind.Public, entry.ChatChannelKind);
+        Assert.False(entry.IsPrivateChat);
         Assert.Equal(PlayerOne, entry.ActorUserId);
         Assert.Equal("northplayer", entry.ActorDisplayName);
         Assert.Equal("Hey, everybody! This is a message to all of you.", entry.Message);
+    }
+
+    [Fact]
+    public void DirectMessageIsVisibleOnlyToTheTwoMembers()
+    {
+        Assert.True(CampaignChatRules.TryPost(
+            CampaignPlayState.Empty,
+            PlayerOne,
+            "Secret plan",
+            Members(),
+            Now,
+            out var next,
+            out _,
+            new ChatChannel(ChatChannelKind.Direct, PlayerTwo),
+            Memberships(),
+            Factions(),
+            AllyGroups()));
+        var entry = Assert.Single(next!.Log);
+        Assert.True(entry.IsPrivateChat);
+        Assert.Equal("southplayer", entry.ChatTargetLabel);
+        Assert.True(CampaignChatRules.CanView(entry, PlayerOne, Memberships(), inspectPrivateLogs: false));
+        Assert.True(CampaignChatRules.CanView(entry, PlayerTwo, Memberships(), inspectPrivateLogs: false));
+        Assert.False(CampaignChatRules.CanView(entry, Outsider, Memberships(), inspectPrivateLogs: false));
+        Assert.True(CampaignChatRules.CanView(entry, Outsider, Memberships(), inspectPrivateLogs: true));
+    }
+
+    [Fact]
+    public void FactionChatIsVisibleToThatFactionAndTheSender()
+    {
+        var northFaction = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        Assert.True(CampaignChatRules.TryPost(
+            CampaignPlayState.Empty,
+            PlayerOne,
+            "North only",
+            Members(),
+            Now,
+            out var next,
+            out _,
+            new ChatChannel(ChatChannelKind.Faction, TargetFactionId: northFaction),
+            Memberships(northFaction, southFaction: Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")),
+            Factions(northFaction, Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")),
+            AllyGroups()));
+        var entry = Assert.Single(next!.Log);
+        Assert.True(CampaignChatRules.CanView(entry, PlayerOne, Memberships(northFaction, Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")), false));
+        Assert.False(CampaignChatRules.CanView(entry, PlayerTwo, Memberships(northFaction, Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc")), false));
+    }
+
+    [Fact]
+    public void MentionsAreResolvedForNotifications()
+    {
+        var mentioned = CampaignChatRules.ResolveMentions("Hi @southplayer", Members());
+        Assert.Equal(PlayerTwo, Assert.Single(mentioned).UserId);
     }
 
     [Fact]
@@ -148,6 +202,28 @@ public sealed class CampaignChatRulesTests
             new CampaignChatMember(PlayerTwo, "southplayer", southDisplayName),
         ];
     }
+
+    private static IReadOnlyList<CampaignChatMembership> Memberships(
+        Guid? northFaction = null,
+        Guid? southFaction = null)
+    {
+        return
+        [
+            new CampaignChatMembership(PlayerOne, northFaction, null),
+            new CampaignChatMembership(PlayerTwo, southFaction, null),
+        ];
+    }
+
+    private static IReadOnlyList<CampaignChatFaction> Factions(Guid? northId = null, Guid? southId = null)
+    {
+        return
+        [
+            new CampaignChatFaction(northId ?? Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), "North", null),
+            new CampaignChatFaction(southId ?? Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"), "South", null),
+        ];
+    }
+
+    private static IReadOnlyList<CampaignChatAllyGroup> AllyGroups() => [];
 
     private static Campaign.Domain.Campaigns.CampaignSchedule CreateSchedule(DateTimeOffset startsUtc)
     {

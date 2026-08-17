@@ -73,7 +73,7 @@ public static class ProfileEndpoints
             return IdentityHttp.Problem(result);
         }
 
-        return Results.Ok(ProfileResponses.FromAccount(result.Value));
+        return Results.Ok(ProfileResponses.FromAccount(result.Value, principal.IsAdministrator()));
     }
 
     private static async Task<IResult> UpdateOwnAsync(
@@ -108,6 +108,8 @@ public static class ProfileEndpoints
                     Country = request.Country,
                     TimeZoneId = request.TimeZoneId,
                     DisplayNameMode = displayNameMode,
+                    InAppNotificationsEnabled = request.InAppNotificationsEnabled,
+                    EmailNotificationsEnabled = request.EmailNotificationsEnabled,
                     ProfileRevision = request.ProfileRevision,
                 },
                 cancellationToken)
@@ -118,7 +120,7 @@ public static class ProfileEndpoints
             return IdentityHttp.Problem(result);
         }
 
-        return Results.Ok(ProfileResponses.FromAccount(result.Value));
+        return Results.Ok(ProfileResponses.FromAccount(result.Value, principal.IsAdministrator()));
     }
 
     private static async Task<IResult> UploadAvatarAsync(
@@ -162,15 +164,21 @@ public static class ProfileEndpoints
             return IdentityHttp.Problem(result);
         }
 
-        return Results.Ok(ProfileResponses.FromAccount(result.Value));
+        return Results.Ok(ProfileResponses.FromAccount(result.Value, principal.IsAdministrator()));
     }
 
     private static async Task<IResult> GetPublicAsync(
         string username,
+        ClaimsPrincipal principal,
         GetPublicProfileHandler handler,
         CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(username, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(
+                username,
+                principal.GetUserId(),
+                principal.Identity?.IsAuthenticated == true && principal.IsAdministrator(),
+                cancellationToken)
+            .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);

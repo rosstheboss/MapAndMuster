@@ -63,6 +63,26 @@ public sealed class UsernameTests
         Assert.Equal("username.prohibited", error.Code);
     }
 
+    [Theory]
+    [InlineData("everyone")]
+    [InlineData("Everyone")]
+    [InlineData("public")]
+    [InlineData("private")]
+    [InlineData("here")]
+    [InlineData("admin")]
+    [InlineData("channel")]
+    public void RejectsReservedChatAndSystemKeywords(string value)
+    {
+        var created = Username.TryCreate(value, out var username, out var error);
+
+        Assert.False(created);
+        Assert.Null(username);
+        Assert.NotNull(error);
+        Assert.Equal("username.reserved", error.Code);
+        Assert.Equal("That username is reserved.", error.Message);
+        Assert.Equal("username", error.Field);
+    }
+
     [Fact]
     public void EqualityIgnoresCase()
     {

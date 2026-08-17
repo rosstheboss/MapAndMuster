@@ -175,6 +175,8 @@ public sealed class UserAccountStore : IUserAccountStore
         user.Country = request.Location.Country;
         user.TimeZoneId = request.TimeZoneId;
         user.DisplayNameMode = request.DisplayNameMode;
+        user.InAppNotificationsEnabled = request.InAppNotificationsEnabled;
+        user.EmailNotificationsEnabled = request.EmailNotificationsEnabled;
         user.UpdatedUtc = _clock.UtcNow;
         user.ProfileRevision++;
 
@@ -224,6 +226,23 @@ public sealed class UserAccountStore : IUserAccountStore
         user.ProfileRevision++;
         await _userManager.UpdateAsync(user).ConfigureAwait(false);
         return previous;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<Guid>> FindAdministratorIdsAsync(
+        IReadOnlyList<Guid> userIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(userIds);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (userIds.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        var wanted = userIds.ToHashSet();
+        var administrators = await _userManager.GetUsersInRoleAsync("Administrator").ConfigureAwait(false);
+        return administrators.Select(static user => user.Id).Where(wanted.Contains).ToHashSet();
     }
 
     /// <inheritdoc />
@@ -299,6 +318,8 @@ public sealed class UserAccountStore : IUserAccountStore
             TimeZoneId = timeZoneId,
             DisplayNameMode = displayNameMode,
             AvatarStorageKey = avatarStorageKey,
+            InAppNotificationsEnabled = true,
+            EmailNotificationsEnabled = true,
             CreatedUtc = now,
             UpdatedUtc = now,
             ProfileRevision = 1,
@@ -332,6 +353,8 @@ public sealed class UserAccountStore : IUserAccountStore
             UpdatedUtc = user.UpdatedUtc,
             ProfileRevision = user.ProfileRevision,
             EmailConfirmed = user.EmailConfirmed,
+            InAppNotificationsEnabled = user.InAppNotificationsEnabled,
+            EmailNotificationsEnabled = user.EmailNotificationsEnabled,
         };
     }
 

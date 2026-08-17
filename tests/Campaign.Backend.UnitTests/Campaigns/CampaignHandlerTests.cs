@@ -13,6 +13,7 @@ public sealed class CampaignHandlerTests
 {
     private static readonly Guid UserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid OtherUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid ThirdUserId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid NorthFactionId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     private static readonly Guid SouthFactionId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private static readonly Guid TownStructureId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
@@ -91,6 +92,47 @@ public sealed class CampaignHandlerTests
         Assert.True(result.Value.IsPubliclyViewable);
         Assert.False(result.Value.CanChat);
         Assert.Contains(result.Value.MentionableMembers, member => member.Username == "northplayer");
+        Assert.Contains(
+            result.Value.Participants,
+            participant => participant.Username == "northplayer" && participant.IsGameMaster && participant.IsPlayer);
+    }
+
+    [Fact]
+    public async Task GetListsParticipantFactionAndAdministratorRole()
+    {
+        var campaign = WithCopied(
+            StoredCampaignFor(UserId),
+            memberships:
+            [
+                new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                    Subfaction = "Riders",
+                },
+                new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var accounts = new FakeAccounts { AdministratorIds = { OtherUserId } };
+        var handler = new GetCampaignHandler(store, new FakeClock(), accounts);
+
+        var result = await handler.HandleAsync(campaign.Id, UserId, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        var manager = Assert.Single(result.Value.Participants, participant => participant.Username == "northplayer");
+        Assert.True(manager.IsGameMaster);
+        Assert.True(manager.IsPlayer);
+        Assert.False(manager.IsAdministrator);
+        Assert.Equal("North", manager.FactionName);
+        Assert.Equal("Riders", manager.Subfaction);
+        var player = Assert.Single(result.Value.Participants, participant => participant.Username == "southplayer");
+        Assert.True(player.IsPlayer);
+        Assert.False(player.IsGameMaster);
+        Assert.True(player.IsAdministrator);
+        Assert.Null(player.FactionName);
     }
 
     [Fact]
@@ -198,6 +240,60 @@ public sealed class CampaignHandlerTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal("chat.mention.unknown", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task PrivateChatIsVisibleToTheAudienceAndHiddenFromManagers()
+    {
+        var campaign = WithMemberships(
+            StoredCampaignFor(UserId),
+            [
+                new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
+                new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
+                new StoredCampaignMembership { UserId = ThirdUserId, IsGameMaster = false, IsPlayer = true },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var accounts = new FakeAccounts();
+        var chat = new PostCampaignChatHandler(store, new FakeClock(), accounts);
+
+        var posted = await chat.HandleAsync(
+            new PostCampaignChatCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+                Message = "Meet at the river",
+                ChannelKind = "Direct",
+                TargetId = ThirdUserId,
+            },
+            CancellationToken.None);
+
+        Assert.True(posted.IsSuccess);
+        Assert.NotNull(posted.Value);
+        var privateEntry = Assert.Single(posted.Value.Log);
+        Assert.True(privateEntry.IsPrivate);
+        Assert.Equal("Direct", privateEntry.ChannelKind);
+        Assert.Equal("southplayer", privateEntry.OriginatorUsername);
+
+        var get = new GetCampaignHandler(store, new FakeClock(), accounts);
+        var senderView = await get.HandleAsync(campaign.Id, OtherUserId, CancellationToken.None);
+        var recipientView = await get.HandleAsync(campaign.Id, ThirdUserId, CancellationToken.None);
+        var managerView = await get.HandleAsync(campaign.Id, UserId, CancellationToken.None);
+        Assert.Contains(senderView.Value!.Log, item => item.Summary == "Meet at the river");
+        Assert.Contains(recipientView.Value!.Log, item => item.Summary == "Meet at the river");
+        Assert.DoesNotContain(managerView.Value!.Log, item => item.Summary == "Meet at the river");
+
+        var adminWithoutDebug = await get.HandleAsync(campaign.Id, UserId, CancellationToken.None, isAdministrator: true);
+        Assert.DoesNotContain(adminWithoutDebug.Value!.Log, item => item.Summary == "Meet at the river");
+
+        store.Existing = WithCopied(
+            store.Existing!,
+            playState: (store.Existing!.PlayState ?? Campaign.Domain.Play.CampaignPlayState.Empty)
+                .With(debugActorUserId: UserId, debugStartedUtc: Now));
+        var adminDebug = await get.HandleAsync(campaign.Id, UserId, CancellationToken.None, isAdministrator: true);
+        Assert.Contains(adminDebug.Value!.Log, item => item.Summary == "Meet at the river");
+        Assert.True(adminDebug.Value.CanInspectPrivateChat);
     }
 
     [Fact]
@@ -1256,6 +1352,8 @@ public sealed class CampaignHandlerTests
 
     private sealed class FakeAccounts : IUserAccountStore
     {
+        public HashSet<Guid> AdministratorIds { get; } = [];
+
         public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken) => Task.FromResult(false);
 
         public Task<bool> UsernameExistsAsync(string username, Guid? userIdToIgnore, CancellationToken cancellationToken) =>
@@ -1273,7 +1371,11 @@ public sealed class CampaignHandlerTests
             {
                 Id = userId,
                 Email = $"{userId:N}@example.test",
-                Username = userId == UserId ? "northplayer" : "southplayer",
+                Username = userId == UserId
+                    ? "northplayer"
+                    : userId == OtherUserId
+                        ? "southplayer"
+                        : "eastplayer",
                 FirstName = "Test",
                 LastName = "User",
                 City = "Halifax",
@@ -1301,6 +1403,13 @@ public sealed class CampaignHandlerTests
 
         public Task<string?> ReplaceAvatarKeyAsync(Guid userId, string? avatarStorageKey, CancellationToken cancellationToken) =>
             Task.FromResult<string?>(null);
+
+        public Task<IReadOnlySet<Guid>> FindAdministratorIdsAsync(
+            IReadOnlyList<Guid> userIds,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlySet<Guid>>(userIds.Where(AdministratorIds.Contains).ToHashSet());
+        }
     }
 
     private sealed class FakeSecretHasher : ISecretHasher

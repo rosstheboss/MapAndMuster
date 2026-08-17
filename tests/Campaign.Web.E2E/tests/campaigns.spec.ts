@@ -18,6 +18,9 @@ const profile = {
   updatedUtc: '2026-08-13T00:00:00+00:00',
   profileRevision: 1,
   emailConfirmed: true,
+  isAdministrator: false,
+  inAppNotificationsEnabled: true,
+  emailNotificationsEnabled: true,
 };
 
 test('signed-in players can open their campaigns and start setup', async ({ page }) => {
@@ -48,7 +51,7 @@ test('signed-in players can open their campaigns and start setup', async ({ page
   await expect(page.getByLabel('Number of rounds')).toBeVisible();
   await expect(page.getByLabel('Faction preset')).toBeVisible();
   await page.getByLabel('Faction preset').selectOption('Warhammer: The Old World');
-  await page.getByRole('button', { name: 'Add preset' }).click();
+  await page.getByRole('button', { name: 'Add preset', disabled: false }).click();
   await expect(page.getByLabel('Faction 1 name')).toHaveValue('Beastmen Brayherds');
   await expect(page.getByLabel('Faction 3 name')).toHaveValue('Daemons of Chaos');
   await expect(page.getByLabel('Faction 3 subfaction 1')).toHaveValue('Khorne');

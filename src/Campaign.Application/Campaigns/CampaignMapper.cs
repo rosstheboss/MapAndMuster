@@ -62,13 +62,19 @@ public static class CampaignMapper
     /// <param name="utcNow">The current UTC instant.</param>
     /// <param name="log">The public campaign log, when already mapped.</param>
     /// <param name="mentionableMembers">Current members who may be tagged in chat.</param>
+    /// <param name="chatChannels">Compose targets for the viewer.</param>
+    /// <param name="inspectPrivateChat">Whether the viewer may inspect all private chats.</param>
+    /// <param name="participants">Members attached to the campaign, when already mapped.</param>
     /// <returns>The detail.</returns>
     public static CampaignDetail ToDetail(
         StoredCampaign campaign,
         Guid viewerUserId,
         DateTimeOffset utcNow,
         IReadOnlyList<PlayLogEntryDetail>? log = null,
-        IReadOnlyList<CampaignLogMemberDetail>? mentionableMembers = null)
+        IReadOnlyList<CampaignLogMemberDetail>? mentionableMembers = null,
+        IReadOnlyList<ChatChannelDetail>? chatChannels = null,
+        bool inspectPrivateChat = false,
+        IReadOnlyList<CampaignParticipantDetail>? participants = null)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
@@ -169,7 +175,10 @@ public static class CampaignMapper
                 && progress.Status == CampaignStatus.InProgress,
             CanChooseFaction = CanChooseFaction(membership, progress.Status),
             CanChat = membership is not null,
+            CanInspectPrivateChat = inspectPrivateChat,
+            Participants = participants ?? [],
             MentionableMembers = mentionableMembers ?? [],
+            ChatChannels = chatChannels ?? [],
             Log = log ?? [],
         };
     }

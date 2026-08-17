@@ -209,11 +209,17 @@ public sealed class CampaignPlayDetail
     /// <summary>Gets whether the viewer is a player.</summary>
     public required bool IsParticipant { get; init; }
 
-    /// <summary>Gets whether the viewer may chat in the public log.</summary>
+    /// <summary>Gets whether the viewer may chat in the log.</summary>
     public required bool CanChat { get; init; }
+
+    /// <summary>Gets whether the viewer is an administrator currently in debug mode on this campaign.</summary>
+    public bool CanInspectPrivateChat { get; init; }
 
     /// <summary>Gets current members who may be tagged in chat.</summary>
     public required IReadOnlyList<Campaigns.CampaignLogMemberDetail> MentionableMembers { get; init; }
+
+    /// <summary>Gets compose targets: public, members, factions, and ally groups.</summary>
+    public IReadOnlyList<Campaigns.ChatChannelDetail> ChatChannels { get; init; } = [];
 
     /// <summary>Gets the lifecycle status.</summary>
     public required string Status { get; init; }
@@ -479,6 +485,9 @@ public sealed class PlayLogEntryDetail
     /// <summary>Gets "Campaign" for game events, or the member's display name for chat.</summary>
     public required string Originator { get; init; }
 
+    /// <summary>Gets the chat author's username, when this is member chat.</summary>
+    public string? OriginatorUsername { get; init; }
+
     /// <summary>Gets a player-visible summary or chat body.</summary>
     public required string Summary { get; init; }
 
@@ -493,4 +502,13 @@ public sealed class PlayLogEntryDetail
 
     /// <summary>Gets whether the application substituted or interrupted a player choice.</summary>
     public required bool IsSystemAdjustment { get; init; }
+
+    /// <summary>Gets Public, Direct, Faction, or AllyGroup for chat; Public for game-log facts.</summary>
+    public string ChannelKind { get; init; } = "Public";
+
+    /// <summary>Gets the private-channel label, when this is private chat.</summary>
+    public string? ChannelLabel { get; init; }
+
+    /// <summary>Gets whether this is a private member chat.</summary>
+    public bool IsPrivate { get; init; }
 }

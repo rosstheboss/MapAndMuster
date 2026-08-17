@@ -1,6 +1,8 @@
 using Campaign.Application.Campaigns;
 using Campaign.Application.Identity;
 using Campaign.Application.Maps;
+using Campaign.Application.News;
+using Campaign.Application.Notifications;
 using Campaign.Application.Play;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -61,6 +63,13 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<ExitCampaignDebugHandler>();
         services.AddScoped<DebugCorrectOrderHandler>();
         services.AddScoped<RevealHiddenItemObjectivesHandler>();
+
+        services.AddScoped<CampaignNotificationPublisher>();
+        services.AddScoped<GetHomeBoardHandler>();
+        services.AddScoped<MarkNotificationReadHandler>();
+        services.AddScoped<GetNewsPageHandler>();
+        services.AddScoped<SaveNewsArticleHandler>();
+        services.AddScoped<DeleteNewsArticleHandler>();
 
         return services;
     }

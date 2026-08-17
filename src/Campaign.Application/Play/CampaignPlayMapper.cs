@@ -119,7 +119,9 @@ internal static class CampaignPlayMapper
             DebugActorUserId = play.DebugActorUserId,
             IsParticipant = membership?.IsPlayer == true,
             CanChat = membership is not null,
+            CanInspectPrivateChat = CampaignChatContext.CanInspectPrivateChat(isAdministrator, viewerUserId, play),
             MentionableMembers = mentionable,
+            ChatChannels = membership is null ? [] : CampaignChatContext.Channels(campaign, viewerUserId, mentionable),
             Status = progress.Status.ToString(),
             CurrentRound = progress.CurrentRound,
             CurrentPhaseNumber = progress.CurrentPhaseNumber,
@@ -198,13 +200,11 @@ internal static class CampaignPlayMapper
             DebugDrafts = DebugDraftsFor(play, staffView),
             Commitments = commitments,
             Battles = battles,
-            Log =
-            [
-                .. play.Log
-                    .OrderBy(static item => item.OccurredUtc)
-                    .ThenBy(static item => item.Id)
-                    .Select(item => ToLogEntry(item, campaign, map, play, names)),
-            ],
+            Log = VisibleLogEntries(
+                campaign,
+                names,
+                viewerUserId,
+                CampaignChatContext.CanInspectPrivateChat(isAdministrator, viewerUserId, play)),
             PlayersMissingFaction =
             [
                 .. campaign.Memberships
@@ -318,13 +318,26 @@ internal static class CampaignPlayMapper
 
     internal static IReadOnlyList<PlayLogEntryDetail> ToLogEntries(
         StoredCampaign campaign,
-        IReadOnlyDictionary<Guid, string> names)
+        IReadOnlyDictionary<Guid, string> names,
+        Guid viewerUserId,
+        bool inspectPrivateChat)
+    {
+        return VisibleLogEntries(campaign, names, viewerUserId, inspectPrivateChat);
+    }
+
+    private static IReadOnlyList<PlayLogEntryDetail> VisibleLogEntries(
+        StoredCampaign campaign,
+        IReadOnlyDictionary<Guid, string> names,
+        Guid viewerUserId,
+        bool inspectPrivateChat)
     {
         var play = campaign.PlayState ?? CampaignPlayState.Empty;
         var map = CampaignLifecycle.ToPlayMap(campaign);
+        var memberships = CampaignChatContext.Memberships(campaign);
         return
         [
             .. play.Log
+                .Where(entry => CampaignChatRules.CanView(entry, viewerUserId, memberships, inspectPrivateChat))
                 .OrderBy(static item => item.OccurredUtc)
                 .ThenBy(static item => item.Id)
                 .Select(item => ToLogEntry(item, campaign, map, play, names)),
@@ -342,7 +355,17 @@ internal static class CampaignPlayMapper
             return names;
         }
 
-        foreach (var userId in campaign.Memberships.Select(static member => member.UserId).Distinct())
+        var userIds = campaign.Memberships.Select(static member => member.UserId);
+        if (campaign.PlayState is { } play)
+        {
+            userIds = userIds.Concat(
+                play.Log
+                    .Select(static entry => entry.ActorUserId)
+                    .Where(static id => id is { } && id != Guid.Empty)
+                    .Select(static id => id!.Value));
+        }
+
+        foreach (var userId in userIds.Distinct())
         {
             var account = await accounts.FindByIdAsync(userId, cancellationToken).ConfigureAwait(false);
             if (account is not null)
@@ -359,10 +382,39 @@ internal static class CampaignPlayMapper
         IUserAccountStore accounts,
         CancellationToken cancellationToken)
     {
+        var participants = await ParticipantsAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
+        return ToChatMembers(participants);
+    }
+
+    internal static IReadOnlyList<CampaignLogMemberDetail> ToChatMembers(
+        IReadOnlyList<CampaignParticipantDetail> participants)
+    {
+        ArgumentNullException.ThrowIfNull(participants);
+        return
+        [
+            .. participants.Select(static participant => new CampaignLogMemberDetail
+            {
+                UserId = participant.UserId,
+                Username = participant.Username,
+                DisplayName = participant.DisplayName,
+            }),
+        ];
+    }
+
+    internal static async Task<IReadOnlyList<CampaignParticipantDetail>> ParticipantsAsync(
+        StoredCampaign campaign,
+        IUserAccountStore accounts,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(accounts);
-        var members = new List<CampaignLogMemberDetail>();
-        foreach (var membership in campaign.Memberships.OrderBy(static member => member.UserId))
+        var administratorIds = await accounts
+            .FindAdministratorIdsAsync(
+                [.. campaign.Memberships.Select(static membership => membership.UserId)],
+                cancellationToken)
+            .ConfigureAwait(false);
+        var participants = new List<CampaignParticipantDetail>();
+        foreach (var membership in campaign.Memberships)
         {
             var account = await accounts.FindByIdAsync(membership.UserId, cancellationToken).ConfigureAwait(false);
             if (account is null)
@@ -371,15 +423,27 @@ internal static class CampaignPlayMapper
             }
 
             var profile = ProfileMapper.ToPublic(account);
-            members.Add(new CampaignLogMemberDetail
+            var faction = membership.FactionId is { } factionId
+                ? campaign.Factions.FirstOrDefault(item => item.Id == factionId)
+                : null;
+            participants.Add(new CampaignParticipantDetail
             {
                 UserId = membership.UserId,
                 Username = profile.Username,
                 DisplayName = profile.DisplayName,
+                IsPlayer = membership.IsPlayer,
+                IsGameMaster = membership.IsGameMaster,
+                IsAdministrator = administratorIds.Contains(membership.UserId),
+                FactionName = faction?.Name,
+                Subfaction = membership.Subfaction,
             });
         }
 
-        return members;
+        return
+        [
+            .. participants.OrderBy(static participant => participant.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static participant => participant.Username, StringComparer.OrdinalIgnoreCase),
+        ];
     }
 
     private static PlayLogEntryDetail ToLogEntry(
@@ -397,11 +461,17 @@ internal static class CampaignPlayMapper
             Originator = entry.Kind == PlayLogKind.PlayerChat
                 ? entry.ActorDisplayName ?? ActorName(entry.ActorUserId, names)
                 : CampaignChatRules.CampaignOriginator,
+            OriginatorUsername = entry.Kind == PlayLogKind.PlayerChat && entry.ActorUserId is { } actorId
+                ? names.GetValueOrDefault(actorId)
+                : null,
             Summary = FormatLog(entry, campaign, map, play, names),
             TerritoryId = entry.TerritoryId,
             ForceId = entry.ForceId,
             BattleId = entry.BattleId,
             IsSystemAdjustment = entry.IsSystemAdjustment,
+            ChannelKind = entry.ChatChannelKind.ToString(),
+            ChannelLabel = entry.ChatTargetLabel,
+            IsPrivate = entry.IsPrivateChat,
         };
     }
 

@@ -24,4 +24,15 @@ public interface IEmailOutbox
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that completes when the message is queued.</returns>
     Task QueuePasswordResetAsync(string email, Guid userId, string token, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Queues a campaign or chat notice. The body must not include hidden orders or private chat text.
+    /// </summary>
+    Task QueueUserNoticeAsync(
+        string email,
+        Guid userId,
+        string subject,
+        string body,
+        string path,
+        CancellationToken cancellationToken);
 }

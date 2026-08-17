@@ -189,6 +189,12 @@ public sealed class PostCampaignChatCommand
 
     /// <summary>Gets the chat message.</summary>
     public required string Message { get; init; }
+
+    /// <summary>Gets Public, Direct, Faction, or AllyGroup.</summary>
+    public string ChannelKind { get; init; } = "Public";
+
+    /// <summary>Gets the member, faction, or ally-group identifier for a private channel.</summary>
+    public Guid? TargetId { get; init; }
 }
 
 /// <summary>

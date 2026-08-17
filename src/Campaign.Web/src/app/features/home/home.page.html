@@ -1,16 +1,97 @@
 <section class="page">
   <h1>Home</h1>
   @if (auth.currentUser(); as user) {
-    <div class="panel stack">
-      <p>
-        You are signed in as <strong>{{ user.username }}</strong
-        >.
-      </p>
-      <p class="muted">Account created {{ user.createdUtc | instantDate: user.timeZoneId }}.</p>
-      <div class="actions">
-        <a class="button" routerLink="/profile">Edit profile</a>
-        <a class="button-secondary" [routerLink]="['/users', user.username]">View public profile</a>
-      </div>
-    </div>
+    <section class="panel stack" aria-labelledby="notice-heading">
+      <h2 id="notice-heading">Notifications</h2>
+      @if (noticeError()) {
+        <p class="error" role="alert">{{ noticeError() }}</p>
+      }
+      @if (notifications().length === 0) {
+        <p>No new notifications.</p>
+      } @else {
+        <ul class="notice-list">
+          @for (item of notifications(); track item.id) {
+            <li>
+              <button type="button" class="notice-item" (click)="openNotice(item)">
+                <strong>{{ item.title }}</strong>
+                @if (item.campaignName) {
+                  <span class="muted">{{ item.campaignName }}</span>
+                }
+                <span>{{ item.body }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+
+    <section class="panel stack" aria-labelledby="news-heading">
+      <h2 id="news-heading">News</h2>
+      @if (newsError()) {
+        <p class="error" role="alert">{{ newsError() }}</p>
+      }
+      @if (user.isAdministrator) {
+        <div class="actions">
+          <button type="button" class="button-secondary" (click)="startNewsCreate()">New article</button>
+          @if (news()?.article) {
+            <button type="button" class="button-secondary" (click)="startNewsEdit()">Edit article</button>
+            <button type="button" class="button-secondary" (click)="deleteNews()" [disabled]="newsSaving()">
+              Delete article
+            </button>
+          }
+        </div>
+      }
+      @if (editingNews()) {
+        <form class="stack" (ngSubmit)="saveNews()">
+          <label class="field">
+            Title
+            <input [ngModel]="newsTitle()" (ngModelChange)="newsTitle.set($event)" name="newsTitle" required />
+          </label>
+          <label class="field">
+            Markdown
+            <textarea
+              [ngModel]="newsBody()"
+              (ngModelChange)="newsBody.set($event)"
+              name="newsBody"
+              rows="10"
+              required
+            ></textarea>
+          </label>
+          <div class="actions">
+            <button type="submit" class="button" [disabled]="newsSaving()">Save article</button>
+            <button type="button" class="button-secondary" (click)="cancelNewsEdit()">Cancel</button>
+          </div>
+        </form>
+      } @else if (news()?.article; as article) {
+        <article class="news-article">
+          <h3>{{ article.title }}</h3>
+          <p class="muted">{{ article.publishedUtc | instantDate: user.timeZoneId }}</p>
+          <div class="news-body" [innerHTML]="article.bodyHtml"></div>
+        </article>
+        @if ((news()?.totalPages ?? 0) > 1) {
+          <div class="actions">
+            <button
+              type="button"
+              class="button-secondary"
+              [disabled]="(news()?.page ?? 1) <= 1"
+              (click)="loadNews((news()?.page ?? 1) - 1)"
+            >
+              Previous
+            </button>
+            <span class="muted">Article {{ news()?.page }} of {{ news()?.totalPages }}</span>
+            <button
+              type="button"
+              class="button-secondary"
+              [disabled]="(news()?.page ?? 1) >= (news()?.totalPages ?? 1)"
+              (click)="loadNews((news()?.page ?? 1) + 1)"
+            >
+              Next
+            </button>
+          </div>
+        }
+      } @else {
+        <p class="muted">No news has been published yet.</p>
+      }
+    </section>
   }
 </section>

@@ -5,8 +5,10 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type {
+  CampaignChatSend,
   CampaignDetail,
   CampaignMission,
+  CampaignParticipant,
   CampaignPlayDetail,
   MapGraphDetail,
   PlayBattle,
@@ -43,6 +45,7 @@ import { PhaseCountdownComponent } from '../../shared/phase-countdown/phase-coun
 
 const CAMPAIGN_SECTIONS = [
   'log',
+  'participants',
   'faction',
   'missingFaction',
   'map',
@@ -268,6 +271,27 @@ export class CampaignDetailPage {
     this.openSections.update((current) => ({ ...current, [id]: open }));
   }
 
+  protected profileFrom(): { from: string } {
+    return { from: this.router.url };
+  }
+
+  protected participantRoles(participant: CampaignParticipant): string {
+    const roles: string[] = [];
+    if (participant.isGameMaster) {
+      roles.push('Manager');
+    }
+
+    if (participant.isPlayer) {
+      roles.push('Player');
+    }
+
+    if (participant.isAdministrator) {
+      roles.push('Admin');
+    }
+
+    return roles.join(', ');
+  }
+
   protected expandAllSections(): void {
     this.openSections.set(openSections());
   }
@@ -282,7 +306,7 @@ export class CampaignDetailPage {
     return Number(value);
   }
 
-  protected async postChat(message: string): Promise<void> {
+  protected async postChat(payload: CampaignChatSend): Promise<void> {
     const campaign = this.campaign();
     if (!campaign) {
       return;
@@ -291,7 +315,12 @@ export class CampaignDetailPage {
     this.chatError.set(null);
     this.chatBusy.set(true);
     try {
-      const next = await this.campaignsApi.postChat(campaign.id, { revision: campaign.revision, message });
+      const next = await this.campaignsApi.postChat(campaign.id, {
+        revision: campaign.revision,
+        message: payload.message,
+        channelKind: payload.channelKind,
+        targetId: payload.targetId,
+      });
       this.applyLog(next, true);
     } catch (error: unknown) {
       this.chatError.set(readApiError(error, 'Unable to send that chat message.'));
@@ -1114,7 +1143,9 @@ export class CampaignDetailPage {
             factionId: play.factionId ?? current.factionId,
             canChooseFaction: play.canChooseFaction,
             canChat: play.canChat,
+            canInspectPrivateChat: play.canInspectPrivateChat,
             mentionableMembers: play.mentionableMembers,
+            chatChannels: play.chatChannels,
             log: play.log,
           }
         : current,

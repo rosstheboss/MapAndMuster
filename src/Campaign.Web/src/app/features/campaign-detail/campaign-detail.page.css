@@ -82,6 +82,11 @@
   gap: 0.5rem;
 }
 
+.profile-link {
+  font-weight: 600;
+  text-underline-offset: 0.12em;
+}
+
 .faction-swatch {
   display: inline-block;
   width: 0.75rem;

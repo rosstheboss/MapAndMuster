@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { ProfilePage } from './profile.page';
@@ -10,7 +11,7 @@ describe('ProfilePage', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ProfilePage],
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideZonelessChangeDetection(), provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
   });
 
@@ -35,6 +36,9 @@ describe('ProfilePage', () => {
       updatedUtc: '2026-08-13T00:00:00+00:00',
       profileRevision: 1,
       emailConfirmed: true,
+      isAdministrator: false,
+      inAppNotificationsEnabled: true,
+      emailNotificationsEnabled: true,
     });
     await fixture.whenStable();
     fixture.detectChanges();
@@ -45,6 +49,7 @@ describe('ProfilePage', () => {
     expect(compiled.querySelector('#confirmPassword')).toBeTruthy();
     expect(compiled.querySelector('#suffix')).toBeTruthy();
     expect(compiled.querySelector('app-theme-toggle button')?.getAttribute('aria-pressed')).toBe('false');
+    expect(compiled.querySelector('a[href="/users/ada"]')?.textContent.trim()).toBe('View public profile');
 
     const page = fixture.componentInstance as unknown as {
       form: {
@@ -87,6 +92,9 @@ describe('ProfilePage', () => {
       updatedUtc: '2026-08-13T00:00:00+00:00',
       profileRevision: 1,
       emailConfirmed: true,
+      isAdministrator: false,
+      inAppNotificationsEnabled: true,
+      emailNotificationsEnabled: true,
     };
     http.expectOne('/api/profiles/me').flush(profile);
     await fixture.whenStable();

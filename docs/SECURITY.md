@@ -19,15 +19,19 @@ separate response models for public, participant, and staff views.
 - Local passwords must be at least 12 characters and include uppercase, lowercase, a number,
   and a special character. Changing a password while signed in requires the current password.
 - Usernames and legal names reject English profanity, racial slurs, and similar abusive terms.
+- Usernames that collide with chat recipients or system keywords (everyone, public, private,
+  here, and similar words) are reserved.
 - Registration and profile updates require username, first name, last name, city, state or
   province, country, and time zone. Middle initial, suffix, and avatar are optional.
 - Secure, HTTP-only, same-site cookies for the same-origin web application.
 - Secure, HTTP-only, same-site cookies for the same-origin web application.
 - External providers are optional and configuration-gated. A matching email does not auto-link;
   the player must sign in to the existing verified account.
-- Other users receive only username, location, avatar, and the chosen display name. Email,
-  created/updated timestamps, time-zone preference, and the legal name (unless the owner opted
-  to show full name) are omitted from public profile responses.
+- Other users receive only username, location, avatar, the chosen display name, and campaigns
+  they may already view (publicly viewable campaigns plus private campaigns they share). Email,
+  created/updated timestamps, time-zone preference, the legal name (unless the owner opted
+  to show full name), join passwords, and hidden private campaigns are omitted from public
+  profile responses.
 - Never log passwords, tokens, reset links, cookies, private objectives, or hidden locations.
 
 ## Authorization
@@ -73,8 +77,10 @@ staff review requires them.
 ## Notifications
 
 In-app and email notifications are created through a transactional outbox. Email content must
-avoid exposing hidden order/relic/objective details; direct the recipient to authenticate for
-sensitive content.
+avoid exposing hidden order/relic/objective details and must never include private chat bodies;
+direct the recipient to authenticate for sensitive content. Private campaign chat is omitted from
+unauthorized API payloads, including campaign-manager views. Only a system administrator who is
+the active debug actor on that campaign may inspect other members' private chats.
 
 ## Operational baseline
 

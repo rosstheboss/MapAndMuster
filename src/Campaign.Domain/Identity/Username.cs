@@ -81,6 +81,12 @@ public sealed class Username : IEquatable<Username>
             return false;
         }
 
+        if (ReservedUsernames.Contains(trimmed))
+        {
+            error = ReservedUsernames.Error();
+            return false;
+        }
+
         if (ProhibitedLanguage.ContainsProhibitedTerm(trimmed))
         {
             error = ProhibitedLanguage.ErrorFor("username", "Username");

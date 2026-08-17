@@ -40,9 +40,47 @@
   overflow-wrap: anywhere;
 }
 
+.profile-link {
+  font-weight: 700;
+  text-underline-offset: 0.12em;
+}
+
 .chat-compose {
   display: grid;
   gap: 0.5rem;
+}
+
+.recipient-combobox {
+  position: relative;
+}
+
+.log-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.log-filters legend {
+  font-weight: 600;
+  padding: 0;
+}
+
+.log-filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.channel-badge {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.3rem;
+  background: var(--color-nested);
+  font-size: 0.8em;
 }
 
 :host .chat-compose .field textarea {
@@ -77,6 +115,33 @@
 .suggest button.is-active,
 .suggest button:hover {
   background: var(--color-button-secondary);
+}
+
+.recipient-suggest {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.2rem);
+  right: 0;
+  left: 0;
+  max-height: 14rem;
+}
+
+.recipient-suggest li {
+  min-height: var(--touch-min);
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+
+.recipient-suggest li.is-active,
+.recipient-suggest li:hover {
+  background: var(--color-button-secondary);
+}
+
+.suggest-empty {
+  color: var(--color-muted);
+  cursor: default;
 }
 
 .muted {

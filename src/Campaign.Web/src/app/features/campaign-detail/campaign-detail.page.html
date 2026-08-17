@@ -50,6 +50,7 @@
     <app-campaign-log
       [entries]="campaign.log"
       [members]="campaign.mentionableMembers"
+      [channels]="campaign.chatChannels ?? []"
       [canChat]="campaign.canChat"
       [timeZoneId]="timeZoneId()"
       [sending]="chatBusy()"
@@ -58,6 +59,45 @@
       (expandedChange)="setSection('log', $event)"
       (send)="postChat($event)"
     />
+
+    <div class="panel stack">
+      <h2>
+        <button
+          type="button"
+          class="section-toggle"
+          [attr.aria-expanded]="isOpen('participants')"
+          (click)="toggleSection('participants')"
+        >
+          Participants
+        </button>
+      </h2>
+      @if (isOpen('participants')) {
+        @if ((campaign.participants ?? []).length === 0) {
+          <p class="muted">No players are attached to this campaign yet.</p>
+        } @else {
+          <ul class="plain-list">
+            @for (participant of campaign.participants ?? []; track participant.userId) {
+              <li>
+                <a class="profile-link" [routerLink]="['/users', participant.username]" [queryParams]="profileFrom()">{{
+                  participant.displayName
+                }}</a>
+                @if (participant.factionName; as faction) {
+                  <span>
+                    · {{ faction }}
+                    @if (participant.subfaction; as subfaction) {
+                      ({{ subfaction }})
+                    }
+                  </span>
+                }
+                @if (participantRoles(participant); as roles) {
+                  <span class="muted"> · {{ roles }}</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+      }
+    </div>
 
     @if (campaign.canChooseFaction) {
       <form class="panel stack" (ngSubmit)="chooseFaction()">
@@ -477,7 +517,16 @@
             <h3>Commitments</h3>
             <ul class="plain-list">
               @for (item of play.commitments; track item.userId) {
-                <li>{{ item.username ?? item.userId }} · {{ item.isCommitted ? 'Committed' : 'Drafting' }}</li>
+                <li>
+                  @if (item.username; as username) {
+                    <a class="profile-link" [routerLink]="['/users', username]" [queryParams]="profileFrom()">{{
+                      username
+                    }}</a>
+                  } @else {
+                    {{ item.userId }}
+                  }
+                  · {{ item.isCommitted ? 'Committed' : 'Drafting' }}
+                </li>
               }
             </ul>
           }

@@ -74,6 +74,18 @@ const campaign = {
   canChooseFaction: true,
   canChat: true,
   mentionableMembers: [{ userId: 'user-1', username: 'northplayer', displayName: 'northplayer' }],
+  participants: [
+    {
+      userId: 'user-1',
+      username: 'northplayer',
+      displayName: 'northplayer',
+      isPlayer: true,
+      isGameMaster: true,
+      isAdministrator: false,
+      factionName: 'North',
+      subfaction: 'Riders',
+    },
+  ],
   log: [],
 };
 
@@ -185,6 +197,9 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('Choose your faction');
     expect(compiled.querySelector('#faction')).toBeTruthy();
     expect(compiled.textContent).toContain('Campaign log');
+    expect(compiled.textContent).toContain('Participants');
+    expect(compiled.querySelector('a[href^="/users/northplayer"]')?.textContent.trim()).toBe('northplayer');
+    expect(compiled.textContent).toContain('Manager, Player');
     expect(compiled.textContent).toContain("Your force starts at that faction's spawn");
     expect(compiled.textContent).toContain('Expand All');
     expect(compiled.textContent).toContain('Collapse All');
@@ -240,8 +255,10 @@ describe('CampaignDetailPage', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('northplayer:');
     expect(compiled.textContent).toContain('Hey, everybody! This is a message to all of you.');
-    const page = fixture.componentInstance as unknown as { postChat(message: string): Promise<void> };
-    const pending = page.postChat('Ready to play');
+    const page = fixture.componentInstance as unknown as {
+      postChat(payload: { message: string; channelKind: string; targetId: string | null }): Promise<void>;
+    };
+    const pending = page.postChat({ message: 'Ready to play', channelKind: 'Public', targetId: null });
     const posted = http.expectOne(`/api/campaigns/${campaign.id}/chat`);
     expect((posted.request.body as { message: string }).message).toBe('Ready to play');
     posted.flush({
@@ -307,8 +324,10 @@ describe('CampaignDetailPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const page = fixture.componentInstance as unknown as { postChat(message: string): Promise<void> };
-    const pending = page.postChat('Ready to play');
+    const page = fixture.componentInstance as unknown as {
+      postChat(payload: { message: string; channelKind: string; targetId: string | null }): Promise<void>;
+    };
+    const pending = page.postChat({ message: 'Ready to play', channelKind: 'Public', targetId: null });
     http
       .expectOne(`/api/campaigns/${campaign.id}/chat`)
       .flush(

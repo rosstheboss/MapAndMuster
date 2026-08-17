@@ -1,5 +1,7 @@
 import { Validators, type AbstractControl, type FormGroup, type ValidatorFn } from '@angular/forms';
 
+import { RESERVED_USERNAMES } from '../identity/identity-fields';
+
 export const required: ValidatorFn = (control) => Validators.required(control);
 
 export const emailAddress: ValidatorFn = (control) => Validators.email(control);
@@ -55,6 +57,15 @@ export const optionalMiddleInitial: ValidatorFn = (control) => {
   }
 
   return null;
+};
+
+export const reservedUsername: ValidatorFn = (control) => {
+  const value = String(control.value ?? '').trim();
+  if (value.length === 0) {
+    return null;
+  }
+
+  return RESERVED_USERNAMES.has(value.toLowerCase()) ? { reservedUsername: true } : null;
 };
 
 export function minValue(minimum: number): ValidatorFn {
@@ -137,6 +148,10 @@ export function describeControlError(control: AbstractControl | null, label: str
 
   if (control.hasError('middleInitial')) {
     return `${label} must be a single alphabetical character.`;
+  }
+
+  if (control.hasError('reservedUsername')) {
+    return 'That username is reserved.';
   }
 
   return `${label} is invalid.`;

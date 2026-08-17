@@ -121,20 +121,30 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
     private MailMessage CreateMail(string type, OutboxEmailPayload payload)
     {
         var origin = _webOptions.Value.Origin.TrimEnd('/');
-        var encodedToken = WebUtility.UrlEncode(payload.Token);
         string subject;
         string body;
-        if (type == EmailOutbox.ConfirmEmailType)
+        if (type == EmailOutbox.UserNoticeType)
         {
-            subject = "Confirm your campaign account";
-            var link = $"{origin}/confirm-email?userId={payload.UserId}&token={encodedToken}";
-            body = $"Confirm your email by opening this link: {link}";
+            subject = payload.Subject ?? "Campaign notice";
+            var path = payload.Path ?? "/";
+            var link = path.StartsWith('/') ? $"{origin}{path}" : $"{origin}/{path}";
+            body = $"{payload.Body ?? string.Empty} Open: {link}";
         }
         else
         {
-            subject = "Reset your campaign password";
-            var link = $"{origin}/reset-password?userId={payload.UserId}&token={encodedToken}";
-            body = $"Reset your password by opening this link: {link}";
+            var encodedToken = WebUtility.UrlEncode(payload.Token);
+            if (type == EmailOutbox.ConfirmEmailType)
+            {
+                subject = "Confirm your campaign account";
+                var link = $"{origin}/confirm-email?userId={payload.UserId}&token={encodedToken}";
+                body = $"Confirm your email by opening this link: {link}";
+            }
+            else
+            {
+                subject = "Reset your campaign password";
+                var link = $"{origin}/reset-password?userId={payload.UserId}&token={encodedToken}";
+                body = $"Reset your password by opening this link: {link}";
+            }
         }
 
         return new MailMessage(_emailOptions.Value.FromAddress, payload.Email, subject, body);

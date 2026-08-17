@@ -1,40 +1,72 @@
-import { Component, computed, effect, input, output, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import type { ElementRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router, RouterLink } from '@angular/router';
 
-import type { PlayLogEntry } from '../../core/campaigns/campaign.models';
+import type { CampaignChatSend, ChatChannel, PlayLogEntry } from '../../core/campaigns/campaign.models';
 import {
   campaignLogComposerSize,
+  filterCampaignLog,
+  filterChatRecipients,
   formatLogTimestamp,
+  matchChatRecipient,
   mentionQuery,
+  recipientFieldLabel,
+  recipientSuggestionLabel,
   splitLogMessage,
   type CampaignLogMember,
 } from '../../core/campaigns/campaign-log';
 
 @Component({
   selector: 'app-campaign-log',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   templateUrl: './campaign-log.component.html',
   styleUrl: './campaign-log.component.css',
 })
 export class CampaignLogComponent {
+  private readonly router = inject(Router);
   readonly entries = input<readonly PlayLogEntry[]>([]);
   readonly members = input<readonly CampaignLogMember[]>([]);
+  readonly channels = input<readonly ChatChannel[]>([]);
   readonly canChat = input(false);
   readonly timeZoneId = input<string | null>(null);
   readonly sending = input(false);
   readonly sendError = input<string | null>(null);
   readonly expanded = input(true);
 
-  readonly send = output<string>();
+  readonly send = output<CampaignChatSend>();
   readonly expandedChange = output<boolean>();
 
   protected readonly draft = signal('');
   protected readonly highlight = signal(0);
+  protected readonly channelKey = signal('Public:');
+  protected readonly recipientQuery = signal('Everyone');
+  protected readonly recipientOpen = signal(false);
+  protected readonly recipientHighlight = signal(0);
+  protected readonly showPublicChat = signal(true);
+  protected readonly showPrivateChat = signal(false);
+  protected readonly showGameLog = signal(true);
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly composer = viewChild<ElementRef<HTMLTextAreaElement>>('composer');
+  private readonly recipientInput = viewChild<ElementRef<HTMLInputElement>>('recipient');
   private heldMessage = '';
   private sawSending = false;
+  protected readonly availableChannels = computed(() => {
+    const listed = this.channels();
+    return listed.length > 0 ? listed : [{ kind: 'Public', targetId: null, label: 'Everyone' }];
+  });
+  protected readonly visibleEntries = computed(() =>
+    filterCampaignLog(this.entries(), this.showPublicChat(), this.showPrivateChat(), this.showGameLog()),
+  );
+  protected readonly recipientSuggestions = computed(() => {
+    const query = this.recipientQuery();
+    const committed = recipientFieldLabel(this.selectedChannel(), this.members());
+    if (query.trim().toLowerCase() === committed.toLowerCase()) {
+      return this.availableChannels();
+    }
+
+    return filterChatRecipients(this.availableChannels(), this.members(), query);
+  });
   protected readonly suggestions = computed(() => {
     const current = mentionQuery(this.draft(), this.draft().length);
     if (!current) {
@@ -53,7 +85,7 @@ export class CampaignLogComponent {
 
   constructor() {
     effect(() => {
-      this.entries();
+      this.visibleEntries();
       queueMicrotask(() => {
         const element = this.scroller()?.nativeElement;
         if (element) {
@@ -95,17 +127,130 @@ export class CampaignLogComponent {
     this.expandedChange.emit(details.open);
   }
 
+  protected originatorText(entry: PlayLogEntry): string {
+    return `${entry.originator}:`;
+  }
+
   protected formatTimestamp(value: string): string {
     return formatLogTimestamp(value, this.timeZoneId());
   }
 
-  protected parts(summary: string): { text: string; mention: boolean }[] {
+  protected parts(summary: string): { text: string; mention: boolean; username?: string | null }[] {
     return splitLogMessage(summary, this.members());
+  }
+
+  protected profileQuery(): { from: string } {
+    return { from: this.router.url };
   }
 
   protected onDraftInput(value: string): void {
     this.draft.set(value);
     this.highlight.set(0);
+  }
+
+  protected onRecipientInput(value: string): void {
+    this.recipientQuery.set(value);
+    this.recipientOpen.set(true);
+    this.recipientHighlight.set(0);
+  }
+
+  protected onRecipientDomInput(event: Event): void {
+    this.onRecipientInput((event.target as HTMLInputElement).value);
+  }
+
+  protected onRecipientFocus(): void {
+    this.recipientOpen.set(true);
+    this.recipientHighlight.set(0);
+    queueMicrotask(() => this.recipientInput()?.nativeElement.select());
+  }
+
+  protected onRecipientFocusOut(event: FocusEvent): void {
+    const next = event.relatedTarget as Node | null;
+    if (next && (event.currentTarget as HTMLElement).contains(next)) {
+      return;
+    }
+
+    this.snapRecipient();
+    this.recipientOpen.set(false);
+  }
+
+  protected onRecipientKeydown(event: KeyboardEvent): void {
+    const options = this.recipientSuggestions();
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.recipientOpen.set(true);
+      if (options.length === 0) {
+        return;
+      }
+
+      this.recipientHighlight.update((index) => (index + 1) % options.length);
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.recipientOpen.set(true);
+      if (options.length === 0) {
+        return;
+      }
+
+      this.recipientHighlight.update((index) => (index - 1 + options.length) % options.length);
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selected =
+        options.at(this.recipientHighlight()) ??
+        matchChatRecipient(this.availableChannels(), this.members(), this.recipientQuery());
+      if (selected) {
+        this.selectRecipient(selected);
+      }
+
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      this.recipientQuery.set(recipientFieldLabel(this.selectedChannel(), this.members()));
+      this.recipientOpen.set(false);
+    }
+  }
+
+  protected selectRecipient(channel: ChatChannel): void {
+    this.channelKey.set(this.channelOptionValue(channel));
+    this.recipientQuery.set(recipientFieldLabel(channel, this.members()));
+    this.recipientOpen.set(false);
+    this.recipientHighlight.set(0);
+    if (channel.kind !== 'Public') {
+      this.showPrivateChat.set(true);
+    }
+  }
+
+  protected recipientOptionLabel(channel: ChatChannel): string {
+    return recipientSuggestionLabel(channel, this.members());
+  }
+
+  protected channelOptionValue(channel: ChatChannel): string {
+    return `${channel.kind}:${channel.targetId ?? ''}`;
+  }
+
+  protected selectedChannel(): ChatChannel {
+    const key = this.channelKey();
+    for (const channel of this.availableChannels()) {
+      if (this.channelOptionValue(channel) === key) {
+        return channel;
+      }
+    }
+
+    return this.availableChannels()[0];
+  }
+
+  protected channelBadge(entry: PlayLogEntry): string | null {
+    if (entry.kind !== 'PlayerChat' || !entry.isPrivate) {
+      return null;
+    }
+
+    return entry.channelLabel ? `Private: ${entry.channelLabel}` : 'Private';
   }
 
   protected onKeydown(event: KeyboardEvent): void {
@@ -146,12 +291,23 @@ export class CampaignLogComponent {
 
   protected submit(): void {
     const message = this.draft().trim();
-    if (!message || this.sending() || !this.canChat()) {
+    const channel =
+      matchChatRecipient(this.availableChannels(), this.members(), this.recipientQuery()) ??
+      (this.recipientQuery().trim().toLowerCase() ===
+      recipientFieldLabel(this.selectedChannel(), this.members()).toLowerCase()
+        ? this.selectedChannel()
+        : null);
+    if (!message || !channel || this.sending() || !this.canChat()) {
       return;
     }
 
+    this.selectRecipient(channel);
     this.heldMessage = message;
-    this.send.emit(message);
+    this.send.emit({
+      message,
+      channelKind: channel.kind,
+      targetId: channel.targetId,
+    });
     this.draft.set('');
   }
 
@@ -161,6 +317,18 @@ export class CampaignLogComponent {
     }
 
     return `${member.displayName} (@${member.username})`;
+  }
+
+  private snapRecipient(): ChatChannel | null {
+    const match = matchChatRecipient(this.availableChannels(), this.members(), this.recipientQuery());
+    if (match) {
+      this.selectRecipient(match);
+      return match;
+    }
+
+    const committed = this.selectedChannel();
+    this.recipientQuery.set(recipientFieldLabel(committed, this.members()));
+    return committed;
   }
 
   private resizeComposer(): void {

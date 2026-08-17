@@ -224,7 +224,7 @@ public static class AuthEndpoints
             return IdentityHttp.Problem(profile);
         }
 
-        return Results.Ok(ProfileResponses.FromAccount(profile.Value));
+        return Results.Ok(ProfileResponses.FromAccount(profile.Value, await signInManager.UserManager.IsInRoleAsync(user, "Administrator").ConfigureAwait(false)));
     }
 
     private static async Task<IResult> LogoutAsync(SignInManager<ApplicationUser> signInManager)
@@ -250,7 +250,7 @@ public static class AuthEndpoints
             return IdentityHttp.Problem(result);
         }
 
-        return Results.Ok(ProfileResponses.FromAccount(result.Value));
+        return Results.Ok(ProfileResponses.FromAccount(result.Value, principal.IsAdministrator()));
     }
 
     private static async Task<IResult> ConfirmEmailAsync(

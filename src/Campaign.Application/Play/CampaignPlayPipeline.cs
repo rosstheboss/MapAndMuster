@@ -1,6 +1,7 @@
 using Campaign.Application.Campaigns;
 using Campaign.Application.Common;
 using Campaign.Application.Maps;
+using Campaign.Application.Notifications;
 using Campaign.Application.Ports;
 using Campaign.Domain.Campaigns;
 using Campaign.Domain.Common;
@@ -78,6 +79,7 @@ internal static class CampaignPlayPipeline
         {
             IsSuccess = true,
             Campaign = nextCampaign,
+            Previous = campaign,
             OriginalRevision = campaign.Revision,
             Changed = !ReferenceEquals(advanced.State, campaign.PlayState)
                 || nextCampaign.EndsUtc != campaign.EndsUtc
@@ -116,6 +118,7 @@ internal static class CampaignPlayPipeline
         {
             IsSuccess = true,
             Campaign = outcome.Campaign,
+            Previous = loaded.Previous,
             OriginalRevision = outcome.Campaign.Revision,
             Changed = false,
         };
@@ -130,7 +133,8 @@ internal static class CampaignPlayPipeline
         bool isAdministrator,
         int expectedRevision,
         Func<CampaignPlayState, PlayMap, StoredCampaign, DateTimeOffset, PlayMutation> mutate,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        CampaignNotificationPublisher? notifications = null)
     {
         var loaded = await LoadAsync(campaigns, clock, campaignId, userId, isAdministrator, cancellationToken)
             .ConfigureAwait(false);
@@ -201,6 +205,12 @@ internal static class CampaignPlayPipeline
             return OperationResults.Failure<CampaignPlayDetail>(
                 outcome.ErrorCode ?? ErrorCodes.ConcurrencyConflict,
                 outcome.Message ?? "The campaign could not be updated.");
+        }
+
+        if (notifications is not null && loaded.Previous is not null)
+        {
+            await notifications.PublishPlayAdvanceAsync(loaded.Previous, outcome.Campaign, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return OperationResults.Success(
@@ -276,6 +286,8 @@ internal sealed class PlayLoad
     public required bool IsSuccess { get; init; }
 
     public StoredCampaign? Campaign { get; init; }
+
+    public StoredCampaign? Previous { get; init; }
 
     public int OriginalRevision { get; init; }
 

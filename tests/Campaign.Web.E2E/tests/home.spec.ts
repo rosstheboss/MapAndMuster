@@ -54,6 +54,9 @@ test('home shows the signed-in player and logout', async ({ page }) => {
     updatedUtc: '2026-08-13T00:00:00+00:00',
     profileRevision: 1,
     emailConfirmed: true,
+    isAdministrator: false,
+    inAppNotificationsEnabled: true,
+    emailNotificationsEnabled: true,
   };
 
   let authenticated = true;
@@ -76,12 +79,25 @@ test('home shows the signed-in player and logout', async ({ page }) => {
   await page.route('**/api/auth/external-providers', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
+  await page.route('**/api/notifications', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/news**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ page: 1, totalPages: 0, article: null }),
+    });
+  });
 
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(page.getByText('No new notifications.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'News' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Your Campaigns' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'All Campaigns' })).toBeVisible();
-  await expect(page.getByText('You are signed in as')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Profile' })).toBeVisible();
+  await expect(page.getByText('You are signed in as')).toHaveCount(0);
   await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
 });

@@ -91,6 +91,20 @@ public interface IUserAccountStore
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The previous storage key, if any.</returns>
     Task<string?> ReplaceAvatarKeyAsync(Guid userId, string? avatarStorageKey, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Returns which of the supplied users currently have the system Administrator role.
+    /// </summary>
+    /// <param name="userIds">The user identifiers to inspect.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The administrator identifiers that appear in <paramref name="userIds"/>.</returns>
+    Task<IReadOnlySet<Guid>> FindAdministratorIdsAsync(
+        IReadOnlyList<Guid> userIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(userIds);
+        return Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
+    }
 }
 
 /// <summary>
@@ -181,6 +195,12 @@ public sealed class UpdateStoredProfileRequest
 
     /// <summary>Gets the display-name preference.</summary>
     public required DisplayNameMode DisplayNameMode { get; init; }
+
+    /// <summary>Gets whether unread notices appear on the home board.</summary>
+    public bool InAppNotificationsEnabled { get; init; } = true;
+
+    /// <summary>Gets whether notices are also queued for email.</summary>
+    public bool EmailNotificationsEnabled { get; init; } = true;
 
     /// <summary>Gets the expected profile revision.</summary>
     public required int ExpectedRevision { get; init; }

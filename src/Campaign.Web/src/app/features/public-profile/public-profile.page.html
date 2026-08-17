@@ -5,6 +5,14 @@
   } @else if (errorMessage()) {
     <p class="error" role="alert">{{ errorMessage() }}</p>
   } @else if (profile(); as player) {
+    <div class="actions">
+      @if (returnLink(); as back) {
+        <a class="button-secondary" [routerLink]="back.path" [queryParams]="back.queryParams">Back</a>
+      }
+      @if (isOwnProfile()) {
+        <a class="button-secondary" routerLink="/profile">Back to edit profile</a>
+      }
+    </div>
     <article class="panel stack">
       @if (player.hasAvatar) {
         <img class="avatar" [src]="avatarSrc(player.username)" width="96" height="96" [alt]="player.displayName" />
@@ -14,6 +22,22 @@
       </p>
       <p>Username: {{ player.username }}</p>
       <p>Location: {{ player.city }}{{ player.region ? ', ' + player.region : '' }}, {{ player.country }}</p>
+    </article>
+    <article class="panel stack">
+      <h2>Campaigns</h2>
+      @if ((player.campaigns ?? []).length === 0) {
+        <p class="muted">No campaigns to show.</p>
+      } @else {
+        <ul class="campaign-list">
+          @for (campaign of player.campaigns ?? []; track campaign.id) {
+            <li>
+              <a [routerLink]="['/campaigns', campaign.id]">{{ campaign.name }}</a>
+              <p class="muted">{{ campaignStatus(campaign.status) }}{{ campaign.isPrivate ? ' · Private' : '' }}</p>
+              <p class="muted">Scores and rankings are not available yet.</p>
+            </li>
+          }
+        </ul>
+      }
     </article>
   }
 </section>

@@ -433,14 +433,53 @@ public sealed class CampaignDetailResponse
     /// <summary>Gets whether the viewer still needs to pick a faction.</summary>
     public required bool CanChooseFaction { get; init; }
 
-    /// <summary>Gets whether the viewer may post in the public campaign log.</summary>
+    /// <summary>Gets whether the viewer may post in the campaign log.</summary>
     public required bool CanChat { get; init; }
+
+    /// <summary>Gets whether the viewer is an administrator currently in debug mode on this campaign.</summary>
+    public bool CanInspectPrivateChat { get; init; }
+
+    /// <summary>Gets members attached to the campaign, including roles and chosen faction.</summary>
+    public IReadOnlyList<CampaignParticipantResponse> Participants { get; init; } = [];
 
     /// <summary>Gets current members who may be tagged in chat.</summary>
     public required IReadOnlyList<CampaignLogMemberResponse> MentionableMembers { get; init; }
 
-    /// <summary>Gets the public campaign log, including chat.</summary>
+    /// <summary>Gets compose targets: public, members, factions, and ally groups.</summary>
+    public IReadOnlyList<ChatChannelResponse> ChatChannels { get; init; } = [];
+
+    /// <summary>Gets the campaign log, including chat the viewer is allowed to see.</summary>
     public required IReadOnlyList<PlayLogEntryResponse> Log { get; init; }
+}
+
+/// <summary>
+/// A member attached to a campaign, shown on the Participants panel.
+/// </summary>
+public sealed class CampaignParticipantResponse
+{
+    /// <summary>Gets the user identifier.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the unique username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the name shown to other users.</summary>
+    public required string DisplayName { get; init; }
+
+    /// <summary>Gets whether the member occupies a player slot.</summary>
+    public required bool IsPlayer { get; init; }
+
+    /// <summary>Gets whether the member is a campaign manager.</summary>
+    public required bool IsGameMaster { get; init; }
+
+    /// <summary>Gets whether the member is a system administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the chosen faction name, when the member has selected one.</summary>
+    public string? FactionName { get; init; }
+
+    /// <summary>Gets the chosen subfaction name, when one is selected.</summary>
+    public string? Subfaction { get; init; }
 }
 
 /// <summary>
@@ -459,7 +498,22 @@ public sealed class CampaignLogMemberResponse
 }
 
 /// <summary>
-/// Request to post a public chat message.
+/// A compose target for campaign chat.
+/// </summary>
+public sealed class ChatChannelResponse
+{
+    /// <summary>Gets Public, Direct, Faction, or AllyGroup.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the member, faction, or ally-group identifier for a private channel.</summary>
+    public Guid? TargetId { get; init; }
+
+    /// <summary>Gets the label shown in the channel list.</summary>
+    public required string Label { get; init; }
+}
+
+/// <summary>
+/// Request to post a chat message.
 /// </summary>
 public sealed class PostCampaignChatRequest
 {
@@ -468,6 +522,12 @@ public sealed class PostCampaignChatRequest
 
     /// <summary>Gets the chat message.</summary>
     public required string Message { get; init; }
+
+    /// <summary>Gets Public, Direct, Faction, or AllyGroup.</summary>
+    public string ChannelKind { get; init; } = "Public";
+
+    /// <summary>Gets the member, faction, or ally-group identifier for a private channel.</summary>
+    public Guid? TargetId { get; init; }
 }
 
 /// <summary>
@@ -821,6 +881,21 @@ public static class CampaignResponses
             CanPlay = detail.CanPlay,
             CanChooseFaction = detail.CanChooseFaction,
             CanChat = detail.CanChat,
+            CanInspectPrivateChat = detail.CanInspectPrivateChat,
+            Participants =
+            [
+                .. detail.Participants.Select(static participant => new CampaignParticipantResponse
+                {
+                    UserId = participant.UserId,
+                    Username = participant.Username,
+                    DisplayName = participant.DisplayName,
+                    IsPlayer = participant.IsPlayer,
+                    IsGameMaster = participant.IsGameMaster,
+                    IsAdministrator = participant.IsAdministrator,
+                    FactionName = participant.FactionName,
+                    Subfaction = participant.Subfaction,
+                }),
+            ],
             MentionableMembers =
             [
                 .. detail.MentionableMembers.Select(static member => new CampaignLogMemberResponse
@@ -830,20 +905,18 @@ public static class CampaignResponses
                     DisplayName = member.DisplayName,
                 }),
             ],
+            ChatChannels =
+            [
+                .. detail.ChatChannels.Select(static channel => new ChatChannelResponse
+                {
+                    Kind = channel.Kind,
+                    TargetId = channel.TargetId,
+                    Label = channel.Label,
+                }),
+            ],
             Log =
             [
-                .. detail.Log.Select(static item => new PlayLogEntryResponse
-                {
-                    Id = item.Id,
-                    OccurredUtc = item.OccurredUtc,
-                    Kind = item.Kind,
-                    Originator = item.Originator,
-                    Summary = item.Summary,
-                    TerritoryId = item.TerritoryId,
-                    ForceId = item.ForceId,
-                    BattleId = item.BattleId,
-                    IsSystemAdjustment = item.IsSystemAdjustment,
-                }),
+                .. detail.Log.Select(PlayResponses.FromLogEntry),
             ],
         };
     }

@@ -1,4 +1,5 @@
 using Campaign.Application.Common;
+using Campaign.Application.Notifications;
 using Campaign.Application.Play;
 using Campaign.Application.Ports;
 using Campaign.Domain.Play;
@@ -6,21 +7,23 @@ using Campaign.Domain.Play;
 namespace Campaign.Application.Campaigns;
 
 /// <summary>
-/// Posts a public chat message to a campaign log.
+/// Posts a chat message to a campaign log. Private channels are stored on the entry and filtered on read.
 /// </summary>
 public sealed class PostCampaignChatHandler
 {
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>
     /// Initializes a new handler.
     /// </summary>
-    /// <param name="campaigns">The campaign store.</param>
-    /// <param name="clock">The clock.</param>
-    /// <param name="accounts">The user account store.</param>
-    public PostCampaignChatHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public PostCampaignChatHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -28,14 +31,12 @@ public sealed class PostCampaignChatHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>
     /// Appends a chat message when the caller is a current campaign member.
     /// </summary>
-    /// <param name="command">The chat command.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The updated campaign detail.</returns>
     public async Task<OperationResult<CampaignDetail>> HandleAsync(
         PostCampaignChatCommand command,
         CancellationToken cancellationToken)
@@ -61,8 +62,14 @@ public sealed class PostCampaignChatHandler
                 "The campaign was changed by another request. Reload and try again.");
         }
 
-        var mentionable = await CampaignPlayMapper.ChatMembersAsync(campaign, _accounts, cancellationToken)
+        if (!CampaignChatContext.TryParseChannel(command.ChannelKind, command.TargetId, out var channel, out var channelError))
+        {
+            return OperationResults.Failure<CampaignDetail>("chat.channel.invalid", channelError ?? "Choose a chat channel.");
+        }
+
+        var participants = await CampaignPlayMapper.ParticipantsAsync(campaign, _accounts, cancellationToken)
             .ConfigureAwait(false);
+        var mentionable = CampaignPlayMapper.ToChatMembers(participants);
         var members = mentionable
             .Select(static member => new CampaignChatMember(member.UserId, member.Username, member.DisplayName))
             .ToArray();
@@ -73,7 +80,11 @@ public sealed class PostCampaignChatHandler
                 members,
                 _clock.UtcNow,
                 out var next,
-                out var error))
+                out var error,
+                channel,
+                CampaignChatContext.Memberships(campaign),
+                CampaignChatContext.Factions(campaign),
+                CampaignChatContext.AllyGroups(campaign)))
         {
             return OperationResults.Failure<CampaignDetail>(
                 error.Code,
@@ -97,15 +108,41 @@ public sealed class PostCampaignChatHandler
                 outcome.Message ?? "The campaign could not be updated.");
         }
 
-        var names = await CampaignPlayMapper.UsernamesAsync(outcome.Campaign, _accounts, cancellationToken)
-            .ConfigureAwait(false);
-        var refreshedMembers = await CampaignPlayMapper.ChatMembersAsync(outcome.Campaign, _accounts, cancellationToken)
-            .ConfigureAwait(false);
-        return OperationResults.Success(CampaignMapper.ToDetail(
-            outcome.Campaign,
-            command.UserId,
+        var log = (outcome.Campaign.PlayState ?? CampaignPlayState.Empty).Log;
+        var posted = log.Count == 0 ? null : log[^1];
+        if (posted is { Kind: PlayLogKind.PlayerChat } && _notifications is not null)
+        {
+            await _notifications.PublishChatAsync(
+                    outcome.Campaign,
+                    posted,
+                    command.UserId,
+                    members,
+                    CampaignChatContext.Memberships(outcome.Campaign),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return OperationResults.Success(
+            ToViewerDetail(outcome.Campaign, command.UserId, command.IsAdministrator, mentionable, participants));
+    }
+
+    private CampaignDetail ToViewerDetail(
+        StoredCampaign campaign,
+        Guid userId,
+        bool isAdministrator,
+        IReadOnlyList<CampaignLogMemberDetail> members,
+        IReadOnlyList<CampaignParticipantDetail> participants)
+    {
+        var inspect = CampaignChatContext.CanInspectPrivateChat(isAdministrator, userId, campaign.PlayState);
+        var names = members.ToDictionary(static member => member.UserId, static member => member.Username);
+        return CampaignMapper.ToDetail(
+            campaign,
+            userId,
             _clock.UtcNow,
-            CampaignPlayMapper.ToLogEntries(outcome.Campaign, names),
-            refreshedMembers));
+            CampaignPlayMapper.ToLogEntries(campaign, names, userId, inspect),
+            members,
+            CampaignChatContext.Channels(campaign, userId, members),
+            inspect,
+            participants);
     }
 }

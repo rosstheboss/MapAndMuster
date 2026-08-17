@@ -19,6 +19,11 @@ public sealed class EmailOutbox : IEmailOutbox
     /// </summary>
     public const string PasswordResetType = "identity.password-reset";
 
+    /// <summary>
+    /// Outbox type for campaign and chat notices. Bodies must not include secrets.
+    /// </summary>
+    public const string UserNoticeType = "campaign.user-notice";
+
     private readonly CampaignDbContext _dbContext;
     private readonly IClock _clock;
 
@@ -45,6 +50,40 @@ public sealed class EmailOutbox : IEmailOutbox
     public Task QueuePasswordResetAsync(string email, Guid userId, string token, CancellationToken cancellationToken)
     {
         return QueueAsync(PasswordResetType, email, userId, token, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task QueueUserNoticeAsync(
+        string email,
+        Guid userId,
+        string subject,
+        string body,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+        ArgumentException.ThrowIfNullOrWhiteSpace(subject);
+        ArgumentException.ThrowIfNullOrWhiteSpace(body);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var payload = JsonSerializer.Serialize(new OutboxEmailPayload
+        {
+            Email = email,
+            UserId = userId,
+            Subject = subject,
+            Body = body,
+            Path = path,
+        });
+
+        _dbContext.OutboxMessages.Add(new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Type = UserNoticeType,
+            Payload = payload,
+            CreatedUtc = _clock.UtcNow,
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task QueueAsync(
@@ -88,5 +127,14 @@ public sealed class OutboxEmailPayload
     public required Guid UserId { get; init; }
 
     /// <summary>Gets or sets the secret token.</summary>
-    public required string Token { get; init; }
+    public string? Token { get; init; }
+
+    /// <summary>Gets or sets the notice subject.</summary>
+    public string? Subject { get; init; }
+
+    /// <summary>Gets or sets the notice body. Must not include hidden orders or private chat text.</summary>
+    public string? Body { get; init; }
+
+    /// <summary>Gets or sets the in-app path to open.</summary>
+    public string? Path { get; init; }
 }

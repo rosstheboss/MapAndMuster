@@ -74,4 +74,14 @@ public sealed class ApplicationUser : IdentityUser<Guid>
     /// </summary>
     [ConcurrencyCheck]
     public int ProfileRevision { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether unread notices appear on the home board.
+    /// </summary>
+    public bool InAppNotificationsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether notices are also queued for email.
+    /// </summary>
+    public bool EmailNotificationsEnabled { get; set; } = true;
 }

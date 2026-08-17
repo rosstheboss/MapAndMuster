@@ -387,6 +387,9 @@ public sealed class CampaignEndpointTests
 
         var beforeChat = await owner.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
         Assert.NotNull(beforeChat);
+        Assert.Contains(
+            beforeChat.Participants,
+            participant => participant.Username == ownerName && participant.IsGameMaster && participant.IsPlayer);
         Assert.Contains(beforeChat.MentionableMembers, member => member.Username == ownerName);
         Assert.Contains(beforeChat.MentionableMembers, member => member.Username == playerName);
         Assert.DoesNotContain(beforeChat.MentionableMembers, member => member.Username == strangerName);
@@ -404,12 +407,80 @@ public sealed class CampaignEndpointTests
         var chat = Assert.Single(afterPost.Log);
         Assert.Equal("PlayerChat", chat.Kind);
         Assert.Equal(ownerName, chat.Originator);
+        Assert.Equal(ownerName, chat.OriginatorUsername);
         Assert.Equal($"Hey, everybody! Hello @{playerName}.", chat.Summary);
 
         using var unknown = await owner.PostAsJsonAsync(
             $"/api/campaigns/{created.Id}/chat",
             new PostCampaignChatRequest { Revision = afterPost.Revision, Message = "Hi @stranger" });
         Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+    }
+
+    [Fact]
+    public async Task PrivateChatIsOmittedFromUnauthorizedCampaignPayloads()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("host");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Private Chat War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var player = _factory.CreateClient();
+        var playerName = UniqueName("joiner");
+        await RegisterConfirmAndLoginAsync(player, $"{playerName}@example.test", playerName);
+        using var joined = await player.PostAsJsonAsync($"/api/campaigns/{created.Id}/join", new JoinCampaignRequest());
+        Assert.Equal(HttpStatusCode.OK, joined.StatusCode);
+
+        using var outsider = _factory.CreateClient();
+        var outsiderName = UniqueName("other");
+        await RegisterConfirmAndLoginAsync(outsider, $"{outsiderName}@example.test", outsiderName);
+        using var outsiderJoined = await outsider.PostAsJsonAsync($"/api/campaigns/{created.Id}/join", new JoinCampaignRequest());
+        Assert.Equal(HttpStatusCode.OK, outsiderJoined.StatusCode);
+
+        var beforeChat = await owner.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(beforeChat);
+        var playerId = beforeChat.MentionableMembers.Single(member => member.Username == playerName).UserId;
+
+        using var posted = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/chat",
+            new PostCampaignChatRequest
+            {
+                Revision = beforeChat.Revision,
+                Message = "Keep this between us",
+                ChannelKind = "Direct",
+                TargetId = playerId,
+            });
+        Assert.Equal(HttpStatusCode.OK, posted.StatusCode);
+        var ownerView = await posted.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(ownerView);
+        Assert.Contains(ownerView.Log, item => item.Summary == "Keep this between us" && item.IsPrivate);
+
+        var playerView = await player.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(playerView);
+        Assert.Contains(playerView.Log, item => item.Summary == "Keep this between us");
+
+        var outsiderView = await outsider.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(outsiderView);
+        Assert.DoesNotContain(outsiderView.Log, item => item.Summary == "Keep this between us");
+        Assert.DoesNotContain(JsonSerializer.Serialize(outsiderView), "Keep this between us");
+    }
+
+    [Fact]
+    public async Task MembersCannotEditSiteNews()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("reader");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        var page = await client.GetFromJsonAsync<NewsPageResponse>("/api/news?page=1", JsonOptions);
+        Assert.NotNull(page);
+        Assert.Equal(1, page.Page);
+
+        using var created = await client.PostAsJsonAsync(
+            "/api/news",
+            new SaveNewsArticleRequest { Title = "Secret patch", BodyMarkdown = "Do not publish this." });
+        Assert.Equal(HttpStatusCode.Forbidden, created.StatusCode);
     }
 
     [Fact]

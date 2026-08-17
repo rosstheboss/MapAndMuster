@@ -31,11 +31,17 @@ public sealed class CampaignPlayResponse
     /// <summary>Gets whether the viewer is a player.</summary>
     public required bool IsParticipant { get; init; }
 
-    /// <summary>Gets whether the viewer may chat in the public log.</summary>
+    /// <summary>Gets whether the viewer may chat in the log.</summary>
     public required bool CanChat { get; init; }
+
+    /// <summary>Gets whether the viewer is an administrator currently in debug mode on this campaign.</summary>
+    public bool CanInspectPrivateChat { get; init; }
 
     /// <summary>Gets current members who may be tagged in chat.</summary>
     public required IReadOnlyList<CampaignLogMemberResponse> MentionableMembers { get; init; }
+
+    /// <summary>Gets compose targets: public, members, factions, and ally groups.</summary>
+    public IReadOnlyList<ChatChannelResponse> ChatChannels { get; init; } = [];
 
     /// <summary>Gets the lifecycle status.</summary>
     public required string Status { get; init; }
@@ -405,6 +411,9 @@ public sealed class PlayLogEntryResponse
     /// <summary>Gets "Campaign" for game events, or the member's display name for chat.</summary>
     public required string Originator { get; init; }
 
+    /// <summary>Gets the chat author's username, when this is member chat.</summary>
+    public string? OriginatorUsername { get; init; }
+
     /// <summary>Gets a player-visible summary or chat body.</summary>
     public required string Summary { get; init; }
 
@@ -419,6 +428,15 @@ public sealed class PlayLogEntryResponse
 
     /// <summary>Gets whether the application substituted or interrupted a player choice.</summary>
     public required bool IsSystemAdjustment { get; init; }
+
+    /// <summary>Gets Public, Direct, Faction, or AllyGroup.</summary>
+    public string ChannelKind { get; init; } = "Public";
+
+    /// <summary>Gets the private-channel label, when this is private chat.</summary>
+    public string? ChannelLabel { get; init; }
+
+    /// <summary>Gets whether this is a private member chat.</summary>
+    public bool IsPrivate { get; init; }
 }
 
 /// <summary>
@@ -443,6 +461,7 @@ public static class PlayResponses
             DebugActorUserId = detail.DebugActorUserId,
             IsParticipant = detail.IsParticipant,
             CanChat = detail.CanChat,
+            CanInspectPrivateChat = detail.CanInspectPrivateChat,
             MentionableMembers =
             [
                 .. detail.MentionableMembers.Select(static member => new CampaignLogMemberResponse
@@ -450,6 +469,15 @@ public static class PlayResponses
                     UserId = member.UserId,
                     Username = member.Username,
                     DisplayName = member.DisplayName,
+                }),
+            ],
+            ChatChannels =
+            [
+                .. detail.ChatChannels.Select(static channel => new ChatChannelResponse
+                {
+                    Kind = channel.Kind,
+                    TargetId = channel.TargetId,
+                    Label = channel.Label,
                 }),
             ],
             Status = detail.Status,
@@ -601,20 +629,33 @@ public static class PlayResponses
             ],
             Log =
             [
-                .. detail.Log.Select(static item => new PlayLogEntryResponse
-                {
-                    Id = item.Id,
-                    OccurredUtc = item.OccurredUtc,
-                    Kind = item.Kind,
-                    Originator = item.Originator,
-                    Summary = item.Summary,
-                    TerritoryId = item.TerritoryId,
-                    ForceId = item.ForceId,
-                    BattleId = item.BattleId,
-                    IsSystemAdjustment = item.IsSystemAdjustment,
-                }),
+                .. detail.Log.Select(FromLogEntry),
             ],
             PlayersMissingFaction = detail.PlayersMissingFaction,
+        };
+    }
+
+    /// <summary>
+    /// Maps a play-log entry. Private chats are already omitted for unauthorized viewers.
+    /// </summary>
+    public static PlayLogEntryResponse FromLogEntry(PlayLogEntryDetail item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return new PlayLogEntryResponse
+        {
+            Id = item.Id,
+            OccurredUtc = item.OccurredUtc,
+            Kind = item.Kind,
+            Originator = item.Originator,
+            OriginatorUsername = item.OriginatorUsername,
+            Summary = item.Summary,
+            TerritoryId = item.TerritoryId,
+            ForceId = item.ForceId,
+            BattleId = item.BattleId,
+            IsSystemAdjustment = item.IsSystemAdjustment,
+            ChannelKind = item.ChannelKind,
+            ChannelLabel = item.ChannelLabel,
+            IsPrivate = item.IsPrivate,
         };
     }
 

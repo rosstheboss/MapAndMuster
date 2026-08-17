@@ -1,3 +1,4 @@
+using Campaign.Application.Campaigns;
 using Campaign.Application.Common;
 using Campaign.Application.Ports;
 using Campaign.Domain.Common;
@@ -70,6 +71,8 @@ public sealed class UpdateProfileHandler
                     Location = location!,
                     TimeZoneId = timeZone!.Id,
                     DisplayNameMode = command.DisplayNameMode,
+                    InAppNotificationsEnabled = command.InAppNotificationsEnabled,
+                    EmailNotificationsEnabled = command.EmailNotificationsEnabled,
                     ExpectedRevision = command.ProfileRevision,
                 },
                 cancellationToken)
@@ -207,24 +210,38 @@ public sealed class GetOwnProfileHandler
 public sealed class GetPublicProfileHandler
 {
     private readonly IUserAccountStore _accounts;
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
 
     /// <summary>
     /// Initializes a new handler.
     /// </summary>
     /// <param name="accounts">The account store.</param>
-    public GetPublicProfileHandler(IUserAccountStore accounts)
+    /// <param name="campaigns">The campaign store.</param>
+    /// <param name="clock">The clock.</param>
+    public GetPublicProfileHandler(IUserAccountStore accounts, ICampaignStore campaigns, IClock clock)
     {
         ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
         _accounts = accounts;
+        _campaigns = campaigns;
+        _clock = clock;
     }
 
     /// <summary>
-    /// Returns the public profile for a username.
+    /// Returns the public profile for a username, including campaigns the viewer may see.
     /// </summary>
     /// <param name="username">The username.</param>
+    /// <param name="viewerUserId">The viewing user's identifier, when signed in.</param>
+    /// <param name="isAdministrator">Whether the viewer is a system administrator.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The public profile.</returns>
-    public async Task<OperationResult<PublicProfile>> HandleAsync(string username, CancellationToken cancellationToken)
+    public async Task<OperationResult<PublicProfile>> HandleAsync(
+        string username,
+        Guid? viewerUserId,
+        bool isAdministrator,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
 
@@ -234,6 +251,20 @@ public sealed class GetPublicProfileHandler
             return OperationResults.Failure<PublicProfile>(ErrorCodes.ProfileNotFound, "The profile was not found.");
         }
 
-        return OperationResults.Success(ProfileMapper.ToPublic(account));
+        var owned = await _campaigns.ListForUserAsync(account.Id, cancellationToken).ConfigureAwait(false);
+        var viewerId = viewerUserId ?? Guid.Empty;
+        var utcNow = _clock.UtcNow;
+        var campaigns = owned
+            .Where(campaign => CampaignAccess.CanView(campaign, viewerId, isAdministrator))
+            .Select(campaign => new PublicProfileCampaign
+            {
+                Id = campaign.Id,
+                Name = campaign.Name,
+                Status = CampaignLifecycle.Progress(campaign, utcNow).Status.ToString(),
+                IsPrivate = campaign.IsPrivate,
+            })
+            .ToArray();
+
+        return OperationResults.Success(ProfileMapper.ToPublic(account, campaigns));
     }
 }

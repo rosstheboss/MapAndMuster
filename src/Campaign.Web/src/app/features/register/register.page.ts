@@ -16,6 +16,7 @@ import {
   optionalMiddleInitial,
   passwordComplexity,
   required,
+  reservedUsername,
   scrollAlertIntoView,
 } from '../../core/forms/validators';
 import { NAME_SUFFIXES, REGISTER_FIELD_LABELS } from '../../core/identity/identity-fields';
@@ -45,7 +46,7 @@ export class RegisterPage {
   protected readonly form = this.formBuilder.nonNullable.group(
     {
       email: ['', [required, emailAddress]],
-      username: ['', [required, minLength(3), maxLength(32)]],
+      username: ['', [required, minLength(3), maxLength(32), reservedUsername]],
       password: ['', [required, passwordComplexity]],
       confirmPassword: ['', required],
       firstName: ['', [required, minLength(2), maxLength(50)]],

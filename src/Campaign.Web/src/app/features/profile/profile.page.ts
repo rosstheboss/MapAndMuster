@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal, viewChild, type ElementRef } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
@@ -14,6 +15,7 @@ import {
   optionalMiddleInitial,
   passwordComplexity,
   required,
+  reservedUsername,
   scrollAlertIntoView,
 } from '../../core/forms/validators';
 import { NAME_SUFFIXES, PROFILE_FIELD_LABELS } from '../../core/identity/identity-fields';
@@ -24,7 +26,7 @@ import { ThemeToggleComponent } from '../../shared/theme-toggle/theme-toggle.com
 
 @Component({
   selector: 'app-profile-page',
-  imports: [ReactiveFormsModule, FilterableComboboxComponent, InstantDatePipe, ThemeToggleComponent],
+  imports: [ReactiveFormsModule, RouterLink, FilterableComboboxComponent, InstantDatePipe, ThemeToggleComponent],
   templateUrl: './profile.page.html',
   styleUrl: './profile.page.css',
 })
@@ -50,7 +52,7 @@ export class ProfilePage {
   protected readonly suffixes = NAME_SUFFIXES;
   protected profileRevision = 0;
   protected readonly form = this.formBuilder.nonNullable.group({
-    username: ['', [required, minLength(3), maxLength(32)]],
+    username: ['', [required, minLength(3), maxLength(32), reservedUsername]],
     firstName: ['', [required, minLength(2), maxLength(50)]],
     middleInitial: ['', optionalMiddleInitial],
     lastName: ['', [required, minLength(2), maxLength(50)]],
@@ -60,6 +62,8 @@ export class ProfilePage {
     country: ['', required],
     timeZoneId: ['', required],
     displayNameMode: this.formBuilder.nonNullable.control<'Username' | 'FullName'>('Username'),
+    inAppNotificationsEnabled: true,
+    emailNotificationsEnabled: true,
     currentPassword: [''],
     newPassword: ['', passwordComplexity],
     confirmPassword: [''],
@@ -94,6 +98,8 @@ export class ProfilePage {
         country: profile.country,
         timeZoneId: profile.timeZoneId ?? '',
         displayNameMode: profile.displayNameMode,
+        inAppNotificationsEnabled: profile.inAppNotificationsEnabled,
+        emailNotificationsEnabled: profile.emailNotificationsEnabled,
       });
       this.profileRevision = profile.profileRevision;
       this.createdUtc.set(profile.createdUtc);
@@ -150,6 +156,8 @@ export class ProfilePage {
             country: value.country,
             timeZoneId: value.timeZoneId,
             displayNameMode: value.displayNameMode,
+            inAppNotificationsEnabled: value.inAppNotificationsEnabled,
+            emailNotificationsEnabled: value.emailNotificationsEnabled,
           },
           this.profileRevision,
         );

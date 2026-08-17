@@ -127,6 +127,8 @@ export class AuthService {
           country: value.country,
           timeZoneId: value.timeZoneId || null,
           displayNameMode: value.displayNameMode,
+          inAppNotificationsEnabled: value.inAppNotificationsEnabled ?? true,
+          emailNotificationsEnabled: value.emailNotificationsEnabled ?? true,
           profileRevision,
         },
         { withCredentials: true },

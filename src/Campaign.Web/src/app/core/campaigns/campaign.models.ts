@@ -63,7 +63,10 @@ export interface CampaignDetail {
   canPlay: boolean;
   canChooseFaction: boolean;
   canChat: boolean;
+  canInspectPrivateChat?: boolean;
+  participants?: CampaignParticipant[];
   mentionableMembers: CampaignLogMember[];
+  chatChannels?: ChatChannel[];
   log: PlayLogEntry[];
   terrainTypes: CampaignTerrainType[];
   structureTypes: CampaignStructureType[];
@@ -278,7 +281,9 @@ export interface CampaignPlayDetail {
   debugActorUserId: string | null;
   isParticipant: boolean;
   canChat: boolean;
+  canInspectPrivateChat?: boolean;
   mentionableMembers: CampaignLogMember[];
+  chatChannels?: ChatChannel[];
   status: string;
   currentRound: number | null;
   currentPhaseNumber: number | null;
@@ -382,17 +387,44 @@ export interface PlayLogEntry {
   occurredUtc: string;
   kind: string;
   originator: string;
+  originatorUsername?: string | null;
   summary: string;
   territoryId: string | null;
   forceId: string | null;
   battleId: string | null;
   isSystemAdjustment: boolean;
+  channelKind?: string;
+  channelLabel?: string | null;
+  isPrivate?: boolean;
+}
+
+export interface ChatChannel {
+  kind: string;
+  targetId: string | null;
+  label: string;
+}
+
+export interface CampaignChatSend {
+  message: string;
+  channelKind: string;
+  targetId: string | null;
 }
 
 export interface CampaignLogMember {
   userId: string;
   username: string;
   displayName: string;
+}
+
+export interface CampaignParticipant {
+  userId: string;
+  username: string;
+  displayName: string;
+  isPlayer: boolean;
+  isGameMaster: boolean;
+  isAdministrator: boolean;
+  factionName?: string | null;
+  subfaction?: string | null;
 }
 
 export interface SaveOrderDraftPayload {
@@ -410,6 +442,8 @@ export interface PlayRevisionPayload {
 export interface PostCampaignChatPayload {
   revision: number;
   message: string;
+  channelKind: string;
+  targetId: string | null;
 }
 
 export interface SubmitBattleResultPayload {

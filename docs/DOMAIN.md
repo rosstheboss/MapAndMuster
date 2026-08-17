@@ -18,7 +18,9 @@
 
 An account has a unique username (3-32 characters, starting with a letter, then letters,
 digits, or underscores; English profanity, racial slurs, and similar abusive terms are
-rejected), email, password or external login, legal name, optional middle initial, optional
+rejected). Usernames that collide with chat recipients or system keywords are reserved,
+including everyone, public, private, here, all, channel, admin, and similar audience or
+identity words. An account also has email, password or external login, legal name, optional middle initial, optional
 name suffix (Jr., Sr., or Roman numerals I-X), city/region/country, IANA time-zone
 preference, optional avatar, and a display-name preference. First and last names are at least
 two characters and use the same prohibited-language rule as usernames. Local passwords must
@@ -31,6 +33,12 @@ according to that preference. Email, created/updated timestamps, time-zone prefe
 legal name when the owner chose username display are omitted from public queries. Created and
 last-edited times are visible only to the owning user. Light or dark appearance is a client
 preference stored in a cookie so it remains after sign-out; light mode is the default.
+
+A public profile also lists campaigns the viewer may open: publicly viewable campaigns plus
+private campaigns the viewer shares with that player. Scores and rankings are not shown until
+those rules are implemented. Display names in chat, mentions, the Participants panel, and other
+member lists link to that public profile. Profiles opened that way include a Back control that
+returns to the previous in-app screen.
 
 ## Campaign setup
 
@@ -72,6 +80,10 @@ is never returned. Publicly viewable campaigns may be opened by any signed-in us
 campaign is not publicly viewable, only players, managers, and administrators may open it after
 it starts. Upcoming campaigns still appear on All Campaigns so players can join. Campaign names
 and faction names reject the same prohibited-language terms as usernames.
+
+The campaign page lists attached members in a Participants panel: each player's display name
+(linked to their public profile), selected faction and subfaction when chosen, and roles
+Manager, Player, and/or Admin when those apply.
 
 Your Campaigns lists campaigns the user manages or plays in. All Campaigns lists upcoming
 campaigns plus publicly viewable active and completed campaigns, using the same grouping and
@@ -442,14 +454,26 @@ last-write-wins.
 
 ## Play log
 
-The campaign page shows a collapsible, scrollable public log at full page width near the top
+The campaign page shows a collapsible, scrollable log at full page width near the top
 for upcoming, in-progress, and completed campaigns. Each entry is formatted as
 `(local-timestamp) originator: text`. Campaign-generated facts use the originator name
-`Campaign`. Member chat uses the author's display name snapshotted when the message was posted.
-The log refreshes while the page is open. Sending chat is not a form save: it does not show the
-saving overlay or the success banner. Failed sends show an error on the log.
+`Campaign` and always belong to the public channel. Member chat uses the author's display name
+snapshotted when the message was posted. Chat originators and `@` mentions of current members
+link to that player's public profile. The log refreshes while the page is open. Sending chat
+is not a form save: it does not show the saving overlay or the success banner. Failed sends show
+an error on the log.
 
-The log records campaign start, manager extensions of remaining phases or rounds, resolved
+Members compose to Everyone (public), another current member (direct), a faction, or an ally
+group. The compose recipient is a typable field with mouse and keyboard autocomplete, including
+Everyone and member usernames. Private messages are stored on the play log with audience metadata and are filtered on
+read. They are returned only to the sender and the selected audience. Campaign managers do not
+receive other members' private chats. A system administrator may inspect all private chats only
+while they are the active debug actor on that campaign. Private chat never appears in exports or
+the visible log unless the viewer enables the private-chat filter for themselves.
+
+Independent filters show public chat, private chats the viewer is allowed to see, and/or the
+game log. Game-log facts always go to the public channel. The log records campaign start,
+manager extensions of remaining phases or rounds, resolved
 actions after an action window closes (including Hold for every force), attempted actions that
 were invalid or conflicted and became Hold, battles created or finalized, manager battle-result
 overrides, debug enter/exit and debug order corrections, player retreats, automatic force rejoins when the same player's forces occupy one
@@ -459,10 +483,27 @@ Unresolved secret orders, including drafts and unrevealed commitments, are never
 returned in the log. A player may uncommit a committed draft only while the action window is
 still open; after the window closes, orders resolve and cannot be returned to draft.
 
-Current members may also post public chat in this log, including before launch. Chat and
+Current members may post chat in this log, including before launch. Chat and
 `@` tags are limited to people who currently belong to the campaign. An unescaped `@` followed
 by a member's username, or by a display name that uniquely identifies one member, is a tag.
 `\@` is a literal `@`. Email-like text such as `ada@example.test` is not a tag. People who have
 not joined cannot chat, cannot be tagged, and are omitted from mention autocomplete. Leaving
 removes the ability to chat or be tagged; earlier messages keep the display name recorded at
-post time.
+post time. Mentions notify only tagged members who can see the message. Public chat without a
+mention does not notify every member.
+
+## Notifications
+
+Users may enable in-app notices, email notices, or both on their profile. Stored notices cover
+mentions, private chats, campaign start, campaign end, and a new phase after the previous window
+resolves. Live attention items always appear when the user still needs to choose a faction,
+commit orders, submit a battle result, or record a retreat. Email copies never include hidden
+orders, relics, or private chat text; they tell the recipient to sign in and open the campaign.
+The home page lists items that need attention, then site news. When none remain, it shows
+"No new notifications." Profile editing and the public profile live on their own pages.
+
+## News
+
+Administrators publish site-wide news as markdown articles. The home news board shows one article
+per page, newest first, with a scrollbar when an article is long. Markdown is HTML-encoded and
+then a conservative subset is rendered; user-provided HTML is not executed.

@@ -89,6 +89,7 @@ app.MapAuthEndpoints();
 app.MapProfileEndpoints();
 app.MapExternalAuthEndpoints();
 app.MapCampaignEndpoints();
+app.MapHomeBoardEndpoints();
 
 await DatabaseStartup.ApplyMigrationsAsync(app).ConfigureAwait(false);
 

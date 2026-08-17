@@ -409,6 +409,8 @@ public static class CampaignEndpoints
                     IsAdministrator = principal.IsAdministrator(),
                     CampaignId = campaignId,
                     ExpectedRevision = request.Revision,
+                    ChannelKind = request.ChannelKind,
+                    TargetId = request.TargetId,
                     Message = request.Message,
                 },
                 cancellationToken)

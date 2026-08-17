@@ -1,6 +1,7 @@
 using Campaign.Application.Campaigns;
 using Campaign.Application.Common;
 using Campaign.Application.Maps;
+using Campaign.Application.Notifications;
 using Campaign.Application.Ports;
 using Campaign.Domain.Campaigns;
 using Campaign.Domain.Play;
@@ -15,11 +16,16 @@ public sealed class GetCampaignPlayHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>
     /// Initializes a new handler.
     /// </summary>
-    public GetCampaignPlayHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public GetCampaignPlayHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -27,6 +33,7 @@ public sealed class GetCampaignPlayHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>
@@ -56,6 +63,12 @@ public sealed class GetCampaignPlayHandler
                 persisted.Message ?? "The campaign could not be updated.");
         }
 
+        if (_notifications is not null && loaded.Changed && loaded.Previous is not null)
+        {
+            await _notifications.PublishPlayAdvanceAsync(loaded.Previous, persisted.Campaign, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         return OperationResults.Success(
             await CampaignPlayMapper.ToDetailAsync(
                 persisted.Campaign, userId, _clock.UtcNow, _accounts, cancellationToken, isAdministrator)
@@ -71,9 +84,10 @@ public sealed class SaveOrderDraftHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public SaveOrderDraftHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public SaveOrderDraftHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -81,6 +95,7 @@ public sealed class SaveOrderDraftHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Saves a draft for one force.</summary>
@@ -123,7 +138,8 @@ public sealed class SaveOrderDraftHandler
 
                 return PlayMutation.Ok(next, map, preserveMap: true);
             },
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            _notifications).ConfigureAwait(false);
     }
 }
 
@@ -135,9 +151,10 @@ public sealed class CommitOrdersHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public CommitOrdersHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public CommitOrdersHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -145,6 +162,7 @@ public sealed class CommitOrdersHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Commits drafts.</summary>
@@ -175,7 +193,8 @@ public sealed class CommitOrdersHandler
 
                 return PlayMutation.FromOutcome(outcome!);
             },
-            cancellationToken);
+            cancellationToken,
+            _notifications);
     }
 }
 
@@ -187,9 +206,10 @@ public sealed class UncommitOrdersHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public UncommitOrdersHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public UncommitOrdersHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -197,6 +217,7 @@ public sealed class UncommitOrdersHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Uncommits.</summary>
@@ -220,7 +241,8 @@ public sealed class UncommitOrdersHandler
 
                 return PlayMutation.Ok(next, map, preserveMap: true);
             },
-            cancellationToken);
+            cancellationToken,
+            _notifications);
     }
 }
 
@@ -233,13 +255,15 @@ public sealed class SubmitBattleResultHandler
     private readonly IClock _clock;
     private readonly IEmailOutbox _outbox;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
     public SubmitBattleResultHandler(
         ICampaignStore campaigns,
         IClock clock,
         IEmailOutbox outbox,
-        IUserAccountStore accounts)
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -249,6 +273,7 @@ public sealed class SubmitBattleResultHandler
         _clock = clock;
         _outbox = outbox;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Records a result.</summary>
@@ -282,7 +307,8 @@ public sealed class SubmitBattleResultHandler
 
                 return PlayMutation.FromOutcome(outcome!);
             },
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            _notifications).ConfigureAwait(false);
         if (result.IsSuccess)
         {
             await CampaignPlayPipeline.NotifyManagersIfNeededAsync(
@@ -306,9 +332,10 @@ public sealed class AcceptBattleResultHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public AcceptBattleResultHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public AcceptBattleResultHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -316,6 +343,7 @@ public sealed class AcceptBattleResultHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Accepts the opponent submission.</summary>
@@ -345,7 +373,8 @@ public sealed class AcceptBattleResultHandler
 
                 return PlayMutation.FromOutcome(outcome!);
             },
-            cancellationToken);
+            cancellationToken,
+            _notifications);
     }
 }
 
@@ -357,9 +386,10 @@ public sealed class ResolveBattleHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public ResolveBattleHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public ResolveBattleHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -367,6 +397,7 @@ public sealed class ResolveBattleHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Applies a manager result.</summary>
@@ -408,7 +439,8 @@ public sealed class ResolveBattleHandler
 
                 return PlayMutation.Ok(next, map, preserveMap: true);
             },
-            cancellationToken);
+            cancellationToken,
+            _notifications);
     }
 }
 
@@ -420,9 +452,10 @@ public sealed class SubmitRetreatHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public SubmitRetreatHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public SubmitRetreatHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -430,6 +463,7 @@ public sealed class SubmitRetreatHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Saves a retreat destination.</summary>
@@ -461,7 +495,8 @@ public sealed class SubmitRetreatHandler
 
                 return PlayMutation.FromOutcome(outcome!);
             },
-            cancellationToken);
+            cancellationToken,
+            _notifications);
     }
 }
 
@@ -473,9 +508,10 @@ public sealed class ExtendCampaignScheduleHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public ExtendCampaignScheduleHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public ExtendCampaignScheduleHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -483,6 +519,7 @@ public sealed class ExtendCampaignScheduleHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Applies a schedule extension.</summary>
@@ -538,7 +575,8 @@ public sealed class ExtendCampaignScheduleHandler
 
                 return PlayMutation.FromOutcome(outcome!);
             },
-            cancellationToken);
+            cancellationToken,
+            _notifications);
     }
 }
 
@@ -550,9 +588,10 @@ public sealed class ChooseFactionHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public ChooseFactionHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public ChooseFactionHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -560,6 +599,7 @@ public sealed class ChooseFactionHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Records or changes the faction choice before launch, and seeds a force when the campaign is in progress.</summary>
@@ -620,7 +660,7 @@ public sealed class ChooseFactionHandler
                 outcome.Message ?? "The faction could not be saved.");
         }
 
-        var play = await new GetCampaignPlayHandler(_campaigns, _clock, _accounts).HandleAsync(
+        var play = await new GetCampaignPlayHandler(_campaigns, _clock, _accounts, _notifications).HandleAsync(
             command.CampaignId,
             command.UserId,
             false,
@@ -683,9 +723,10 @@ public sealed class EnterCampaignDebugHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public EnterCampaignDebugHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public EnterCampaignDebugHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -693,6 +734,7 @@ public sealed class EnterCampaignDebugHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Enters debug mode.</summary>
@@ -713,7 +755,8 @@ public sealed class EnterCampaignDebugHandler
 
                 return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
             },
-            cancellationToken);
+            cancellationToken,
+            _notifications);
     }
 }
 
@@ -725,9 +768,10 @@ public sealed class ExitCampaignDebugHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public ExitCampaignDebugHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public ExitCampaignDebugHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -735,6 +779,7 @@ public sealed class ExitCampaignDebugHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Exits debug mode.</summary>
@@ -755,7 +800,8 @@ public sealed class ExitCampaignDebugHandler
 
                 return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
             },
-            cancellationToken);
+            cancellationToken,
+            _notifications);
     }
 }
 
@@ -767,9 +813,10 @@ public sealed class DebugCorrectOrderHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public DebugCorrectOrderHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public DebugCorrectOrderHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -777,6 +824,7 @@ public sealed class DebugCorrectOrderHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Applies a debug order correction.</summary>
@@ -822,7 +870,8 @@ public sealed class DebugCorrectOrderHandler
 
                 return PlayMutation.FromOutcome(outcome!);
             },
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            _notifications).ConfigureAwait(false);
     }
 }
 
@@ -834,9 +883,10 @@ public sealed class RevealHiddenItemObjectivesHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>Initializes a new handler.</summary>
-    public RevealHiddenItemObjectivesHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    public RevealHiddenItemObjectivesHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -844,6 +894,7 @@ public sealed class RevealHiddenItemObjectivesHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>Reveals hidden item objectives to all players.</summary>
@@ -867,7 +918,8 @@ public sealed class RevealHiddenItemObjectivesHandler
 
                 return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
             },
-            cancellationToken);
+            cancellationToken,
+            _notifications);
     }
 }
 
@@ -879,15 +931,17 @@ internal static class CampaignDebugAccess
         IUserAccountStore accounts,
         PlayCommand command,
         Func<CampaignPlayState, PlayMap, DateTimeOffset, PlayMutation> mutate,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        CampaignNotificationPublisher? notifications = null)
     {
-        return CampaignDebugAccess.MutateDebugAsync(
+        return MutateDebugAsync(
             campaigns,
             clock,
             accounts,
             command,
             (state, map, utcNow, _) => mutate(state, map, utcNow),
-            cancellationToken);
+            cancellationToken,
+            notifications);
     }
 
     public static Task<OperationResult<CampaignPlayDetail>> MutateDebugAsync(
@@ -896,7 +950,8 @@ internal static class CampaignDebugAccess
         IUserAccountStore accounts,
         PlayCommand command,
         Func<CampaignPlayState, PlayMap, DateTimeOffset, StoredCampaign, PlayMutation> mutate,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        CampaignNotificationPublisher? notifications = null)
     {
         return CampaignPlayPipeline.MutateAsync(
             campaigns,
@@ -918,6 +973,7 @@ internal static class CampaignDebugAccess
 
                 return mutate(state, map, utcNow, campaign);
             },
-            cancellationToken);
+            cancellationToken,
+            notifications);
     }
 }

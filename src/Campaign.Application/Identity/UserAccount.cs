@@ -91,4 +91,14 @@ public sealed class UserAccount
     /// Gets a value indicating whether the email address is confirmed.
     /// </summary>
     public required bool EmailConfirmed { get; init; }
+
+    /// <summary>
+    /// Gets whether unread notices appear on the home board.
+    /// </summary>
+    public bool InAppNotificationsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Gets whether notices are also queued for email.
+    /// </summary>
+    public bool EmailNotificationsEnabled { get; init; } = true;
 }

@@ -204,6 +204,49 @@ public sealed class IdentityEndpointTests
         Assert.Equal("Ada Lovelace", publicProfile.DisplayName);
         Assert.True(publicProfile.ShowsFullName);
         Assert.Equal(username, publicProfile.Username);
+        Assert.NotNull(publicProfile.Campaigns);
+    }
+
+    [Fact]
+    public async Task PublicProfileListsVisibleCampaignsAndOmitsHiddenPrivateOnes()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("host");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var openResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidOpenCampaign("Open War"));
+        var open = await openResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(open);
+
+        using var hiddenResponse = await owner.PostAsJsonAsync(
+            "/api/campaigns",
+            ValidOpenCampaign("Secret War", isPubliclyViewable: false));
+        var hidden = await hiddenResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(hidden);
+
+        using var sharedResponse = await owner.PostAsJsonAsync(
+            "/api/campaigns",
+            ValidOpenCampaign("Shared War", isPubliclyViewable: false));
+        var shared = await sharedResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(shared);
+
+        using var stranger = _factory.CreateClient();
+        var strangerName = UniqueName("guest");
+        await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
+        using var joined = await stranger.PostAsJsonAsync($"/api/campaigns/{shared.Id}/join", new JoinCampaignRequest());
+        Assert.Equal(HttpStatusCode.OK, joined.StatusCode);
+
+        var profile = await stranger.GetFromJsonAsync<PublicProfileResponse>($"/api/profiles/{ownerName}", JsonOptions);
+        Assert.NotNull(profile);
+        Assert.Contains(profile.Campaigns, campaign => campaign.Id == open.Id && campaign.Name == "Open War");
+        Assert.Contains(profile.Campaigns, campaign => campaign.Id == shared.Id && campaign.Name == "Shared War");
+        Assert.DoesNotContain(profile.Campaigns, campaign => campaign.Id == hidden.Id);
+
+        using var anonymous = _factory.CreateClient();
+        var publicProfile = await anonymous.GetFromJsonAsync<PublicProfileResponse>($"/api/profiles/{ownerName}", JsonOptions);
+        Assert.NotNull(publicProfile);
+        Assert.Contains(publicProfile.Campaigns, campaign => campaign.Id == open.Id);
+        Assert.DoesNotContain(publicProfile.Campaigns, campaign => campaign.Id == hidden.Id);
+        Assert.DoesNotContain(publicProfile.Campaigns, campaign => campaign.Id == shared.Id);
     }
 
     [Fact]
@@ -313,6 +356,20 @@ public sealed class IdentityEndpointTests
     }
 
     [Fact]
+    public async Task ReservedUsernameIsRejected()
+    {
+        using var client = _factory.CreateClient();
+        using var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            CreateRegisterBody("reserved@example.test", "everyone"));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.NotNull(body);
+        Assert.Equal("username.reserved", body.Code);
+        Assert.Contains("reserved", body.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ChangePasswordRequiresTheCurrentPassword()
     {
         using var client = _factory.CreateClient();
@@ -389,6 +446,35 @@ public sealed class IdentityEndpointTests
             country = "Canada",
             timeZoneId = "America/Halifax",
             displayNameMode = "Username",
+        };
+    }
+
+    private static SaveCampaignRequest ValidOpenCampaign(string name, bool isPubliclyViewable = true)
+    {
+        return new SaveCampaignRequest
+        {
+            Name = name,
+            Description = "A contested frontier.",
+            PlayerCount = 8,
+            IsPrivate = false,
+            IsPubliclyViewable = isPubliclyViewable,
+            CreatorIsParticipant = true,
+            Factions =
+            [
+                new FactionRequest { Name = "North", Subfactions = ["Riders"] },
+                new FactionRequest { Name = "South" },
+            ],
+            TimeZoneId = "UTC",
+            StartsAtLocal = "2099-01-05T12:00",
+            RoundCount = 8,
+            RoundLengthAmount = 1,
+            RoundLengthUnit = "Weeks",
+            Phases =
+            [
+                new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new RoundPhaseRequest { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+            ],
         };
     }
 

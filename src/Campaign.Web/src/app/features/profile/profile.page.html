@@ -3,6 +3,11 @@
   @if (loading()) {
     <p>Loading profile…</p>
   } @else {
+    @if (username(); as name) {
+      <div class="actions">
+        <a class="button-secondary" [routerLink]="['/users', name]">View public profile</a>
+      </div>
+    }
     <form class="panel stack" [formGroup]="form" (ngSubmit)="save()" novalidate>
       @if (errorMessages().length > 0 || successMessage()) {
         <div
@@ -93,6 +98,22 @@
             Full name
           </label>
         </div>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Notifications</legend>
+        <p class="muted">
+          In-app notices appear on Home. Email copies never include hidden orders or private chat text; they ask you to
+          sign in and open the campaign.
+        </p>
+        <label>
+          <input type="checkbox" formControlName="inAppNotificationsEnabled" />
+          Show notices on the home board
+        </label>
+        <label>
+          <input type="checkbox" formControlName="emailNotificationsEnabled" />
+          Email me about mentions, private chats, campaign start and end, new phases, and actions I need to take
+        </label>
       </fieldset>
 
       <fieldset class="field">

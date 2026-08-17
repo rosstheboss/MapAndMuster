@@ -1,17 +1,45 @@
 <details class="campaign-log" [open]="expanded()" (toggle)="onToggle($event)">
   <summary>Campaign log</summary>
+  <fieldset class="log-filters">
+    <legend>Show</legend>
+    <label>
+      <input type="checkbox" [ngModel]="showPublicChat()" (ngModelChange)="showPublicChat.set($event)" />
+      Public chat
+    </label>
+    <label>
+      <input type="checkbox" [ngModel]="showPrivateChat()" (ngModelChange)="showPrivateChat.set($event)" />
+      Private chats
+    </label>
+    <label>
+      <input type="checkbox" [ngModel]="showGameLog()" (ngModelChange)="showGameLog.set($event)" />
+      Game log
+    </label>
+  </fieldset>
   <div class="log-scroll" #scroller tabindex="0" role="log" aria-live="polite" aria-relevant="additions">
-    @if (entries().length === 0) {
+    @if (visibleEntries().length === 0) {
       <p class="muted">No messages yet.</p>
     } @else {
       <ol class="log-list">
-        @for (entry of entries(); track entry.id) {
+        @for (entry of visibleEntries(); track entry.id) {
           <li>
             <p>
               <time [attr.datetime]="entry.occurredUtc">{{ formatTimestamp(entry.occurredUtc) }}</time>
-              {{ entry.originator }}:
+              @if (entry.originatorUsername; as username) {
+                <a class="profile-link" [routerLink]="['/users', username]" [queryParams]="profileQuery()">{{
+                  originatorText(entry)
+                }}</a>
+              } @else {
+                {{ originatorText(entry) }}
+              }
+              @if (channelBadge(entry); as badge) {
+                <span class="channel-badge">{{ badge }}</span>
+              }
               @for (part of parts(entry.summary); track $index) {
-                @if (part.mention) {
+                @if (part.mention && part.username) {
+                  <a class="profile-link" [routerLink]="['/users', part.username]" [queryParams]="profileQuery()"
+                    ><strong>{{ part.text }}</strong></a
+                  >
+                } @else if (part.mention) {
                   <strong>{{ part.text }}</strong>
                 } @else {
                   {{ part.text }}
@@ -25,6 +53,44 @@
   </div>
   @if (canChat()) {
     <div class="chat-compose">
+      <div class="recipient-combobox" (focusout)="onRecipientFocusOut($event)">
+        <label class="field">
+          Send to
+          <input
+            #recipient
+            id="chat-recipient"
+            type="text"
+            role="combobox"
+            autocomplete="off"
+            [value]="recipientQuery()"
+            (input)="onRecipientDomInput($event)"
+            (focus)="onRecipientFocus()"
+            (keydown)="onRecipientKeydown($event)"
+            [disabled]="sending()"
+            aria-autocomplete="list"
+            aria-controls="chat-recipient-suggest"
+            [attr.aria-expanded]="recipientOpen()"
+            [attr.aria-activedescendant]="recipientOpen() ? 'chat-recipient-option-' + recipientHighlight() : null"
+          />
+        </label>
+        @if (recipientOpen()) {
+          <ul id="chat-recipient-suggest" class="suggest recipient-suggest" role="listbox">
+            @for (channel of recipientSuggestions(); track channelOptionValue(channel); let index = $index) {
+              <li
+                [id]="'chat-recipient-option-' + index"
+                role="option"
+                [class.is-active]="index === recipientHighlight()"
+                [attr.aria-selected]="index === recipientHighlight()"
+                (mousedown)="selectRecipient(channel)"
+              >
+                {{ recipientOptionLabel(channel) }}
+              </li>
+            } @empty {
+              <li class="suggest-empty" role="presentation">No matching recipients</li>
+            }
+          </ul>
+        }
+      </div>
       <label class="field">
         Message
         <textarea

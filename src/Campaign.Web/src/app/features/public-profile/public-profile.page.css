@@ -2,10 +2,34 @@
   display: block;
 }
 
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 .avatar {
   width: 96px;
   height: 96px;
   border-radius: 50%;
   object-fit: cover;
   background: #e7e5e4;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.campaign-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.campaign-list p {
+  margin: 0.15rem 0 0;
 }

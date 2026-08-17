@@ -28,6 +28,9 @@ export interface OwnProfile {
   updatedUtc: string;
   profileRevision: number;
   emailConfirmed: boolean;
+  isAdministrator: boolean;
+  inAppNotificationsEnabled: boolean;
+  emailNotificationsEnabled: boolean;
 }
 
 export interface PublicProfile {
@@ -38,6 +41,14 @@ export interface PublicProfile {
   region: string | null;
   country: string;
   hasAvatar: boolean;
+  campaigns?: PublicProfileCampaign[];
+}
+
+export interface PublicProfileCampaign {
+  id: string;
+  name: string;
+  status: string;
+  isPrivate: boolean;
 }
 
 export interface ExternalProvider {
@@ -80,6 +91,8 @@ export interface ProfileFormValue {
   country: string;
   displayNameMode: 'Username' | 'FullName';
   timeZoneId: string;
+  inAppNotificationsEnabled?: boolean;
+  emailNotificationsEnabled?: boolean;
 }
 
 export interface ChangePasswordPayload {

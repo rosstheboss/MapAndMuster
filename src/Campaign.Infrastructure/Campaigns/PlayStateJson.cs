@@ -151,6 +151,11 @@ internal static class PlayStateJson
                 RelatedForceIds = [.. item.RelatedForceIds],
                 Message = item.Message,
                 ActorDisplayName = item.ActorDisplayName,
+                ChatChannelKind = item.ChatChannelKind.ToString(),
+                ChatTargetUserId = item.ChatTargetUserId,
+                ChatTargetFactionId = item.ChatTargetFactionId,
+                ChatTargetAllyGroupId = item.ChatTargetAllyGroupId,
+                ChatTargetLabel = item.ChatTargetLabel,
             })],
             Snapshots = [.. state.Snapshots.Select(static item => new SnapshotDocument
             {
@@ -276,7 +281,14 @@ internal static class PlayStateJson
                 string.IsNullOrWhiteSpace(item.ActionKind) ? null : Enum.Parse<ActionKind>(item.ActionKind, true),
                 item.RelatedForceIds,
                 item.Message,
-                item.ActorDisplayName))],
+                item.ActorDisplayName,
+                Enum.TryParse<ChatChannelKind>(item.ChatChannelKind, true, out var channelKind)
+                    ? channelKind
+                    : ChatChannelKind.Public,
+                item.ChatTargetUserId,
+                item.ChatTargetFactionId,
+                item.ChatTargetAllyGroupId,
+                item.ChatTargetLabel))],
             ToSnapshots(document),
             document.DebugActorUserId,
             document.DebugStartedUtc);
@@ -461,6 +473,11 @@ internal static class PlayStateJson
         public List<Guid> RelatedForceIds { get; set; } = [];
         public string? Message { get; set; }
         public string? ActorDisplayName { get; set; }
+        public string? ChatChannelKind { get; set; }
+        public Guid? ChatTargetUserId { get; set; }
+        public Guid? ChatTargetFactionId { get; set; }
+        public Guid? ChatTargetAllyGroupId { get; set; }
+        public string? ChatTargetLabel { get; set; }
     }
 
     private sealed class SnapshotDocument

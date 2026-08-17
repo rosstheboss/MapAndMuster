@@ -210,6 +210,17 @@ public sealed class RegisterAccountHandlerTests
         {
             return Task.CompletedTask;
         }
+
+        public Task QueueUserNoticeAsync(
+            string email,
+            Guid userId,
+            string subject,
+            string body,
+            string path,
+            CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeAvatarProcessor : IAvatarImageProcessor

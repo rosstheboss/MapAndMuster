@@ -237,6 +237,15 @@ public sealed class OwnProfileResponse
 
     /// <summary>Gets a value indicating whether the email is confirmed.</summary>
     public required bool EmailConfirmed { get; init; }
+
+    /// <summary>Gets whether the caller is a system administrator.</summary>
+    public bool IsAdministrator { get; init; }
+
+    /// <summary>Gets whether unread notices appear on the home board.</summary>
+    public bool InAppNotificationsEnabled { get; init; } = true;
+
+    /// <summary>Gets whether notices are also queued for email.</summary>
+    public bool EmailNotificationsEnabled { get; init; } = true;
 }
 
 /// <summary>
@@ -264,6 +273,29 @@ public sealed class PublicProfileResponse
 
     /// <summary>Gets whether an avatar is stored.</summary>
     public required bool HasAvatar { get; init; }
+
+    /// <summary>
+    /// Gets campaigns the viewer may see for this player. Scores and rankings are omitted until implemented.
+    /// </summary>
+    public IReadOnlyList<PublicProfileCampaignResponse> Campaigns { get; init; } = [];
+}
+
+/// <summary>
+/// A campaign listed on a public profile.
+/// </summary>
+public sealed class PublicProfileCampaignResponse
+{
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the campaign name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the lifecycle status name.</summary>
+    public required string Status { get; init; }
+
+    /// <summary>Gets whether the campaign requires a join password.</summary>
+    public required bool IsPrivate { get; init; }
 }
 
 /// <summary>
@@ -303,6 +335,12 @@ public sealed class UpdateProfileRequest
 
     /// <summary>Gets the last observed profile revision.</summary>
     public required int ProfileRevision { get; init; }
+
+    /// <summary>Gets whether unread notices appear on the home board.</summary>
+    public bool InAppNotificationsEnabled { get; init; } = true;
+
+    /// <summary>Gets whether notices are also queued for email.</summary>
+    public bool EmailNotificationsEnabled { get; init; } = true;
 }
 
 /// <summary>
@@ -314,8 +352,9 @@ public static class ProfileResponses
     /// Maps a private account to the owner response.
     /// </summary>
     /// <param name="account">The account.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <returns>The owner response.</returns>
-    public static OwnProfileResponse FromAccount(UserAccount account)
+    public static OwnProfileResponse FromAccount(UserAccount account, bool isAdministrator = false)
     {
         ArgumentNullException.ThrowIfNull(account);
         return new OwnProfileResponse
@@ -337,6 +376,9 @@ public static class ProfileResponses
             UpdatedUtc = account.UpdatedUtc,
             ProfileRevision = account.ProfileRevision,
             EmailConfirmed = account.EmailConfirmed,
+            IsAdministrator = isAdministrator,
+            InAppNotificationsEnabled = account.InAppNotificationsEnabled,
+            EmailNotificationsEnabled = account.EmailNotificationsEnabled,
         };
     }
 
@@ -357,6 +399,16 @@ public static class ProfileResponses
             Region = profile.Region,
             Country = profile.Country,
             HasAvatar = profile.HasAvatar,
+            Campaigns =
+            [
+                .. profile.Campaigns.Select(static campaign => new PublicProfileCampaignResponse
+                {
+                    Id = campaign.Id,
+                    Name = campaign.Name,
+                    Status = campaign.Status,
+                    IsPrivate = campaign.IsPrivate,
+                }),
+            ],
         };
     }
 }

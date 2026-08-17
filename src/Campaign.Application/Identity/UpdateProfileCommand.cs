@@ -63,6 +63,16 @@ public sealed class UpdateProfileCommand
     public required DisplayNameMode DisplayNameMode { get; init; }
 
     /// <summary>
+    /// Gets whether unread notices appear on the home board.
+    /// </summary>
+    public bool InAppNotificationsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Gets whether notices are also queued for email.
+    /// </summary>
+    public bool EmailNotificationsEnabled { get; init; } = true;
+
+    /// <summary>
     /// Gets the profile revision last observed by the client.
     /// </summary>
     public required int ProfileRevision { get; init; }

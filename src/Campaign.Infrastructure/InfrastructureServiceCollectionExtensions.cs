@@ -70,6 +70,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IUserAccountStore, UserAccountStore>();
         services.AddScoped<ICampaignStore, CampaignStore>();
+        services.AddScoped<IUserNotificationStore, UserNotificationStore>();
+        services.AddScoped<INewsStore, NewsStore>();
         services.AddScoped<IEmailOutbox, EmailOutbox>();
         services.AddSingleton<ISecretHasher, Pbkdf2SecretHasher>();
         services.AddSingleton<IAvatarImageProcessor, AvatarImageProcessor>();

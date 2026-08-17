@@ -12,6 +12,7 @@ import {
   minLength,
   optionalMiddleInitial,
   required,
+  reservedUsername,
   scrollAlertIntoView,
 } from '../../core/forms/validators';
 import { NAME_SUFFIXES, PROFILE_FIELD_LABELS } from '../../core/identity/identity-fields';
@@ -52,7 +53,7 @@ export class CompleteExternalPage {
   protected readonly timeZones = listTimeZones();
   protected readonly suffixes = NAME_SUFFIXES;
   protected readonly form = this.formBuilder.nonNullable.group({
-    username: ['', [required, minLength(3), maxLength(32)]],
+    username: ['', [required, minLength(3), maxLength(32), reservedUsername]],
     firstName: ['', [required, minLength(2), maxLength(50)]],
     middleInitial: ['', optionalMiddleInitial],
     lastName: ['', [required, minLength(2), maxLength(50)]],

@@ -132,14 +132,19 @@ public sealed class GetCampaignHandler
         }
 
         var names = await CampaignPlayMapper.UsernamesAsync(campaign, _accounts, cancellationToken).ConfigureAwait(false);
-        var members = await CampaignPlayMapper.ChatMembersAsync(campaign, _accounts, cancellationToken)
+        var participants = await CampaignPlayMapper.ParticipantsAsync(campaign, _accounts, cancellationToken)
             .ConfigureAwait(false);
+        var members = CampaignPlayMapper.ToChatMembers(participants);
+        var inspect = CampaignChatContext.CanInspectPrivateChat(isAdministrator, userId, campaign.PlayState);
         return OperationResults.Success(CampaignMapper.ToDetail(
             campaign,
             userId,
             _clock.UtcNow,
-            CampaignPlayMapper.ToLogEntries(campaign, names),
-            members));
+            CampaignPlayMapper.ToLogEntries(campaign, names, userId, inspect),
+            members,
+            CampaignChatContext.Channels(campaign, userId, members),
+            inspect,
+            participants));
     }
 }
 

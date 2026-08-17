@@ -41,6 +41,30 @@ public sealed class PublicProfile
     /// Gets a value indicating whether the user has an avatar.
     /// </summary>
     public required bool HasAvatar { get; init; }
+
+    /// <summary>
+    /// Gets campaigns the viewer may see for this player: publicly viewable campaigns, plus
+    /// private campaigns the viewer shares. Scores and rankings are not included yet.
+    /// </summary>
+    public IReadOnlyList<PublicProfileCampaign> Campaigns { get; init; } = [];
+}
+
+/// <summary>
+/// A campaign listed on a public profile. Secrets and join passwords are omitted.
+/// </summary>
+public sealed class PublicProfileCampaign
+{
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the campaign name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the lifecycle status name.</summary>
+    public required string Status { get; init; }
+
+    /// <summary>Gets whether the campaign requires a join password.</summary>
+    public required bool IsPrivate { get; init; }
 }
 
 /// <summary>
@@ -52,8 +76,11 @@ public static class ProfileMapper
     /// Builds the public profile, omitting email, timestamps, and the legal name unless the owner opted in.
     /// </summary>
     /// <param name="account">The source account.</param>
+    /// <param name="campaigns">Campaigns the viewer may see for this player.</param>
     /// <returns>The public profile.</returns>
-    public static PublicProfile ToPublic(UserAccount account)
+    public static PublicProfile ToPublic(
+        UserAccount account,
+        IReadOnlyList<PublicProfileCampaign>? campaigns = null)
     {
         ArgumentNullException.ThrowIfNull(account);
 
@@ -71,6 +98,7 @@ public static class ProfileMapper
             Region = account.Region,
             Country = account.Country,
             HasAvatar = !string.IsNullOrWhiteSpace(account.AvatarStorageKey),
+            Campaigns = campaigns ?? [],
         };
     }
 

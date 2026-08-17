@@ -31,6 +31,16 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
     /// </summary>
     public DbSet<CampaignRecord> Campaigns => Set<CampaignRecord>();
 
+    /// <summary>
+    /// Gets in-app user notifications.
+    /// </summary>
+    public DbSet<UserNotificationRecord> UserNotifications => Set<UserNotificationRecord>();
+
+    /// <summary>
+    /// Gets site-wide news articles.
+    /// </summary>
+    public DbSet<NewsArticleRecord> NewsArticles => Set<NewsArticleRecord>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -49,6 +59,8 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(user => user.TimeZoneId).HasMaxLength(64);
             entity.Property(user => user.AvatarStorageKey).HasMaxLength(260);
             entity.Property(user => user.DisplayNameMode).HasConversion<string>().HasMaxLength(32);
+            entity.Property(user => user.InAppNotificationsEnabled).IsRequired().HasDefaultValue(true);
+            entity.Property(user => user.EmailNotificationsEnabled).IsRequired().HasDefaultValue(true);
             entity.Property(user => user.ProfileRevision).IsConcurrencyToken();
             entity.HasIndex(user => user.NormalizedEmail).IsUnique();
         });
@@ -158,6 +170,29 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(phase => phase.Kind).HasMaxLength(16).IsRequired();
             entity.Property(phase => phase.DurationUnit).HasMaxLength(16).IsRequired();
             entity.HasIndex(phase => phase.CampaignId);
+        });
+
+        builder.Entity<UserNotificationRecord>(entity =>
+        {
+            entity.ToTable("UserNotifications");
+            entity.HasKey(notice => notice.Id);
+            entity.Property(notice => notice.Kind).HasMaxLength(32).IsRequired();
+            entity.Property(notice => notice.CampaignName).HasMaxLength(80);
+            entity.Property(notice => notice.Title).HasMaxLength(160).IsRequired();
+            entity.Property(notice => notice.Body).HasMaxLength(500).IsRequired();
+            entity.Property(notice => notice.Path).HasMaxLength(260).IsRequired();
+            entity.Property(notice => notice.DedupeKey).HasMaxLength(160).IsRequired();
+            entity.HasIndex(notice => new { notice.UserId, notice.DedupeKey }).IsUnique();
+            entity.HasIndex(notice => new { notice.UserId, notice.ReadUtc, notice.CreatedUtc });
+        });
+
+        builder.Entity<NewsArticleRecord>(entity =>
+        {
+            entity.ToTable("NewsArticles");
+            entity.HasKey(article => article.Id);
+            entity.Property(article => article.Title).HasMaxLength(120).IsRequired();
+            entity.Property(article => article.BodyMarkdown).HasMaxLength(20000).IsRequired();
+            entity.HasIndex(article => article.PublishedUtc);
         });
     }
 }

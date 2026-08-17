@@ -1,6 +1,6 @@
 import { FormControl, FormGroup } from '@angular/forms';
 
-import { collectFormFailures, matchingPasswords, passwordComplexity, required } from './validators';
+import { collectFormFailures, matchingPasswords, passwordComplexity, required, reservedUsername } from './validators';
 
 describe('form validators', () => {
   it('accepts a 12-character complex password', () => {
@@ -39,5 +39,14 @@ describe('form validators', () => {
     expect(failures).toContain('Email is not filled in.');
     expect(failures).toContain('Username is not filled in.');
     expect(failures).toContain('Confirm password does not match the password.');
+  });
+
+  it('rejects reserved chat and system usernames', () => {
+    const control = new FormControl('Everyone', { validators: reservedUsername });
+    expect(control.invalid).toBe(true);
+    expect(control.hasError('reservedUsername')).toBe(true);
+
+    const allowed = new FormControl('bobisthebest', { validators: reservedUsername });
+    expect(allowed.valid).toBe(true);
   });
 });

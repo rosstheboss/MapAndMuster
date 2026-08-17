@@ -137,7 +137,7 @@ public enum PlayLogKind
     /// <summary>Same-player forces occupying one territory rejoined.</summary>
     ForcesRejoined = 14,
 
-    /// <summary>A campaign member posted a public chat message.</summary>
+    /// <summary>A campaign member posted a chat message. Audience is stored on the log entry.</summary>
     PlayerChat = 15,
 
     /// <summary>A manager or administrator entered debug mode.</summary>
@@ -178,4 +178,22 @@ public enum StructureCondition
 
     /// <summary>The structure is destroyed.</summary>
     Destroyed = 2,
+}
+
+/// <summary>
+/// Audience for a member chat message. Game-log facts are always public.
+/// </summary>
+public enum ChatChannelKind
+{
+    /// <summary>Visible to everyone who can view the campaign log.</summary>
+    Public = 0,
+
+    /// <summary>Visible only to the sender and one other member.</summary>
+    Direct = 1,
+
+    /// <summary>Visible to the sender and current members of one faction.</summary>
+    Faction = 2,
+
+    /// <summary>Visible to the sender and current members whose faction is in one ally group.</summary>
+    AllyGroup = 3,
 }
