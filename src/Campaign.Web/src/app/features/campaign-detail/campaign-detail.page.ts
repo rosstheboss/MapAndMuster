@@ -1,4 +1,4 @@
-import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal, viewChild, type ElementRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
@@ -11,6 +11,7 @@ import type {
   MapGraphDetail,
   PlayBattle,
   PlayForce,
+  PlayItemObjective,
 } from '../../core/campaigns/campaign.models';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { CAMPAIGN_LOG_POLL_MS, mergeCampaignLog, type CampaignLogSync } from '../../core/campaigns/campaign-log';
@@ -35,6 +36,7 @@ import { CampaignLogComponent } from '../../shared/campaign-log/campaign-log.com
 import {
   CampaignMapViewComponent,
   type MapForceMarker,
+  type MapItemMarker,
 } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { PhaseCountdownComponent } from '../../shared/phase-countdown/phase-countdown.component';
@@ -44,6 +46,7 @@ const CAMPAIGN_SECTIONS = [
   'faction',
   'missingFaction',
   'map',
+  'itemObjectives',
   'orders',
   'battles',
   'debug',
@@ -62,6 +65,17 @@ interface OrderDraft {
   kind: string;
   targetTerritoryId: string;
   structureTypeId: string;
+}
+
+interface MapActionFlow {
+  step: 'menu' | 'pick-target' | 'pick-structure' | 'confirm';
+  forceId: string;
+  originId: string;
+  kind: string;
+  targetTerritoryId: string;
+  structureTypeId: string;
+  menuX: number;
+  menuY: number;
 }
 
 function openSections(): Record<CampaignSection, boolean> {
@@ -89,6 +103,7 @@ export class CampaignDetailPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly mapBoard = viewChild<ElementRef<HTMLElement>>('mapBoard');
 
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
@@ -113,6 +128,7 @@ export class CampaignDetailPage {
   protected readonly extensionWindowId = signal('');
   protected readonly drafts = signal<Record<string, OrderDraft>>({});
   protected readonly debugDrafts = signal<Record<string, OrderDraft>>({});
+  protected readonly mapAction = signal<MapActionFlow | null>(null);
   protected readonly battleWinner = signal<Record<string, string>>({});
   protected readonly retreatTarget = signal<Record<string, string>>({});
   private readonly mapRevision = signal(0);
@@ -141,18 +157,15 @@ export class CampaignDetailPage {
     const id = this.hoveredTerritoryId() ?? this.selectedIds().at(-1) ?? null;
     return this.graph().territories.find((territory) => territory.id === id) ?? null;
   });
-  protected readonly focusTerritoryIds = computed(() => {
-    const ids = [...this.selectedIds()];
-    const hover = this.hoveredTerritoryId();
-    if (hover) {
-      ids.push(hover);
+  protected readonly adjacentTerritoryIds = computed(() => {
+    const flow = this.mapAction();
+    if (flow?.step === 'pick-target') {
+      const force = this.myForces().find((item) => item.id === flow.forceId);
+      return force?.moveTargets ?? [];
     }
 
-    return [...new Set(ids)];
+    return adjacentTerritoryIds(this.graph().adjacencies, this.selectedIds());
   });
-  protected readonly adjacentTerritoryIds = computed(() =>
-    adjacentTerritoryIds(this.graph().adjacencies, this.focusTerritoryIds()),
-  );
   protected readonly selectedFaction = computed(
     () => this.campaign()?.factions.find((faction) => faction.id === this.factionChoice()) ?? null,
   );
@@ -165,6 +178,21 @@ export class CampaignDetailPage {
     return campaign.factions.find((faction) => faction.id === campaign.factionId) ?? null;
   });
   protected readonly myForces = computed(() => this.play()?.forces.filter((force) => force.isMine) ?? []);
+  protected readonly orderableForces = computed(() =>
+    this.myForces().filter((force) => force.availableActions.length > 0),
+  );
+  protected readonly canCommitActions = computed(() => {
+    const play = this.play();
+    const forces = this.orderableForces();
+    if (!play || play.isCommitted || forces.length === 0) {
+      return false;
+    }
+
+    return forces.every((force) => play.myDrafts.some((draft) => draft.forceId === force.id));
+  });
+  protected readonly buildableStructures = computed(() =>
+    (this.play()?.structureTypes ?? this.campaign()?.structureTypes ?? []).filter((type) => type.isBuildable),
+  );
   protected readonly isActionPhase = computed(() => this.play()?.currentPhaseKind === 'Action');
   protected readonly isBattlePhase = computed(() => this.play()?.currentPhaseKind === 'Battle');
   protected readonly canDebug = computed(() => this.play()?.canDebug === true);
@@ -197,6 +225,36 @@ export class CampaignDetailPage {
       label: `${this.forceLabel(force)} in ${this.territoryName(force.territoryId)}`,
     }));
   });
+  protected readonly mapItems = computed((): MapItemMarker[] => {
+    const play = this.play();
+    if (!play) {
+      return [];
+    }
+
+    const forces = new Map(play.forces.map((force) => [force.id, force]));
+    return (play.itemObjectives ?? []).flatMap((item) => {
+      const territoryId = item.possessorForceId
+        ? (forces.get(item.possessorForceId)?.territoryId ?? null)
+        : item.territoryId;
+      if (!territoryId) {
+        return [];
+      }
+
+      return [
+        {
+          id: item.id,
+          territoryId,
+          name: item.name,
+          carried: !!item.possessorForceId,
+          hidden: !item.isRevealed,
+        },
+      ];
+    });
+  });
+  protected readonly visibleItemObjectives = computed(() => this.play()?.itemObjectives ?? []);
+  protected readonly hiddenItemCount = computed(
+    () => (this.play()?.itemObjectives ?? []).filter((item) => !item.isRevealed).length,
+  );
 
   protected isOpen(id: CampaignSection): boolean {
     return this.openSections()[id] !== false;
@@ -275,7 +333,11 @@ export class CampaignDetailPage {
     }
   }
 
-  protected onTerritorySelect(event: { id: string; additive: boolean }): void {
+  protected onTerritorySelect(event: { id: string; additive: boolean; clientX?: number; clientY?: number }): void {
+    if (this.handleMapActionSelect(event)) {
+      return;
+    }
+
     if (event.additive) {
       this.selectedIds.update((current) =>
         current.includes(event.id) ? current.filter((id) => id !== event.id) : [...current, event.id],
@@ -285,15 +347,11 @@ export class CampaignDetailPage {
 
     this.selectedIds.set([event.id]);
     this.hoveredTerritoryId.set(event.id);
-    const force = this.myForces().find((item) => !item.inBattle);
-    if (!force || this.play()?.isCommitted) {
-      return;
-    }
+  }
 
-    const draft = this.draftFor(force.id);
-    if ((draft.kind === 'Move' || draft.kind === 'Split') && force.moveTargets.includes(event.id)) {
-      this.onDraftTarget(force.id, event.id);
-    }
+  protected onMapBackgroundSelect(): void {
+    this.cancelMapAction();
+    this.selectedIds.set([]);
   }
 
   protected factionName(id: string | null | undefined): string {
@@ -343,6 +401,36 @@ export class CampaignDetailPage {
     return (this.play()?.forces.filter((force) => force.territoryId === territoryId) ?? []).map((force) =>
       this.forceLabel(force),
     );
+  }
+
+  protected itemsInTerritory(territoryId: string): PlayItemObjective[] {
+    const play = this.play();
+    if (!play) {
+      return [];
+    }
+
+    const forceIds = new Set(play.forces.filter((force) => force.territoryId === territoryId).map((force) => force.id));
+    return (play.itemObjectives ?? []).filter(
+      (item) => item.territoryId === territoryId || (!!item.possessorForceId && forceIds.has(item.possessorForceId)),
+    );
+  }
+
+  protected itemLocation(item: PlayItemObjective): string {
+    if (item.possessorForceId) {
+      return `Carried by ${this.forceLabelById(item.possessorForceId)}`;
+    }
+
+    if (item.territoryId) {
+      return this.territoryName(item.territoryId);
+    }
+
+    return 'Unknown';
+  }
+
+  protected itemSummary(item: PlayItemObjective): string {
+    const hidden = item.isRevealed ? '' : ' (hidden)';
+    const carried = item.possessorForceId ? ' (carried)' : '';
+    return `${item.name}${hidden}${carried}`;
   }
 
   protected structureConditionLabel(condition: string | null | undefined): string {
@@ -469,19 +557,16 @@ export class CampaignDetailPage {
         structureTypeId: kind === 'Build' ? current.structureTypeId : '',
       },
     }));
-    void this.persistDraftIfReady(forceId);
   }
 
   protected onDraftTarget(forceId: string, targetTerritoryId: string): void {
     const current = this.draftFor(forceId);
     this.drafts.update((drafts) => ({ ...drafts, [forceId]: { ...current, targetTerritoryId } }));
-    void this.persistDraftIfReady(forceId);
   }
 
   protected onDraftStructure(forceId: string, structureTypeId: string): void {
     const current = this.draftFor(forceId);
     this.drafts.update((drafts) => ({ ...drafts, [forceId]: { ...current, structureTypeId } }));
-    void this.persistDraftIfReady(forceId);
   }
 
   protected onDebugDraftKind(forceId: string, kind: string): void {
@@ -546,30 +631,7 @@ export class CampaignDetailPage {
       return;
     }
 
-    const local = { ...this.drafts() };
-    await this.runPlay(async () => {
-      let current = this.play();
-      if (!current) {
-        return play;
-      }
-
-      for (const force of current.forces.filter((item) => item.isMine)) {
-        const draft = local[force.id];
-        if (!this.isDraftReady(force, draft) || this.draftMatchesSaved(current, force.id, draft)) {
-          continue;
-        }
-
-        current = await this.campaignsApi.saveDraft(current.id, {
-          revision: current.revision,
-          forceId: force.id,
-          kind: draft.kind,
-          targetTerritoryId: draft.targetTerritoryId || null,
-          structureTypeId: draft.structureTypeId || null,
-        });
-      }
-
-      return this.campaignsApi.commitOrders(current.id, { revision: current.revision });
-    });
+    await this.runPlay(() => this.campaignsApi.commitOrders(play.id, { revision: play.revision }));
   }
 
   protected async uncommit(): Promise<void> {
@@ -674,6 +736,15 @@ export class CampaignDetailPage {
     }
 
     await this.runPlay(() => this.campaignsApi.exitDebug(play.id, { revision: play.revision }));
+  }
+
+  protected async revealHiddenObjectives(): Promise<void> {
+    const play = this.play();
+    if (!play) {
+      return;
+    }
+
+    await this.runPlay(() => this.campaignsApi.revealHiddenObjectives(play.id, { revision: play.revision }));
   }
 
   protected async applyDebugCorrection(force: PlayForce): Promise<void> {
@@ -813,21 +884,155 @@ export class CampaignDetailPage {
     }
   }
 
-  private persistDraftIfReady(forceId: string): Promise<void> {
+  protected canSaveForceDraft(force: PlayForce): boolean {
     const play = this.play();
-    const force = play?.forces.find((item) => item.id === forceId);
-    const draft = this.draftFor(forceId);
-    if (
-      !play ||
-      play.isCommitted ||
-      !force ||
-      !this.isDraftReady(force, draft) ||
-      this.draftMatchesSaved(play, forceId, draft)
-    ) {
-      return Promise.resolve();
+    const draft = this.draftFor(force.id);
+    return (
+      !!play && !play.isCommitted && this.isDraftReady(force, draft) && !this.draftMatchesSaved(play, force.id, draft)
+    );
+  }
+
+  protected mapMenuActions(): readonly string[] {
+    const flow = this.mapAction();
+    const force = this.myForces().find((item) => item.id === flow?.forceId);
+    return force?.availableActions ?? [];
+  }
+
+  protected mapActionPrompt(): string | null {
+    const flow = this.mapAction();
+    if (flow?.step === 'pick-target') {
+      return `Select a destination for ${flow.kind}.`;
     }
 
-    return this.saveDraft(force);
+    if (flow?.step === 'pick-structure') {
+      return 'Select a structure to build.';
+    }
+
+    return null;
+  }
+
+  protected confirmActionSummary(): string {
+    const flow = this.mapAction();
+    if (!flow) {
+      return '';
+    }
+
+    const origin = this.territoryName(flow.originId);
+    if (flow.kind === 'Move' || flow.kind === 'Split') {
+      return `${flow.kind} from ${origin} to ${this.territoryName(flow.targetTerritoryId)}?`;
+    }
+
+    if (flow.kind === 'Build') {
+      const name = this.buildableStructures().find((type) => type.id === flow.structureTypeId)?.name ?? 'a structure';
+      return `Build ${name} in ${origin}?`;
+    }
+
+    return `${flow.kind} in ${origin}?`;
+  }
+
+  protected onMapActionKind(kind: string): void {
+    const flow = this.mapAction();
+    if (!flow) {
+      return;
+    }
+
+    if (kind === 'Move' || kind === 'Split') {
+      this.mapAction.set({ ...flow, step: 'pick-target', kind, targetTerritoryId: '', structureTypeId: '' });
+      this.selectedIds.set([flow.originId]);
+      return;
+    }
+
+    if (kind === 'Build') {
+      this.mapAction.set({ ...flow, step: 'pick-structure', kind, targetTerritoryId: '', structureTypeId: '' });
+      return;
+    }
+
+    this.mapAction.set({ ...flow, step: 'confirm', kind, targetTerritoryId: '', structureTypeId: '' });
+  }
+
+  protected onMapStructurePicked(structureTypeId: string): void {
+    const flow = this.mapAction();
+    if (!flow) {
+      return;
+    }
+
+    this.mapAction.set({ ...flow, step: 'confirm', kind: 'Build', structureTypeId, targetTerritoryId: '' });
+  }
+
+  protected cancelMapAction(): void {
+    this.mapAction.set(null);
+  }
+
+  protected async confirmMapAction(): Promise<void> {
+    const flow = this.mapAction();
+    const force = this.myForces().find((item) => item.id === flow?.forceId);
+    if (!flow || !force) {
+      return;
+    }
+
+    this.drafts.update((drafts) => ({
+      ...drafts,
+      [force.id]: {
+        kind: flow.kind,
+        targetTerritoryId: flow.targetTerritoryId,
+        structureTypeId: flow.structureTypeId,
+      },
+    }));
+    this.cancelMapAction();
+    await this.saveDraft(force);
+  }
+
+  private handleMapActionSelect(event: { id: string; additive: boolean; clientX?: number; clientY?: number }): boolean {
+    const play = this.play();
+    if (!this.isActionPhase() || !play?.isParticipant || play.canChooseFaction || play.isCommitted) {
+      return false;
+    }
+
+    const flow = this.mapAction();
+    if (flow?.step === 'pick-target') {
+      const force = this.myForces().find((item) => item.id === flow.forceId);
+      if (force?.moveTargets.includes(event.id) && event.id !== flow.originId) {
+        this.mapAction.set({ ...flow, step: 'confirm', targetTerritoryId: event.id });
+        this.selectedIds.set([flow.originId, event.id]);
+        return true;
+      }
+
+      this.cancelMapAction();
+    } else if (flow) {
+      this.cancelMapAction();
+    }
+
+    const occupying = this.myForces().find((item) => item.territoryId === event.id && item.availableActions.length > 0);
+    if (!occupying) {
+      return false;
+    }
+
+    const { x, y } = this.menuPosition(event.clientX ?? 0, event.clientY ?? 0);
+    this.selectedIds.set([event.id]);
+    this.hoveredTerritoryId.set(event.id);
+    this.mapAction.set({
+      step: 'menu',
+      forceId: occupying.id,
+      originId: event.id,
+      kind: '',
+      targetTerritoryId: '',
+      structureTypeId: '',
+      menuX: x,
+      menuY: y,
+    });
+    return true;
+  }
+
+  private menuPosition(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.mapBoard()?.nativeElement.getBoundingClientRect();
+    if (!rect) {
+      return { x: clientX, y: clientY };
+    }
+
+    return {
+      x: Math.min(Math.max(clientX - rect.left + 12, 8), Math.max(rect.width - 180, 8)),
+      y: Math.min(Math.max(clientY - rect.top, 8), Math.max(rect.height - 12, 8)),
+    };
   }
 
   private isDraftReady(force: PlayForce, draft: OrderDraft | undefined): boolean {
@@ -870,6 +1075,7 @@ export class CampaignDetailPage {
   private applyPlay(play: CampaignPlayDetail): void {
     const previousRevision = this.play()?.revision ?? this.campaign()?.revision ?? 0;
     this.play.set(play);
+    this.cancelMapAction();
     this.roundCount.set(play.roundCount);
     this.extensionWindowId.set(play.remainingWindows[0]?.id ?? '');
     const drafts: Record<string, OrderDraft> = {};

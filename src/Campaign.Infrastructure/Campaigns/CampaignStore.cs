@@ -109,7 +109,7 @@ public sealed class CampaignStore : ICampaignStore
 
         // Apply scalars and replace children in SQL. Graph-replace through the change tracker
         // raises false concurrency conflicts on faction rows.
-        var catalogJson = CatalogJson.Serialize(campaign.TerrainTypes, campaign.StructureTypes);
+        var catalogJson = CatalogJson.Serialize(campaign.TerrainTypes, campaign.StructureTypes, campaign.ItemObjectiveTypes);
         var playJson = PlayStateJson.Serialize(campaign.PlayState);
         var affected = await _dbContext.Campaigns
             .Where(item => item.Id == campaign.Id && item.Revision == expectedRevision)
@@ -397,7 +397,7 @@ public sealed class CampaignStore : ICampaignStore
             MapStorageKey = campaign.MapStorageKey,
             MapGraphJson = campaign.MapGraph is null ? null : MapGraphJson.Serialize(campaign.MapGraph),
             PlayStateJson = PlayStateJson.Serialize(campaign.PlayState),
-            CatalogJson = CatalogJson.Serialize(campaign.TerrainTypes, campaign.StructureTypes),
+            CatalogJson = CatalogJson.Serialize(campaign.TerrainTypes, campaign.StructureTypes, campaign.ItemObjectiveTypes),
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
@@ -562,6 +562,7 @@ public sealed class CampaignStore : ICampaignStore
             PlayState = PlayStateJson.Deserialize(record.PlayStateJson),
             TerrainTypes = catalogs.TerrainTypes,
             StructureTypes = catalogs.StructureTypes,
+            ItemObjectiveTypes = catalogs.ItemObjectiveTypes,
             Memberships =
             [
                 .. record.Memberships.Select(membership => new StoredCampaignMembership

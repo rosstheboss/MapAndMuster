@@ -88,6 +88,9 @@ public sealed class CampaignPlayResponse
     /// <summary>Gets structure types.</summary>
     public required IReadOnlyList<StructureTypeResponse> StructureTypes { get; init; }
 
+    /// <summary>Gets visible item objectives. Hidden items are omitted unless the viewer is in debug mode.</summary>
+    public IReadOnlyList<PlayItemObjectiveResponse> ItemObjectives { get; init; } = [];
+
     /// <summary>Gets forces on the map.</summary>
     public required IReadOnlyList<PlayForceResponse> Forces { get; init; }
 
@@ -164,6 +167,28 @@ public sealed class PlayForceResponse
 
     /// <summary>Gets player-submittable action kinds available for this force.</summary>
     public required IReadOnlyList<string> AvailableActions { get; init; }
+}
+
+/// <summary>A visible item objective.</summary>
+public sealed class PlayItemObjectiveResponse
+{
+    /// <summary>Gets the instance identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the catalog type.</summary>
+    public required Guid TypeId { get; init; }
+
+    /// <summary>Gets the item name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the territory when the item is on the ground.</summary>
+    public Guid? TerritoryId { get; init; }
+
+    /// <summary>Gets the carrying force when possessed.</summary>
+    public Guid? PossessorForceId { get; init; }
+
+    /// <summary>Gets whether players can see this item.</summary>
+    public required bool IsRevealed { get; init; }
 }
 
 /// <summary>The viewer's draft.</summary>
@@ -475,6 +500,9 @@ public static class PlayResponses
                     BuiltinSymbol = type.BuiltinSymbol,
                     HasImage = type.HasImage,
                     HasPillagedImage = type.HasPillagedImage,
+                    IsBuildable = type.IsBuildable,
+                    IsPillageable = type.IsPillageable,
+                    IsDestructible = type.IsDestructible,
                     Missions =
                     [
                         .. type.Missions.Select(static mission => new MissionResponse
@@ -486,6 +514,18 @@ public static class PlayResponses
                             FileName = mission.FileName,
                         }),
                     ],
+                }),
+            ],
+            ItemObjectives =
+            [
+                .. detail.ItemObjectives.Select(static item => new PlayItemObjectiveResponse
+                {
+                    Id = item.Id,
+                    TypeId = item.TypeId,
+                    Name = item.Name,
+                    TerritoryId = item.TerritoryId,
+                    PossessorForceId = item.PossessorForceId,
+                    IsRevealed = item.IsRevealed,
                 }),
             ],
             Forces =

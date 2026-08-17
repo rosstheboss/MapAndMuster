@@ -87,6 +87,9 @@ public sealed class UploadStructureImageHandler
             BuiltinSymbol = structures[index].BuiltinSymbol,
             ImageStorageKey = command.Pillaged ? structures[index].ImageStorageKey : newKey,
             PillagedImageStorageKey = command.Pillaged ? newKey : structures[index].PillagedImageStorageKey,
+            IsBuildable = structures[index].IsBuildable,
+            IsPillageable = structures[index].IsPillageable,
+            IsDestructible = structures[index].IsDestructible,
             Missions = structures[index].Missions,
         };
 
@@ -522,6 +525,9 @@ public sealed class UploadMissionFileHandler
                     BuiltinSymbol = structures[i].BuiltinSymbol,
                     ImageStorageKey = structures[i].ImageStorageKey,
                     PillagedImageStorageKey = structures[i].PillagedImageStorageKey,
+                    IsBuildable = structures[i].IsBuildable,
+                    IsPillageable = structures[i].IsPillageable,
+                    IsDestructible = structures[i].IsDestructible,
                     Missions = missions,
                 };
             }

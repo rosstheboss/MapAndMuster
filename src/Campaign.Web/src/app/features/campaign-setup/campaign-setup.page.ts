@@ -9,11 +9,13 @@ import { CampaignService } from '../../core/campaigns/campaign.service';
 import type {
   CampaignDetail,
   CampaignMission,
+  CampaignItemObjectiveType,
   CampaignStructureType,
   CampaignTerrainType,
   SaveCampaignPayload,
 } from '../../core/campaigns/campaign.models';
 import { defaultStructureCatalog, defaultTerrainCatalog } from '../../core/campaigns/catalog-defaults';
+import { CAMPAIGN_PRESETS, campaignFromPreset } from '../../core/campaigns/campaign-presets';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
@@ -28,6 +30,13 @@ import {
   factionsFromPreset,
   nextUnusedFactionColor,
 } from '../../core/campaigns/faction-presets';
+import {
+  defaultItemObjective,
+  type ItemObjectivePlacement,
+  type ItemObjectivePresetItem,
+} from '../../core/campaigns/item-objective-presets';
+import { STRUCTURE_PRESETS, structureTypesFromPreset } from '../../core/campaigns/structure-presets';
+import { TERRAIN_PRESETS, terrainTypesFromPreset } from '../../core/campaigns/terrain-presets';
 import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { CampaignMapPreviewComponent } from '../../shared/campaign-map-preview/campaign-map-preview.component';
@@ -75,7 +84,17 @@ type StructureGroup = FormGroup<{
   clearImage: FormControl<boolean>;
   pillagedIconSource: FormControl<'symbol' | 'image'>;
   clearPillagedImage: FormControl<boolean>;
+  isBuildable: FormControl<boolean>;
+  isPillageable: FormControl<boolean>;
+  isDestructible: FormControl<boolean>;
   missions: FormArray<MissionGroup>;
+}>;
+type ItemObjectiveGroup = FormGroup<{
+  id: FormControl<string>;
+  name: FormControl<string>;
+  isHiddenUntilFound: FormControl<boolean>;
+  placement: FormControl<ItemObjectivePlacement>;
+  allowOnSpawn: FormControl<boolean>;
 }>;
 type PhaseGroup = FormGroup<{
   kind: FormControl<string>;
@@ -91,6 +110,7 @@ const TOP_LEVEL_SECTION_IDS = [
   'factions',
   'terrain',
   'structures',
+  'itemObjectives',
   'links',
   'map',
 ] as const;
@@ -147,6 +167,9 @@ export class CampaignSetupPage {
   protected readonly durationUnits = DURATION_UNITS;
   protected readonly phaseKinds = PHASE_KINDS;
   protected readonly factionPresets = FACTION_PRESETS;
+  protected readonly terrainPresets = TERRAIN_PRESETS;
+  protected readonly structurePresets = STRUCTURE_PRESETS;
+  protected readonly campaignPresets = CAMPAIGN_PRESETS;
   protected readonly structureSymbols = STRUCTURE_TYPES;
   protected readonly structureImageMaxPx = 50;
   protected readonly flagImageMaxPx = 50;
@@ -154,6 +177,18 @@ export class CampaignSetupPage {
   protected readonly presetId = this.formBuilder.nonNullable.control('');
   protected readonly selectedPresetId = toSignal(this.presetId.valueChanges, {
     initialValue: this.presetId.value,
+  });
+  protected readonly terrainPresetId = this.formBuilder.nonNullable.control('');
+  protected readonly selectedTerrainPresetId = toSignal(this.terrainPresetId.valueChanges, {
+    initialValue: this.terrainPresetId.value,
+  });
+  protected readonly structurePresetId = this.formBuilder.nonNullable.control('');
+  protected readonly selectedStructurePresetId = toSignal(this.structurePresetId.valueChanges, {
+    initialValue: this.structurePresetId.value,
+  });
+  protected readonly campaignPresetId = this.formBuilder.nonNullable.control('');
+  protected readonly selectedCampaignPresetId = toSignal(this.campaignPresetId.valueChanges, {
+    initialValue: this.campaignPresetId.value,
   });
 
   protected readonly form = this.formBuilder.nonNullable.group({
@@ -180,6 +215,7 @@ export class CampaignSetupPage {
     links: this.formBuilder.array<LinkGroup>([]),
     terrainTypes: this.formBuilder.array<TerrainGroup>(this.createDefaultTerrainGroups()),
     structureTypes: this.formBuilder.array<StructureGroup>(this.createDefaultStructureGroups()),
+    itemObjectiveTypes: this.formBuilder.array<ItemObjectiveGroup>([]),
     phases: this.formBuilder.array<PhaseGroup>([
       this.createPhaseGroup('Action', 3, 'Days'),
       this.createPhaseGroup('Action', 3, 'Days'),
@@ -229,6 +265,10 @@ export class CampaignSetupPage {
 
   protected get structureTypes(): FormArray<StructureGroup> {
     return this.form.controls.structureTypes;
+  }
+
+  protected get itemObjectiveTypes(): FormArray<ItemObjectiveGroup> {
+    return this.form.controls.itemObjectiveTypes;
   }
 
   protected actionCount(): number {
@@ -323,6 +363,90 @@ export class CampaignSetupPage {
           requiresSubfaction: faction.requiresSubfaction,
         }),
       ),
+    );
+  }
+
+  protected applySelectedTerrainPreset(): void {
+    const types = terrainTypesFromPreset(this.terrainPresetId.value);
+    if (!types) {
+      this.revealErrors(['Select a terrain preset before adding it.']);
+      return;
+    }
+
+    this.replaceArray(
+      this.terrainTypes,
+      types.map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color)),
+    );
+  }
+
+  protected applySelectedStructurePreset(): void {
+    const types = structureTypesFromPreset(this.structurePresetId.value);
+    if (!types) {
+      this.revealErrors(['Select a structure preset before adding it.']);
+      return;
+    }
+
+    this.replaceArray(
+      this.structureTypes,
+      types.map((entry) =>
+        this.createStructureGroup(
+          undefined,
+          entry.name,
+          entry.builtinSymbol,
+          undefined,
+          'symbol',
+          'symbol',
+          entry.isBuildable,
+          entry.isPillageable,
+          entry.isDestructible,
+        ),
+      ),
+    );
+  }
+
+  protected applySelectedCampaignPreset(): void {
+    const copy = campaignFromPreset(this.campaignPresetId.value);
+    if (!copy) {
+      this.revealErrors(['Select a campaign preset before adding it.']);
+      return;
+    }
+
+    if (!this.form.controls.name.value.trim()) {
+      this.form.controls.name.setValue(copy.name);
+    }
+
+    this.replaceArray(
+      this.factions,
+      copy.factions.map((faction) =>
+        this.createFactionGroup(faction.name, '', faction.subfactions, {
+          color: faction.color,
+          requiresSubfaction: faction.requiresSubfaction,
+        }),
+      ),
+    );
+    this.replaceArray(
+      this.terrainTypes,
+      copy.terrainTypes.map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color)),
+    );
+    this.replaceArray(
+      this.structureTypes,
+      copy.structureTypes.map((entry) =>
+        this.createStructureGroup(
+          undefined,
+          entry.name,
+          entry.builtinSymbol,
+          undefined,
+          'symbol',
+          'symbol',
+          entry.isBuildable,
+          entry.isPillageable,
+          entry.isDestructible,
+        ),
+      ),
+    );
+    this.replaceArray(
+      this.itemObjectiveTypes,
+      copy.itemObjectives.map((item) => this.createItemObjectiveGroup(item)),
     );
   }
 
@@ -421,6 +545,18 @@ export class CampaignSetupPage {
     this.structurePillagedImages.delete(id);
     this.removeMissionsFiles(this.structureTypes.at(index));
     this.structureTypes.removeAt(index);
+  }
+
+  protected addItemObjective(): void {
+    if (this.itemObjectiveTypes.length >= 50) {
+      return;
+    }
+
+    this.itemObjectiveTypes.push(this.createItemObjectiveGroup());
+  }
+
+  protected removeItemObjective(index: number): void {
+    this.itemObjectiveTypes.removeAt(index);
   }
 
   protected addMission(group: TerrainGroup | StructureGroup): void {
@@ -848,6 +984,10 @@ export class CampaignSetupPage {
         campaign.structureTypes.map((type) => this.createStructureGroupFromDetail(type)),
       );
       this.replaceArray(
+        this.itemObjectiveTypes,
+        (campaign.itemObjectiveTypes ?? []).map((type) => this.createItemObjectiveGroupFromDetail(type)),
+      );
+      this.replaceArray(
         this.phases,
         campaign.phases.map((phase) => this.createPhaseGroup(phase.kind, phase.durationAmount, phase.durationUnit)),
       );
@@ -936,6 +1076,9 @@ export class CampaignSetupPage {
     missions?: MissionGroup[],
     iconSource: 'symbol' | 'image' = 'symbol',
     pillagedIconSource: 'symbol' | 'image' = 'symbol',
+    isBuildable = true,
+    isPillageable = true,
+    isDestructible = true,
   ): StructureGroup {
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
@@ -945,6 +1088,9 @@ export class CampaignSetupPage {
       clearImage: [false],
       pillagedIconSource: this.formBuilder.nonNullable.control<'symbol' | 'image'>(pillagedIconSource),
       clearPillagedImage: [false],
+      isBuildable: [isBuildable],
+      isPillageable: [isPillageable],
+      isDestructible: [isDestructible],
       missions: this.formBuilder.array<MissionGroup>(missions ?? []),
     });
   }
@@ -959,11 +1105,37 @@ export class CampaignSetupPage {
       missions,
       type.hasImage ? 'image' : 'symbol',
       type.hasPillagedImage ? 'image' : 'symbol',
+      type.isBuildable,
+      type.isPillageable,
+      type.isDestructible,
     );
   }
 
   private createMissionGroupFromDetail(mission: CampaignMission): MissionGroup {
     return this.createMissionGroup(mission.id, mission.name, mission.url ?? '', false);
+  }
+
+  private createItemObjectiveGroup(item?: ItemObjectivePresetItem, id?: string): ItemObjectiveGroup {
+    const defaults = defaultItemObjective();
+    return this.formBuilder.nonNullable.group({
+      id: [id ?? this.newId()],
+      name: [item?.name ?? '', [maxLength(60)]],
+      isHiddenUntilFound: [item?.isHiddenUntilFound ?? defaults.isHiddenUntilFound],
+      placement: this.formBuilder.nonNullable.control<ItemObjectivePlacement>(item?.placement ?? defaults.placement),
+      allowOnSpawn: [item?.allowOnSpawn ?? defaults.allowOnSpawn],
+    });
+  }
+
+  private createItemObjectiveGroupFromDetail(type: CampaignItemObjectiveType): ItemObjectiveGroup {
+    return this.createItemObjectiveGroup(
+      {
+        name: type.name,
+        isHiddenUntilFound: type.isHiddenUntilFound,
+        placement: type.placement === 'Placed' ? 'Placed' : 'Random',
+        allowOnSpawn: type.allowOnSpawn,
+      },
+      type.id,
+    );
   }
 
   private createDefaultTerrainGroups(): TerrainGroup[] {
@@ -972,7 +1144,17 @@ export class CampaignSetupPage {
 
   private createDefaultStructureGroups(): StructureGroup[] {
     return defaultStructureCatalog().map((entry) =>
-      this.createStructureGroup(undefined, entry.name, entry.builtinSymbol),
+      this.createStructureGroup(
+        undefined,
+        entry.name,
+        entry.builtinSymbol,
+        undefined,
+        'symbol',
+        'symbol',
+        entry.isBuildable,
+        entry.isPillageable,
+        entry.isDestructible,
+      ),
     );
   }
 
@@ -1034,10 +1216,22 @@ export class CampaignSetupPage {
       builtinSymbol: type.builtinSymbol.trim() || null,
       clearImage: type.iconSource === 'symbol' || type.clearImage,
       clearPillagedImage: type.pillagedIconSource === 'symbol' || type.clearPillagedImage,
+      isBuildable: type.isBuildable,
+      isPillageable: type.isPillageable,
+      isDestructible: type.isDestructible,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toMissionPayload(mission)),
     }));
+    const itemObjectiveTypes = value.itemObjectiveTypes
+      .filter((type) => type.name.trim().length > 0)
+      .map((type) => ({
+        id: type.id,
+        name: type.name.trim(),
+        isHiddenUntilFound: type.isHiddenUntilFound,
+        placement: type.placement,
+        allowOnSpawn: type.allowOnSpawn,
+      }));
 
     return {
       name: value.name.trim(),
@@ -1055,6 +1249,7 @@ export class CampaignSetupPage {
       links,
       terrainTypes,
       structureTypes,
+      itemObjectiveTypes,
       timeZoneId: value.timeZoneId || 'UTC',
       startsAtLocal: value.startsAtLocal,
       roundCount: Number(value.roundCount),
@@ -1248,6 +1443,30 @@ export class CampaignSetupPage {
       }
     });
 
+    const usedItemNames = new Set<string>();
+    this.itemObjectiveTypes.controls.forEach((item, index) => {
+      const name = item.controls.name.value.trim();
+      if (!name) {
+        return;
+      }
+
+      const nameMessage = describeControlError(item.controls.name, `Item objective ${index + 1} name`);
+      if (nameMessage) {
+        failures.push(nameMessage);
+        sections.add('itemObjectives');
+        sections.add(`item-objective-${index}`);
+      }
+
+      const key = name.toLowerCase();
+      if (usedItemNames.has(key)) {
+        failures.push(`Item objective ${index + 1} name must be unique.`);
+        sections.add('itemObjectives');
+        sections.add(`item-objective-${index}`);
+      }
+
+      usedItemNames.add(key);
+    });
+
     const roundLengthError = describeControlError(this.form.controls.roundLengthAmount, 'Round length');
     if (!roundLengthError) {
       const roundLengthMessage = durationRangeMessage(
@@ -1387,6 +1606,9 @@ export class CampaignSetupPage {
     });
     this.structureTypes.controls.forEach((_, index) => {
       ids.push(`structure-item-${index}`, `structure-missions-${index}`);
+    });
+    this.itemObjectiveTypes.controls.forEach((_, index) => {
+      ids.push(`item-objective-${index}`);
     });
     return ids;
   }

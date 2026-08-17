@@ -61,4 +61,44 @@ public static class StructureCatalog
         type = default;
         return false;
     }
+
+    /// <summary>
+    /// Default play flags for a built-in structure type.
+    /// Town, Capital City, City, and Castle are not buildable. Capital City is not pillageable.
+    /// Capital City, City, and Castle are not destructible.
+    /// </summary>
+    /// <param name="type">The built-in structure type.</param>
+    /// <returns>Buildable, pillageable, and destructible flags.</returns>
+    public static (bool IsBuildable, bool IsPillageable, bool IsDestructible) DefaultFlags(StructureType type)
+    {
+        return type switch
+        {
+            StructureType.CapitalCity => (false, false, false),
+            StructureType.Castle => (false, true, false),
+            StructureType.City => (false, true, false),
+            StructureType.Fortification => (true, true, true),
+            StructureType.SupplyDepot => (true, true, true),
+            StructureType.Town => (false, true, true),
+            _ => (true, true, true),
+        };
+    }
+
+    /// <summary>
+    /// Default play flags for a structure name or built-in logo key. Unknown custom structures
+    /// default to buildable, pillageable, and destructible.
+    /// </summary>
+    /// <param name="name">The structure name.</param>
+    /// <param name="builtinSymbol">The built-in logo key.</param>
+    /// <returns>Buildable, pillageable, and destructible flags.</returns>
+    public static (bool IsBuildable, bool IsPillageable, bool IsDestructible) DefaultFlags(
+        string? name,
+        string? builtinSymbol)
+    {
+        if (TryParse(builtinSymbol, out var type) || TryParse(name, out type))
+        {
+            return DefaultFlags(type);
+        }
+
+        return (true, true, true);
+    }
 }

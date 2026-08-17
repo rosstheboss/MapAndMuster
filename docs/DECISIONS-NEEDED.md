@@ -42,7 +42,9 @@ in an ADR or the relevant domain document and update tests.
 
 14. Define castle gates, walls, battering rams, scaling, and inside-the-walls behavior.
 15. Define relic choice options, private/public timing, effects, and recovery when a choice
-    changes campaign state.
+    changes campaign state. Placement (random or manager-placed), hidden-until-found
+    visibility, spawn eligibility, drop-on-move, pickup, battle transfer, and staff reveal
+    in debug mode are implemented.
 16. Complete armies-of-infamy content or mark it explicitly out of application scope.
 17. Define neutral-force eligibility, drought threshold, scoring, territory capture, relic/objective
     interaction, and whether a participating GM may control it against their own rivals.

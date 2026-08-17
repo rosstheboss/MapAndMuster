@@ -19,4 +19,7 @@ public sealed class CampaignMapGraphDetail
 
     /// <summary>Gets the explicit adjacencies.</summary>
     public required IReadOnlyList<AdjacencyDetail> Adjacencies { get; init; }
+
+    /// <summary>Gets manager-assigned item objective placements.</summary>
+    public IReadOnlyList<ItemObjectivePlacementDetail> ItemObjectivePlacements { get; init; } = [];
 }

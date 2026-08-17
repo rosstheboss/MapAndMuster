@@ -50,6 +50,7 @@ public static class ActionResolution
 
         var nextForces = new List<CampaignForce>();
         var occupied = new Dictionary<Guid, List<Guid>>();
+        var moveOrigins = new Dictionary<Guid, Guid>();
         foreach (var force in state.Forces.OrderBy(static item => item.Id))
         {
             if (force.InBattle)
@@ -79,6 +80,11 @@ public static class ActionResolution
             var destination = order.Kind is ActionKind.Move or ActionKind.Retreat
                 ? order.TargetTerritoryId ?? force.TerritoryId
                 : force.TerritoryId;
+            if (order.Kind is ActionKind.Move or ActionKind.Retreat && destination != force.TerritoryId)
+            {
+                moveOrigins[force.Id] = force.TerritoryId;
+            }
+
             var moved = force.With(territoryId: destination);
             nextForces.Add(moved);
             AddOccupied(occupied, destination, moved.Id);
@@ -145,6 +151,9 @@ public static class ActionResolution
             .. nextForces.Select(force => force.With(inBattle: inBattle.Contains(force.Id) || force.InBattle)),
         ];
 
+        var items = ItemObjectiveRules.DropCarriedByMovers(state.ItemObjectives, moveOrigins, utcNow, log);
+        items = ItemObjectiveRules.PickUpUnpossessed(items, nextForces, utcNow, log);
+
         var nextMap = ApplyTerritoryEffects(map, nextForces, resolved, inBattle);
         return (
             state.With(
@@ -152,6 +161,7 @@ public static class ActionResolution
                 battles: battles,
                 brokenAllyFactionIds: [.. broken.OrderBy(static id => id)],
                 structures: CaptureStructures(nextMap),
+                itemObjectives: items,
                 log: log),
             nextMap);
     }
@@ -164,8 +174,7 @@ public static class ActionResolution
         CampaignPlayState state,
         PlayMap map,
         CampaignForce force,
-        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
-        bool catalogHasStructures)
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -183,7 +192,7 @@ public static class ActionResolution
             kinds.Add(ActionKind.Move);
         }
 
-        if (catalogHasStructures && CanBuildInTerritory(map, force))
+        if (map.HasBuildableStructure && CanBuildInTerritory(map, force))
         {
             kinds.Add(ActionKind.Build);
         }
@@ -324,20 +333,10 @@ public static class ActionResolution
         return IsValidMove(map, force, targetId);
     }
 
-    private static bool IsValidBuild(PlayMap map, CampaignForce force, Guid? structureTypeId)
+    internal static bool CanBuildInTerritory(PlayMap map, CampaignForce force)
     {
-        if (structureTypeId is null)
-        {
-            return false;
-        }
-
         var territory = map.Territory(force.TerritoryId);
-        if (territory is null || territory.IsSpawn && territory.SpawnFactionId != force.FactionId)
-        {
-            return false;
-        }
-
-        if (territory.IsSpawn)
+        if (territory is null || territory.IsSpawn)
         {
             return false;
         }
@@ -345,9 +344,23 @@ public static class ActionResolution
         return territory.StructureTypeId is null || territory.StructureCondition == StructureCondition.Destroyed;
     }
 
-    internal static bool CanBuildInTerritory(PlayMap map, CampaignForce force)
+    private static bool IsValidBuild(PlayMap map, CampaignForce force, Guid? structureTypeId)
     {
-        return IsValidBuild(map, force, Guid.NewGuid());
+        if (structureTypeId is null)
+        {
+            return false;
+        }
+
+        if (map.StructureTypes.Count > 0)
+        {
+            var rules = map.StructureRules(structureTypeId.Value);
+            if (rules is null || !rules.IsBuildable)
+            {
+                return false;
+            }
+        }
+
+        return CanBuildInTerritory(map, force);
     }
 
     internal static bool IsValidPillage(PlayMap map, CampaignForce force)
@@ -359,6 +372,16 @@ public static class ActionResolution
         }
 
         if (territory.OwnerFactionId == force.FactionId)
+        {
+            return false;
+        }
+
+        if (!territory.IsPillageable)
+        {
+            return false;
+        }
+
+        if (territory.StructureCondition == StructureCondition.Pillaged && !territory.IsDestructible)
         {
             return false;
         }
@@ -488,19 +511,25 @@ public static class ActionResolution
             var territory = next[force.TerritoryId];
             if (order.Kind == ActionKind.Build && order.StructureTypeId is { } structureTypeId)
             {
+                var rules = map.StructureRules(structureTypeId);
                 next[territory.Id] = territory.With(
                     ownerFactionId: force.FactionId,
                     structureTypeId: structureTypeId,
-                    structureCondition: StructureCondition.Operational);
+                    structureName: rules?.Name,
+                    structureCondition: StructureCondition.Operational,
+                    isPillageable: rules?.IsPillageable ?? territory.IsPillageable,
+                    isDestructible: rules?.IsDestructible ?? territory.IsDestructible);
             }
             else if (order.Kind == ActionKind.Pillage)
             {
-                var nextCondition = territory.StructureCondition == StructureCondition.Operational
-                    ? StructureCondition.Pillaged
-                    : territory.IsCity
-                        ? StructureCondition.Pillaged
-                        : StructureCondition.Destroyed;
-                next[territory.Id] = territory.With(structureCondition: nextCondition);
+                if (territory.StructureCondition == StructureCondition.Operational)
+                {
+                    next[territory.Id] = territory.With(structureCondition: StructureCondition.Pillaged);
+                }
+                else if (territory.IsDestructible)
+                {
+                    next[territory.Id] = territory.With(clearStructure: true);
+                }
             }
             else if (order.Kind == ActionKind.Repair)
             {

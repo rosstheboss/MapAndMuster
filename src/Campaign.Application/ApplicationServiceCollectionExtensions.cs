@@ -60,6 +60,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<EnterCampaignDebugHandler>();
         services.AddScoped<ExitCampaignDebugHandler>();
         services.AddScoped<DebugCorrectOrderHandler>();
+        services.AddScoped<RevealHiddenItemObjectivesHandler>();
 
         return services;
     }

@@ -125,6 +125,7 @@ public sealed class DuplicateCampaignHandler
             PlayState = null,
             TerrainTypes = [.. source.TerrainTypes],
             StructureTypes = [.. source.StructureTypes],
+            ItemObjectiveTypes = [.. source.ItemObjectiveTypes],
         };
 
         var created = await _campaigns.AddAsync(copy, cancellationToken).ConfigureAwait(false);

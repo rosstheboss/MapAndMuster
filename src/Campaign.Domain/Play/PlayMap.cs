@@ -15,7 +15,9 @@ public sealed class PlayTerritory
         Guid? spawnFactionId,
         Guid? structureTypeId,
         string? structureName,
-        StructureCondition structureCondition)
+        StructureCondition structureCondition,
+        bool isPillageable = true,
+        bool isDestructible = true)
     {
         Id = id;
         DisplayNumber = displayNumber;
@@ -24,6 +26,8 @@ public sealed class PlayTerritory
         StructureTypeId = structureTypeId;
         StructureName = structureName;
         StructureCondition = structureCondition;
+        IsPillageable = isPillageable;
+        IsDestructible = isDestructible;
     }
 
     /// <summary>Gets the territory identifier.</summary>
@@ -50,11 +54,11 @@ public sealed class PlayTerritory
     /// <summary>Gets whether this territory is a spawn location.</summary>
     public bool IsSpawn => SpawnFactionId.HasValue;
 
-    /// <summary>Gets whether the structure is a city that cannot be destroyed.</summary>
-    public bool IsCity =>
-        StructureName is not null
-        && (string.Equals(StructureName, "City", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(StructureName, "Capital City", StringComparison.OrdinalIgnoreCase));
+    /// <summary>Gets whether the occupying structure may be pillaged.</summary>
+    public bool IsPillageable { get; }
+
+    /// <summary>Gets whether a second Pillage may destroy and remove the occupying structure.</summary>
+    public bool IsDestructible { get; }
 
     /// <summary>
     /// Returns a copy with updated ownership and structure fields.
@@ -64,7 +68,9 @@ public sealed class PlayTerritory
         Guid? structureTypeId = null,
         string? structureName = null,
         StructureCondition? structureCondition = null,
-        bool clearStructure = false)
+        bool clearStructure = false,
+        bool? isPillageable = null,
+        bool? isDestructible = null)
     {
         return new PlayTerritory(
             Id,
@@ -73,7 +79,9 @@ public sealed class PlayTerritory
             SpawnFactionId,
             clearStructure ? null : structureTypeId ?? StructureTypeId,
             clearStructure ? null : structureName ?? StructureName,
-            structureCondition ?? StructureCondition);
+            clearStructure ? StructureCondition.Operational : structureCondition ?? StructureCondition,
+            clearStructure ? false : isPillageable ?? IsPillageable,
+            clearStructure ? false : isDestructible ?? IsDestructible);
     }
 }
 
@@ -90,11 +98,16 @@ public sealed class PlayMap
     /// </summary>
     /// <param name="territories">The territories.</param>
     /// <param name="adjacencies">Undirected adjacency pairs.</param>
-    public PlayMap(IReadOnlyList<PlayTerritory> territories, IReadOnlyList<(Guid A, Guid B)> adjacencies)
+    /// <param name="structureTypes">Catalog flags used to validate Build and structure effects.</param>
+    public PlayMap(
+        IReadOnlyList<PlayTerritory> territories,
+        IReadOnlyList<(Guid A, Guid B)> adjacencies,
+        IReadOnlyList<StructureTypePlayRules>? structureTypes = null)
     {
         ArgumentNullException.ThrowIfNull(territories);
         ArgumentNullException.ThrowIfNull(adjacencies);
         Territories = territories;
+        StructureTypes = structureTypes ?? [];
         _territories = territories.ToDictionary(static territory => territory.Id);
         _adjacent = [];
         foreach (var (left, right) in adjacencies)
@@ -106,6 +119,9 @@ public sealed class PlayMap
 
     /// <summary>Gets the territories.</summary>
     public IReadOnlyList<PlayTerritory> Territories { get; }
+
+    /// <summary>Gets catalog flags for structure types in this campaign.</summary>
+    public IReadOnlyList<StructureTypePlayRules> StructureTypes { get; }
 
     /// <summary>
     /// Returns a territory by identifier.
@@ -159,8 +175,19 @@ public sealed class PlayMap
         var edges = _adjacent
             .SelectMany(pair => pair.Value.Where(other => other.CompareTo(pair.Key) > 0).Select(other => (pair.Key, other)))
             .ToArray();
-        return new PlayMap(territories, edges);
+        return new PlayMap(territories, edges, StructureTypes);
     }
+
+    /// <summary>
+    /// Catalog rules for a structure type, when present.
+    /// </summary>
+    public StructureTypePlayRules? StructureRules(Guid structureTypeId)
+    {
+        return StructureTypes.FirstOrDefault(item => item.Id == structureTypeId);
+    }
+
+    /// <summary>Gets whether any catalog structure may be built.</summary>
+    public bool HasBuildableStructure => StructureTypes.Any(static item => item.IsBuildable);
 
     /// <summary>
     /// Replaces one territory.

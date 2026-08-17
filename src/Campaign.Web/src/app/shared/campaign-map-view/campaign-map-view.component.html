@@ -65,7 +65,9 @@
           <polygon
             class="territory"
             [class.is-selected]="item.selected"
-            [class.is-adjacent]="item.adjacent"
+            [class.is-half-highlighted]="item.halfHighlighted"
+            [class.is-move-valid]="item.moveValid"
+            [class.is-move-invalid]="item.moveInvalid"
             [attr.points]="item.points"
             [attr.fill]="item.territory.overlayColor ? item.territory.overlayColor : 'transparent'"
             [attr.stroke-width]="item.strokeWidth"
@@ -204,6 +206,38 @@
             [attr.aria-label]="pin.force.label"
           ></div>
         }
+        @for (pin of item.items; track pin.item.id) {
+          <div
+            class="item-pin"
+            [class.is-carried]="pin.item.carried"
+            [class.is-hidden]="pin.item.hidden"
+            [style.left.%]="pin.fit.x * 100"
+            [style.top.%]="pin.fit.y * 100"
+            [style.width.px]="markerSize(pin.fit).width"
+            [style.height.px]="markerSize(pin.fit).height"
+            [style.margin-left.px]="-markerSize(pin.fit).width / 2"
+            [style.margin-top.px]="-markerSize(pin.fit).height / 2"
+            role="img"
+            [attr.aria-label]="pin.item.name"
+          ></div>
+        }
+      }
+      @if (moveDropMarker(); as marker) {
+        <div
+          class="move-drop-marker"
+          [class.is-valid]="marker.valid"
+          [class.is-invalid]="!marker.valid"
+          [style.left.%]="marker.x * 100"
+          [style.top.%]="marker.y * 100"
+          [style.width.px]="marker.size"
+          [style.height.px]="marker.size"
+          [style.margin-left.px]="-marker.size / 2"
+          [style.margin-top.px]="-marker.size / 2"
+          role="img"
+          [attr.aria-label]="marker.valid ? 'Drop is allowed' : 'Drop is not allowed'"
+        >
+          <app-icon [name]="marker.valid ? 'check' : 'x'" />
+        </div>
       }
     </div>
     @if (marqueeBox(); as box) {

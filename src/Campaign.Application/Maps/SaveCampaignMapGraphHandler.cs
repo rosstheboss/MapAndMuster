@@ -74,7 +74,7 @@ public sealed class SaveCampaignMapGraphHandler
             return OperationResults.Failure<CampaignMapGraphDetail>(errors);
         }
 
-        var stored = MapGraphMapper.ToStored(graph);
+        var stored = MapGraphMapper.ToStored(graph, BindPlacements(command, graph, existing));
         var outcome = await _campaigns
             .UpdateMapGraphAsync(command.CampaignId, stored, command.ExpectedRevision, _clock.UtcNow, cancellationToken)
             .ConfigureAwait(false);
@@ -86,6 +86,29 @@ public sealed class SaveCampaignMapGraphHandler
         }
 
         return OperationResults.Success(
-            MapGraphMapper.ToDetail(outcome.Campaign.Id, outcome.Campaign.Revision, canManage: true, graph));
+            MapGraphMapper.ToDetail(outcome.Campaign.Id, outcome.Campaign.Revision, canManage: true, graph, stored.ItemObjectivePlacements));
+    }
+
+    private static IReadOnlyList<ItemObjectivePlacementDetail> BindPlacements(
+        SaveCampaignMapGraphCommand command,
+        CampaignMapGraph graph,
+        StoredCampaign existing)
+    {
+        var territoryIds = graph.Territories.Select(static territory => territory.Id).ToHashSet();
+        var placedTypeIds = existing.ItemObjectiveTypes
+            .Where(static type => type.Placement.Equals("Placed", StringComparison.OrdinalIgnoreCase))
+            .Select(static type => type.Id)
+            .ToHashSet();
+        return
+        [
+            .. (command.ItemObjectivePlacements ?? [])
+                .Where(item => placedTypeIds.Contains(item.TypeId) && territoryIds.Contains(item.TerritoryId))
+                .GroupBy(static item => item.TypeId)
+                .Select(static group => new ItemObjectivePlacementDetail
+                {
+                    TypeId = group.Key,
+                    TerritoryId = group.First().TerritoryId,
+                }),
+        ];
     }
 }

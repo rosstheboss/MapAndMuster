@@ -93,8 +93,9 @@
                 {{ toolLabel(item) }}
               </button>
             }
-            <button type="button" class="button-secondary" (click)="undo()">Undo</button>
-            <button type="button" class="button-secondary" (click)="closePolygon()" [disabled]="drawing().length < 3">
+            <button type="button" class="button-secondary" (click)="undo()" [disabled]="!canUndo()">Undo</button>
+            <button type="button" class="button-secondary" (click)="redo()" [disabled]="!canRedoHistory()">Redo</button>
+            <button type="button" class="button-secondary" (click)="closePolygon()" [disabled]="drawing().length < 2">
               Close Territory
             </button>
             <button
@@ -173,15 +174,17 @@
         <p class="muted">
           Draw on the overlay, not the image. Click to place segments; a ring highlights when a line is about to
           connect. If two endpoints land on the same open border of an existing territory, that border is traced when
-          you release the mouse. If both endpoints sit on the map image edge, the shape closes along that edge. Press
-          Enter to close a territory, Escape to cancel, Delete to remove selected territories, and Ctrl+Z to undo.
+          you release the mouse. Press Close Territory or Enter to close the current drawing, including trying to close
+          along a touched border or the map image edge. Click near the first point to close a drawn loop. Press Escape
+          to cancel, Delete to remove selected territories, Ctrl+Z to undo, and Ctrl+Y or Ctrl+Shift+Z to redo.
           Ctrl+click selects multiple territories; in Select mode, drag a box to multi-select, or drag selected
-          territories to move them. Select two territories and click Connect, or use the Connect tool and click two
-          territories; a pair can have only one connection. In Select, click a connection arrow to edit it; in Erase,
-          click an arrow to delete it. Drawing ignores connection arrows. Hovering an arrow in Select or Erase glows
-          that arrow and its two territories. Hold right-click or middle-click and drag to pan; the mouse wheel always
-          zooms. Left-click does not pan. Drawing stays aligned to the full-size map. Click empty map to clear the
-          selection. Use the territory list to select without a pointer.
+          territories to move them. A moving group is green with a checkmark when it can be dropped, or red with an X
+          when it cannot; dropping while red restores the group to where the drag started. Select two territories and
+          click Connect, or use the Connect tool and click two territories; a pair can have only one connection. In
+          Select, click a connection arrow to edit it; in Erase, click an arrow to delete it. Drawing ignores connection
+          arrows. Hovering an arrow in Select or Erase glows that arrow and its two territories. Hold right-click or
+          middle-click and drag to pan; the mouse wheel always zooms. Left-click does not pan. Drawing stays aligned to
+          the full-size map. Click empty map to clear the selection. Use the territory list to select without a pointer.
         </p>
       }
 
@@ -193,7 +196,7 @@
             [adjacencies]="graph().adjacencies"
             [drawingPoints]="drawing()"
             [snapTarget]="snapTarget()"
-            [selectedTerritoryIds]="highlightedTerritoryIds()"
+            [selectedTerritoryIds]="selectedIds()"
             [hoveredTerritoryId]="hoveredTerritoryId()"
             [hoveredAdjacencyId]="hoveredAdjacencyId()"
             [selectedAdjacencyId]="selectedAdjacencyId()"
@@ -202,6 +205,7 @@
             [adjacenciesInteractive]="tool() === 'select' || tool() === 'erase'"
             [interactive]="true"
             [moveTerritories]="tool() === 'select'"
+            [movePlacement]="movePlacement()"
             [marqueeSelect]="tool() === 'select'"
             [factions]="campaign()?.factions ?? []"
             [structures]="campaign()?.structureTypes ?? []"
@@ -450,6 +454,24 @@
                       }
                     </select>
                   </div>
+                  @if (placedItemTypes().length > 0 && selectedIds().length === 1) {
+                    <fieldset class="field">
+                      <legend>Placed item objectives</legend>
+                      @for (type of placedItemTypes(); track type.id) {
+                        <label class="choice-row">
+                          <input
+                            type="checkbox"
+                            [id]="'item-place-' + type.id"
+                            [ngModel]="isItemPlacedHere(type.id)"
+                            [ngModelOptions]="{ standalone: true }"
+                            (ngModelChange)="setItemPlacedHere(type.id, $event)"
+                          />
+                          Place {{ type.name }} here
+                        </label>
+                        <p class="muted">Currently: {{ itemPlacementLabel(type.id) }}</p>
+                      }
+                    </fieldset>
+                  }
                   <div class="field">
                     <label for="territory-color">Overlay color</label>
                     <input

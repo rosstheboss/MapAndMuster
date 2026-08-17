@@ -578,7 +578,8 @@ public sealed class ActionWindowSnapshot
         IReadOnlyList<CampaignForce> forces,
         IReadOnlyList<TerritoryStructureState> structures,
         IReadOnlyList<Guid> brokenAllyFactionIds,
-        IReadOnlyList<TerritorySnapshot> territories)
+        IReadOnlyList<TerritorySnapshot> territories,
+        IReadOnlyList<CampaignItemObjective>? itemObjectives = null)
     {
         ArgumentNullException.ThrowIfNull(forces);
         ArgumentNullException.ThrowIfNull(structures);
@@ -589,6 +590,7 @@ public sealed class ActionWindowSnapshot
         Structures = structures;
         BrokenAllyFactionIds = brokenAllyFactionIds;
         Territories = territories;
+        ItemObjectives = itemObjectives ?? [];
     }
 
     /// <summary>Gets the action window.</summary>
@@ -605,4 +607,7 @@ public sealed class ActionWindowSnapshot
 
     /// <summary>Gets territory ownership and structures before resolution.</summary>
     public IReadOnlyList<TerritorySnapshot> Territories { get; }
+
+    /// <summary>Gets item objectives before resolution.</summary>
+    public IReadOnlyList<CampaignItemObjective> ItemObjectives { get; }
 }

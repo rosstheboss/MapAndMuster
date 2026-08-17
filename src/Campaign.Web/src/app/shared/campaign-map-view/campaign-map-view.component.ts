@@ -29,15 +29,18 @@ import {
   polygonIntersectsRect,
   polygonPointsAttribute,
   SNAP_RING_SCREEN_PX,
-  STROKE_ADJACENT_SCREEN_PX,
+  STROKE_FULL_HIGHLIGHT_SCREEN_PX,
+  STROKE_HALF_HIGHLIGHT_SCREEN_PX,
   STROKE_SCREEN_PX,
-  STROKE_SELECTED_SCREEN_PX,
   VERTEX_SCREEN_PX,
   ZOOM_STEP,
 } from '../../core/maps/geometry';
 import type { FittedSquare, MapPoint } from '../../core/maps/geometry';
 import type { MapAdjacency, MapTerritory } from '../../core/maps/map-graph.models';
+import { IconComponent } from '../icon/icon.component';
 import { MapSymbolComponent } from '../map-symbol/map-symbol.component';
+
+export type MovePlacement = 'valid' | 'invalid' | null;
 
 export interface MapForceMarker {
   id: string;
@@ -48,9 +51,17 @@ export interface MapForceMarker {
   label: string;
 }
 
+export interface MapItemMarker {
+  id: string;
+  territoryId: string;
+  name: string;
+  carried: boolean;
+  hidden: boolean;
+}
+
 @Component({
   selector: 'app-campaign-map-view',
-  imports: [MapSymbolComponent],
+  imports: [IconComponent, MapSymbolComponent],
   templateUrl: './campaign-map-view.component.html',
   styleUrl: './campaign-map-view.component.css',
 })
@@ -69,18 +80,20 @@ export class CampaignMapViewComponent {
   readonly adjacenciesInteractive = input(false);
   readonly interactive = input(true);
   readonly moveTerritories = input(false);
+  readonly movePlacement = input<MovePlacement>(null);
   readonly marqueeSelect = input(false);
   readonly factions = input<readonly CampaignFaction[]>([]);
   readonly structures = input<readonly CampaignStructureType[]>([]);
   readonly structureImageUrl = input<(structureTypeId: string, pillaged?: boolean) => string | null>(() => null);
   readonly flagImageUrl = input<(factionId: string) => string | null>(() => null);
   readonly forces = input<readonly MapForceMarker[]>([]);
+  readonly items = input<readonly MapItemMarker[]>([]);
 
   readonly mapPoint = output<MapPoint>();
   readonly mapHover = output<MapPoint>();
   readonly territoryHover = output<string | null>();
   readonly adjacencyHover = output<string | null>();
-  readonly territorySelect = output<{ id: string; additive: boolean }>();
+  readonly territorySelect = output<{ id: string; additive: boolean; clientX: number; clientY: number }>();
   readonly adjacencySelect = output<string>();
   readonly backgroundSelect = output<void>();
   readonly territoryMarquee = output<{ ids: string[]; additive: boolean }>();
@@ -153,6 +166,16 @@ export class CampaignMapViewComponent {
           color: this.factions().find((faction) => faction.id === force.factionId)?.color ?? '#44403c',
         };
       });
+      const presentItems = this.items().filter((item) => item.territoryId === territory.id);
+      const itemPins = presentItems.map((item, index) => {
+        const preferred = {
+          x: center.x + (index - (presentItems.length - 1) / 2) * maxWidth * 0.55,
+          y: center.y - maxHeight * 0.38,
+        };
+        const fit = fitSquareInPolygon(territory.polygon, preferred, maxWidth * 0.7, maxHeight * 0.7, avoided);
+        avoided.push(fit);
+        return { item, fit };
+      });
       return {
         territory,
         points: polygonPointsAttribute(territory.polygon),
@@ -167,6 +190,7 @@ export class CampaignMapViewComponent {
               }
             : null,
         forces: forcePins,
+        items: itemPins,
         structure,
         structureImage: structure
           ? pillaged && structure.hasPillagedImage
@@ -176,17 +200,46 @@ export class CampaignMapViewComponent {
               : null
           : null,
         selected,
-        adjacent: !selected && this.isAdjacent(territory.id),
+        halfHighlighted: !selected && this.isHalfHighlighted(territory.id),
+        moveValid: selected && this.movePlacement() === 'valid',
+        moveInvalid: selected && this.movePlacement() === 'invalid',
         strokeWidth: this.screenToMap(
           selected
-            ? STROKE_SELECTED_SCREEN_PX
-            : this.isAdjacent(territory.id)
-              ? STROKE_ADJACENT_SCREEN_PX
+            ? STROKE_FULL_HIGHLIGHT_SCREEN_PX
+            : this.isHalfHighlighted(territory.id)
+              ? STROKE_HALF_HIGHLIGHT_SCREEN_PX
               : STROKE_SCREEN_PX,
         ),
         glowColor: territory.overlayColor ?? 'var(--color-glow)',
       };
     });
+  });
+
+  protected readonly moveDropMarker = computed(() => {
+    const placement = this.movePlacement();
+    if (!placement) {
+      return null;
+    }
+
+    const selected = this.territories().filter((territory) => this.isSelected(territory.id));
+    if (selected.length === 0) {
+      return null;
+    }
+
+    let x = 0;
+    let y = 0;
+    for (const territory of selected) {
+      const center = centroid(territory.polygon);
+      x += center.x;
+      y += center.y;
+    }
+
+    return {
+      x: x / selected.length,
+      y: y / selected.length,
+      size: MARKER_MAX_PX / Math.max(this.currentScale(), Number.EPSILON),
+      valid: placement === 'valid',
+    };
   });
 
   protected readonly overlayAdjacencies = computed(() => {
@@ -213,7 +266,7 @@ export class CampaignMapViewComponent {
           cy: (ends.from.y + ends.to.y) / 2,
           highlighted,
           hitWidth: Math.min(this.screenToMap(ARROW_HIT_SCREEN_PX), 0.05),
-          strokeWidth: Math.min(this.screenToMap(STROKE_SELECTED_SCREEN_PX), 0.008),
+          strokeWidth: Math.min(this.screenToMap(STROKE_FULL_HIGHLIGHT_SCREEN_PX), 0.008),
         },
       ];
     });
@@ -356,7 +409,12 @@ export class CampaignMapViewComponent {
     const territoryId = kind === 'territory' && id ? id : this.territoryIdAt(point);
     if (territoryId) {
       const additive = event.ctrlKey || event.metaKey;
-      this.territorySelect.emit({ id: territoryId, additive });
+      this.territorySelect.emit({
+        id: territoryId,
+        additive,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
       this.mapPoint.emit(point);
       if (!additive && this.moveTerritories()) {
         this.movingTerritory = true;
@@ -507,11 +565,11 @@ export class CampaignMapViewComponent {
   }
 
   private isSelected(territoryId: string): boolean {
-    return this.selectedTerritoryIds().includes(territoryId) || territoryId === this.hoveredTerritoryId();
+    return this.selectedTerritoryIds().includes(territoryId);
   }
 
-  private isAdjacent(territoryId: string): boolean {
-    return this.adjacentTerritoryIds().includes(territoryId);
+  private isHalfHighlighted(territoryId: string): boolean {
+    return territoryId === this.hoveredTerritoryId() || this.adjacentTerritoryIds().includes(territoryId);
   }
 
   private pointFromEvent(event: PointerEvent): MapPoint | null {

@@ -143,6 +143,20 @@ internal static class CampaignPlayMapper
             RemainingWindows = remaining,
             Factions = CampaignMapper.ToDetail(campaign, viewerUserId, utcNow).Factions,
             StructureTypes = CampaignMapper.ToDetail(campaign, viewerUserId, utcNow).StructureTypes,
+            ItemObjectives =
+            [
+                .. play.ItemObjectives
+                    .Where(item => item.IsRevealed || staffView)
+                    .Select(item => new PlayItemObjectiveDetail
+                    {
+                        Id = item.Id,
+                        TypeId = item.TypeId,
+                        Name = item.Name,
+                        TerritoryId = item.IsRevealed || staffView ? item.TerritoryId : null,
+                        PossessorForceId = item.IsRevealed || staffView ? item.PossessorForceId : null,
+                        IsRevealed = item.IsRevealed,
+                    }),
+            ],
             Forces =
             [
                 .. play.Forces.Select(force => new PlayForceDetail
@@ -162,8 +176,7 @@ internal static class CampaignPlayMapper
                             play,
                             map,
                             force,
-                            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName),
-                            campaign.StructureTypes.Count > 0).Select(static kind => kind.ToString())]
+                            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName)).Select(static kind => kind.ToString())]
                         : [],
                 }),
             ],
@@ -463,6 +476,14 @@ internal static class CampaignPlayMapper
                     : $"{actor} corrected an order in debug mode.",
             PlayLogKind.DebugActionReresolved =>
                 $"{actor} re-resolved the previous action window.",
+            PlayLogKind.ItemObjectiveFound =>
+                $"{(entry.ForceId is { } foundId ? ForceController(play, foundId, names) : actor)} found {entry.Message ?? "an item objective"} in {territory}.",
+            PlayLogKind.ItemObjectivePickedUp =>
+                $"{(entry.ForceId is { } takenId ? ForceController(play, takenId, names) : actor)} took {entry.Message ?? "an item objective"}.",
+            PlayLogKind.ItemObjectiveDropped =>
+                $"{(entry.ForceId is { } droppedId ? ForceController(play, droppedId, names) : actor)} dropped {entry.Message ?? "an item objective"} in {territory}.",
+            PlayLogKind.ItemObjectivesStaffRevealed =>
+                $"{actor} revealed hidden item objectives.",
             _ => $"{actor} recorded a campaign change in {territory}.",
         };
     }

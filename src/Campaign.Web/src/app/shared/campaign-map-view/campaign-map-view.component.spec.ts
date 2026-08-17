@@ -106,6 +106,26 @@ describe('CampaignMapViewComponent', () => {
     expect(pin?.getAttribute('aria-label')).toBe('North force in Coast');
   });
 
+  it('renders an item objective marker in a territory', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.componentRef.setInput('items', [
+      {
+        id: 'item-1',
+        territoryId: 't1',
+        name: 'Crown',
+        carried: false,
+        hidden: false,
+      },
+    ]);
+    fixture.detectChanges();
+
+    const pin = (fixture.nativeElement as HTMLElement).querySelector('.item-pin');
+    expect(pin).toBeTruthy();
+    expect(pin?.getAttribute('aria-label')).toBe('Crown');
+  });
+
   it('does not pan on left-click drag', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
@@ -225,6 +245,66 @@ describe('CampaignMapViewComponent', () => {
     expect(other?.querySelector('.adjacency-visual')?.getAttribute('transform')).toBeNull();
     expect(hovered?.querySelectorAll('.adjacency-hit-head').length).toBe(2);
     expect(hovered?.classList.contains('is-interactive')).toBe(false);
+  });
+
+  it('uses a full highlight for selection and a half highlight for hover and connections', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      squareTerritory('t1', 0.1, 0.1),
+      squareTerritory('t2', 0.4, 0.1),
+      squareTerritory('t3', 0.7, 0.1),
+    ]);
+    fixture.componentRef.setInput('selectedTerritoryIds', ['t1']);
+    fixture.componentRef.setInput('hoveredTerritoryId', 't2');
+    fixture.componentRef.setInput('adjacentTerritoryIds', ['t2', 't3']);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const polygon = (id: string): Element | null => compiled.querySelector(`.territory[data-id="${id}"]`);
+    expect(polygon('t1')?.classList.contains('is-selected')).toBe(true);
+    expect(polygon('t1')?.classList.contains('is-half-highlighted')).toBe(false);
+    expect(polygon('t2')?.classList.contains('is-selected')).toBe(false);
+    expect(polygon('t2')?.classList.contains('is-half-highlighted')).toBe(true);
+    expect(polygon('t3')?.classList.contains('is-half-highlighted')).toBe(true);
+  });
+
+  it('lets a full selection override a hovered half highlight', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1)]);
+    fixture.componentRef.setInput('selectedTerritoryIds', ['t1']);
+    fixture.componentRef.setInput('hoveredTerritoryId', 't1');
+    fixture.componentRef.setInput('adjacentTerritoryIds', ['t1']);
+    fixture.detectChanges();
+
+    const polygon = (fixture.nativeElement as HTMLElement).querySelector('.territory[data-id="t1"]');
+    expect(polygon?.classList.contains('is-selected')).toBe(true);
+    expect(polygon?.classList.contains('is-half-highlighted')).toBe(false);
+  });
+
+  it('shows a green check when a move can be dropped and a red X when it cannot', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1), squareTerritory('t2', 0.4, 0.1)]);
+    fixture.componentRef.setInput('selectedTerritoryIds', ['t1', 't2']);
+    fixture.componentRef.setInput('movePlacement', 'valid');
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const polygon = (id: string): Element | null => compiled.querySelector(`.territory[data-id="${id}"]`);
+    expect(polygon('t1')?.classList.contains('is-move-valid')).toBe(true);
+    expect(polygon('t2')?.classList.contains('is-move-valid')).toBe(true);
+    expect(compiled.querySelector('.move-drop-marker.is-valid')?.getAttribute('aria-label')).toBe('Drop is allowed');
+    expect(compiled.querySelector('.move-drop-marker app-icon')).toBeTruthy();
+
+    fixture.componentRef.setInput('movePlacement', 'invalid');
+    fixture.detectChanges();
+    expect(polygon('t1')?.classList.contains('is-move-invalid')).toBe(true);
+    expect(polygon('t2')?.classList.contains('is-move-invalid')).toBe(true);
+    expect(compiled.querySelector('.move-drop-marker.is-invalid')?.getAttribute('aria-label')).toBe(
+      'Drop is not allowed',
+    );
   });
 
   it('lets connection arrows intercept clicks only when they are interactive', () => {

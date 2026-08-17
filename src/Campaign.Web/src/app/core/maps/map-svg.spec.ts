@@ -40,6 +40,7 @@ describe('map svg', () => {
 
   it('round-trips overlay territories and adjacencies', () => {
     const svg = serializeMapSvg(graph);
+    expect(svg).toContain('stroke-width="0.004"');
     const parsed = parseMapSvg(svg, { defaultTerrainTypeId: 'sea' });
     expect(parsed.errors).toEqual([]);
     expect(parsed.graph.territories).toHaveLength(1);

@@ -17,6 +17,7 @@ import {
 } from '../../core/maps/adjacency';
 import {
   clampPoint,
+  clampTranslation,
   CLOSE_POLYGON_SCREEN_PX,
   containsStrict,
   encloseAlongImageEdge,
@@ -25,7 +26,6 @@ import {
   isValidTerritoryPolygon,
   MIN_DRAW_SCREEN_PX,
   MIN_DRAW_STEP,
-  resolveTerritoryTranslation,
   SNAP_SCREEN_PX,
   snapToExistingGeometry,
   traceSharedBorder,
@@ -81,6 +81,7 @@ export class MapEditorPage {
   protected readonly lastSavedAtUtc = signal<string | null>(null);
   protected readonly mapImageRevision = signal(0);
   protected readonly drawingActive = signal(false);
+  protected readonly movePlacement = signal<'valid' | 'invalid' | null>(null);
   protected readonly confirmingDownload = signal(false);
   protected readonly downloading = signal(false);
   protected readonly pendingDownload = signal<'map' | 'svg' | null>(null);
@@ -90,6 +91,8 @@ export class MapEditorPage {
 
   private revision = 0;
   private undoStack: MapGraph[] = [];
+  private redoStack: MapGraph[] = [];
+  private drawingRedo: MapPoint[] = [];
   private strokeStartCount = 0;
   private readonly campaignId = this.route.snapshot.paramMap.get('id');
   private moveBaseline: MapGraph | null = null;
@@ -97,8 +100,17 @@ export class MapEditorPage {
   private savedSnapshot = signal('');
   private savedGraph: MapGraph = { territories: [], adjacencies: [] };
   private readonly mapView = viewChild(CampaignMapViewComponent);
+  private readonly historyVersion = signal(0);
 
   protected readonly canManage = computed(() => this.campaign()?.canManage === true);
+  protected readonly canUndo = computed(() => {
+    this.historyVersion();
+    return this.drawing().length > 0 || this.undoStack.length > 0;
+  });
+  protected readonly canRedoHistory = computed(() => {
+    this.historyVersion();
+    return this.drawingRedo.length > 0 || this.redoStack.length > 0;
+  });
   protected readonly mapSrc = computed(() => {
     const campaign = this.campaign();
     return campaign?.hasMap ? this.campaignsApi.mapUrl(campaign.id, this.mapImageRevision()) : null;
@@ -126,26 +138,13 @@ export class MapEditorPage {
     const hoverId = this.hoveredTerritoryId();
     return this.graph().territories.find((territory) => territory.id === hoverId) ?? this.selected();
   });
-  protected readonly highlightedTerritoryIds = computed(() => {
-    const ids = [...this.selectedIds()];
-    const hover = this.hoveredTerritoryId();
-    if (hover) {
-      ids.push(hover);
-    }
-
+  protected readonly adjacentTerritoryIds = computed(() => {
     const edge = this.selectedAdjacency() ?? this.hoveredConnection();
     if (edge) {
-      ids.push(edge.territoryAId, edge.territoryBId);
+      return [edge.territoryAId, edge.territoryBId];
     }
 
-    return [...new Set(ids)];
-  });
-  protected readonly adjacentTerritoryIds = computed(() => {
-    if (this.selectedAdjacency() ?? this.hoveredConnection()) {
-      return [];
-    }
-
-    return adjacentTerritoryIds(this.graph().adjacencies, this.highlightedTerritoryIds());
+    return adjacentTerritoryIds(this.graph().adjacencies, this.selectedIds());
   });
   protected readonly canConnectSelected = computed(() => {
     const ids = this.selectedIds();
@@ -167,6 +166,11 @@ export class MapEditorPage {
   );
   protected readonly catalogStructures = computed(() =>
     [...(this.campaign()?.structureTypes ?? [])].sort((left, right) => left.name.localeCompare(right.name)),
+  );
+  protected readonly placedItemTypes = computed(() =>
+    [...(this.campaign()?.itemObjectiveTypes ?? [])]
+      .filter((type) => type.placement === 'Placed')
+      .sort((left, right) => left.name.localeCompare(right.name)),
   );
   protected readonly hasUnsavedEdits = computed(
     () => this.drawing().length > 0 || JSON.stringify(this.graph()) !== this.savedSnapshot(),
@@ -255,27 +259,21 @@ export class MapEditorPage {
       this.moveDidMove = false;
     }
 
-    const moved = moveSelection(
+    const preview = moveSelection(
       this.moveBaseline,
       ids,
       event.current.x - event.origin.x,
       event.current.y - event.origin.y,
     );
-    if (!moved) {
-      return;
-    }
-
     this.moveDidMove = Math.hypot(event.current.x - event.origin.x, event.current.y - event.origin.y) >= MIN_DRAW_STEP;
-    this.graph.set(moved);
+    this.movePlacement.set(preview.valid ? 'valid' : 'invalid');
+    this.graph.set(preview.graph);
   }
 
   protected onTerritoryMoveEnd(): void {
     if (this.moveBaseline) {
-      if (this.moveDidMove) {
-        this.undoStack.push(this.moveBaseline);
-        if (this.undoStack.length > 40) {
-          this.undoStack.shift();
-        }
+      if (this.moveDidMove && this.movePlacement() === 'valid') {
+        this.pushGraphUndo(this.moveBaseline);
       } else {
         this.graph.set(this.moveBaseline);
       }
@@ -283,6 +281,7 @@ export class MapEditorPage {
 
     this.moveBaseline = null;
     this.moveDidMove = false;
+    this.movePlacement.set(null);
   }
 
   protected deleteSelectedTerritories(): void {
@@ -298,8 +297,10 @@ export class MapEditorPage {
     this.pushUndo();
     const remove = new Set(ids);
     this.graph.update((graph) => ({
+      ...graph,
       territories: graph.territories.filter((territory) => !remove.has(territory.id)),
       adjacencies: graph.adjacencies.filter((edge) => !remove.has(edge.territoryAId) && !remove.has(edge.territoryBId)),
+      itemObjectivePlacements: (graph.itemObjectivePlacements ?? []).filter((item) => !remove.has(item.territoryId)),
     }));
     this.selectedIds.set([]);
   }
@@ -419,54 +420,34 @@ export class MapEditorPage {
   }
 
   protected closePolygon(): void {
-    const points = this.drawing();
-    if (!this.canManage() || points.length < 3) {
+    if (!this.canManage()) {
       return;
     }
 
-    if (!isValidTerritoryPolygon(points)) {
-      this.revealErrors(['That shape must stay on the map, stay closed, and not cross itself.']);
+    const original = this.drawing();
+    if (original.length < 2) {
       return;
     }
 
-    if (this.graph().territories.some((territory) => interiorsOverlap(points, territory.polygon))) {
-      this.revealErrors(['Territories cannot overlap. They may share a border.']);
+    if (this.tryCommitDrawing(original)) {
       return;
     }
 
-    this.pushUndo();
-    const defaultTerrain = this.catalogTerrains().at(0);
-    if (!defaultTerrain) {
-      this.revealErrors(['Add at least one terrain type in campaign setup before drawing territories.']);
+    const enclosed =
+      encloseAlongImageEdge(original, this.polygons()) ?? encloseAlongTouchedBorders(original, this.polygons());
+    if (enclosed && this.tryCommitDrawing(enclosed)) {
       return;
     }
 
-    const territory: MapTerritory = {
-      id: createId(),
-      displayNumber: nextDisplayNumber(this.graph().territories),
-      name: null,
-      description: null,
-      polygon: points.map((point) => ({ ...point })),
-      terrainTypeId: defaultTerrain.id,
-      structureTypeId: null,
-      structureCondition: 'Operational',
-      overlayColor: this.overlayColorForNew(defaultTerrain.id),
-      ownerFactionId: null,
-      spawnFactionId: null,
-    };
-    this.graph.update((graph) => ({ ...graph, territories: [...graph.territories, territory] }));
-    this.drawing.set([]);
-    this.drawingActive.set(false);
-    this.selectedIds.set([territory.id]);
-    this.tool.set('select');
-    this.successMessage.set(null);
-    this.errorMessages.set([]);
+    this.revealCloseDrawingError(original);
   }
 
   protected cancelDrawing(): void {
     this.drawing.set([]);
     this.drawingActive.set(false);
     this.snapTarget.set(null);
+    this.drawingRedo = [];
+    this.markHistoryChanged();
   }
 
   protected undo(): void {
@@ -474,15 +455,51 @@ export class MapEditorPage {
       return;
     }
 
-    if (this.drawing().length > 0) {
-      this.drawing.update((points) => points.slice(0, -1));
+    const points = this.drawing();
+    const last = points.at(-1);
+    if (last) {
+      this.drawingRedo.push(last);
+      this.drawing.set(points.slice(0, -1));
+      this.markHistoryChanged();
       return;
     }
 
     const previous = this.undoStack.pop();
     if (previous) {
+      this.redoStack.push(cloneGraph(this.graph()));
+      if (this.redoStack.length > 40) {
+        this.redoStack.shift();
+      }
+
       this.graph.set(previous);
+      this.markHistoryChanged();
     }
+  }
+
+  protected redo(): void {
+    if (!this.canManage()) {
+      return;
+    }
+
+    const point = this.drawingRedo.pop();
+    if (point) {
+      this.drawing.update((points) => [...points, point]);
+      this.markHistoryChanged();
+      return;
+    }
+
+    const next = this.redoStack.pop();
+    if (!next) {
+      return;
+    }
+
+    this.undoStack.push(cloneGraph(this.graph()));
+    if (this.undoStack.length > 40) {
+      this.undoStack.shift();
+    }
+
+    this.graph.set(next);
+    this.markHistoryChanged();
   }
 
   protected onConnectClick(): void {
@@ -606,6 +623,37 @@ export class MapEditorPage {
     this.patchSelected((territory) => ({ ...territory, overlayColor: value || null }));
   }
 
+  protected itemPlacementTerritoryId(typeId: string): string | null {
+    return this.graph().itemObjectivePlacements?.find((item) => item.typeId === typeId)?.territoryId ?? null;
+  }
+
+  protected isItemPlacedHere(typeId: string): boolean {
+    const territoryId = this.selectedId();
+    return !!territoryId && this.itemPlacementTerritoryId(typeId) === territoryId;
+  }
+
+  protected itemPlacementLabel(typeId: string): string {
+    const territoryId = this.itemPlacementTerritoryId(typeId);
+    const territory = this.graph().territories.find((item) => item.id === territoryId);
+    return territory ? territoryLabel(territory) : 'Not placed';
+  }
+
+  protected setItemPlacedHere(typeId: string, placed: boolean): void {
+    const territoryId = this.selectedId();
+    if (!territoryId || !this.canManage()) {
+      return;
+    }
+
+    this.pushUndo();
+    this.graph.update((graph) => {
+      const without = (graph.itemObjectivePlacements ?? []).filter((item) => item.typeId !== typeId);
+      return {
+        ...graph,
+        itemObjectivePlacements: placed ? [...without, { typeId, territoryId }] : without,
+      };
+    });
+  }
+
   protected factionName(id: string | null | undefined): string {
     if (!id) {
       return 'Neutral';
@@ -706,9 +754,7 @@ export class MapEditorPage {
   @HostListener('document:pointercancel')
   protected onPointerUp(): void {
     if (this.drawingActive()) {
-      if (!this.encloseImageEdgeIfEligible() && !this.encloseTouchedBordersIfEligible()) {
-        this.traceSharedBorderIfEligible();
-      }
+      this.traceSharedBorderIfEligible();
     }
 
     this.drawingActive.set(false);
@@ -722,7 +768,7 @@ export class MapEditorPage {
 
     const target = event.target as HTMLElement | null;
     const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT';
-    if (event.key === 'Enter' && this.drawing().length >= 3 && !typing) {
+    if (event.key === 'Enter' && this.drawing().length >= 2 && !typing) {
       event.preventDefault();
       this.closePolygon();
       return;
@@ -751,7 +797,18 @@ export class MapEditorPage {
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
       event.preventDefault();
-      this.undo();
+      if (event.shiftKey) {
+        this.redo();
+      } else {
+        this.undo();
+      }
+
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+      event.preventDefault();
+      this.redo();
     }
   }
 
@@ -810,6 +867,7 @@ export class MapEditorPage {
             markerX: edge.marker.x,
             markerY: edge.marker.y,
           })),
+          itemObjectivePlacements: this.graph().itemObjectivePlacements ?? [],
         }),
       );
       this.revision = saved.revision;
@@ -963,12 +1021,14 @@ export class MapEditorPage {
       return;
     }
 
+    this.drawingRedo = [];
     this.drawing.set([...current, snap]);
+    this.markHistoryChanged();
   }
 
   private eraseAt(point: MapPoint): void {
     if (this.drawing().length > 0) {
-      this.drawing.update((points) => points.slice(0, -1));
+      this.undo();
       return;
     }
 
@@ -981,8 +1041,10 @@ export class MapEditorPage {
   private deleteTerritory(id: string): void {
     this.pushUndo();
     this.graph.update((graph) => ({
+      ...graph,
       territories: graph.territories.filter((territory) => territory.id !== id),
       adjacencies: graph.adjacencies.filter((edge) => edge.territoryAId !== id && edge.territoryBId !== id),
+      itemObjectivePlacements: (graph.itemObjectivePlacements ?? []).filter((item) => item.territoryId !== id),
     }));
     if (this.selectedIds().includes(id)) {
       this.selectedIds.update((current) => current.filter((item) => item !== id));
@@ -1107,26 +1169,62 @@ export class MapEditorPage {
     return this.graph().territories.map((territory) => territory.polygon);
   }
 
-  private encloseImageEdgeIfEligible(): boolean {
-    const enclosed = encloseAlongImageEdge(this.drawing(), this.polygons());
-    if (!enclosed) {
+  private tryCommitDrawing(points: readonly MapPoint[]): boolean {
+    if (points.length < 3 || !isValidTerritoryPolygon(points)) {
       return false;
     }
 
-    this.drawing.set(enclosed);
-    this.closePolygon();
+    if (this.graph().territories.some((territory) => interiorsOverlap(points, territory.polygon))) {
+      return false;
+    }
+
+    const defaultTerrain = this.catalogTerrains().at(0);
+    if (!defaultTerrain) {
+      this.revealErrors(['Add at least one terrain type in campaign setup before drawing territories.']);
+      return true;
+    }
+
+    this.pushUndo();
+    const territory: MapTerritory = {
+      id: createId(),
+      displayNumber: nextDisplayNumber(this.graph().territories),
+      name: null,
+      description: null,
+      polygon: points.map((point) => ({ ...point })),
+      terrainTypeId: defaultTerrain.id,
+      structureTypeId: null,
+      structureCondition: 'Operational',
+      overlayColor: this.overlayColorForNew(defaultTerrain.id),
+      ownerFactionId: null,
+      spawnFactionId: null,
+    };
+    this.graph.update((graph) => ({ ...graph, territories: [...graph.territories, territory] }));
+    this.drawing.set([]);
+    this.drawingActive.set(false);
+    this.selectedIds.set([territory.id]);
+    this.tool.set('select');
+    this.successMessage.set(null);
+    this.errorMessages.set([]);
     return true;
   }
 
-  private encloseTouchedBordersIfEligible(): boolean {
-    const enclosed = encloseAlongTouchedBorders(this.drawing(), this.polygons());
-    if (!enclosed) {
-      return false;
+  private revealCloseDrawingError(points: readonly MapPoint[]): void {
+    if (points.length < 3) {
+      this.revealErrors(['That shape could not be closed along a border or the map edge.']);
+      return;
     }
 
-    this.drawing.set(enclosed);
-    this.closePolygon();
-    return true;
+    if (!isValidTerritoryPolygon(points)) {
+      this.revealErrors(['That shape must stay on the map, stay closed, and not cross itself.']);
+      return;
+    }
+
+    if (this.graph().territories.some((territory) => interiorsOverlap(points, territory.polygon))) {
+      this.revealErrors(['Territories cannot overlap. They may share a border.']);
+      return;
+    }
+
+    this.revealErrors(['That shape could not be closed along a border or the map edge.']);
   }
 
   private traceSharedBorderIfEligible(): void {
@@ -1152,10 +1250,22 @@ export class MapEditorPage {
   }
 
   private pushUndo(): void {
-    this.undoStack.push(cloneGraph(this.graph()));
+    this.pushGraphUndo(cloneGraph(this.graph()));
+  }
+
+  private pushGraphUndo(previous: MapGraph): void {
+    this.undoStack.push(previous);
     if (this.undoStack.length > 40) {
       this.undoStack.shift();
     }
+
+    this.redoStack = [];
+    this.drawingRedo = [];
+    this.markHistoryChanged();
+  }
+
+  private markHistoryChanged(): void {
+    this.historyVersion.update((value) => value + 1);
   }
 
   private rememberSaved(graph: MapGraph): void {
@@ -1215,6 +1325,9 @@ export class MapEditorPage {
     this.drawingActive.set(false);
     this.snapTarget.set(null);
     this.undoStack = [];
+    this.redoStack = [];
+    this.drawingRedo = [];
+    this.markHistoryChanged();
     const remaining = new Set(this.savedGraph.territories.map((territory) => territory.id));
     this.selectedIds.update((current) => current.filter((id) => remaining.has(id)));
     const selectedEdgeId = this.selectedAdjacencyId();
@@ -1265,21 +1378,24 @@ function fromApi(detail: MapGraphDetail): MapGraph {
       origin: edge.origin === 'Generated' ? 'Generated' : 'Manual',
       marker: { x: edge.markerX, y: edge.markerY },
     })),
+    itemObjectivePlacements: (detail.itemObjectivePlacements ?? []).map((item) => ({
+      typeId: item.typeId,
+      territoryId: item.territoryId,
+    })),
   };
 }
 
-function moveSelection(baseline: MapGraph, ids: readonly string[], dx: number, dy: number): MapGraph | null {
+function moveSelection(
+  baseline: MapGraph,
+  ids: readonly string[],
+  dx: number,
+  dy: number,
+): { graph: MapGraph; valid: boolean } {
   const selected = new Set(ids);
   const selectedPolygons = baseline.territories
     .filter((territory) => selected.has(territory.id))
     .map((territory) => territory.polygon);
-  const otherPolygons = baseline.territories
-    .filter((territory) => !selected.has(territory.id))
-    .map((territory) => territory.polygon);
-  const delta = resolveTerritoryTranslation(selectedPolygons, otherPolygons, dx, dy);
-  if (!delta) {
-    return null;
-  }
+  const delta = clampTranslation(selectedPolygons, dx, dy);
 
   const territories = baseline.territories.map((territory) =>
     selected.has(territory.id)
@@ -1288,13 +1404,16 @@ function moveSelection(baseline: MapGraph, ids: readonly string[], dx: number, d
   );
   const moved = territories.filter((territory) => selected.has(territory.id));
   const others = territories.filter((territory) => !selected.has(territory.id));
+  let valid = true;
   for (const territory of moved) {
     if (!isValidTerritoryPolygon(territory.polygon)) {
-      return null;
+      valid = false;
+      break;
     }
 
     if (others.some((other) => interiorsOverlap(territory.polygon, other.polygon))) {
-      return null;
+      valid = false;
+      break;
     }
   }
 
@@ -1312,7 +1431,7 @@ function moveSelection(baseline: MapGraph, ids: readonly string[], dx: number, d
     return { ...edge, marker: adjacencyMarker(left, right) };
   });
 
-  return { territories, adjacencies };
+  return { graph: { territories, adjacencies, itemObjectivePlacements: baseline.itemObjectivePlacements }, valid };
 }
 
 function distanceClose(left: MapPoint, right: MapPoint, threshold: number): boolean {

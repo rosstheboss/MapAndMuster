@@ -63,7 +63,8 @@ public sealed class CreateCampaignHandler
                 command.IsPubliclyViewable,
                 command.City,
                 command.Region,
-                command.Country))
+                command.Country,
+                command.ItemObjectiveTypes))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -168,7 +169,8 @@ public sealed class UpdateCampaignHandler
                 command.IsPubliclyViewable,
                 command.City,
                 command.Region,
-                command.Country))
+                command.Country,
+                command.ItemObjectiveTypes))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -329,6 +331,7 @@ internal static class CampaignPersistenceFactory
             MapGraph = mapGraph,
             TerrainTypes = CatalogFileBinder.BindTerrains(setup.TerrainTypes, previousTerrainTypes),
             StructureTypes = CatalogFileBinder.BindStructures(setup.StructureTypes, previousStructureTypes),
+            ItemObjectiveTypes = CatalogFileBinder.BindItemObjectives(setup.ItemObjectiveTypes),
         };
     }
 }

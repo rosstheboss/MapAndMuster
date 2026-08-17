@@ -14,9 +14,9 @@ export const ZOOM_STEP = 0.1;
 export const SNAP_SCREEN_PX = 10;
 export const MIN_DRAW_SCREEN_PX = 2;
 export const CLOSE_POLYGON_SCREEN_PX = 12;
-export const STROKE_SCREEN_PX = 1.25;
-export const STROKE_SELECTED_SCREEN_PX = 2.5;
-export const STROKE_ADJACENT_SCREEN_PX = 1.85;
+export const STROKE_SCREEN_PX = 2.5;
+export const STROKE_FULL_HIGHLIGHT_SCREEN_PX = STROKE_SCREEN_PX * 2;
+export const STROKE_HALF_HIGHLIGHT_SCREEN_PX = STROKE_SCREEN_PX * 1.5;
 export const DRAWING_STROKE_SCREEN_PX = 1.75;
 export const VERTEX_SCREEN_PX = 3.25;
 export const SNAP_RING_SCREEN_PX = 6;
@@ -121,7 +121,7 @@ export function interiorsOverlap(left: readonly MapPoint[], right: readonly MapP
     return true;
   }
 
-  if (hasVertexStrictlyInside(left, right) || hasVertexStrictlyInside(right, left)) {
+  if (hasVertexDeepInside(left, right) || hasVertexDeepInside(right, left)) {
     return true;
   }
 
@@ -952,13 +952,13 @@ function hasProperEdgeCrossing(left: readonly MapPoint[], right: readonly MapPoi
   return false;
 }
 
-function hasVertexStrictlyInside(vertices: readonly MapPoint[], polygon: readonly MapPoint[]): boolean {
-  return vertices.some((vertex) => containsStrict(polygon, vertex));
+function hasVertexDeepInside(vertices: readonly MapPoint[], polygon: readonly MapPoint[]): boolean {
+  return vertices.some((vertex) => containsDeepInterior(polygon, vertex));
 }
 
 function hasInteriorSampleInside(source: readonly MapPoint[], other: readonly MapPoint[]): boolean {
   const center = centroid(source);
-  if (containsStrict(other, center)) {
+  if (containsDeepInterior(other, center)) {
     return true;
   }
 
@@ -970,16 +970,44 @@ function hasInteriorSampleInside(source: readonly MapPoint[], other: readonly Ma
       continue;
     }
 
-    if (containsStrict(other, { x: (vertex.x + center.x) / 2, y: (vertex.y + center.y) / 2 })) {
+    if (containsDeepInterior(other, { x: (vertex.x + center.x) / 2, y: (vertex.y + center.y) / 2 })) {
       return true;
     }
 
-    if (next && containsStrict(other, { x: (vertex.x + next.x) / 2, y: (vertex.y + next.y) / 2 })) {
+    if (next && containsDeepInterior(other, { x: (vertex.x + next.x) / 2, y: (vertex.y + next.y) / 2 })) {
       return true;
     }
   }
 
   return false;
+}
+
+function containsDeepInterior(polygon: readonly MapPoint[], point: MapPoint, margin = SNAP_DISTANCE): boolean {
+  if (!containsStrict(polygon, point)) {
+    return false;
+  }
+
+  return distanceToBoundary(polygon, point) > margin;
+}
+
+function distanceToBoundary(polygon: readonly MapPoint[], point: MapPoint): number {
+  let best = Number.POSITIVE_INFINITY;
+  const count = polygon.length;
+  for (let i = 0; i < count; i += 1) {
+    const a = polygon.at(i);
+    const b = polygon.at((i + 1) % count);
+    if (!a || !b) {
+      continue;
+    }
+
+    const closest = closestPointOnSegment(a, b, point);
+    const distance = Math.hypot(point.x - closest.x, point.y - closest.y);
+    if (distance < best) {
+      best = distance;
+    }
+  }
+
+  return best;
 }
 
 function projectPointOnSegment(a: MapPoint, b: MapPoint, p: MapPoint, snapDistance = SNAP_DISTANCE): MapPoint | null {

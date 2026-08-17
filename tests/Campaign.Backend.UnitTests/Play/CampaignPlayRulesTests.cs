@@ -136,6 +136,28 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
+    public void CommitRequiresADraftForEveryForce()
+    {
+        var (state, map, schedule) = Seeded();
+        Assert.False(CampaignPlayRules.TryCommit(
+            state,
+            map,
+            PlayerOne,
+            AllyGroups(),
+            schedule.StartsUtc,
+            out _,
+            out var error));
+        Assert.Equal("order.draft.required", error!.Code);
+
+        var force = state.Forces.Single(item => item.FactionId == North);
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state, PlayerOne, force.Id, ActionKind.Hold, null, null, map, schedule.StartsUtc, out state, out _));
+        Assert.True(CampaignPlayRules.TryCommit(state, map, PlayerOne, AllyGroups(), schedule.StartsUtc, out var committed, out _));
+        Assert.False(committed!.State.Windows[0].Status == PhaseWindowStatus.Resolved);
+        _ = schedule;
+    }
+
+    [Fact]
     public void UncommitIsAllowedUntilTheWindowCloses()
     {
         var (state, map, schedule) = Seeded();

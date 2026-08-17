@@ -14,12 +14,14 @@ public static class MapGraphMapper
     /// <param name="revision">The campaign revision.</param>
     /// <param name="canManage">Whether the viewer can edit the graph.</param>
     /// <param name="graph">The validated graph.</param>
+    /// <param name="itemObjectivePlacements">Optional manager-assigned placements for Placed items.</param>
     /// <returns>The detail.</returns>
     public static CampaignMapGraphDetail ToDetail(
         Guid campaignId,
         int revision,
         bool canManage,
-        CampaignMapGraph graph)
+        CampaignMapGraph graph,
+        IReadOnlyList<ItemObjectivePlacementDetail>? itemObjectivePlacements = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         return new CampaignMapGraphDetail
@@ -29,6 +31,7 @@ public static class MapGraphMapper
             CanManage = canManage,
             Territories = [.. graph.Territories.Select(ToTerritory)],
             Adjacencies = [.. graph.Adjacencies.Select(ToAdjacency)],
+            ItemObjectivePlacements = itemObjectivePlacements ?? [],
         };
     }
 
@@ -36,14 +39,18 @@ public static class MapGraphMapper
     /// Maps a validated graph onto the persistence model.
     /// </summary>
     /// <param name="graph">The validated graph.</param>
+    /// <param name="itemObjectivePlacements">Optional manager-assigned placements for Placed items.</param>
     /// <returns>The stored graph.</returns>
-    public static StoredMapGraph ToStored(CampaignMapGraph graph)
+    public static StoredMapGraph ToStored(
+        CampaignMapGraph graph,
+        IReadOnlyList<ItemObjectivePlacementDetail>? itemObjectivePlacements = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         return new StoredMapGraph
         {
             Territories = [.. graph.Territories.Select(ToTerritory)],
             Adjacencies = [.. graph.Adjacencies.Select(ToAdjacency)],
+            ItemObjectivePlacements = itemObjectivePlacements ?? [],
         };
     }
 

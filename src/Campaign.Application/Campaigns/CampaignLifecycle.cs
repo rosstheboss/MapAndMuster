@@ -48,29 +48,42 @@ internal static class CampaignLifecycle
             return new PlayMap([], []);
         }
 
-        var names = campaign.StructureTypes.ToDictionary(type => type.Id, type => type.Name);
+        var catalog = campaign.StructureTypes
+            .Select(static type => new StructureTypePlayRules(
+                type.Id,
+                type.Name,
+                type.IsBuildable,
+                type.IsPillageable,
+                type.IsDestructible))
+            .ToArray();
+        var names = catalog.ToDictionary(type => type.Id, type => type.Name);
+        var rulesById = catalog.ToDictionary(static type => type.Id);
         var conditions = campaign.PlayState?.Structures.ToDictionary(item => item.TerritoryId) ?? [];
         var territories = graph.Territories.Select(territory =>
         {
             conditions.TryGetValue(territory.Id, out var structure);
             var structureTypeId = structure?.StructureTypeId ?? territory.StructureTypeId;
             names.TryGetValue(structureTypeId ?? Guid.Empty, out var structureName);
+            rulesById.TryGetValue(structureTypeId ?? Guid.Empty, out var rules);
             var condition = structure?.Condition
                 ?? ParseCondition(territory.StructureCondition)
                 ?? StructureCondition.Operational;
+            var intact = structureTypeId is not null && condition != StructureCondition.Destroyed;
             return new PlayTerritory(
                 territory.Id,
                 territory.DisplayNumber,
                 territory.OwnerFactionId,
                 territory.SpawnFactionId,
-                structureTypeId,
-                structureName,
-                condition);
+                intact ? structureTypeId : null,
+                intact ? structureName : null,
+                intact ? condition : StructureCondition.Operational,
+                intact && (rules?.IsPillageable ?? false),
+                intact && (rules?.IsDestructible ?? false));
         }).ToArray();
         var edges = graph.Adjacencies
             .Select(edge => (edge.TerritoryAId, edge.TerritoryBId))
             .ToArray();
-        return new PlayMap(territories, edges);
+        return new PlayMap(territories, edges, catalog);
     }
 
     /// <summary>

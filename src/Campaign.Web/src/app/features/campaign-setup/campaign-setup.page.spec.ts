@@ -5,6 +5,9 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 
 import { FACTION_PRESETS, WARHAMMER_OLD_WORLD_PRESET_ID } from '../../core/campaigns/faction-presets';
+import { HUNT_IN_ESTALIA_CAMPAIGN_PRESET_ID } from '../../core/campaigns/campaign-presets';
+import { STANDARD_STRUCTURES_PRESET_ID } from '../../core/campaigns/structure-presets';
+import { STANDARD_TERRAIN_PRESET_ID, TERRAIN_PRESETS } from '../../core/campaigns/terrain-presets';
 import { CampaignSetupPage } from './campaign-setup.page';
 
 function factionNames(compiled: HTMLElement): string[] {
@@ -87,6 +90,50 @@ describe('CampaignSetupPage', () => {
       button.textContent.includes('Factions'),
     );
     expect(factionsToggle?.getAttribute('aria-expanded')).toBe('true');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('defaults structure flags for catalog structures and new custom structures', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Buildable');
+    expect(compiled.textContent).toContain('Pillageable');
+    expect(compiled.textContent).toContain('Destructible');
+
+    const page = fixture.componentInstance as unknown as {
+      structureTypes: {
+        getRawValue: () => {
+          name: string;
+          isBuildable: boolean;
+          isPillageable: boolean;
+          isDestructible: boolean;
+        }[];
+      };
+      addStructureType: () => void;
+    };
+    const byName = (
+      name: string,
+    ): { name: string; isBuildable: boolean; isPillageable: boolean; isDestructible: boolean } | undefined =>
+      page.structureTypes.getRawValue().find((type) => type.name === name);
+    expect(byName('Capital City')).toMatchObject({
+      isBuildable: false,
+      isPillageable: false,
+      isDestructible: false,
+    });
+    expect(byName('Castle')).toMatchObject({ isBuildable: false, isPillageable: true, isDestructible: false });
+    expect(byName('City')).toMatchObject({ isBuildable: false, isPillageable: true, isDestructible: false });
+    expect(byName('Town')).toMatchObject({ isBuildable: false, isPillageable: true, isDestructible: true });
+    expect(byName('Supply Depot')).toMatchObject({ isBuildable: true, isPillageable: true, isDestructible: true });
+    expect(byName('Fortification')).toMatchObject({ isBuildable: true, isPillageable: true, isDestructible: true });
+
+    page.addStructureType();
+    const added = page.structureTypes.getRawValue().at(-1);
+    expect(added?.isBuildable).toBe(true);
+    expect(added?.isPillageable).toBe(true);
+    expect(added?.isDestructible).toBe(true);
     TestBed.inject(HttpTestingController).verify();
   });
 
@@ -178,6 +225,60 @@ describe('CampaignSetupPage', () => {
     await pageSave.save();
     fixture.detectChanges();
     expect(factionsToggle?.getAttribute('aria-expanded')).toBe('true');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('replaces terrain, structures, and catalogs from presets without mutating the source', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      terrainPresetId: { setValue: (value: string) => void };
+      applySelectedTerrainPreset: () => void;
+      structurePresetId: { setValue: (value: string) => void };
+      applySelectedStructurePreset: () => void;
+      campaignPresetId: { setValue: (value: string) => void };
+      applySelectedCampaignPreset: () => void;
+      terrainTypes: { at: (index: number) => { controls: { name: { setValue: (value: string) => void } } } };
+    };
+
+    compiled.querySelector<HTMLInputElement>('#terrain-name-0')!.value = 'Renamed terrain';
+    compiled.querySelector<HTMLInputElement>('#terrain-name-0')!.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    page.terrainPresetId.setValue(STANDARD_TERRAIN_PRESET_ID);
+    page.applySelectedTerrainPreset();
+    fixture.detectChanges();
+    expect(compiled.querySelector<HTMLInputElement>('#terrain-name-0')?.value).toBe('Beach');
+    expect(TERRAIN_PRESETS[0]?.terrainTypes[0]?.name).toBe('Beach');
+
+    page.structurePresetId.setValue(STANDARD_STRUCTURES_PRESET_ID);
+    page.applySelectedStructurePreset();
+    fixture.detectChanges();
+    expect(compiled.querySelector<HTMLInputElement>('#structure-name-0')?.value).toBe('Capital City');
+
+    page.campaignPresetId.setValue(HUNT_IN_ESTALIA_CAMPAIGN_PRESET_ID);
+    page.applySelectedCampaignPreset();
+    fixture.detectChanges();
+    expect(compiled.querySelector<HTMLInputElement>('#name')?.value).toBe('The Hunt in Estalia');
+    expect(factionNames(compiled)[0]).toBe('Beastmen Brayherds');
+    expect(compiled.querySelector('#item-objective-name-0')).toBeNull();
+
+    clickNamedButton(compiled, 'Add item objective');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(compiled.querySelector('#item-objective-name-0')).toBeTruthy();
+    expect(compiled.querySelector<HTMLSelectElement>('#item-objective-placement-0')?.value).toBe('Random');
+    const itemPage = fixture.componentInstance as unknown as {
+      itemObjectiveTypes: {
+        at: (index: number) => {
+          controls: { isHiddenUntilFound: { value: boolean }; allowOnSpawn: { value: boolean } };
+        };
+      };
+    };
+    expect(itemPage.itemObjectiveTypes.at(0).controls.isHiddenUntilFound.value).toBe(true);
+    expect(itemPage.itemObjectiveTypes.at(0).controls.allowOnSpawn.value).toBe(false);
     TestBed.inject(HttpTestingController).verify();
   });
 

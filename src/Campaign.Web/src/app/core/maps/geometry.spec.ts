@@ -39,6 +39,31 @@ describe('map geometry', () => {
     expect(interiorsOverlap(square(0.1, 0.1, 0.4), square(0.3, 0.1, 0.4))).toBe(true);
   });
 
+  it('allows extra vertices along a shared border even when they sit slightly inside', () => {
+    const existing = square(0.1, 0.1, 0.3);
+    const neighbor = [
+      { x: 0.4, y: 0.1 },
+      { x: 0.399, y: 0.2 },
+      { x: 0.4, y: 0.3 },
+      { x: 0.4, y: 0.4 },
+      { x: 0.7, y: 0.4 },
+      { x: 0.7, y: 0.1 },
+    ];
+    expect(interiorsOverlap(existing, neighbor)).toBe(false);
+  });
+
+  it('rejects a new border that overhangs into a territory', () => {
+    const existing = square(0.1, 0.1, 0.3);
+    const overhang = [
+      { x: 0.4, y: 0.1 },
+      { x: 0.25, y: 0.25 },
+      { x: 0.4, y: 0.4 },
+      { x: 0.7, y: 0.4 },
+      { x: 0.7, y: 0.1 },
+    ];
+    expect(interiorsOverlap(existing, overhang)).toBe(true);
+  });
+
   it('rejects self-intersecting polygons', () => {
     expect(
       isValidTerritoryPolygon([
@@ -140,11 +165,27 @@ describe('map geometry', () => {
     expect(traceSharedBorder({ x: 0.4, y: 0.15 }, { x: 0.4, y: 0.35 }, [leftPoly, rightPoly])).toBeNull();
   });
 
-  it('encloses an empty pocket by walking the touched territory border', () => {
+  it('encloses a pocket by walking the touched territory border', () => {
     const existing = square(0.1, 0.4, 0.3);
     const enclosed = encloseAlongTouchedBorders(
       [
         { x: 0.1, y: 0.4 },
+        { x: 0.25, y: 0.2 },
+        { x: 0.4, y: 0.4 },
+      ],
+      [existing],
+    );
+    expect(enclosed).toBeTruthy();
+    expect(isValidTerritoryPolygon(enclosed ?? [])).toBe(true);
+    expect(interiorsOverlap(enclosed ?? [], existing)).toBe(false);
+  });
+
+  it('encloses a pocket when the drawn line has extra vertices along a shared border', () => {
+    const existing = square(0.1, 0.4, 0.3);
+    const enclosed = encloseAlongTouchedBorders(
+      [
+        { x: 0.1, y: 0.4 },
+        { x: 0.2, y: 0.4 },
         { x: 0.25, y: 0.2 },
         { x: 0.4, y: 0.4 },
       ],
@@ -229,11 +270,12 @@ describe('map geometry', () => {
   it('snaps a move back onto a touching border instead of overlapping interiors', () => {
     const moving = [square(0.1, 0.1, 0.3)];
     const neighbor = [square(0.4, 0.1, 0.3)];
-    const snapped = resolveTerritoryTranslation(moving, neighbor, 0.01, 0);
-    expect(snapped?.x).toBeCloseTo(0, 5);
-    expect(interiorsOverlap(translatePolygon(moving[0] ?? [], snapped?.x ?? 1, 0), neighbor[0] ?? [])).toBe(false);
+    const nearShared = resolveTerritoryTranslation(moving, neighbor, 0.01, 0);
+    expect(nearShared?.x).toBeCloseTo(0.01, 5);
+    expect(interiorsOverlap(translatePolygon(moving[0] ?? [], nearShared?.x ?? 1, 0), neighbor[0] ?? [])).toBe(false);
     const blocked = resolveTerritoryTranslation(moving, neighbor, 0.2, 0);
-    expect(blocked?.x).toBeCloseTo(0, 5);
+    expect(blocked?.x ?? 1).toBeLessThan(0.05);
+    expect(interiorsOverlap(translatePolygon(moving[0] ?? [], blocked?.x ?? 1, 0), neighbor[0] ?? [])).toBe(false);
     const along = resolveTerritoryTranslation(moving, neighbor, 0, 0.04);
     expect(along?.x).toBeCloseTo(0, 5);
     expect(along?.y).toBeCloseTo(0.04, 5);

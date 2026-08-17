@@ -397,6 +397,7 @@ internal static class CampaignMapClone
             MapGraph = existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
+            ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PlayState = existing.PlayState,
         };
     }
@@ -439,6 +440,7 @@ internal static class CampaignMapClone
             MapGraph = existing.MapGraph,
             TerrainTypes = terrainTypes,
             StructureTypes = structureTypes,
+            ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PlayState = existing.PlayState,
         };
     }
@@ -480,6 +482,7 @@ internal static class CampaignMapClone
             MapGraph = existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
+            ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PlayState = existing.PlayState,
         };
     }
@@ -521,6 +524,7 @@ internal static class CampaignMapClone
             MapGraph = existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
+            ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PlayState = existing.PlayState,
         };
     }

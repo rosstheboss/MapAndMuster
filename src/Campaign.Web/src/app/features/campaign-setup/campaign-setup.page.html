@@ -57,6 +57,30 @@
             <input id="name" formControlName="name" maxlength="80" aria-required="true" />
           </div>
 
+          <p class="muted">
+            Applying a campaign preset fills factions, terrain, structures, and item objectives with a copy you can then
+            edit. The preset itself is not changed. The campaign name is filled only when it is empty.
+          </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="campaignPreset">Campaign preset</label>
+              <select id="campaignPreset" [formControl]="campaignPresetId">
+                <option value="">Select a preset</option>
+                @for (preset of campaignPresets; track preset.id) {
+                  <option [value]="preset.id">{{ preset.name }}</option>
+                }
+              </select>
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="applySelectedCampaignPreset()"
+              [disabled]="!selectedCampaignPresetId()"
+            >
+              Add preset
+            </button>
+          </div>
+
           <div class="field" [class.invalid]="isInvalid('description')">
             <label for="description">Description (optional)</label>
             <textarea id="description" formControlName="description" maxlength="500" rows="4"></textarea>
@@ -516,8 +540,28 @@
         <div [hidden]="!isOpen('terrain')">
           <p class="muted">
             At least one terrain type is required. Each type needs a unique color and at least one mission. Missions may
-            use an http or https link or a PDF/Word file.
+            use an http or https link or a PDF/Word file. Adding a preset replaces the current terrain list with a copy
+            you can then edit. The preset itself is not changed.
           </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="terrainPreset">Terrain preset</label>
+              <select id="terrainPreset" [formControl]="terrainPresetId">
+                <option value="">Select a preset</option>
+                @for (preset of terrainPresets; track preset.id) {
+                  <option [value]="preset.id">{{ preset.name }}</option>
+                }
+              </select>
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="applySelectedTerrainPreset()"
+              [disabled]="!selectedTerrainPresetId()"
+            >
+              Add preset
+            </button>
+          </div>
           <div formArrayName="terrainTypes" class="stack">
             @for (terrain of terrainTypes.controls; track terrain; let index = $index) {
               <div class="nested-card stack" [formGroupName]="index">
@@ -656,9 +700,30 @@
         <div [hidden]="!isOpen('structures')">
           <p class="muted">
             Choose a built-in icon or upload a logo image for each structure. Each structure also has a pillaged icon
-            used when that structure is pillaged on the map. Territory missions come from the structure when it has any,
-            otherwise from the terrain type.
+            used when that structure is pillaged on the map. Buildable structures may be created with the Build action.
+            Pillageable structures may be pillaged; destructible structures may be destroyed by a second Pillage.
+            Territory missions come from the structure when it has any, otherwise from the terrain type. Adding a preset
+            replaces the current structure list with a copy you can then edit. The preset itself is not changed.
           </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="structurePreset">Structure preset</label>
+              <select id="structurePreset" [formControl]="structurePresetId">
+                <option value="">Select a preset</option>
+                @for (preset of structurePresets; track preset.id) {
+                  <option [value]="preset.id">{{ preset.name }}</option>
+                }
+              </select>
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="applySelectedStructurePreset()"
+              [disabled]="!selectedStructurePresetId()"
+            >
+              Add preset
+            </button>
+          </div>
           <div formArrayName="structureTypes" class="stack">
             @for (structure of structureTypes.controls; track structure; let index = $index) {
               <div class="nested-card stack" [formGroupName]="index">
@@ -677,6 +742,20 @@
                       <input [id]="'structure-name-' + index" formControlName="name" maxlength="60" />
                     </div>
                     <button type="button" class="button-secondary" (click)="removeStructureType(index)">Remove</button>
+                  </div>
+                  <div class="choice-row">
+                    <label>
+                      <input type="checkbox" formControlName="isBuildable" />
+                      Buildable
+                    </label>
+                    <label>
+                      <input type="checkbox" formControlName="isPillageable" />
+                      Pillageable
+                    </label>
+                    <label>
+                      <input type="checkbox" formControlName="isDestructible" />
+                      Destructible
+                    </label>
                   </div>
                   <fieldset class="field">
                     <legend>Icon</legend>
@@ -882,6 +961,72 @@
             [disabled]="structureTypes.length >= 50"
           >
             Add structure
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('itemObjectives')"
+            (click)="toggleSection('itemObjectives')"
+          >
+            Item objectives (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('itemObjectives')">
+          <p class="muted">
+            Item objectives are hidden and randomly placed by default. Hidden items stay off player views until found or
+            until a manager in debug mode reveals them. A force that Moves drops a carried item in the territory it
+            left. Place Placed items on the map after you save this campaign.
+          </p>
+          <div formArrayName="itemObjectiveTypes" class="stack">
+            @for (item of itemObjectiveTypes.controls; track item; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [attr.aria-expanded]="isOpen('item-objective-' + index)"
+                  (click)="toggleSection('item-objective-' + index)"
+                >
+                  {{ itemLabel(item.controls.name.value, 'Item objective ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('item-objective-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'item-objective-name-' + index">Item {{ index + 1 }} name</label>
+                      <input [id]="'item-objective-name-' + index" formControlName="name" maxlength="60" />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removeItemObjective(index)">Remove</button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'item-objective-placement-' + index">Placement</label>
+                    <select [id]="'item-objective-placement-' + index" formControlName="placement">
+                      <option value="Random">Random</option>
+                      <option value="Placed">Placed on the map</option>
+                    </select>
+                  </div>
+                  <label class="choice-row">
+                    <input type="checkbox" formControlName="isHiddenUntilFound" />
+                    Hidden until found
+                  </label>
+                  <label class="choice-row">
+                    <input type="checkbox" formControlName="allowOnSpawn" />
+                    Allowed on a spawn location
+                  </label>
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addItemObjective()"
+            [disabled]="itemObjectiveTypes.length >= 50"
+          >
+            Add item objective
           </button>
         </div>
       </fieldset>

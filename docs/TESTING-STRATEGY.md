@@ -35,7 +35,7 @@ Cover:
 - Player, player-GM, neutral GM, and administrator capabilities.
 - Database constraints, migrations, optimistic concurrency, and transactions.
 - Final commitment and deadline processing under concurrent requests.
-- API response shapes that omit orders, objectives, relics, and audit data from unauthorized
+- API response shapes that omit orders, hidden item objectives, relics, and audit data from unauthorized
   callers.
 - GM inspection/correction audit events and transactional notification outbox.
 - Idempotent deadline workers and retry behavior.
@@ -48,9 +48,10 @@ Use Angular's Vitest integration.
 
 Cover components/services for:
 
-- Order drafting (selection saves a draft), validation messages, commit of unsaved drafts, uncommit, and locked state.
+- Order drafting from the map menu or force-panel checkmark, commit only when every required draft is saved, uncommit, and locked state.
 - Countdown display without treating the browser clock as authoritative.
-- Map territory selection, force markers, polygon editing, keyboard alternatives, and metadata forms.
+- Map territory selection, force markers, polygon editing including Close Territory enclose and
+  shared-border versus overhang checks, move drop validity, keyboard alternatives, and metadata forms.
 - Permission-based navigation without relying on it as backend security.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
 - Campaign log display, member chat, live log refresh, chat send errors without the save success

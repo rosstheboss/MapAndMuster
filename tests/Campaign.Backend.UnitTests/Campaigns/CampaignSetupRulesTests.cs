@@ -48,6 +48,30 @@ public sealed class CampaignSetupRulesTests
         Assert.Contains(setup.TerrainTypes, type => type.Name == "Jungle");
         Assert.Equal(6, setup.StructureTypes.Count);
         Assert.Empty(setup.StructureTypes[0].Missions);
+        Assert.Equal("Capital City", setup.StructureTypes[0].Name);
+        Assert.False(setup.StructureTypes[0].IsBuildable);
+        Assert.False(setup.StructureTypes[0].IsPillageable);
+        Assert.False(setup.StructureTypes[0].IsDestructible);
+        var supplyDepot = Assert.Single(setup.StructureTypes, type => type.Name == "Supply Depot");
+        Assert.True(supplyDepot.IsBuildable);
+        Assert.True(supplyDepot.IsPillageable);
+        Assert.True(supplyDepot.IsDestructible);
+        var town = Assert.Single(setup.StructureTypes, type => type.Name == "Town");
+        Assert.False(town.IsBuildable);
+        Assert.True(town.IsPillageable);
+        Assert.True(town.IsDestructible);
+        var city = Assert.Single(setup.StructureTypes, type => type.Name == "City");
+        Assert.False(city.IsBuildable);
+        Assert.True(city.IsPillageable);
+        Assert.False(city.IsDestructible);
+        var castle = Assert.Single(setup.StructureTypes, type => type.Name == "Castle");
+        Assert.False(castle.IsBuildable);
+        Assert.True(castle.IsPillageable);
+        Assert.False(castle.IsDestructible);
+        var fortification = Assert.Single(setup.StructureTypes, type => type.Name == "Fortification");
+        Assert.True(fortification.IsBuildable);
+        Assert.True(fortification.IsPillageable);
+        Assert.True(fortification.IsDestructible);
         Assert.NotEqual(setup.Factions[0].Color, setup.Factions[1].Color);
         Assert.False(setup.Factions[0].RequiresSubfaction);
     }
@@ -804,6 +828,118 @@ public sealed class CampaignSetupRulesTests
 
         Assert.False(succeeded);
         Assert.Contains(errors, error => error.Code == "missions.duplicate");
+    }
+
+    [Fact]
+    public void AcceptsEmptyItemObjectivesByDefault()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            factions: TwoFactions(),
+            allyGroups: null,
+            links: null,
+            schedule: WeekSchedule(),
+            out var setup,
+            out _,
+            out var errors);
+
+        Assert.True(succeeded);
+        Assert.Empty(errors);
+        Assert.NotNull(setup);
+        Assert.Empty(setup.ItemObjectiveTypes);
+    }
+
+    [Fact]
+    public void ParsesItemObjectiveDefaultsAndRejectsDuplicatesOrInvalidPlacement()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            terrainTypes: null,
+            structureTypes: null,
+            out var setup,
+            out _,
+            out var errors,
+            itemObjectiveTypes:
+            [
+                new ItemObjectiveTypeInput { Name = "Crown" },
+            ]);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        var item = Assert.Single(setup.ItemObjectiveTypes);
+        Assert.Equal("Crown", item.Name);
+        Assert.True(item.IsHiddenUntilFound);
+        Assert.Equal(ItemObjectivePlacementKind.Random, item.Placement);
+        Assert.False(item.AllowOnSpawn);
+
+        var duplicate = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            terrainTypes: null,
+            structureTypes: null,
+            out _,
+            out _,
+            out var duplicateErrors,
+            itemObjectiveTypes:
+            [
+                new ItemObjectiveTypeInput { Name = "Crown" },
+                new ItemObjectiveTypeInput { Name = "crown" },
+            ]);
+        Assert.False(duplicate);
+        Assert.Contains(duplicateErrors, error => error.Code == "itemObjectiveTypes.duplicate");
+
+        var invalid = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            terrainTypes: null,
+            structureTypes: null,
+            out _,
+            out _,
+            out var placementErrors,
+            itemObjectiveTypes:
+            [
+                new ItemObjectiveTypeInput { Name = "Crown", Placement = "Teleport" },
+            ]);
+        Assert.False(invalid);
+        Assert.Contains(placementErrors, error => error.Code == "itemObjectiveTypes.placement.invalid");
     }
 
     private static IReadOnlyList<FactionInput> TwoFactions()

@@ -69,8 +69,26 @@ internal static class CatalogFileBinder
                     BuiltinSymbol = imageKey is null ? type.BuiltinSymbol : existing?.BuiltinSymbol ?? type.BuiltinSymbol,
                     ImageStorageKey = imageKey,
                     PillagedImageStorageKey = pillagedKey,
+                    IsBuildable = type.IsBuildable,
+                    IsPillageable = type.IsPillageable,
+                    IsDestructible = type.IsDestructible,
                     Missions = BindMissions(type.Missions, previousMissions),
                 };
+            }),
+        ];
+    }
+
+    public static IReadOnlyList<StoredItemObjectiveType> BindItemObjectives(IReadOnlyList<ItemObjectiveTypeSetup> incoming)
+    {
+        return
+        [
+            .. incoming.Select(static type => new StoredItemObjectiveType
+            {
+                Id = type.Id,
+                Name = type.Name,
+                IsHiddenUntilFound = type.IsHiddenUntilFound,
+                Placement = type.Placement.ToString(),
+                AllowOnSpawn = type.AllowOnSpawn,
             }),
         ];
     }

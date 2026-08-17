@@ -28,6 +28,7 @@ export interface MapAdjacency {
 export interface MapGraph {
   territories: MapTerritory[];
   adjacencies: MapAdjacency[];
+  itemObjectivePlacements?: { typeId: string; territoryId: string }[];
 }
 
 export function territoryLabel(territory: MapTerritory): string {
@@ -72,5 +73,6 @@ export function cloneGraph(graph: MapGraph): MapGraph {
       ...edge,
       marker: { ...edge.marker },
     })),
+    itemObjectivePlacements: (graph.itemObjectivePlacements ?? []).map((item) => ({ ...item })),
   };
 }

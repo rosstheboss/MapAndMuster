@@ -9,6 +9,9 @@ export interface DefaultTerrainType {
 export interface DefaultStructureType {
   name: string;
   builtinSymbol: string;
+  isBuildable: boolean;
+  isPillageable: boolean;
+  isDestructible: boolean;
 }
 
 export function defaultTerrainCatalog(): DefaultTerrainType[] {
@@ -22,5 +25,8 @@ export function defaultStructureCatalog(): DefaultStructureType[] {
   return STRUCTURE_TYPES.map((entry) => ({
     name: entry.label,
     builtinSymbol: entry.id,
+    isBuildable: entry.isBuildable,
+    isPillageable: entry.isPillageable,
+    isDestructible: entry.isDestructible,
   }));
 }

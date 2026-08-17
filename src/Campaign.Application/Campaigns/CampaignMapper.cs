@@ -117,7 +117,18 @@ public static class CampaignMapper
                 BuiltinSymbol = type.ImageStorageKey is null ? type.BuiltinSymbol : null,
                 HasImage = !string.IsNullOrWhiteSpace(type.ImageStorageKey),
                 HasPillagedImage = !string.IsNullOrWhiteSpace(type.PillagedImageStorageKey),
+                IsBuildable = type.IsBuildable,
+                IsPillageable = type.IsPillageable,
+                IsDestructible = type.IsDestructible,
                 Missions = [.. type.Missions.Select(ToMission)],
+            })],
+            ItemObjectiveTypes = [.. campaign.ItemObjectiveTypes.Select(static type => new ItemObjectiveTypeDetail
+            {
+                Id = type.Id,
+                Name = type.Name,
+                IsHiddenUntilFound = type.IsHiddenUntilFound,
+                Placement = type.Placement,
+                AllowOnSpawn = type.AllowOnSpawn,
             })],
             AllyGroups = [.. campaign.AllyGroups.Select(static group => new AllyGroupDetail
             {

@@ -39,7 +39,7 @@ export function serializeMapSvg(graph: MapGraph): string {
         territory.spawnFactionId,
       )} points="${points}" fill="${escapeAttr(territory.overlayColor ?? '#000000')}" fill-opacity="${
         territory.overlayColor ? '0.32' : '0'
-      }" stroke="#1c1917" stroke-opacity="0.75" stroke-width="0.002" />`;
+      }" stroke="#1c1917" stroke-opacity="0.75" stroke-width="0.004" />`;
     })
     .join('\n');
   const adjacencies = graph.adjacencies

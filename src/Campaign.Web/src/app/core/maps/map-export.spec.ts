@@ -1,3 +1,4 @@
+import { STROKE_SCREEN_PX } from './geometry';
 import { colorWithAlpha, drawTerritoryOverlay, mapDownloadFilename } from './map-export';
 import type { MapTerritory } from './map-graph.models';
 
@@ -57,5 +58,6 @@ describe('map export', () => {
     expect(calls).toContain('fill');
     expect(calls).toContain('stroke');
     expect(ctx.fillStyle).toBe('rgba(0, 170, 0, 0.32)');
+    expect(ctx.lineWidth).toBe(STROKE_SCREEN_PX);
   });
 });

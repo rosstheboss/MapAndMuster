@@ -57,6 +57,9 @@ public sealed class CreateCampaignCommand
 
     /// <summary>Gets the structure types. Defaults are used when omitted.</summary>
     public IReadOnlyList<StructureTypeInput>? StructureTypes { get; init; }
+
+    /// <summary>Gets the item objective types. Omitted or empty means none.</summary>
+    public IReadOnlyList<ItemObjectiveTypeInput>? ItemObjectiveTypes { get; init; }
 }
 
 /// <summary>
@@ -120,6 +123,9 @@ public sealed class UpdateCampaignCommand
 
     /// <summary>Gets the structure types. Defaults are used when omitted.</summary>
     public IReadOnlyList<StructureTypeInput>? StructureTypes { get; init; }
+
+    /// <summary>Gets the item objective types. Omitted or empty means none.</summary>
+    public IReadOnlyList<ItemObjectiveTypeInput>? ItemObjectiveTypes { get; init; }
 }
 
 /// <summary>

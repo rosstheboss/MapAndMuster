@@ -14,7 +14,7 @@ public static class TerrainCatalog
         (TerrainType.Cave, "Cave", "#6B4F3A"),
         (TerrainType.Desert, "Desert", "#D4A017"),
         (TerrainType.Forest, "Forest", "#2E7D32"),
-        (TerrainType.Highlands, "Highlands", "#6B8E4E"),
+        (TerrainType.Highlands, "Highlands", "#C45C26"),
         (TerrainType.Jungle, "Jungle", "#0B8F4A"),
         (TerrainType.Lake, "Lake", "#5BA3C9"),
         (TerrainType.Mountain, "Mountain", "#8A8680"),

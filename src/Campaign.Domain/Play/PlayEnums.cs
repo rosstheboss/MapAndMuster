@@ -151,6 +151,18 @@ public enum PlayLogKind
 
     /// <summary>A manager in debug mode re-resolved a prior action window.</summary>
     DebugActionReresolved = 19,
+
+    /// <summary>A hidden item objective was found by occupying its territory.</summary>
+    ItemObjectiveFound = 20,
+
+    /// <summary>A revealed item objective was picked up by a force.</summary>
+    ItemObjectivePickedUp = 21,
+
+    /// <summary>A force dropped an item objective when it moved.</summary>
+    ItemObjectiveDropped = 22,
+
+    /// <summary>A manager in debug mode revealed hidden item objectives to players.</summary>
+    ItemObjectivesStaffRevealed = 23,
 }
 
 /// <summary>

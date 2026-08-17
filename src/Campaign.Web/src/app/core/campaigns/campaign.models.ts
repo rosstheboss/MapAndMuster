@@ -67,6 +67,7 @@ export interface CampaignDetail {
   log: PlayLogEntry[];
   terrainTypes: CampaignTerrainType[];
   structureTypes: CampaignStructureType[];
+  itemObjectiveTypes?: CampaignItemObjectiveType[];
 }
 
 export interface RoundPhase {
@@ -117,8 +118,21 @@ export interface CampaignStructureType {
   builtinSymbol: string | null;
   hasImage: boolean;
   hasPillagedImage: boolean;
+  isBuildable: boolean;
+  isPillageable: boolean;
+  isDestructible: boolean;
   missions: CampaignMission[];
 }
+
+export interface CampaignItemObjectiveType {
+  id: string;
+  name: string;
+  isHiddenUntilFound: boolean;
+  placement: ItemObjectivePlacement;
+  allowOnSpawn: boolean;
+}
+
+export type ItemObjectivePlacement = 'Random' | 'Placed';
 
 export interface SaveCampaignPayload {
   name: string;
@@ -143,6 +157,7 @@ export interface SaveCampaignPayload {
   phases: SaveRoundPhasePayload[];
   terrainTypes: SaveTerrainTypePayload[];
   structureTypes: SaveStructureTypePayload[];
+  itemObjectiveTypes: SaveItemObjectiveTypePayload[];
 }
 
 export interface SaveRoundPhasePayload {
@@ -183,7 +198,18 @@ export interface SaveStructureTypePayload {
   builtinSymbol?: string | null;
   clearImage?: boolean;
   clearPillagedImage?: boolean;
+  isBuildable: boolean;
+  isPillageable: boolean;
+  isDestructible: boolean;
   missions: SaveMissionPayload[];
+}
+
+export interface SaveItemObjectiveTypePayload {
+  id?: string;
+  name: string;
+  isHiddenUntilFound: boolean;
+  placement: ItemObjectivePlacement;
+  allowOnSpawn: boolean;
 }
 
 export interface SaveMissionPayload {
@@ -199,6 +225,7 @@ export interface MapGraphDetail {
   canManage: boolean;
   territories: MapTerritoryPayload[];
   adjacencies: MapAdjacencyPayload[];
+  itemObjectivePlacements?: ItemObjectivePlacementPayload[];
 }
 
 export interface MapTerritoryPayload {
@@ -229,10 +256,16 @@ export interface MapAdjacencyPayload {
   markerY: number;
 }
 
+export interface ItemObjectivePlacementPayload {
+  typeId: string;
+  territoryId: string;
+}
+
 export interface SaveMapGraphPayload {
   revision: number;
   territories: MapTerritoryPayload[];
   adjacencies: MapAdjacencyPayload[];
+  itemObjectivePlacements?: ItemObjectivePlacementPayload[];
 }
 
 export interface CampaignPlayDetail {
@@ -263,6 +296,7 @@ export interface CampaignPlayDetail {
   remainingWindows: PlayWindow[];
   factions: CampaignFaction[];
   structureTypes: CampaignStructureType[];
+  itemObjectives?: PlayItemObjective[];
   forces: PlayForce[];
   myDrafts: PlayDraft[];
   orders: PlayOrder[];
@@ -292,6 +326,15 @@ export interface PlayForce {
   inBattle: boolean;
   moveTargets: string[];
   availableActions: string[];
+}
+
+export interface PlayItemObjective {
+  id: string;
+  typeId: string;
+  name: string;
+  territoryId: string | null;
+  possessorForceId: string | null;
+  isRevealed: boolean;
 }
 
 export interface PlayDraft {

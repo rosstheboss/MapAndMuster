@@ -367,6 +367,7 @@ public sealed class MapGraphHandlerTests
                 MapGraph = graph,
                 TerrainTypes = Existing.TerrainTypes,
                 StructureTypes = Existing.StructureTypes,
+                ItemObjectiveTypes = Existing.ItemObjectiveTypes,
                 PlayState = Existing.PlayState,
             };
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });
@@ -424,6 +425,7 @@ public sealed class MapGraphHandlerTests
                 MapGraph = mapGraph ?? Existing.MapGraph,
                 TerrainTypes = Existing.TerrainTypes,
                 StructureTypes = Existing.StructureTypes,
+                ItemObjectiveTypes = Existing.ItemObjectiveTypes,
                 PlayState = playState,
             };
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });

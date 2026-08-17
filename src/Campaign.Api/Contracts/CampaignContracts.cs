@@ -75,6 +75,9 @@ public sealed class SaveCampaignRequest
 
     /// <summary>Gets the structure types. Defaults are used when omitted.</summary>
     public IReadOnlyList<StructureTypeRequest>? StructureTypes { get; init; }
+
+    /// <summary>Gets the item objective types. Omitted or empty means none.</summary>
+    public IReadOnlyList<ItemObjectiveTypeRequest>? ItemObjectiveTypes { get; init; }
 }
 
 /// <summary>
@@ -178,8 +181,38 @@ public sealed class StructureTypeRequest
     /// <summary>Gets whether an existing uploaded pillaged logo should be removed.</summary>
     public bool ClearPillagedImage { get; init; }
 
+    /// <summary>Gets whether players may Build this structure.</summary>
+    public bool? IsBuildable { get; init; }
+
+    /// <summary>Gets whether players may Pillage this structure.</summary>
+    public bool? IsPillageable { get; init; }
+
+    /// <summary>Gets whether a second Pillage may destroy and remove this structure.</summary>
+    public bool? IsDestructible { get; init; }
+
     /// <summary>Gets nested missions.</summary>
     public IReadOnlyList<MissionRequest>? Missions { get; init; }
+}
+
+/// <summary>
+/// Item objective configuration in a save request.
+/// </summary>
+public sealed class ItemObjectiveTypeRequest
+{
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Gets the item name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets whether the item stays hidden until found or staff-revealed. Defaults to true.</summary>
+    public bool? IsHiddenUntilFound { get; init; }
+
+    /// <summary>Gets Random or Placed. Defaults to Random.</summary>
+    public string? Placement { get; init; }
+
+    /// <summary>Gets whether the item may occupy a spawn territory. Defaults to false.</summary>
+    public bool? AllowOnSpawn { get; init; }
 }
 
 /// <summary>
@@ -336,6 +369,9 @@ public sealed class CampaignDetailResponse
 
     /// <summary>Gets the structure types.</summary>
     public required IReadOnlyList<StructureTypeResponse> StructureTypes { get; init; }
+
+    /// <summary>Gets the item objective types. Empty means none.</summary>
+    public IReadOnlyList<ItemObjectiveTypeResponse> ItemObjectiveTypes { get; init; } = [];
 
     /// <summary>Gets the ally groups.</summary>
     public required IReadOnlyList<AllyGroupResponse> AllyGroups { get; init; }
@@ -541,8 +577,38 @@ public sealed class StructureTypeResponse
     /// <summary>Gets whether a custom pillaged logo image is stored.</summary>
     public required bool HasPillagedImage { get; init; }
 
+    /// <summary>Gets whether players may Build this structure.</summary>
+    public required bool IsBuildable { get; init; }
+
+    /// <summary>Gets whether players may Pillage this structure.</summary>
+    public required bool IsPillageable { get; init; }
+
+    /// <summary>Gets whether a second Pillage may destroy and remove this structure.</summary>
+    public required bool IsDestructible { get; init; }
+
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<MissionResponse> Missions { get; init; }
+}
+
+/// <summary>
+/// An item objective type in a campaign response.
+/// </summary>
+public sealed class ItemObjectiveTypeResponse
+{
+    /// <summary>Gets the type identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the item name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets whether the item stays hidden until found or staff-revealed.</summary>
+    public required bool IsHiddenUntilFound { get; init; }
+
+    /// <summary>Gets Random or Placed.</summary>
+    public required string Placement { get; init; }
+
+    /// <summary>Gets whether the item may occupy a spawn territory.</summary>
+    public required bool AllowOnSpawn { get; init; }
 }
 
 /// <summary>
@@ -684,6 +750,9 @@ public static class CampaignResponses
                     BuiltinSymbol = type.BuiltinSymbol,
                     HasImage = type.HasImage,
                     HasPillagedImage = type.HasPillagedImage,
+                    IsBuildable = type.IsBuildable,
+                    IsPillageable = type.IsPillageable,
+                    IsDestructible = type.IsDestructible,
                     Missions =
                     [
                         .. type.Missions.Select(static mission => new MissionResponse
@@ -695,6 +764,17 @@ public static class CampaignResponses
                             FileName = mission.FileName,
                         }),
                     ],
+                }),
+            ],
+            ItemObjectiveTypes =
+            [
+                .. detail.ItemObjectiveTypes.Select(static type => new ItemObjectiveTypeResponse
+                {
+                    Id = type.Id,
+                    Name = type.Name,
+                    IsHiddenUntilFound = type.IsHiddenUntilFound,
+                    Placement = type.Placement,
+                    AllowOnSpawn = type.AllowOnSpawn,
                 }),
             ],
             AllyGroups =
@@ -811,6 +891,14 @@ public static class CampaignResponses
                     Origin = edge.Origin,
                     MarkerX = edge.MarkerX,
                     MarkerY = edge.MarkerY,
+                }),
+            ],
+            ItemObjectivePlacements =
+            [
+                .. detail.ItemObjectivePlacements.Select(static item => new ItemObjectivePlacementResponse
+                {
+                    TypeId = item.TypeId,
+                    TerritoryId = item.TerritoryId,
                 }),
             ],
         };
@@ -948,7 +1036,28 @@ public static class CampaignResponses
                 BuiltinSymbol = type.BuiltinSymbol,
                 ClearImage = type.ClearImage,
                 ClearPillagedImage = type.ClearPillagedImage,
+                IsBuildable = type.IsBuildable,
+                IsPillageable = type.IsPillageable,
+                IsDestructible = type.IsDestructible,
                 Missions = ToMissionInputs(type.Missions),
+            })
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Maps HTTP item-objective requests onto domain inputs.
+    /// </summary>
+    public static IReadOnlyList<ItemObjectiveTypeInput>? ToItemObjectiveTypeInputs(
+        IReadOnlyList<ItemObjectiveTypeRequest>? types)
+    {
+        return types?
+            .Select(static type => new ItemObjectiveTypeInput
+            {
+                Id = type.Id,
+                Name = type.Name,
+                IsHiddenUntilFound = type.IsHiddenUntilFound,
+                Placement = type.Placement,
+                AllowOnSpawn = type.AllowOnSpawn,
             })
             .ToArray();
     }
@@ -1018,6 +1127,9 @@ public sealed class SaveMapGraphRequest
 
     /// <summary>Gets the adjacencies.</summary>
     public IReadOnlyList<AdjacencyRequest>? Adjacencies { get; init; }
+
+    /// <summary>Gets manager-assigned item objective placements.</summary>
+    public IReadOnlyList<ItemObjectivePlacementRequest>? ItemObjectivePlacements { get; init; }
 }
 
 /// <summary>
@@ -1114,6 +1226,33 @@ public sealed class MapGraphResponse
 
     /// <summary>Gets the explicit adjacencies.</summary>
     public required IReadOnlyList<AdjacencyResponse> Adjacencies { get; init; }
+
+    /// <summary>Gets manager-assigned item objective placements.</summary>
+    public IReadOnlyList<ItemObjectivePlacementResponse> ItemObjectivePlacements { get; init; } = [];
+}
+
+/// <summary>
+/// A manager-assigned launch location for a Placed item objective.
+/// </summary>
+public sealed class ItemObjectivePlacementResponse
+{
+    /// <summary>Gets the item objective type.</summary>
+    public required Guid TypeId { get; init; }
+
+    /// <summary>Gets the territory.</summary>
+    public required Guid TerritoryId { get; init; }
+}
+
+/// <summary>
+/// A manager-assigned launch location in a save request.
+/// </summary>
+public sealed class ItemObjectivePlacementRequest
+{
+    /// <summary>Gets the item objective type.</summary>
+    public required Guid TypeId { get; init; }
+
+    /// <summary>Gets the territory.</summary>
+    public required Guid TerritoryId { get; init; }
 }
 
 /// <summary>

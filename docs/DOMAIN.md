@@ -52,6 +52,20 @@ Daemons of Chaos includes the subfactions Khorne, Nurgle, Slaanesh, and Tzeentch
 and requires a subfaction choice. Setup can also clear the faction list (back to two empty
 slots) or clear all ally groups.
 
+Setup may apply a standard terrain preset or a standard structures preset the same way: applying
+the preset replaces the current list with a copy of the current catalog values. Later catalog
+edits in code update those presets, the same as faction presets. Setup may also apply a whole
+campaign preset. The initial catalog includes The Hunt in Estalia, which copies the Old World
+factions, standard terrain, standard structures, and that campaign's item-objective list (empty
+until named items are added). Applying a campaign preset fills the campaign name only when the
+name field is empty.
+
+Optional item objectives may be none, one, or many (at most 50), each with a unique name.
+Defaults are hidden until found, randomly placed, and not allowed on a spawn territory. A
+Placed item is assigned to a territory in the map editor. Hidden items stay off player views
+until a force finds them or a manager or administrator in debug mode clicks Reveal hidden
+objectives. Found or staff-revealed items stay revealed.
+
 The creating user is always a campaign manager (Game Master). If they also participate, they
 occupy one player slot. Private campaigns store a hashed join password; the plaintext password
 is never returned. Publicly viewable campaigns may be opened by any signed-in user. When a
@@ -150,14 +164,14 @@ When staff act for another party, record:
 
 ## Action-window lifecycle
 
-1. `Open`: required participants save, commit, or uncommit.
+1. `Open`: required participants save a draft for every force, then commit or uncommit.
 2. `Closing`: a transaction freezes the required participant/order set.
 3. `Revealed`: submitted/default orders become visible according to policy.
 4. `Resolving`: deterministic precedence and conflict rules run.
 5. `Resolved`: resulting map/battle state is committed once.
 6. `Reopened`: staff correction creates a new revision and a new controlled editing window.
 
-The final required commitment closes an open window atomically. Before that instant, a player
+The final required commitment closes an open window atomically. A player may commit only after every required force has a saved draft. Before that instant, a player
 may uncommit a committed order back to draft. At the deadline, the latest valid draft is
 submitted. Missing slots become `Hold`. After the window closes, orders resolve and cannot be
 returned to draft. Each force requires an action; same-player forces that occupy one territory
@@ -190,9 +204,12 @@ Player-submittable actions in an open action window are listed in this order:
 - `Hold`: remain and receive applicable resting effects.
 - `Move`: travel to an allowed adjacent territory; invalid move becomes Hold.
 - `Build`: create an allowed structure in a non-spawn territory that has no intact structure.
-- `Pillage`: progress an enemy or unowned intact structure from operational to pillaged, then
-  from pillaged to destroyed. Cities may be pillaged but not destroyed. A force cannot pillage a
-  structure it already owns.
+  Only structure types flagged buildable may be chosen. Town, Capital City, City, and Castle
+  start not buildable; Supply Depot and Fortification start buildable.
+- `Pillage`: progress an enemy or unowned intact structure that is flagged pillageable from
+  operational to pillaged. A second Pillage against a pillaged structure that is flagged
+  destructible removes it from the map. Capital City starts not pillageable. Capital City, City,
+  and Castle start not destructible. A force cannot pillage a structure it already owns.
 - `Repair`: restore a pillaged structure the force's faction owns.
 - `Split`: create a second force in an eligible adjacent territory; maximum two per player in
   the supplied rules.
@@ -235,11 +252,16 @@ that force become Battle.
 - A faction that controls a non-spawn territory displays its flag there.
 - At most one structure occupies a territory under the supplied rules.
 - Structure type, owner/controller, and condition are separate concepts.
+- Each structure type has Buildable, Pillageable, and Destructible flags configured in campaign
+  setup.
 - Conditions are `Operational`, `Pillaged`, and `Destroyed`. Setup and the map editor may place
-  a structure as Operational or Pillaged. Play may set Destroyed when a non-city is pillaged a
-  second time. Destroyed structures leave the type on the territory so a later Build can replace
-  them, but they are not shown as a pin.
-- Cities may be pillaged but not destroyed in the supplied rules.
+  a structure as Operational or Pillaged. Play may destroy a pillaged structure that is
+  destructible; destroyed structures are removed from the map so a later Build can occupy the
+  empty territory.
+- A pillaged structure is shown with its pillaged icon and labeled as `Name (pillaged)`, for
+  example `Town (pillaged)`. Repair restores the operational condition and operational icon.
+- Capital City starts not pillageable and not destructible. City and Castle start pillageable
+  but not destructible. Town starts pillageable and destructible.
 - Each structure type has a built-in operational icon and a built-in pillaged icon. Campaign
   setup may replace either with a user-uploaded 50×50 logo.
 
@@ -249,11 +271,12 @@ After campaign creation, the creating manager is taken to the map editor. Territ
 an overlay on the rectangular raster map; the image itself is not modified. Overlay coordinates are
 normalized to the unit square. Drawing stays inside the image rectangle. Territories may share a
 border but their interiors must not overlap. The drawing cursor highlights when it is about to snap
-to an existing vertex. Managers may undo or erase segments, assign an optional unique name and
+to an existing vertex. Managers may undo, redo, or erase segments, assign an optional unique name and
 description (otherwise the display number 1, 2, 3… is used), select a required terrain type,
 select at most one optional structure and whether that structure starts Operational or Pillaged,
 assign optional ownership (otherwise Neutral), assign an optional spawn faction (at most one
-spawn per faction), and apply a transparent overlay color.
+spawn per faction), place catalog item objectives that use Placed launch placement, and apply a
+transparent overlay color.
 
 Auto Generate Connections suggests adjacency arrows from shared borders. User-created (manual) arrows
 are kept on regenerate, and those pairs are skipped. Generated arrows may be replaced. Managers may
@@ -274,7 +297,9 @@ alphabetically, are Beach, Cave, Desert, Forest, Highlands, Jungle, Lake, Mounta
 and Swamp.
 Each has a unique color, a symbol, and at least one mission. Setup starts each terrain type with one
 empty mission row. The initial structures, alphabetically, are Capital City, Castle, City, Fortification, Supply
-Depot, and Town. Each structure uses either a built-in icon or an uploaded logo image, not both.
+Depot, and Town. Town, Capital City, City, and Castle are not buildable; Supply Depot and
+Fortification are. Capital City is not pillageable. Capital City, City, and Castle are not
+destructible. Each structure uses either a built-in icon or an uploaded logo image, not both.
 Clearing or replacing an uploaded logo deletes only that uploaded file. Built-in icons remain in the
 application.
 Uploaded structure logos are limited to 50×50 pixels; larger images are shrunk to that size.
@@ -293,16 +318,21 @@ border and disappears when the button is released. A click on the map with no te
 selection. When two or more territories are selected, the side panel lists all of them and the map
 highlights each as selected. Selected territories can be deleted with Delete or the Delete territory
 control, including when several are selected. Dragging a selection moves those territories together
-when the move stays on the map and does not overlap another territory's interior. Shared or
-overlapping borders are allowed, and a dragged territory snaps back onto a touching border,
-including its original place, when that contact is within snap distance.
+and keeps them on the map. Shared borders are allowed; a newly drawn or moved border must not
+overhang into another territory's interior. While a group is being dragged, it is highlighted green
+at about 70% fill with a centered checkmark of at most 50×50 pixels when it can be dropped, or red
+at about 70% fill with a centered X of at most 50×50 pixels when it cannot. Dropping while red
+restores the group to the position it had when the drag started.
 Owned territories also show a flag at up to 50×50 pixels, using the faction color flag by default or an
 uploaded image that is not recolored. Structure logos and ownership flags sit at 50×50 pixels in the
 territory center when that size fits; otherwise they shrink and shift to stay inside the polygon, as centered
 as possible. When a structure is present, the ownership flag sits beside it. Highlights use a subtle
-contrasting glow. Selected or hovered territories use the full selected glow. Connected adjacent territories
-glow with half of the usual fill transparency. When several territories are selected, those
-territories stay selected and every other connected territory uses the half-glow. When a territory
+contrasting glow. Selected territories use a full highlight: about 70% fill and double the usual
+border thickness. Hovered territories, possible action destinations, and territories connected to
+the current selection use a half highlight: 50% fill and 1.5 times the usual border thickness.
+When a territory qualifies for both, the full highlight wins. When several territories are selected,
+those territories stay fully highlighted and every other connected territory uses the half highlight.
+When a territory
 has an overlay color, that color is the glow, strongest around the territory border. Overlay color
 mode is Random Colors, Color By Terrain, or Manual Colors. Switching to Random Colors or Color By
 Terrain recolors every territory. A new territory, or a terrain change while Color By Terrain is on,
@@ -339,10 +369,11 @@ using the campaign's first terrain type.
 
 If two endpoints of a new drawing land on the same border of an existing territory, and no other
 lines, endpoints, or territories lie between those points on that border, a line matching that
-border is inserted when the pointer is released. If a drawn line’s endpoints touch one or more
-territory borders and walking those borders can close a single empty region, that loop is enclosed
-as a new territory. If both endpoints sit on the map image edge, the shape is enclosed along that
-image edge.
+border is inserted when the pointer is released. Releasing the pointer does not close the shape.
+Close Territory or Enter closes a valid drawn loop, or tries to enclose a single empty region by
+walking touched territory borders or the map image edge. Clicking near the first point also closes a
+drawn loop. Extra vertices along a shared border are allowed. A newly drawn border must not overhang
+into another territory's interior.
 
 Factions, terrain types, and structures can be expanded or collapsed inside their setup sections.
 Each ally group lists its member factions in a paragraph. When any ally group exists, unaligned
@@ -359,7 +390,7 @@ Completed campaigns are ordered by most recently finished.
 ## Forces
 
 - A force has location, controller, faction, supply context, current status, battle history,
-  and optional relic possession.
+  and optional item-objective possession.
 - Split forces have independent orders, locations, supply paths, battles, and statuses.
 - Two forces belonging to the same player rejoin when they occupy the same territory. The
   surviving force keeps one action slot afterward, and the rejoin is recorded in the play log.
@@ -382,9 +413,15 @@ Objective visibility scopes: Public, Player, Faction, Alliance, Backstabber, and
 Completion and awarded points are separate so a secret objective can be completed without
 publicly revealing it.
 
-A relic has hidden placement, revealed state, map location or possessor, choice/effect state,
-and public history after reveal. Hidden location is never included in unauthorized queries.
-Relics cannot return to spawn under the supplied rules.
+Item objectives are named catalog items (none, one, or many). Launch placement is Random or
+Placed. Hidden-until-found items are omitted from player play payloads, including location and
+possessor, until found or until staff in an active debug session clicks Reveal hidden
+objectives. Staff in that debug session may see still-hidden items. Once revealed, an item
+stays revealed. A force that Moves or Retreats drops a carried item on the territory it left;
+another force that is alone in that territory and not in battle picks it up. A battle winner
+takes items held by participants or lying in the battle territory; a draw does not transfer
+them. Items may occupy a spawn territory only when that catalog flag is enabled (off by
+default). Relic choice options and effects remain in `docs/DECISIONS-NEEDED.md`.
 
 ## Corrections
 

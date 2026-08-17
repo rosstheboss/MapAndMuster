@@ -32,10 +32,17 @@ public static class CampaignCatalogDefaults
     {
         return
         [
-            .. StructureCatalog.All.Select(static entry => new StructureTypeInput
+            .. StructureCatalog.All.Select(static entry =>
             {
-                Name = entry.Label,
-                BuiltinSymbol = entry.Type.ToString(),
+                var flags = StructureCatalog.DefaultFlags(entry.Type);
+                return new StructureTypeInput
+                {
+                    Name = entry.Label,
+                    BuiltinSymbol = entry.Type.ToString(),
+                    IsBuildable = flags.IsBuildable,
+                    IsPillageable = flags.IsPillageable,
+                    IsDestructible = flags.IsDestructible,
+                };
             }),
         ];
     }

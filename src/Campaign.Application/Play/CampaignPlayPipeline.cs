@@ -35,12 +35,28 @@ internal static class CampaignPlayPipeline
             .Where(static member => member.IsPlayer)
             .Select(member => new PlayerFactionAssignment(member.UserId, member.FactionId))
             .ToArray();
+        var itemTypes = campaign.ItemObjectiveTypes
+            .Select(static type => new ItemObjectiveTypePlayRules(
+                type.Id,
+                type.Name,
+                type.IsHiddenUntilFound,
+                Enum.TryParse<ItemObjectivePlacementKind>(type.Placement, true, out var placement)
+                    ? placement
+                    : ItemObjectivePlacementKind.Random,
+                type.AllowOnSpawn))
+            .ToArray();
+        var placements = (campaign.MapGraph?.ItemObjectivePlacements ?? [])
+            .Select(static item => new ItemObjectiveMapPlacement(item.TypeId, item.TerritoryId))
+            .ToArray();
         var seeded = CampaignPlayRules.Seed(
             campaign.PlayState ?? CampaignPlayState.Empty,
             map,
             CampaignMapper.ToSchedule(campaign),
             players,
-            utcNow);
+            utcNow,
+            itemTypes,
+            placements,
+            count => count <= 0 ? 0 : Random.Shared.Next(count));
         var schedule = CampaignMapper.ToSchedule(campaign);
         var advanced = CampaignPlayRules.Advance(
             seeded.State,
@@ -237,6 +253,7 @@ internal static class CampaignPlayPipeline
             MapGraph = graph ?? existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
+            ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PlayState = play,
         };
     }

@@ -478,6 +478,131 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task GetPlayHidesUnrevealedItemObjectivesUntilDebugReveal()
+    {
+        var northSpawn = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var southSpawn = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var midland = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var plainsId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var itemTypeId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var graph = new StoredMapGraph
+        {
+            Territories =
+            [
+                SquareTerritory(northSpawn, 1, 0.05, 0.05, 0.2, NorthFactionId, plainsId),
+                SquareTerritory(midland, 2, 0.30, 0.05, 0.2, null, plainsId),
+                SquareTerritory(southSpawn, 3, 0.55, 0.05, 0.2, SouthFactionId, plainsId),
+            ],
+            Adjacencies =
+            [
+                new AdjacencyDetail
+                {
+                    Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01"),
+                    TerritoryAId = northSpawn,
+                    TerritoryBId = midland,
+                    Origin = "Manual",
+                    MarkerX = 0.27,
+                    MarkerY = 0.15,
+                },
+                new AdjacencyDetail
+                {
+                    Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02"),
+                    TerritoryAId = midland,
+                    TerritoryBId = southSpawn,
+                    Origin = "Manual",
+                    MarkerX = 0.52,
+                    MarkerY = 0.15,
+                },
+            ],
+        };
+        var campaign = WithCopied(
+            StoredCampaignFor(UserId),
+            memberships:
+            [
+                new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                },
+                new StoredCampaignMembership
+                {
+                    UserId = OtherUserId,
+                    IsGameMaster = false,
+                    IsPlayer = true,
+                    FactionId = SouthFactionId,
+                },
+            ],
+            startsUtc: Now,
+            endsUtc: Now.AddDays(40),
+            mapGraph: graph,
+            terrainTypes:
+            [
+                new StoredTerrainType
+                {
+                    Id = plainsId,
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [],
+                },
+            ],
+            itemObjectiveTypes:
+            [
+                new StoredItemObjectiveType
+                {
+                    Id = itemTypeId,
+                    Name = "Crown",
+                    IsHiddenUntilFound = true,
+                    Placement = "Random",
+                    AllowOnSpawn = false,
+                },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var accounts = new FakeAccounts();
+        var get = new GetCampaignPlayHandler(store, new FakeClock(), accounts);
+
+        var playerView = await get.HandleAsync(campaign.Id, OtherUserId, false, CancellationToken.None);
+        Assert.True(playerView.IsSuccess);
+        Assert.Empty(playerView.Value!.ItemObjectives);
+
+        var managerView = await get.HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+        Assert.True(managerView.IsSuccess);
+        Assert.Empty(managerView.Value!.ItemObjectives);
+
+        store.Existing = WithCopied(
+            store.Existing!,
+            playState: store.Existing!.PlayState!.With(debugActorUserId: UserId, debugStartedUtc: Now));
+        var debugView = await get.HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+        Assert.True(debugView.IsSuccess);
+        var hidden = Assert.Single(debugView.Value!.ItemObjectives);
+        Assert.Equal("Crown", hidden.Name);
+        Assert.False(hidden.IsRevealed);
+        Assert.Equal(midland, hidden.TerritoryId);
+
+        var reveal = new RevealHiddenItemObjectivesHandler(store, new FakeClock(), accounts);
+        var revealed = await reveal.HandleAsync(
+            new PlayCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = debugView.Value.Revision,
+            },
+            CancellationToken.None);
+        Assert.True(revealed.IsSuccess);
+        var visible = Assert.Single(revealed.Value!.ItemObjectives);
+        Assert.True(visible.IsRevealed);
+
+        var afterReveal = await get.HandleAsync(campaign.Id, OtherUserId, false, CancellationToken.None);
+        Assert.True(afterReveal.IsSuccess);
+        var playerItem = Assert.Single(afterReveal.Value!.ItemObjectives);
+        Assert.Equal("Crown", playerItem.Name);
+        Assert.True(playerItem.IsRevealed);
+        Assert.Equal(midland, playerItem.TerritoryId);
+    }
+
+    [Fact]
     public async Task DeleteRemovesCampaignForManagersOnly()
     {
         var campaign = StoredCampaignFor(UserId);
@@ -678,6 +803,9 @@ public sealed class CampaignHandlerTests
                     Name = "Town",
                     BuiltinSymbol = "Town",
                     ImageStorageKey = "Town",
+                    IsBuildable = false,
+                    IsPillageable = true,
+                    IsDestructible = true,
                     Missions = [],
                 },
                 new StoredStructureType
@@ -686,6 +814,9 @@ public sealed class CampaignHandlerTests
                     Name = "Keep",
                     BuiltinSymbol = "Castle",
                     ImageStorageKey = "structures/keep.png",
+                    IsBuildable = false,
+                    IsPillageable = true,
+                    IsDestructible = false,
                     Missions = [],
                 },
             ]);
@@ -972,6 +1103,9 @@ public sealed class CampaignHandlerTests
                     Name = "Town",
                     BuiltinSymbol = "Town",
                     ImageStorageKey = "structures/town.png",
+                    IsBuildable = false,
+                    IsPillageable = true,
+                    IsDestructible = true,
                     Missions = [],
                 },
             ],
@@ -1017,6 +1151,7 @@ public sealed class CampaignHandlerTests
             MapGraph = campaign.MapGraph,
             TerrainTypes = campaign.TerrainTypes,
             StructureTypes = campaign.StructureTypes,
+            ItemObjectiveTypes = campaign.ItemObjectiveTypes,
             PlayState = campaign.PlayState,
         };
     }
@@ -1030,7 +1165,10 @@ public sealed class CampaignHandlerTests
         string? joinPasswordHash = null,
         DateTimeOffset? startsUtc = null,
         DateTimeOffset? endsUtc = null,
-        StoredMapGraph? mapGraph = null)
+        StoredMapGraph? mapGraph = null,
+        IReadOnlyList<StoredTerrainType>? terrainTypes = null,
+        IReadOnlyList<StoredItemObjectiveType>? itemObjectiveTypes = null,
+        Campaign.Domain.Play.CampaignPlayState? playState = null)
     {
         return new StoredCampaign
         {
@@ -1062,9 +1200,10 @@ public sealed class CampaignHandlerTests
             RoundLengthUnit = campaign.RoundLengthUnit,
             Phases = campaign.Phases,
             MapGraph = mapGraph ?? campaign.MapGraph,
-            TerrainTypes = campaign.TerrainTypes,
+            TerrainTypes = terrainTypes ?? campaign.TerrainTypes,
             StructureTypes = structures ?? campaign.StructureTypes,
-            PlayState = campaign.PlayState,
+            ItemObjectiveTypes = itemObjectiveTypes ?? campaign.ItemObjectiveTypes,
+            PlayState = playState ?? campaign.PlayState,
         };
     }
 
@@ -1314,6 +1453,7 @@ public sealed class CampaignHandlerTests
                 MapGraph = graph,
                 TerrainTypes = Existing.TerrainTypes,
                 StructureTypes = Existing.StructureTypes,
+                ItemObjectiveTypes = Existing.ItemObjectiveTypes,
                 PlayState = Existing.PlayState,
             };
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });
@@ -1381,6 +1521,7 @@ public sealed class CampaignHandlerTests
                 MapGraph = mapGraph ?? Existing.MapGraph,
                 TerrainTypes = Existing.TerrainTypes,
                 StructureTypes = Existing.StructureTypes,
+                ItemObjectiveTypes = Existing.ItemObjectiveTypes,
                 PlayState = playState,
             };
             Updated = Existing;

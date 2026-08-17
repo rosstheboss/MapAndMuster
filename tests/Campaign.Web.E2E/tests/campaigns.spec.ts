@@ -490,7 +490,7 @@ test('players can read and chat in the campaign log', async ({ page }) => {
   await expect(page.getByText('North held in Coast.')).toBeVisible();
   await expect(page.getByText('Phase ends in')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Expand All' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Commit orders' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Commit Actions' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Play' })).toHaveCount(0);
   await page.getByLabel('Message').fill('Hey, everybody! This is a message to all of you.');
   await page.getByRole('button', { name: 'Send' }).click();

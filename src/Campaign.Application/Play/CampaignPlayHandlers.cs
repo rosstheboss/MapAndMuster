@@ -669,6 +669,7 @@ public sealed class ChooseFactionHandler
             MapGraph = graph ?? existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
             StructureTypes = existing.StructureTypes,
+            ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PlayState = play,
         };
     }
@@ -822,6 +823,51 @@ public sealed class DebugCorrectOrderHandler
                 return PlayMutation.FromOutcome(outcome!);
             },
             cancellationToken).ConfigureAwait(false);
+    }
+}
+
+/// <summary>
+/// Reveals hidden item objectives while a manager or administrator is in debug mode.
+/// </summary>
+public sealed class RevealHiddenItemObjectivesHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+
+    /// <summary>Initializes a new handler.</summary>
+    public RevealHiddenItemObjectivesHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+    }
+
+    /// <summary>Reveals hidden item objectives to all players.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(PlayCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignDebugAccess.MutateDebugAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command,
+            (state, _, utcNow) =>
+            {
+                if (!ItemObjectiveRules.TryRevealHidden(state, command.UserId, utcNow, out var next, out var error)
+                    || next is null)
+                {
+                    return PlayMutation.Fail(error ?? new Domain.Common.DomainError(
+                        "debug.required",
+                        "Enter debug mode before revealing hidden item objectives."));
+                }
+
+                return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
+            },
+            cancellationToken);
     }
 }
 

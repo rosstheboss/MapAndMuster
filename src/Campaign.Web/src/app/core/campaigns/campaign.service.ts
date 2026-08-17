@@ -298,4 +298,14 @@ export class CampaignService {
       ),
     );
   }
+
+  async revealHiddenObjectives(campaignId: string, payload: PlayRevisionPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/debug/reveal-hidden-objectives`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
 }

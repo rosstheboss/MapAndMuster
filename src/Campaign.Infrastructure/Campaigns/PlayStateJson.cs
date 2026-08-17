@@ -125,6 +125,17 @@ internal static class PlayStateJson
                 StructureTypeId = item.StructureTypeId,
                 Condition = item.Condition.ToString(),
             })],
+            ItemObjectives = [.. state.ItemObjectives.Select(static item => new ItemObjectiveDocument
+            {
+                Id = item.Id,
+                TypeId = item.TypeId,
+                Name = item.Name,
+                TerritoryId = item.TerritoryId,
+                PossessorForceId = item.PossessorForceId,
+                IsRevealed = item.IsRevealed,
+                OriginalTerritoryId = item.OriginalTerritoryId,
+                WasHiddenUntilFound = item.WasHiddenUntilFound,
+            })],
             Log = [.. state.Log.Select(static item => new LogDocument
             {
                 Id = item.Id,
@@ -166,6 +177,17 @@ internal static class PlayStateJson
                     StructureTypeId = territory.StructureTypeId,
                     StructureName = territory.StructureName,
                     Condition = territory.Condition.ToString(),
+                })],
+                ItemObjectives = [.. item.ItemObjectives.Select(static objective => new ItemObjectiveDocument
+                {
+                    Id = objective.Id,
+                    TypeId = objective.TypeId,
+                    Name = objective.Name,
+                    TerritoryId = objective.TerritoryId,
+                    PossessorForceId = objective.PossessorForceId,
+                    IsRevealed = objective.IsRevealed,
+                    OriginalTerritoryId = objective.OriginalTerritoryId,
+                    WasHiddenUntilFound = objective.WasHiddenUntilFound,
                 })],
             })],
             DebugActorUserId = state.DebugActorUserId,
@@ -240,6 +262,7 @@ internal static class PlayStateJson
                 item.TerritoryId,
                 item.StructureTypeId,
                 Enum.Parse<StructureCondition>(item.Condition, true)))],
+            [.. (document.ItemObjectives ?? []).Select(FromItem)],
             [.. (document.Log ?? []).Select(static item => new PlayLogEntry(
                 item.Id,
                 item.OccurredUtc,
@@ -281,8 +304,22 @@ internal static class PlayStateJson
                     territory.OwnerFactionId,
                     territory.StructureTypeId,
                     territory.StructureName,
-                    Enum.Parse<StructureCondition>(territory.Condition, true)))])),
+                    Enum.Parse<StructureCondition>(territory.Condition, true)))],
+                [.. (item.ItemObjectives ?? []).Select(FromItem)])),
         ];
+    }
+
+    private static CampaignItemObjective FromItem(ItemObjectiveDocument item)
+    {
+        return new CampaignItemObjective(
+            item.Id,
+            item.TypeId,
+            item.Name,
+            item.TerritoryId,
+            item.PossessorForceId,
+            item.IsRevealed,
+            item.OriginalTerritoryId,
+            item.WasHiddenUntilFound);
     }
 
     private sealed class PlayDocument
@@ -297,6 +334,7 @@ internal static class PlayStateJson
         public List<RetreatDocument> Retreats { get; set; } = [];
         public List<Guid> BrokenAllyFactionIds { get; set; } = [];
         public List<StructureDocument> Structures { get; set; } = [];
+        public List<ItemObjectiveDocument>? ItemObjectives { get; set; }
         public List<LogDocument> Log { get; set; } = [];
         public List<SnapshotDocument>? Snapshots { get; set; }
         public Guid? DebugActorUserId { get; set; }
@@ -396,6 +434,18 @@ internal static class PlayStateJson
         public string Condition { get; set; } = "";
     }
 
+    private sealed class ItemObjectiveDocument
+    {
+        public Guid Id { get; set; }
+        public Guid TypeId { get; set; }
+        public string Name { get; set; } = "";
+        public Guid? TerritoryId { get; set; }
+        public Guid? PossessorForceId { get; set; }
+        public bool IsRevealed { get; set; }
+        public Guid OriginalTerritoryId { get; set; }
+        public bool WasHiddenUntilFound { get; set; }
+    }
+
     private sealed class LogDocument
     {
         public Guid Id { get; set; }
@@ -420,6 +470,7 @@ internal static class PlayStateJson
         public List<StructureDocument> Structures { get; set; } = [];
         public List<Guid> BrokenAllyFactionIds { get; set; } = [];
         public List<TerritorySnapshotDocument> Territories { get; set; } = [];
+        public List<ItemObjectiveDocument>? ItemObjectives { get; set; }
     }
 
     private sealed class TerritorySnapshotDocument

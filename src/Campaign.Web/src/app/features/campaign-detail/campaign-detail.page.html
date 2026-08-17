@@ -189,25 +189,56 @@
       @if (isOpen('map')) {
         @if (mapSrc(); as src) {
           <div class="map-view">
-            <app-campaign-map-view
-              [imageUrl]="src"
-              [territories]="graph().territories"
-              [adjacencies]="graph().adjacencies"
-              [selectedTerritoryIds]="focusTerritoryIds()"
-              [hoveredTerritoryId]="hoveredTerritoryId()"
-              [adjacentTerritoryIds]="adjacentTerritoryIds()"
-              [showAdjacencies]="false"
-              [interactive]="true"
-              [factions]="campaign.factions"
-              [structures]="campaign.structureTypes"
-              [structureImageUrl]="structureImageUrl"
-              [flagImageUrl]="flagImageUrl"
-              [forces]="mapForces()"
-              (territoryHover)="hoveredTerritoryId.set($event)"
-              (territorySelect)="onTerritorySelect($event)"
-              (backgroundSelect)="selectedIds.set([])"
-            />
+            <div class="map-board" #mapBoard>
+              <app-campaign-map-view
+                [imageUrl]="src"
+                [territories]="graph().territories"
+                [adjacencies]="graph().adjacencies"
+                [selectedTerritoryIds]="selectedIds()"
+                [hoveredTerritoryId]="hoveredTerritoryId()"
+                [adjacentTerritoryIds]="adjacentTerritoryIds()"
+                [showAdjacencies]="false"
+                [interactive]="true"
+                [factions]="campaign.factions"
+                [structures]="campaign.structureTypes"
+                [structureImageUrl]="structureImageUrl"
+                [flagImageUrl]="flagImageUrl"
+                [forces]="mapForces()"
+                [items]="mapItems()"
+                (territoryHover)="hoveredTerritoryId.set($event)"
+                (territorySelect)="onTerritorySelect($event)"
+                (backgroundSelect)="onMapBackgroundSelect()"
+              />
+              @if (mapAction(); as flow) {
+                @if (flow.step === 'menu' || flow.step === 'pick-structure') {
+                  <div
+                    class="action-context-menu panel stack"
+                    role="menu"
+                    [style.left.px]="flow.menuX"
+                    [style.top.px]="flow.menuY"
+                  >
+                    @if (flow.step === 'menu') {
+                      @for (kind of mapMenuActions(); track kind) {
+                        <button type="button" class="menu-item" role="menuitem" (click)="onMapActionKind(kind)">
+                          {{ kind }}
+                        </button>
+                      }
+                    } @else {
+                      <p class="muted">Choose a structure to build</p>
+                      @for (type of buildableStructures(); track type.id) {
+                        <button type="button" class="menu-item" role="menuitem" (click)="onMapStructurePicked(type.id)">
+                          {{ type.name }}
+                        </button>
+                      }
+                    }
+                  </div>
+                }
+              }
+            </div>
             <aside class="map-meta panel stack" aria-live="polite">
+              @if (mapActionPrompt(); as prompt) {
+                <p>{{ prompt }}</p>
+              }
               @if (hoveredTerritory(); as territory) {
                 <h3>{{ labelFor(territory) }}</h3>
                 <p>{{ territory.description || 'No description.' }}</p>
@@ -222,7 +253,7 @@
                 </p>
                 <p>
                   Structure:
-                  @if (territory.structureTypeId) {
+                  @if (territory.structureTypeId && territory.structureCondition !== 'Destroyed') {
                     @if (structureSymbol(territory.structureTypeId); as symbol) {
                       <app-map-symbol
                         kind="structure"
@@ -263,6 +294,19 @@
                   {{ territory.spawnFactionId ? factionName(territory.spawnFactionId) : 'None' }}
                 </p>
                 <p>Forces: {{ forcesInTerritory(territory.id).join(', ') || 'None' }}</p>
+                <p>
+                  Item objectives:
+                  @if (itemsInTerritory(territory.id).length > 0) {
+                    @for (item of itemsInTerritory(territory.id); track item.id) {
+                      {{ itemSummary(item) }}
+                      @if (!$last) {
+                        <span>, </span>
+                      }
+                    }
+                  } @else {
+                    None
+                  }
+                </p>
                 <p>Adjacent territories: {{ adjacentLabels(territory) }}</p>
               } @else {
                 <p class="muted">Hover a territory to see its details.</p>
@@ -275,6 +319,38 @@
       }
     </div>
 
+    @if (play() && (visibleItemObjectives().length > 0 || (canDebug() && isDebugActive()))) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('itemObjectives')"
+            (click)="toggleSection('itemObjectives')"
+          >
+            Item objectives
+          </button>
+        </h2>
+        @if (isOpen('itemObjectives')) {
+          @if (visibleItemObjectives().length === 0) {
+            <p class="muted">No revealed item objectives.</p>
+          } @else {
+            <ul class="stack">
+              @for (item of visibleItemObjectives(); track item.id) {
+                <li>
+                  {{ item.name }}
+                  @if (!item.isRevealed) {
+                    (hidden)
+                  }
+                  — {{ itemLocation(item) }}
+                </li>
+              }
+            </ul>
+          }
+        }
+      </div>
+    }
+
     @if (isActionPhase() && play(); as play) {
       @if (play.isParticipant && !play.canChooseFaction) {
         <div class="panel stack">
@@ -285,80 +361,94 @@
               [attr.aria-expanded]="isOpen('orders')"
               (click)="toggleSection('orders')"
             >
-              Orders
+              Actions
             </button>
           </h2>
           @if (isOpen('orders')) {
             <p>
-              Choose an action for each of your forces. The latest saved draft is what commits if time runs out. Missing
-              drafts become Hold.
+              Choose an action for each of your forces from the map or the list below. Commit is available after every
+              force has a saved draft. Missing drafts become Hold if time runs out.
             </p>
             @if (play.isCommitted) {
               <p>
-                Your orders are committed. You can return them to draft until this action window closes. After it closes
-                they resolve and cannot be backed out.
+                Your actions are committed. Uncommit returns them to draft until this action window closes. After it
+                closes they resolve and cannot be backed out.
               </p>
               <button type="button" class="button-secondary" (click)="uncommit()">Uncommit</button>
             } @else {
+              <button type="button" class="button" (click)="commit()" [disabled]="!canCommitActions()">
+                Commit Actions
+              </button>
               @for (force of myForces(); track force.id) {
                 <fieldset class="stack">
                   <legend>{{ forceLabel(force) }} · {{ territoryName(force.territoryId) }}</legend>
                   @if (draftKindsFor(force).length === 0) {
                     <p class="muted">This force is in battle and cannot submit an action.</p>
                   } @else {
-                    <div class="field">
-                      <label [attr.for]="'kind-' + force.id">Action</label>
-                      <select
-                        [id]="'kind-' + force.id"
-                        [ngModel]="draftFor(force.id).kind"
-                        (ngModelChange)="onDraftKind(force.id, $event)"
-                        [name]="'kind-' + force.id"
+                    <div class="force-draft-row">
+                      <div class="field grow">
+                        <label [attr.for]="'kind-' + force.id">Action</label>
+                        <select
+                          [id]="'kind-' + force.id"
+                          [ngModel]="draftFor(force.id).kind"
+                          (ngModelChange)="onDraftKind(force.id, $event)"
+                          [name]="'kind-' + force.id"
+                        >
+                          @for (kind of draftKindsFor(force); track kind) {
+                            <option [value]="kind">{{ kind }}</option>
+                          }
+                        </select>
+                      </div>
+                      @if (draftFor(force.id).kind === 'Move' || draftFor(force.id).kind === 'Split') {
+                        <div class="field grow">
+                          <label [attr.for]="'target-' + force.id">Destination</label>
+                          <select
+                            [id]="'target-' + force.id"
+                            [ngModel]="draftFor(force.id).targetTerritoryId"
+                            (ngModelChange)="onDraftTarget(force.id, $event)"
+                            [name]="'target-' + force.id"
+                          >
+                            <option value="">Select a territory</option>
+                            @for (target of force.moveTargets; track target) {
+                              <option [value]="target">{{ territoryName(target) }}</option>
+                            }
+                          </select>
+                        </div>
+                      }
+                      @if (draftFor(force.id).kind === 'Build') {
+                        <div class="field grow">
+                          <label [attr.for]="'structure-' + force.id">Structure</label>
+                          <select
+                            [id]="'structure-' + force.id"
+                            [ngModel]="draftFor(force.id).structureTypeId"
+                            (ngModelChange)="onDraftStructure(force.id, $event)"
+                            [name]="'structure-' + force.id"
+                          >
+                            <option value="">Select a structure</option>
+                            @for (type of buildableStructures(); track type.id) {
+                              <option [value]="type.id">{{ type.name }}</option>
+                            }
+                          </select>
+                        </div>
+                      }
+                      <button
+                        type="button"
+                        class="icon-button"
+                        (click)="saveDraft(force)"
+                        [disabled]="!canSaveForceDraft(force)"
+                        [attr.aria-label]="'Save draft for ' + forceLabel(force)"
                       >
-                        @for (kind of draftKindsFor(force); track kind) {
-                          <option [value]="kind">{{ kind }}</option>
-                        }
-                      </select>
+                        ✓
+                      </button>
                     </div>
-                    @if (draftFor(force.id).kind === 'Move' || draftFor(force.id).kind === 'Split') {
-                      <div class="field">
-                        <label [attr.for]="'target-' + force.id">Destination</label>
-                        <select
-                          [id]="'target-' + force.id"
-                          [ngModel]="draftFor(force.id).targetTerritoryId"
-                          (ngModelChange)="onDraftTarget(force.id, $event)"
-                          [name]="'target-' + force.id"
-                        >
-                          <option value="">Select a territory</option>
-                          @for (target of force.moveTargets; track target) {
-                            <option [value]="target">{{ territoryName(target) }}</option>
-                          }
-                        </select>
-                      </div>
-                    }
-                    @if (draftFor(force.id).kind === 'Build') {
-                      <div class="field">
-                        <label [attr.for]="'structure-' + force.id">Structure</label>
-                        <select
-                          [id]="'structure-' + force.id"
-                          [ngModel]="draftFor(force.id).structureTypeId"
-                          (ngModelChange)="onDraftStructure(force.id, $event)"
-                          [name]="'structure-' + force.id"
-                        >
-                          <option value="">Select a structure</option>
-                          @for (type of play.structureTypes; track type.id) {
-                            <option [value]="type.id">{{ type.name }}</option>
-                          }
-                        </select>
-                      </div>
-                    }
                     @if (draftFor(force.id).kind === 'Pillage') {
                       <p class="muted">
                         @if (structureAt(force.territoryId); as structure) {
                           Pillage the {{ structure.condition }} {{ structure.name }} in
                           {{ territoryName(force.territoryId) }}. Operational structures become pillaged; pillaged
-                          non-cities become destroyed.
+                          destructible structures are removed from the map.
                         } @else {
-                          Pillage requires an intact enemy or unowned structure in this territory.
+                          Pillage requires an intact enemy or unowned pillageable structure in this territory.
                         }
                       </p>
                     }
@@ -371,15 +461,9 @@
                         created.
                       </p>
                     }
-                    @if (draftFor(force.id).kind === 'Move' || draftFor(force.id).kind === 'Split') {
-                      <p class="muted">
-                        Choose a destination from the list, or click an adjacent eligible territory on the map.
-                      </p>
-                    }
-                    <button type="button" class="button-secondary" (click)="saveDraft(force)">Save draft</button>
                     @if (savedDraft(force.id); as saved) {
                       <p class="muted">
-                        Saved draft: {{ saved.kind
+                        Draft: {{ saved.kind
                         }}{{ saved.targetTerritoryId ? ' to ' + territoryName(saved.targetTerritoryId) : '' }}. This is
                         the action that commits when time runs out.
                       </p>
@@ -389,7 +473,6 @@
                   }
                 </fieldset>
               }
-              <button type="button" class="button" (click)="commit()">Commit orders</button>
             }
             <h3>Commitments</h3>
             <ul class="plain-list">
@@ -488,6 +571,14 @@
             Debug mode is active and recorded in the campaign log. Corrections append new facts; original orders are
             never overwritten.
           </p>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="revealHiddenObjectives()"
+            [disabled]="hiddenItemCount() === 0"
+          >
+            Reveal hidden objectives
+          </button>
           @for (force of play.forces; track force.id) {
             <fieldset class="stack">
               <legend>{{ forceLabel(force) }} · {{ territoryName(force.territoryId) }}</legend>
@@ -530,7 +621,7 @@
                     [name]="'debug-structure-' + force.id"
                   >
                     <option value="">Select a structure</option>
-                    @for (type of play.structureTypes; track type.id) {
+                    @for (type of buildableStructures(); track type.id) {
                       <option [value]="type.id">{{ type.name }}</option>
                     }
                   </select>
@@ -796,6 +887,24 @@
             <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
           </div>
         }
+      </div>
+    }
+
+    @if (mapAction()?.step === 'confirm') {
+      <div class="dialog-backdrop">
+        <div
+          class="dialog panel stack"
+          role="alertdialog"
+          aria-labelledby="action-confirm-title"
+          aria-describedby="action-confirm-desc"
+        >
+          <h2 id="action-confirm-title">Confirm action</h2>
+          <p id="action-confirm-desc">{{ confirmActionSummary() }}</p>
+          <div class="actions">
+            <button type="button" class="button" (click)="confirmMapAction()">Confirm</button>
+            <button type="button" class="button-secondary" (click)="cancelMapAction()">Cancel</button>
+          </div>
+        </div>
       </div>
     }
 

@@ -21,6 +21,7 @@ public sealed class CampaignPlayState
         IReadOnlyList<RetreatOrder> retreats,
         IReadOnlyList<Guid> brokenAllyFactionIds,
         IReadOnlyList<TerritoryStructureState> structures,
+        IReadOnlyList<CampaignItemObjective> itemObjectives,
         IReadOnlyList<PlayLogEntry> log,
         IReadOnlyList<ActionWindowSnapshot>? snapshots = null,
         Guid? debugActorUserId = null,
@@ -36,6 +37,7 @@ public sealed class CampaignPlayState
         ArgumentNullException.ThrowIfNull(retreats);
         ArgumentNullException.ThrowIfNull(brokenAllyFactionIds);
         ArgumentNullException.ThrowIfNull(structures);
+        ArgumentNullException.ThrowIfNull(itemObjectives);
         ArgumentNullException.ThrowIfNull(log);
         Windows = windows;
         Forces = forces;
@@ -47,6 +49,7 @@ public sealed class CampaignPlayState
         Retreats = retreats;
         BrokenAllyFactionIds = brokenAllyFactionIds;
         Structures = structures;
+        ItemObjectives = itemObjectives;
         Log = log;
         Snapshots = snapshots ?? [];
         DebugActorUserId = debugActorUserId;
@@ -54,7 +57,7 @@ public sealed class CampaignPlayState
     }
 
     /// <summary>Gets an empty play state.</summary>
-    public static CampaignPlayState Empty { get; } = new([], [], [], [], [], [], [], [], [], [], []);
+    public static CampaignPlayState Empty { get; } = new([], [], [], [], [], [], [], [], [], [], [], []);
 
     /// <summary>Gets stored phase windows.</summary>
     public IReadOnlyList<PhaseWindow> Windows { get; }
@@ -86,6 +89,9 @@ public sealed class CampaignPlayState
     /// <summary>Gets structure conditions by territory.</summary>
     public IReadOnlyList<TerritoryStructureState> Structures { get; }
 
+    /// <summary>Gets spawned item objectives. Hidden instances are omitted from unauthorized reads.</summary>
+    public IReadOnlyList<CampaignItemObjective> ItemObjectives { get; }
+
     /// <summary>Gets public resolved-action and battle facts. Secret unrevealed orders are omitted.</summary>
     public IReadOnlyList<PlayLogEntry> Log { get; }
 
@@ -112,6 +118,7 @@ public sealed class CampaignPlayState
         IReadOnlyList<RetreatOrder>? retreats = null,
         IReadOnlyList<Guid>? brokenAllyFactionIds = null,
         IReadOnlyList<TerritoryStructureState>? structures = null,
+        IReadOnlyList<CampaignItemObjective>? itemObjectives = null,
         IReadOnlyList<PlayLogEntry>? log = null,
         IReadOnlyList<ActionWindowSnapshot>? snapshots = null,
         Guid? debugActorUserId = null,
@@ -129,6 +136,7 @@ public sealed class CampaignPlayState
             retreats ?? Retreats,
             brokenAllyFactionIds ?? BrokenAllyFactionIds,
             structures ?? Structures,
+            itemObjectives ?? ItemObjectives,
             log ?? Log,
             snapshots ?? Snapshots,
             clearDebug ? null : debugActorUserId ?? DebugActorUserId,

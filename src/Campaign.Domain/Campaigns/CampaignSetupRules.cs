@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Campaign.Domain.Common;
 using Campaign.Domain.Identity;
+using Campaign.Domain.Maps;
 
 namespace Campaign.Domain.Campaigns;
 
@@ -47,6 +48,9 @@ public static class CampaignSetupRules
 
     /// <summary>Maximum number of structure types.</summary>
     public const int MaxStructureTypeCount = 50;
+
+    /// <summary>Maximum number of item objective types.</summary>
+    public const int MaxItemObjectiveTypeCount = 50;
 
     /// <summary>Maximum missions nested under one terrain type or structure.</summary>
     public const int MaxMissionsPerCatalogItem = 20;
@@ -146,7 +150,8 @@ public static class CampaignSetupRules
             isPubliclyViewable,
             city,
             region,
-            country);
+            country,
+            itemObjectiveTypes: null);
     }
 
     /// <summary>
@@ -166,6 +171,7 @@ public static class CampaignSetupRules
     /// <param name="schedule">The round-schedule inputs.</param>
     /// <param name="terrainTypes">The terrain-type inputs. Defaults are used when omitted.</param>
     /// <param name="structureTypes">The structure-type inputs. Defaults are used when omitted.</param>
+    /// <param name="itemObjectiveTypes">The item-objective inputs. Omitted or empty means none.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
@@ -195,7 +201,8 @@ public static class CampaignSetupRules
         bool isPubliclyViewable = true,
         string? city = null,
         string? region = null,
-        string? country = null)
+        string? country = null,
+        IReadOnlyList<ItemObjectiveTypeInput>? itemObjectiveTypes = null)
     {
         var collected = new List<DomainError>();
         setup = null;
@@ -248,6 +255,7 @@ public static class CampaignSetupRules
         var parsedLinks = ParseLinks(links, collected);
         var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, collected);
         var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, collected);
+        var parsedItems = ParseItemObjectiveTypes(itemObjectiveTypes, usedIds, collected);
         var parsedSchedule = ParseSchedule(schedule, collected);
 
         if (collected.Count > 0)
@@ -272,6 +280,7 @@ public static class CampaignSetupRules
             parsedLinks,
             parsedTerrain,
             parsedStructures,
+            parsedItems,
             parsedSchedule!);
         errors = collected;
         return true;
@@ -717,16 +726,103 @@ public static class CampaignSetupRules
                 continue;
             }
 
+            var flags = StructureCatalog.DefaultFlags(name, builtin);
             parsed.Add(new StructureTypeSetup(
                 ResolveId(input.Id, usedIds, $"structureTypes[{index}].id", errors),
                 name,
                 builtin,
                 input.ClearImage,
                 input.ClearPillagedImage,
+                input.IsBuildable ?? flags.IsBuildable,
+                input.IsPillageable ?? flags.IsPillageable,
+                input.IsDestructible ?? flags.IsDestructible,
                 missionsForType));
         }
 
         return parsed;
+    }
+
+    private static List<ItemObjectiveTypeSetup> ParseItemObjectiveTypes(
+        IReadOnlyList<ItemObjectiveTypeInput>? itemObjectiveTypes,
+        HashSet<Guid> usedIds,
+        List<DomainError> errors)
+    {
+        var supplied = itemObjectiveTypes ?? [];
+        var parsed = new List<ItemObjectiveTypeSetup>();
+        if (supplied.Count > MaxItemObjectiveTypeCount)
+        {
+            errors.Add(new DomainError(
+                "itemObjectiveTypes.invalid",
+                $"At most {MaxItemObjectiveTypeCount} item objectives are allowed.",
+                "itemObjectiveTypes"));
+            return parsed;
+        }
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var name = ParseRequiredName(
+                input.Name,
+                $"itemObjectiveTypes[{index}].name",
+                $"Item objective {index + 1} name",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!seenNames.Add(name))
+            {
+                errors.Add(new DomainError(
+                    "itemObjectiveTypes.duplicate",
+                    "Item objective names must be unique.",
+                    $"itemObjectiveTypes[{index}].name"));
+                continue;
+            }
+
+            if (!TryParsePlacement(input.Placement, index, errors, out var placement))
+            {
+                continue;
+            }
+
+            parsed.Add(new ItemObjectiveTypeSetup(
+                ResolveId(input.Id, usedIds, $"itemObjectiveTypes[{index}].id", errors),
+                name,
+                input.IsHiddenUntilFound ?? true,
+                placement,
+                input.AllowOnSpawn ?? false));
+        }
+
+        return parsed;
+    }
+
+    private static bool TryParsePlacement(
+        string? value,
+        int index,
+        List<DomainError> errors,
+        out ItemObjectivePlacementKind placement)
+    {
+        placement = ItemObjectivePlacementKind.Random;
+        if (string.IsNullOrWhiteSpace(value)
+            || value.Equals(nameof(ItemObjectivePlacementKind.Random), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (value.Equals(nameof(ItemObjectivePlacementKind.Placed), StringComparison.OrdinalIgnoreCase))
+        {
+            placement = ItemObjectivePlacementKind.Placed;
+            return true;
+        }
+
+        errors.Add(new DomainError(
+            "itemObjectiveTypes.placement.invalid",
+            $"Item objective {index + 1} placement must be Random or Placed.",
+            $"itemObjectiveTypes[{index}].placement"));
+        return false;
     }
 
     private static List<MissionSetup> ParseMissions(

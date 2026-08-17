@@ -24,7 +24,7 @@ public sealed class ActionResolutionTests
         var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
         var map = Map(midlandStructureId: TownId, midlandStructureName: "Town", midlandOwner: South);
         var state = State(force);
-        var kinds = ActionResolution.EligibleActions(state, map, force, AlliedGroups(), catalogHasStructures: true);
+        var kinds = ActionResolution.EligibleActions(state, map, force, AlliedGroups());
 
         Assert.Equal(
             [ActionKind.Hold, ActionKind.Move, ActionKind.Pillage, ActionKind.Split, ActionKind.Backstab],
@@ -35,13 +35,11 @@ public sealed class ActionResolutionTests
     public void EligibleActionsIncludeBuildAndRepairWhenThoseSlotsApply()
     {
         var emptyForce = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
-        var emptyMap = Map();
         var emptyKinds = ActionResolution.EligibleActions(
             State(emptyForce),
-            emptyMap,
+            Map(structureTypes: BuildableCatalog()),
             emptyForce,
-            UnalignedGroups(),
-            catalogHasStructures: true);
+            UnalignedGroups());
         Assert.Equal([ActionKind.Hold, ActionKind.Move, ActionKind.Build, ActionKind.Split], emptyKinds);
 
         var repairForce = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
@@ -54,8 +52,7 @@ public sealed class ActionResolutionTests
             State(repairForce),
             repairMap,
             repairForce,
-            UnalignedGroups(),
-            catalogHasStructures: true);
+            UnalignedGroups());
         Assert.Equal([ActionKind.Hold, ActionKind.Move, ActionKind.Repair, ActionKind.Split], repairKinds);
     }
 
@@ -63,12 +60,12 @@ public sealed class ActionResolutionTests
     public void EligibleActionsAreEmptyWhileTheForceIsInBattle()
     {
         var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, true);
-        var kinds = ActionResolution.EligibleActions(State(force), Map(), force, UnalignedGroups(), true);
+        var kinds = ActionResolution.EligibleActions(State(force), Map(), force, UnalignedGroups());
         Assert.Empty(kinds);
     }
 
     [Fact]
-    public void PillageProgressesOperationalToPillagedAndPillagedNonCityToDestroyed()
+    public void PillageProgressesOperationalToPillagedAndRemovesDestructibleStructures()
     {
         var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
         var first = Resolve(State(force, Pillage(force.Id)), Map(midlandStructureId: TownId, midlandStructureName: "Town"));
@@ -79,13 +76,14 @@ public sealed class ActionResolutionTests
             Map(
                 midlandStructureId: TownId,
                 midlandStructureName: "Town",
-                midlandCondition: StructureCondition.Pillaged));
-        Assert.Equal(StructureCondition.Destroyed, second.Map.Territory(Midland)!.StructureCondition);
-        Assert.Equal(TownId, second.Map.Territory(Midland)!.StructureTypeId);
+                midlandCondition: StructureCondition.Pillaged,
+                midlandDestructible: true));
+        Assert.Null(second.Map.Territory(Midland)!.StructureTypeId);
+        Assert.Equal(StructureCondition.Operational, second.Map.Territory(Midland)!.StructureCondition);
     }
 
     [Fact]
-    public void PillagedCitiesCannotBeDestroyed()
+    public void PillagedNonDestructibleStructuresCannotBeDestroyed()
     {
         var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
         var resolved = Resolve(
@@ -93,7 +91,9 @@ public sealed class ActionResolutionTests
             Map(
                 midlandStructureId: CityId,
                 midlandStructureName: "City",
-                midlandCondition: StructureCondition.Pillaged));
+                midlandCondition: StructureCondition.Pillaged,
+                midlandPillageable: true,
+                midlandDestructible: false));
         Assert.Equal(StructureCondition.Pillaged, resolved.Map.Territory(Midland)!.StructureCondition);
         Assert.Equal(CityId, resolved.Map.Territory(Midland)!.StructureTypeId);
     }
@@ -117,8 +117,10 @@ public sealed class ActionResolutionTests
     public void BuildPlacesAnOperationalStructure()
     {
         var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
-        var resolved = Resolve(State(force, Submit(force.Id, ActionKind.Build, structureTypeId: TownId)), Map());
-        Assert.Equal(TownId, resolved.Map.Territory(Midland)!.StructureTypeId);
+        var resolved = Resolve(
+            State(force, Submit(force.Id, ActionKind.Build, structureTypeId: FortId)),
+            Map(structureTypes: BuildableCatalog()));
+        Assert.Equal(FortId, resolved.Map.Territory(Midland)!.StructureTypeId);
         Assert.Equal(StructureCondition.Operational, resolved.Map.Territory(Midland)!.StructureCondition);
         Assert.Equal(North, resolved.Map.Territory(Midland)!.OwnerFactionId);
     }
@@ -175,13 +177,11 @@ public sealed class ActionResolutionTests
             State(
                 [northForce, southForce],
                 [
-                    Submit(northForce.Id, ActionKind.Build, structureTypeId: TownId),
+                    Submit(northForce.Id, ActionKind.Build, structureTypeId: FortId),
                     Submit(southForce.Id, ActionKind.Build, structureTypeId: FortId),
                 ]),
-            Map(),
+            Map(structureTypes: BuildableCatalog()),
             AlliedGroups());
-
-        Assert.Null(resolved.Map.Territory(Midland)!.StructureTypeId);
         Assert.Contains(resolved.State.Log, item => item.Kind == PlayLogKind.ConflictingBuildHold);
         Assert.Empty(resolved.State.Battles);
     }
@@ -205,6 +205,39 @@ public sealed class ActionResolutionTests
         Assert.True(resolved.State.Forces.All(force => force.InBattle));
     }
 
+    [Fact]
+    public void NonPillageableStructuresCannotBePillaged()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var map = Map(
+            midlandStructureId: CityId,
+            midlandStructureName: "Capital City",
+            midlandPillageable: false,
+            midlandDestructible: false);
+        var kinds = ActionResolution.EligibleActions(State(force), map, force, UnalignedGroups());
+        Assert.DoesNotContain(ActionKind.Pillage, kinds);
+
+        var resolved = Resolve(State(force, Pillage(force.Id)), map);
+        Assert.Equal(StructureCondition.Operational, resolved.Map.Territory(Midland)!.StructureCondition);
+        Assert.Equal(CityId, resolved.Map.Territory(Midland)!.StructureTypeId);
+    }
+
+    [Fact]
+    public void NonBuildableStructuresCannotBeBuilt()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var catalog = new[]
+        {
+            new StructureTypePlayRules(TownId, "Town", false, true, true),
+            new StructureTypePlayRules(FortId, "Fortification", true, true, true),
+        };
+        var resolved = Resolve(
+            State(force, Submit(force.Id, ActionKind.Build, structureTypeId: TownId)),
+            Map(structureTypes: catalog));
+        Assert.Null(resolved.Map.Territory(Midland)!.StructureTypeId);
+        Assert.Contains(resolved.State.Log, item => item.Kind == PlayLogKind.InvalidOrderHold);
+    }
+
     private static (CampaignPlayState State, PlayMap Map) Resolve(
         CampaignPlayState state,
         PlayMap map,
@@ -225,6 +258,7 @@ public sealed class ActionResolutionTests
             forces,
             [],
             submissions,
+            [],
             [],
             [],
             [],
@@ -276,7 +310,10 @@ public sealed class ActionResolutionTests
         Guid? midlandStructureId = null,
         string? midlandStructureName = null,
         Guid? midlandOwner = null,
-        StructureCondition midlandCondition = StructureCondition.Operational)
+        StructureCondition midlandCondition = StructureCondition.Operational,
+        bool midlandPillageable = true,
+        bool midlandDestructible = true,
+        IReadOnlyList<StructureTypePlayRules>? structureTypes = null)
     {
         return new PlayMap(
             [
@@ -288,10 +325,18 @@ public sealed class ActionResolutionTests
                     null,
                     midlandStructureId,
                     midlandStructureName,
-                    midlandCondition),
+                    midlandCondition,
+                    midlandPillageable,
+                    midlandDestructible),
                 new PlayTerritory(SouthSpawn, 3, South, South, null, null, StructureCondition.Operational),
             ],
-            [(NorthSpawn, Midland), (Midland, SouthSpawn)]);
+            [(NorthSpawn, Midland), (Midland, SouthSpawn)],
+            structureTypes);
+    }
+
+    private static IReadOnlyList<StructureTypePlayRules> BuildableCatalog()
+    {
+        return [new StructureTypePlayRules(FortId, "Fortification", true, true, true)];
     }
 
     private static Dictionary<Guid, string?> UnalignedGroups()

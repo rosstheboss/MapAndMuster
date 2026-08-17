@@ -20,6 +20,15 @@ public sealed class StructureTypeInput
     /// <summary>Gets whether an existing uploaded pillaged logo should be removed.</summary>
     public bool ClearPillagedImage { get; init; }
 
+    /// <summary>Gets whether players may Build this structure. Omitted values use catalog defaults.</summary>
+    public bool? IsBuildable { get; init; }
+
+    /// <summary>Gets whether players may Pillage this structure. Omitted values use catalog defaults.</summary>
+    public bool? IsPillageable { get; init; }
+
+    /// <summary>Gets whether a second Pillage may destroy and remove this structure. Omitted values use catalog defaults.</summary>
+    public bool? IsDestructible { get; init; }
+
     /// <summary>Gets nested missions. Missions are optional for structures.</summary>
     public IReadOnlyList<MissionInput>? Missions { get; init; }
 }

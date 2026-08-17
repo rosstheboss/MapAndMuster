@@ -266,6 +266,14 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/debug/reveal-hidden-objectives", RevealHiddenItemObjectivesAsync)
+            .WithName("RevealHiddenItemObjectives")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
     }
 
     private static async Task<IResult> ListAsync(
@@ -342,6 +350,7 @@ public static class CampaignEndpoints
                     Schedule = CampaignResponses.ToScheduleInput(request),
                     TerrainTypes = CampaignResponses.ToTerrainTypeInputs(request.TerrainTypes),
                     StructureTypes = CampaignResponses.ToStructureTypeInputs(request.StructureTypes),
+                    ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -512,6 +521,7 @@ public static class CampaignEndpoints
                     Schedule = CampaignResponses.ToScheduleInput(request),
                     TerrainTypes = CampaignResponses.ToTerrainTypeInputs(request.TerrainTypes),
                     StructureTypes = CampaignResponses.ToStructureTypeInputs(request.StructureTypes),
+                    ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -699,6 +709,14 @@ public static class CampaignEndpoints
                     ExpectedRevision = request.Revision,
                     Territories = CampaignResponses.ToTerritoryInputs(request.Territories),
                     Adjacencies = CampaignResponses.ToAdjacencyInputs(request.Adjacencies),
+                    ItemObjectivePlacements =
+                    [
+                        .. (request.ItemObjectivePlacements ?? []).Select(static item => new ItemObjectivePlacementInput
+                        {
+                            TypeId = item.TypeId,
+                            TerritoryId = item.TerritoryId,
+                        }),
+                    ],
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -1304,6 +1322,17 @@ public static class CampaignEndpoints
                 cancellationToken)
             .ConfigureAwait(false);
         return PlayResult(result);
+    }
+
+    private static async Task<IResult> RevealHiddenItemObjectivesAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        RevealHiddenItemObjectivesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task<IResult> PlayCommandAsync(

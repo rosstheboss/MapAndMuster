@@ -21,6 +21,11 @@ internal static class MapGraphJson
         {
             Territories = [.. graph.Territories.Select(ToDocument)],
             Adjacencies = [.. graph.Adjacencies.Select(ToDocument)],
+            ItemObjectivePlacements = [.. graph.ItemObjectivePlacements.Select(static item => new ItemPlacementDocument
+            {
+                TypeId = item.TypeId,
+                TerritoryId = item.TerritoryId,
+            })],
         };
         return JsonSerializer.Serialize(document, Options);
     }
@@ -42,6 +47,14 @@ internal static class MapGraphJson
         {
             Territories = [.. document.Territories.Select(FromDocument)],
             Adjacencies = [.. document.Adjacencies.Select(FromDocument)],
+            ItemObjectivePlacements =
+            [
+                .. (document.ItemObjectivePlacements ?? []).Select(static item => new ItemObjectivePlacementDetail
+                {
+                    TypeId = item.TypeId,
+                    TerritoryId = item.TerritoryId,
+                }),
+            ],
         };
     }
 
@@ -114,6 +127,15 @@ internal static class MapGraphJson
         public List<TerritoryDocument> Territories { get; set; } = [];
 
         public List<AdjacencyDocument> Adjacencies { get; set; } = [];
+
+        public List<ItemPlacementDocument>? ItemObjectivePlacements { get; set; }
+    }
+
+    private sealed class ItemPlacementDocument
+    {
+        public Guid TypeId { get; set; }
+
+        public Guid TerritoryId { get; set; }
     }
 
     private sealed class TerritoryDocument

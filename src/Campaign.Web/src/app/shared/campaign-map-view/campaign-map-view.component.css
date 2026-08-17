@@ -81,20 +81,31 @@
   pointer-events: fill;
 }
 
-.territory.is-adjacent {
-  fill-opacity: 0.16;
+.territory.is-half-highlighted {
+  fill-opacity: 0.5;
   filter: drop-shadow(0 0 2px var(--glow-color, var(--color-glow)))
     drop-shadow(0 0 4px var(--glow-color, var(--color-glow)));
 }
 
 .territory.is-selected {
-  fill-opacity: 0.22;
+  fill-opacity: 0.7;
   filter: drop-shadow(0 0 2px var(--glow-color, var(--color-glow)))
     drop-shadow(0 0 4px var(--glow-color, var(--color-glow)));
 }
 
+.territory.is-move-valid {
+  fill: #16a34a;
+  fill-opacity: 0.7;
+}
+
+.territory.is-move-invalid {
+  fill: #dc2626;
+  fill-opacity: 0.7;
+}
+
 .structure-pin,
-.force-pin {
+.force-pin,
+.item-pin {
   position: absolute;
   z-index: 1;
   display: grid;
@@ -118,6 +129,23 @@
   box-shadow:
     0 0 0 2px #7c2d12,
     0 0 0 4px rgb(254 243 226 / 90%);
+}
+
+.item-pin {
+  z-index: 3;
+  border-radius: 2px;
+  background: #c45c26;
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 55%);
+  transform: rotate(45deg);
+}
+
+.item-pin.is-carried {
+  border-radius: 50%;
+  transform: none;
+}
+
+.item-pin.is-hidden {
+  opacity: 0.55;
 }
 
 .structure-pin.is-pillaged {
@@ -153,6 +181,30 @@
   display: grid;
   place-items: center;
   overflow: hidden;
+}
+
+.move-drop-marker {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: rgb(255 255 255 / 92%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 35%);
+}
+
+.move-drop-marker.is-valid {
+  color: #16a34a;
+}
+
+.move-drop-marker.is-invalid {
+  color: #dc2626;
+}
+
+.move-drop-marker app-icon {
+  width: 70%;
+  height: 70%;
 }
 
 .drawing-path {

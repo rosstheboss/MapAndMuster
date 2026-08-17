@@ -266,6 +266,9 @@ public sealed class CampaignPlayDetail
     /// <summary>Gets structure types.</summary>
     public required IReadOnlyList<Campaigns.StructureTypeDetail> StructureTypes { get; init; }
 
+    /// <summary>Gets visible item objectives. Hidden items are omitted unless the viewer is in debug mode.</summary>
+    public IReadOnlyList<PlayItemObjectiveDetail> ItemObjectives { get; init; } = [];
+
     /// <summary>Gets forces on the map.</summary>
     public required IReadOnlyList<PlayForceDetail> Forces { get; init; }
 
@@ -289,6 +292,28 @@ public sealed class CampaignPlayDetail
 
     /// <summary>Gets players who still need a faction.</summary>
     public required IReadOnlyList<string> PlayersMissingFaction { get; init; }
+}
+
+/// <summary>A visible item objective on the map or carried by a force.</summary>
+public sealed class PlayItemObjectiveDetail
+{
+    /// <summary>Gets the instance identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the catalog type.</summary>
+    public required Guid TypeId { get; init; }
+
+    /// <summary>Gets the item name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the territory when the item is on the ground.</summary>
+    public Guid? TerritoryId { get; init; }
+
+    /// <summary>Gets the carrying force when possessed.</summary>
+    public Guid? PossessorForceId { get; init; }
+
+    /// <summary>Gets whether players can see this item.</summary>
+    public required bool IsRevealed { get; init; }
 }
 
 /// <summary>A remaining phase window.</summary>

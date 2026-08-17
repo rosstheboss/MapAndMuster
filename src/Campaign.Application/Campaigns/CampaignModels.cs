@@ -140,6 +140,9 @@ public sealed class CampaignDetail
     /// <summary>Gets the structure types.</summary>
     public required IReadOnlyList<StructureTypeDetail> StructureTypes { get; init; }
 
+    /// <summary>Gets the item objective types. Empty means none.</summary>
+    public IReadOnlyList<ItemObjectiveTypeDetail> ItemObjectiveTypes { get; init; } = [];
+
     /// <summary>Gets the ally groups.</summary>
     public required IReadOnlyList<AllyGroupDetail> AllyGroups { get; init; }
 
@@ -391,6 +394,9 @@ public sealed class StoredCampaign
 
     /// <summary>Gets the structure types.</summary>
     public required IReadOnlyList<StoredStructureType> StructureTypes { get; init; }
+
+    /// <summary>Gets the item objective types. Empty means the campaign has none.</summary>
+    public IReadOnlyList<StoredItemObjectiveType> ItemObjectiveTypes { get; init; } = [];
 }
 
 /// <summary>
@@ -539,8 +545,38 @@ public sealed class StructureTypeDetail
     /// <summary>Gets whether a custom pillaged logo image is stored.</summary>
     public required bool HasPillagedImage { get; init; }
 
+    /// <summary>Gets whether players may Build this structure.</summary>
+    public required bool IsBuildable { get; init; }
+
+    /// <summary>Gets whether players may Pillage this structure.</summary>
+    public required bool IsPillageable { get; init; }
+
+    /// <summary>Gets whether a second Pillage may destroy and remove this structure.</summary>
+    public required bool IsDestructible { get; init; }
+
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<MissionDetail> Missions { get; init; }
+}
+
+/// <summary>
+/// An item objective type in a campaign detail response.
+/// </summary>
+public sealed class ItemObjectiveTypeDetail
+{
+    /// <summary>Gets the type identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the item name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets whether the item stays hidden until found or staff-revealed.</summary>
+    public required bool IsHiddenUntilFound { get; init; }
+
+    /// <summary>Gets Random or Placed.</summary>
+    public required string Placement { get; init; }
+
+    /// <summary>Gets whether the item may occupy a spawn territory.</summary>
+    public required bool AllowOnSpawn { get; init; }
 }
 
 /// <summary>
@@ -602,8 +638,38 @@ public sealed class StoredStructureType
     /// <summary>Gets the stored pillaged logo key, when a custom pillaged image was uploaded.</summary>
     public string? PillagedImageStorageKey { get; init; }
 
+    /// <summary>Gets whether players may Build this structure.</summary>
+    public required bool IsBuildable { get; init; }
+
+    /// <summary>Gets whether players may Pillage this structure.</summary>
+    public required bool IsPillageable { get; init; }
+
+    /// <summary>Gets whether a second Pillage may destroy and remove this structure.</summary>
+    public required bool IsDestructible { get; init; }
+
     /// <summary>Gets the missions.</summary>
     public required IReadOnlyList<StoredMission> Missions { get; init; }
+}
+
+/// <summary>
+/// A persisted item objective type.
+/// </summary>
+public sealed class StoredItemObjectiveType
+{
+    /// <summary>Gets the type identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the item name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets whether the item stays hidden until found or staff-revealed.</summary>
+    public required bool IsHiddenUntilFound { get; init; }
+
+    /// <summary>Gets Random or Placed.</summary>
+    public required string Placement { get; init; }
+
+    /// <summary>Gets whether the item may occupy a spawn territory.</summary>
+    public required bool AllowOnSpawn { get; init; }
 }
 
 /// <summary>

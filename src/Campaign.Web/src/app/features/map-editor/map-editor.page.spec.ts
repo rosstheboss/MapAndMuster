@@ -7,6 +7,7 @@ import { of } from 'rxjs';
 
 import { TERRAIN_TYPES } from '../../core/maps/terrain';
 import { STRUCTURE_TYPES } from '../../core/maps/structures';
+import type { MapPoint } from '../../core/maps/geometry';
 import type { MapTerritory } from '../../core/maps/map-graph.models';
 import { MapEditorPage } from './map-editor.page';
 
@@ -57,7 +58,17 @@ const campaign = {
     },
   ],
   structureTypes: [
-    { id: 'town', name: 'Town', builtinSymbol: 'Town', hasImage: false, hasPillagedImage: false, missions: [] },
+    {
+      id: 'town',
+      name: 'Town',
+      builtinSymbol: 'Town',
+      hasImage: false,
+      hasPillagedImage: false,
+      isBuildable: false,
+      isPillageable: true,
+      isDestructible: true,
+      missions: [],
+    },
   ],
   timeZoneId: 'UTC',
   startsAtLocal: '2099-01-05T12:00',
@@ -120,6 +131,8 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Auto Generate Connections');
     expect(compiled.textContent).not.toContain('Connect selected');
     expect(compiled.textContent).toContain('Clear Connections');
+    expect(compiled.textContent).toContain('Undo');
+    expect(compiled.textContent).toContain('Redo');
     expect(compiled.textContent).toContain('Manual Colors');
     expect(compiled.textContent).toContain('Clear Unsaved Changes');
     expect(compiled.textContent).toContain('Save Map');
@@ -172,6 +185,69 @@ describe('MapEditorPage', () => {
     expect(generate).toBeTruthy();
     generate?.click();
     fixture.detectChanges();
+    http.verify();
+  });
+
+  it('redoes a graph change that was undone', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1), namedSquare('t2', 2, 'Southmarch', 0.3)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      generateConnections: () => void;
+      undo: () => void;
+      redo: () => void;
+      canRedoHistory: () => boolean;
+      graph: () => { adjacencies: { id: string }[] };
+    };
+    page.generateConnections();
+    expect(page.graph().adjacencies.length).toBeGreaterThan(0);
+    page.undo();
+    expect(page.graph().adjacencies).toHaveLength(0);
+    expect(page.canRedoHistory()).toBe(true);
+    page.redo();
+    expect(page.graph().adjacencies.length).toBeGreaterThan(0);
+    http.verify();
+  });
+
+  it('assigns a placed item objective to the selected territory', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      ...campaign,
+      itemObjectiveTypes: [
+        {
+          id: 'crown',
+          name: 'Crown',
+          isHiddenUntilFound: true,
+          placement: 'Placed',
+          allowOnSpawn: false,
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      selectedIds: { set: (ids: string[]) => void };
+      setItemPlacedHere: (typeId: string, placed: boolean) => void;
+      graph: () => { itemObjectivePlacements?: { typeId: string; territoryId: string }[] };
+    };
+    page.selectedIds.set(['t1']);
+    page.setItemPlacedHere('crown', true);
+    fixture.detectChanges();
+    expect(page.graph().itemObjectivePlacements).toEqual([{ typeId: 'crown', territoryId: 't1' }]);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Place Crown here');
     http.verify();
   });
 
@@ -401,6 +477,7 @@ describe('MapEditorPage', () => {
       deleteSelectedTerritories: () => void;
       deleteLabel: () => string;
       selectedIds: () => string[];
+      movePlacement: () => 'valid' | 'invalid' | null;
       graph: () => { territories: { id: string; polygon: { x: number; y: number }[] }[] };
     };
     const compiled = fixture.nativeElement as HTMLElement;
@@ -414,10 +491,13 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Delete territories');
 
     page.onTerritoryMove({ origin: { x: 0.2, y: 0.2 }, current: { x: 0.3, y: 0.2 } });
-    expect(page.graph().territories.find((territory) => territory.id === 't1')?.polygon[0]?.x).toBeCloseTo(0.18, 5);
+    expect(page.graph().territories.find((territory) => territory.id === 't1')?.polygon[0]?.x).toBeCloseTo(0.2, 5);
+    expect(page.movePlacement()).toBe('invalid');
 
     page.onTerritoryMove({ origin: { x: 0.2, y: 0.2 }, current: { x: 0.24, y: 0.2 } });
+    expect(page.movePlacement()).toBe('valid');
     page.onTerritoryMoveEnd();
+    expect(page.movePlacement()).toBeNull();
     expect(page.graph().territories.find((territory) => territory.id === 't1')?.polygon[0]?.x).toBeCloseTo(0.14, 5);
     expect(page.graph().territories.find((territory) => territory.id === 't2')?.polygon[1]?.x).toBeCloseTo(0.54, 5);
 
@@ -425,6 +505,197 @@ describe('MapEditorPage', () => {
     fixture.detectChanges();
     expect(page.graph().territories.map((territory) => territory.id)).toEqual(['t3']);
     expect(page.selectedIds()).toEqual([]);
+    http.verify();
+  });
+
+  it('restores a moved group when it is dropped in an invalid place', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        namedSquare('t1', 1, 'Northmarch', 0.1),
+        namedSquare('t2', 2, 'Southmarch', 0.4),
+        namedSquare('t3', 3, 'Eastmarch', 0.7),
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onToolChange: (tool: string) => void;
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      onTerritoryMove: (event: { origin: { x: number; y: number }; current: { x: number; y: number } }) => void;
+      onTerritoryMoveEnd: () => void;
+      graph: () => { territories: { id: string; polygon: { x: number; y: number }[] }[] };
+    };
+
+    page.onToolChange('select');
+    page.onTerritorySelect({ id: 't1', additive: false });
+    page.onTerritoryMove({ origin: { x: 0.2, y: 0.2 }, current: { x: 0.45, y: 0.2 } });
+    expect(page.graph().territories.find((territory) => territory.id === 't1')?.polygon[0]?.x).toBeCloseTo(0.35, 5);
+    page.onTerritoryMoveEnd();
+    expect(page.graph().territories.find((territory) => territory.id === 't1')?.polygon[0]?.x).toBeCloseTo(0.1, 5);
+    http.verify();
+  });
+
+  it('does not close a drawing when the pointer is released', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush(emptyGraph);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      drawing: { (): MapPoint[]; set(points: MapPoint[]): void };
+      drawingActive: { set(value: boolean): void };
+      onPointerUp: () => void;
+      graph: () => { territories: { id: string }[] };
+    };
+    page.drawing.set([
+      { x: 0, y: 0.3 },
+      { x: 0.2, y: 0.5 },
+      { x: 0, y: 0.7 },
+    ]);
+    page.drawingActive.set(true);
+    page.onPointerUp();
+    expect(page.drawing()).toEqual([
+      { x: 0, y: 0.3 },
+      { x: 0.2, y: 0.5 },
+      { x: 0, y: 0.7 },
+    ]);
+    expect(page.graph().territories).toHaveLength(0);
+    http.verify();
+  });
+
+  it('closes along a touched border only when Close Territory is used', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        {
+          id: 't1',
+          displayNumber: 1,
+          name: 'Northmarch',
+          description: null,
+          polygon: [
+            { x: 0.1, y: 0.4 },
+            { x: 0.4, y: 0.4 },
+            { x: 0.4, y: 0.7 },
+            { x: 0.1, y: 0.7 },
+          ],
+          terrainTypeId: 'plains',
+          structureTypeId: null,
+          structureCondition: 'Operational',
+          overlayColor: null,
+          ownerFactionId: null,
+          spawnFactionId: null,
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      drawing: { (): MapPoint[]; set(points: MapPoint[]): void };
+      closePolygon: () => void;
+      graph: () => { territories: { id: string }[] };
+    };
+    page.drawing.set([
+      { x: 0.1, y: 0.4 },
+      { x: 0.25, y: 0.2 },
+      { x: 0.4, y: 0.4 },
+    ]);
+    page.closePolygon();
+    expect(page.drawing()).toEqual([]);
+    expect(page.graph().territories).toHaveLength(2);
+    http.verify();
+  });
+
+  it('encloses along the map image edge when Close Territory is pressed', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush(emptyGraph);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      drawing: { (): MapPoint[]; set(points: MapPoint[]): void };
+      closePolygon: () => void;
+      graph: () => { territories: { id: string }[] };
+    };
+    page.drawing.set([
+      { x: 0, y: 0.3 },
+      { x: 0, y: 0.7 },
+    ]);
+    page.closePolygon();
+    expect(page.drawing()).toEqual([]);
+    expect(page.graph().territories).toHaveLength(1);
+    http.verify();
+  });
+
+  it('closes a neighbor that has extra vertices along a shared border', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      drawing: { set(points: MapPoint[]): void };
+      closePolygon: () => void;
+      graph: () => { territories: { id: string }[] };
+      errorMessages: () => string[];
+    };
+    page.drawing.set([
+      { x: 0.3, y: 0.1 },
+      { x: 0.299, y: 0.2 },
+      { x: 0.3, y: 0.3 },
+      { x: 0.55, y: 0.3 },
+      { x: 0.55, y: 0.1 },
+    ]);
+    page.closePolygon();
+    expect(page.errorMessages()).toEqual([]);
+    expect(page.graph().territories).toHaveLength(2);
+    http.verify();
+  });
+
+  it('rejects a newly drawn border that overhangs into a territory', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      drawing: { set(points: MapPoint[]): void };
+      closePolygon: () => void;
+      graph: () => { territories: { id: string }[] };
+      errorMessages: () => string[];
+    };
+    page.drawing.set([
+      { x: 0.3, y: 0.1 },
+      { x: 0.2, y: 0.2 },
+      { x: 0.3, y: 0.3 },
+      { x: 0.55, y: 0.3 },
+      { x: 0.55, y: 0.1 },
+    ]);
+    page.closePolygon();
+    expect(page.graph().territories).toHaveLength(1);
+    expect(page.errorMessages()).toContain('Territories cannot overlap. They may share a border.');
     http.verify();
   });
 
@@ -608,7 +879,7 @@ describe('MapEditorPage', () => {
       setAdjacencyEnd: (end: 'a' | 'b', territoryId: string) => void;
       deleteSelectedAdjacency: () => void;
       selectedAdjacencyId: () => string | null;
-      highlightedTerritoryIds: () => string[];
+      adjacentTerritoryIds: () => string[];
       graph: () => { adjacencies: { id: string; territoryAId: string; territoryBId: string }[] };
     };
     const compiled = fixture.nativeElement as HTMLElement;
@@ -618,7 +889,7 @@ describe('MapEditorPage', () => {
 
     page.onToolChange('select');
     page.onAdjacencyHover('ab');
-    expect(page.highlightedTerritoryIds().sort()).toEqual(['t1', 't2']);
+    expect(page.adjacentTerritoryIds().sort()).toEqual(['t1', 't2']);
 
     page.onAdjacencySelect('ab');
     fixture.detectChanges();
@@ -627,7 +898,7 @@ describe('MapEditorPage', () => {
     expect(compiled.querySelector('.side-pane h2')?.textContent).toContain('Connection');
     expect(compiled.textContent).toContain('Northmarch');
     expect(compiled.textContent).toContain('Southmarch');
-    expect(page.highlightedTerritoryIds().sort()).toEqual(['t1', 't2']);
+    expect(page.adjacentTerritoryIds().sort()).toEqual(['t1', 't2']);
     expect(compiled.querySelector<HTMLSelectElement>('#connection-territory-a')?.value).toBe('t1');
     expect(compiled.querySelector<HTMLSelectElement>('#connection-territory-b')?.value).toBe('t2');
 
