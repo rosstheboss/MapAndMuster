@@ -1,3 +1,4 @@
+using Campaign.Domain.Chat;
 using Campaign.Domain.Identity;
 
 namespace Campaign.Application.Identity;
@@ -101,4 +102,9 @@ public sealed class UserAccount
     /// Gets whether notices are also queued for email.
     /// </summary>
     public bool EmailNotificationsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Gets the default site-chat compose language. English when unset.
+    /// </summary>
+    public string PreferredChatLanguage { get; init; } = nameof(ChatLanguage.English);
 }

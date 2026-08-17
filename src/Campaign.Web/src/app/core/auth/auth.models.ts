@@ -31,6 +31,7 @@ export interface OwnProfile {
   isAdministrator: boolean;
   inAppNotificationsEnabled: boolean;
   emailNotificationsEnabled: boolean;
+  preferredChatLanguage: string;
 }
 
 export interface PublicProfile {
@@ -93,6 +94,7 @@ export interface ProfileFormValue {
   timeZoneId: string;
   inAppNotificationsEnabled?: boolean;
   emailNotificationsEnabled?: boolean;
+  preferredChatLanguage?: string;
 }
 
 export interface ChangePasswordPayload {

@@ -22,4 +22,10 @@ public enum NotificationKind
 
     /// <summary>The recipient still needs to submit orders, a battle result, or a retreat.</summary>
     ActionRequired = 5,
+
+    /// <summary>The recipient was tagged in public site chat.</summary>
+    SiteChatMention = 6,
+
+    /// <summary>An administrator sent a site-chat announcement to everyone or to this recipient.</summary>
+    SiteAdminMessage = 7,
 }

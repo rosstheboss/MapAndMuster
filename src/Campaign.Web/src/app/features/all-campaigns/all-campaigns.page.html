@@ -7,6 +7,28 @@
     <p class="error error-banner" role="alert">{{ error() }}</p>
   }
 
+  @if (chat(); as board) {
+    <app-site-chat
+      [messages]="board.messages"
+      [members]="board.mentionableUsers"
+      [blockedUsers]="board.blockedUsers"
+      [viewerUserId]="viewerUserId()"
+      [timeZoneId]="timeZoneId()"
+      [canChat]="board.canChat"
+      [canSendAdminMessages]="board.canSendAdminMessages"
+      [sending]="chatSending()"
+      [sendError]="chatError()"
+      [expanded]="chatExpanded()"
+      [composeLanguage]="composeLanguage()"
+      [visibleLanguages]="visibleLanguages()"
+      (send)="postChat($event)"
+      (expandedChange)="onChatExpanded($event)"
+      (composeLanguageChange)="onComposeLanguage($event)"
+      (visibleLanguagesChange)="onVisibleLanguages($event)"
+      (blockChange)="onBlockChange($event)"
+    />
+  }
+
   @if (loading()) {
     <p>Loading campaigns…</p>
   } @else if (campaigns().length === 0) {

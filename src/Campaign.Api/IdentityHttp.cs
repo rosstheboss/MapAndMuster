@@ -26,6 +26,11 @@ public static class IdentityHttp
     public const string UploadRateLimitPolicy = "upload";
 
     /// <summary>
+    /// Rate-limit policy for chat posts.
+    /// </summary>
+    public const string ChatRateLimitPolicy = "chat";
+
+    /// <summary>
     /// Reads the authenticated user's identifier.
     /// </summary>
     /// <param name="user">The user principal.</param>

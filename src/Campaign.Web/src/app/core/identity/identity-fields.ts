@@ -77,6 +77,7 @@ export const PROFILE_FIELD_LABELS: Readonly<Record<string, string>> = {
   region: 'State or province',
   city: 'City',
   timeZoneId: 'Time zone',
+  preferredChatLanguage: 'Default chat language',
   currentPassword: 'Current password',
   newPassword: 'New password',
   confirmPassword: 'Confirm password',

@@ -66,6 +66,7 @@ Modules may initially share a database and process. Keep public module interacti
 - Use optimistic concurrency tokens and a campaign revision for state-changing commands.
 - Store timestamps as UTC instants.
 - Store current state in normal relational tables and immutable history in audit/revision tables.
+- Public site chat and site-chat blocks live in their own tables, never on campaign play-log JSON.
 - GeoJSON or normalized polygon points may be stored as JSONB; PostGIS is not initially
   required.
 - Never overwrite original orders or battle submissions when staff correct outcomes.

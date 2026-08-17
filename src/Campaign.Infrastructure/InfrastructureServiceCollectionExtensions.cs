@@ -72,6 +72,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ICampaignStore, CampaignStore>();
         services.AddScoped<IUserNotificationStore, UserNotificationStore>();
         services.AddScoped<INewsStore, NewsStore>();
+        services.AddScoped<ISiteChatStore, SiteChatStore>();
         services.AddScoped<IEmailOutbox, EmailOutbox>();
         services.AddSingleton<ISecretHasher, Pbkdf2SecretHasher>();
         services.AddSingleton<IAvatarImageProcessor, AvatarImageProcessor>();

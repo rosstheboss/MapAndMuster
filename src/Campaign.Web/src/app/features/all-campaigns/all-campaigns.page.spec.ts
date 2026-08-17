@@ -5,6 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
+import { emptySiteChatBoard } from '../../core/chat/site-chat.fixtures';
 import { AllCampaignsPage } from './all-campaigns.page';
 
 function item(
@@ -55,11 +56,13 @@ describe('AllCampaignsPage', () => {
         endsUtc: '2099-03-02T12:00:00+00:00',
       }),
     ]);
+    http.expectOne('/api/site-chat').flush(emptySiteChatBoard());
     await fixture.whenStable();
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('All campaigns');
+    expect(compiled.textContent).toContain('Site chat');
     expect(compiled.textContent).toContain('Upcoming campaigns');
     expect(compiled.querySelector('button.group-toggle')?.textContent).toContain('Upcoming campaigns');
     const toggle = compiled.querySelector<HTMLButtonElement>('button.campaign-toggle');
@@ -76,11 +79,15 @@ describe('AllCampaignsPage', () => {
 
   it('explains when no campaigns are listed', async () => {
     const fixture = TestBed.createComponent(AllCampaignsPage);
-    TestBed.inject(HttpTestingController).expectOne('/api/campaigns/all').flush([]);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/campaigns/all').flush([]);
+    http.expectOne('/api/site-chat').flush(emptySiteChatBoard());
     await fixture.whenStable();
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('No campaigns are available to join or view right now.');
+    expect(compiled.textContent).toContain('Site chat');
+    http.verify();
   });
 });

@@ -73,6 +73,11 @@ public sealed class UpdateProfileCommand
     public bool EmailNotificationsEnabled { get; init; } = true;
 
     /// <summary>
+    /// Gets the default site-chat compose language.
+    /// </summary>
+    public string PreferredChatLanguage { get; init; } = "English";
+
+    /// <summary>
     /// Gets the profile revision last observed by the client.
     /// </summary>
     public required int ProfileRevision { get; init; }

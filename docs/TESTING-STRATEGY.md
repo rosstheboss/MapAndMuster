@@ -42,6 +42,7 @@ Cover:
 - Idempotent deadline workers and retry behavior.
 - File metadata and upload authorization.
 - Public campaign-log chat on an upcoming campaign, including outsider rejection, unknown `@` mentions, and private-channel omission from unauthorized payloads.
+- Public site chat on All Campaigns, including unknown `@` mentions, prohibited language, mutual blocks, isolation from campaign logs, and administrator announcements with notifications.
 - Public profile campaign lists that include shared or publicly viewable campaigns and omit hidden private campaigns the viewer does not share.
 - Home notification board empty and populated states, and administrator-only news edits.
 
@@ -59,6 +60,7 @@ Cover components/services for:
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
 - Campaign log display, member chat including typable recipient autocomplete and public/private/game-log filters, live log refresh, chat send errors without the save success
   banner, `@` mention autocomplete limited to current members, and clickable originator and mention names.
+- Public site chat on All Campaigns, including language filters, block toggles, administrator compose, and cookie-stored language preferences.
 - Participants panel names, factions, and Manager/Player/Admin roles.
 - Public profile campaign list, scores placeholder, and Back to the previous in-app screen.
 - Home notification board, including "No new notifications.", and paginated site news.

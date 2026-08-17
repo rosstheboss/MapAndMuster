@@ -1,4 +1,5 @@
 using Campaign.Application.Campaigns;
+using Campaign.Application.Chat;
 using Campaign.Application.Identity;
 using Campaign.Application.Maps;
 using Campaign.Application.News;
@@ -77,6 +78,10 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<GetNewsPageHandler>();
         services.AddScoped<SaveNewsArticleHandler>();
         services.AddScoped<DeleteNewsArticleHandler>();
+        services.AddScoped<GetSiteChatHandler>();
+        services.AddScoped<PostSiteChatHandler>();
+        services.AddScoped<SetSiteChatBlockHandler>();
+        services.AddScoped<SiteChatNotificationPublisher>();
 
         return services;
     }

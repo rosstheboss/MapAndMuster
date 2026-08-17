@@ -84,4 +84,9 @@ public sealed class ApplicationUser : IdentityUser<Guid>
     /// Gets or sets whether notices are also queued for email.
     /// </summary>
     public bool EmailNotificationsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the default site-chat compose language.
+    /// </summary>
+    public string PreferredChatLanguage { get; set; } = "English";
 }

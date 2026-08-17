@@ -1,6 +1,7 @@
 using Campaign.Application.Campaigns;
 using Campaign.Application.Common;
 using Campaign.Application.Ports;
+using Campaign.Domain.Chat;
 using Campaign.Domain.Common;
 using Campaign.Domain.Identity;
 
@@ -57,6 +58,11 @@ public sealed class UpdateProfileHandler
             errors = [.. errors, new DomainError(ErrorCodes.UsernameTaken, "That username is already taken.", "username")];
         }
 
+        if (!ChatLanguages.TryParse(command.PreferredChatLanguage, out var languageError, out var language))
+        {
+            errors = [.. errors, languageError];
+        }
+
         if (errors.Count > 0)
         {
             return OperationResults.Failure<UserAccount>(errors);
@@ -73,6 +79,7 @@ public sealed class UpdateProfileHandler
                     DisplayNameMode = command.DisplayNameMode,
                     InAppNotificationsEnabled = command.InAppNotificationsEnabled,
                     EmailNotificationsEnabled = command.EmailNotificationsEnabled,
+                    PreferredChatLanguage = language.ToString(),
                     ExpectedRevision = command.ProfileRevision,
                 },
                 cancellationToken)

@@ -39,6 +39,7 @@ describe('ProfilePage', () => {
       isAdministrator: false,
       inAppNotificationsEnabled: true,
       emailNotificationsEnabled: true,
+      preferredChatLanguage: 'English',
     });
     await fixture.whenStable();
     fixture.detectChanges();
@@ -49,6 +50,7 @@ describe('ProfilePage', () => {
     expect(compiled.querySelector('#confirmPassword')).toBeTruthy();
     expect(compiled.querySelector('#suffix')).toBeTruthy();
     expect(compiled.querySelector('app-theme-toggle button')?.getAttribute('aria-pressed')).toBe('false');
+    expect(compiled.querySelector('#preferredChatLanguage')).toBeTruthy();
     expect(compiled.querySelector('a[href="/users/ada"]')?.textContent.trim()).toBe('View public profile');
 
     const page = fixture.componentInstance as unknown as {
@@ -95,6 +97,7 @@ describe('ProfilePage', () => {
       isAdministrator: false,
       inAppNotificationsEnabled: true,
       emailNotificationsEnabled: true,
+      preferredChatLanguage: 'English',
     };
     http.expectOne('/api/profiles/me').flush(profile);
     await fixture.whenStable();
@@ -104,6 +107,7 @@ describe('ProfilePage', () => {
     const pending = page.save();
     const request = http.expectOne('/api/profiles/me');
     expect(request.request.method).toBe('PUT');
+    expect((request.request.body as { preferredChatLanguage: string }).preferredChatLanguage).toBe('English');
     request.flush({ ...profile, profileRevision: 2, updatedUtc: '2026-08-14T00:00:00+00:00' });
     await pending;
     fixture.detectChanges();

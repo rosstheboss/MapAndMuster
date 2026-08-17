@@ -30,6 +30,7 @@ const ownAccount: OwnProfile = {
   isAdministrator: false,
   inAppNotificationsEnabled: true,
   emailNotificationsEnabled: true,
+  preferredChatLanguage: 'English',
 };
 
 const publicProfile = (username: string): PublicProfile => ({

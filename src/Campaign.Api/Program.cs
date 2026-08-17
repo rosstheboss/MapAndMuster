@@ -67,6 +67,15 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             }));
+    options.AddPolicy(IdentityHttp.ChatRateLimitPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
 });
 
 var app = builder.Build();
@@ -90,6 +99,7 @@ app.MapProfileEndpoints();
 app.MapExternalAuthEndpoints();
 app.MapCampaignEndpoints();
 app.MapHomeBoardEndpoints();
+app.MapSiteChatEndpoints();
 
 await DatabaseStartup.ApplyMigrationsAsync(app).ConfigureAwait(false);
 

@@ -3,9 +3,9 @@
 ## Data classification
 
 - **Public:** revealed map state, standings (with hidden item-objective sources omitted), public objectives, revealed or completed private-objective names and points, unclaimed private-objective counts, configured public faction special-rule names and descriptions,
-  the campaign log, in-campaign chat, and the live play board returned to viewers (force
+  the campaign log, in-campaign chat, public site-wide chat, and the live play board returned to viewers (force
   positions and revealed facts; drafts and unrevealed orders remain omitted).
-- **Participant-private:** own drafts/orders, unrevealed private objectives, item-objective flavor and eligible choices, account data.
+- **Participant-private:** own drafts/orders, unrevealed private objectives, item-objective flavor and eligible choices, account data, site-chat block lists.
 - **Shared-private:** faction/alliance private-objective data visible only to authorized group members.
 - **Staff-sensitive:** unrevealed orders/relics, correction tools, moderation notes, full audit.
 - **Secret:** credentials, tokens, signing keys, database/email/storage secrets.
@@ -19,6 +19,7 @@ separate response models for public, participant, and staff views.
 - Local passwords must be at least 12 characters and include uppercase, lowercase, a number,
   and a special character. Changing a password while signed in requires the current password.
 - Usernames and legal names reject English profanity, racial slurs, and similar abusive terms.
+- Campaign chat and public site chat reject the same prohibited-language list.
 - Usernames that collide with chat recipients or system keywords (everyone, public, private,
   here, and similar words) are reserved.
 - Registration and profile updates require username, first name, last name, city, state or
@@ -77,15 +78,18 @@ staff review requires them.
 ## Notifications
 
 In-app and email notifications are created through a transactional outbox. Email content must
-avoid exposing hidden order/relic/objective details and must never include private chat bodies;
-direct the recipient to authenticate for sensitive content. Private campaign chat is omitted from
-unauthorized API payloads, including campaign-manager views. Only a system administrator who is
-the active debug actor on that campaign may inspect other members' private chats.
+avoid exposing hidden order/relic/objective details and must never include private chat bodies
+or site-chat bodies; direct the recipient to authenticate for sensitive content. Private campaign
+chat is omitted from unauthorized API payloads, including campaign-manager views. Only a system
+administrator who is the active debug actor on that campaign may inspect other members' private
+chats. Public site chat is visible to every signed-in user except when a player-to-player block
+hides those two authors from each other; administrator site-chat announcements are never hidden
+that way.
 
 ## Operational baseline
 
 - Secrets come from development secret storage or deployment configuration, never Git.
 - Apply database migrations deliberately and back up production campaign data.
 - Enable structured security/audit logging without sensitive payloads.
-- Rate-limit registration, login, password reset, uploads, and high-impact staff actions.
+- Rate-limit registration, login, password reset, uploads, chat posts, and high-impact staff actions.
 - Maintain dependency and static-analysis checks in CI.

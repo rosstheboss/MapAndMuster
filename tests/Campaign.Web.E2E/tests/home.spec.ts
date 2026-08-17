@@ -57,6 +57,7 @@ test('home shows the signed-in player and logout', async ({ page }) => {
     isAdministrator: false,
     inAppNotificationsEnabled: true,
     emailNotificationsEnabled: true,
+    preferredChatLanguage: 'English',
   };
 
   let authenticated = true;

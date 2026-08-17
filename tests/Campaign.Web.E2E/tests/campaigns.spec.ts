@@ -21,6 +21,7 @@ const profile = {
   isAdministrator: false,
   inAppNotificationsEnabled: true,
   emailNotificationsEnabled: true,
+  preferredChatLanguage: 'English',
 };
 
 test('signed-in players can open their campaigns and start setup', async ({ page }) => {
@@ -72,9 +73,25 @@ test('signed-in players can browse all campaigns', async ({ page }) => {
   await page.route('**/api/campaigns/all', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
+  await page.route('**/api/site-chat', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        messages: [],
+        mentionableUsers: [],
+        blockedUsers: [],
+        languages: ['English', 'Spanish'],
+        preferredLanguage: 'English',
+        canChat: true,
+        canSendAdminMessages: false,
+      }),
+    });
+  });
 
   await page.goto('/campaigns/all');
   await expect(page.getByRole('heading', { level: 1, name: 'All campaigns' })).toBeVisible();
+  await expect(page.getByText('Site chat')).toBeVisible();
   await expect(page.getByText('No campaigns are available to join or view right now.')).toBeVisible();
 });
 

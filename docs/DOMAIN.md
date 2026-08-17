@@ -174,6 +174,7 @@ sort: active by soonest end, upcoming by soonest start, completed by latest end.
 player slots occupied of maximum, name, description, filled location parts, proposed start and
 end, and for active campaigns the current round, phase label (Action 1, Action 2, Battle, or
 Battle N when a round has more than one battle), and a countdown until the current phase ends.
+A public site chat sits above those lists. It is not stored on any campaign play log.
 
 A signed-in user may join an upcoming campaign that still has an open player slot. Public
 campaigns join without a password; private campaigns require the join password. Members who are
@@ -599,17 +600,51 @@ by a member's username, or by a display name that uniquely identifies one member
 not joined cannot chat, cannot be tagged, and are omitted from mention autocomplete. Leaving
 removes the ability to chat or be tagged; earlier messages keep the display name recorded at
 post time. Mentions notify only tagged members who can see the message. Public chat without a
-mention does not notify every member.
+mention does not notify every member. Site-wide chat is never written to this log.
+
+## Site chat
+
+The All Campaigns page shows a collapsible public site chat above the campaign lists. Messages
+are stored separately from campaign play logs and never appear in a campaign. Sending is not a
+form save: it does not show the saving overlay or the success banner. Failed sends show an error
+on the chat box. The board refreshes while the page is open.
+
+Every signed-in user may post. Player messages are public. `@` tags may name any account on the
+site; unknown usernames are rejected with "You can only tag people who have an account on this
+site." `\@` is a literal `@`. Email-like text is not a tag. Mentions notify only tagged people
+who can see the message. Chat originators and mentions link to public profiles.
+
+A user may block another person. Blocking is stored one-way and hides player messages both ways:
+neither person sees the other's player chat, and mentions of a blocked person do not notify them.
+The block list can be toggled from a message or from the blocked-people list. Administrator
+announcements remain visible through blocks.
+
+Administrators may send an administrator message to everyone or to one person. Those messages
+are still public and show an `Admin` or `Admin to {name}` badge. Everyone, or that one person,
+is notified in-app and by email. Notification and email bodies omit the chat text and point to
+`/campaigns/all`.
+
+Messages are rejected when they contain prohibited language. Each message has a language flag
+used only for filtering, not translation. Supported flags are English, Spanish, French, German,
+Dutch, Italian, Russian, Korean, Chinese, Japanese, Danish, Swedish, Norwegian, Finnish, Hindi,
+and Arabic. New messages default to English unless the composer picks another flag. The viewer
+may hide languages; by default every language is visible. Compose language, language filter
+checkboxes, and the block list sit in a collapsed subpanel below Send. Compose language and
+language filters are stored in a `siteChat` cookie (`Path=/`, Max-Age one year, SameSite=Lax). A
+user may also set a default compose language on their profile; that value is used until they
+change language on All Campaigns.
 
 ## Notifications
 
 Users may enable in-app notices, email notices, or both on their profile. Stored notices cover
-mentions, private chats, campaign start, campaign end, and a new phase after the previous window
-resolves. Live attention items always appear when the user still needs to choose a faction,
+mentions, private chats, campaign start, campaign end, a new phase after the previous window
+resolves, public site-chat mentions, and administrator site-chat announcements. Live attention
+items always appear when the user still needs to choose a faction,
 commit orders, submit a battle result, or record a retreat. Email copies never include hidden
-orders, relics, or private chat text; they tell the recipient to sign in and open the campaign.
-The home page lists items that need attention, then site news. When none remain, it shows
-"No new notifications." Profile editing and the public profile live on their own pages.
+orders, relics, private chat text, or site-chat bodies; they tell the recipient to sign in and
+open the campaign or All Campaigns. The home page lists items that need attention, then site
+news. When none remain, it shows "No new notifications." Profile editing and the public profile
+live on their own pages. The profile includes a default site-chat compose language.
 
 ## News
 

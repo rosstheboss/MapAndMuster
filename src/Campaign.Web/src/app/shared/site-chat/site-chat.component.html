@@ -1,0 +1,182 @@
+<details class="site-chat" [open]="expanded()" (toggle)="onToggle($event)">
+  <summary>Site chat</summary>
+  <p class="muted">
+    Public messages for everyone on this site. They are separate from campaign logs. You can tag any account.
+  </p>
+  <div class="log-scroll" #scroller tabindex="0" role="log" aria-live="polite" aria-relevant="additions">
+    @if (visibleMessages().length === 0) {
+      <p class="muted">No messages yet.</p>
+    } @else {
+      <ol class="log-list">
+        @for (entry of visibleMessages(); track entry.id) {
+          <li>
+            <p>
+              <time [attr.datetime]="entry.postedUtc">{{ formatTimestamp(entry.postedUtc) }}</time>
+              <a class="profile-link" [routerLink]="['/users', entry.authorUsername]" [queryParams]="profileQuery()">{{
+                originatorText(entry)
+              }}</a>
+              @if (channelBadge(entry); as badge) {
+                <span class="channel-badge">{{ badge }}</span>
+              }
+              <span class="channel-badge">{{ entry.language }}</span>
+              @for (part of parts(entry.body); track $index) {
+                @if (part.mention && part.username) {
+                  <a class="profile-link" [routerLink]="['/users', part.username]" [queryParams]="profileQuery()"
+                    ><strong>{{ part.text }}</strong></a
+                  >
+                } @else if (part.mention) {
+                  <strong>{{ part.text }}</strong>
+                } @else {
+                  {{ part.text }}
+                }
+              }
+            </p>
+            @if (canBlock(entry)) {
+              <button type="button" class="block-toggle" (click)="toggleBlock(entry.authorUserId)">
+                {{ isBlocked(entry.authorUserId) ? 'Unblock' : 'Block' }}
+              </button>
+            }
+          </li>
+        }
+      </ol>
+    }
+  </div>
+  @if (canChat()) {
+    <div class="chat-compose">
+      @if (canSendAdminMessages()) {
+        <label>
+          <input type="checkbox" [ngModel]="sendAsAdmin()" (ngModelChange)="sendAsAdmin.set($event)" />
+          Send as administrator
+        </label>
+      }
+      @if (canSendAdminMessages() && sendAsAdmin()) {
+        <div class="recipient-combobox" (focusout)="onRecipientFocusOut($event)">
+          <label class="field">
+            Notify
+            <input
+              #recipient
+              id="site-chat-recipient"
+              type="text"
+              role="combobox"
+              autocomplete="off"
+              [value]="recipientQuery()"
+              (input)="onRecipientDomInput($event)"
+              (focus)="onRecipientFocus()"
+              (keydown)="onRecipientKeydown($event)"
+              [disabled]="sending()"
+              aria-autocomplete="list"
+              aria-controls="site-chat-recipient-suggest"
+              [attr.aria-expanded]="recipientOpen()"
+              [attr.aria-activedescendant]="
+                recipientOpen() ? 'site-chat-recipient-option-' + recipientHighlight() : null
+              "
+            />
+          </label>
+          @if (recipientOpen()) {
+            <ul id="site-chat-recipient-suggest" class="suggest recipient-suggest" role="listbox">
+              <li
+                id="site-chat-recipient-option-everyone"
+                role="option"
+                [class.is-active]="recipientQuery().trim().toLowerCase() === 'everyone'"
+                [attr.aria-selected]="recipientQuery().trim().toLowerCase() === 'everyone'"
+                (mousedown)="selectEveryone()"
+              >
+                Everyone
+              </li>
+              @for (member of recipientSuggestions(); track member.userId; let index = $index) {
+                <li
+                  [id]="'site-chat-recipient-option-' + index"
+                  role="option"
+                  [class.is-active]="index === recipientHighlight()"
+                  [attr.aria-selected]="index === recipientHighlight()"
+                  (mousedown)="selectRecipient(member)"
+                >
+                  {{ recipientOptionLabel(member) }}
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
+      <label class="field">
+        Message
+        <textarea
+          #composer
+          rows="1"
+          [ngModel]="draft()"
+          (ngModelChange)="onDraftInput($event)"
+          (keydown)="onKeydown($event)"
+          [disabled]="sending()"
+          maxlength="2000"
+          aria-autocomplete="list"
+          [attr.aria-expanded]="suggestions().length > 0"
+          aria-controls="site-chat-suggest"
+        ></textarea>
+      </label>
+      @if (suggestions().length > 0) {
+        <ul id="site-chat-suggest" class="suggest" role="listbox">
+          @for (member of suggestions(); track member.userId; let index = $index) {
+            <li>
+              <button
+                type="button"
+                role="option"
+                [class.is-active]="index === highlight()"
+                [attr.aria-selected]="index === highlight()"
+                (mousedown)="complete(member)"
+              >
+                {{ suggestionLabel(member) }}
+              </button>
+            </li>
+          }
+        </ul>
+      }
+      @if (sendError()) {
+        <p class="error" role="alert">{{ sendError() }}</p>
+      }
+      <button type="button" class="button" (click)="submit()" [disabled]="sending() || draft().trim().length === 0">
+        Send
+      </button>
+    </div>
+  } @else {
+    <p class="muted">Sign in to chat here.</p>
+  }
+  <details class="chat-options" [open]="optionsOpen()" (toggle)="onOptionsToggle($event)">
+    <summary>Public Chat Settings</summary>
+    @if (canChat()) {
+      <label class="field">
+        Message language
+        <select [ngModel]="composeLanguage()" (ngModelChange)="onComposeLanguage($event)">
+          @for (language of languages; track language) {
+            <option [value]="language">{{ language }}</option>
+          }
+        </select>
+      </label>
+    }
+    <fieldset class="log-filters">
+      <legend>Languages</legend>
+      @for (language of languages; track language) {
+        <label>
+          <input type="checkbox" [checked]="languageOn(language)" (change)="onLanguageToggle(language, $event)" />
+          {{ language }}
+        </label>
+      }
+    </fieldset>
+    <section class="block-list" aria-labelledby="site-chat-blocked-heading">
+      <h2 id="site-chat-blocked-heading">Blocked people ({{ blockedUsers().length }})</h2>
+      @if (blockedUsers().length === 0) {
+        <p class="muted">
+          You have not blocked anyone. Blocked people cannot see your messages, and you cannot see theirs.
+        </p>
+      } @else {
+        <ul class="blocked-people">
+          @for (user of blockedUsers(); track user.userId) {
+            <li>
+              <a [routerLink]="['/users', user.username]" [queryParams]="profileQuery()">{{ user.displayName }}</a>
+              <button type="button" class="block-toggle" (click)="toggleBlock(user.userId)">Unblock</button>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  </details>
+</details>

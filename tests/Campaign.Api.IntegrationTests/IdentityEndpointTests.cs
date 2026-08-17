@@ -128,6 +128,7 @@ public sealed class IdentityEndpointTests
         var own = await owner.GetFromJsonAsync<OwnProfileResponse>("/api/profiles/me", JsonOptions);
         Assert.NotNull(own);
         Assert.Equal("America/Halifax", own.TimeZoneId);
+        Assert.Equal("English", own.PreferredChatLanguage);
 
         using var stranger = _factory.CreateClient();
         using var publicResponse = await stranger.GetAsync($"/api/profiles/{username}");
@@ -145,6 +146,7 @@ public sealed class IdentityEndpointTests
         Assert.False(root.TryGetProperty("updatedUtc", out _));
         Assert.False(root.TryGetProperty("timeZoneId", out _));
         Assert.False(root.TryGetProperty("profileRevision", out _));
+        Assert.False(root.TryGetProperty("preferredChatLanguage", out _));
         Assert.DoesNotContain(email, json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Lovelace", json, StringComparison.Ordinal);
     }
@@ -171,6 +173,34 @@ public sealed class IdentityEndpointTests
                 profileRevision = 1,
             });
         Assert.Equal(HttpStatusCode.BadRequest, update.StatusCode);
+    }
+
+    [Fact]
+    public async Task PreferredChatLanguageCanBeUpdated()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("clang");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var update = await client.PutAsJsonAsync(
+            "/api/profiles/me",
+            new
+            {
+                username,
+                firstName = "Ada",
+                lastName = "Lovelace",
+                city = "Halifax",
+                region = "Nova Scotia",
+                country = "Canada",
+                timeZoneId = "America/Halifax",
+                displayNameMode = "Username",
+                preferredChatLanguage = "Spanish",
+                profileRevision = 1,
+            });
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        var profile = await update.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonOptions);
+        Assert.NotNull(profile);
+        Assert.Equal("Spanish", profile.PreferredChatLanguage);
     }
 
     [Fact]

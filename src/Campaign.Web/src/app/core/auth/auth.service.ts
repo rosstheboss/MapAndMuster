@@ -129,6 +129,7 @@ export class AuthService {
           displayNameMode: value.displayNameMode,
           inAppNotificationsEnabled: value.inAppNotificationsEnabled ?? true,
           emailNotificationsEnabled: value.emailNotificationsEnabled ?? true,
+          preferredChatLanguage: value.preferredChatLanguage ?? 'English',
           profileRevision,
         },
         { withCredentials: true },

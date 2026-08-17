@@ -40,6 +40,7 @@ Player and Game Master in the same campaign.
 - Public faction rules and private player/faction/alliance objectives.
 - Multiple GMs, neutral forces, campaign extension, corrections, revision history, and audit.
 - In-app and email notifications.
+- Public site-wide chat on All Campaigns, with language flags, block lists, and administrator announcements.
 
 ## Product boundaries
 

@@ -177,6 +177,7 @@ public sealed class UserAccountStore : IUserAccountStore
         user.DisplayNameMode = request.DisplayNameMode;
         user.InAppNotificationsEnabled = request.InAppNotificationsEnabled;
         user.EmailNotificationsEnabled = request.EmailNotificationsEnabled;
+        user.PreferredChatLanguage = request.PreferredChatLanguage;
         user.UpdatedUtc = _clock.UtcNow;
         user.ProfileRevision++;
 
@@ -243,6 +244,34 @@ public sealed class UserAccountStore : IUserAccountStore
         var wanted = userIds.ToHashSet();
         var administrators = await _userManager.GetUsersInRoleAsync("Administrator").ConfigureAwait(false);
         return administrators.Select(static user => user.Id).Where(wanted.Contains).ToHashSet();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MentionableAccount>> ListMentionableAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var users = await _userManager.Users
+            .AsNoTracking()
+            .OrderBy(user => user.UserName)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return [.. users.Select(user => new MentionableAccount
+        {
+            UserId = user.Id,
+            Username = user.UserName ?? string.Empty,
+            DisplayName = ProfileMapper.ToPublic(Map(user)).DisplayName,
+        })];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<UserAccount>> ListAllAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var users = await _userManager.Users
+            .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return [.. users.Select(Map)];
     }
 
     /// <inheritdoc />
@@ -320,6 +349,7 @@ public sealed class UserAccountStore : IUserAccountStore
             AvatarStorageKey = avatarStorageKey,
             InAppNotificationsEnabled = true,
             EmailNotificationsEnabled = true,
+            PreferredChatLanguage = "English",
             CreatedUtc = now,
             UpdatedUtc = now,
             ProfileRevision = 1,
@@ -355,6 +385,9 @@ public sealed class UserAccountStore : IUserAccountStore
             EmailConfirmed = user.EmailConfirmed,
             InAppNotificationsEnabled = user.InAppNotificationsEnabled,
             EmailNotificationsEnabled = user.EmailNotificationsEnabled,
+            PreferredChatLanguage = string.IsNullOrWhiteSpace(user.PreferredChatLanguage)
+                ? "English"
+                : user.PreferredChatLanguage,
         };
     }
 

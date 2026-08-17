@@ -38,6 +38,7 @@ describe('AuthService', () => {
       isAdministrator: false,
       inAppNotificationsEnabled: true,
       emailNotificationsEnabled: true,
+      preferredChatLanguage: 'English',
     });
 
     await loginPromise;

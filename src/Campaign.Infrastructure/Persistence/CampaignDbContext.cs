@@ -41,6 +41,16 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
     /// </summary>
     public DbSet<NewsArticleRecord> NewsArticles => Set<NewsArticleRecord>();
 
+    /// <summary>
+    /// Gets public site-wide chat messages.
+    /// </summary>
+    public DbSet<SiteChatMessageRecord> SiteChatMessages => Set<SiteChatMessageRecord>();
+
+    /// <summary>
+    /// Gets directed site-chat blocks.
+    /// </summary>
+    public DbSet<SiteChatBlockRecord> SiteChatBlocks => Set<SiteChatBlockRecord>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -61,6 +71,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(user => user.DisplayNameMode).HasConversion<string>().HasMaxLength(32);
             entity.Property(user => user.InAppNotificationsEnabled).IsRequired().HasDefaultValue(true);
             entity.Property(user => user.EmailNotificationsEnabled).IsRequired().HasDefaultValue(true);
+            entity.Property(user => user.PreferredChatLanguage).HasMaxLength(32).IsRequired().HasDefaultValue("English");
             entity.Property(user => user.ProfileRevision).IsConcurrencyToken();
             entity.HasIndex(user => user.NormalizedEmail).IsUnique();
         });
@@ -194,6 +205,27 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(article => article.Title).HasMaxLength(120).IsRequired();
             entity.Property(article => article.BodyMarkdown).HasMaxLength(20000).IsRequired();
             entity.HasIndex(article => article.PublishedUtc);
+        });
+
+        builder.Entity<SiteChatMessageRecord>(entity =>
+        {
+            entity.ToTable("SiteChatMessages");
+            entity.HasKey(message => message.Id);
+            entity.Property(message => message.AuthorUsername).HasMaxLength(32).IsRequired();
+            entity.Property(message => message.AuthorDisplayName).HasMaxLength(160).IsRequired();
+            entity.Property(message => message.Body).HasMaxLength(2000).IsRequired();
+            entity.Property(message => message.Language).HasMaxLength(32).IsRequired();
+            entity.Property(message => message.Kind).HasMaxLength(16).IsRequired();
+            entity.Property(message => message.TargetUsername).HasMaxLength(32);
+            entity.Property(message => message.TargetDisplayName).HasMaxLength(160);
+            entity.HasIndex(message => message.PostedUtc);
+        });
+
+        builder.Entity<SiteChatBlockRecord>(entity =>
+        {
+            entity.ToTable("SiteChatBlocks");
+            entity.HasKey(block => new { block.BlockerUserId, block.BlockedUserId });
+            entity.HasIndex(block => block.BlockedUserId);
         });
     }
 }

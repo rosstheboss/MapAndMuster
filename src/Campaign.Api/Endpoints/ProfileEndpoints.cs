@@ -110,6 +110,7 @@ public static class ProfileEndpoints
                     DisplayNameMode = displayNameMode,
                     InAppNotificationsEnabled = request.InAppNotificationsEnabled,
                     EmailNotificationsEnabled = request.EmailNotificationsEnabled,
+                    PreferredChatLanguage = request.PreferredChatLanguage,
                     ProfileRevision = request.ProfileRevision,
                 },
                 cancellationToken)

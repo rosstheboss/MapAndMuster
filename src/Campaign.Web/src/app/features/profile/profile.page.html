@@ -86,6 +86,18 @@
         <app-filterable-combobox inputId="timeZoneId" formControlName="timeZoneId" [options]="timeZones" />
         <p class="muted">Times below use this zone. Values stay stored in UTC.</p>
       </div>
+      <div class="field" [class.invalid]="isInvalid('preferredChatLanguage')">
+        <label for="preferredChatLanguage">Default chat language</label>
+        <select id="preferredChatLanguage" formControlName="preferredChatLanguage">
+          @for (language of chatLanguages; track language) {
+            <option [value]="language">{{ language }}</option>
+          }
+        </select>
+        <p class="muted">
+          New site-chat messages use this language flag unless you pick another language on the All campaigns page. That
+          page also stores language filters in a cookie.
+        </p>
+      </div>
       <fieldset class="field">
         <legend>Other players should see</legend>
         <div class="choice-row">
@@ -112,7 +124,8 @@
         </label>
         <label>
           <input type="checkbox" formControlName="emailNotificationsEnabled" />
-          Email me about mentions, private chats, campaign start and end, new phases, and actions I need to take
+          Email me about mentions, private chats, site chat, campaign start and end, new phases, and actions I need to
+          take
         </label>
       </fieldset>
 

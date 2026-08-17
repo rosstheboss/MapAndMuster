@@ -246,6 +246,9 @@ public sealed class OwnProfileResponse
 
     /// <summary>Gets whether notices are also queued for email.</summary>
     public bool EmailNotificationsEnabled { get; init; } = true;
+
+    /// <summary>Gets the default site-chat compose language.</summary>
+    public string PreferredChatLanguage { get; init; } = "English";
 }
 
 /// <summary>
@@ -341,6 +344,9 @@ public sealed class UpdateProfileRequest
 
     /// <summary>Gets whether notices are also queued for email.</summary>
     public bool EmailNotificationsEnabled { get; init; } = true;
+
+    /// <summary>Gets the default site-chat compose language.</summary>
+    public string PreferredChatLanguage { get; init; } = "English";
 }
 
 /// <summary>
@@ -379,6 +385,7 @@ public static class ProfileResponses
             IsAdministrator = isAdministrator,
             InAppNotificationsEnabled = account.InAppNotificationsEnabled,
             EmailNotificationsEnabled = account.EmailNotificationsEnabled,
+            PreferredChatLanguage = account.PreferredChatLanguage,
         };
     }
 

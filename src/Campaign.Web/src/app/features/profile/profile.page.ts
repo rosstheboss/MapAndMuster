@@ -19,6 +19,7 @@ import {
   scrollAlertIntoView,
 } from '../../core/forms/validators';
 import { NAME_SUFFIXES, PROFILE_FIELD_LABELS } from '../../core/identity/identity-fields';
+import { CHAT_LANGUAGES } from '../../core/chat/chat-languages';
 import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
@@ -50,6 +51,7 @@ export class ProfilePage {
   protected readonly countries = listCountries();
   protected readonly timeZones = listTimeZones();
   protected readonly suffixes = NAME_SUFFIXES;
+  protected readonly chatLanguages = CHAT_LANGUAGES;
   protected profileRevision = 0;
   protected readonly form = this.formBuilder.nonNullable.group({
     username: ['', [required, minLength(3), maxLength(32), reservedUsername]],
@@ -64,6 +66,7 @@ export class ProfilePage {
     displayNameMode: this.formBuilder.nonNullable.control<'Username' | 'FullName'>('Username'),
     inAppNotificationsEnabled: true,
     emailNotificationsEnabled: true,
+    preferredChatLanguage: 'English',
     currentPassword: [''],
     newPassword: ['', passwordComplexity],
     confirmPassword: [''],
@@ -100,6 +103,7 @@ export class ProfilePage {
         displayNameMode: profile.displayNameMode,
         inAppNotificationsEnabled: profile.inAppNotificationsEnabled,
         emailNotificationsEnabled: profile.emailNotificationsEnabled,
+        preferredChatLanguage: profile.preferredChatLanguage || 'English',
       });
       this.profileRevision = profile.profileRevision;
       this.createdUtc.set(profile.createdUtc);
@@ -158,6 +162,7 @@ export class ProfilePage {
             displayNameMode: value.displayNameMode,
             inAppNotificationsEnabled: value.inAppNotificationsEnabled,
             emailNotificationsEnabled: value.emailNotificationsEnabled,
+            preferredChatLanguage: value.preferredChatLanguage,
           },
           this.profileRevision,
         );

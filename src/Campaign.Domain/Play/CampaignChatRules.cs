@@ -65,6 +65,12 @@ public static class CampaignChatRules
     /// <summary>Originator label for campaign-generated log facts.</summary>
     public const string CampaignOriginator = "Campaign";
 
+    /// <summary>Error text when an @ token is not a current campaign member.</summary>
+    public const string CampaignUnknownMentionMessage = "You can only tag people who have joined this campaign.";
+
+    /// <summary>Error text when an @ token is not a registered account.</summary>
+    public const string SiteUnknownMentionMessage = "You can only tag people who have an account on this site.";
+
     /// <summary>
     /// Posts a chat message from a current campaign member.
     /// </summary>
@@ -116,7 +122,7 @@ public static class CampaignChatRules
             return false;
         }
 
-        if (!TryValidateMentions(trimmed, members, out error))
+        if (!TryValidateMentions(trimmed, members, out error, CampaignUnknownMentionMessage))
         {
             return false;
         }
@@ -397,11 +403,18 @@ public static class CampaignChatRules
         }
     }
 
-    private static bool TryValidateMentions(
+    /// <summary>
+    /// Validates that every unescaped @ token matches a known person.
+    /// </summary>
+    public static bool TryValidateMentions(
         string text,
         IReadOnlyList<CampaignChatMember> members,
-        [NotNullWhen(false)] out DomainError? error)
+        [NotNullWhen(false)] out DomainError? error,
+        string unknownMentionMessage = CampaignUnknownMentionMessage)
     {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(members);
+        ArgumentException.ThrowIfNullOrWhiteSpace(unknownMentionMessage);
         error = null;
         var tokens = MentionTokens(members);
         var index = 0;
@@ -426,10 +439,7 @@ public static class CampaignChatRules
                 .FirstOrDefault();
             if (string.IsNullOrEmpty(match))
             {
-                error = new DomainError(
-                    "chat.mention.unknown",
-                    "You can only tag people who have joined this campaign.",
-                    "message");
+                error = new DomainError("chat.mention.unknown", unknownMentionMessage, "message");
                 return false;
             }
 

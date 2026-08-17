@@ -105,6 +105,41 @@ public interface IUserAccountStore
         ArgumentNullException.ThrowIfNull(userIds);
         return Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
     }
+
+    /// <summary>
+    /// Returns public mention tokens for every account. Email and other private fields are omitted.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Mention identities for every account.</returns>
+    Task<IReadOnlyList<MentionableAccount>> ListMentionableAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<MentionableAccount>>([]);
+    }
+
+    /// <summary>
+    /// Returns every account. Used to notify all users of an administrator site-chat announcement.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Every stored account.</returns>
+    Task<IReadOnlyList<UserAccount>> ListAllAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<UserAccount>>([]);
+    }
+}
+
+/// <summary>
+/// Public mention identity for site chat. Email is omitted.
+/// </summary>
+public sealed class MentionableAccount
+{
+    /// <summary>Gets the account identifier.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the unique username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the name shown to other users.</summary>
+    public required string DisplayName { get; init; }
 }
 
 /// <summary>
@@ -201,6 +236,9 @@ public sealed class UpdateStoredProfileRequest
 
     /// <summary>Gets whether notices are also queued for email.</summary>
     public bool EmailNotificationsEnabled { get; init; } = true;
+
+    /// <summary>Gets the default site-chat compose language.</summary>
+    public string PreferredChatLanguage { get; init; } = "English";
 
     /// <summary>Gets the expected profile revision.</summary>
     public required int ExpectedRevision { get; init; }

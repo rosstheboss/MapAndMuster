@@ -29,6 +29,7 @@ const profile: OwnProfile = {
   isAdministrator: false,
   inAppNotificationsEnabled: true,
   emailNotificationsEnabled: true,
+  preferredChatLanguage: 'English',
 };
 
 describe('HomePage', () => {
