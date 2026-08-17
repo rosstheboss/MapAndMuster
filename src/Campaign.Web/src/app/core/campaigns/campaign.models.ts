@@ -72,6 +72,10 @@ export interface CampaignDetail {
   structureTypes: CampaignStructureType[];
   itemObjectiveTypes?: CampaignItemObjectiveType[];
   publicObjectiveTypes?: CampaignPublicObjectiveType[];
+  specialRules?: CampaignSpecialRule[];
+  privateObjectiveTypes?: CampaignPrivateObjectiveType[];
+  privateObjectives?: PrivateObjectiveAssignment[];
+  privateObjectiveUnclaimedCounts?: PrivateObjectiveUnclaimedCount[];
   pointsPerBattleWon?: number;
   pointsPerBattleDraw?: number;
   useDifferentialBattleScoring?: boolean;
@@ -101,6 +105,7 @@ export interface CampaignFaction {
   allyGroupName: string | null;
   requiresSubfaction: boolean;
   hasFlagImage: boolean;
+  specialRuleIds?: string[];
 }
 
 export interface CampaignAllyGroup {
@@ -129,6 +134,7 @@ export interface CampaignTerrainType {
   color: string;
   missions: CampaignMission[];
   campaignPoints?: number;
+  isWaterFeature?: boolean;
 }
 
 export interface CampaignStructureType {
@@ -154,6 +160,9 @@ export interface CampaignItemObjectiveType {
   color?: string;
   hasImage?: boolean;
   campaignPoints?: number;
+  flavorText?: string | null;
+  choices?: ItemObjectiveChoice[];
+  specialRuleIds?: string[];
 }
 
 export interface CampaignPublicObjectiveType {
@@ -161,6 +170,61 @@ export interface CampaignPublicObjectiveType {
   name: string;
   description?: string | null;
   campaignPoints: number;
+}
+
+export interface ItemObjectiveChoice {
+  id: string;
+  name: string;
+  results?: ItemObjectiveChoiceResult[];
+}
+
+export interface ItemObjectiveChoiceResult {
+  id: string;
+  flavorText?: string | null;
+  newStateKey?: string | null;
+  destroyItem?: boolean;
+  replacementItemTypeId?: string | null;
+  grantedPrivateObjectiveTypeId?: string | null;
+}
+
+export interface CampaignSpecialRule {
+  id: string;
+  name: string;
+  text: string;
+}
+
+export interface CampaignPrivateObjectiveType {
+  id: string;
+  name?: string | null;
+  description?: string | null;
+  campaignPoints?: number | null;
+  allowedHolderKinds?: string[];
+  scoringKind: string;
+  automaticKind?: string | null;
+  requiredCount?: number;
+  structureTypeId?: string | null;
+  territoryIds?: string[];
+}
+
+export interface PrivateObjectiveAssignment {
+  id: string;
+  typeId: string;
+  holderKind: string;
+  holderId: string;
+  status: string;
+  scoringKind: string;
+  name?: string | null;
+  description?: string | null;
+  campaignPoints?: number | null;
+  canClaim?: boolean;
+  canModerate?: boolean;
+}
+
+export interface PrivateObjectiveUnclaimedCount {
+  holderKind: string;
+  holderId: string;
+  holderName: string;
+  count: number;
 }
 
 export interface CampaignPointStanding {
@@ -175,6 +239,7 @@ export interface CampaignPointStanding {
   territoryAndStructurePoints: number;
   battlesWonPoints: number;
   publicObjectivePoints: number;
+  privateObjectivePoints?: number;
   otherPoints: number;
   total: number;
   heldItems?: HeldItemObjective[];
@@ -231,6 +296,8 @@ export interface SaveCampaignPayload {
   structureTypes: SaveStructureTypePayload[];
   itemObjectiveTypes: SaveItemObjectiveTypePayload[];
   publicObjectiveTypes?: SavePublicObjectiveTypePayload[];
+  specialRules?: SaveSpecialRulePayload[];
+  privateObjectiveTypes?: SavePrivateObjectiveTypePayload[];
   pointsPerBattleWon?: number;
   pointsPerBattleDraw?: number;
   useDifferentialBattleScoring?: boolean;
@@ -257,6 +324,7 @@ export interface SaveFactionPayload {
   allyGroupName: string | null;
   requiresSubfaction: boolean;
   clearFlagImage?: boolean;
+  specialRuleIds?: string[];
 }
 
 export interface SaveAllyGroupPayload {
@@ -275,6 +343,7 @@ export interface SaveTerrainTypePayload {
   color: string;
   missions: SaveMissionPayload[];
   campaignPoints?: number;
+  isWaterFeature?: boolean;
 }
 
 export interface SaveStructureTypePayload {
@@ -300,6 +369,9 @@ export interface SaveItemObjectiveTypePayload {
   color?: string | null;
   clearImage?: boolean;
   campaignPoints?: number;
+  flavorText?: string | null;
+  specialRuleIds?: string[];
+  choices?: SaveItemObjectiveChoicePayload[];
 }
 
 export interface SavePublicObjectiveTypePayload {
@@ -307,6 +379,40 @@ export interface SavePublicObjectiveTypePayload {
   name: string;
   description?: string | null;
   campaignPoints?: number;
+}
+
+export interface SaveItemObjectiveChoicePayload {
+  id?: string;
+  name: string;
+  results?: SaveItemObjectiveChoiceResultPayload[];
+}
+
+export interface SaveItemObjectiveChoiceResultPayload {
+  id?: string;
+  flavorText?: string | null;
+  newStateKey?: string | null;
+  destroyItem?: boolean;
+  replacementItemTypeId?: string | null;
+  grantedPrivateObjectiveTypeId?: string | null;
+}
+
+export interface SaveSpecialRulePayload {
+  id?: string;
+  name: string;
+  text?: string | null;
+}
+
+export interface SavePrivateObjectiveTypePayload {
+  id?: string;
+  name: string;
+  description?: string | null;
+  campaignPoints?: number;
+  allowedHolderKinds?: string[];
+  scoringKind?: string;
+  automaticKind?: string;
+  requiredCount?: number;
+  structureTypeId?: string | null;
+  territoryIds?: string[];
 }
 
 export interface SaveMissionPayload {
@@ -399,6 +505,9 @@ export interface CampaignPlayDetail {
   brokenAllyFactionIds?: string[];
   standings?: CampaignPointStanding[];
   publicObjectiveLeaderboards?: PublicObjectiveLeaderboard[];
+  privateObjectives?: PrivateObjectiveAssignment[];
+  privateObjectiveUnclaimedCounts?: PrivateObjectiveUnclaimedCount[];
+  specialRules?: CampaignSpecialRule[];
   pointsPerBattleWon?: number;
   pointsPerBattleDraw?: number;
   useDifferentialBattleScoring?: boolean;
@@ -443,6 +552,11 @@ export interface PlayItemObjective {
   builtinSymbol?: string;
   color?: string;
   hasImage?: boolean;
+  flavorText?: string | null;
+  stateKey?: string | null;
+  isDestroyed?: boolean;
+  resolvedChoiceId?: string | null;
+  choices?: ItemObjectiveChoice[];
 }
 
 export interface PlayDraft {
@@ -555,6 +669,30 @@ export interface SetPublicObjectiveAwardPayload {
   objectiveId: string;
   playerUserId: string;
   awarded: boolean;
+}
+
+export interface GrantPrivateObjectivePayload {
+  revision: number;
+  holderKind: string;
+  holderId: string;
+  typeId?: string | null;
+}
+
+export interface ClaimPrivateObjectivePayload {
+  revision: number;
+  assignmentId: string;
+}
+
+export interface ModeratePrivateObjectivePayload {
+  revision: number;
+  assignmentId: string;
+  approved: boolean;
+}
+
+export interface ResolveItemObjectiveChoicePayload {
+  revision: number;
+  itemId: string;
+  choiceId: string;
 }
 
 export interface PostCampaignChatPayload {

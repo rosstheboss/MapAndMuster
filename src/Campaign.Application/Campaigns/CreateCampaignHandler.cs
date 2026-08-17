@@ -75,7 +75,9 @@ public sealed class CreateCampaignHandler
                 command.AllowNegativeDifferential,
                 command.MostTerritoriesCampaignPoints,
                 command.LongestTerritoryChainCampaignPoints,
-                command.MostBattlesWonCampaignPoints))
+                command.MostBattlesWonCampaignPoints,
+                command.SpecialRules,
+                command.PrivateObjectiveTypes))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -192,7 +194,9 @@ public sealed class UpdateCampaignHandler
                 command.AllowNegativeDifferential,
                 command.MostTerritoriesCampaignPoints,
                 command.LongestTerritoryChainCampaignPoints,
-                command.MostBattlesWonCampaignPoints))
+                command.MostBattlesWonCampaignPoints,
+                command.SpecialRules,
+                command.PrivateObjectiveTypes))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -362,6 +366,8 @@ internal static class CampaignPersistenceFactory
             StructureTypes = CatalogFileBinder.BindStructures(setup.StructureTypes, previousStructureTypes),
             ItemObjectiveTypes = CatalogFileBinder.BindItemObjectives(setup.ItemObjectiveTypes, previousItemObjectiveTypes),
             PublicObjectiveTypes = CatalogFileBinder.BindPublicObjectives(setup.PublicObjectiveTypes),
+            SpecialRules = CatalogFileBinder.BindSpecialRules(setup.SpecialRules),
+            PrivateObjectiveTypes = CatalogFileBinder.BindPrivateObjectives(setup.PrivateObjectiveTypes),
             BattleScoring = setup.BattleScoring,
             RankingObjectivePoints = setup.RankingObjectivePoints,
         };

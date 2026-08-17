@@ -9,6 +9,9 @@ describe('terrain presets', () => {
     expect(types).not.toBeNull();
     expect(types!.map((entry) => entry.name)).toEqual(TERRAIN_TYPES.map((entry) => entry.label));
     expect(types!.find((entry) => entry.name === 'Highlands')?.color).toBe('#C45C26');
+    expect(types!.find((entry) => entry.name === 'Sea')?.isWaterFeature).toBe(true);
+    expect(types!.find((entry) => entry.name === 'Swamp')?.isWaterFeature).toBe(true);
+    expect(types!.find((entry) => entry.name === 'Cave')?.isWaterFeature).toBe(false);
 
     const first = types![0];
     first.name = 'Renamed';

@@ -42,7 +42,7 @@ for the campaign rules.
 | Allied co-location                   | Calculate                     | Determine territory claimant using configured ranking/tie-break rules.                                                         |
 | Map image and territories            | Configure                     | Upload raster, draw/import polygons, assign IDs, terrain, ownership, spawn, structures, structure condition, and adjacency. A pair of territories has at most one connection. |
 | Spawn behavior                       | Enforce, Calculate            | Prohibit enemy entry/battle/build, provide base supply, combine same-player split forces, and drop carried item objectives on the territory a force leaves. |
-| Terrain types                        | Configure, Display            | Select mission/layout candidates and show tabletop rules. Standard terrain is a replaceable preset copied from the current catalog. |
+| Terrain types                        | Configure, Display            | Select mission/layout candidates and show tabletop rules. Standard terrain is a replaceable preset copied from the current catalog. Each type has a Water feature flag for special-rule interaction and player reminders; it does not change movement by itself. |
 | Tabletop terrain features            | Display                       | Present woods, water, river, bridge, cliff, castle, and similar rules with the mission; do not simulate tabletop movement.     |
 | Supply network                       | Calculate                     | Graph traversal through owned/allied adjacent territories; calculate per-force normal supply.                                  |
 | Temporary supply                     | Calculate, Audit              | Award, retain, allocate, and consume only for an eligible played battle.                                                       |
@@ -53,16 +53,16 @@ for the campaign rules.
 | Longest connected territory chain    | Calculate                     | Calculate from player-owned territory graph; allied territories excluded. Friendly first-place ties each receive the configured campaign points. |
 | Structure-control objective          | Calculate                     | Calculate qualified structures and configured tie behavior.                                                                    |
 | Public objectives                    | Configure, Calculate, Display | Track progress and show criteria/results.                                                                                      |
-| Private objectives                   | Configure, Secret, Calculate  | Assign at player/faction/alliance scope; conceal progress and award until reveal policy permits.                               |
+| Private objectives                   | Configure, Secret, Calculate, Audit | Catalog at setup; assign to players, factions, and ally groups. Manual claims need manager approval. Automatic criteria score from map facts and become public when completed. Unclaimed counts are public; text stays secret until reveal or campaign completion. |
 | Backstabber objective                | Calculate, Secret             | Remove alliance-objective eligibility and assign configured replacement.                                                       |
 | Hidden item-objective placement      | Secret, Configure             | Random or manager-placed; skip spawn unless allowed; never include unrevealed location in player responses.                    |
 | Item-objective discovery/transfer    | Calculate, Audit              | Reveal when found or staff-revealed in debug; drop on move/retreat; pickup by a lone force; battle winner takes spoils.        |
-| Relic choices/effects                | Configure, Secret, TBD        | Provide a versioned choice/effect mechanism after rules are supplied. Placement, visibility, and transfer are implemented.     |
+| Relic choices/effects                | Configure, Secret, Calculate, Audit | Configure flavor text and named choices in setup. Resolving a choice applies one result or a random result from that choice's group: new flavor text, optional new state label, optional secret private objective, and optional destroy-and-replace. Destroyed items award no points and leave the map. |
 | Force statuses                       | Calculate, Display            | Track one status per force; apply transition/recovery rules and show tabletop effects.                                         |
 | Faction choice                       | Configure, Enforce            | Players pick a faction (and required subfaction) before they can play; they may change it until the campaign starts, then it is locked. |
 | Faction alignments                   | Configure                     | Model alliance groups and unaligned factions per campaign.                                                                     |
 | Faction map rules                    | Configure, Enforce/Calculate  | Structured modifiers may affect movement, supply, spawn, relic sensing, status, pillage, or retreat.                           |
-| Faction tabletop rules               | Configure, Display            | Show assigned rules with mission/battle; do not simulate tabletop dice/unit effects.                                           |
+| Faction tabletop rules               | Configure, Display            | Reusable special-rule catalog (name and description) assigned to factions and item objectives the same way missions are reused. Pre-configured rules copy a generic catalog description (no faction-specific wording or flavor). User-created rules are display-only and do not execute code or change resolution. |
 | Rule/version changes                 | Configure, Audit              | Record source/version/effective round; activate approved changes at a round boundary.                                          |
 | GM order inspection                  | Secret, Audit                 | Permit inspection only inside a logged debug session; unrevealed orders stay out of the public log. Notify affected players when debug ends. |
 | GM corrections                       | Enforce, Audit                | Enter debug (logged), append staff corrections without overwriting originals, re-resolve the last action only while the following phase is open, then exit debug (logged, notifying players). |
@@ -104,7 +104,7 @@ content or structured mission metadata. Do not execute administrator-provided co
 These remain in `DECISIONS-NEEDED.md` and must not be silently resolved by an agent:
 
 - Castle gates, walls, battering rams, scaling, and inside-the-walls rules are headings only.
-- Relic choices and state-changing effects are intentionally unrevealed.
+- Relic choice options, result groups, destroy-and-replace, and granted secret objectives are configured in setup. Mechanical map modifiers from special rules remain display-only until specified.
 - Several armies-of-infamy entries are placeholders.
 - Exact proprietary battle-point conversion charts are out of scope; managers enter already-converted
   scores or raw victory points and configure multiplier, clamp, and negative-loser behavior.

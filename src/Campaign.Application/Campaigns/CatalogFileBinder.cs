@@ -27,6 +27,7 @@ internal static class CatalogFileBinder
                     AllyGroupName = faction.AllyGroupName,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     FlagImageStorageKey = faction.ClearFlagImage ? null : existing?.FlagImageStorageKey,
+                    SpecialRuleIds = faction.SpecialRuleIds,
                 };
             }),
         ];
@@ -45,6 +46,7 @@ internal static class CatalogFileBinder
                 Name = type.Name,
                 Color = type.Color,
                 Missions = BindMissions(type.Missions, previousMissions),
+                IsWaterFeature = type.IsWaterFeature,
             }),
         ];
     }
@@ -101,6 +103,28 @@ internal static class CatalogFileBinder
                     Color = type.Color,
                     ImageStorageKey = imageKey,
                     CampaignPoints = type.CampaignPoints,
+                    FlavorText = type.FlavorText,
+                    Choices =
+                    [
+                        .. type.Choices.Select(static choice => new StoredItemObjectiveChoice
+                        {
+                            Id = choice.Id,
+                            Name = choice.Name,
+                            Results =
+                            [
+                                .. choice.Results.Select(static result => new StoredItemObjectiveChoiceResult
+                                {
+                                    Id = result.Id,
+                                    FlavorText = result.FlavorText,
+                                    NewStateKey = result.NewStateKey,
+                                    DestroyItem = result.DestroyItem,
+                                    ReplacementItemTypeId = result.ReplacementItemTypeId,
+                                    GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+                                }),
+                            ],
+                        }),
+                    ],
+                    SpecialRuleIds = type.SpecialRuleIds,
                 };
             }),
         ];
@@ -117,6 +141,40 @@ internal static class CatalogFileBinder
                 Name = type.Name,
                 Description = type.Description,
                 CampaignPoints = type.CampaignPoints,
+            }),
+        ];
+    }
+
+    public static IReadOnlyList<StoredSpecialRule> BindSpecialRules(IReadOnlyList<SpecialRuleSetup> incoming)
+    {
+        return
+        [
+            .. incoming.Select(static rule => new StoredSpecialRule
+            {
+                Id = rule.Id,
+                Name = rule.Name,
+                Text = rule.Text,
+            }),
+        ];
+    }
+
+    public static IReadOnlyList<StoredPrivateObjectiveType> BindPrivateObjectives(
+        IReadOnlyList<PrivateObjectiveTypeSetup> incoming)
+    {
+        return
+        [
+            .. incoming.Select(static type => new StoredPrivateObjectiveType
+            {
+                Id = type.Id,
+                Name = type.Name,
+                Description = type.Description,
+                CampaignPoints = type.CampaignPoints,
+                AllowedHolderKinds = [.. type.AllowedHolderKinds.Select(static kind => kind.ToString())],
+                ScoringKind = type.ScoringKind.ToString(),
+                AutomaticKind = type.AutomaticKind.ToString(),
+                RequiredCount = type.RequiredCount,
+                StructureTypeId = type.StructureTypeId,
+                TerritoryIds = type.TerritoryIds,
             }),
         ];
     }

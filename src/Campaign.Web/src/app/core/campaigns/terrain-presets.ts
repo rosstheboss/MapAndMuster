@@ -17,6 +17,7 @@ export const TERRAIN_PRESETS: readonly TerrainPreset[] = [
     terrainTypes: TERRAIN_TYPES.map((entry) => ({
       name: entry.label,
       color: entry.overlayColor,
+      isWaterFeature: entry.isWaterFeature,
     })),
   },
 ];
@@ -27,7 +28,11 @@ export function terrainTypesFromPreset(presetId: string): DefaultTerrainType[] |
     return null;
   }
 
-  return preset.terrainTypes.map((entry) => ({ name: entry.name, color: entry.color }));
+  return preset.terrainTypes.map((entry) => ({
+    name: entry.name,
+    color: entry.color,
+    isWaterFeature: entry.isWaterFeature === true,
+  }));
 }
 
 export function standardTerrainTypes(): DefaultTerrainType[] {

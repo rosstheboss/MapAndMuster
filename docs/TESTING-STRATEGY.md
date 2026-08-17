@@ -19,8 +19,8 @@ Required early suites:
 - Move adjacency, spawn restrictions, split/rejoin with a play-log entry, backstab, pillage/repair, and retreat.
 - Supply graph traversal, alliance inclusion, temporary supply, and split forces.
 - Status transitions and faction exceptions.
-- Public/private objective visibility and completion.
-- Relic discovery, transfer, drop, tie-breaking, and secrecy.
+- Public/private objective visibility, completion, manager approval of private claims, and automatic private-objective scoring.
+- Relic discovery, transfer, drop, choice resolution, destroy-and-replace, tie-breaking, and secrecy.
 - Campaign-point components and graph objectives.
 - Public-objective award/revoke facts and hidden item-objective standings secrecy.
 - Battle-submission equivalence, single submission, disagreement, and GM resolution.

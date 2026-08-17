@@ -664,7 +664,16 @@ public sealed class ChooseFactionHandler
         {
             var map = CampaignLifecycle.ToPlayMap(updated);
             var ensured = CampaignPlayRules.EnsureForce(updated.PlayState, map, command.UserId, command.FactionId);
-            updated = CloneWithPlay(updated, ensured.State, ensured.PreserveMap ? updated.MapGraph : CampaignLifecycle.ApplyOwnership(updated.MapGraph!, ensured.Map));
+            var withObjective = PrivateObjectiveRules.EnsurePlayerAssignment(
+                ensured.State,
+                CampaignPlayCatalog.PrivateTypes(updated),
+                command.UserId,
+                _clock.UtcNow,
+                CampaignPlayCatalog.PickIndex);
+            updated = CloneWithPlay(
+                updated,
+                withObjective,
+                ensured.PreserveMap ? updated.MapGraph : CampaignLifecycle.ApplyOwnership(updated.MapGraph!, ensured.Map));
         }
 
         var outcome = await _campaigns.UpdateAsync(updated, command.ExpectedRevision, cancellationToken).ConfigureAwait(false);
@@ -726,6 +735,8 @@ public sealed class ChooseFactionHandler
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            SpecialRules = existing.SpecialRules,
+            PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = play,
@@ -1026,6 +1037,306 @@ public sealed class SetPublicObjectiveAwardHandler
                         utcNow,
                         out next,
                         out error)
+                    || next is null)
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
+            },
+            cancellationToken,
+            _notifications);
+    }
+}
+
+/// <summary>
+/// Grants a still-available private objective to a player, faction, or ally group.
+/// </summary>
+public sealed class GrantPrivateObjectiveHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public GrantPrivateObjectiveHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Grants a specific or random still-available private objective.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(
+        GrantPrivateObjectiveCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignPlayPipeline.MutateAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, _, campaign, utcNow) =>
+            {
+                var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
+                if (membership?.IsGameMaster != true && !command.IsAdministrator)
+                {
+                    return PlayMutation.Fail(new Domain.Common.DomainError(
+                        ErrorCodes.CampaignForbidden,
+                        "Only a campaign manager can grant private objectives."));
+                }
+
+                if (!Enum.TryParse<PrivateObjectiveHolderKind>(command.HolderKind, true, out var holderKind))
+                {
+                    return PlayMutation.Fail(new Domain.Common.DomainError(
+                        "privateObjective.holder.invalid",
+                        "Choose a player, faction, or ally group.",
+                        "holderKind"));
+                }
+
+                if (!PrivateObjectiveRules.TryGrant(
+                        state,
+                        CampaignPlayCatalog.PrivateTypes(campaign),
+                        holderKind,
+                        command.HolderId,
+                        command.TypeId,
+                        utcNow,
+                        CampaignPlayCatalog.PickIndex,
+                        out var next,
+                        out var error)
+                    || next is null)
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
+            },
+            cancellationToken,
+            _notifications);
+    }
+}
+
+/// <summary>
+/// Submits a manual private-objective claim for manager approval.
+/// </summary>
+public sealed class ClaimPrivateObjectiveHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public ClaimPrivateObjectiveHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Claims a held manual private objective.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(
+        ClaimPrivateObjectiveCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignPlayPipeline.MutateAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, _, campaign, utcNow) =>
+            {
+                var assignment = state.PrivateObjectives.FirstOrDefault(item => item.Id == command.AssignmentId);
+                var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
+                var allyGroupId = membership?.FactionId is { } factionId
+                    ? CampaignPlayCatalog.AllyGroupByFaction(campaign).GetValueOrDefault(factionId)
+                    : null;
+                if (assignment is null
+                    || !PrivateObjectiveRules.CanViewDetails(
+                        assignment,
+                        command.UserId,
+                        membership?.FactionId,
+                        allyGroupId,
+                        staffView: false,
+                        campaignCompleted: false)
+                    || (assignment.HolderKind == PrivateObjectiveHolderKind.Player && assignment.HolderId != command.UserId)
+                    || (assignment.HolderKind == PrivateObjectiveHolderKind.Faction && assignment.HolderId != membership?.FactionId)
+                    || (assignment.HolderKind == PrivateObjectiveHolderKind.AllyGroup && assignment.HolderId != allyGroupId))
+                {
+                    return PlayMutation.Fail(new Domain.Common.DomainError(
+                        "privateObjective.forbidden",
+                        "Only a holder of that private objective can claim it."));
+                }
+
+                if (!PrivateObjectiveRules.TryClaim(state, command.AssignmentId, command.UserId, utcNow, out var next, out var error)
+                    || next is null)
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
+            },
+            cancellationToken,
+            _notifications);
+    }
+}
+
+/// <summary>
+/// Approves or denies a claimed private objective.
+/// </summary>
+public sealed class ModeratePrivateObjectiveHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public ModeratePrivateObjectiveHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Approves or denies a claim.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(
+        ModeratePrivateObjectiveCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignPlayPipeline.MutateAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, _, campaign, utcNow) =>
+            {
+                var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
+                if (membership?.IsGameMaster != true && !command.IsAdministrator)
+                {
+                    return PlayMutation.Fail(new Domain.Common.DomainError(
+                        ErrorCodes.CampaignForbidden,
+                        "Only a campaign manager can approve private objectives."));
+                }
+
+                CampaignPlayState? next;
+                Domain.Common.DomainError? error;
+                if (command.Approved)
+                {
+                    if (!PrivateObjectiveRules.TryApprove(
+                            state,
+                            command.AssignmentId,
+                            command.UserId,
+                            utcNow,
+                            CampaignPlayCatalog.PrivateNames(campaign),
+                            out next,
+                            out error)
+                        || next is null)
+                    {
+                        return PlayMutation.Fail(error);
+                    }
+                }
+                else if (!PrivateObjectiveRules.TryDeny(state, command.AssignmentId, out next, out error) || next is null)
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
+            },
+            cancellationToken,
+            _notifications);
+    }
+}
+
+/// <summary>
+/// Resolves a configured holder choice on a possessed item objective.
+/// </summary>
+public sealed class ResolveItemObjectiveChoiceHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public ResolveItemObjectiveChoiceHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Applies one configured item choice.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(
+        ResolveItemObjectiveChoiceCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignPlayPipeline.MutateAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, _, campaign, utcNow) =>
+            {
+                if (!ItemObjectiveChoiceRules.TryResolve(
+                        state,
+                        command.ItemId,
+                        command.ChoiceId,
+                        command.UserId,
+                        CampaignPlayCatalog.ItemSetups(campaign),
+                        utcNow,
+                        CampaignPlayCatalog.PickIndex,
+                        out var next,
+                        out var error)
                     || next is null)
                 {
                     return PlayMutation.Fail(error);

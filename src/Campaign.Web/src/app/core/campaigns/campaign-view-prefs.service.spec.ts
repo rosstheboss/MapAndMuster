@@ -18,6 +18,7 @@ function standing(overrides: Partial<CampaignPointStanding>): CampaignPointStand
     territoryAndStructurePoints: 1,
     battlesWonPoints: 2,
     publicObjectivePoints: 3,
+    privateObjectivePoints: 0,
     otherPoints: 4,
     total: 10,
     ...overrides,

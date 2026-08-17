@@ -87,10 +87,92 @@ describe('CampaignSetupPage', () => {
     expect(lines).toContain('A campaign map image is required.');
     expect(compiled.textContent).toContain('up to 20 MB');
     const factionsToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
-      button.textContent.includes('Factions'),
+      button.textContent.trim().startsWith('Factions'),
     );
     expect(factionsToggle?.getAttribute('aria-expanded')).toBe('true');
     TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('lists faction special rules, public, and private objectives before allies and factions', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const titles = [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll('.setup-section > legend > .section-toggle'),
+    ].map((button) => button.textContent.replace(/\s+/g, ' ').trim());
+    const special = titles.findIndex((title) => title.startsWith('Faction special rules'));
+    const publicObjectives = titles.findIndex((title) => title.startsWith('Public objectives'));
+    const privateObjectives = titles.findIndex((title) => title.startsWith('Private objectives'));
+    const allies = titles.findIndex((title) => title.startsWith('Ally groups'));
+    const factions = titles.findIndex((title) => title.startsWith('Factions'));
+    expect(special).toBeGreaterThan(-1);
+    expect(special).toBeLessThan(publicObjectives);
+    expect(publicObjectives).toBeLessThan(privateObjectives);
+    expect(privateObjectives).toBeLessThan(allies);
+    expect(allies).toBeLessThan(factions);
+  });
+
+  it('adds a pre-configured faction special rule from the autocomplete list', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      specialRulePresetPick: { setValue: (value: string) => void };
+      addPickedSpecialRule: () => void;
+      pickControl: (ownerId: string) => { setValue: (value: string) => void };
+      assignSpecialRuleByName: (control: { value: string[] }, ownerId: string) => void;
+      specialRules: {
+        at: (index: number) => {
+          controls: { id: { value: string }; name: { value: string }; text: { value: string } };
+        };
+      };
+      factions: {
+        at: (index: number) => {
+          controls: { id: { value: string }; specialRuleIds: { value: string[] } };
+        };
+      };
+    };
+
+    page.specialRulePresetPick.setValue('Forced March');
+    page.addPickedSpecialRule();
+    fixture.detectChanges();
+    expect(page.specialRules.at(0).controls.name.value).toBe('Forced March');
+    expect(page.specialRules.at(0).controls.text.value).toContain('one extra adjacent territory');
+    expect((fixture.nativeElement as HTMLElement).querySelector('#specialRulePreset')).toBeTruthy();
+    expect((fixture.nativeElement as HTMLElement).querySelector('#faction-special-rule-0')).toBeTruthy();
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('label[for="special-rule-description-0"]')
+        ?.textContent.trim(),
+    ).toBe('Description');
+
+    const factionId = page.factions.at(0).controls.id.value;
+    page.pickControl(factionId).setValue('Forced March');
+    page.assignSpecialRuleByName(page.factions.at(0).controls.specialRuleIds, factionId);
+    expect(page.factions.at(0).controls.specialRuleIds.value).toEqual([page.specialRules.at(0).controls.id.value]);
+  });
+
+  it('leaves the description blank for a custom faction special rule', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      addSpecialRule: () => void;
+      specialRules: {
+        at: (index: number) => {
+          controls: { name: { value: string }; text: { value: string } };
+        };
+      };
+    };
+
+    page.addSpecialRule();
+    fixture.detectChanges();
+    expect(page.specialRules.at(0).controls.name.value).toBe('');
+    expect(page.specialRules.at(0).controls.text.value).toBe('');
+    expect((fixture.nativeElement as HTMLElement).querySelector('#special-rule-description-0')).toBeTruthy();
   });
 
   it('defaults structure flags for catalog structures and new custom structures', async () => {
@@ -216,7 +298,7 @@ describe('CampaignSetupPage', () => {
     expect(factionNames(compiled)).toEqual(['', '']);
 
     const factionsToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
-      button.textContent.includes('Factions'),
+      button.textContent.trim().startsWith('Factions'),
     );
     factionsToggle?.click();
     fixture.detectChanges();
@@ -252,6 +334,13 @@ describe('CampaignSetupPage', () => {
     fixture.detectChanges();
     expect(compiled.querySelector<HTMLInputElement>('#terrain-name-0')?.value).toBe('Beach');
     expect(TERRAIN_PRESETS[0]?.terrainTypes[0]?.name).toBe('Beach');
+    expect(
+      (
+        fixture.componentInstance as unknown as {
+          terrainTypes: { at: (index: number) => { controls: { isWaterFeature: { value: boolean } } } };
+        }
+      ).terrainTypes.at(0).controls.isWaterFeature.value,
+    ).toBe(true);
 
     page.structurePresetId.setValue(STANDARD_STRUCTURES_PRESET_ID);
     page.applySelectedStructurePreset();
@@ -264,6 +353,18 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector<HTMLInputElement>('#name')?.value).toBe('The Hunt in Estalia');
     expect(factionNames(compiled)[0]).toBe('Beastmen Brayherds');
     expect(compiled.querySelector('#item-objective-name-0')).toBeNull();
+    expect(compiled.querySelector<HTMLInputElement>('#special-rule-name-0')?.value).toBe('Forced March');
+    expect(compiled.querySelector<HTMLTextAreaElement>('#special-rule-description-0')?.value).toContain(
+      'one extra adjacent territory',
+    );
+    expect(compiled.querySelector('#specialRulePreset')).toBeTruthy();
+    expect(
+      (
+        fixture.componentInstance as unknown as {
+          factions: { at: (index: number) => { controls: { specialRuleIds: { value: string[] } } } };
+        }
+      ).factions.at(0).controls.specialRuleIds.value.length,
+    ).toBeGreaterThan(0);
 
     clickNamedButton(compiled, 'Add item objective');
     await fixture.whenStable();
@@ -281,6 +382,7 @@ describe('CampaignSetupPage', () => {
     expect(itemPage.itemObjectiveTypes.at(0).controls.allowOnSpawn.value).toBe(false);
     expect(compiled.querySelector('#item-objective-points-0')).toBeTruthy();
     expect(compiled.querySelector('#item-objective-symbol-0')).toBeTruthy();
+    expect(compiled.querySelector('#item-objective-flavor-0')).toBeTruthy();
     expect(compiled.querySelector('#pointsPerBattleWon')).toBeTruthy();
     expect(compiled.querySelector('#pointsPerBattleDraw')).toBeTruthy();
     expect(compiled.querySelector('#mostTerritoriesCampaignPoints')).toBeTruthy();

@@ -307,6 +307,9 @@
                   @if (terrainSymbol(territory.terrainTypeId); as symbol) {
                     <app-map-symbol kind="terrain" [name]="symbol" />
                     {{ terrainName(territory.terrainTypeId) }}
+                    @if (isWaterFeature(territory.terrainTypeId)) {
+                      <span class="muted"> (water feature)</span>
+                    }
                   } @else {
                     None
                   }
@@ -403,9 +406,129 @@
                     (hidden)
                   }
                   — {{ itemLocation(item) }}
+                  @if (item.flavorText) {
+                    <p>{{ item.flavorText }}</p>
+                  }
+                  @if (item.stateKey) {
+                    <p class="muted">State: {{ item.stateKey }}</p>
+                  }
+                  @if (itemSpecialRules(item).length > 0) {
+                    <ul>
+                      @for (rule of itemSpecialRules(item); track rule.id) {
+                        <li>
+                          <strong>{{ rule.name }}</strong>
+                          @if (rule.text) {
+                            — {{ rule.text }}
+                          }
+                        </li>
+                      }
+                    </ul>
+                  }
+                  @if (canResolveItemChoice(item)) {
+                    <div class="choice-row">
+                      @for (choice of item.choices ?? []; track choice.id) {
+                        <button
+                          type="button"
+                          class="button-secondary"
+                          (click)="resolveItemObjectiveChoice(item.id, choice.id)"
+                        >
+                          {{ choice.name }}
+                        </button>
+                      }
+                    </div>
+                  }
                 </li>
               }
             </ul>
+          }
+        }
+      </div>
+    }
+
+    @if (
+      play() && (unclaimedPrivateCounts().length > 0 || visiblePrivateObjectives().length > 0 || campaign.canManage)
+    ) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('privateObjectives')"
+            (click)="toggleSection('privateObjectives')"
+          >
+            Private objectives
+          </button>
+        </h2>
+        @if (isOpen('privateObjectives')) {
+          @if (unclaimedPrivateCounts().length > 0) {
+            <p class="muted">Unclaimed private objectives (public counts only):</p>
+            <ul>
+              @for (row of unclaimedPrivateCounts(); track row.holderKind + row.holderId) {
+                <li>{{ row.holderName }}: {{ row.count }}</li>
+              }
+            </ul>
+          }
+          @if (visiblePrivateObjectives().length > 0) {
+            <ul class="stack">
+              @for (assignment of visiblePrivateObjectives(); track assignment.id) {
+                <li>
+                  <strong>{{ assignment.name || 'Private objective' }}</strong>
+                  <span class="muted"> · {{ assignment.status }}</span>
+                  @if (assignment.description) {
+                    <p>{{ assignment.description }}</p>
+                  }
+                  @if (assignment.canClaim) {
+                    <button type="button" class="button" (click)="claimPrivateObjective(assignment.id)">
+                      Claim for manager review
+                    </button>
+                  }
+                  @if (assignment.canModerate) {
+                    <div class="choice-row">
+                      <button type="button" class="button" (click)="moderatePrivateObjective(assignment.id, true)">
+                        Approve points
+                      </button>
+                      <button
+                        type="button"
+                        class="button-secondary"
+                        (click)="moderatePrivateObjective(assignment.id, false)"
+                      >
+                        Deny claim
+                      </button>
+                    </div>
+                  }
+                </li>
+              }
+            </ul>
+          }
+          @if (campaign.canManage) {
+            <div class="award-row">
+              <label>
+                Holder kind
+                <select [ngModel]="grantHolderKind()" (ngModelChange)="onGrantHolderKind($event)">
+                  <option value="Player">Player</option>
+                  <option value="Faction">Faction</option>
+                  <option value="AllyGroup">Ally group</option>
+                </select>
+              </label>
+              <label>
+                Holder
+                <select [ngModel]="grantHolderId()" (ngModelChange)="grantHolderId.set($event)">
+                  @for (holder of grantHolders(); track holder.id) {
+                    <option [value]="holder.id">{{ holder.name }}</option>
+                  }
+                </select>
+              </label>
+              <label>
+                Objective
+                <select [ngModel]="grantTypeId()" (ngModelChange)="grantTypeId.set($event)">
+                  <option value="">Random available</option>
+                  @for (type of grantablePrivateTypes(); track type.id) {
+                    <option [value]="type.id">{{ type.name }}</option>
+                  }
+                </select>
+              </label>
+              <button type="button" class="button" (click)="grantPrivateObjective()">Grant</button>
+            </div>
           }
         }
       </div>
@@ -939,6 +1062,18 @@
               @if (faction.subfactions.length > 0) {
                 <p class="muted">Subfactions: {{ faction.subfactions.join(', ') }}</p>
               }
+              @if (specialRulesFor(faction.specialRuleIds).length > 0) {
+                <ul>
+                  @for (rule of specialRulesFor(faction.specialRuleIds); track rule.id) {
+                    <li>
+                      <strong>{{ rule.name }}</strong>
+                      @if (rule.text) {
+                        — {{ rule.text }}
+                      }
+                    </li>
+                  }
+                </ul>
+              }
             </li>
           }
         </ul>
@@ -1031,6 +1166,9 @@
                   <th [attr.aria-sort]="sortDirection('public')">
                     <button type="button" (click)="sortBy('public')">Public Objectives</button>
                   </th>
+                  <th [attr.aria-sort]="sortDirection('private')">
+                    <button type="button" (click)="sortBy('private')">Private Objectives</button>
+                  </th>
                   <th [attr.aria-sort]="sortDirection('other')">
                     <button type="button" (click)="sortBy('other')">Other</button>
                   </th>
@@ -1071,6 +1209,7 @@
                     <td>{{ row.territoryAndStructurePoints }}</td>
                     <td>{{ row.battlesWonPoints }}</td>
                     <td>{{ row.publicObjectivePoints }}</td>
+                    <td>{{ row.privateObjectivePoints ?? 0 }}</td>
                     <td>{{ row.otherPoints }}</td>
                     <td>{{ row.total }}</td>
                   </tr>

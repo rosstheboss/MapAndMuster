@@ -43,7 +43,8 @@ public static class ItemObjectiveRules
                 possessorForceId: null,
                 isRevealed: !type.IsHiddenUntilFound,
                 territoryId,
-                type.IsHiddenUntilFound));
+                type.IsHiddenUntilFound,
+                type.FlavorText));
         }
 
         return spawned;
@@ -64,6 +65,12 @@ public static class ItemObjectiveRules
         var next = new List<CampaignItemObjective>(items.Count);
         foreach (var item in items.OrderBy(static entry => entry.Id))
         {
+            if (item.IsDestroyed)
+            {
+                next.Add(item);
+                continue;
+            }
+
             if (item.PossessorForceId is { } forceId
                 && originByForceId.TryGetValue(forceId, out var origin))
             {
@@ -103,7 +110,8 @@ public static class ItemObjectiveRules
         var next = new List<CampaignItemObjective>(items.Count);
         foreach (var item in items.OrderBy(static entry => entry.Id))
         {
-            if (item.PossessorForceId is not null
+            if (item.IsDestroyed
+                || item.PossessorForceId is not null
                 || item.TerritoryId is not { } territoryId
                 || !occupants.TryGetValue(territoryId, out var force))
             {
@@ -148,6 +156,12 @@ public static class ItemObjectiveRules
         var next = new List<CampaignItemObjective>(items.Count);
         foreach (var item in items.OrderBy(static entry => entry.Id))
         {
+            if (item.IsDestroyed)
+            {
+                next.Add(item);
+                continue;
+            }
+
             var heldByParticipant = item.PossessorForceId is { } holder && participants.Contains(holder);
             var onBattlefield = item.PossessorForceId is null && item.TerritoryId == battle.TerritoryId;
             if (!heldByParticipant && !onBattlefield)

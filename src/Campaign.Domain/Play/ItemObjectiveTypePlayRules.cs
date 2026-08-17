@@ -15,7 +15,8 @@ public sealed class ItemObjectiveTypePlayRules
         string name,
         bool isHiddenUntilFound,
         ItemObjectivePlacementKind placement,
-        bool allowOnSpawn)
+        bool allowOnSpawn,
+        string? flavorText = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Id = id;
@@ -23,6 +24,7 @@ public sealed class ItemObjectiveTypePlayRules
         IsHiddenUntilFound = isHiddenUntilFound;
         Placement = placement;
         AllowOnSpawn = allowOnSpawn;
+        FlavorText = flavorText;
     }
 
     /// <summary>Gets the catalog type identifier.</summary>
@@ -39,6 +41,9 @@ public sealed class ItemObjectiveTypePlayRules
 
     /// <summary>Gets whether the item may occupy a spawn territory.</summary>
     public bool AllowOnSpawn { get; }
+
+    /// <summary>Gets optional flavor text snapshotted onto spawned instances.</summary>
+    public string? FlavorText { get; }
 }
 
 /// <summary>

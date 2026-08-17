@@ -290,6 +290,15 @@ public sealed class CampaignPlayDetail
     /// <summary>Gets current top-five leaders for enabled ranking public objectives.</summary>
     public IReadOnlyList<Campaigns.PublicObjectiveLeaderboardDetail> PublicObjectiveLeaderboards { get; init; } = [];
 
+    /// <summary>Gets assigned private objectives visible to the viewer.</summary>
+    public IReadOnlyList<Campaigns.PrivateObjectiveAssignmentDetail> PrivateObjectives { get; init; } = [];
+
+    /// <summary>Gets public unclaimed private-objective counts.</summary>
+    public IReadOnlyList<Campaigns.PrivateObjectiveUnclaimedCountDetail> PrivateObjectiveUnclaimedCounts { get; init; } = [];
+
+    /// <summary>Gets reusable special rules.</summary>
+    public IReadOnlyList<Campaigns.SpecialRuleDetail> SpecialRules { get; init; } = [];
+
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon { get; init; }
 
@@ -353,6 +362,21 @@ public sealed class PlayItemObjectiveDetail
 
     /// <summary>Gets whether a custom logo image is stored.</summary>
     public bool HasImage { get; init; }
+
+    /// <summary>Gets flavor text when the viewer holds the item or is staff.</summary>
+    public string? FlavorText { get; init; }
+
+    /// <summary>Gets the optional state label after a choice.</summary>
+    public string? StateKey { get; init; }
+
+    /// <summary>Gets whether the item was destroyed.</summary>
+    public bool IsDestroyed { get; init; }
+
+    /// <summary>Gets the resolved choice, when one was already picked.</summary>
+    public Guid? ResolvedChoiceId { get; init; }
+
+    /// <summary>Gets holder choices when the viewer may resolve one.</summary>
+    public IReadOnlyList<Campaigns.ItemObjectiveChoiceDetail> Choices { get; init; } = [];
 }
 
 /// <summary>A remaining phase window.</summary>
@@ -583,4 +607,100 @@ public sealed class SetPublicObjectiveAwardCommand
 
     /// <summary>Gets whether to award (<see langword="true"/>) or revoke (<see langword="false"/>).</summary>
     public required bool Awarded { get; init; }
+}
+
+/// <summary>
+/// Command for a manager to grant a still-available private objective.
+/// </summary>
+public sealed class GrantPrivateObjectiveCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets Player, Faction, or AllyGroup.</summary>
+    public required string HolderKind { get; init; }
+
+    /// <summary>Gets the player, faction, or ally-group identifier.</summary>
+    public required Guid HolderId { get; init; }
+
+    /// <summary>Gets a specific catalog type, or null to grant a random still-available entry.</summary>
+    public Guid? TypeId { get; init; }
+}
+
+/// <summary>
+/// Command for a holder to claim a manual private objective.
+/// </summary>
+public sealed class ClaimPrivateObjectiveCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the assignment.</summary>
+    public required Guid AssignmentId { get; init; }
+}
+
+/// <summary>
+/// Command for a manager to approve or deny a private-objective claim.
+/// </summary>
+public sealed class ModeratePrivateObjectiveCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the assignment.</summary>
+    public required Guid AssignmentId { get; init; }
+
+    /// <summary>Gets whether to approve and reveal the objective.</summary>
+    public required bool Approved { get; init; }
+}
+
+/// <summary>
+/// Command for a holder to resolve a configured item-objective choice.
+/// </summary>
+public sealed class ResolveItemObjectiveChoiceCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the item instance.</summary>
+    public required Guid ItemId { get; init; }
+
+    /// <summary>Gets the configured choice.</summary>
+    public required Guid ChoiceId { get; init; }
 }

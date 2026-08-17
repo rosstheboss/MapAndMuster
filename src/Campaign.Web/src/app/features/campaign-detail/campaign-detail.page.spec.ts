@@ -101,6 +101,7 @@ const campaign = {
       territoryAndStructurePoints: 4,
       battlesWonPoints: 2,
       publicObjectivePoints: 1,
+      privateObjectivePoints: 0,
       otherPoints: 3,
       total: 10,
       heldItems: [{ typeId: 'crown', name: 'Crown', builtinSymbol: 'Crown', color: '#C45C26', hasImage: false }],
@@ -117,6 +118,7 @@ const campaign = {
       territoryAndStructurePoints: 1,
       battlesWonPoints: 0,
       publicObjectivePoints: 0,
+      privateObjectivePoints: 0,
       otherPoints: 0,
       total: 1,
       heldItems: [],
@@ -242,8 +244,8 @@ describe('CampaignDetailPage', () => {
     expect(compiled.querySelector('a[href^="/users/northplayer"]')?.textContent.trim()).toBe('northplayer');
     expect(compiled.textContent).toContain('Manager, Player');
     expect(compiled.textContent).toContain("Your force starts at that faction's spawn");
-    expect(compiled.textContent).toContain('Campaign points');
-    expect(compiled.textContent).toContain('Structures captured');
+    expect(compiled.textContent).toContain('Public Objectives');
+    expect(compiled.textContent).toContain('Private Objectives');
     expect(compiled.querySelector('.standings-table')?.textContent).toContain('northplayer');
     expect(compiled.querySelector('.standings-table')?.textContent).toContain('Ada');
     expect(compiled.textContent).toContain('Collapse All');
@@ -881,6 +883,83 @@ describe('CampaignDetailPage', () => {
     fixture.detectChanges();
     expect(compiled.textContent).toContain('Crown');
     expect(compiled.textContent).not.toContain('(hidden)');
+    http.verify();
+  });
+
+  it('shows unclaimed private-objective counts and lets a holder claim', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        privateObjectiveUnclaimedCounts: [
+          { holderKind: 'Player', holderId: 'user-1', holderName: 'northplayer', count: 1 },
+        ],
+        privateObjectives: [
+          {
+            id: 'po-1',
+            typeId: 'type-1',
+            holderKind: 'Player',
+            holderId: 'user-1',
+            status: 'Assigned',
+            scoringKind: 'Manual',
+            name: 'Hold the pass',
+            description: 'Control the highland pass.',
+            campaignPoints: 3,
+            canClaim: true,
+            canModerate: false,
+          },
+        ],
+      }),
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Private objectives');
+    expect(compiled.textContent).toContain('northplayer: 1');
+    expect(compiled.textContent).toContain('Hold the pass');
+    expect(compiled.textContent).toContain('Control the highland pass.');
+
+    const page = fixture.componentInstance as unknown as { claimPrivateObjective: (id: string) => Promise<void> };
+    const pending = page.claimPrivateObjective('po-1');
+    const request = http.expectOne(`/api/campaigns/${campaign.id}/play/private-objectives/claim`);
+    expect(request.request.body).toEqual({ revision: campaign.revision, assignmentId: 'po-1' });
+    request.flush(
+      playState({
+        privateObjectives: [
+          {
+            id: 'po-1',
+            typeId: 'type-1',
+            holderKind: 'Player',
+            holderId: 'user-1',
+            status: 'Claimed',
+            scoringKind: 'Manual',
+            name: 'Hold the pass',
+            canClaim: false,
+            canModerate: true,
+          },
+        ],
+      }),
+    );
+    await pending;
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Approve points');
     http.verify();
   });
 

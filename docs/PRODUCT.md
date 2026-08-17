@@ -31,7 +31,8 @@ Player and Game Master in the same campaign.
 - Raster-map upload with polygon territories, adjacency, terrain, structures, spawn locations,
   ownership, force/relic markers, and viewer-selected map highlight colors.
 - Campaign-point standings with sortable current-holdings totals, ranking public-objective
-  leaderboards, named public-objective awards, and relic logos.
+  leaderboards, named public-objective awards, revealed private-objective totals, unclaimed
+  private-objective counts, and relic logos.
 - Secret draft/commit/uncommit order entry with deadline and early-close behavior.
 - Simultaneous action reveal and deterministic, explainable resolution.
 - Battle creation, mission assignment, dual result submissions, disputes, retreats, and scoring.

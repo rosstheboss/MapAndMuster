@@ -5,7 +5,7 @@ import type { CampaignPointStanding } from './campaign.models';
 export type MapHighlightMode = 'configured' | 'faction' | 'alliance';
 
 export type StandingsSortColumn =
-  'displayName' | 'faction' | 'allyGroup' | 'territory' | 'battles' | 'public' | 'other' | 'total';
+  'displayName' | 'faction' | 'allyGroup' | 'territory' | 'battles' | 'public' | 'private' | 'other' | 'total';
 
 export interface StandingsSort {
   column: StandingsSortColumn;
@@ -94,7 +94,12 @@ export function nextStandingsSort(current: StandingsSort, column: StandingsSortC
   }
 
   const numeric =
-    column === 'territory' || column === 'battles' || column === 'public' || column === 'other' || column === 'total';
+    column === 'territory' ||
+    column === 'battles' ||
+    column === 'public' ||
+    column === 'private' ||
+    column === 'other' ||
+    column === 'total';
   return { column, direction: numeric ? 'desc' : 'asc' };
 }
 
@@ -118,6 +123,8 @@ function compareStandingValue(
       return left.battlesWonPoints - right.battlesWonPoints;
     case 'public':
       return left.publicObjectivePoints - right.publicObjectivePoints;
+    case 'private':
+      return (left.privateObjectivePoints ?? 0) - (right.privateObjectivePoints ?? 0);
     case 'other':
       return left.otherPoints - right.otherPoints;
     case 'total':
@@ -142,6 +149,7 @@ function isStandingsSort(value: unknown): value is StandingsSort {
     'territory',
     'battles',
     'public',
+    'private',
     'other',
     'total',
   ];

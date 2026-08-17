@@ -15,6 +15,10 @@ import type {
   SaveMapGraphPayload,
   SaveOrderDraftPayload,
   SetPublicObjectiveAwardPayload,
+  GrantPrivateObjectivePayload,
+  ClaimPrivateObjectivePayload,
+  ModeratePrivateObjectivePayload,
+  ResolveItemObjectiveChoicePayload,
   SubmitBattleResultPayload,
   SubmitRetreatPayload,
 } from './campaign.models';
@@ -339,6 +343,52 @@ export class CampaignService {
     return firstValueFrom(
       this.http.post<CampaignPlayDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/play/public-objectives/awards`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async grantPrivateObjective(campaignId: string, payload: GrantPrivateObjectivePayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/private-objectives/grant`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async claimPrivateObjective(campaignId: string, payload: ClaimPrivateObjectivePayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/private-objectives/claim`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async moderatePrivateObjective(
+    campaignId: string,
+    payload: ModeratePrivateObjectivePayload,
+  ): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/private-objectives/moderate`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async resolveItemObjectiveChoice(
+    campaignId: string,
+    payload: ResolveItemObjectiveChoicePayload,
+  ): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/item-objectives/choices`,
         payload,
         { withCredentials: true },
       ),

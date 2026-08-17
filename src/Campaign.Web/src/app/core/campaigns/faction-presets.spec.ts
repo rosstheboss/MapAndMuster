@@ -46,6 +46,11 @@ describe('faction presets', () => {
       'Minotaur Blood Herd',
       'Wild Herd',
     ]);
+    expect(factions!.find((faction) => faction.name === 'Beastmen Brayherds')?.specialRuleNames).toEqual([
+      'Scattered Arrival',
+      'Harsh Reaving',
+      'Living Ground',
+    ]);
     expect(factions!.find((faction) => faction.name === 'Warriors of Chaos')?.subfactions).toEqual([
       'Heralds of Darkness',
       'Hordes of Chaos',

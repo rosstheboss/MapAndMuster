@@ -26,7 +26,9 @@ public sealed class CampaignPlayState
         IReadOnlyList<ActionWindowSnapshot>? snapshots = null,
         Guid? debugActorUserId = null,
         DateTimeOffset? debugStartedUtc = null,
-        IReadOnlyList<PublicObjectiveAward>? publicObjectiveAwards = null)
+        IReadOnlyList<PublicObjectiveAward>? publicObjectiveAwards = null,
+        IReadOnlyList<PrivateObjectiveAssignment>? privateObjectives = null,
+        IReadOnlyList<StructureDestructionFact>? structureDestructions = null)
     {
         ArgumentNullException.ThrowIfNull(windows);
         ArgumentNullException.ThrowIfNull(forces);
@@ -56,6 +58,8 @@ public sealed class CampaignPlayState
         DebugActorUserId = debugActorUserId;
         DebugStartedUtc = debugStartedUtc;
         PublicObjectiveAwards = publicObjectiveAwards ?? [];
+        PrivateObjectives = privateObjectives ?? [];
+        StructureDestructions = structureDestructions ?? [];
     }
 
     /// <summary>Gets an empty play state.</summary>
@@ -109,6 +113,12 @@ public sealed class CampaignPlayState
     /// <summary>Gets public-objective award facts. Original awards are never overwritten.</summary>
     public IReadOnlyList<PublicObjectiveAward> PublicObjectiveAwards { get; }
 
+    /// <summary>Gets assigned private objectives. Unrevealed details are omitted from unauthorized reads.</summary>
+    public IReadOnlyList<PrivateObjectiveAssignment> PrivateObjectives { get; }
+
+    /// <summary>Gets append-only facts for destroyed structures.</summary>
+    public IReadOnlyList<StructureDestructionFact> StructureDestructions { get; }
+
     /// <summary>
     /// Returns a copy with replaced collections.
     /// </summary>
@@ -129,7 +139,9 @@ public sealed class CampaignPlayState
         Guid? debugActorUserId = null,
         DateTimeOffset? debugStartedUtc = null,
         bool clearDebug = false,
-        IReadOnlyList<PublicObjectiveAward>? publicObjectiveAwards = null)
+        IReadOnlyList<PublicObjectiveAward>? publicObjectiveAwards = null,
+        IReadOnlyList<PrivateObjectiveAssignment>? privateObjectives = null,
+        IReadOnlyList<StructureDestructionFact>? structureDestructions = null)
     {
         return new CampaignPlayState(
             windows ?? Windows,
@@ -147,7 +159,9 @@ public sealed class CampaignPlayState
             snapshots ?? Snapshots,
             clearDebug ? null : debugActorUserId ?? DebugActorUserId,
             clearDebug ? null : debugStartedUtc ?? DebugStartedUtc,
-            publicObjectiveAwards ?? PublicObjectiveAwards);
+            publicObjectiveAwards ?? PublicObjectiveAwards,
+            privateObjectives ?? PrivateObjectives,
+            structureDestructions ?? StructureDestructions);
     }
 
     /// <summary>

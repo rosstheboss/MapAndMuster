@@ -115,7 +115,10 @@ public sealed class CampaignStore : ICampaignStore
             campaign.ItemObjectiveTypes,
             campaign.PublicObjectiveTypes,
             campaign.BattleScoring,
-            campaign.RankingObjectivePoints);
+            campaign.RankingObjectivePoints,
+            campaign.SpecialRules,
+            campaign.PrivateObjectiveTypes,
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds));
         var playJson = PlayStateJson.Serialize(campaign.PlayState);
         var affected = await _dbContext.Campaigns
             .Where(item => item.Id == campaign.Id && item.Revision == expectedRevision)
@@ -409,7 +412,10 @@ public sealed class CampaignStore : ICampaignStore
                 campaign.ItemObjectiveTypes,
                 campaign.PublicObjectiveTypes,
                 campaign.BattleScoring,
-                campaign.RankingObjectivePoints),
+                campaign.RankingObjectivePoints,
+                campaign.SpecialRules,
+                campaign.PrivateObjectiveTypes,
+                campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds)),
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
@@ -577,6 +583,8 @@ public sealed class CampaignStore : ICampaignStore
             StructureTypes = catalogs.StructureTypes,
             ItemObjectiveTypes = catalogs.ItemObjectiveTypes,
             PublicObjectiveTypes = catalogs.PublicObjectiveTypes,
+            SpecialRules = catalogs.SpecialRules,
+            PrivateObjectiveTypes = catalogs.PrivateObjectiveTypes,
             BattleScoring = catalogs.BattleScoring,
             RankingObjectivePoints = catalogs.RankingObjectivePoints,
             Memberships =
@@ -619,6 +627,7 @@ public sealed class CampaignStore : ICampaignStore
                         ],
                         AllyGroupName = faction.AllyGroup?.Name,
                         FlagImageStorageKey = faction.FlagImageStorageKey,
+                        SpecialRuleIds = catalogs.FactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
                     }),
             ],
             Links =

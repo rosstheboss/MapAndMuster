@@ -4,6 +4,7 @@ import {
   itemObjectivesFromPreset,
   type ItemObjectivePresetItem,
 } from './item-objective-presets';
+import { specialRulesFromOldWorldPreset, type SpecialRulePreset } from './special-rule-presets';
 import { STANDARD_STRUCTURES_PRESET_ID, structureTypesFromPreset } from './structure-presets';
 import { STANDARD_TERRAIN_PRESET_ID, terrainTypesFromPreset } from './terrain-presets';
 import type { DefaultStructureType } from './catalog-defaults';
@@ -16,6 +17,7 @@ export interface CampaignPresetCopy {
   terrainTypes: DefaultTerrainType[];
   structureTypes: DefaultStructureType[];
   itemObjectives: ItemObjectivePresetItem[];
+  specialRules: SpecialRulePreset[];
 }
 
 export interface CampaignPreset {
@@ -60,5 +62,6 @@ export function campaignFromPreset(presetId: string): CampaignPresetCopy | null 
     terrainTypes,
     structureTypes,
     itemObjectives,
+    specialRules: specialRulesFromOldWorldPreset(),
   };
 }

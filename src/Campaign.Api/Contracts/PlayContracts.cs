@@ -106,6 +106,15 @@ public sealed class CampaignPlayResponse
     /// <summary>Gets current top-five leaders for enabled ranking public objectives.</summary>
     public IReadOnlyList<PublicObjectiveLeaderboardResponse> PublicObjectiveLeaderboards { get; init; } = [];
 
+    /// <summary>Gets assigned private objectives visible to the viewer.</summary>
+    public IReadOnlyList<PrivateObjectiveAssignmentResponse> PrivateObjectives { get; init; } = [];
+
+    /// <summary>Gets public unclaimed private-objective counts.</summary>
+    public IReadOnlyList<PrivateObjectiveUnclaimedCountResponse> PrivateObjectiveUnclaimedCounts { get; init; } = [];
+
+    /// <summary>Gets reusable special rules.</summary>
+    public IReadOnlyList<SpecialRuleResponse> SpecialRules { get; init; } = [];
+
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon { get; init; }
 
@@ -222,6 +231,21 @@ public sealed class PlayItemObjectiveResponse
 
     /// <summary>Gets whether a custom logo image is stored.</summary>
     public bool HasImage { get; init; }
+
+    /// <summary>Gets flavor text when the viewer holds the item or is staff.</summary>
+    public string? FlavorText { get; init; }
+
+    /// <summary>Gets the optional state label after a choice.</summary>
+    public string? StateKey { get; init; }
+
+    /// <summary>Gets whether the item was destroyed.</summary>
+    public bool IsDestroyed { get; init; }
+
+    /// <summary>Gets the resolved choice, when one was already picked.</summary>
+    public Guid? ResolvedChoiceId { get; init; }
+
+    /// <summary>Gets holder choices when the viewer may resolve one.</summary>
+    public IReadOnlyList<ItemObjectiveChoiceResponse> Choices { get; init; } = [];
 }
 
 /// <summary>The viewer's draft.</summary>
@@ -371,6 +395,58 @@ public sealed class SetPublicObjectiveAwardRequest
 
     /// <summary>Gets whether to award (<see langword="true"/>) or revoke (<see langword="false"/>).</summary>
     public required bool Awarded { get; init; }
+}
+
+/// <summary>Request for a manager to grant a private objective.</summary>
+public sealed class GrantPrivateObjectiveRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets Player, Faction, or AllyGroup.</summary>
+    public required string HolderKind { get; init; }
+
+    /// <summary>Gets the player, faction, or ally-group identifier.</summary>
+    public required Guid HolderId { get; init; }
+
+    /// <summary>Gets a specific catalog type, or omit to grant a random still-available entry.</summary>
+    public Guid? TypeId { get; init; }
+}
+
+/// <summary>Request for a holder to claim a private objective.</summary>
+public sealed class ClaimPrivateObjectiveRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the assignment.</summary>
+    public required Guid AssignmentId { get; init; }
+}
+
+/// <summary>Request for a manager to approve or deny a private-objective claim.</summary>
+public sealed class ModeratePrivateObjectiveRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the assignment.</summary>
+    public required Guid AssignmentId { get; init; }
+
+    /// <summary>Gets whether to approve and reveal the objective.</summary>
+    public required bool Approved { get; init; }
+}
+
+/// <summary>Request for a holder to resolve an item-objective choice.</summary>
+public sealed class ResolveItemObjectiveChoiceRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the item instance.</summary>
+    public required Guid ItemId { get; init; }
+
+    /// <summary>Gets the configured choice.</summary>
+    public required Guid ChoiceId { get; init; }
 }
 
 /// <summary>Request to submit or override a battle result.</summary>
@@ -578,6 +654,7 @@ public static class PlayResponses
                     Color = faction.Color,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     HasFlagImage = faction.HasFlagImage,
+                    SpecialRuleIds = faction.SpecialRuleIds,
                 }),
             ],
             StructureTypes =
@@ -619,11 +696,71 @@ public static class PlayResponses
                     BuiltinSymbol = item.BuiltinSymbol,
                     Color = item.Color,
                     HasImage = item.HasImage,
+                    FlavorText = item.FlavorText,
+                    StateKey = item.StateKey,
+                    IsDestroyed = item.IsDestroyed,
+                    ResolvedChoiceId = item.ResolvedChoiceId,
+                    Choices =
+                    [
+                        .. item.Choices.Select(static choice => new ItemObjectiveChoiceResponse
+                        {
+                            Id = choice.Id,
+                            Name = choice.Name,
+                            Results =
+                            [
+                                .. choice.Results.Select(static result => new ItemObjectiveChoiceResultResponse
+                                {
+                                    Id = result.Id,
+                                    FlavorText = result.FlavorText,
+                                    NewStateKey = result.NewStateKey,
+                                    DestroyItem = result.DestroyItem,
+                                    ReplacementItemTypeId = result.ReplacementItemTypeId,
+                                    GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+                                }),
+                            ],
+                        }),
+                    ],
                 }),
             ],
             BrokenAllyFactionIds = detail.BrokenAllyFactionIds,
             Standings = [.. detail.Standings.Select(CampaignResponses.FromStanding)],
             PublicObjectiveLeaderboards = [.. detail.PublicObjectiveLeaderboards.Select(CampaignResponses.FromLeaderboard)],
+            PrivateObjectives =
+            [
+                .. detail.PrivateObjectives.Select(static item => new PrivateObjectiveAssignmentResponse
+                {
+                    Id = item.Id,
+                    TypeId = item.TypeId,
+                    HolderKind = item.HolderKind,
+                    HolderId = item.HolderId,
+                    Status = item.Status,
+                    ScoringKind = item.ScoringKind,
+                    Name = item.Name,
+                    Description = item.Description,
+                    CampaignPoints = item.CampaignPoints,
+                    CanClaim = item.CanClaim,
+                    CanModerate = item.CanModerate,
+                }),
+            ],
+            PrivateObjectiveUnclaimedCounts =
+            [
+                .. detail.PrivateObjectiveUnclaimedCounts.Select(static item => new PrivateObjectiveUnclaimedCountResponse
+                {
+                    HolderKind = item.HolderKind,
+                    HolderId = item.HolderId,
+                    HolderName = item.HolderName,
+                    Count = item.Count,
+                }),
+            ],
+            SpecialRules =
+            [
+                .. detail.SpecialRules.Select(static rule => new SpecialRuleResponse
+                {
+                    Id = rule.Id,
+                    Name = rule.Name,
+                    Text = rule.Text,
+                }),
+            ],
             PointsPerBattleWon = detail.PointsPerBattleWon,
             PointsPerBattleDraw = detail.PointsPerBattleDraw,
             UseDifferentialBattleScoring = detail.UseDifferentialBattleScoring,

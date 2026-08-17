@@ -169,6 +169,12 @@ public enum PlayLogKind
 
     /// <summary>A manager revoked a public objective from a player.</summary>
     PublicObjectiveRevoked = 25,
+
+    /// <summary>A private objective was revealed after approval, automatic completion, or campaign end.</summary>
+    PrivateObjectiveRevealed = 26,
+
+    /// <summary>A held item objective was destroyed by a resolved choice.</summary>
+    ItemObjectiveDestroyed = 27,
 }
 
 /// <summary>

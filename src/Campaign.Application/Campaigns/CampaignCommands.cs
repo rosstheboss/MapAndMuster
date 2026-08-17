@@ -93,6 +93,12 @@ public sealed class CreateCampaignCommand
 
     /// <summary>Gets campaign points for most battle wins.</summary>
     public int? MostBattlesWonCampaignPoints { get; init; }
+
+    /// <summary>Gets reusable special rules. Omitted or empty means none.</summary>
+    public IReadOnlyList<SpecialRuleInput>? SpecialRules { get; init; }
+
+    /// <summary>Gets private campaign objectives. Omitted or empty means none.</summary>
+    public IReadOnlyList<PrivateObjectiveTypeInput>? PrivateObjectiveTypes { get; init; }
 }
 
 /// <summary>
@@ -192,6 +198,12 @@ public sealed class UpdateCampaignCommand
 
     /// <summary>Gets campaign points for most battle wins.</summary>
     public int? MostBattlesWonCampaignPoints { get; init; }
+
+    /// <summary>Gets reusable special rules. Omitted or empty means none.</summary>
+    public IReadOnlyList<SpecialRuleInput>? SpecialRules { get; init; }
+
+    /// <summary>Gets private campaign objectives. Omitted or empty means none.</summary>
+    public IReadOnlyList<PrivateObjectiveTypeInput>? PrivateObjectiveTypes { get; init; }
 }
 
 /// <summary>

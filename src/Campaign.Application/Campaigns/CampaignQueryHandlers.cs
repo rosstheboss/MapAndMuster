@@ -148,7 +148,8 @@ public sealed class GetCampaignHandler
             CampaignChatContext.Channels(campaign, userId, members),
             inspect,
             participants,
-            staffView));
+            staffView,
+            isAdministrator));
     }
 }
 
@@ -408,6 +409,8 @@ internal static class CampaignMapClone
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            SpecialRules = existing.SpecialRules,
+            PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = existing.PlayState,
@@ -455,6 +458,8 @@ internal static class CampaignMapClone
             StructureTypes = structureTypes,
             ItemObjectiveTypes = itemObjectiveTypes ?? existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            SpecialRules = existing.SpecialRules,
+            PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = existing.PlayState,
@@ -500,6 +505,8 @@ internal static class CampaignMapClone
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            SpecialRules = existing.SpecialRules,
+            PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = existing.PlayState,
@@ -545,6 +552,8 @@ internal static class CampaignMapClone
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            SpecialRules = existing.SpecialRules,
+            PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = existing.PlayState,

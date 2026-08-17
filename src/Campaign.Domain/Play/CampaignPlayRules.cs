@@ -21,7 +21,10 @@ public static class CampaignPlayRules
         DateTimeOffset utcNow,
         IReadOnlyList<ItemObjectiveTypePlayRules>? itemObjectiveTypes = null,
         IReadOnlyList<ItemObjectiveMapPlacement>? itemPlacements = null,
-        Func<int, int>? pickIndex = null)
+        Func<int, int>? pickIndex = null,
+        IReadOnlyList<PrivateObjectiveTypePlayRules>? privateObjectiveTypes = null,
+        IReadOnlyList<Guid>? factionIds = null,
+        IReadOnlyList<Guid>? allyGroupIds = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -62,6 +65,13 @@ public static class CampaignPlayRules
             seededMap,
             itemPlacements ?? [],
             pickIndex ?? (static count => 0));
+        var privateObjectives = PrivateObjectiveRules.SeedInitial(
+            privateObjectiveTypes ?? [],
+            [.. players.Where(static item => item.FactionId.HasValue).Select(static item => item.UserId)],
+            factionIds ?? [],
+            allyGroupIds ?? [],
+            utcNow,
+            pickIndex ?? (static count => 0));
 
         var started = new CampaignPlayState(
             windows,
@@ -75,7 +85,8 @@ public static class CampaignPlayRules
             [],
             CaptureStructures(seededMap),
             items,
-            state.Log)
+            state.Log,
+            privateObjectives: privateObjectives)
             .AppendLog(new PlayLogEntry(
                 Guid.NewGuid(),
                 utcNow,
@@ -957,6 +968,12 @@ public static class CampaignPlayRules
         var snapshot = CaptureWindowSnapshot(state, map, window.Id);
         var withOrders = state.With(submissions: submissions);
         var (resolved, resolvedMap) = ActionResolution.Resolve(withOrders, map, window, factionAllyGroups, closeAt);
+        var destructions = StructureDestructionRules.Detect(map, resolvedMap, resolved.Forces, closeAt);
+        if (destructions.Count > 0)
+        {
+            resolved = resolved.With(structureDestructions: [.. resolved.StructureDestructions, .. destructions]);
+        }
+
         var snapshots = resolved.Snapshots.Where(item => item.WindowId != window.Id).Append(snapshot).ToArray();
         return FinishWindow(resolved.With(snapshots: snapshots), resolvedMap, window, closeAt, due);
     }

@@ -311,6 +311,425 @@
           <button
             type="button"
             class="section-toggle"
+            [attr.aria-expanded]="isOpen('specialRules')"
+            (click)="toggleSection('specialRules')"
+          >
+            Faction special rules (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('specialRules')">
+          <p class="muted">
+            Named campaign rules that factions and item objectives can share. Choosing a pre-configured rule fills the
+            description from the catalog. For a custom rule, write the description yourself. Descriptions are
+            display-only and do not change resolution. Search a pre-configured rule or type a custom name. Up to 80
+            rules.
+          </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="specialRulePreset">Pre-configured faction special rule</label>
+              <app-filterable-combobox
+                inputId="specialRulePreset"
+                [formControl]="specialRulePresetPick"
+                [options]="availableSpecialRulePresetNames()"
+                placeholder="Search or type a name"
+              />
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="addPickedSpecialRule()"
+              [disabled]="specialRules.length >= 80"
+            >
+              Add
+            </button>
+          </div>
+          <div formArrayName="specialRules" class="stack">
+            @for (rule of specialRules.controls; track rule; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [attr.aria-expanded]="isOpen('special-rule-' + index)"
+                  (click)="toggleSection('special-rule-' + index)"
+                >
+                  {{ itemLabel(rule.controls.name.value, 'Faction special rule ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('special-rule-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'special-rule-name-' + index">Rule {{ index + 1 }} name</label>
+                      <app-filterable-combobox
+                        [inputId]="'special-rule-name-' + index"
+                        formControlName="name"
+                        [options]="specialRuleNameOptions(index)"
+                        placeholder="Search or type a name"
+                      />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removeSpecialRule(index)">Remove</button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'special-rule-description-' + index">Description</label>
+                    <textarea
+                      [id]="'special-rule-description-' + index"
+                      formControlName="text"
+                      maxlength="2000"
+                      rows="5"
+                    ></textarea>
+                    <p class="muted">
+                      Pre-configured rules fill this from the catalog. Edit it if you need to. For a custom rule, write
+                      the description yourself.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addSpecialRule()"
+            [disabled]="specialRules.length >= 80"
+          >
+            Add custom faction special rule
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('publicObjectives')"
+            (click)="toggleSection('publicObjectives')"
+          >
+            Public objectives (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('publicObjectives')">
+          <p class="muted">
+            Named public objectives that a manager can award during play. Set campaign points to 0 to ignore an
+            objective. Ranking objectives below are calculated automatically. Ties are friendly: every player currently
+            tied for first receives the points.
+          </p>
+          <div class="nested-card stack">
+            <h3>Ranking public objectives</h3>
+            <p class="muted">Set any of these to 0 to omit them from scoring and the campaign-page leaderboards.</p>
+            <div class="nested-row">
+              <div class="field">
+                <label for="mostTerritoriesCampaignPoints">Most territories controlled</label>
+                <input
+                  id="mostTerritoriesCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="mostTerritoriesCampaignPoints"
+                />
+              </div>
+              <div class="field">
+                <label for="longestTerritoryChainCampaignPoints">Longest unbroken territory chain</label>
+                <input
+                  id="longestTerritoryChainCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="longestTerritoryChainCampaignPoints"
+                />
+              </div>
+              <div class="field">
+                <label for="mostBattlesWonCampaignPoints">Most battles won</label>
+                <input
+                  id="mostBattlesWonCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="mostBattlesWonCampaignPoints"
+                />
+              </div>
+            </div>
+            <p class="muted">
+              Most battles won ranks by wins, then draws. Players who remain tied after that each receive the points.
+            </p>
+          </div>
+          <div class="nested-card stack">
+            <h3>Battle campaign points</h3>
+            <label class="choice-row">
+              <input type="checkbox" formControlName="useDifferentialBattleScoring" />
+              Award campaign points from the score difference
+            </label>
+            <div class="nested-row">
+              <div class="field">
+                <label for="pointsPerBattleWon">Campaign points per battle won</label>
+                <input id="pointsPerBattleWon" type="number" min="0" max="999" formControlName="pointsPerBattleWon" />
+              </div>
+              <div class="field">
+                <label for="pointsPerBattleDraw">Campaign points per battle draw</label>
+                <input id="pointsPerBattleDraw" type="number" min="0" max="999" formControlName="pointsPerBattleDraw" />
+              </div>
+            </div>
+            <p class="muted">
+              Win points apply when differential scoring is off. Draw points are awarded to each participant of a draw
+              in either mode. Wins and draws are still recorded for ranking.
+            </p>
+            @if (useDifferential()) {
+              <div class="nested-row">
+                <div class="field">
+                  <label for="differentialMultiplier">Differential multiplier</label>
+                  <input
+                    id="differentialMultiplier"
+                    type="number"
+                    min="0.01"
+                    max="999"
+                    step="0.01"
+                    formControlName="differentialMultiplier"
+                  />
+                </div>
+                <div class="field">
+                  <label for="differentialMinimum">Minimum campaign points</label>
+                  <input
+                    id="differentialMinimum"
+                    type="number"
+                    min="-999"
+                    max="999"
+                    formControlName="differentialMinimum"
+                  />
+                </div>
+                <div class="field">
+                  <label for="differentialMaximum">Maximum campaign points</label>
+                  <input
+                    id="differentialMaximum"
+                    type="number"
+                    min="-999"
+                    max="999"
+                    formControlName="differentialMaximum"
+                  />
+                </div>
+              </div>
+              <label class="choice-row">
+                <input type="checkbox" formControlName="allowNegativeDifferential" />
+                Award negative campaign points to the loser
+              </label>
+              <p class="muted">
+                Winner campaign points are the clamped score difference times the multiplier. The default range is 0 to
+                10. Enter already-converted battle points or raw victory points; this app does not apply a proprietary
+                conversion chart.
+              </p>
+            }
+          </div>
+          <div formArrayName="publicObjectiveTypes" class="stack">
+            @for (item of publicObjectiveTypes.controls; track item; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [attr.aria-expanded]="isOpen('public-objective-' + index)"
+                  (click)="toggleSection('public-objective-' + index)"
+                >
+                  {{ itemLabel(item.controls.name.value, 'Public objective ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('public-objective-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'public-objective-name-' + index">Objective {{ index + 1 }} name</label>
+                      <input [id]="'public-objective-name-' + index" formControlName="name" maxlength="60" />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'public-objective-points-' + index">Campaign points</label>
+                      <input
+                        [id]="'public-objective-points-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="campaignPoints"
+                      />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removePublicObjective(index)">
+                      Remove
+                    </button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'public-objective-description-' + index">Description (optional)</label>
+                    <input
+                      [id]="'public-objective-description-' + index"
+                      formControlName="description"
+                      maxlength="240"
+                    />
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addPublicObjective()"
+            [disabled]="publicObjectiveTypes.length >= 50"
+          >
+            Add public objective
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('privateObjectives')"
+            (click)="toggleSection('privateObjectives')"
+          >
+            Private objectives (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('privateObjectives')">
+          <p class="muted">
+            Catalog of private objectives for players, factions, and ally groups. Manual objectives stay secret until a
+            manager approves a claim or the campaign closes. Automatic objectives score from map facts and become public
+            when completed. At start each player, faction, and ally group receives one available objective.
+          </p>
+          <div formArrayName="privateObjectiveTypes" class="stack">
+            @for (item of privateObjectiveTypes.controls; track item; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [attr.aria-expanded]="isOpen('private-objective-' + index)"
+                  (click)="toggleSection('private-objective-' + index)"
+                >
+                  {{ itemLabel(item.controls.name.value, 'Private objective ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('private-objective-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'private-objective-name-' + index">Objective {{ index + 1 }} name</label>
+                      <input [id]="'private-objective-name-' + index" formControlName="name" maxlength="60" />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'private-objective-points-' + index">Campaign points</label>
+                      <input
+                        [id]="'private-objective-points-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="campaignPoints"
+                      />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removePrivateObjective(index)">
+                      Remove
+                    </button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'private-objective-description-' + index">Secret description</label>
+                    <textarea
+                      [id]="'private-objective-description-' + index"
+                      formControlName="description"
+                      maxlength="2000"
+                      rows="3"
+                    ></textarea>
+                  </div>
+                  <fieldset class="field">
+                    <legend>May be assigned to</legend>
+                    <label class="choice-row">
+                      <input type="checkbox" formControlName="allowPlayer" />
+                      Players
+                    </label>
+                    <label class="choice-row">
+                      <input type="checkbox" formControlName="allowFaction" />
+                      Factions
+                    </label>
+                    <label class="choice-row">
+                      <input type="checkbox" formControlName="allowAllyGroup" />
+                      Ally groups
+                    </label>
+                  </fieldset>
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'private-objective-scoring-' + index">Scoring</label>
+                      <select [id]="'private-objective-scoring-' + index" formControlName="scoringKind">
+                        <option value="Manual">Manual (claim and manager approval)</option>
+                        <option value="Automatic">Automatic (map facts)</option>
+                      </select>
+                    </div>
+                    @if (item.controls.scoringKind.value === 'Automatic') {
+                      <div class="field grow">
+                        <label [attr.for]="'private-objective-automatic-' + index">Automatic criterion</label>
+                        <select [id]="'private-objective-automatic-' + index" formControlName="automaticKind">
+                          <option value="ControlTerritoryCount">Control a number of territories</option>
+                          <option value="ControlNamedTerritories">Control named territories</option>
+                          <option value="ControlStructureType">Control a structure type</option>
+                          <option value="PillageStructureType">Pillage a structure type</option>
+                          <option value="DestroyStructureType">Destroy a structure type</option>
+                        </select>
+                      </div>
+                    }
+                  </div>
+                  @if (item.controls.scoringKind.value === 'Automatic') {
+                    <div class="nested-row">
+                      <div class="field">
+                        <label [attr.for]="'private-objective-count-' + index">Required count</label>
+                        <input
+                          [id]="'private-objective-count-' + index"
+                          type="number"
+                          min="1"
+                          max="999"
+                          formControlName="requiredCount"
+                        />
+                      </div>
+                      @if (
+                        item.controls.automaticKind.value === 'ControlStructureType' ||
+                        item.controls.automaticKind.value === 'PillageStructureType' ||
+                        item.controls.automaticKind.value === 'DestroyStructureType'
+                      ) {
+                        <div class="field grow">
+                          <label [attr.for]="'private-objective-structure-' + index">Structure type</label>
+                          <select [id]="'private-objective-structure-' + index" formControlName="structureTypeId">
+                            <option value="">Select a structure type</option>
+                            @for (structure of structureTypes.controls; track structure.controls.id.value) {
+                              @if (structure.controls.name.value.trim()) {
+                                <option [value]="structure.controls.id.value">
+                                  {{ structure.controls.name.value }}
+                                </option>
+                              }
+                            }
+                          </select>
+                        </div>
+                      }
+                    </div>
+                    @if (item.controls.automaticKind.value === 'ControlNamedTerritories') {
+                      <div class="field">
+                        <label [attr.for]="'private-objective-territories-' + index">Territory identifiers</label>
+                        <textarea
+                          [id]="'private-objective-territories-' + index"
+                          formControlName="territoryIds"
+                          rows="2"
+                        ></textarea>
+                        <p class="muted">
+                          Comma-separated territory identifiers from the saved map. Required count is how many of those
+                          territories the holder must control.
+                        </p>
+                      </div>
+                    }
+                  }
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addPrivateObjective()"
+            [disabled]="privateObjectiveTypes.length >= 50"
+          >
+            Add private objective
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
             [attr.aria-expanded]="isOpen('allies')"
             (click)="toggleSection('allies')"
           >
@@ -472,6 +891,42 @@
                     </div>
                   </div>
                   <fieldset class="field">
+                    <legend>Faction special rules</legend>
+                    <p class="muted">
+                      Search the campaign list or a pre-configured rule. Multiple factions can share the same rule.
+                    </p>
+                    @for (rule of assignedSpecialRules(faction.controls.specialRuleIds); track rule.id) {
+                      <div class="nested-row">
+                        <p class="grow">{{ rule.name }}</p>
+                        <button
+                          type="button"
+                          class="button-secondary"
+                          (click)="removeAssignedSpecialRule(faction.controls.specialRuleIds, rule.id)"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    }
+                    <div class="nested-row">
+                      <div class="field grow">
+                        <label [attr.for]="'faction-special-rule-' + index">Add faction special rule</label>
+                        <app-filterable-combobox
+                          [inputId]="'faction-special-rule-' + index"
+                          [formControl]="pickControl(faction.controls.id.value)"
+                          [options]="assignableSpecialRuleNames(faction.controls.specialRuleIds)"
+                          placeholder="Search or type a name"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        class="button-secondary"
+                        (click)="assignSpecialRuleByName(faction.controls.specialRuleIds, faction.controls.id.value)"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </fieldset>
+                  <fieldset class="field">
                     <legend>Flag</legend>
                     <div class="choice-row">
                       <label>
@@ -598,6 +1053,10 @@
                       <button type="button" class="button-secondary" (click)="removeTerrainType(index)">Remove</button>
                     }
                   </div>
+                  <label class="choice-row">
+                    <input type="checkbox" formControlName="isWaterFeature" />
+                    Water feature (reminder for faction special rules)
+                  </label>
                   <div class="field" formArrayName="missions">
                     <button
                       type="button"
@@ -1099,6 +1558,177 @@
                     <input type="checkbox" formControlName="allowOnSpawn" />
                     Allowed on a spawn location
                   </label>
+                  <div class="field">
+                    <label [attr.for]="'item-objective-flavor-' + index">Flavor or lore text</label>
+                    <textarea
+                      [id]="'item-objective-flavor-' + index"
+                      formControlName="flavorText"
+                      maxlength="2000"
+                      rows="3"
+                    ></textarea>
+                  </div>
+                  <fieldset class="field">
+                    <legend>Faction special rules</legend>
+                    @for (rule of assignedSpecialRules(item.controls.specialRuleIds); track rule.id) {
+                      <div class="nested-row">
+                        <p class="grow">{{ rule.name }}</p>
+                        <button
+                          type="button"
+                          class="button-secondary"
+                          (click)="removeAssignedSpecialRule(item.controls.specialRuleIds, rule.id)"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    }
+                    <div class="nested-row">
+                      <div class="field grow">
+                        <label [attr.for]="'item-special-rule-' + index">Add faction special rule</label>
+                        <app-filterable-combobox
+                          [inputId]="'item-special-rule-' + index"
+                          [formControl]="pickControl(item.controls.id.value)"
+                          [options]="assignableSpecialRuleNames(item.controls.specialRuleIds)"
+                          placeholder="Search or type a name"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        class="button-secondary"
+                        (click)="assignSpecialRuleByName(item.controls.specialRuleIds, item.controls.id.value)"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </fieldset>
+                  <div class="field" formArrayName="choices">
+                    <p class="muted">
+                      Optional holder choices. One result is used as-is; several results pick one at random. Destroying
+                      an item removes it from the map and awards no points.
+                    </p>
+                    @for (choice of item.controls.choices.controls; track choice; let choiceIndex = $index) {
+                      <div class="nested-card stack" [formGroupName]="choiceIndex">
+                        <div class="nested-row">
+                          <div class="field grow">
+                            <label [attr.for]="'item-choice-name-' + index + '-' + choiceIndex">Choice name</label>
+                            <input
+                              [id]="'item-choice-name-' + index + '-' + choiceIndex"
+                              formControlName="name"
+                              maxlength="60"
+                            />
+                          </div>
+                          <button type="button" class="button-secondary" (click)="removeItemChoice(item, choiceIndex)">
+                            Remove
+                          </button>
+                        </div>
+                        <div formArrayName="results" class="stack">
+                          @for (result of choice.controls.results.controls; track result; let resultIndex = $index) {
+                            <div class="nested-card stack" [formGroupName]="resultIndex">
+                              <div class="nested-row">
+                                <div class="field grow">
+                                  <label
+                                    [attr.for]="'item-result-flavor-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    >Result flavor</label
+                                  >
+                                  <textarea
+                                    [id]="'item-result-flavor-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    formControlName="flavorText"
+                                    maxlength="2000"
+                                    rows="2"
+                                  ></textarea>
+                                </div>
+                                <button
+                                  type="button"
+                                  class="button-secondary"
+                                  (click)="removeItemChoiceResult(choice, resultIndex)"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                              <div class="nested-row">
+                                <div class="field grow">
+                                  <label
+                                    [attr.for]="'item-result-state-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    >New state key (optional)</label
+                                  >
+                                  <input
+                                    [id]="'item-result-state-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    formControlName="newStateKey"
+                                    maxlength="60"
+                                  />
+                                </div>
+                                <label class="choice-row">
+                                  <input type="checkbox" formControlName="destroyItem" />
+                                  Destroy this item
+                                </label>
+                              </div>
+                              <div class="nested-row">
+                                <div class="field grow">
+                                  <label
+                                    [attr.for]="'item-result-replace-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    >Replacement item (optional)</label
+                                  >
+                                  <select
+                                    [id]="'item-result-replace-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    formControlName="replacementItemTypeId"
+                                  >
+                                    <option value="">None</option>
+                                    @for (other of itemObjectiveTypes.controls; track other.controls.id.value) {
+                                      @if (
+                                        other.controls.id.value !== item.controls.id.value &&
+                                        other.controls.name.value.trim()
+                                      ) {
+                                        <option [value]="other.controls.id.value">
+                                          {{ other.controls.name.value }}
+                                        </option>
+                                      }
+                                    }
+                                  </select>
+                                </div>
+                                <div class="field grow">
+                                  <label
+                                    [attr.for]="'item-result-private-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    >Granted private objective (optional)</label
+                                  >
+                                  <select
+                                    [id]="'item-result-private-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    formControlName="grantedPrivateObjectiveTypeId"
+                                  >
+                                    <option value="">None</option>
+                                    @for (
+                                      objective of privateObjectiveTypes.controls;
+                                      track objective.controls.id.value
+                                    ) {
+                                      @if (objective.controls.name.value.trim()) {
+                                        <option [value]="objective.controls.id.value">
+                                          {{ objective.controls.name.value }}
+                                        </option>
+                                      }
+                                    }
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                          }
+                          <button
+                            type="button"
+                            class="button-secondary"
+                            (click)="addItemChoiceResult(choice)"
+                            [disabled]="choice.controls.results.length >= 12"
+                          >
+                            Add result
+                          </button>
+                        </div>
+                      </div>
+                    }
+                    <button
+                      type="button"
+                      class="button-secondary"
+                      (click)="addItemChoice(item)"
+                      [disabled]="item.controls.choices.length >= 10"
+                    >
+                      Add choice
+                    </button>
+                  </div>
                 </div>
               </div>
             }
@@ -1110,181 +1740,6 @@
             [disabled]="itemObjectiveTypes.length >= 50"
           >
             Add item objective
-          </button>
-        </div>
-      </fieldset>
-
-      <fieldset class="field setup-section">
-        <legend>
-          <button
-            type="button"
-            class="section-toggle"
-            [attr.aria-expanded]="isOpen('publicObjectives')"
-            (click)="toggleSection('publicObjectives')"
-          >
-            Public objectives (optional)
-          </button>
-        </legend>
-        <div [hidden]="!isOpen('publicObjectives')">
-          <p class="muted">
-            Named public objectives that a manager can award during play. Set campaign points to 0 to ignore an
-            objective. Ranking objectives below are calculated automatically. Ties are friendly: every player currently
-            tied for first receives the points.
-          </p>
-          <div class="nested-card stack">
-            <h3>Ranking public objectives</h3>
-            <p class="muted">Set any of these to 0 to omit them from scoring and the campaign-page leaderboards.</p>
-            <div class="nested-row">
-              <div class="field">
-                <label for="mostTerritoriesCampaignPoints">Most territories controlled</label>
-                <input
-                  id="mostTerritoriesCampaignPoints"
-                  type="number"
-                  min="0"
-                  max="999"
-                  formControlName="mostTerritoriesCampaignPoints"
-                />
-              </div>
-              <div class="field">
-                <label for="longestTerritoryChainCampaignPoints">Longest unbroken territory chain</label>
-                <input
-                  id="longestTerritoryChainCampaignPoints"
-                  type="number"
-                  min="0"
-                  max="999"
-                  formControlName="longestTerritoryChainCampaignPoints"
-                />
-              </div>
-              <div class="field">
-                <label for="mostBattlesWonCampaignPoints">Most battles won</label>
-                <input
-                  id="mostBattlesWonCampaignPoints"
-                  type="number"
-                  min="0"
-                  max="999"
-                  formControlName="mostBattlesWonCampaignPoints"
-                />
-              </div>
-            </div>
-            <p class="muted">
-              Most battles won ranks by wins, then draws. Players who remain tied after that each receive the points.
-            </p>
-          </div>
-          <div class="nested-card stack">
-            <h3>Battle campaign points</h3>
-            <label class="choice-row">
-              <input type="checkbox" formControlName="useDifferentialBattleScoring" />
-              Award campaign points from the score difference
-            </label>
-            <div class="nested-row">
-              <div class="field">
-                <label for="pointsPerBattleWon">Campaign points per battle won</label>
-                <input id="pointsPerBattleWon" type="number" min="0" max="999" formControlName="pointsPerBattleWon" />
-              </div>
-              <div class="field">
-                <label for="pointsPerBattleDraw">Campaign points per battle draw</label>
-                <input id="pointsPerBattleDraw" type="number" min="0" max="999" formControlName="pointsPerBattleDraw" />
-              </div>
-            </div>
-            <p class="muted">
-              Win points apply when differential scoring is off. Draw points are awarded to each participant of a draw
-              in either mode. Wins and draws are still recorded for ranking.
-            </p>
-            @if (useDifferential()) {
-              <div class="nested-row">
-                <div class="field">
-                  <label for="differentialMultiplier">Differential multiplier</label>
-                  <input
-                    id="differentialMultiplier"
-                    type="number"
-                    min="0.01"
-                    max="999"
-                    step="0.01"
-                    formControlName="differentialMultiplier"
-                  />
-                </div>
-                <div class="field">
-                  <label for="differentialMinimum">Minimum campaign points</label>
-                  <input
-                    id="differentialMinimum"
-                    type="number"
-                    min="-999"
-                    max="999"
-                    formControlName="differentialMinimum"
-                  />
-                </div>
-                <div class="field">
-                  <label for="differentialMaximum">Maximum campaign points</label>
-                  <input
-                    id="differentialMaximum"
-                    type="number"
-                    min="-999"
-                    max="999"
-                    formControlName="differentialMaximum"
-                  />
-                </div>
-              </div>
-              <label class="choice-row">
-                <input type="checkbox" formControlName="allowNegativeDifferential" />
-                Award negative campaign points to the loser
-              </label>
-              <p class="muted">
-                Winner campaign points are the clamped score difference times the multiplier. The default range is 0 to
-                10. Enter already-converted battle points or raw victory points; this app does not apply a proprietary
-                conversion chart.
-              </p>
-            }
-          </div>
-          <div formArrayName="publicObjectiveTypes" class="stack">
-            @for (item of publicObjectiveTypes.controls; track item; let index = $index) {
-              <div class="nested-card stack" [formGroupName]="index">
-                <button
-                  type="button"
-                  class="section-toggle nested-toggle"
-                  [attr.aria-expanded]="isOpen('public-objective-' + index)"
-                  (click)="toggleSection('public-objective-' + index)"
-                >
-                  {{ itemLabel(item.controls.name.value, 'Public objective ' + (index + 1)) }}
-                </button>
-                <div [hidden]="!isOpen('public-objective-' + index)">
-                  <div class="nested-row">
-                    <div class="field grow">
-                      <label [attr.for]="'public-objective-name-' + index">Objective {{ index + 1 }} name</label>
-                      <input [id]="'public-objective-name-' + index" formControlName="name" maxlength="60" />
-                    </div>
-                    <div class="field">
-                      <label [attr.for]="'public-objective-points-' + index">Campaign points</label>
-                      <input
-                        [id]="'public-objective-points-' + index"
-                        type="number"
-                        min="0"
-                        max="999"
-                        formControlName="campaignPoints"
-                      />
-                    </div>
-                    <button type="button" class="button-secondary" (click)="removePublicObjective(index)">
-                      Remove
-                    </button>
-                  </div>
-                  <div class="field">
-                    <label [attr.for]="'public-objective-description-' + index">Description (optional)</label>
-                    <input
-                      [id]="'public-objective-description-' + index"
-                      formControlName="description"
-                      maxlength="240"
-                    />
-                  </div>
-                </div>
-              </div>
-            }
-          </div>
-          <button
-            type="button"
-            class="button-secondary"
-            (click)="addPublicObjective()"
-            [disabled]="publicObjectiveTypes.length >= 50"
-          >
-            Add public objective
           </button>
         </div>
       </fieldset>

@@ -22,7 +22,10 @@ internal static class CatalogJson
         IReadOnlyList<StoredItemObjectiveType>? itemObjectiveTypes = null,
         IReadOnlyList<StoredPublicObjectiveType>? publicObjectiveTypes = null,
         BattleScoringSetup? battleScoring = null,
-        GeneralPublicObjectivePoints? rankingObjectivePoints = null)
+        GeneralPublicObjectivePoints? rankingObjectivePoints = null,
+        IReadOnlyList<StoredSpecialRule>? specialRules = null,
+        IReadOnlyList<StoredPrivateObjectiveType>? privateObjectiveTypes = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? factionSpecialRuleIds = null)
     {
         ArgumentNullException.ThrowIfNull(terrainTypes);
         ArgumentNullException.ThrowIfNull(structureTypes);
@@ -35,6 +38,17 @@ internal static class CatalogJson
                 StructureTypes = [.. structureTypes.Select(ToDocument)],
                 ItemObjectiveTypes = [.. (itemObjectiveTypes ?? []).Select(ToDocument)],
                 PublicObjectiveTypes = [.. (publicObjectiveTypes ?? []).Select(ToDocument)],
+                SpecialRules = [.. (specialRules ?? []).Select(ToDocument)],
+                PrivateObjectiveTypes = [.. (privateObjectiveTypes ?? []).Select(ToDocument)],
+                FactionSpecialRules =
+                [
+                    .. (factionSpecialRuleIds ?? new Dictionary<Guid, IReadOnlyList<Guid>>()).Select(static pair =>
+                        new FactionSpecialRulesDocument
+                        {
+                            FactionId = pair.Key,
+                            SpecialRuleIds = [.. pair.Value],
+                        }),
+                ],
                 PointsPerBattleWon = scoring.PointsPerWin,
                 BattleScoring = ToDocument(scoring),
                 MostTerritoriesCampaignPoints = ranking.MostTerritories,
@@ -50,18 +64,21 @@ internal static class CatalogJson
         IReadOnlyList<StoredItemObjectiveType> ItemObjectiveTypes,
         IReadOnlyList<StoredPublicObjectiveType> PublicObjectiveTypes,
         BattleScoringSetup BattleScoring,
-        GeneralPublicObjectivePoints RankingObjectivePoints)
+        GeneralPublicObjectivePoints RankingObjectivePoints,
+        IReadOnlyList<StoredSpecialRule> SpecialRules,
+        IReadOnlyList<StoredPrivateObjectiveType> PrivateObjectiveTypes,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> FactionSpecialRuleIds)
         Deserialize(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None);
+            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>());
         }
 
         var document = JsonSerializer.Deserialize<CatalogDocument>(json, Options);
         if (document is null)
         {
-            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None);
+            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>());
         }
 
         return (
@@ -73,7 +90,12 @@ internal static class CatalogJson
             new GeneralPublicObjectivePoints(
                 Math.Max(0, document.MostTerritoriesCampaignPoints),
                 Math.Max(0, document.LongestTerritoryChainCampaignPoints),
-                Math.Max(0, document.MostBattlesWonCampaignPoints)));
+                Math.Max(0, document.MostBattlesWonCampaignPoints)),
+            [.. (document.SpecialRules ?? []).Select(FromDocument)],
+            [.. (document.PrivateObjectiveTypes ?? []).Select(FromDocument)],
+            (document.FactionSpecialRules ?? []).ToDictionary(
+                static item => item.FactionId,
+                static item => (IReadOnlyList<Guid>)item.SpecialRuleIds));
     }
 
     private static TerrainDocument ToDocument(StoredTerrainType type)
@@ -85,6 +107,7 @@ internal static class CatalogJson
             Color = type.Color,
             Missions = [.. type.Missions.Select(ToDocument)],
             CampaignPoints = type.CampaignPoints,
+            IsWaterFeature = type.IsWaterFeature,
         };
     }
 
@@ -126,6 +149,7 @@ internal static class CatalogJson
             Color = type.Color,
             Missions = [.. type.Missions.Select(FromDocument)],
             CampaignPoints = type.CampaignPoints,
+            IsWaterFeature = type.IsWaterFeature,
         };
     }
 
@@ -172,6 +196,59 @@ internal static class CatalogJson
             Color = type.Color,
             ImageStorageKey = type.ImageStorageKey,
             CampaignPoints = type.CampaignPoints,
+            FlavorText = type.FlavorText,
+            Choices = [.. type.Choices.Select(ToDocument)],
+            SpecialRuleIds = [.. type.SpecialRuleIds],
+        };
+    }
+
+    private static ItemChoiceDocument ToDocument(StoredItemObjectiveChoice choice)
+    {
+        return new ItemChoiceDocument
+        {
+            Id = choice.Id,
+            Name = choice.Name,
+            Results = [.. choice.Results.Select(ToDocument)],
+        };
+    }
+
+    private static ItemChoiceResultDocument ToDocument(StoredItemObjectiveChoiceResult result)
+    {
+        return new ItemChoiceResultDocument
+        {
+            Id = result.Id,
+            FlavorText = result.FlavorText,
+            NewStateKey = result.NewStateKey,
+            DestroyItem = result.DestroyItem,
+            ReplacementItemTypeId = result.ReplacementItemTypeId,
+            GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+        };
+    }
+
+    private static SpecialRuleDocument ToDocument(StoredSpecialRule rule)
+    {
+        return new SpecialRuleDocument
+        {
+            Id = rule.Id,
+            Name = rule.Name,
+            Text = rule.Text,
+        };
+    }
+
+    private static PrivateObjectiveDocument ToDocument(StoredPrivateObjectiveType type)
+    {
+        return new PrivateObjectiveDocument
+        {
+            Id = type.Id,
+            Name = type.Name,
+            Description = type.Description,
+            CampaignPoints = type.CampaignPoints,
+            AllowedHolderKinds = [.. type.AllowedHolderKinds],
+            ScoringKind = type.ScoringKind,
+            AutomaticKind = type.AutomaticKind,
+            RequiredCount = type.RequiredCount,
+            StructureTypeId = type.StructureTypeId,
+            TerritoryIds = [.. type.TerritoryIds],
         };
     }
 
@@ -199,6 +276,61 @@ internal static class CatalogJson
             Color = string.IsNullOrWhiteSpace(type.Color) ? "#C45C26" : type.Color,
             ImageStorageKey = type.ImageStorageKey,
             CampaignPoints = type.CampaignPoints,
+            FlavorText = type.FlavorText,
+            Choices = [.. (type.Choices ?? []).Select(FromDocument)],
+            SpecialRuleIds = type.SpecialRuleIds ?? [],
+        };
+    }
+
+    private static StoredItemObjectiveChoice FromDocument(ItemChoiceDocument choice)
+    {
+        return new StoredItemObjectiveChoice
+        {
+            Id = choice.Id,
+            Name = choice.Name,
+            Results = [.. choice.Results.Select(FromDocument)],
+        };
+    }
+
+    private static StoredItemObjectiveChoiceResult FromDocument(ItemChoiceResultDocument result)
+    {
+        return new StoredItemObjectiveChoiceResult
+        {
+            Id = result.Id,
+            FlavorText = result.FlavorText,
+            NewStateKey = result.NewStateKey,
+            DestroyItem = result.DestroyItem,
+            ReplacementItemTypeId = result.ReplacementItemTypeId,
+            GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+        };
+    }
+
+    private static StoredSpecialRule FromDocument(SpecialRuleDocument rule)
+    {
+        return new StoredSpecialRule
+        {
+            Id = rule.Id,
+            Name = rule.Name,
+            Text = rule.Text ?? string.Empty,
+        };
+    }
+
+    private static StoredPrivateObjectiveType FromDocument(PrivateObjectiveDocument type)
+    {
+        return new StoredPrivateObjectiveType
+        {
+            Id = type.Id,
+            Name = type.Name,
+            Description = type.Description,
+            CampaignPoints = type.CampaignPoints,
+            AllowedHolderKinds = type.AllowedHolderKinds is { Count: > 0 }
+                ? type.AllowedHolderKinds
+                : ["Player", "Faction", "AllyGroup"],
+            ScoringKind = string.IsNullOrWhiteSpace(type.ScoringKind) ? "Manual" : type.ScoringKind,
+            AutomaticKind = string.IsNullOrWhiteSpace(type.AutomaticKind) ? "None" : type.AutomaticKind,
+            RequiredCount = type.RequiredCount < 1 ? 1 : type.RequiredCount,
+            StructureTypeId = type.StructureTypeId,
+            TerritoryIds = type.TerritoryIds ?? [],
         };
     }
 
@@ -260,6 +392,12 @@ internal static class CatalogJson
 
         public List<PublicObjectiveDocument> PublicObjectiveTypes { get; set; } = [];
 
+        public List<SpecialRuleDocument>? SpecialRules { get; set; }
+
+        public List<PrivateObjectiveDocument>? PrivateObjectiveTypes { get; set; }
+
+        public List<FactionSpecialRulesDocument>? FactionSpecialRules { get; set; }
+
         public int PointsPerBattleWon { get; set; }
 
         public BattleScoringDocument? BattleScoring { get; set; }
@@ -299,6 +437,8 @@ internal static class CatalogJson
         public List<MissionDocument> Missions { get; set; } = [];
 
         public int CampaignPoints { get; set; }
+
+        public bool IsWaterFeature { get; set; }
     }
 
     private sealed class StructureDocument
@@ -343,6 +483,12 @@ internal static class CatalogJson
         public string? ImageStorageKey { get; set; }
 
         public int CampaignPoints { get; set; }
+
+        public string? FlavorText { get; set; }
+
+        public List<ItemChoiceDocument>? Choices { get; set; }
+
+        public List<Guid>? SpecialRuleIds { get; set; }
     }
 
     private sealed class PublicObjectiveDocument
@@ -367,5 +513,68 @@ internal static class CatalogJson
         public string? FileStorageKey { get; set; }
 
         public string? FileName { get; set; }
+    }
+
+    private sealed class ItemChoiceDocument
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public List<ItemChoiceResultDocument> Results { get; set; } = [];
+    }
+
+    private sealed class ItemChoiceResultDocument
+    {
+        public Guid Id { get; set; }
+
+        public string? FlavorText { get; set; }
+
+        public string? NewStateKey { get; set; }
+
+        public bool DestroyItem { get; set; }
+
+        public Guid? ReplacementItemTypeId { get; set; }
+
+        public Guid? GrantedPrivateObjectiveTypeId { get; set; }
+    }
+
+    private sealed class SpecialRuleDocument
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public string? Text { get; set; }
+    }
+
+    private sealed class PrivateObjectiveDocument
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+
+        public int CampaignPoints { get; set; }
+
+        public List<string>? AllowedHolderKinds { get; set; }
+
+        public string ScoringKind { get; set; } = "Manual";
+
+        public string AutomaticKind { get; set; } = "None";
+
+        public int RequiredCount { get; set; } = 1;
+
+        public Guid? StructureTypeId { get; set; }
+
+        public List<Guid>? TerritoryIds { get; set; }
+    }
+
+    private sealed class FactionSpecialRulesDocument
+    {
+        public Guid FactionId { get; set; }
+
+        public List<Guid> SpecialRuleIds { get; set; } = [];
     }
 }

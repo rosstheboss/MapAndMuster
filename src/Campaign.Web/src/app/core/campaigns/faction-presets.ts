@@ -1,8 +1,11 @@
+import { specialRuleNamesForFaction } from './special-rule-presets';
+
 export interface FactionPresetFaction {
   name: string;
   color: string;
   subfactions: readonly string[];
   requiresSubfaction: boolean;
+  specialRuleNames?: readonly string[];
 }
 
 export interface FactionPreset {
@@ -130,6 +133,7 @@ export function sortedPresetFactions(factions: readonly FactionPresetFaction[]):
       color: faction.color,
       requiresSubfaction: faction.requiresSubfaction,
       subfactions: [...faction.subfactions].sort(compareNames),
+      specialRuleNames: [...(faction.specialRuleNames ?? specialRuleNamesForFaction(faction.name))],
     }))
     .sort((left, right) => compareNames(left.name, right.name));
 }

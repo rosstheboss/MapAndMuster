@@ -85,4 +85,24 @@ public static class TerrainCatalog
         type = default;
         return false;
     }
+
+    /// <summary>
+    /// Whether a default terrain type is a water feature.
+    /// </summary>
+    /// <param name="type">The terrain type.</param>
+    /// <returns><see langword="true"/> for Beach, Lake, Riverlands, Sea, and Swamp.</returns>
+    public static bool IsWaterFeature(TerrainType type)
+    {
+        return type is TerrainType.Beach or TerrainType.Lake or TerrainType.Riverlands or TerrainType.Sea or TerrainType.Swamp;
+    }
+
+    /// <summary>
+    /// Whether a default terrain label is a water feature.
+    /// </summary>
+    /// <param name="label">The terrain display label.</param>
+    /// <returns><see langword="true"/> for the default water types.</returns>
+    public static bool IsWaterFeature(string? label)
+    {
+        return TryParse(label, out var type) && IsWaterFeature(type);
+    }
 }

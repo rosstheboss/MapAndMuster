@@ -2,11 +2,11 @@
 
 ## Data classification
 
-- **Public:** revealed map state, standings (with hidden item-objective sources omitted), public objectives, configured public faction rules,
+- **Public:** revealed map state, standings (with hidden item-objective sources omitted), public objectives, revealed or completed private-objective names and points, unclaimed private-objective counts, configured public faction special-rule names and descriptions,
   the campaign log, in-campaign chat, and the live play board returned to viewers (force
   positions and revealed facts; drafts and unrevealed orders remain omitted).
-- **Participant-private:** own drafts/orders, private objectives, account data, eligible choices.
-- **Shared-private:** faction/alliance objective data visible only to authorized group members.
+- **Participant-private:** own drafts/orders, unrevealed private objectives, item-objective flavor and eligible choices, account data.
+- **Shared-private:** faction/alliance private-objective data visible only to authorized group members.
 - **Staff-sensitive:** unrevealed orders/relics, correction tools, moderation notes, full audit.
 - **Secret:** credentials, tokens, signing keys, database/email/storage secrets.
 

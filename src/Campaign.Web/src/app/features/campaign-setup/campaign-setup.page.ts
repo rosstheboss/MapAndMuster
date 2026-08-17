@@ -1,5 +1,5 @@
 import { Component, computed, DestroyRef, inject, signal, viewChild, type ElementRef } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { toSignal, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, type FormArray, type FormControl, type FormGroup } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
@@ -10,13 +10,17 @@ import type {
   CampaignDetail,
   CampaignMission,
   CampaignItemObjectiveType,
+  CampaignPrivateObjectiveType,
   CampaignPublicObjectiveType,
   CampaignStructureType,
   CampaignTerrainType,
+  ItemObjectiveChoice,
+  ItemObjectiveChoiceResult,
   SaveCampaignPayload,
 } from '../../core/campaigns/campaign.models';
 import { defaultStructureCatalog, defaultTerrainCatalog } from '../../core/campaigns/catalog-defaults';
 import { CAMPAIGN_PRESETS, campaignFromPreset } from '../../core/campaigns/campaign-presets';
+import { OLD_WORLD_SPECIAL_RULES, type SpecialRulePreset } from '../../core/campaigns/special-rule-presets';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
@@ -73,12 +77,14 @@ type FactionGroup = FormGroup<{
   flagSource: FormControl<'color' | 'image'>;
   clearFlagImage: FormControl<boolean>;
   subfactions: FormArray<NamedGroup>;
+  specialRuleIds: FormControl<string[]>;
 }>;
 type TerrainGroup = FormGroup<{
   id: FormControl<string>;
   name: FormControl<string>;
   color: FormControl<string>;
   campaignPoints: FormControl<number>;
+  isWaterFeature: FormControl<boolean>;
   missions: FormArray<MissionGroup>;
 }>;
 type StructureGroup = FormGroup<{
@@ -106,12 +112,47 @@ type ItemObjectiveGroup = FormGroup<{
   iconSource: FormControl<'symbol' | 'image'>;
   clearImage: FormControl<boolean>;
   campaignPoints: FormControl<number>;
+  flavorText: FormControl<string>;
+  specialRuleIds: FormControl<string[]>;
+  choices: FormArray<ItemChoiceGroup>;
+}>;
+type ItemChoiceGroup = FormGroup<{
+  id: FormControl<string>;
+  name: FormControl<string>;
+  results: FormArray<ItemChoiceResultGroup>;
+}>;
+type ItemChoiceResultGroup = FormGroup<{
+  id: FormControl<string>;
+  flavorText: FormControl<string>;
+  newStateKey: FormControl<string>;
+  destroyItem: FormControl<boolean>;
+  replacementItemTypeId: FormControl<string>;
+  grantedPrivateObjectiveTypeId: FormControl<string>;
 }>;
 type PublicObjectiveGroup = FormGroup<{
   id: FormControl<string>;
   name: FormControl<string>;
   description: FormControl<string>;
   campaignPoints: FormControl<number>;
+}>;
+type SpecialRuleGroup = FormGroup<{
+  id: FormControl<string>;
+  name: FormControl<string>;
+  text: FormControl<string>;
+}>;
+type PrivateObjectiveGroup = FormGroup<{
+  id: FormControl<string>;
+  name: FormControl<string>;
+  description: FormControl<string>;
+  campaignPoints: FormControl<number>;
+  allowPlayer: FormControl<boolean>;
+  allowFaction: FormControl<boolean>;
+  allowAllyGroup: FormControl<boolean>;
+  scoringKind: FormControl<string>;
+  automaticKind: FormControl<string>;
+  requiredCount: FormControl<number>;
+  structureTypeId: FormControl<string>;
+  territoryIds: FormControl<string>;
 }>;
 type PhaseGroup = FormGroup<{
   kind: FormControl<string>;
@@ -123,12 +164,14 @@ const TOP_LEVEL_SECTION_IDS = [
   'details',
   'schedule',
   'visibility',
+  'specialRules',
+  'publicObjectives',
+  'privateObjectives',
   'allies',
   'factions',
   'terrain',
   'structures',
   'itemObjectives',
-  'publicObjectives',
   'links',
   'map',
 ] as const;
@@ -211,6 +254,9 @@ export class CampaignSetupPage {
   protected readonly selectedCampaignPresetId = toSignal(this.campaignPresetId.valueChanges, {
     initialValue: this.campaignPresetId.value,
   });
+  protected readonly specialRulePresetPick = this.formBuilder.nonNullable.control('');
+  private readonly catalogTick = signal(0);
+  private readonly assignmentPicks = new Map<string, FormControl<string>>();
 
   protected readonly form = this.formBuilder.nonNullable.group({
     name: ['', [required, minLength(3), maxLength(80)]],
@@ -237,6 +283,8 @@ export class CampaignSetupPage {
     terrainTypes: this.formBuilder.array<TerrainGroup>(this.createDefaultTerrainGroups()),
     structureTypes: this.formBuilder.array<StructureGroup>(this.createDefaultStructureGroups()),
     itemObjectiveTypes: this.formBuilder.array<ItemObjectiveGroup>([]),
+    specialRules: this.formBuilder.array<SpecialRuleGroup>([]),
+    privateObjectiveTypes: this.formBuilder.array<PrivateObjectiveGroup>([]),
     publicObjectiveTypes: this.formBuilder.array<PublicObjectiveGroup>([]),
     pointsPerBattleWon: [2, [minValue(0), maxValue(999)]],
     pointsPerBattleDraw: [1, [minValue(0), maxValue(999)]],
@@ -304,6 +352,14 @@ export class CampaignSetupPage {
 
   protected get itemObjectiveTypes(): FormArray<ItemObjectiveGroup> {
     return this.form.controls.itemObjectiveTypes;
+  }
+
+  protected get specialRules(): FormArray<SpecialRuleGroup> {
+    return this.form.controls.specialRules;
+  }
+
+  protected get privateObjectiveTypes(): FormArray<PrivateObjectiveGroup> {
+    return this.form.controls.privateObjectiveTypes;
   }
 
   protected get publicObjectiveTypes(): FormArray<PublicObjectiveGroup> {
@@ -394,12 +450,17 @@ export class CampaignSetupPage {
       return;
     }
 
+    this.ensureSpecialRulesFromNames(factions.flatMap((faction) => [...(faction.specialRuleNames ?? [])]));
+    const ruleIds = this.specialRuleIdsByName();
     this.replaceArray(
       this.factions,
       factions.map((faction) =>
         this.createFactionGroup(faction.name, '', faction.subfactions, {
           color: faction.color,
           requiresSubfaction: faction.requiresSubfaction,
+          specialRuleIds: (faction.specialRuleNames ?? [])
+            .map((name) => ruleIds.get(name))
+            .filter((id): id is string => !!id),
         }),
       ),
     );
@@ -414,7 +475,7 @@ export class CampaignSetupPage {
 
     this.replaceArray(
       this.terrainTypes,
-      types.map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color)),
+      types.map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color, '', 0, entry.isWaterFeature)),
     );
   }
 
@@ -455,17 +516,28 @@ export class CampaignSetupPage {
     }
 
     this.replaceArray(
+      this.specialRules,
+      copy.specialRules.map((rule) => this.createSpecialRuleGroup(undefined, rule.name, rule.description)),
+    );
+    this.bumpCatalog();
+    const ruleIds = this.specialRuleIdsByName();
+    this.replaceArray(
       this.factions,
       copy.factions.map((faction) =>
         this.createFactionGroup(faction.name, '', faction.subfactions, {
           color: faction.color,
           requiresSubfaction: faction.requiresSubfaction,
+          specialRuleIds: (faction.specialRuleNames ?? [])
+            .map((name) => ruleIds.get(name))
+            .filter((id): id is string => !!id),
         }),
       ),
     );
     this.replaceArray(
       this.terrainTypes,
-      copy.terrainTypes.map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color)),
+      copy.terrainTypes.map((entry) =>
+        this.createTerrainGroup(undefined, entry.name, entry.color, '', 0, entry.isWaterFeature),
+      ),
     );
     this.replaceArray(
       this.structureTypes,
@@ -621,6 +693,160 @@ export class CampaignSetupPage {
 
   protected removePublicObjective(index: number): void {
     this.publicObjectiveTypes.removeAt(index);
+  }
+
+  protected addSpecialRule(): void {
+    if (this.specialRules.length >= 80) {
+      return;
+    }
+
+    this.specialRules.push(this.createSpecialRuleGroup());
+    this.bumpCatalog();
+  }
+
+  protected addPickedSpecialRule(): void {
+    const name = this.specialRulePresetPick.value.trim();
+    if (!name || this.specialRules.length >= 80) {
+      return;
+    }
+
+    if (this.findSpecialRuleByName(name)) {
+      this.specialRulePresetPick.setValue('');
+      return;
+    }
+
+    const preset = this.presetSpecialRule(name);
+    this.specialRules.push(this.createSpecialRuleGroup(undefined, preset?.name ?? name, preset?.description ?? ''));
+    this.specialRulePresetPick.setValue('');
+    this.bumpCatalog();
+  }
+
+  protected specialRuleNameOptions(index: number): string[] {
+    this.catalogTick();
+    const current = this.specialRules.at(index).controls.name.value.trim().toLowerCase();
+    const used = new Set(
+      this.specialRules.controls
+        .filter((_, ruleIndex) => ruleIndex !== index)
+        .map((rule) => rule.controls.name.value.trim().toLowerCase())
+        .filter((name) => name.length > 0),
+    );
+    return OLD_WORLD_SPECIAL_RULES.filter(
+      (rule) => !used.has(rule.name.toLowerCase()) || rule.name.toLowerCase() === current,
+    ).map((rule) => rule.name);
+  }
+
+  protected availableSpecialRulePresetNames(): string[] {
+    this.catalogTick();
+    const used = new Set(
+      this.specialRules.controls.map((rule) => rule.controls.name.value.trim().toLowerCase()).filter((name) => name),
+    );
+    return OLD_WORLD_SPECIAL_RULES.filter((rule) => !used.has(rule.name.toLowerCase())).map((rule) => rule.name);
+  }
+
+  protected pickControl(ownerId: string): FormControl<string> {
+    const existing = this.assignmentPicks.get(ownerId);
+    if (existing) {
+      return existing;
+    }
+
+    const control = this.formBuilder.nonNullable.control('');
+    this.assignmentPicks.set(ownerId, control);
+    return control;
+  }
+
+  protected assignedSpecialRules(control: FormControl<string[]>): { id: string; name: string }[] {
+    this.catalogTick();
+    const names = new Map(
+      this.specialRules.controls.map((rule) => [rule.controls.id.value, rule.controls.name.value.trim()]),
+    );
+    return control.value.map((id) => ({ id, name: names.get(id) ?? '' })).filter((rule) => rule.name.length > 0);
+  }
+
+  protected assignableSpecialRuleNames(control: FormControl<string[]>): string[] {
+    this.catalogTick();
+    const assigned = new Set(this.assignedSpecialRules(control).map((rule) => rule.name.toLowerCase()));
+    const catalog = this.specialRules.controls
+      .map((rule) => rule.controls.name.value.trim())
+      .filter((name) => name.length > 0 && !assigned.has(name.toLowerCase()));
+    const presets = OLD_WORLD_SPECIAL_RULES.map((rule) => rule.name).filter(
+      (name) =>
+        !assigned.has(name.toLowerCase()) && !catalog.some((entry) => entry.toLowerCase() === name.toLowerCase()),
+    );
+    return [...catalog, ...presets];
+  }
+
+  protected assignSpecialRuleByName(control: FormControl<string[]>, ownerId: string): void {
+    const name = this.pickControl(ownerId).value.trim();
+    if (!name) {
+      return;
+    }
+
+    let rule = this.findSpecialRuleByName(name);
+    if (!rule) {
+      if (this.specialRules.length >= 80) {
+        return;
+      }
+
+      const preset = this.presetSpecialRule(name);
+      rule = this.createSpecialRuleGroup(undefined, preset?.name ?? name, preset?.description ?? '');
+      this.specialRules.push(rule);
+    }
+
+    const id = rule.controls.id.value;
+    if (!control.value.includes(id)) {
+      control.setValue([...control.value, id]);
+    }
+
+    this.pickControl(ownerId).setValue('');
+    this.bumpCatalog();
+  }
+
+  protected removeAssignedSpecialRule(control: FormControl<string[]>, ruleId: string): void {
+    control.setValue(control.value.filter((id) => id !== ruleId));
+    this.bumpCatalog();
+  }
+
+  protected removeSpecialRule(index: number): void {
+    const id = this.specialRules.at(index).controls.id.value;
+    this.specialRules.removeAt(index);
+    this.dropAssignedSpecialRule(id);
+    this.bumpCatalog();
+  }
+
+  protected addPrivateObjective(): void {
+    if (this.privateObjectiveTypes.length >= 50) {
+      return;
+    }
+
+    this.privateObjectiveTypes.push(this.createPrivateObjectiveGroup());
+  }
+
+  protected removePrivateObjective(index: number): void {
+    this.privateObjectiveTypes.removeAt(index);
+  }
+
+  protected addItemChoice(item: ItemObjectiveGroup): void {
+    if (item.controls.choices.length >= 10) {
+      return;
+    }
+
+    item.controls.choices.push(this.createItemChoiceGroup());
+  }
+
+  protected removeItemChoice(item: ItemObjectiveGroup, index: number): void {
+    item.controls.choices.removeAt(index);
+  }
+
+  protected addItemChoiceResult(choice: ItemChoiceGroup): void {
+    if (choice.controls.results.length >= 12) {
+      return;
+    }
+
+    choice.controls.results.push(this.createItemChoiceResultGroup());
+  }
+
+  protected removeItemChoiceResult(choice: ItemChoiceGroup, index: number): void {
+    choice.controls.results.removeAt(index);
   }
 
   protected addMission(group: TerrainGroup | StructureGroup): void {
@@ -1076,6 +1302,7 @@ export class CampaignSetupPage {
             color: faction.color,
             requiresSubfaction: faction.requiresSubfaction,
             hasFlagImage: faction.hasFlagImage,
+            specialRuleIds: faction.specialRuleIds ?? [],
           }),
         ),
       );
@@ -1100,6 +1327,15 @@ export class CampaignSetupPage {
       this.replaceArray(
         this.itemObjectiveTypes,
         (campaign.itemObjectiveTypes ?? []).map((type) => this.createItemObjectiveGroupFromDetail(type)),
+      );
+      this.replaceArray(
+        this.specialRules,
+        (campaign.specialRules ?? []).map((rule) => this.createSpecialRuleGroup(rule.id, rule.name, rule.text)),
+      );
+      this.bumpCatalog();
+      this.replaceArray(
+        this.privateObjectiveTypes,
+        (campaign.privateObjectiveTypes ?? []).map((type) => this.createPrivateObjectiveGroup(type, type.id)),
       );
       this.replaceArray(
         this.publicObjectiveTypes,
@@ -1143,6 +1379,7 @@ export class CampaignSetupPage {
       color?: string;
       requiresSubfaction?: boolean;
       hasFlagImage?: boolean;
+      specialRuleIds?: readonly string[];
     },
   ): FactionGroup {
     const names = subfactions.length > 0 ? subfactions : [''];
@@ -1155,6 +1392,7 @@ export class CampaignSetupPage {
       flagSource: this.formBuilder.nonNullable.control<'color' | 'image'>(options?.hasFlagImage ? 'image' : 'color'),
       clearFlagImage: [false],
       subfactions: this.formBuilder.array<NamedGroup>(names.map((value) => this.createNamedGroup(value))),
+      specialRuleIds: [options?.specialRuleIds ? [...options.specialRuleIds] : []],
     });
   }
 
@@ -1194,12 +1432,14 @@ export class CampaignSetupPage {
     color = '#7CB342',
     missionName = '',
     campaignPoints = 0,
+    isWaterFeature = false,
   ): TerrainGroup {
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
       name: [name, [required, maxLength(60)]],
       color: [color, required],
       campaignPoints: [campaignPoints, [minValue(0), maxValue(999)]],
+      isWaterFeature: [isWaterFeature],
       missions: this.formBuilder.array<MissionGroup>([this.createMissionGroup(undefined, missionName)]),
     });
   }
@@ -1214,6 +1454,7 @@ export class CampaignSetupPage {
       name: [type.name, [required, maxLength(60)]],
       color: [type.color, required],
       campaignPoints: [type.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
+      isWaterFeature: [type.isWaterFeature === true],
       missions: this.formBuilder.array<MissionGroup>(missions),
     });
   }
@@ -1284,6 +1525,11 @@ export class CampaignSetupPage {
       iconSource: this.formBuilder.nonNullable.control<'symbol' | 'image'>(extra?.hasImage ? 'image' : 'symbol'),
       clearImage: [false],
       campaignPoints: [extra?.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
+      flavorText: [extra?.flavorText ?? '', maxLength(2000)],
+      specialRuleIds: [extra?.specialRuleIds ? [...extra.specialRuleIds] : []],
+      choices: this.formBuilder.array<ItemChoiceGroup>(
+        (extra?.choices ?? []).map((choice) => this.createItemChoiceGroup(choice)),
+      ),
     });
   }
 
@@ -1309,8 +1555,128 @@ export class CampaignSetupPage {
     });
   }
 
+  private createSpecialRuleGroup(id?: string, name = '', text = ''): SpecialRuleGroup {
+    const group = this.formBuilder.nonNullable.group({
+      id: [id ?? this.newId()],
+      name: [name, [maxLength(60)]],
+      text: [text, maxLength(2000)],
+    });
+    group.controls.name.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((value) => {
+      this.fillSpecialRuleText(group, value);
+      this.bumpCatalog();
+    });
+    return group;
+  }
+
+  private fillSpecialRuleText(group: SpecialRuleGroup, name: string): void {
+    const preset = this.presetSpecialRule(name);
+    if (!preset) {
+      return;
+    }
+
+    const current = group.controls.text.value;
+    if (!current.trim() || OLD_WORLD_SPECIAL_RULES.some((rule) => rule.description === current)) {
+      group.controls.text.setValue(preset.description);
+    }
+  }
+
+  private createPrivateObjectiveGroup(
+    type?: Partial<CampaignPrivateObjectiveType>,
+    id?: string,
+  ): PrivateObjectiveGroup {
+    const kinds = new Set(type?.allowedHolderKinds ?? ['Player', 'Faction', 'AllyGroup']);
+    return this.formBuilder.nonNullable.group({
+      id: [id ?? type?.id ?? this.newId()],
+      name: [type?.name ?? '', [maxLength(60)]],
+      description: [type?.description ?? '', maxLength(2000)],
+      campaignPoints: [type?.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
+      allowPlayer: [kinds.has('Player')],
+      allowFaction: [kinds.has('Faction')],
+      allowAllyGroup: [kinds.has('AllyGroup')],
+      scoringKind: [type?.scoringKind ?? 'Manual'],
+      automaticKind: [type?.automaticKind ?? 'None'],
+      requiredCount: [type?.requiredCount ?? 1, [minValue(1), maxValue(999)]],
+      structureTypeId: [type?.structureTypeId ?? ''],
+      territoryIds: [(type?.territoryIds ?? []).join(', ')],
+    });
+  }
+
+  private createItemChoiceGroup(choice?: ItemObjectiveChoice): ItemChoiceGroup {
+    const results = choice?.results ?? [];
+    return this.formBuilder.nonNullable.group({
+      id: [choice?.id ?? this.newId()],
+      name: [choice?.name ?? '', maxLength(60)],
+      results: this.formBuilder.array<ItemChoiceResultGroup>(
+        results.length > 0
+          ? results.map((result) => this.createItemChoiceResultGroup(result))
+          : [this.createItemChoiceResultGroup()],
+      ),
+    });
+  }
+
+  private createItemChoiceResultGroup(result?: ItemObjectiveChoiceResult): ItemChoiceResultGroup {
+    return this.formBuilder.nonNullable.group({
+      id: [result?.id ?? this.newId()],
+      flavorText: [result?.flavorText ?? '', maxLength(2000)],
+      newStateKey: [result?.newStateKey ?? '', maxLength(60)],
+      destroyItem: [result?.destroyItem === true],
+      replacementItemTypeId: [result?.replacementItemTypeId ?? ''],
+      grantedPrivateObjectiveTypeId: [result?.grantedPrivateObjectiveTypeId ?? ''],
+    });
+  }
+
+  private specialRuleIdsByName(): Map<string, string> {
+    return new Map(this.specialRules.controls.map((rule) => [rule.controls.name.value, rule.controls.id.value]));
+  }
+
+  private findSpecialRuleByName(name: string): SpecialRuleGroup | undefined {
+    const needle = name.trim().toLowerCase();
+    return this.specialRules.controls.find((rule) => rule.controls.name.value.trim().toLowerCase() === needle);
+  }
+
+  private presetSpecialRule(name: string): SpecialRulePreset | undefined {
+    const needle = name.trim().toLowerCase();
+    return OLD_WORLD_SPECIAL_RULES.find((rule) => rule.name.toLowerCase() === needle);
+  }
+
+  private ensureSpecialRulesFromNames(names: readonly string[]): void {
+    const seen = new Set(
+      this.specialRules.controls.map((rule) => rule.controls.name.value.trim().toLowerCase()).filter((name) => name),
+    );
+    for (const name of names) {
+      const trimmed = name.trim();
+      if (!trimmed || seen.has(trimmed.toLowerCase()) || this.specialRules.length >= 80) {
+        continue;
+      }
+
+      const preset = this.presetSpecialRule(trimmed);
+      this.specialRules.push(
+        this.createSpecialRuleGroup(undefined, preset?.name ?? trimmed, preset?.description ?? ''),
+      );
+      seen.add((preset?.name ?? trimmed).toLowerCase());
+    }
+
+    this.bumpCatalog();
+  }
+
+  private bumpCatalog(): void {
+    this.catalogTick.update((value) => value + 1);
+  }
+
+  private dropAssignedSpecialRule(ruleId: string): void {
+    for (const faction of this.factions.controls) {
+      faction.controls.specialRuleIds.setValue(faction.controls.specialRuleIds.value.filter((id) => id !== ruleId));
+    }
+
+    for (const item of this.itemObjectiveTypes.controls) {
+      item.controls.specialRuleIds.setValue(item.controls.specialRuleIds.value.filter((id) => id !== ruleId));
+    }
+  }
+
   private createDefaultTerrainGroups(): TerrainGroup[] {
-    return defaultTerrainCatalog().map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color));
+    return defaultTerrainCatalog().map((entry) =>
+      this.createTerrainGroup(undefined, entry.name, entry.color, '', 0, entry.isWaterFeature === true),
+    );
   }
 
   private createDefaultStructureGroups(): StructureGroup[] {
@@ -1368,6 +1734,7 @@ export class CampaignSetupPage {
       allyGroupName: faction.allyGroupName.trim() || null,
       subfactions: faction.subfactions.map((item) => item.name.trim()).filter((name) => name.length > 0),
       clearFlagImage: faction.flagSource === 'color' || faction.clearFlagImage,
+      specialRuleIds: faction.specialRuleIds,
     }));
     const links = value.links
       .filter((link) => link.label.trim().length > 0 || link.url.trim().length > 0)
@@ -1377,6 +1744,7 @@ export class CampaignSetupPage {
       name: type.name.trim(),
       color: type.color,
       campaignPoints: 0,
+      isWaterFeature: type.isWaterFeature,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toMissionPayload(mission)),
@@ -1407,6 +1775,50 @@ export class CampaignSetupPage {
         color: type.color,
         clearImage: type.iconSource === 'symbol' || type.clearImage,
         campaignPoints: Number(type.campaignPoints) || 0,
+        flavorText: type.flavorText.trim() || null,
+        specialRuleIds: type.specialRuleIds,
+        choices: type.choices
+          .filter((choice) => choice.name.trim().length > 0)
+          .map((choice) => ({
+            id: choice.id,
+            name: choice.name.trim(),
+            results: choice.results.map((result) => ({
+              id: result.id,
+              flavorText: result.flavorText.trim() || null,
+              newStateKey: result.newStateKey.trim() || null,
+              destroyItem: result.destroyItem,
+              replacementItemTypeId: result.replacementItemTypeId.trim() || null,
+              grantedPrivateObjectiveTypeId: result.grantedPrivateObjectiveTypeId.trim() || null,
+            })),
+          })),
+      }));
+    const specialRules = value.specialRules
+      .filter((rule) => rule.name.trim().length > 0)
+      .map((rule) => ({
+        id: rule.id,
+        name: rule.name.trim(),
+        text: rule.text.trim() || null,
+      }));
+    const privateObjectiveTypes = value.privateObjectiveTypes
+      .filter((type) => type.name.trim().length > 0)
+      .map((type) => ({
+        id: type.id,
+        name: type.name.trim(),
+        description: type.description.trim() || null,
+        campaignPoints: Number(type.campaignPoints) || 0,
+        allowedHolderKinds: [
+          type.allowPlayer ? 'Player' : null,
+          type.allowFaction ? 'Faction' : null,
+          type.allowAllyGroup ? 'AllyGroup' : null,
+        ].filter((kind): kind is string => kind !== null),
+        scoringKind: type.scoringKind,
+        automaticKind: type.scoringKind === 'Automatic' ? type.automaticKind : 'None',
+        requiredCount: Number(type.requiredCount) || 1,
+        structureTypeId: type.structureTypeId.trim() || null,
+        territoryIds: type.territoryIds
+          .split(/[\s,]+/)
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0),
       }));
     const publicObjectiveTypes = value.publicObjectiveTypes
       .filter((type) => type.name.trim().length > 0)
@@ -1434,6 +1846,8 @@ export class CampaignSetupPage {
       terrainTypes,
       structureTypes,
       itemObjectiveTypes,
+      specialRules,
+      privateObjectiveTypes,
       publicObjectiveTypes,
       pointsPerBattleWon: Number(value.pointsPerBattleWon) || 0,
       pointsPerBattleDraw: Number(value.pointsPerBattleDraw) || 0,
@@ -1661,6 +2075,13 @@ export class CampaignSetupPage {
 
       usedItemNames.add(key);
 
+      const flavorMessage = describeControlError(item.controls.flavorText, `Item objective ${index + 1} flavor text`);
+      if (flavorMessage) {
+        failures.push(flavorMessage);
+        sections.add('itemObjectives');
+        sections.add(`item-objective-${index}`);
+      }
+
       if (item.controls.iconSource.value === 'image') {
         const id = item.controls.id.value;
         if (!this.itemObjectiveImages.has(id) && !this.hasStoredItemObjectiveImage(id)) {
@@ -1693,6 +2114,54 @@ export class CampaignSetupPage {
       }
 
       usedPublicNames.add(key);
+    });
+
+    const usedSpecialRuleNames = new Set<string>();
+    this.specialRules.controls.forEach((rule, index) => {
+      const name = rule.controls.name.value.trim();
+      if (!name) {
+        return;
+      }
+
+      const nameMessage = describeControlError(rule.controls.name, `Faction special rule ${index + 1} name`);
+      if (nameMessage) {
+        failures.push(nameMessage);
+        sections.add('specialRules');
+        sections.add(`special-rule-${index}`);
+      }
+
+      const key = name.toLowerCase();
+      if (usedSpecialRuleNames.has(key)) {
+        failures.push(`Faction special rule ${index + 1} name must be unique.`);
+        sections.add('specialRules');
+        sections.add(`special-rule-${index}`);
+      }
+
+      usedSpecialRuleNames.add(key);
+    });
+
+    const usedPrivateNames = new Set<string>();
+    this.privateObjectiveTypes.controls.forEach((item, index) => {
+      const name = item.controls.name.value.trim();
+      if (!name) {
+        return;
+      }
+
+      const nameMessage = describeControlError(item.controls.name, `Private objective ${index + 1} name`);
+      if (nameMessage) {
+        failures.push(nameMessage);
+        sections.add('privateObjectives');
+        sections.add(`private-objective-${index}`);
+      }
+
+      const key = name.toLowerCase();
+      if (usedPrivateNames.has(key)) {
+        failures.push(`Private objective ${index + 1} name must be unique.`);
+        sections.add('privateObjectives');
+        sections.add(`private-objective-${index}`);
+      }
+
+      usedPrivateNames.add(key);
     });
 
     const roundLengthError = describeControlError(this.form.controls.roundLengthAmount, 'Round length');

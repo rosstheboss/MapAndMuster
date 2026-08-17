@@ -27,6 +27,8 @@ public sealed class CampaignSetup
     /// <param name="publicObjectiveTypes">The public campaign objectives. Empty means none.</param>
     /// <param name="battleScoring">Conversion from resolved battles into campaign points.</param>
     /// <param name="rankingObjectivePoints">Campaign points for built-in ranking public objectives.</param>
+    /// <param name="specialRules">Reusable special rules. Empty means none.</param>
+    /// <param name="privateObjectiveTypes">Private campaign objectives. Empty means none.</param>
     public CampaignSetup(
         string name,
         string? description,
@@ -46,7 +48,9 @@ public sealed class CampaignSetup
         CampaignSchedule schedule,
         IReadOnlyList<PublicObjectiveTypeSetup>? publicObjectiveTypes = null,
         BattleScoringSetup? battleScoring = null,
-        GeneralPublicObjectivePoints? rankingObjectivePoints = null)
+        GeneralPublicObjectivePoints? rankingObjectivePoints = null,
+        IReadOnlyList<SpecialRuleSetup>? specialRules = null,
+        IReadOnlyList<PrivateObjectiveTypeSetup>? privateObjectiveTypes = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factions);
@@ -75,6 +79,8 @@ public sealed class CampaignSetup
         PublicObjectiveTypes = publicObjectiveTypes ?? [];
         BattleScoring = battleScoring ?? BattleScoringSetup.Default;
         RankingObjectivePoints = rankingObjectivePoints ?? GeneralPublicObjectivePoints.None;
+        SpecialRules = specialRules ?? [];
+        PrivateObjectiveTypes = privateObjectiveTypes ?? [];
     }
 
     /// <summary>Gets the campaign name.</summary>
@@ -130,6 +136,12 @@ public sealed class CampaignSetup
 
     /// <summary>Gets campaign points for the built-in ranking public objectives.</summary>
     public GeneralPublicObjectivePoints RankingObjectivePoints { get; }
+
+    /// <summary>Gets reusable special rules. Empty means none.</summary>
+    public IReadOnlyList<SpecialRuleSetup> SpecialRules { get; }
+
+    /// <summary>Gets the private campaign objectives. Empty means none.</summary>
+    public IReadOnlyList<PrivateObjectiveTypeSetup> PrivateObjectiveTypes { get; }
 
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon => BattleScoring.PointsPerWin;

@@ -95,6 +95,7 @@ public sealed class DuplicateCampaignHandler
                     AllyGroupName = faction.AllyGroupName,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     FlagImageStorageKey = faction.FlagImageStorageKey,
+                    SpecialRuleIds = faction.SpecialRuleIds,
                 }),
             ],
             AllyGroups =
@@ -128,6 +129,8 @@ public sealed class DuplicateCampaignHandler
             StructureTypes = [.. source.StructureTypes],
             ItemObjectiveTypes = [.. source.ItemObjectiveTypes],
             PublicObjectiveTypes = [.. source.PublicObjectiveTypes],
+            SpecialRules = [.. source.SpecialRules],
+            PrivateObjectiveTypes = [.. source.PrivateObjectiveTypes],
             BattleScoring = source.BattleScoring,
             RankingObjectivePoints = source.RankingObjectivePoints,
         };

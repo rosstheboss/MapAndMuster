@@ -43,7 +43,10 @@ public sealed class CampaignSetupRulesTests
         Assert.Equal(12, setup.TerrainTypes.Count);
         Assert.Equal("Beach", setup.TerrainTypes[0].Name);
         Assert.Equal("Beach control", setup.TerrainTypes[0].Missions[0].Name);
-        Assert.Contains(setup.TerrainTypes, type => type.Name == "Cave");
+        Assert.True(setup.TerrainTypes[0].IsWaterFeature);
+        Assert.Contains(setup.TerrainTypes, type => type.Name == "Cave" && !type.IsWaterFeature);
+        Assert.Contains(setup.TerrainTypes, type => type.Name == "Sea" && type.IsWaterFeature);
+        Assert.Contains(setup.TerrainTypes, type => type.Name == "Swamp" && type.IsWaterFeature);
         Assert.Contains(setup.TerrainTypes, type => type.Name == "Forest");
         Assert.Contains(setup.TerrainTypes, type => type.Name == "Jungle");
         Assert.Equal(6, setup.StructureTypes.Count);
@@ -1066,6 +1069,61 @@ public sealed class CampaignSetupRulesTests
 
         Assert.False(succeeded);
         Assert.Contains(errors, error => error.Field == "differentialMultiplier");
+    }
+
+    [Fact]
+    public void AcceptsReusableSpecialRulesAndPrivateObjectives()
+    {
+        var ruleId = Guid.NewGuid();
+        var townId = Guid.NewGuid();
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            [
+                new FactionInput { Name = "North", SpecialRuleIds = [ruleId] },
+                new FactionInput { Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            [
+                new StructureTypeInput { Id = townId, Name = "Town", BuiltinSymbol = "Town" },
+            ],
+            out var setup,
+            out _,
+            out var errors,
+            specialRules:
+            [
+                new SpecialRuleInput { Id = ruleId, Name = "Forced March", Text = "The host may travel farther than usual." },
+            ],
+            privateObjectiveTypes:
+            [
+                new PrivateObjectiveTypeInput
+                {
+                    Name = "Hold two towns",
+                    CampaignPoints = 4,
+                    AllowedHolderKinds = ["Faction"],
+                    ScoringKind = "Automatic",
+                    AutomaticKind = "ControlStructureType",
+                    RequiredCount = 2,
+                    StructureTypeId = townId,
+                },
+            ]);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        Assert.Equal("Forced March", Assert.Single(setup.SpecialRules).Name);
+        Assert.Equal(ruleId, Assert.Single(setup.Factions[0].SpecialRuleIds));
+        var privateObjective = Assert.Single(setup.PrivateObjectiveTypes);
+        Assert.Equal(PrivateObjectiveScoringKind.Automatic, privateObjective.ScoringKind);
+        Assert.Equal(townId, privateObjective.StructureTypeId);
     }
 
     private static IReadOnlyList<FactionInput> TwoFactions()

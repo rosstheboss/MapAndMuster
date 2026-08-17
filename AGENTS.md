@@ -114,6 +114,6 @@ Follow `.editorconfig`, analyzers, ESLint, Prettier, and Stylelint. Key defaults
 
 - Do not add a component library, state-management framework, job scheduler, cloud provider,
   or external identity provider without an explicit decision.
-- Do not implement incomplete castle, relic-choice, army-of-infamy, or scoring rules.
+- Do not implement incomplete castle, army-of-infamy, or unspecified scoring rules.
 - Do not use full event sourcing without a recorded architecture decision.
 - Do not edit generated API clients directly; regenerate them from OpenAPI.

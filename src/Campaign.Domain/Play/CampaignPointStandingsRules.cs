@@ -99,7 +99,9 @@ public static class CampaignPointStandingsRules
         var otherByPlayer = new Dictionary<Guid, int>();
         foreach (var item in state.VisibleItems)
         {
-            if (item.PossessorForceId is not { } forceId || !forcesById.TryGetValue(forceId, out var possessor))
+            if (item.IsDestroyed
+                || item.PossessorForceId is not { } forceId
+                || !forcesById.TryGetValue(forceId, out var possessor))
             {
                 continue;
             }
@@ -199,11 +201,22 @@ public static class CampaignPointStandingsRules
                 publicTotal += ranking.MostBattlesWon;
             }
 
+            var privateTotal = PrivateObjectiveRules.PointsForPlayer(
+                state.PrivateObjectives,
+                state.PrivateObjectivePoints,
+                player.UserId,
+                player.FactionId,
+                player.FactionId is { } playerFaction
+                    ? state.AllyGroupByFaction.GetValueOrDefault(playerFaction)
+                    : null,
+                state.CampaignCompleted);
+
             standings.Add(new CampaignPointStanding(
                 player.UserId,
                 capture,
                 battlePointsByPlayer.GetValueOrDefault(player.UserId),
                 publicTotal,
+                privateTotal,
                 otherByPlayer.GetValueOrDefault(player.UserId),
                 heldItemsByPlayer.GetValueOrDefault(player.UserId) ?? []));
         }
@@ -420,6 +433,20 @@ public sealed class CampaignPointScoringState
 
     /// <summary>Gets public-objective award facts, oldest first when ordered by time.</summary>
     public required IReadOnlyList<PublicObjectiveAward> Awards { get; init; }
+
+    /// <summary>Gets assigned private objectives.</summary>
+    public IReadOnlyList<PrivateObjectiveAssignment> PrivateObjectives { get; init; } = [];
+
+    /// <summary>Gets campaign points for each private-objective catalog type.</summary>
+    public IReadOnlyDictionary<Guid, int> PrivateObjectivePoints { get; init; } =
+        new Dictionary<Guid, int>();
+
+    /// <summary>Gets ally-group identifiers by faction.</summary>
+    public IReadOnlyDictionary<Guid, Guid?> AllyGroupByFaction { get; init; } =
+        new Dictionary<Guid, Guid?>();
+
+    /// <summary>Gets whether the campaign is completed, so remaining private objectives count.</summary>
+    public bool CampaignCompleted { get; init; }
 }
 
 /// <summary>
@@ -443,12 +470,13 @@ public readonly record struct CampaignPointTerritory(
     StructureCondition StructureCondition);
 
 /// <summary>
-/// One player's current campaign-point breakdown. The four component totals add up to <see cref="Total"/>.
+/// One player's current campaign-point breakdown. The five component totals add up to <see cref="Total"/>.
 /// </summary>
 /// <param name="UserId">The player.</param>
 /// <param name="TerritoryAndStructurePoints">Points from currently owned non-destroyed structures.</param>
 /// <param name="BattlesWonPoints">Points from resolved battles, including draws and differentials.</param>
 /// <param name="PublicObjectivePoints">Points from ranking objectives and currently active named awards.</param>
+/// <param name="PrivateObjectivePoints">Points from revealed or completed private objectives that apply to this player.</param>
 /// <param name="OtherPoints">Points from currently held visible item objectives.</param>
 /// <param name="HeldItemTypeIds">Distinct item-objective types the player currently holds, when visible to the viewer.</param>
 public sealed record CampaignPointStanding(
@@ -456,9 +484,11 @@ public sealed record CampaignPointStanding(
     int TerritoryAndStructurePoints,
     int BattlesWonPoints,
     int PublicObjectivePoints,
+    int PrivateObjectivePoints,
     int OtherPoints,
     IReadOnlyList<Guid> HeldItemTypeIds)
 {
-    /// <summary>Gets the sum of the four component columns.</summary>
-    public int Total => TerritoryAndStructurePoints + BattlesWonPoints + PublicObjectivePoints + OtherPoints;
+    /// <summary>Gets the sum of the five component columns.</summary>
+    public int Total =>
+        TerritoryAndStructurePoints + BattlesWonPoints + PublicObjectivePoints + PrivateObjectivePoints + OtherPoints;
 }

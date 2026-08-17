@@ -66,6 +66,10 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<DebugCorrectOrderHandler>();
         services.AddScoped<RevealHiddenItemObjectivesHandler>();
         services.AddScoped<SetPublicObjectiveAwardHandler>();
+        services.AddScoped<GrantPrivateObjectiveHandler>();
+        services.AddScoped<ClaimPrivateObjectiveHandler>();
+        services.AddScoped<ModeratePrivateObjectiveHandler>();
+        services.AddScoped<ResolveItemObjectiveChoiceHandler>();
 
         services.AddScoped<CampaignNotificationPublisher>();
         services.AddScoped<GetHomeBoardHandler>();

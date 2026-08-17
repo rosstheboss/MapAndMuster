@@ -31,4 +31,13 @@ public sealed class ItemObjectiveTypeInput
 
     /// <summary>Gets campaign points awarded while a force currently holds this item. Defaults to 0.</summary>
     public int? CampaignPoints { get; init; }
+
+    /// <summary>Gets optional flavor or lore text shown to the holder.</summary>
+    public string? FlavorText { get; init; }
+
+    /// <summary>Gets holder choices configured for this item.</summary>
+    public IReadOnlyList<ItemObjectiveChoiceInput>? Choices { get; init; }
+
+    /// <summary>Gets special-rule identifiers assigned to this item.</summary>
+    public IReadOnlyList<Guid>? SpecialRuleIds { get; init; }
 }

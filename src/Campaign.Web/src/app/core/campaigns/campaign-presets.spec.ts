@@ -17,6 +17,17 @@ describe('campaign presets', () => {
     expect(copy!.terrainTypes.some((entry) => entry.name === 'Highlands')).toBe(true);
     expect(copy!.structureTypes.some((entry) => entry.name === 'Town')).toBe(true);
     expect(copy!.itemObjectives).toEqual([]);
+    expect(copy!.specialRules.length).toBeGreaterThan(0);
+    expect(copy!.specialRules.some((rule) => rule.name === 'Forced March')).toBe(true);
+    expect(copy!.specialRules.find((rule) => rule.name === 'Forced March')?.description).toContain(
+      'one extra adjacent territory',
+    );
+    expect(copy!.factions.find((faction) => faction.name === 'Beastmen Brayherds')?.specialRuleNames).toEqual([
+      'Scattered Arrival',
+      'Harsh Reaving',
+      'Living Ground',
+    ]);
+    expect(copy!.terrainTypes.find((entry) => entry.name === 'Sea')?.isWaterFeature).toBe(true);
     expect(campaignFromPreset('unknown')).toBeNull();
   });
 });

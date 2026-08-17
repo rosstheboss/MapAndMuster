@@ -1,3 +1,4 @@
+using Campaign.Application.Play;
 using Campaign.Domain.Play;
 
 namespace Campaign.Application.Campaigns;
@@ -12,16 +13,18 @@ internal static class CampaignPointStandingsMapper
         StoredCampaign campaign,
         IReadOnlyList<CampaignParticipantDetail> participants,
         Guid viewerUserId,
-        bool staffView)
+        bool staffView,
+        DateTimeOffset utcNow)
     {
-        return ToScoring(campaign, participants, viewerUserId, staffView).Standings;
+        return ToScoring(campaign, participants, viewerUserId, staffView, utcNow).Standings;
     }
 
     public static CampaignScoringView ToScoring(
         StoredCampaign campaign,
         IReadOnlyList<CampaignParticipantDetail> participants,
         Guid viewerUserId,
-        bool staffView)
+        bool staffView,
+        DateTimeOffset utcNow)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(participants);
@@ -76,6 +79,10 @@ internal static class CampaignPointStandingsMapper
             Forces = play.Forces,
             VisibleItems = visibleItems,
             Awards = play.PublicObjectiveAwards,
+            PrivateObjectives = play.PrivateObjectives,
+            PrivateObjectivePoints = campaign.PrivateObjectiveTypes.ToDictionary(static type => type.Id, static type => type.CampaignPoints),
+            AllyGroupByFaction = CampaignPlayCatalog.AllyGroupByFaction(campaign),
+            CampaignCompleted = CampaignLifecycle.Progress(campaign, utcNow).Status == Campaign.Domain.Campaigns.CampaignStatus.Completed,
         });
 
         var byUser = participants.ToDictionary(static participant => participant.UserId);
@@ -101,6 +108,7 @@ internal static class CampaignPointStandingsMapper
                 TerritoryAndStructurePoints = standing.TerritoryAndStructurePoints,
                 BattlesWonPoints = standing.BattlesWonPoints,
                 PublicObjectivePoints = standing.PublicObjectivePoints,
+                PrivateObjectivePoints = standing.PrivateObjectivePoints,
                 OtherPoints = standing.OtherPoints,
                 Total = standing.Total,
                 HeldItems =

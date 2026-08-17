@@ -807,7 +807,7 @@ public sealed class CampaignHandlerTests
         Assert.True(holderView.IsSuccess);
         var holderRow = Assert.Single(holderView.Value!.Standings, row => row.UserId == UserId);
         Assert.Equal(7, holderRow.OtherPoints);
-        Assert.Equal(holderRow.TerritoryAndStructurePoints + holderRow.BattlesWonPoints + holderRow.PublicObjectivePoints + holderRow.OtherPoints, holderRow.Total);
+        Assert.Equal(holderRow.TerritoryAndStructurePoints + holderRow.BattlesWonPoints + holderRow.PublicObjectivePoints + holderRow.PrivateObjectivePoints + holderRow.OtherPoints, holderRow.Total);
         Assert.Equal("Crown", Assert.Single(holderRow.HeldItems).Name);
 
         var otherView = await get.HandleAsync(campaign.Id, OtherUserId, false, CancellationToken.None);
@@ -820,6 +820,7 @@ public sealed class CampaignHandlerTests
             hiddenFromRival.TerritoryAndStructurePoints
             + hiddenFromRival.BattlesWonPoints
             + hiddenFromRival.PublicObjectivePoints
+            + hiddenFromRival.PrivateObjectivePoints
             + hiddenFromRival.OtherPoints,
             hiddenFromRival.Total);
     }

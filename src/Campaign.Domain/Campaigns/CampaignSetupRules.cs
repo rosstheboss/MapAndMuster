@@ -55,8 +55,23 @@ public static class CampaignSetupRules
     /// <summary>Maximum number of public campaign objectives.</summary>
     public const int MaxPublicObjectiveTypeCount = 50;
 
+    /// <summary>Maximum number of private campaign objectives.</summary>
+    public const int MaxPrivateObjectiveTypeCount = 50;
+
+    /// <summary>Maximum number of reusable special rules.</summary>
+    public const int MaxSpecialRuleCount = 80;
+
     /// <summary>Maximum campaign points for one configured source.</summary>
     public const int MaxCampaignPoints = 999;
+
+    /// <summary>Maximum length of special-rule, flavor, and private-objective text.</summary>
+    public const int CatalogTextMaxLength = 2000;
+
+    /// <summary>Maximum holder choices on one item objective.</summary>
+    public const int MaxItemObjectiveChoiceCount = 10;
+
+    /// <summary>Maximum results on one item-objective choice.</summary>
+    public const int MaxItemObjectiveChoiceResultCount = 12;
 
     /// <summary>Maximum missions nested under one terrain type or structure.</summary>
     public const int MaxMissionsPerCatalogItem = 20;
@@ -189,6 +204,8 @@ public static class CampaignSetupRules
     /// <param name="mostTerritoriesCampaignPoints">Points for most territories currently controlled. Zero ignores the objective.</param>
     /// <param name="longestTerritoryChainCampaignPoints">Points for the longest owned territory chain. Zero ignores the objective.</param>
     /// <param name="mostBattlesWonCampaignPoints">Points for most battle wins. Zero ignores the objective.</param>
+    /// <param name="specialRules">Reusable special-rule inputs. Omitted or empty means none.</param>
+    /// <param name="privateObjectiveTypes">Private-objective inputs. Omitted or empty means none.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
@@ -230,7 +247,9 @@ public static class CampaignSetupRules
         bool? allowNegativeDifferential = null,
         int? mostTerritoriesCampaignPoints = null,
         int? longestTerritoryChainCampaignPoints = null,
-        int? mostBattlesWonCampaignPoints = null)
+        int? mostBattlesWonCampaignPoints = null,
+        IReadOnlyList<SpecialRuleInput>? specialRules = null,
+        IReadOnlyList<PrivateObjectiveTypeInput>? privateObjectiveTypes = null)
     {
         var collected = new List<DomainError>();
         setup = null;
@@ -278,12 +297,22 @@ public static class CampaignSetupRules
         var parsedGroups = ParseAllyGroups(allyGroups, collected);
         var usedIds = new HashSet<Guid>();
         var missionIndex = new MissionIndex();
-        var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, collected);
+        var parsedSpecialRules = ParseSpecialRules(specialRules, usedIds, collected);
+        var specialRuleIds = parsedSpecialRules.Select(static rule => rule.Id).ToHashSet();
+        var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, specialRuleIds, collected);
         ValidateAllyMembership(parsedFactions, parsedGroups, collected);
         var parsedLinks = ParseLinks(links, collected);
         var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, collected);
         var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, collected);
-        var parsedItems = ParseItemObjectiveTypes(itemObjectiveTypes, usedIds, collected);
+        var structureTypeIds = parsedStructures.Select(static type => type.Id).ToHashSet();
+        var parsedPrivate = ParsePrivateObjectiveTypes(privateObjectiveTypes, usedIds, structureTypeIds, collected);
+        var privateObjectiveIds = parsedPrivate.Select(static type => type.Id).ToHashSet();
+        var parsedItems = ParseItemObjectiveTypes(
+            itemObjectiveTypes,
+            usedIds,
+            specialRuleIds,
+            privateObjectiveIds,
+            collected);
         var parsedPublic = ParsePublicObjectiveTypes(publicObjectiveTypes, usedIds, collected);
         var parsedBattleScoring = ParseBattleScoring(
             pointsPerBattleWon,
@@ -327,7 +356,9 @@ public static class CampaignSetupRules
             parsedSchedule!,
             parsedPublic,
             parsedBattleScoring,
-            parsedRanking);
+            parsedRanking,
+            parsedSpecialRules,
+            parsedPrivate);
         errors = collected;
         return true;
     }
@@ -490,6 +521,7 @@ public static class CampaignSetupRules
         IReadOnlyList<FactionInput>? factions,
         IReadOnlyList<AllyGroupSetup> allyGroups,
         HashSet<Guid> usedIds,
+        HashSet<Guid> knownSpecialRuleIds,
         List<DomainError> errors)
     {
         var parsed = new List<FactionSetup>();
@@ -579,7 +611,13 @@ public static class CampaignSetupRules
                 subfactions,
                 canonicalGroup,
                 faction.RequiresSubfaction,
-                faction.ClearFlagImage));
+                faction.ClearFlagImage,
+                ParseAssignedSpecialRuleIds(
+                    faction.SpecialRuleIds,
+                    knownSpecialRuleIds,
+                    $"factions[{index}].specialRuleIds",
+                    $"Faction {index + 1}",
+                    errors)));
         }
 
         return parsed;
@@ -713,7 +751,8 @@ public static class CampaignSetupRules
                 ResolveId(input.Id, usedIds, $"terrainTypes[{index}].id", errors),
                 name,
                 color,
-                missionsForType));
+                missionsForType,
+                input.IsWaterFeature ?? TerrainCatalog.IsWaterFeature(name)));
         }
 
         return parsed;
@@ -804,6 +843,8 @@ public static class CampaignSetupRules
     private static List<ItemObjectiveTypeSetup> ParseItemObjectiveTypes(
         IReadOnlyList<ItemObjectiveTypeInput>? itemObjectiveTypes,
         HashSet<Guid> usedIds,
+        HashSet<Guid> knownSpecialRuleIds,
+        HashSet<Guid> knownPrivateObjectiveIds,
         List<DomainError> errors)
     {
         var supplied = itemObjectiveTypes ?? [];
@@ -857,6 +898,11 @@ public static class CampaignSetupRules
             }
 
             var color = ParseOptionalItemColor(input.Color, $"itemObjectiveTypes[{index}].color", $"Item objective {index + 1} color", errors);
+            var flavor = ParseOptionalCatalogText(
+                input.FlavorText,
+                $"itemObjectiveTypes[{index}].flavorText",
+                $"Item objective {index + 1} flavor text",
+                errors);
             parsed.Add(new ItemObjectiveTypeSetup(
                 ResolveId(input.Id, usedIds, $"itemObjectiveTypes[{index}].id", errors),
                 name,
@@ -870,9 +916,23 @@ public static class CampaignSetupRules
                     input.CampaignPoints,
                     $"itemObjectiveTypes[{index}].campaignPoints",
                     $"Item objective {index + 1} campaign points",
+                    errors),
+                flavor,
+                ParseItemObjectiveChoices(
+                    input.Choices,
+                    usedIds,
+                    knownPrivateObjectiveIds,
+                    index,
+                    errors),
+                ParseAssignedSpecialRuleIds(
+                    input.SpecialRuleIds,
+                    knownSpecialRuleIds,
+                    $"itemObjectiveTypes[{index}].specialRuleIds",
+                    $"Item objective {index + 1}",
                     errors)));
         }
 
+        ValidateItemReplacementReferences(parsed, errors);
         return parsed;
     }
 
@@ -1682,6 +1742,487 @@ public static class CampaignSetupRules
         }
 
         return Enum.TryParse(raw.Trim(), ignoreCase: true, out kind) && Enum.IsDefined(kind);
+    }
+
+    private static List<SpecialRuleSetup> ParseSpecialRules(
+        IReadOnlyList<SpecialRuleInput>? specialRules,
+        HashSet<Guid> usedIds,
+        List<DomainError> errors)
+    {
+        var supplied = specialRules ?? [];
+        var parsed = new List<SpecialRuleSetup>();
+        if (supplied.Count > MaxSpecialRuleCount)
+        {
+            errors.Add(new DomainError(
+                "specialRules.invalid",
+                $"At most {MaxSpecialRuleCount} special rules are allowed.",
+                "specialRules"));
+            return parsed;
+        }
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var name = ParseRequiredName(
+                input.Name,
+                $"specialRules[{index}].name",
+                $"Special rule {index + 1} name",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!seenNames.Add(name))
+            {
+                errors.Add(new DomainError(
+                    "specialRules.duplicate",
+                    "Special rule names must be unique.",
+                    $"specialRules[{index}].name"));
+                continue;
+            }
+
+            var text = ParseOptionalCatalogText(
+                input.Text,
+                $"specialRules[{index}].text",
+                $"Special rule {index + 1} text",
+                errors) ?? string.Empty;
+            parsed.Add(new SpecialRuleSetup(
+                ResolveId(input.Id, usedIds, $"specialRules[{index}].id", errors),
+                name,
+                text));
+        }
+
+        return parsed;
+    }
+
+    private static List<PrivateObjectiveTypeSetup> ParsePrivateObjectiveTypes(
+        IReadOnlyList<PrivateObjectiveTypeInput>? privateObjectiveTypes,
+        HashSet<Guid> usedIds,
+        HashSet<Guid> knownStructureTypeIds,
+        List<DomainError> errors)
+    {
+        var supplied = privateObjectiveTypes ?? [];
+        var parsed = new List<PrivateObjectiveTypeSetup>();
+        if (supplied.Count > MaxPrivateObjectiveTypeCount)
+        {
+            errors.Add(new DomainError(
+                "privateObjectiveTypes.invalid",
+                $"At most {MaxPrivateObjectiveTypeCount} private objectives are allowed.",
+                "privateObjectiveTypes"));
+            return parsed;
+        }
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var name = ParseRequiredName(
+                input.Name,
+                $"privateObjectiveTypes[{index}].name",
+                $"Private objective {index + 1} name",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!seenNames.Add(name))
+            {
+                errors.Add(new DomainError(
+                    "privateObjectiveTypes.duplicate",
+                    "Private objective names must be unique.",
+                    $"privateObjectiveTypes[{index}].name"));
+                continue;
+            }
+
+            var description = ParseOptionalCatalogText(
+                input.Description,
+                $"privateObjectiveTypes[{index}].description",
+                $"Private objective {index + 1} description",
+                errors);
+            var holderKinds = ParseHolderKinds(input.AllowedHolderKinds, index, errors);
+            if (!TryParseScoringKind(input.ScoringKind, index, errors, out var scoringKind))
+            {
+                continue;
+            }
+
+            var automaticKind = PrivateObjectiveAutomaticKind.None;
+            if (scoringKind == PrivateObjectiveScoringKind.Automatic
+                && !TryParseAutomaticKind(input.AutomaticKind, index, errors, out automaticKind))
+            {
+                continue;
+            }
+
+            if (scoringKind == PrivateObjectiveScoringKind.Manual)
+            {
+                automaticKind = PrivateObjectiveAutomaticKind.None;
+            }
+
+            var requiredCount = input.RequiredCount ?? 1;
+            if (requiredCount < 1 || requiredCount > MaxCampaignPoints)
+            {
+                errors.Add(new DomainError(
+                    $"privateObjectiveTypes[{index}].requiredCount.invalid",
+                    $"Private objective {index + 1} required count must be between 1 and {MaxCampaignPoints}.",
+                    $"privateObjectiveTypes[{index}].requiredCount"));
+                requiredCount = 1;
+            }
+
+            Guid? structureTypeId = input.StructureTypeId;
+            if (automaticKind is PrivateObjectiveAutomaticKind.ControlStructureType
+                or PrivateObjectiveAutomaticKind.PillageStructureType
+                or PrivateObjectiveAutomaticKind.DestroyStructureType)
+            {
+                if (structureTypeId is not { } structureId || !knownStructureTypeIds.Contains(structureId))
+                {
+                    errors.Add(new DomainError(
+                        $"privateObjectiveTypes[{index}].structureTypeId.invalid",
+                        $"Private objective {index + 1} must name a structure type from this campaign.",
+                        $"privateObjectiveTypes[{index}].structureTypeId"));
+                    structureTypeId = null;
+                }
+            }
+            else
+            {
+                structureTypeId = null;
+            }
+
+            var territoryIds = (input.TerritoryIds ?? [])
+                .Where(static id => id != Guid.Empty)
+                .Distinct()
+                .ToArray();
+            if (automaticKind == PrivateObjectiveAutomaticKind.ControlNamedTerritories && territoryIds.Length == 0)
+            {
+                errors.Add(new DomainError(
+                    $"privateObjectiveTypes[{index}].territoryIds.invalid",
+                    $"Private objective {index + 1} must list at least one territory.",
+                    $"privateObjectiveTypes[{index}].territoryIds"));
+            }
+
+            parsed.Add(new PrivateObjectiveTypeSetup(
+                ResolveId(input.Id, usedIds, $"privateObjectiveTypes[{index}].id", errors),
+                name,
+                description,
+                ParseCampaignPoints(
+                    input.CampaignPoints,
+                    $"privateObjectiveTypes[{index}].campaignPoints",
+                    $"Private objective {index + 1} campaign points",
+                    errors),
+                holderKinds,
+                scoringKind,
+                automaticKind,
+                requiredCount,
+                structureTypeId,
+                territoryIds));
+        }
+
+        return parsed;
+    }
+
+    private static List<PrivateObjectiveHolderKind> ParseHolderKinds(
+        IReadOnlyList<string>? raw,
+        int index,
+        List<DomainError> errors)
+    {
+        if (raw is null || raw.Count == 0)
+        {
+            return
+            [
+                PrivateObjectiveHolderKind.Player,
+                PrivateObjectiveHolderKind.Faction,
+                PrivateObjectiveHolderKind.AllyGroup,
+            ];
+        }
+
+        var parsed = new List<PrivateObjectiveHolderKind>();
+        foreach (var value in raw)
+        {
+            if (!Enum.TryParse<PrivateObjectiveHolderKind>(value, ignoreCase: true, out var kind) || !Enum.IsDefined(kind))
+            {
+                errors.Add(new DomainError(
+                    $"privateObjectiveTypes[{index}].allowedHolderKinds.invalid",
+                    $"Private objective {index + 1} holder must be Player, Faction, or AllyGroup.",
+                    $"privateObjectiveTypes[{index}].allowedHolderKinds"));
+                continue;
+            }
+
+            if (!parsed.Contains(kind))
+            {
+                parsed.Add(kind);
+            }
+        }
+
+        return parsed.Count == 0
+            ?
+            [
+                PrivateObjectiveHolderKind.Player,
+                PrivateObjectiveHolderKind.Faction,
+                PrivateObjectiveHolderKind.AllyGroup,
+            ]
+            : parsed;
+    }
+
+    private static bool TryParseScoringKind(
+        string? raw,
+        int index,
+        List<DomainError> errors,
+        out PrivateObjectiveScoringKind kind)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            kind = PrivateObjectiveScoringKind.Manual;
+            return true;
+        }
+
+        if (Enum.TryParse(raw.Trim(), ignoreCase: true, out kind) && Enum.IsDefined(kind))
+        {
+            return true;
+        }
+
+        errors.Add(new DomainError(
+            $"privateObjectiveTypes[{index}].scoringKind.invalid",
+            $"Private objective {index + 1} scoring must be Manual or Automatic.",
+            $"privateObjectiveTypes[{index}].scoringKind"));
+        kind = PrivateObjectiveScoringKind.Manual;
+        return false;
+    }
+
+    private static bool TryParseAutomaticKind(
+        string? raw,
+        int index,
+        List<DomainError> errors,
+        out PrivateObjectiveAutomaticKind kind)
+    {
+        if (Enum.TryParse(raw, ignoreCase: true, out kind)
+            && Enum.IsDefined(kind)
+            && kind != PrivateObjectiveAutomaticKind.None)
+        {
+            return true;
+        }
+
+        errors.Add(new DomainError(
+            $"privateObjectiveTypes[{index}].automaticKind.invalid",
+            $"Private objective {index + 1} needs an automatic criterion.",
+            $"privateObjectiveTypes[{index}].automaticKind"));
+        kind = PrivateObjectiveAutomaticKind.None;
+        return false;
+    }
+
+    private static List<Guid> ParseAssignedSpecialRuleIds(
+        IReadOnlyList<Guid>? ids,
+        HashSet<Guid> knownSpecialRuleIds,
+        string field,
+        string ownerLabel,
+        List<DomainError> errors)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            return [];
+        }
+
+        var parsed = new List<Guid>();
+        foreach (var id in ids.Distinct())
+        {
+            if (!knownSpecialRuleIds.Contains(id))
+            {
+                errors.Add(new DomainError(
+                    $"{field}.unknown",
+                    $"{ownerLabel} references a special rule that was not created.",
+                    field));
+                continue;
+            }
+
+            parsed.Add(id);
+        }
+
+        return parsed;
+    }
+
+    private static List<ItemObjectiveChoiceSetup> ParseItemObjectiveChoices(
+        IReadOnlyList<ItemObjectiveChoiceInput>? choices,
+        HashSet<Guid> usedIds,
+        HashSet<Guid> knownPrivateObjectiveIds,
+        int itemIndex,
+        List<DomainError> errors)
+    {
+        var supplied = choices ?? [];
+        if (supplied.Count > MaxItemObjectiveChoiceCount)
+        {
+            errors.Add(new DomainError(
+                $"itemObjectiveTypes[{itemIndex}].choices.invalid",
+                $"Item objective {itemIndex + 1} may have at most {MaxItemObjectiveChoiceCount} choices.",
+                $"itemObjectiveTypes[{itemIndex}].choices"));
+            return [];
+        }
+
+        var parsed = new List<ItemObjectiveChoiceSetup>();
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var name = ParseRequiredName(
+                input.Name,
+                $"itemObjectiveTypes[{itemIndex}].choices[{index}].name",
+                $"Item objective {itemIndex + 1} choice {index + 1} name",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!seenNames.Add(name))
+            {
+                errors.Add(new DomainError(
+                    $"itemObjectiveTypes[{itemIndex}].choices.duplicate",
+                    $"Item objective {itemIndex + 1} choice names must be unique.",
+                    $"itemObjectiveTypes[{itemIndex}].choices[{index}].name"));
+                continue;
+            }
+
+            var results = ParseItemObjectiveChoiceResults(
+                input.Results,
+                usedIds,
+                knownPrivateObjectiveIds,
+                itemIndex,
+                index,
+                errors);
+            if (results.Count == 0)
+            {
+                errors.Add(new DomainError(
+                    $"itemObjectiveTypes[{itemIndex}].choices[{index}].results.invalid",
+                    $"Item objective {itemIndex + 1} choice {index + 1} needs at least one result.",
+                    $"itemObjectiveTypes[{itemIndex}].choices[{index}].results"));
+                continue;
+            }
+
+            parsed.Add(new ItemObjectiveChoiceSetup(
+                ResolveId(
+                    input.Id,
+                    usedIds,
+                    $"itemObjectiveTypes[{itemIndex}].choices[{index}].id",
+                    errors),
+                name,
+                results));
+        }
+
+        return parsed;
+    }
+
+    private static List<ItemObjectiveChoiceResultSetup> ParseItemObjectiveChoiceResults(
+        IReadOnlyList<ItemObjectiveChoiceResultInput>? results,
+        HashSet<Guid> usedIds,
+        HashSet<Guid> knownPrivateObjectiveIds,
+        int itemIndex,
+        int choiceIndex,
+        List<DomainError> errors)
+    {
+        var supplied = results ?? [];
+        if (supplied.Count > MaxItemObjectiveChoiceResultCount)
+        {
+            errors.Add(new DomainError(
+                $"itemObjectiveTypes[{itemIndex}].choices[{choiceIndex}].results.invalid",
+                $"Item objective {itemIndex + 1} choice {choiceIndex + 1} may have at most {MaxItemObjectiveChoiceResultCount} results.",
+                $"itemObjectiveTypes[{itemIndex}].choices[{choiceIndex}].results"));
+            return [];
+        }
+
+        var parsed = new List<ItemObjectiveChoiceResultSetup>();
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var flavor = ParseOptionalCatalogText(
+                input.FlavorText,
+                $"itemObjectiveTypes[{itemIndex}].choices[{choiceIndex}].results[{index}].flavorText",
+                $"Item objective {itemIndex + 1} choice result flavor text",
+                errors);
+            var stateKey = ParseOptionalCatalogText(
+                input.NewStateKey,
+                $"itemObjectiveTypes[{itemIndex}].choices[{choiceIndex}].results[{index}].newStateKey",
+                $"Item objective {itemIndex + 1} choice result state",
+                errors,
+                NamedItemMaxLength);
+            Guid? granted = input.GrantedPrivateObjectiveTypeId;
+            if (granted is { } grantedId && grantedId != Guid.Empty && !knownPrivateObjectiveIds.Contains(grantedId))
+            {
+                errors.Add(new DomainError(
+                    $"itemObjectiveTypes[{itemIndex}].choices[{choiceIndex}].results[{index}].grantedPrivateObjectiveTypeId.unknown",
+                    $"Item objective {itemIndex + 1} choice result references an unknown private objective.",
+                    $"itemObjectiveTypes[{itemIndex}].choices[{choiceIndex}].results[{index}].grantedPrivateObjectiveTypeId"));
+                granted = null;
+            }
+
+            parsed.Add(new ItemObjectiveChoiceResultSetup(
+                ResolveId(
+                    input.Id,
+                    usedIds,
+                    $"itemObjectiveTypes[{itemIndex}].choices[{choiceIndex}].results[{index}].id",
+                    errors),
+                flavor,
+                stateKey,
+                input.DestroyItem,
+                input.ReplacementItemTypeId is { } replacement && replacement != Guid.Empty ? replacement : null,
+                granted is { } id && id != Guid.Empty ? id : null));
+        }
+
+        return parsed;
+    }
+
+    private static void ValidateItemReplacementReferences(
+        IReadOnlyList<ItemObjectiveTypeSetup> items,
+        List<DomainError> errors)
+    {
+        var known = items.Select(static item => item.Id).ToHashSet();
+        foreach (var item in items)
+        {
+            foreach (var choice in item.Choices)
+            {
+                foreach (var result in choice.Results)
+                {
+                    if (result.ReplacementItemTypeId is { } replacement
+                        && replacement != item.Id
+                        && !known.Contains(replacement))
+                    {
+                        errors.Add(new DomainError(
+                            "itemObjectiveTypes.replacement.unknown",
+                            $"Item objective '{item.Name}' choice '{choice.Name}' references an unknown replacement item.",
+                            "itemObjectiveTypes"));
+                    }
+                }
+            }
+        }
+    }
+
+    private static string? ParseOptionalCatalogText(
+        string? raw,
+        string field,
+        string label,
+        List<DomainError> errors,
+        int maxLength = CatalogTextMaxLength)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var trimmed = raw.Trim();
+        if (trimmed.Length > maxLength)
+        {
+            errors.Add(new DomainError(
+                $"{field}.invalid",
+                $"{label} is too long (maximum {maxLength} characters).",
+                field));
+            return null;
+        }
+
+        return trimmed;
     }
 
     private sealed class MissionIndex

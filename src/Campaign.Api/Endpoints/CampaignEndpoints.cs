@@ -296,6 +296,38 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/private-objectives/grant", GrantPrivateObjectiveAsync)
+            .WithName("GrantPrivateObjective")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/private-objectives/claim", ClaimPrivateObjectiveAsync)
+            .WithName("ClaimPrivateObjective")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/private-objectives/moderate", ModeratePrivateObjectiveAsync)
+            .WithName("ModeratePrivateObjective")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/item-objectives/choices", ResolveItemObjectiveChoiceAsync)
+            .WithName("ResolveItemObjectiveChoice")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
     }
 
     private static async Task<IResult> ListAsync(
@@ -374,6 +406,8 @@ public static class CampaignEndpoints
                     StructureTypes = CampaignResponses.ToStructureTypeInputs(request.StructureTypes),
                     ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
                     PublicObjectiveTypes = CampaignResponses.ToPublicObjectiveTypeInputs(request.PublicObjectiveTypes),
+                    SpecialRules = CampaignResponses.ToSpecialRuleInputs(request.SpecialRules),
+                    PrivateObjectiveTypes = CampaignResponses.ToPrivateObjectiveTypeInputs(request.PrivateObjectiveTypes),
                     PointsPerBattleWon = request.PointsPerBattleWon,
                     PointsPerBattleDraw = request.PointsPerBattleDraw,
                     UseDifferentialBattleScoring = request.UseDifferentialBattleScoring,
@@ -558,6 +592,8 @@ public static class CampaignEndpoints
                     StructureTypes = CampaignResponses.ToStructureTypeInputs(request.StructureTypes),
                     ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
                     PublicObjectiveTypes = CampaignResponses.ToPublicObjectiveTypeInputs(request.PublicObjectiveTypes),
+                    SpecialRules = CampaignResponses.ToSpecialRuleInputs(request.SpecialRules),
+                    PrivateObjectiveTypes = CampaignResponses.ToPrivateObjectiveTypeInputs(request.PrivateObjectiveTypes),
                     PointsPerBattleWon = request.PointsPerBattleWon,
                     PointsPerBattleDraw = request.PointsPerBattleDraw,
                     UseDifferentialBattleScoring = request.UseDifferentialBattleScoring,
@@ -1490,6 +1526,122 @@ public static class CampaignEndpoints
                     ObjectiveId = request.ObjectiveId,
                     PlayerUserId = request.PlayerUserId,
                     Awarded = request.Awarded,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> GrantPrivateObjectiveAsync(
+        Guid campaignId,
+        GrantPrivateObjectiveRequest request,
+        ClaimsPrincipal principal,
+        GrantPrivateObjectiveHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new GrantPrivateObjectiveCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    HolderKind = request.HolderKind,
+                    HolderId = request.HolderId,
+                    TypeId = request.TypeId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ClaimPrivateObjectiveAsync(
+        Guid campaignId,
+        ClaimPrivateObjectiveRequest request,
+        ClaimsPrincipal principal,
+        ClaimPrivateObjectiveHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ClaimPrivateObjectiveCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    AssignmentId = request.AssignmentId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ModeratePrivateObjectiveAsync(
+        Guid campaignId,
+        ModeratePrivateObjectiveRequest request,
+        ClaimsPrincipal principal,
+        ModeratePrivateObjectiveHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ModeratePrivateObjectiveCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    AssignmentId = request.AssignmentId,
+                    Approved = request.Approved,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ResolveItemObjectiveChoiceAsync(
+        Guid campaignId,
+        ResolveItemObjectiveChoiceRequest request,
+        ClaimsPrincipal principal,
+        ResolveItemObjectiveChoiceHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ResolveItemObjectiveChoiceCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    ItemId = request.ItemId,
+                    ChoiceId = request.ChoiceId,
                 },
                 cancellationToken)
             .ConfigureAwait(false);

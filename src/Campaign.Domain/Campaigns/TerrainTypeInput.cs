@@ -16,4 +16,7 @@ public sealed class TerrainTypeInput
 
     /// <summary>Gets nested missions. At least one is required.</summary>
     public IReadOnlyList<MissionInput>? Missions { get; init; }
+
+    /// <summary>Gets whether this terrain is a water feature. Defaults to false.</summary>
+    public bool? IsWaterFeature { get; init; }
 }

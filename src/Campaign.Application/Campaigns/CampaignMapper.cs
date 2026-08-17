@@ -1,6 +1,7 @@
 using Campaign.Application.Play;
 using Campaign.Domain.Campaigns;
 using Campaign.Domain.Identity;
+using Campaign.Domain.Play;
 
 namespace Campaign.Application.Campaigns;
 
@@ -66,6 +67,7 @@ public static class CampaignMapper
     /// <param name="inspectPrivateChat">Whether the viewer may inspect all private chats.</param>
     /// <param name="participants">Members attached to the campaign, when already mapped.</param>
     /// <param name="staffView">Whether hidden item objectives are visible to the viewer.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <returns>The detail.</returns>
     public static CampaignDetail ToDetail(
         StoredCampaign campaign,
@@ -76,14 +78,18 @@ public static class CampaignMapper
         IReadOnlyList<ChatChannelDetail>? chatChannels = null,
         bool inspectPrivateChat = false,
         IReadOnlyList<CampaignParticipantDetail>? participants = null,
-        bool staffView = false)
+        bool staffView = false,
+        bool isAdministrator = false)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
         var schedule = ToSchedule(campaign);
         var progress = CampaignLifecycle.Progress(campaign, utcNow);
         var mappedParticipants = participants ?? [];
-        var scoring = CampaignPointStandingsMapper.ToScoring(campaign, mappedParticipants, viewerUserId, staffView);
+        var scoring = CampaignPointStandingsMapper.ToScoring(campaign, mappedParticipants, viewerUserId, staffView, utcNow);
+        var canStaff = membership?.IsGameMaster == true || isAdministrator;
+        var completed = progress.Status == CampaignStatus.Completed;
+        var viewerAllyGroupId = ViewerAllyGroupId(campaign, membership?.FactionId);
         return new CampaignDetail
         {
             Id = campaign.Id,
@@ -112,6 +118,7 @@ public static class CampaignMapper
                 AllyGroupName = faction.AllyGroupName,
                 RequiresSubfaction = faction.RequiresSubfaction,
                 HasFlagImage = !string.IsNullOrWhiteSpace(faction.FlagImageStorageKey),
+                SpecialRuleIds = faction.SpecialRuleIds,
             })],
             TerrainTypes = [.. campaign.TerrainTypes.Select(static type => new TerrainTypeDetail
             {
@@ -120,6 +127,7 @@ public static class CampaignMapper
                 Color = type.Color,
                 Missions = [.. type.Missions.Select(ToMission)],
                 CampaignPoints = type.CampaignPoints,
+                IsWaterFeature = type.IsWaterFeature,
             })],
             StructureTypes = [.. campaign.StructureTypes.Select(static type => new StructureTypeDetail
             {
@@ -134,18 +142,7 @@ public static class CampaignMapper
                 Missions = [.. type.Missions.Select(ToMission)],
                 CampaignPoints = type.CampaignPoints,
             })],
-            ItemObjectiveTypes = [.. campaign.ItemObjectiveTypes.Select(static type => new ItemObjectiveTypeDetail
-            {
-                Id = type.Id,
-                Name = type.Name,
-                IsHiddenUntilFound = type.IsHiddenUntilFound,
-                Placement = type.Placement,
-                AllowOnSpawn = type.AllowOnSpawn,
-                BuiltinSymbol = type.BuiltinSymbol,
-                Color = type.Color,
-                HasImage = !string.IsNullOrWhiteSpace(type.ImageStorageKey),
-                CampaignPoints = type.CampaignPoints,
-            })],
+            ItemObjectiveTypes = [.. campaign.ItemObjectiveTypes.Select(type => ToItemObjectiveType(type, canStaff))],
             PublicObjectiveTypes = [.. campaign.PublicObjectiveTypes.Select(static type => new PublicObjectiveTypeDetail
             {
                 Id = type.Id,
@@ -153,6 +150,15 @@ public static class CampaignMapper
                 Description = type.Description,
                 CampaignPoints = type.CampaignPoints,
             })],
+            SpecialRules = [.. campaign.SpecialRules.Select(static rule => new SpecialRuleDetail
+            {
+                Id = rule.Id,
+                Name = rule.Name,
+                Text = rule.Text,
+            })],
+            PrivateObjectiveTypes = VisiblePrivateTypes(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed),
+            PrivateObjectives = VisiblePrivateAssignments(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed),
+            PrivateObjectiveUnclaimedCounts = UnclaimedCounts(campaign, mappedParticipants),
             PointsPerBattleWon = campaign.BattleScoring.PointsPerWin,
             PointsPerBattleDraw = campaign.BattleScoring.PointsPerDraw,
             UseDifferentialBattleScoring = campaign.BattleScoring.UseDifferential,
@@ -252,6 +258,212 @@ public static class CampaignMapper
     {
         ArgumentNullException.ThrowIfNull(campaign);
         return campaign.Memberships.FirstOrDefault(membership => membership.UserId == viewerUserId);
+    }
+
+    private static ItemObjectiveTypeDetail ToItemObjectiveType(StoredItemObjectiveType type, bool includeSecrets)
+    {
+        return new ItemObjectiveTypeDetail
+        {
+            Id = type.Id,
+            Name = type.Name,
+            IsHiddenUntilFound = type.IsHiddenUntilFound,
+            Placement = type.Placement,
+            AllowOnSpawn = type.AllowOnSpawn,
+            BuiltinSymbol = type.BuiltinSymbol,
+            Color = type.Color,
+            HasImage = !string.IsNullOrWhiteSpace(type.ImageStorageKey),
+            CampaignPoints = type.CampaignPoints,
+            FlavorText = includeSecrets ? type.FlavorText : null,
+            Choices = includeSecrets
+                ? [.. type.Choices.Select(static choice => new ItemObjectiveChoiceDetail
+                {
+                    Id = choice.Id,
+                    Name = choice.Name,
+                    Results =
+                    [
+                        .. choice.Results.Select(static result => new ItemObjectiveChoiceResultDetail
+                        {
+                            Id = result.Id,
+                            FlavorText = result.FlavorText,
+                            NewStateKey = result.NewStateKey,
+                            DestroyItem = result.DestroyItem,
+                            ReplacementItemTypeId = result.ReplacementItemTypeId,
+                            GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+                        }),
+                    ],
+                })]
+                : [],
+            SpecialRuleIds = type.SpecialRuleIds,
+        };
+    }
+
+    private static IReadOnlyList<PrivateObjectiveTypeDetail> VisiblePrivateTypes(
+        StoredCampaign campaign,
+        Guid viewerUserId,
+        Guid? viewerFactionId,
+        Guid? viewerAllyGroupId,
+        bool staffView,
+        bool campaignCompleted)
+    {
+        var assignments = campaign.PlayState?.PrivateObjectives ?? [];
+        return
+        [
+            .. campaign.PrivateObjectiveTypes
+                .Where(type => staffView
+                    || assignments.Any(item =>
+                        item.TypeId == type.Id
+                        && PrivateObjectiveRules.CanViewDetails(
+                            item,
+                            viewerUserId,
+                            viewerFactionId,
+                            viewerAllyGroupId,
+                            staffView,
+                            campaignCompleted)))
+                .Select(type =>
+                {
+                    var visible = staffView
+                        || assignments.Any(item =>
+                            item.TypeId == type.Id
+                            && PrivateObjectiveRules.CanViewDetails(
+                                item,
+                                viewerUserId,
+                                viewerFactionId,
+                                viewerAllyGroupId,
+                                staffView,
+                                campaignCompleted));
+                    return new PrivateObjectiveTypeDetail
+                    {
+                        Id = type.Id,
+                        Name = visible ? type.Name : null,
+                        Description = visible ? type.Description : null,
+                        CampaignPoints = visible ? type.CampaignPoints : null,
+                        AllowedHolderKinds = type.AllowedHolderKinds,
+                        ScoringKind = type.ScoringKind,
+                        AutomaticKind = visible ? type.AutomaticKind : null,
+                        RequiredCount = type.RequiredCount,
+                        StructureTypeId = visible ? type.StructureTypeId : null,
+                        TerritoryIds = visible ? type.TerritoryIds : [],
+                    };
+                }),
+        ];
+    }
+
+    private static IReadOnlyList<PrivateObjectiveAssignmentDetail> VisiblePrivateAssignments(
+        StoredCampaign campaign,
+        Guid viewerUserId,
+        Guid? viewerFactionId,
+        Guid? viewerAllyGroupId,
+        bool staffView,
+        bool campaignCompleted)
+    {
+        var play = campaign.PlayState;
+        if (play is null)
+        {
+            return [];
+        }
+
+        var types = campaign.PrivateObjectiveTypes.ToDictionary(static type => type.Id);
+        return
+        [
+            .. play.PrivateObjectives.Select(assignment =>
+            {
+                types.TryGetValue(assignment.TypeId, out var type);
+                var visible = PrivateObjectiveRules.CanViewDetails(
+                    assignment,
+                    viewerUserId,
+                    viewerFactionId,
+                    viewerAllyGroupId,
+                    staffView,
+                    campaignCompleted);
+                return new PrivateObjectiveAssignmentDetail
+                {
+                    Id = assignment.Id,
+                    TypeId = assignment.TypeId,
+                    HolderKind = assignment.HolderKind.ToString(),
+                    HolderId = assignment.HolderId,
+                    Status = assignment.Status.ToString(),
+                    ScoringKind = assignment.ScoringKind.ToString(),
+                    Name = visible ? type?.Name : null,
+                    Description = visible ? type?.Description : null,
+                    CampaignPoints = visible ? type?.CampaignPoints : null,
+                    CanClaim = assignment.ScoringKind == PrivateObjectiveScoringKind.Manual
+                        && assignment.Status == PrivateObjectiveAssignmentStatus.Assigned
+                        && IsHolder(assignment, viewerUserId, viewerFactionId, viewerAllyGroupId),
+                    CanModerate = staffView
+                        && assignment.ScoringKind == PrivateObjectiveScoringKind.Manual
+                        && assignment.Status is PrivateObjectiveAssignmentStatus.Assigned or PrivateObjectiveAssignmentStatus.Claimed,
+                };
+            }),
+        ];
+    }
+
+    private static IReadOnlyList<PrivateObjectiveUnclaimedCountDetail> UnclaimedCounts(
+        StoredCampaign campaign,
+        IReadOnlyList<CampaignParticipantDetail> participants)
+    {
+        var play = campaign.PlayState;
+        if (play is null)
+        {
+            return [];
+        }
+
+        var names = new Dictionary<(PrivateObjectiveHolderKind Kind, Guid Id), string>();
+        foreach (var participant in participants.Where(static item => item.IsPlayer))
+        {
+            names[(PrivateObjectiveHolderKind.Player, participant.UserId)] = participant.DisplayName;
+        }
+
+        foreach (var faction in campaign.Factions)
+        {
+            names[(PrivateObjectiveHolderKind.Faction, faction.Id)] = faction.Name;
+        }
+
+        foreach (var group in campaign.AllyGroups)
+        {
+            names[(PrivateObjectiveHolderKind.AllyGroup, group.Id)] = group.Name;
+        }
+
+        return
+        [
+            .. PrivateObjectiveRules.UnclaimedCounts(play.PrivateObjectives).Select(item => new PrivateObjectiveUnclaimedCountDetail
+            {
+                HolderKind = item.HolderKind.ToString(),
+                HolderId = item.HolderId,
+                HolderName = names.GetValueOrDefault((item.HolderKind, item.HolderId)) ?? "Unknown",
+                Count = item.Count,
+            }),
+        ];
+    }
+
+    private static bool IsHolder(
+        PrivateObjectiveAssignment assignment,
+        Guid viewerUserId,
+        Guid? viewerFactionId,
+        Guid? viewerAllyGroupId)
+    {
+        return assignment.HolderKind switch
+        {
+            PrivateObjectiveHolderKind.Player => assignment.HolderId == viewerUserId,
+            PrivateObjectiveHolderKind.Faction => viewerFactionId is { } faction && assignment.HolderId == faction,
+            PrivateObjectiveHolderKind.AllyGroup => viewerAllyGroupId is { } group && assignment.HolderId == group,
+            _ => false,
+        };
+    }
+
+    private static Guid? ViewerAllyGroupId(StoredCampaign campaign, Guid? factionId)
+    {
+        if (factionId is not { } id)
+        {
+            return null;
+        }
+
+        var faction = campaign.Factions.FirstOrDefault(item => item.Id == id);
+        if (faction?.AllyGroupName is not { } name)
+        {
+            return null;
+        }
+
+        return campaign.AllyGroups.FirstOrDefault(group => group.Name == name)?.Id;
     }
 
     private static string? FormatCurrentPhaseLabel(StoredCampaign campaign, CampaignProgress progress)

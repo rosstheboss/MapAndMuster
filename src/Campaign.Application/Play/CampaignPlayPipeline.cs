@@ -36,16 +36,7 @@ internal static class CampaignPlayPipeline
             .Where(static member => member.IsPlayer)
             .Select(member => new PlayerFactionAssignment(member.UserId, member.FactionId))
             .ToArray();
-        var itemTypes = campaign.ItemObjectiveTypes
-            .Select(static type => new ItemObjectiveTypePlayRules(
-                type.Id,
-                type.Name,
-                type.IsHiddenUntilFound,
-                Enum.TryParse<ItemObjectivePlacementKind>(type.Placement, true, out var placement)
-                    ? placement
-                    : ItemObjectivePlacementKind.Random,
-                type.AllowOnSpawn))
-            .ToArray();
+        var itemTypes = CampaignPlayCatalog.ItemPlayRules(campaign);
         var placements = (campaign.MapGraph?.ItemObjectivePlacements ?? [])
             .Select(static item => new ItemObjectiveMapPlacement(item.TypeId, item.TerritoryId))
             .ToArray();
@@ -57,7 +48,10 @@ internal static class CampaignPlayPipeline
             utcNow,
             itemTypes,
             placements,
-            count => count <= 0 ? 0 : Random.Shared.Next(count));
+            CampaignPlayCatalog.PickIndex,
+            CampaignPlayCatalog.PrivateTypes(campaign),
+            [.. campaign.Factions.Select(static faction => faction.Id)],
+            [.. campaign.AllyGroups.Select(static group => group.Id)]);
         var schedule = CampaignMapper.ToSchedule(campaign);
         var advanced = CampaignPlayRules.Advance(
             seeded.State,
@@ -65,12 +59,13 @@ internal static class CampaignPlayPipeline
             schedule,
             AllyGroups(campaign),
             utcNow);
+        var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, advanced.Map, utcNow, advanced.PreserveSchedule ? campaign.EndsUtc : advanced.EndsUtc);
         var nextGraph = campaign.MapGraph is null || advanced.PreserveMap
             ? campaign.MapGraph
             : CampaignLifecycle.ApplyOwnership(campaign.MapGraph, advanced.Map);
         var nextCampaign = Clone(
             campaign,
-            advanced.State,
+            effected,
             nextGraph,
             advanced.PreserveSchedule ? campaign.EndsUtc : advanced.EndsUtc,
             advanced.PreserveSchedule || advanced.RoundCount == 0 ? campaign.RoundCount : advanced.RoundCount,
@@ -81,7 +76,7 @@ internal static class CampaignPlayPipeline
             Campaign = nextCampaign,
             Previous = campaign,
             OriginalRevision = campaign.Revision,
-            Changed = !ReferenceEquals(advanced.State, campaign.PlayState)
+            Changed = !ReferenceEquals(effected, campaign.PlayState)
                 || nextCampaign.EndsUtc != campaign.EndsUtc
                 || nextCampaign.RoundCount != campaign.RoundCount
                 || !ReferenceEquals(nextGraph, campaign.MapGraph),
@@ -177,16 +172,19 @@ internal static class CampaignPlayPipeline
             CampaignMapper.ToSchedule(campaign),
             AllyGroups(campaign),
             clock.UtcNow);
+        var playMap = advanced.PreserveMap ? workingMap : advanced.Map;
+        var endsUtc = mutation.PreserveSchedule && advanced.PreserveSchedule
+            ? campaign.EndsUtc
+            : advanced.EndsUtc == default ? campaign.EndsUtc : advanced.EndsUtc;
+        var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, playMap, clock.UtcNow, endsUtc);
         var nextGraph = campaign.MapGraph is null || (mutation.PreserveMap && advanced.PreserveMap)
             ? campaign.MapGraph
-            : CampaignLifecycle.ApplyOwnership(campaign.MapGraph, advanced.PreserveMap ? workingMap : advanced.Map);
+            : CampaignLifecycle.ApplyOwnership(campaign.MapGraph, playMap);
         var next = Clone(
             campaign,
-            advanced.State,
+            effected,
             nextGraph,
-            mutation.PreserveSchedule && advanced.PreserveSchedule
-                ? campaign.EndsUtc
-                : advanced.EndsUtc == default ? campaign.EndsUtc : advanced.EndsUtc,
+            endsUtc,
             mutation.PreserveSchedule && advanced.PreserveSchedule || advanced.RoundCount == 0
                 ? campaign.RoundCount
                 : advanced.RoundCount,
@@ -265,6 +263,8 @@ internal static class CampaignPlayPipeline
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            SpecialRules = existing.SpecialRules,
+            PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
             PlayState = play,

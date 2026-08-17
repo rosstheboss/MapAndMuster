@@ -12,7 +12,13 @@ public sealed class TerrainTypeSetup
     /// <param name="name">The terrain type name.</param>
     /// <param name="color">The unique #RRGGBB overlay color.</param>
     /// <param name="missions">The missions for this terrain type.</param>
-    public TerrainTypeSetup(Guid id, string name, string color, IReadOnlyList<MissionSetup> missions)
+    /// <param name="isWaterFeature">Whether this terrain is a water feature.</param>
+    public TerrainTypeSetup(
+        Guid id,
+        string name,
+        string color,
+        IReadOnlyList<MissionSetup> missions,
+        bool isWaterFeature = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(color);
@@ -21,6 +27,7 @@ public sealed class TerrainTypeSetup
         Name = name;
         Color = color;
         Missions = missions;
+        IsWaterFeature = isWaterFeature;
     }
 
     /// <summary>Gets the terrain type identifier.</summary>
@@ -34,4 +41,7 @@ public sealed class TerrainTypeSetup
 
     /// <summary>Gets the missions.</summary>
     public IReadOnlyList<MissionSetup> Missions { get; }
+
+    /// <summary>Gets whether this terrain is a water feature.</summary>
+    public bool IsWaterFeature { get; }
 }

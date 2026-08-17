@@ -64,9 +64,10 @@ Setup may apply a standard terrain preset or a standard structures preset the sa
 the preset replaces the current list with a copy of the current catalog values. Later catalog
 edits in code update those presets, the same as faction presets. Setup may also apply a whole
 campaign preset. The initial catalog includes The Hunt in Estalia, which copies the Old World
-factions, standard terrain, standard structures, and that campaign's item-objective list (empty
-until named items are added). Applying a campaign preset fills the campaign name only when the
-name field is empty.
+factions (including that preset's special-rule assignments), standard terrain (including water
+feature flags), standard structures, the reusable special-rule catalog, and that campaign's
+item-objective list (empty until named items are added). Applying a campaign preset fills the
+campaign name only when the name field is empty.
 
 Optional item objectives may be none, one, or many (at most 50), each with a unique name.
 Defaults are hidden until found, randomly placed, and not allowed on a spawn territory. A
@@ -77,13 +78,42 @@ awarded while a force currently holds it, a built-in logo chosen from ten generi
 administrator in debug mode clicks Reveal hidden objectives. Found or staff-revealed items stay
 revealed. On the campaign map, uncarried items use the same pin treatment as structures. A force
 that currently holds an item always shows that logo on its pin until the item is dropped or
-transferred.
+transferred. Setup may also attach flavor text, named holder choices, and reusable special rules
+to an item. Each choice has one result or a group of results; resolving the choice applies the
+single result or one result picked at random from that group. A result may replace flavor text,
+set a state label, grant a catalog private objective to the possessing player, destroy the item,
+and/or spawn a replacement catalog item in its place. A destroyed item awards no campaign points
+and is removed from the map and from every force.
 
 Setup also configures campaign points on each terrain type (territory capture) and each structure
-type (current holdings; destroyed structures do not count). Named public objectives live in their
-own setup section (name, optional description, and points). Points per finalized battle win are
-configured there as well (default 0). Battle Point Difference conversion remains in
-`docs/DECISIONS-NEEDED.md`.
+type (current holdings; destroyed structures do not count). Each terrain type has a Water feature
+flag. The standard terrain preset marks Beach, Lake, Riverlands, Sea, and Swamp as water
+features; other default types are not. The flag is display and special-rule metadata only; it
+does not change movement or adjacency by itself.
+
+Named public objectives live in their own setup section (name, optional description, and points).
+Private objectives are a separate optional catalog (at most 50). Each private objective has a
+name, optional description, campaign points, one or more holder kinds (player, faction, and/or
+ally group), and either Manual or Automatic scoring. Automatic objectives name a map criterion:
+control a number of territories, control listed territories, or control, pillage, or destroy a
+number of a chosen structure type. A catalog entry may be assigned at most once. At launch, each
+occupying player, each faction, and each ally group receives one random still-available objective
+whose holder kinds include that group; leftover holders receive none when the pool is empty. A
+player who joins play later receives one player-scoped objective the same way when one remains.
+After launch, a manager may grant a specific still-available catalog objective, or a random
+still-available one, to a chosen player, faction, or ally group. Private-objective catalog
+entries cannot be added after launch.
+
+Points per finalized battle win are configured with public objectives (default 0). Battle Point
+Difference conversion remains in `docs/DECISIONS-NEEDED.md`.
+
+A campaign has a reusable special-rule catalog (at most 80), each with a unique name and
+description (stored as text). Factions and item objectives may reuse the same special rule, the
+same way terrain and structures reuse missions. Applying the Warhammer: The Old World faction
+preset copies that catalog's generic special rules onto the matching factions, including the
+catalog description with faction-specific wording and flavor omitted. User-created special rules
+are display-only: they do not execute code and do not change map resolution. The manager writes
+the description for a custom rule.
 
 The creating user is always a campaign manager (Game Master). If they also participate, they
 occupy one player slot. Private campaigns store a hashed join password; the plaintext password
@@ -99,22 +129,36 @@ Manager, Player, and/or Admin when those apply.
 Near the bottom of the campaign page, a Campaign points panel lists every player occupying a
 slot. Default order is highest total to lowest, then display name. Columns are display name
 (with currently held visible item-objective logos), faction logo, alliance group, Structures
-captured, Battles Won, Public Objectives, Other, and Total. The four point columns sum to
-Total. The table sorts by any of those columns. Structure points are the current holdings
-(destroyed structures do not count). Battles Won is cumulative campaign points from resolved
-battles: by default the score differential (winner minus loser, times a multiplier, clamped to
-a configured range, default 0 to 10) with draw participants each receiving configured draw
-points (default 1). When differential scoring is off, a win awards configured win points
+captured, Battles Won, Public Objectives, Private Objectives, Other, and Total. The five point
+columns sum to Total. The table sorts by any of those columns. Structure points are the current
+holdings (destroyed structures do not count). Battles Won is cumulative campaign points from
+resolved battles: by default the score differential (winner minus loser, times a multiplier,
+clamped to a configured range, default 0 to 10) with draw participants each receiving configured
+draw points (default 1). When differential scoring is off, a win awards configured win points
 (default 2) and a draw still awards draw points. The loser receives negative points only when
 that option is enabled. Public Objectives include manager-awarded named catalog items (award
 and revoke are append-only facts; originals are never overwritten) plus ranking objectives
 that currently award points to every player tied for first: most territories controlled,
 longest unbroken chain of the player's own territories, and most battle wins (draws break
 win-count ties). A named or ranking objective configured at 0 campaign points is ignored.
-The panel also shows a top five for each enabled ranking objective. Other is currently held
-visible item-objective points. Hidden items are omitted from unauthorized standings and logos
-so the columns still add up for that viewer; the holder and staff in an active debug session
-see their own hidden items.
+The panel also shows a top five for each enabled ranking objective. Private Objectives is the
+total of revealed or completed private-objective points that apply to that player: a
+player-scoped award counts only for that player; a faction award counts for every current
+player of that faction; an ally-group award counts for every current player whose faction is
+still in that group. Manual private objectives enter this column after a manager approves a
+claim, or when the campaign is completed while the objective is still held. Automatic private
+objectives enter it when their map criterion is met. Other is currently held visible
+item-objective points. Destroyed items contribute nothing. Hidden items are omitted from
+unauthorized standings and logos so the columns still add up for that viewer; the holder and
+staff in an active debug session see their own hidden items.
+
+Public knowledge of private objectives is the unclaimed count for each player, faction, and
+ally group that has at least one assigned private objective still unrevealed. Names, text, and
+progress of unrevealed private objectives are returned only to authorized holders (the player;
+members of the faction or ally group) and to campaign managers or administrators. Revealed or
+completed private objectives are listed publicly, and their points are included in the Private
+Objectives total. When the campaign is completed, remaining assigned private objectives become
+publicly visible; still-unapproved manual objectives then count in standings.
 
 While a campaign is in progress, the map toolbar offers a display-only highlight mode for the
 current viewer: configured overlay colors, faction colors, or alliance colors (unaligned
@@ -141,7 +185,7 @@ previous action while the following phase is still open, or override battle resu
 and completed campaigns use the same page without live order controls. The campaign page includes
 a collapsible public log and member chat for upcoming, in-progress, and completed campaigns.
 Your Campaigns also offers Duplicate campaign on every listed campaign. Duplication copies the map overlay, factions, missions, ally
-groups and their colors, public objectives, battle scoring, ranking public objectives, item-objective types, links, visibility, location, and schedule template into a new campaign whose start is one
+groups and their colors, special rules, public and private objectives, battle scoring, ranking public objectives, item-objective types (including flavor text and choices), links, visibility, location, and schedule template into a new campaign whose start is one
 week after the duplication instant in the campaign time zone. The duplicating user becomes the
 manager of the copy and occupies a player slot only when they were a player on the source.
 Raster maps, flags, structure logos, item-objective logos, and mission files are reused until the copy replaces them;
@@ -153,8 +197,9 @@ rejected. Maps may be JPEG, PNG, or WebP up to 20 MB. One map may later be repla
 map file is deleted when it is no longer used. Deleting a campaign also deletes its stored map and
 user-uploaded catalog images. Built-in structure icons are application assets and are never deleted.
 
-Setup sections (details, schedule, visibility, ally groups, factions, subfactions, terrain,
-structures, missions, links, and map) can be expanded or collapsed. Section actions collapse
+Setup sections (details, schedule, visibility, ally groups, factions, subfactions, special
+rules, terrain, structures, missions, item objectives, public objectives, private objectives,
+links, and map) can be expanded or collapsed. Section actions collapse
 with their section. Invalid sections expand automatically when save validation fails. Sections
 start expanded. Setup keeps Back to campaigns, Expand All, Collapse All, and Save or Create in a
 sticky toolbar. Edit campaign also includes Edit map, which opens the map editor without saving
@@ -192,8 +237,9 @@ A phase boundary belongs to the following phase. After launch, actual phase wind
 and may diverge from the original template when a window closes early or a manager extends it.
 
 After the start instant, managers cannot change the map, the ordered action and battle steps,
-name, description, factions, faction abilities, ally groups, terrain, structures, missions, or
-most other setup. They may increase the number of rounds, not below the current round and not
+name, description, factions, faction abilities, special-rule catalog, ally groups, terrain,
+structures, missions, private-objective catalog, or most other setup. They may still grant
+remaining catalog private objectives and approve or deny claims. They may increase the number of rounds, not below the current round and not
 above 52. They may lengthen the current round by adding time to the current or remaining action
 and battle windows; a window cannot be shortened below the duration already in effect for that
 window. Added rounds use the original phase template and make the campaign longer.
@@ -346,8 +392,9 @@ and glows both connected territories without washing the rest of the map.
 Campaign setup owns the terrain-type and structure catalogs. The initial terrain types,
 alphabetically, are Beach, Cave, Desert, Forest, Highlands, Jungle, Lake, Mountain, Plains, Riverlands, Sea,
 and Swamp.
-Each has a unique color, a symbol, and at least one mission. Setup starts each terrain type with one
-empty mission row. The initial structures, alphabetically, are Capital City, Castle, City, Fortification, Supply
+Each has a unique color, a symbol, at least one mission, and a Water feature flag. Beach, Lake,
+Riverlands, Sea, and Swamp start as water features. Setup starts each terrain type with one
+empty mission row. Hovering a territory shows whether its terrain is a water feature. The initial structures, alphabetically, are Capital City, Castle, City, Fortification, Supply
 Depot, and Town. Town, Capital City, City, and Castle are not buildable; Supply Depot and
 Fortification are. Capital City is not pillageable. Capital City, City, and Castle are not
 destructible. Each structure uses either a built-in icon or an uploaded logo image, not both.
@@ -465,8 +512,23 @@ Completion and awarded points are separate so a secret objective can be complete
 publicly revealing it.
 
 Named public objectives are a campaign catalog. A manager or administrator awards or revokes
-them during play; each change appends a public log fact. Relic choice options and effects remain
-in `docs/DECISIONS-NEEDED.md`.
+them during play; each change appends a public log fact.
+
+Private objectives are a campaign catalog assigned to a player, a faction, or an ally group.
+Unrevealed text and criteria are omitted from unauthorized payloads. Everyone who can view the
+campaign may see how many assigned private objectives each player, faction, and ally group still
+has unclaimed. Manual private objectives are claimed by an authorized holder (the player, or any
+player in that faction or ally group) who reveals them to a manager. A manager or administrator
+approves the claim to reveal it publicly and add its points, or denies it so the holder may
+claim again later. Holders may instead keep a manual objective until the campaign completes, at
+which point remaining assignments become public and their points count. Automatic private
+objectives are scored from live map facts after action resolution: currently controlled
+territories, currently controlled or pillaged structures of a configured type, or a cumulative
+count of destroyed structures of a configured type attributed to the holder's faction, player,
+or remaining ally group. When an automatic criterion is met, the objective is revealed, its
+points are added, and the public log records that the holder scored. Destroyed structures are
+removed from the map, so destroy criteria use append-only destruction facts rather than current
+holdings.
 
 Item objectives are named catalog items (none, one, or many). Launch placement is Random or
 Placed. Hidden-until-found items are omitted from player play payloads, including location and
@@ -476,7 +538,11 @@ stays revealed. A force that Moves or Retreats drops a carried item on the terri
 another force that is alone in that territory and not in battle picks it up. A battle winner
 takes items held by participants or lying in the battle territory; a draw does not transfer
 them. Items may occupy a spawn territory only when that catalog flag is enabled (off by
-default). Relic choice options and effects remain in `docs/DECISIONS-NEEDED.md`.
+default). The possessing player may resolve one configured choice on a held item. That choice
+applies its only result, or one result picked at random when several are configured. A destroyed
+item is gone: it awards no points, cannot be dropped, picked up, or taken as spoils, and is
+omitted from standings. A replacement item, when configured, appears with the possessor or on
+the same territory and uses that catalog type's own flavor, choices, and special rules.
 
 ## Corrections
 

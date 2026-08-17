@@ -16,7 +16,11 @@ public sealed class CampaignItemObjective
         Guid? possessorForceId,
         bool isRevealed,
         Guid originalTerritoryId,
-        bool wasHiddenUntilFound)
+        bool wasHiddenUntilFound,
+        string? flavorText = null,
+        string? stateKey = null,
+        bool isDestroyed = false,
+        Guid? resolvedChoiceId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Id = id;
@@ -27,6 +31,10 @@ public sealed class CampaignItemObjective
         IsRevealed = isRevealed;
         OriginalTerritoryId = originalTerritoryId;
         WasHiddenUntilFound = wasHiddenUntilFound;
+        FlavorText = flavorText;
+        StateKey = stateKey;
+        IsDestroyed = isDestroyed;
+        ResolvedChoiceId = resolvedChoiceId;
     }
 
     /// <summary>Gets the instance identifier.</summary>
@@ -53,15 +61,31 @@ public sealed class CampaignItemObjective
     /// <summary>Gets whether the item started hidden until found.</summary>
     public bool WasHiddenUntilFound { get; }
 
+    /// <summary>Gets flavor text currently shown to the holder.</summary>
+    public string? FlavorText { get; }
+
+    /// <summary>Gets the optional state label after a choice.</summary>
+    public string? StateKey { get; }
+
+    /// <summary>Gets whether the item was destroyed and removed from the map.</summary>
+    public bool IsDestroyed { get; }
+
+    /// <summary>Gets the resolved choice, when a holder already picked one.</summary>
+    public Guid? ResolvedChoiceId { get; }
+
     /// <summary>
-    /// Returns a copy with updated location, possessor, or reveal state.
+    /// Returns a copy with updated location, possessor, reveal, or choice state.
     /// </summary>
     public CampaignItemObjective With(
         Guid? territoryId = null,
         Guid? possessorForceId = null,
         bool? isRevealed = null,
         bool clearTerritory = false,
-        bool clearPossessor = false)
+        bool clearPossessor = false,
+        string? flavorText = null,
+        string? stateKey = null,
+        bool? isDestroyed = null,
+        Guid? resolvedChoiceId = null)
     {
         return new CampaignItemObjective(
             Id,
@@ -71,6 +95,10 @@ public sealed class CampaignItemObjective
             clearPossessor ? null : possessorForceId ?? PossessorForceId,
             isRevealed ?? IsRevealed,
             OriginalTerritoryId,
-            WasHiddenUntilFound);
+            WasHiddenUntilFound,
+            flavorText ?? FlavorText,
+            stateKey ?? StateKey,
+            isDestroyed ?? IsDestroyed,
+            resolvedChoiceId ?? ResolvedChoiceId);
     }
 }

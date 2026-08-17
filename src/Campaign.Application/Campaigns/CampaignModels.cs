@@ -146,6 +146,18 @@ public sealed class CampaignDetail
     /// <summary>Gets the public campaign objectives. Empty means none.</summary>
     public IReadOnlyList<PublicObjectiveTypeDetail> PublicObjectiveTypes { get; init; } = [];
 
+    /// <summary>Gets reusable special rules. Empty means none.</summary>
+    public IReadOnlyList<SpecialRuleDetail> SpecialRules { get; init; } = [];
+
+    /// <summary>Gets private campaign objectives the viewer may see. Secret fields are omitted unless authorized.</summary>
+    public IReadOnlyList<PrivateObjectiveTypeDetail> PrivateObjectiveTypes { get; init; } = [];
+
+    /// <summary>Gets assigned private objectives visible to the viewer.</summary>
+    public IReadOnlyList<PrivateObjectiveAssignmentDetail> PrivateObjectives { get; init; } = [];
+
+    /// <summary>Gets public unclaimed private-objective counts.</summary>
+    public IReadOnlyList<PrivateObjectiveUnclaimedCountDetail> PrivateObjectiveUnclaimedCounts { get; init; } = [];
+
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon { get; init; }
 
@@ -376,6 +388,9 @@ public sealed class FactionDetail
 
     /// <summary>Gets whether the faction has an uploaded flag image.</summary>
     public required bool HasFlagImage { get; init; }
+
+    /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
+    public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
 }
 
 /// <summary>
@@ -512,6 +527,12 @@ public sealed class StoredCampaign
     /// <summary>Gets the public campaign objectives. Empty means none.</summary>
     public IReadOnlyList<StoredPublicObjectiveType> PublicObjectiveTypes { get; init; } = [];
 
+    /// <summary>Gets reusable special rules. Empty means none.</summary>
+    public IReadOnlyList<StoredSpecialRule> SpecialRules { get; init; } = [];
+
+    /// <summary>Gets the private campaign objectives. Empty means none.</summary>
+    public IReadOnlyList<StoredPrivateObjectiveType> PrivateObjectiveTypes { get; init; } = [];
+
     /// <summary>Gets conversion from resolved battles into campaign points.</summary>
     public Campaign.Domain.Campaigns.BattleScoringSetup BattleScoring { get; init; } =
         Campaign.Domain.Campaigns.BattleScoringSetup.Default;
@@ -585,6 +606,9 @@ public sealed class StoredFaction
 
     /// <summary>Gets the stored flag image key, when a custom flag was uploaded.</summary>
     public string? FlagImageStorageKey { get; init; }
+
+    /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
+    public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
 }
 
 /// <summary>
@@ -654,6 +678,9 @@ public sealed class TerrainTypeDetail
 
     /// <summary>Gets campaign points awarded for currently owning a territory of this terrain.</summary>
     public int CampaignPoints { get; init; }
+
+    /// <summary>Gets whether this terrain is a water feature.</summary>
+    public bool IsWaterFeature { get; init; }
 }
 
 /// <summary>
@@ -723,6 +750,162 @@ public sealed class ItemObjectiveTypeDetail
 
     /// <summary>Gets campaign points awarded while a force currently holds this item.</summary>
     public int CampaignPoints { get; init; }
+
+    /// <summary>Gets optional flavor or lore text shown to the holder.</summary>
+    public string? FlavorText { get; init; }
+
+    /// <summary>Gets holder choices configured for this item.</summary>
+    public IReadOnlyList<ItemObjectiveChoiceDetail> Choices { get; init; } = [];
+
+    /// <summary>Gets special-rule identifiers assigned to this item.</summary>
+    public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+}
+
+/// <summary>
+/// A holder choice on an item objective.
+/// </summary>
+public sealed class ItemObjectiveChoiceDetail
+{
+    /// <summary>Gets the choice identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the choice name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets configured results. Result effects are omitted from unauthorized views.</summary>
+    public IReadOnlyList<ItemObjectiveChoiceResultDetail> Results { get; init; } = [];
+}
+
+/// <summary>
+/// One possible outcome of an item-objective choice.
+/// </summary>
+public sealed class ItemObjectiveChoiceResultDetail
+{
+    /// <summary>Gets the result identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets replacement flavor text after the choice.</summary>
+    public string? FlavorText { get; init; }
+
+    /// <summary>Gets an optional state label after the choice.</summary>
+    public string? NewStateKey { get; init; }
+
+    /// <summary>Gets whether the item is destroyed.</summary>
+    public bool DestroyItem { get; init; }
+
+    /// <summary>Gets a replacement item-objective catalog type.</summary>
+    public Guid? ReplacementItemTypeId { get; init; }
+
+    /// <summary>Gets a private-objective catalog type granted to the possessing player.</summary>
+    public Guid? GrantedPrivateObjectiveTypeId { get; init; }
+}
+
+/// <summary>
+/// A reusable special rule.
+/// </summary>
+public sealed class SpecialRuleDetail
+{
+    /// <summary>Gets the rule identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the unique rule name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the player-facing rule text.</summary>
+    public required string Text { get; init; }
+}
+
+/// <summary>
+/// A private-objective catalog entry. Secret description is omitted unless the viewer may see it.
+/// </summary>
+public sealed class PrivateObjectiveTypeDetail
+{
+    /// <summary>Gets the catalog identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the objective name when the viewer may see it.</summary>
+    public string? Name { get; init; }
+
+    /// <summary>Gets the secret description when the viewer may see it.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Gets campaign points when the viewer may see them.</summary>
+    public int? CampaignPoints { get; init; }
+
+    /// <summary>Gets holder kinds this entry may be assigned to.</summary>
+    public IReadOnlyList<string> AllowedHolderKinds { get; init; } = [];
+
+    /// <summary>Gets Manual or Automatic.</summary>
+    public required string ScoringKind { get; init; }
+
+    /// <summary>Gets the automatic criterion kind.</summary>
+    public string? AutomaticKind { get; init; }
+
+    /// <summary>Gets how many matching facts complete an automatic objective.</summary>
+    public int RequiredCount { get; init; } = 1;
+
+    /// <summary>Gets the structure type for structure-based automatic criteria.</summary>
+    public Guid? StructureTypeId { get; init; }
+
+    /// <summary>Gets named territories when the viewer may see them.</summary>
+    public IReadOnlyList<Guid> TerritoryIds { get; init; } = [];
+}
+
+/// <summary>
+/// One assigned private objective visible to the current viewer.
+/// </summary>
+public sealed class PrivateObjectiveAssignmentDetail
+{
+    /// <summary>Gets the assignment identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the catalog type.</summary>
+    public required Guid TypeId { get; init; }
+
+    /// <summary>Gets Player, Faction, or AllyGroup.</summary>
+    public required string HolderKind { get; init; }
+
+    /// <summary>Gets the player, faction, or ally-group identifier.</summary>
+    public required Guid HolderId { get; init; }
+
+    /// <summary>Gets Assigned, Claimed, or Revealed.</summary>
+    public required string Status { get; init; }
+
+    /// <summary>Gets Manual or Automatic.</summary>
+    public required string ScoringKind { get; init; }
+
+    /// <summary>Gets the objective name when the viewer may see it.</summary>
+    public string? Name { get; init; }
+
+    /// <summary>Gets the secret description when the viewer may see it.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Gets campaign points when the viewer may see them.</summary>
+    public int? CampaignPoints { get; init; }
+
+    /// <summary>Gets whether the viewer may claim this assignment.</summary>
+    public bool CanClaim { get; init; }
+
+    /// <summary>Gets whether the viewer may approve or deny a claim.</summary>
+    public bool CanModerate { get; init; }
+}
+
+/// <summary>
+/// Public count of still-unclaimed private objectives for one holder.
+/// </summary>
+public sealed class PrivateObjectiveUnclaimedCountDetail
+{
+    /// <summary>Gets Player, Faction, or AllyGroup.</summary>
+    public required string HolderKind { get; init; }
+
+    /// <summary>Gets the player, faction, or ally-group identifier.</summary>
+    public required Guid HolderId { get; init; }
+
+    /// <summary>Gets a public display name for the holder.</summary>
+    public required string HolderName { get; init; }
+
+    /// <summary>Gets how many assigned private objectives are still unclaimed.</summary>
+    public required int Count { get; init; }
 }
 
 /// <summary>
@@ -781,10 +964,13 @@ public sealed class CampaignPointStandingDetail
     /// <summary>Gets points from ranking objectives and currently active named awards.</summary>
     public required int PublicObjectivePoints { get; init; }
 
+    /// <summary>Gets points from revealed or completed private objectives that apply to this player.</summary>
+    public int PrivateObjectivePoints { get; init; }
+
     /// <summary>Gets points from currently held visible item objectives.</summary>
     public required int OtherPoints { get; init; }
 
-    /// <summary>Gets the sum of the four component columns.</summary>
+    /// <summary>Gets the sum of the five component columns.</summary>
     public required int Total { get; init; }
 
     /// <summary>Gets visible item objectives the player currently holds.</summary>
@@ -894,6 +1080,9 @@ public sealed class StoredTerrainType
 
     /// <summary>Gets campaign points awarded for currently owning a territory of this terrain.</summary>
     public int CampaignPoints { get; init; }
+
+    /// <summary>Gets whether this terrain is a water feature.</summary>
+    public bool IsWaterFeature { get; init; }
 }
 
 /// <summary>
@@ -963,6 +1152,105 @@ public sealed class StoredItemObjectiveType
 
     /// <summary>Gets campaign points awarded while a force currently holds this item.</summary>
     public int CampaignPoints { get; init; }
+
+    /// <summary>Gets optional flavor or lore text shown to the holder.</summary>
+    public string? FlavorText { get; init; }
+
+    /// <summary>Gets holder choices configured for this item.</summary>
+    public IReadOnlyList<StoredItemObjectiveChoice> Choices { get; init; } = [];
+
+    /// <summary>Gets special-rule identifiers assigned to this item.</summary>
+    public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+}
+
+/// <summary>
+/// A persisted holder choice on an item objective.
+/// </summary>
+public sealed class StoredItemObjectiveChoice
+{
+    /// <summary>Gets the choice identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the choice name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the configured results.</summary>
+    public required IReadOnlyList<StoredItemObjectiveChoiceResult> Results { get; init; }
+}
+
+/// <summary>
+/// A persisted outcome of an item-objective choice.
+/// </summary>
+public sealed class StoredItemObjectiveChoiceResult
+{
+    /// <summary>Gets the result identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets replacement flavor text after the choice.</summary>
+    public string? FlavorText { get; init; }
+
+    /// <summary>Gets an optional state label after the choice.</summary>
+    public string? NewStateKey { get; init; }
+
+    /// <summary>Gets whether the item is destroyed and removed from the map.</summary>
+    public bool DestroyItem { get; init; }
+
+    /// <summary>Gets a replacement item-objective catalog type.</summary>
+    public Guid? ReplacementItemTypeId { get; init; }
+
+    /// <summary>Gets a private-objective catalog type granted to the possessing player.</summary>
+    public Guid? GrantedPrivateObjectiveTypeId { get; init; }
+}
+
+/// <summary>
+/// A persisted reusable special rule.
+/// </summary>
+public sealed class StoredSpecialRule
+{
+    /// <summary>Gets the rule identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the unique rule name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the player-facing rule text.</summary>
+    public required string Text { get; init; }
+}
+
+/// <summary>
+/// A persisted private campaign objective.
+/// </summary>
+public sealed class StoredPrivateObjectiveType
+{
+    /// <summary>Gets the catalog identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the objective name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the optional secret description.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Gets campaign points awarded when revealed or completed.</summary>
+    public required int CampaignPoints { get; init; }
+
+    /// <summary>Gets holder kinds this entry may be assigned to.</summary>
+    public required IReadOnlyList<string> AllowedHolderKinds { get; init; }
+
+    /// <summary>Gets Manual or Automatic.</summary>
+    public required string ScoringKind { get; init; }
+
+    /// <summary>Gets the automatic criterion kind.</summary>
+    public required string AutomaticKind { get; init; }
+
+    /// <summary>Gets how many matching facts complete an automatic objective.</summary>
+    public int RequiredCount { get; init; } = 1;
+
+    /// <summary>Gets the structure type for structure-based automatic criteria.</summary>
+    public Guid? StructureTypeId { get; init; }
+
+    /// <summary>Gets named territories for ControlNamedTerritories.</summary>
+    public IReadOnlyList<Guid> TerritoryIds { get; init; } = [];
 }
 
 /// <summary>

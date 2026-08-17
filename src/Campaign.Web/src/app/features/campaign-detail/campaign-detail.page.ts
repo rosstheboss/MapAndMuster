@@ -10,6 +10,7 @@ import type {
   CampaignMission,
   CampaignParticipant,
   CampaignPlayDetail,
+  CampaignSpecialRule,
   MapGraphDetail,
   PlayBattle,
   PlayForce,
@@ -63,6 +64,7 @@ const CAMPAIGN_SECTIONS = [
   'missingFaction',
   'map',
   'itemObjectives',
+  'privateObjectives',
   'orders',
   'battles',
   'debug',
@@ -143,6 +145,9 @@ export class CampaignDetailPage {
   protected readonly restoreChatScroll = signal<number | null>(null);
   protected readonly awardObjectiveId = signal('');
   protected readonly awardPlayerUserId = signal('');
+  protected readonly grantHolderKind = signal('Player');
+  protected readonly grantHolderId = signal('');
+  protected readonly grantTypeId = signal('');
   private prefsHydrated = false;
   private lastChatScrollTop = 0;
   protected readonly durationUnits = DURATION_UNITS;
@@ -299,6 +304,34 @@ export class CampaignDetailPage {
   protected readonly awardableObjectives = computed(() =>
     (this.campaign()?.publicObjectiveTypes ?? []).filter((objective) => objective.campaignPoints > 0),
   );
+  protected readonly unclaimedPrivateCounts = computed(
+    () => this.play()?.privateObjectiveUnclaimedCounts ?? this.campaign()?.privateObjectiveUnclaimedCounts ?? [],
+  );
+  protected readonly visiblePrivateObjectives = computed(
+    () => this.play()?.privateObjectives ?? this.campaign()?.privateObjectives ?? [],
+  );
+  protected readonly grantHolders = computed(() => {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return [];
+    }
+
+    const kind = this.grantHolderKind();
+    if (kind === 'Faction') {
+      return campaign.factions.map((faction) => ({ id: faction.id, name: faction.name }));
+    }
+
+    if (kind === 'AllyGroup') {
+      return campaign.allyGroups.map((group) => ({ id: group.id, name: group.name }));
+    }
+
+    return (campaign.participants ?? [])
+      .filter((participant) => participant.isPlayer)
+      .map((participant) => ({ id: participant.userId, name: participant.displayName }));
+  });
+  protected readonly grantablePrivateTypes = computed(() =>
+    (this.campaign()?.privateObjectiveTypes ?? []).filter((type) => !!type.name),
+  );
   protected readonly usesDifferentialScoring = computed(
     () => this.play()?.useDifferentialBattleScoring ?? this.campaign()?.useDifferentialBattleScoring ?? true,
   );
@@ -426,6 +459,72 @@ export class CampaignDetailPage {
         awarded,
       }),
     );
+  }
+
+  protected async grantPrivateObjective(): Promise<void> {
+    const campaign = this.campaign();
+    const holderId = this.grantHolderId();
+    if (!campaign || !holderId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.grantPrivateObjective(campaign.id, {
+        revision: campaign.revision,
+        holderKind: this.grantHolderKind(),
+        holderId,
+        typeId: this.grantTypeId() || null,
+      }),
+    );
+  }
+
+  protected async claimPrivateObjective(assignmentId: string): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign || !assignmentId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.claimPrivateObjective(campaign.id, {
+        revision: campaign.revision,
+        assignmentId,
+      }),
+    );
+  }
+
+  protected async moderatePrivateObjective(assignmentId: string, approved: boolean): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign || !assignmentId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.moderatePrivateObjective(campaign.id, {
+        revision: campaign.revision,
+        assignmentId,
+        approved,
+      }),
+    );
+  }
+
+  protected async resolveItemObjectiveChoice(itemId: string, choiceId: string): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign || !itemId || !choiceId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.resolveItemObjectiveChoice(campaign.id, {
+        revision: campaign.revision,
+        itemId,
+        choiceId,
+      }),
+    );
+  }
+
+  protected onGrantHolderKind(kind: string): void {
+    this.grantHolderKind.set(kind);
+    this.grantHolderId.set(this.grantHolders()[0]?.id ?? '');
   }
 
   protected async chooseFaction(): Promise<void> {
@@ -575,6 +674,28 @@ export class CampaignDetailPage {
 
   protected terrainName(id: string | null): string {
     return terrainTypeById(this.campaign(), id)?.name ?? 'None';
+  }
+
+  protected isWaterFeature(id: string | null | undefined): boolean {
+    return terrainTypeById(this.campaign(), id)?.isWaterFeature === true;
+  }
+
+  protected specialRulesFor(ids: readonly string[] | undefined): CampaignSpecialRule[] {
+    if (!ids || ids.length === 0) {
+      return [];
+    }
+
+    const catalog = this.play()?.specialRules ?? this.campaign()?.specialRules ?? [];
+    return ids.flatMap((id) => catalog.find((rule) => rule.id === id) ?? []);
+  }
+
+  protected itemSpecialRules(item: PlayItemObjective): CampaignSpecialRule[] {
+    const type = this.campaign()?.itemObjectiveTypes?.find((entry) => entry.id === item.typeId);
+    return this.specialRulesFor(type?.specialRuleIds);
+  }
+
+  protected canResolveItemChoice(item: PlayItemObjective): boolean {
+    return !item.isDestroyed && !item.resolvedChoiceId && (item.choices?.length ?? 0) > 0;
   }
 
   protected structureName(id: string | null | undefined): string {
@@ -1317,6 +1438,10 @@ export class CampaignDetailPage {
             standings: play.standings ?? current.standings,
             publicObjectiveLeaderboards: play.publicObjectiveLeaderboards ?? current.publicObjectiveLeaderboards,
             brokenAllyFactionIds: play.brokenAllyFactionIds ?? current.brokenAllyFactionIds,
+            privateObjectives: play.privateObjectives ?? current.privateObjectives,
+            privateObjectiveUnclaimedCounts:
+              play.privateObjectiveUnclaimedCounts ?? current.privateObjectiveUnclaimedCounts,
+            specialRules: play.specialRules ?? current.specialRules,
           }
         : current,
     );
@@ -1505,6 +1630,10 @@ export class CampaignDetailPage {
 
     if (!this.awardPlayerUserId()) {
       this.awardPlayerUserId.set(this.sortedStandings()[0]?.userId ?? '');
+    }
+
+    if (!this.grantHolderId()) {
+      this.grantHolderId.set(this.grantHolders()[0]?.id ?? '');
     }
   }
 

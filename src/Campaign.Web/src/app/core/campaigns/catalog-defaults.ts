@@ -4,6 +4,7 @@ import { TERRAIN_TYPES } from '../maps/terrain';
 export interface DefaultTerrainType {
   name: string;
   color: string;
+  isWaterFeature?: boolean;
 }
 
 export interface DefaultStructureType {
@@ -18,6 +19,7 @@ export function defaultTerrainCatalog(): DefaultTerrainType[] {
   return TERRAIN_TYPES.map((entry) => ({
     name: entry.label,
     color: entry.overlayColor,
+    isWaterFeature: entry.isWaterFeature,
   }));
 }
 
