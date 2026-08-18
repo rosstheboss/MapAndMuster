@@ -22,6 +22,13 @@ describe('campaign presets', () => {
     expect(copy!.specialRules.find((rule) => rule.name === 'Forced March')?.description).toContain(
       'one extra adjacent territory',
     );
+    expect(copy!.forceStatuses.map((status) => status.name)).toEqual([
+      'Diseased',
+      'Shaken',
+      'Confident',
+      'Exhausted',
+      'Well Rested',
+    ]);
     expect(copy!.factions.find((faction) => faction.name === 'Beastmen Brayherds')?.specialRuleNames).toEqual([
       'Scattered Arrival',
       'Harsh Reaving',

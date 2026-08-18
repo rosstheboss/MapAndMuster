@@ -37,10 +37,13 @@ Player and Game Master in the same campaign.
 - Simultaneous action reveal and deterministic, explainable resolution.
 - Battle creation, mission assignment, dual result submissions, disputes, retreats, and scoring.
 - Campaign-point, supply-line, temporary-supply, status, objective, and relic tracking.
+- Configurable force statuses with enable/clear triggers and display-only tabletop effects.
 - Public faction rules and private player/faction/alliance objectives.
 - Multiple GMs, neutral forces, campaign extension, corrections, revision history, and audit.
+- Manager add/kick of players and staff assignment of another player's faction.
 - In-app and email notifications.
 - Public site-wide chat on All Campaigns, with language flags, block lists, and administrator announcements.
+- Seeded administrator test accounts (Test 1–Test 30) that skip email and public site chat.
 
 ## Product boundaries
 

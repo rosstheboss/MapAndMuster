@@ -29,6 +29,7 @@ public sealed class CampaignSetup
     /// <param name="rankingObjectivePoints">Campaign points for built-in ranking public objectives.</param>
     /// <param name="specialRules">Reusable special rules. Empty means none.</param>
     /// <param name="privateObjectiveTypes">Private campaign objectives. Empty means none.</param>
+    /// <param name="forceStatuses">Configured force statuses other than Normal. Empty means none.</param>
     public CampaignSetup(
         string name,
         string? description,
@@ -50,7 +51,8 @@ public sealed class CampaignSetup
         BattleScoringSetup? battleScoring = null,
         GeneralPublicObjectivePoints? rankingObjectivePoints = null,
         IReadOnlyList<SpecialRuleSetup>? specialRules = null,
-        IReadOnlyList<PrivateObjectiveTypeSetup>? privateObjectiveTypes = null)
+        IReadOnlyList<PrivateObjectiveTypeSetup>? privateObjectiveTypes = null,
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factions);
@@ -81,6 +83,7 @@ public sealed class CampaignSetup
         RankingObjectivePoints = rankingObjectivePoints ?? GeneralPublicObjectivePoints.None;
         SpecialRules = specialRules ?? [];
         PrivateObjectiveTypes = privateObjectiveTypes ?? [];
+        ForceStatuses = forceStatuses ?? [];
     }
 
     /// <summary>Gets the campaign name.</summary>
@@ -142,6 +145,9 @@ public sealed class CampaignSetup
 
     /// <summary>Gets the private campaign objectives. Empty means none.</summary>
     public IReadOnlyList<PrivateObjectiveTypeSetup> PrivateObjectiveTypes { get; }
+
+    /// <summary>Gets configured force statuses other than Normal. Empty means none.</summary>
+    public IReadOnlyList<ForceStatusSetup> ForceStatuses { get; }
 
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon => BattleScoring.PointsPerWin;

@@ -85,6 +85,9 @@ public sealed class SaveCampaignRequest
     /// <summary>Gets reusable special rules. Omitted or empty means none.</summary>
     public IReadOnlyList<SpecialRuleRequest>? SpecialRules { get; init; }
 
+    /// <summary>Gets configured force statuses other than Normal. Omitted or empty means none.</summary>
+    public IReadOnlyList<ForceStatusRequest>? ForceStatuses { get; init; }
+
     /// <summary>Gets private campaign objectives. Omitted or empty means none.</summary>
     public IReadOnlyList<PrivateObjectiveTypeRequest>? PrivateObjectiveTypes { get; init; }
 
@@ -363,6 +366,27 @@ public sealed class SpecialRuleRequest
 }
 
 /// <summary>
+/// Force-status configuration in a save request. Normal is omitted.
+/// </summary>
+public sealed class ForceStatusRequest
+{
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Gets the unique status name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets tabletop effect text.</summary>
+    public string? Effects { get; init; }
+
+    /// <summary>Gets the enable-trigger name.</summary>
+    public string? EnableTrigger { get; init; }
+
+    /// <summary>Gets the clear-trigger name.</summary>
+    public string? ClearTrigger { get; init; }
+}
+
+/// <summary>
 /// Private campaign objective configuration in a save request.
 /// </summary>
 public sealed class PrivateObjectiveTypeRequest
@@ -561,6 +585,9 @@ public sealed class CampaignDetailResponse
 
     /// <summary>Gets reusable special rules. Empty means none.</summary>
     public IReadOnlyList<SpecialRuleResponse> SpecialRules { get; init; } = [];
+
+    /// <summary>Gets configured force statuses other than Normal.</summary>
+    public IReadOnlyList<ForceStatusResponse> ForceStatuses { get; init; } = [];
 
     /// <summary>Gets private campaign objectives the viewer may see.</summary>
     public IReadOnlyList<PrivateObjectiveTypeResponse> PrivateObjectiveTypes { get; init; } = [];
@@ -1029,6 +1056,27 @@ public sealed class SpecialRuleResponse
 }
 
 /// <summary>
+/// A configured force status other than Normal.
+/// </summary>
+public sealed class ForceStatusResponse
+{
+    /// <summary>Gets the status identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the unique status name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets tabletop effect text.</summary>
+    public required string Effects { get; init; }
+
+    /// <summary>Gets the enable-trigger name.</summary>
+    public required string EnableTrigger { get; init; }
+
+    /// <summary>Gets the clear-trigger name.</summary>
+    public required string ClearTrigger { get; init; }
+}
+
+/// <summary>
 /// A private-objective catalog entry. Secret fields are omitted unless the viewer may see them.
 /// </summary>
 public sealed class PrivateObjectiveTypeResponse
@@ -1266,6 +1314,63 @@ public sealed class JoinCampaignRequest
 }
 
 /// <summary>
+/// Request for a manager or administrator to add a player without a join password.
+/// </summary>
+public sealed class AddCampaignMemberRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the account to add.</summary>
+    public required Guid UserId { get; init; }
+}
+
+/// <summary>
+/// Request for a manager or administrator to remove a player.
+/// </summary>
+public sealed class KickCampaignMemberRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the player to remove.</summary>
+    public required Guid UserId { get; init; }
+}
+
+/// <summary>
+/// Request for a manager or administrator to assign another player's faction.
+/// </summary>
+public sealed class AssignPlayerFactionRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the player whose faction is assigned.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the faction.</summary>
+    public required Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction, when required.</summary>
+    public string? Subfaction { get; init; }
+}
+
+/// <summary>
+/// A public identity returned by campaign member search. Email is omitted.
+/// </summary>
+public sealed class UserSearchHitResponse
+{
+    /// <summary>Gets the account identifier.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the unique username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the name shown to other users.</summary>
+    public required string DisplayName { get; init; }
+}
+
+/// <summary>
 /// Maps campaign application models onto HTTP contracts.
 /// </summary>
 public static class CampaignResponses
@@ -1448,6 +1553,17 @@ public static class CampaignResponses
                     Id = rule.Id,
                     Name = rule.Name,
                     Text = rule.Text,
+                }),
+            ],
+            ForceStatuses =
+            [
+                .. detail.ForceStatuses.Select(static status => new ForceStatusResponse
+                {
+                    Id = status.Id,
+                    Name = status.Name,
+                    Effects = status.Effects,
+                    EnableTrigger = status.EnableTrigger,
+                    ClearTrigger = status.ClearTrigger,
                 }),
             ],
             PrivateObjectiveTypes =
@@ -1847,6 +1963,23 @@ public static class CampaignResponses
                 Id = rule.Id,
                 Name = rule.Name,
                 Text = rule.Text,
+            })
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Maps HTTP force-status requests onto domain inputs.
+    /// </summary>
+    public static IReadOnlyList<ForceStatusInput>? ToForceStatusInputs(IReadOnlyList<ForceStatusRequest>? statuses)
+    {
+        return statuses?
+            .Select(static status => new ForceStatusInput
+            {
+                Id = status.Id,
+                Name = status.Name,
+                Effects = status.Effects,
+                EnableTrigger = status.EnableTrigger,
+                ClearTrigger = status.ClearTrigger,
             })
             .ToArray();
     }

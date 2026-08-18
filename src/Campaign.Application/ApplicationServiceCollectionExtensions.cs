@@ -38,6 +38,10 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<PostCampaignChatHandler>();
         services.AddScoped<JoinCampaignHandler>();
         services.AddScoped<LeaveCampaignHandler>();
+        services.AddScoped<SearchCampaignUsersHandler>();
+        services.AddScoped<AddCampaignMemberHandler>();
+        services.AddScoped<KickCampaignMemberHandler>();
+        services.AddScoped<AssignPlayerFactionHandler>();
         services.AddScoped<DeleteCampaignHandler>();
         services.AddScoped<DuplicateCampaignHandler>();
         services.AddScoped<UploadCampaignMapHandler>();

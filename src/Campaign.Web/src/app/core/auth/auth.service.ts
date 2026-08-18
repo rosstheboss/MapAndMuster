@@ -10,6 +10,7 @@ import type {
   ProfileFormValue,
   PublicProfile,
   RegisterPayload,
+  TestAccount,
 } from './auth.models';
 
 @Injectable({ providedIn: 'root' })
@@ -159,6 +160,32 @@ export class AuthService {
 
   async getExternalProviders(): Promise<ExternalProvider[]> {
     return firstValueFrom(this.http.get<ExternalProvider[]>('/api/auth/external-providers'));
+  }
+
+  async listTestUsers(): Promise<TestAccount[]> {
+    return firstValueFrom(this.http.get<TestAccount[]>('/api/auth/test-users', { withCredentials: true }));
+  }
+
+  async impersonateTestUser(userId: string): Promise<OwnProfile> {
+    const profile = await firstValueFrom(
+      this.http.post<OwnProfile>(
+        `/api/auth/test-users/${encodeURIComponent(userId)}/impersonate`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+    this.currentUser.set(profile);
+    this.sessionChecked.set(true);
+    return profile;
+  }
+
+  async stopImpersonation(): Promise<OwnProfile> {
+    const profile = await firstValueFrom(
+      this.http.post<OwnProfile>('/api/auth/stop-impersonation', {}, { withCredentials: true }),
+    );
+    this.currentUser.set(profile);
+    this.sessionChecked.set(true);
+    return profile;
   }
 
   startExternalLogin(provider: string): void {

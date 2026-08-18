@@ -533,6 +533,70 @@ public sealed class CampaignPlayRulesTests
         return closed!.State;
     }
 
+    [Fact]
+    public void RemoveControllerDropsForcesDraftsAndOpenBattles()
+    {
+        var (state, map, schedule) = Seeded();
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state,
+            PlayerOne,
+            northForce.Id,
+            ActionKind.Hold,
+            null,
+            null,
+            map,
+            schedule.StartsUtc,
+            out state,
+            out _));
+        state = ForceBattle(state, map, schedule);
+        northForce = state.Forces.Single(force => force.FactionId == North);
+        Assert.Contains(
+            state.Battles,
+            battle => battle.Status == BattleStatus.AwaitingResults && battle.ParticipantForceIds.Contains(northForce.Id));
+
+        var next = CampaignPlayRules.RemoveController(state, PlayerOne, schedule.StartsUtc);
+
+        Assert.DoesNotContain(next.Forces, force => force.ControllerUserId == PlayerOne);
+        Assert.Contains(next.Forces, force => force.ControllerUserId == PlayerTwo);
+        Assert.DoesNotContain(next.Drafts, draft => draft.ForceId == northForce.Id);
+        Assert.DoesNotContain(next.Commitments, commitment => commitment.UserId == PlayerOne);
+        Assert.DoesNotContain(
+            next.Battles,
+            battle => battle.ParticipantForceIds.Contains(northForce.Id) && battle.Status == BattleStatus.AwaitingResults);
+    }
+
+    [Fact]
+    public void ReassignControllerFactionKeepsTerritory()
+    {
+        var (state, _, _) = Seeded();
+        var origin = state.Forces.Single(force => force.ControllerUserId == PlayerOne);
+
+        var next = CampaignPlayRules.ReassignControllerFaction(state, PlayerOne, South);
+        var force = next.Forces.Single(item => item.ControllerUserId == PlayerOne);
+
+        Assert.Equal(South, force.FactionId);
+        Assert.Equal(origin.Id, force.Id);
+        Assert.Equal(origin.TerritoryId, force.TerritoryId);
+        Assert.Equal(South, next.Forces.Single(item => item.ControllerUserId == PlayerTwo).FactionId);
+    }
+
+    [Fact]
+    public void HoldAppliesWellRestedFromConfiguredStatuses()
+    {
+        var (state, map, schedule) = Seeded();
+        var catalog = ForceStatusCatalog.Standard
+            .Select(status => new ForceStatusSetup(
+                Guid.NewGuid(),
+                status.Name,
+                status.Effects,
+                status.EnableTrigger,
+                status.ClearTrigger))
+            .ToArray();
+        var advanced = CampaignPlayRules.Advance(state, map, schedule, AllyGroups(), state.Windows[0].EndsUtc, catalog);
+        Assert.All(advanced.State.Forces, force => Assert.Equal("Well Rested", force.StatusName));
+    }
+
     private static (CampaignPlayState State, PlayMap Map, CampaignSchedule Schedule) Seeded()
     {
         var schedule = CreateSchedule();

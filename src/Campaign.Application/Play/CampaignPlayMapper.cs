@@ -163,6 +163,7 @@ internal static class CampaignPlayMapper
             PrivateObjectives = catalog.PrivateObjectives,
             PrivateObjectiveUnclaimedCounts = catalog.PrivateObjectiveUnclaimedCounts,
             SpecialRules = catalog.SpecialRules,
+            ForceStatuses = catalog.ForceStatuses,
             PointsPerBattleWon = campaign.BattleScoring.PointsPerWin,
             PointsPerBattleDraw = campaign.BattleScoring.PointsPerDraw,
             UseDifferentialBattleScoring = campaign.BattleScoring.UseDifferential,
@@ -177,6 +178,10 @@ internal static class CampaignPlayMapper
                     TerritoryId = force.TerritoryId,
                     IsMine = force.ControllerUserId == viewerUserId,
                     InBattle = force.InBattle,
+                    StatusName = force.StatusName,
+                    StatusEffects = campaign.ForceStatuses
+                        .FirstOrDefault(status => string.Equals(status.Name, force.StatusName, StringComparison.OrdinalIgnoreCase))
+                        ?.Effects,
                     MoveTargets = force.ControllerUserId == viewerUserId || staffView
                         ? CampaignPlayRules.EligibleMoves(map, force)
                         : [],

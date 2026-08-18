@@ -18,7 +18,8 @@ Required early suites:
 - Action validity and precedence, especially Battle overriding later actions.
 - Move adjacency, spawn restrictions, split/rejoin with a play-log entry, backstab, pillage/repair, and retreat.
 - Supply graph traversal, alliance inclusion, temporary supply, and split forces.
-- Status transitions and faction exceptions.
+- Status transitions and faction exceptions, including configured force-status enable/clear
+  triggers and catalog order when more than one trigger matches.
 - Public/private objective visibility, completion, manager approval of private claims, and automatic private-objective scoring.
 - Relic discovery, transfer, drop, choice resolution, destroy-and-replace, tie-breaking, and secrecy.
 - Campaign-point components and graph objectives.
@@ -42,9 +43,11 @@ Cover:
 - Idempotent deadline workers and retry behavior.
 - File metadata and upload authorization.
 - Public campaign-log chat on an upcoming campaign, including outsider rejection, unknown `@` mentions, and private-channel omission from unauthorized payloads.
-- Public site chat on All Campaigns, including unknown `@` mentions, prohibited language, mutual blocks, isolation from campaign logs, and administrator announcements with notifications.
+- Public site chat on All Campaigns, including unknown `@` mentions, prohibited language, mutual blocks, isolation from campaign logs, administrator announcements with notifications, and rejection of seeded test accounts.
 - Public profile campaign lists that include shared or publicly viewable campaigns and omit hidden private campaigns the viewer does not share.
 - Home notification board empty and populated states, and administrator-only news edits.
+- Manager add and kick of players (including private campaigns without the join password), staff
+  faction assignment, and administrator impersonation of seeded test accounts.
 
 ## Angular tests
 
@@ -61,7 +64,8 @@ Cover components/services for:
 - Campaign log display, member chat including typable recipient autocomplete and public/private/game-log filters, live log refresh, chat send errors without the save success
   banner, `@` mention autocomplete limited to current members, and clickable originator and mention names.
 - Public site chat on All Campaigns, including language filters, block toggles, administrator compose, and cookie-stored language preferences.
-- Participants panel names, factions, and Manager/Player/Admin roles.
+- Participants panel names, factions, and Manager/Player/Admin roles, including manager add/search/kick and staff faction assignment.
+- Administrator test-users page and the impersonation banner with Return to admin.
 - Public profile campaign list, scores placeholder, and Back to the previous in-app screen.
 - Home notification board, including "No new notifications.", and paginated site news.
 - API error and concurrency-conflict recovery.

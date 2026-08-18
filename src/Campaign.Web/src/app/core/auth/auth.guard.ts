@@ -16,3 +16,10 @@ export const guestGuard: CanActivateFn = async () => {
   const user = auth.currentUser() ?? (await auth.loadSession());
   return user ? router.parseUrl('/') : true;
 };
+
+export const adminGuard: CanActivateFn = async () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  const user = auth.currentUser() ?? (await auth.loadSession());
+  return user?.isAdministrator ? true : router.parseUrl('/');
+};

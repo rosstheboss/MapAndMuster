@@ -32,6 +32,9 @@ export interface OwnProfile {
   inAppNotificationsEnabled: boolean;
   emailNotificationsEnabled: boolean;
   preferredChatLanguage: string;
+  isTestAccount?: boolean;
+  testAccountNumber?: number | null;
+  isImpersonating?: boolean;
 }
 
 export interface PublicProfile {
@@ -100,4 +103,11 @@ export interface ProfileFormValue {
 export interface ChangePasswordPayload {
   currentPassword: string;
   newPassword: string;
+}
+
+export interface TestAccount {
+  id: string;
+  number: number;
+  username: string;
+  displayName: string;
 }

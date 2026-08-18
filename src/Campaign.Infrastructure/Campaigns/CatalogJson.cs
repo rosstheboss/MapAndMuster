@@ -25,7 +25,8 @@ internal static class CatalogJson
         GeneralPublicObjectivePoints? rankingObjectivePoints = null,
         IReadOnlyList<StoredSpecialRule>? specialRules = null,
         IReadOnlyList<StoredPrivateObjectiveType>? privateObjectiveTypes = null,
-        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? factionSpecialRuleIds = null)
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? factionSpecialRuleIds = null,
+        IReadOnlyList<StoredForceStatus>? forceStatuses = null)
     {
         ArgumentNullException.ThrowIfNull(terrainTypes);
         ArgumentNullException.ThrowIfNull(structureTypes);
@@ -39,6 +40,7 @@ internal static class CatalogJson
                 ItemObjectiveTypes = [.. (itemObjectiveTypes ?? []).Select(ToDocument)],
                 PublicObjectiveTypes = [.. (publicObjectiveTypes ?? []).Select(ToDocument)],
                 SpecialRules = [.. (specialRules ?? []).Select(ToDocument)],
+                ForceStatuses = [.. (forceStatuses ?? []).Select(ToDocument)],
                 PrivateObjectiveTypes = [.. (privateObjectiveTypes ?? []).Select(ToDocument)],
                 FactionSpecialRules =
                 [
@@ -67,18 +69,19 @@ internal static class CatalogJson
         GeneralPublicObjectivePoints RankingObjectivePoints,
         IReadOnlyList<StoredSpecialRule> SpecialRules,
         IReadOnlyList<StoredPrivateObjectiveType> PrivateObjectiveTypes,
-        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> FactionSpecialRuleIds)
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> FactionSpecialRuleIds,
+        IReadOnlyList<StoredForceStatus> ForceStatuses)
         Deserialize(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>());
+            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), []);
         }
 
         var document = JsonSerializer.Deserialize<CatalogDocument>(json, Options);
         if (document is null)
         {
-            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>());
+            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), []);
         }
 
         return (
@@ -95,7 +98,8 @@ internal static class CatalogJson
             [.. (document.PrivateObjectiveTypes ?? []).Select(FromDocument)],
             (document.FactionSpecialRules ?? []).ToDictionary(
                 static item => item.FactionId,
-                static item => (IReadOnlyList<Guid>)item.SpecialRuleIds));
+                static item => (IReadOnlyList<Guid>)item.SpecialRuleIds),
+            [.. (document.ForceStatuses ?? []).Select(FromDocument)]);
     }
 
     private static TerrainDocument ToDocument(StoredTerrainType type)
@@ -235,6 +239,18 @@ internal static class CatalogJson
         };
     }
 
+    private static ForceStatusDocument ToDocument(StoredForceStatus status)
+    {
+        return new ForceStatusDocument
+        {
+            Id = status.Id,
+            Name = status.Name,
+            Effects = status.Effects,
+            EnableTrigger = status.EnableTrigger,
+            ClearTrigger = status.ClearTrigger,
+        };
+    }
+
     private static PrivateObjectiveDocument ToDocument(StoredPrivateObjectiveType type)
     {
         return new PrivateObjectiveDocument
@@ -312,6 +328,18 @@ internal static class CatalogJson
             Id = rule.Id,
             Name = rule.Name,
             Text = rule.Text ?? string.Empty,
+        };
+    }
+
+    private static StoredForceStatus FromDocument(ForceStatusDocument status)
+    {
+        return new StoredForceStatus
+        {
+            Id = status.Id,
+            Name = status.Name,
+            Effects = status.Effects ?? string.Empty,
+            EnableTrigger = status.EnableTrigger ?? string.Empty,
+            ClearTrigger = status.ClearTrigger ?? string.Empty,
         };
     }
 
@@ -393,6 +421,8 @@ internal static class CatalogJson
         public List<PublicObjectiveDocument> PublicObjectiveTypes { get; set; } = [];
 
         public List<SpecialRuleDocument>? SpecialRules { get; set; }
+
+        public List<ForceStatusDocument>? ForceStatuses { get; set; }
 
         public List<PrivateObjectiveDocument>? PrivateObjectiveTypes { get; set; }
 
@@ -546,6 +576,19 @@ internal static class CatalogJson
         public string Name { get; set; } = string.Empty;
 
         public string? Text { get; set; }
+    }
+
+    private sealed class ForceStatusDocument
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public string? Effects { get; set; }
+
+        public string? EnableTrigger { get; set; }
+
+        public string? ClearTrigger { get; set; }
     }
 
     private sealed class PrivateObjectiveDocument

@@ -61,6 +61,9 @@ public static class CampaignSetupRules
     /// <summary>Maximum number of reusable special rules.</summary>
     public const int MaxSpecialRuleCount = 80;
 
+    /// <summary>Maximum number of configured force statuses.</summary>
+    public const int MaxForceStatusCount = 20;
+
     /// <summary>Maximum campaign points for one configured source.</summary>
     public const int MaxCampaignPoints = 999;
 
@@ -206,6 +209,7 @@ public static class CampaignSetupRules
     /// <param name="mostBattlesWonCampaignPoints">Points for most battle wins. Zero ignores the objective.</param>
     /// <param name="specialRules">Reusable special-rule inputs. Omitted or empty means none.</param>
     /// <param name="privateObjectiveTypes">Private-objective inputs. Omitted or empty means none.</param>
+    /// <param name="forceStatuses">Force-status inputs other than Normal. Omitted or empty means none.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
@@ -249,7 +253,8 @@ public static class CampaignSetupRules
         int? longestTerritoryChainCampaignPoints = null,
         int? mostBattlesWonCampaignPoints = null,
         IReadOnlyList<SpecialRuleInput>? specialRules = null,
-        IReadOnlyList<PrivateObjectiveTypeInput>? privateObjectiveTypes = null)
+        IReadOnlyList<PrivateObjectiveTypeInput>? privateObjectiveTypes = null,
+        IReadOnlyList<ForceStatusInput>? forceStatuses = null)
     {
         var collected = new List<DomainError>();
         setup = null;
@@ -298,6 +303,7 @@ public static class CampaignSetupRules
         var usedIds = new HashSet<Guid>();
         var missionIndex = new MissionIndex();
         var parsedSpecialRules = ParseSpecialRules(specialRules, usedIds, collected);
+        var parsedForceStatuses = ParseForceStatuses(forceStatuses, usedIds, collected);
         var specialRuleIds = parsedSpecialRules.Select(static rule => rule.Id).ToHashSet();
         var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, specialRuleIds, collected);
         ValidateAllyMembership(parsedFactions, parsedGroups, collected);
@@ -358,7 +364,8 @@ public static class CampaignSetupRules
             parsedBattleScoring,
             parsedRanking,
             parsedSpecialRules,
-            parsedPrivate);
+            parsedPrivate,
+            parsedForceStatuses);
         errors = collected;
         return true;
     }
@@ -1797,6 +1804,106 @@ public static class CampaignSetupRules
         }
 
         return parsed;
+    }
+
+    private static List<ForceStatusSetup> ParseForceStatuses(
+        IReadOnlyList<ForceStatusInput>? forceStatuses,
+        HashSet<Guid> usedIds,
+        List<DomainError> errors)
+    {
+        var supplied = forceStatuses ?? [];
+        var parsed = new List<ForceStatusSetup>();
+        if (supplied.Count > MaxForceStatusCount)
+        {
+            errors.Add(new DomainError(
+                "forceStatuses.invalid",
+                $"At most {MaxForceStatusCount} force statuses are allowed.",
+                "forceStatuses"));
+            return parsed;
+        }
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var name = ParseRequiredName(
+                input.Name,
+                $"forceStatuses[{index}].name",
+                $"Force status {index + 1} name",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (string.Equals(name, "Normal", StringComparison.OrdinalIgnoreCase))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.normal",
+                    "Normal is the absence of a status and cannot be configured.",
+                    $"forceStatuses[{index}].name"));
+                continue;
+            }
+
+            if (!seenNames.Add(name))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.duplicate",
+                    "Force status names must be unique.",
+                    $"forceStatuses[{index}].name"));
+                continue;
+            }
+
+            var effects = ParseOptionalCatalogText(
+                input.Effects,
+                $"forceStatuses[{index}].effects",
+                $"Force status {index + 1} effects",
+                errors) ?? string.Empty;
+            if (!TryParseForceStatusEnable(input.EnableTrigger, out var enable))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.enable.invalid",
+                    "Choose how this force status is enabled.",
+                    $"forceStatuses[{index}].enableTrigger"));
+                continue;
+            }
+
+            if (!TryParseForceStatusClear(input.ClearTrigger, out var clear))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.clear.invalid",
+                    "Choose how this force status is cleared.",
+                    $"forceStatuses[{index}].clearTrigger"));
+                continue;
+            }
+
+            parsed.Add(new ForceStatusSetup(
+                ResolveId(input.Id, usedIds, $"forceStatuses[{index}].id", errors),
+                name,
+                effects,
+                enable,
+                clear));
+        }
+
+        return parsed;
+    }
+
+    private static bool TryParseForceStatusEnable(string? raw, out ForceStatusEnableTrigger trigger)
+    {
+        trigger = default;
+        return !string.IsNullOrWhiteSpace(raw)
+            && Enum.TryParse(raw.Trim(), ignoreCase: true, out trigger)
+            && Enum.IsDefined(trigger);
+    }
+
+    private static bool TryParseForceStatusClear(string? raw, out ForceStatusClearTrigger trigger)
+    {
+        trigger = default;
+        return !string.IsNullOrWhiteSpace(raw)
+            && Enum.TryParse(raw.Trim(), ignoreCase: true, out trigger)
+            && Enum.IsDefined(trigger);
     }
 
     private static List<PrivateObjectiveTypeSetup> ParsePrivateObjectiveTypes(

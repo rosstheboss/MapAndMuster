@@ -69,6 +69,7 @@ public static class ExternalAuthEndpoints
     private static async Task<IResult> CallbackAsync(
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
+        IdentityMaintenance identity,
         IOptions<PublicWebOptions> webOptions)
     {
         var origin = webOptions.Value.Origin.TrimEnd('/');
@@ -86,6 +87,12 @@ public static class ExternalAuthEndpoints
             .ConfigureAwait(false);
         if (existing.Succeeded)
         {
+            var signedIn = await userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey).ConfigureAwait(false);
+            if (signedIn is not null)
+            {
+                await identity.PromoteIfPrivilegedAsync(signedIn).ConfigureAwait(false);
+            }
+
             return Results.Redirect($"{origin}/");
         }
 
@@ -99,26 +106,26 @@ public static class ExternalAuthEndpoints
             }
         }
 
-        var identity = new ClaimsIdentity(IdentityHttp.ExternalRegistrationScheme);
-        identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, info.ProviderKey));
-        identity.AddClaim(new Claim(ExternalAuthentication.ProviderClaim, info.LoginProvider));
+        var pendingIdentity = new ClaimsIdentity(IdentityHttp.ExternalRegistrationScheme);
+        pendingIdentity.AddClaim(new Claim(ClaimTypes.NameIdentifier, info.ProviderKey));
+        pendingIdentity.AddClaim(new Claim(ExternalAuthentication.ProviderClaim, info.LoginProvider));
         if (!string.IsNullOrWhiteSpace(email))
         {
-            identity.AddClaim(new Claim(ClaimTypes.Email, email));
+            pendingIdentity.AddClaim(new Claim(ClaimTypes.Email, email));
         }
 
-        CopyClaim(info.Principal, identity, ClaimTypes.GivenName);
-        CopyClaim(info.Principal, identity, ClaimTypes.Surname);
-        CopyClaim(info.Principal, identity, ClaimTypes.Name);
-        CopyClaim(info.Principal, identity, ExternalAuthentication.AvatarUrlClaim);
+        CopyClaim(info.Principal, pendingIdentity, ClaimTypes.GivenName);
+        CopyClaim(info.Principal, pendingIdentity, ClaimTypes.Surname);
+        CopyClaim(info.Principal, pendingIdentity, ClaimTypes.Name);
+        CopyClaim(info.Principal, pendingIdentity, ExternalAuthentication.AvatarUrlClaim);
         if (info.Principal.FindFirstValue("email_verified") is { } verified)
         {
-            identity.AddClaim(new Claim("email_verified", verified));
+            pendingIdentity.AddClaim(new Claim("email_verified", verified));
         }
 
         await signInManager.Context.SignInAsync(
                 IdentityHttp.ExternalRegistrationScheme,
-                new ClaimsPrincipal(identity))
+                new ClaimsPrincipal(pendingIdentity))
             .ConfigureAwait(false);
 
         return Results.Redirect($"{origin}/complete-external");
@@ -223,8 +230,12 @@ public static class ExternalAuthEndpoints
             }
 
             await httpContext.SignOutAsync(IdentityHttp.ExternalRegistrationScheme).ConfigureAwait(false);
+            var identity = httpContext.RequestServices.GetRequiredService<IdentityMaintenance>();
+            await identity.PromoteIfPrivilegedAsync(user).ConfigureAwait(false);
             await signInManager.SignInAsync(user, isPersistent: true).ConfigureAwait(false);
-            return Results.Ok(ProfileResponses.FromAccount(created.Value));
+            return Results.Ok(ProfileResponses.FromAccount(
+                created.Value,
+                await signInManager.UserManager.IsInRoleAsync(user, IdentityMaintenance.AdministratorRole).ConfigureAwait(false)));
         }
         finally
         {

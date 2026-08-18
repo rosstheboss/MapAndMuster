@@ -20,6 +20,12 @@ import type {
 } from '../../core/campaigns/campaign.models';
 import { defaultStructureCatalog, defaultTerrainCatalog } from '../../core/campaigns/catalog-defaults';
 import { CAMPAIGN_PRESETS, campaignFromPreset } from '../../core/campaigns/campaign-presets';
+import {
+  FORCE_STATUS_CLEAR_OPTIONS,
+  FORCE_STATUS_ENABLE_OPTIONS,
+  forceStatusesFromStandardPreset,
+  STANDARD_FORCE_STATUSES,
+} from '../../core/campaigns/force-status-presets';
 import { OLD_WORLD_SPECIAL_RULES, type SpecialRulePreset } from '../../core/campaigns/special-rule-presets';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
@@ -140,6 +146,13 @@ type SpecialRuleGroup = FormGroup<{
   name: FormControl<string>;
   text: FormControl<string>;
 }>;
+type ForceStatusGroup = FormGroup<{
+  id: FormControl<string>;
+  name: FormControl<string>;
+  effects: FormControl<string>;
+  enableTrigger: FormControl<string>;
+  clearTrigger: FormControl<string>;
+}>;
 type PrivateObjectiveGroup = FormGroup<{
   id: FormControl<string>;
   name: FormControl<string>;
@@ -165,6 +178,7 @@ const TOP_LEVEL_SECTION_IDS = [
   'schedule',
   'visibility',
   'specialRules',
+  'forceStatuses',
   'publicObjectives',
   'privateObjectives',
   'allies',
@@ -233,6 +247,8 @@ export class CampaignSetupPage {
   protected readonly terrainPresets = TERRAIN_PRESETS;
   protected readonly structurePresets = STRUCTURE_PRESETS;
   protected readonly campaignPresets = CAMPAIGN_PRESETS;
+  protected readonly forceStatusEnableOptions = FORCE_STATUS_ENABLE_OPTIONS;
+  protected readonly forceStatusClearOptions = FORCE_STATUS_CLEAR_OPTIONS;
   protected readonly structureSymbols = STRUCTURE_TYPES;
   protected readonly itemObjectiveSymbols = ITEM_OBJECTIVE_SYMBOLS;
   protected readonly structureImageMaxPx = 50;
@@ -255,6 +271,7 @@ export class CampaignSetupPage {
     initialValue: this.campaignPresetId.value,
   });
   protected readonly specialRulePresetPick = this.formBuilder.nonNullable.control('');
+  protected readonly forceStatusPresetPick = this.formBuilder.nonNullable.control('');
   private readonly catalogTick = signal(0);
   private readonly assignmentPicks = new Map<string, FormControl<string>>();
 
@@ -284,6 +301,7 @@ export class CampaignSetupPage {
     structureTypes: this.formBuilder.array<StructureGroup>(this.createDefaultStructureGroups()),
     itemObjectiveTypes: this.formBuilder.array<ItemObjectiveGroup>([]),
     specialRules: this.formBuilder.array<SpecialRuleGroup>([]),
+    forceStatuses: this.formBuilder.array<ForceStatusGroup>([]),
     privateObjectiveTypes: this.formBuilder.array<PrivateObjectiveGroup>([]),
     publicObjectiveTypes: this.formBuilder.array<PublicObjectiveGroup>([]),
     pointsPerBattleWon: [2, [minValue(0), maxValue(999)]],
@@ -356,6 +374,10 @@ export class CampaignSetupPage {
 
   protected get specialRules(): FormArray<SpecialRuleGroup> {
     return this.form.controls.specialRules;
+  }
+
+  protected get forceStatuses(): FormArray<ForceStatusGroup> {
+    return this.form.controls.forceStatuses;
   }
 
   protected get privateObjectiveTypes(): FormArray<PrivateObjectiveGroup> {
@@ -518,6 +540,12 @@ export class CampaignSetupPage {
     this.replaceArray(
       this.specialRules,
       copy.specialRules.map((rule) => this.createSpecialRuleGroup(undefined, rule.name, rule.description)),
+    );
+    this.replaceArray(
+      this.forceStatuses,
+      copy.forceStatuses.map((status) =>
+        this.createForceStatusGroup(undefined, status.name, status.effects, status.enableTrigger, status.clearTrigger),
+      ),
     );
     this.bumpCatalog();
     const ruleIds = this.specialRuleIdsByName();
@@ -811,6 +839,66 @@ export class CampaignSetupPage {
     this.specialRules.removeAt(index);
     this.dropAssignedSpecialRule(id);
     this.bumpCatalog();
+  }
+
+  protected applyStandardForceStatuses(): void {
+    this.replaceArray(
+      this.forceStatuses,
+      forceStatusesFromStandardPreset().map((status) =>
+        this.createForceStatusGroup(undefined, status.name, status.effects, status.enableTrigger, status.clearTrigger),
+      ),
+    );
+  }
+
+  protected addForceStatus(): void {
+    if (this.forceStatuses.length >= 20) {
+      return;
+    }
+
+    this.forceStatuses.push(this.createForceStatusGroup());
+  }
+
+  protected addPickedForceStatus(): void {
+    const name = this.forceStatusPresetPick.value.trim();
+    if (!name || this.forceStatuses.length >= 20) {
+      return;
+    }
+
+    if (
+      this.forceStatuses.controls.some(
+        (status) => status.controls.name.value.trim().toLowerCase() === name.toLowerCase(),
+      )
+    ) {
+      this.forceStatusPresetPick.setValue('');
+      return;
+    }
+
+    const preset = STANDARD_FORCE_STATUSES.find((status) => status.name.toLowerCase() === name.toLowerCase());
+    this.forceStatuses.push(
+      this.createForceStatusGroup(
+        undefined,
+        preset?.name ?? name,
+        preset?.effects ?? '',
+        preset?.enableTrigger ?? 'Hold',
+        preset?.clearTrigger ?? 'Hold',
+      ),
+    );
+    this.forceStatusPresetPick.setValue('');
+  }
+
+  protected availableForceStatusPresetNames(): string[] {
+    const used = new Set(
+      this.forceStatuses.controls
+        .map((status) => status.controls.name.value.trim().toLowerCase())
+        .filter((name) => name),
+    );
+    return STANDARD_FORCE_STATUSES.filter((status) => !used.has(status.name.toLowerCase())).map(
+      (status) => status.name,
+    );
+  }
+
+  protected removeForceStatus(index: number): void {
+    this.forceStatuses.removeAt(index);
   }
 
   protected addPrivateObjective(): void {
@@ -1332,6 +1420,18 @@ export class CampaignSetupPage {
         this.specialRules,
         (campaign.specialRules ?? []).map((rule) => this.createSpecialRuleGroup(rule.id, rule.name, rule.text)),
       );
+      this.replaceArray(
+        this.forceStatuses,
+        (campaign.forceStatuses ?? []).map((status) =>
+          this.createForceStatusGroup(
+            status.id,
+            status.name,
+            status.effects,
+            status.enableTrigger,
+            status.clearTrigger,
+          ),
+        ),
+      );
       this.bumpCatalog();
       this.replaceArray(
         this.privateObjectiveTypes,
@@ -1552,6 +1652,22 @@ export class CampaignSetupPage {
       name: [type?.name ?? '', [maxLength(60)]],
       description: [type?.description ?? '', maxLength(240)],
       campaignPoints: [type?.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
+    });
+  }
+
+  private createForceStatusGroup(
+    id?: string,
+    name = '',
+    effects = '',
+    enableTrigger = 'Hold',
+    clearTrigger = 'Hold',
+  ): ForceStatusGroup {
+    return this.formBuilder.nonNullable.group({
+      id: [id ?? this.newId()],
+      name: [name, [maxLength(60)]],
+      effects: [effects, maxLength(2000)],
+      enableTrigger: [enableTrigger, required],
+      clearTrigger: [clearTrigger, required],
     });
   }
 
@@ -1799,6 +1915,15 @@ export class CampaignSetupPage {
         name: rule.name.trim(),
         text: rule.text.trim() || null,
       }));
+    const forceStatuses = value.forceStatuses
+      .filter((status) => status.name.trim().length > 0)
+      .map((status) => ({
+        id: status.id,
+        name: status.name.trim(),
+        effects: status.effects.trim() || null,
+        enableTrigger: status.enableTrigger,
+        clearTrigger: status.clearTrigger,
+      }));
     const privateObjectiveTypes = value.privateObjectiveTypes
       .filter((type) => type.name.trim().length > 0)
       .map((type) => ({
@@ -1847,6 +1972,7 @@ export class CampaignSetupPage {
       structureTypes,
       itemObjectiveTypes,
       specialRules,
+      forceStatuses,
       privateObjectiveTypes,
       publicObjectiveTypes,
       pointsPerBattleWon: Number(value.pointsPerBattleWon) || 0,
@@ -2138,6 +2264,48 @@ export class CampaignSetupPage {
       }
 
       usedSpecialRuleNames.add(key);
+    });
+
+    const usedForceStatusNames = new Set<string>();
+    this.forceStatuses.controls.forEach((status, index) => {
+      const name = status.controls.name.value.trim();
+      if (!name) {
+        return;
+      }
+
+      const nameMessage = describeControlError(status.controls.name, `Force status ${index + 1} name`);
+      if (nameMessage) {
+        failures.push(nameMessage);
+        sections.add('forceStatuses');
+        sections.add(`force-status-${index}`);
+      }
+
+      if (name.toLowerCase() === 'normal') {
+        failures.push('Normal is the absence of a status and cannot be configured.');
+        sections.add('forceStatuses');
+        sections.add(`force-status-${index}`);
+      }
+
+      const key = name.toLowerCase();
+      if (usedForceStatusNames.has(key)) {
+        failures.push(`Force status ${index + 1} name must be unique.`);
+        sections.add('forceStatuses');
+        sections.add(`force-status-${index}`);
+      }
+
+      usedForceStatusNames.add(key);
+
+      if (!status.controls.enableTrigger.value) {
+        failures.push(`Force status ${index + 1} needs an enable condition.`);
+        sections.add('forceStatuses');
+        sections.add(`force-status-${index}`);
+      }
+
+      if (!status.controls.clearTrigger.value) {
+        failures.push(`Force status ${index + 1} needs a clear condition.`);
+        sections.add('forceStatuses');
+        sections.add(`force-status-${index}`);
+      }
     });
 
     const usedPrivateNames = new Set<string>();

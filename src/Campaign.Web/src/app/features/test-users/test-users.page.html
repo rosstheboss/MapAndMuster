@@ -1,0 +1,25 @@
+<section class="page">
+  <p><a routerLink="/">Back to home</a></p>
+  <h1>Test users</h1>
+  <p>
+    These accounts are for administrator testing. They receive in-app notifications but no email, and they cannot use
+    public site chat. Campaign chat is allowed.
+  </p>
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+  @if (loading()) {
+    <p>Loading test users.</p>
+  } @else if (users().length === 0) {
+    <p>No test users are seeded in this environment.</p>
+  } @else {
+    <ul class="plain-list">
+      @for (user of users(); track user.id) {
+        <li class="nested-row">
+          <span>{{ user.displayName }} ({{ user.username }})</span>
+          <button type="button" class="button-secondary" (click)="impersonate(user)">Test as this user</button>
+        </li>
+      }
+    </ul>
+  }
+</section>

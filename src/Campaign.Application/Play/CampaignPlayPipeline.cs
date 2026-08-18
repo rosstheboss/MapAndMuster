@@ -58,7 +58,8 @@ internal static class CampaignPlayPipeline
             seeded.Map,
             schedule,
             AllyGroups(campaign),
-            utcNow);
+            utcNow,
+            ForceStatuses(campaign));
         var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, advanced.Map, utcNow, advanced.PreserveSchedule ? campaign.EndsUtc : advanced.EndsUtc);
         var nextGraph = campaign.MapGraph is null || advanced.PreserveMap
             ? campaign.MapGraph
@@ -171,7 +172,8 @@ internal static class CampaignPlayPipeline
             workingMap,
             CampaignMapper.ToSchedule(campaign),
             AllyGroups(campaign),
-            clock.UtcNow);
+            clock.UtcNow,
+            ForceStatuses(campaign));
         var playMap = advanced.PreserveMap ? workingMap : advanced.Map;
         var endsUtc = mutation.PreserveSchedule && advanced.PreserveSchedule
             ? campaign.EndsUtc
@@ -221,6 +223,24 @@ internal static class CampaignPlayPipeline
         return campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName);
     }
 
+    public static IReadOnlyList<ForceStatusSetup> ForceStatuses(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        return
+        [
+            .. campaign.ForceStatuses
+                .Where(static status =>
+                    Enum.TryParse<ForceStatusEnableTrigger>(status.EnableTrigger, true, out _)
+                    && Enum.TryParse<ForceStatusClearTrigger>(status.ClearTrigger, true, out _))
+                .Select(static status => new ForceStatusSetup(
+                    status.Id,
+                    status.Name,
+                    status.Effects,
+                    Enum.Parse<ForceStatusEnableTrigger>(status.EnableTrigger, true),
+                    Enum.Parse<ForceStatusClearTrigger>(status.ClearTrigger, true))),
+        ];
+    }
+
     public static StoredCampaign Clone(
         StoredCampaign existing,
         CampaignPlayState play,
@@ -264,6 +284,7 @@ internal static class CampaignPlayPipeline
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
             SpecialRules = existing.SpecialRules,
+            ForceStatuses = existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,

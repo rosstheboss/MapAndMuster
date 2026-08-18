@@ -156,6 +156,14 @@ public static class CampaignMapper
                 Name = rule.Name,
                 Text = rule.Text,
             })],
+            ForceStatuses = [.. campaign.ForceStatuses.Select(static status => new ForceStatusDetail
+            {
+                Id = status.Id,
+                Name = status.Name,
+                Effects = status.Effects,
+                EnableTrigger = status.EnableTrigger,
+                ClearTrigger = status.ClearTrigger,
+            })],
             PrivateObjectiveTypes = VisiblePrivateTypes(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed),
             PrivateObjectives = VisiblePrivateAssignments(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed),
             PrivateObjectiveUnclaimedCounts = UnclaimedCounts(campaign, mappedParticipants),

@@ -1,6 +1,8 @@
 using Campaign.Application.Common;
+using Campaign.Application.Maps;
 using Campaign.Application.Play;
 using Campaign.Application.Ports;
+using Campaign.Domain.Play;
 
 namespace Campaign.Application.Campaigns;
 
@@ -410,6 +412,7 @@ internal static class CampaignMapClone
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
             SpecialRules = existing.SpecialRules,
+            ForceStatuses = existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
@@ -459,6 +462,7 @@ internal static class CampaignMapClone
             ItemObjectiveTypes = itemObjectiveTypes ?? existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
             SpecialRules = existing.SpecialRules,
+            ForceStatuses = existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
@@ -506,6 +510,7 @@ internal static class CampaignMapClone
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
             SpecialRules = existing.SpecialRules,
+            ForceStatuses = existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
@@ -516,7 +521,8 @@ internal static class CampaignMapClone
     public static StoredCampaign CloneWithMemberships(
         StoredCampaign existing,
         IReadOnlyList<StoredCampaignMembership> memberships,
-        DateTimeOffset updatedUtc)
+        DateTimeOffset updatedUtc,
+        CampaignPlayState? playState = null)
     {
         return new StoredCampaign
         {
@@ -553,10 +559,61 @@ internal static class CampaignMapClone
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
             SpecialRules = existing.SpecialRules,
+            ForceStatuses = existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
-            PlayState = existing.PlayState,
+            PlayState = playState ?? existing.PlayState,
+        };
+    }
+
+    public static StoredCampaign WithPlay(
+        StoredCampaign existing,
+        CampaignPlayState play,
+        StoredMapGraph? graph = null)
+    {
+        ArgumentNullException.ThrowIfNull(existing);
+        ArgumentNullException.ThrowIfNull(play);
+        return new StoredCampaign
+        {
+            Id = existing.Id,
+            Name = existing.Name,
+            Description = existing.Description,
+            PlayerSlotCount = existing.PlayerSlotCount,
+            IsPrivate = existing.IsPrivate,
+            IsPubliclyViewable = existing.IsPubliclyViewable,
+            JoinPasswordHash = existing.JoinPasswordHash,
+            CreatorIsParticipant = existing.CreatorIsParticipant,
+            City = existing.City,
+            Region = existing.Region,
+            Country = existing.Country,
+            MapStorageKey = existing.MapStorageKey,
+            Revision = existing.Revision,
+            CreatedUtc = existing.CreatedUtc,
+            UpdatedUtc = existing.UpdatedUtc,
+            CreatedByUserId = existing.CreatedByUserId,
+            Memberships = existing.Memberships,
+            Factions = existing.Factions,
+            AllyGroups = existing.AllyGroups,
+            Links = existing.Links,
+            TimeZoneId = existing.TimeZoneId,
+            StartsUtc = existing.StartsUtc,
+            EndsUtc = existing.EndsUtc,
+            RoundCount = existing.RoundCount,
+            RoundLengthAmount = existing.RoundLengthAmount,
+            RoundLengthUnit = existing.RoundLengthUnit,
+            Phases = existing.Phases,
+            MapGraph = graph ?? existing.MapGraph,
+            TerrainTypes = existing.TerrainTypes,
+            StructureTypes = existing.StructureTypes,
+            ItemObjectiveTypes = existing.ItemObjectiveTypes,
+            PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            SpecialRules = existing.SpecialRules,
+            ForceStatuses = existing.ForceStatuses,
+            PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
+            BattleScoring = existing.BattleScoring,
+            RankingObjectivePoints = existing.RankingObjectivePoints,
+            PlayState = play,
         };
     }
 }

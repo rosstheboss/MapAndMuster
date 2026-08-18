@@ -72,6 +72,9 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(user => user.InAppNotificationsEnabled).IsRequired().HasDefaultValue(true);
             entity.Property(user => user.EmailNotificationsEnabled).IsRequired().HasDefaultValue(true);
             entity.Property(user => user.PreferredChatLanguage).HasMaxLength(32).IsRequired().HasDefaultValue("English");
+            entity.Property(user => user.IsTestAccount).IsRequired().HasDefaultValue(false);
+            entity.Property(user => user.TestAccountNumber);
+            entity.HasIndex(user => user.TestAccountNumber).IsUnique().HasFilter("\"TestAccountNumber\" IS NOT NULL");
             entity.Property(user => user.ProfileRevision).IsConcurrencyToken();
             entity.HasIndex(user => user.NormalizedEmail).IsUnique();
         });

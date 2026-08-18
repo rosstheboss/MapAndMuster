@@ -299,6 +299,9 @@ public sealed class CampaignPlayDetail
     /// <summary>Gets reusable special rules.</summary>
     public IReadOnlyList<Campaigns.SpecialRuleDetail> SpecialRules { get; init; } = [];
 
+    /// <summary>Gets configured force statuses other than Normal.</summary>
+    public IReadOnlyList<Campaigns.ForceStatusDetail> ForceStatuses { get; init; } = [];
+
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon { get; init; }
 
@@ -424,6 +427,12 @@ public sealed class PlayForceDetail
 
     /// <summary>Gets whether the force is locked in battle.</summary>
     public required bool InBattle { get; init; }
+
+    /// <summary>Gets the current status name, or null when Normal.</summary>
+    public string? StatusName { get; init; }
+
+    /// <summary>Gets tabletop effect text for the current status.</summary>
+    public string? StatusEffects { get; init; }
 
     /// <summary>Gets adjacent eligible move destinations.</summary>
     public required IReadOnlyList<Guid> MoveTargets { get; init; }

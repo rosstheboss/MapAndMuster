@@ -85,9 +85,11 @@ public static class ProfileMapper
         ArgumentNullException.ThrowIfNull(account);
 
         var showsFullName = account.DisplayNameMode == DisplayNameMode.FullName;
-        var displayName = showsFullName
-            ? FormatFullName(account.FirstName, account.MiddleInitial, account.LastName, account.Suffix)
-            : account.Username;
+        var displayName = TestAccountCatalog.TryDisplayName(account, out var testName)
+            ? testName
+            : showsFullName
+                ? FormatFullName(account.FirstName, account.MiddleInitial, account.LastName, account.Suffix)
+                : account.Username;
 
         return new PublicProfile
         {

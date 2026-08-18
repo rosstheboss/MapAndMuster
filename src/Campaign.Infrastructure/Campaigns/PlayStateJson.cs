@@ -59,6 +59,7 @@ internal static class PlayStateJson
                 FactionId = force.FactionId,
                 TerritoryId = force.TerritoryId,
                 InBattle = force.InBattle,
+                StatusName = force.StatusName,
             })],
             Drafts = [.. state.Drafts.Select(static draft => new DraftDocument
             {
@@ -161,6 +162,7 @@ internal static class PlayStateJson
                     FactionId = force.FactionId,
                     TerritoryId = force.TerritoryId,
                     InBattle = force.InBattle,
+                    StatusName = force.StatusName,
                 })],
                 Structures = [.. item.Structures.Select(static structure => new StructureDocument
                 {
@@ -234,7 +236,8 @@ internal static class PlayStateJson
                 force.ControllerUserId,
                 force.FactionId,
                 force.TerritoryId,
-                force.InBattle))],
+                force.InBattle,
+                force.StatusName))],
             [.. document.Drafts.Select(static draft => new OrderDraft(
                 draft.WindowId,
                 draft.ForceId,
@@ -351,7 +354,8 @@ internal static class PlayStateJson
                     force.ControllerUserId,
                     force.FactionId,
                     force.TerritoryId,
-                    force.InBattle))],
+                    force.InBattle,
+                    force.StatusName))],
                 [.. item.Structures.Select(static structure => new TerritoryStructureState(
                     structure.TerritoryId,
                     structure.StructureTypeId,
@@ -445,6 +449,7 @@ internal static class PlayStateJson
         public Guid FactionId { get; set; }
         public Guid TerritoryId { get; set; }
         public bool InBattle { get; set; }
+        public string? StatusName { get; set; }
     }
 
     private sealed class DraftDocument

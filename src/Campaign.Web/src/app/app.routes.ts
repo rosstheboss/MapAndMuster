@@ -1,6 +1,6 @@
 import type { Routes } from '@angular/router';
 
-import { authGuard, guestGuard } from './core/auth/auth.guard';
+import { authGuard, guestGuard, adminGuard } from './core/auth/auth.guard';
 
 export const routes: Routes = [
   {
@@ -43,6 +43,11 @@ export const routes: Routes = [
     path: 'profile',
     canActivate: [authGuard],
     loadComponent: () => import('./features/profile/profile.page').then((module) => module.ProfilePage),
+  },
+  {
+    path: 'admin/test-users',
+    canActivate: [authGuard, adminGuard],
+    loadComponent: () => import('./features/test-users/test-users.page').then((module) => module.TestUsersPage),
   },
   {
     path: 'campaigns',

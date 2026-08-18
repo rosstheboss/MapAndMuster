@@ -1,3 +1,4 @@
+using Campaign.Infrastructure.Identity;
 using Campaign.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,5 +27,7 @@ public static class DatabaseStartup
         using var scope = app.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CampaignDbContext>();
         await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+        var identity = scope.ServiceProvider.GetRequiredService<IdentityMaintenance>();
+        await identity.EnsureAsync(CancellationToken.None).ConfigureAwait(false);
     }
 }

@@ -31,6 +31,11 @@ public static class IdentityHttp
     public const string ChatRateLimitPolicy = "chat";
 
     /// <summary>
+    /// Claim type storing the administrator who is impersonating a test account.
+    /// </summary>
+    public const string ImpersonatorClaimType = "campaign.impersonator";
+
+    /// <summary>
     /// Reads the authenticated user's identifier.
     /// </summary>
     /// <param name="user">The user principal.</param>
@@ -51,6 +56,16 @@ public static class IdentityHttp
     {
         ArgumentNullException.ThrowIfNull(user);
         return user.IsInRole("Administrator");
+    }
+
+    /// <summary>
+    /// Reads the administrator identifier when the caller is impersonating a test account.
+    /// </summary>
+    public static Guid? GetImpersonatorUserId(this ClaimsPrincipal user)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        var value = user.FindFirstValue(ImpersonatorClaimType);
+        return Guid.TryParse(value, out var userId) ? userId : null;
     }
 
     /// <summary>
@@ -119,8 +134,9 @@ public static class IdentityHttp
         {
             ErrorCodes.Unauthorized or ErrorCodes.InvalidCredentials => StatusCodes.Status401Unauthorized,
             ErrorCodes.LockedOut or ErrorCodes.EmailNotConfirmed => StatusCodes.Status403Forbidden,
-            ErrorCodes.ProfileNotFound or ErrorCodes.CampaignNotFound => StatusCodes.Status404NotFound,
-            ErrorCodes.CampaignForbidden or ErrorCodes.CampaignLocked => StatusCodes.Status403Forbidden,
+            ErrorCodes.ProfileNotFound or ErrorCodes.CampaignNotFound or ErrorCodes.CampaignMemberNotFound
+                or ErrorCodes.TestAccountNotFound => StatusCodes.Status404NotFound,
+            ErrorCodes.CampaignForbidden or ErrorCodes.CampaignLocked or ErrorCodes.ImpersonationForbidden => StatusCodes.Status403Forbidden,
             ErrorCodes.EmailTaken or ErrorCodes.UsernameTaken or ErrorCodes.ConcurrencyConflict
                 or ErrorCodes.ExternalLinkRequired
                 or ErrorCodes.CampaignAlreadyMember

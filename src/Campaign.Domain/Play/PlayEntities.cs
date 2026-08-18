@@ -88,13 +88,20 @@ public sealed class CampaignForce
     /// <summary>
     /// Initializes a force.
     /// </summary>
-    public CampaignForce(Guid id, Guid controllerUserId, Guid factionId, Guid territoryId, bool inBattle)
+    public CampaignForce(
+        Guid id,
+        Guid controllerUserId,
+        Guid factionId,
+        Guid territoryId,
+        bool inBattle,
+        string? statusName = null)
     {
         Id = id;
         ControllerUserId = controllerUserId;
         FactionId = factionId;
         TerritoryId = territoryId;
         InBattle = inBattle;
+        StatusName = string.IsNullOrWhiteSpace(statusName) ? null : statusName.Trim();
     }
 
     /// <summary>Gets the force identifier.</summary>
@@ -112,12 +119,29 @@ public sealed class CampaignForce
     /// <summary>Gets whether the force is locked in an unresolved battle.</summary>
     public bool InBattle { get; }
 
+    /// <summary>Gets the current status name, or null when Normal.</summary>
+    public string? StatusName { get; }
+
     /// <summary>
-    /// Returns a copy with a new location or battle flag.
+    /// Returns a copy with a new location or battle flag. Status is preserved.
     /// </summary>
     public CampaignForce With(Guid? territoryId = null, bool? inBattle = null)
     {
-        return new CampaignForce(Id, ControllerUserId, FactionId, territoryId ?? TerritoryId, inBattle ?? InBattle);
+        return new CampaignForce(
+            Id,
+            ControllerUserId,
+            FactionId,
+            territoryId ?? TerritoryId,
+            inBattle ?? InBattle,
+            StatusName);
+    }
+
+    /// <summary>
+    /// Returns a copy with a replacement status. Null is Normal.
+    /// </summary>
+    public CampaignForce WithStatus(string? statusName)
+    {
+        return new CampaignForce(Id, ControllerUserId, FactionId, TerritoryId, InBattle, statusName);
     }
 }
 

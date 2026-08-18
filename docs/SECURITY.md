@@ -73,7 +73,10 @@ staff review requires them.
 - Join privacy (`IsPrivate`) is separate from public viewing (`IsPubliclyViewable`). Hidden
   campaigns return 404 to non-members for detail, map, and catalog reads after the caller is
   authorized as a signed-in user. Upcoming hidden campaigns remain listable on All Campaigns so
-  players can join.
+  players can join. A manager or administrator may add a player without the join password.
+- Seeded test accounts cannot sign in with a password. Only an administrator (or an administrator
+  already testing as a test user) may impersonate them. Test accounts are omitted from site-chat
+  mentions and cannot post to public site chat.
 
 ## Notifications
 

@@ -400,6 +400,109 @@
           <button
             type="button"
             class="section-toggle"
+            [attr.aria-expanded]="isOpen('forceStatuses')"
+            (click)="toggleSection('forceStatuses')"
+          >
+            Force statuses (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('forceStatuses')">
+          <p class="muted">
+            A force has at most one status at a time. Normal is the absence of a status and is not configured. Enable
+            and clear conditions decide when a status is applied or removed. Effects are display-only for the tabletop
+            sheet. Up to 20 statuses.
+          </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="forceStatusPreset">Standard force status</label>
+              <app-filterable-combobox
+                inputId="forceStatusPreset"
+                [formControl]="forceStatusPresetPick"
+                [options]="availableForceStatusPresetNames()"
+                placeholder="Search a status name"
+              />
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="addPickedForceStatus()"
+              [disabled]="forceStatuses.length >= 20"
+            >
+              Add
+            </button>
+          </div>
+          <div class="nested-row">
+            <button type="button" class="button-secondary" (click)="applyStandardForceStatuses()">
+              Add standard force statuses
+            </button>
+          </div>
+          <div formArrayName="forceStatuses" class="stack">
+            @for (status of forceStatuses.controls; track status; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [attr.aria-expanded]="isOpen('force-status-' + index)"
+                  (click)="toggleSection('force-status-' + index)"
+                >
+                  {{ itemLabel(status.controls.name.value, 'Force status ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('force-status-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'force-status-name-' + index">Status {{ index + 1 }} name</label>
+                      <input [id]="'force-status-name-' + index" type="text" formControlName="name" maxlength="60" />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removeForceStatus(index)">Remove</button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'force-status-effects-' + index">Effects</label>
+                    <textarea
+                      [id]="'force-status-effects-' + index"
+                      formControlName="effects"
+                      maxlength="2000"
+                      rows="4"
+                    ></textarea>
+                    <p class="muted">Shown on the campaign page. The app does not resolve tabletop modifiers.</p>
+                  </div>
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'force-status-enable-' + index">Enable when</label>
+                      <select [id]="'force-status-enable-' + index" formControlName="enableTrigger">
+                        @for (option of forceStatusEnableOptions; track option.id) {
+                          <option [value]="option.id">{{ option.label }}</option>
+                        }
+                      </select>
+                    </div>
+                    <div class="field grow">
+                      <label [attr.for]="'force-status-clear-' + index">Clear when</label>
+                      <select [id]="'force-status-clear-' + index" formControlName="clearTrigger">
+                        @for (option of forceStatusClearOptions; track option.id) {
+                          <option [value]="option.id">{{ option.label }}</option>
+                        }
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addForceStatus()"
+            [disabled]="forceStatuses.length >= 20"
+          >
+            Add custom force status
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
             [attr.aria-expanded]="isOpen('publicObjectives')"
             (click)="toggleSection('publicObjectives')"
           >

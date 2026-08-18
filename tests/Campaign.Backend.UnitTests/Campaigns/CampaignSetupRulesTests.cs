@@ -1126,6 +1126,75 @@ public sealed class CampaignSetupRulesTests
         Assert.Equal(townId, privateObjective.StructureTypeId);
     }
 
+    [Fact]
+    public void AcceptsForceStatusesAndRejectsNormal()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out var setup,
+            out _,
+            out var errors,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    Effects = "Tabletop shaken modifiers apply.",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                },
+            ]);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        var status = Assert.Single(setup!.ForceStatuses);
+        Assert.Equal("Shaken", status.Name);
+        Assert.Equal(ForceStatusEnableTrigger.BattleLostOrRetreat, status.EnableTrigger);
+        Assert.Equal(ForceStatusClearTrigger.Hold, status.ClearTrigger);
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var rejected,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Normal",
+                    Effects = "None.",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.Hold),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                },
+            ]));
+        Assert.Contains(rejected, error => error.Code == "forceStatuses.normal");
+    }
+
     private static IReadOnlyList<FactionInput> TwoFactions()
     {
         return

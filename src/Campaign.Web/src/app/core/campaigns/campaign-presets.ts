@@ -7,6 +7,11 @@ import {
 import { specialRulesFromOldWorldPreset, type SpecialRulePreset } from './special-rule-presets';
 import { STANDARD_STRUCTURES_PRESET_ID, structureTypesFromPreset } from './structure-presets';
 import { STANDARD_TERRAIN_PRESET_ID, terrainTypesFromPreset } from './terrain-presets';
+import {
+  STANDARD_FORCE_STATUSES_PRESET_ID,
+  forceStatusesFromStandardPreset,
+  type ForceStatusPreset,
+} from './force-status-presets';
 import type { DefaultStructureType } from './catalog-defaults';
 import type { DefaultTerrainType } from './catalog-defaults';
 import type { FactionPresetFaction } from './faction-presets';
@@ -18,6 +23,7 @@ export interface CampaignPresetCopy {
   structureTypes: DefaultStructureType[];
   itemObjectives: ItemObjectivePresetItem[];
   specialRules: SpecialRulePreset[];
+  forceStatuses: ForceStatusPreset[];
 }
 
 export interface CampaignPreset {
@@ -27,6 +33,7 @@ export interface CampaignPreset {
   terrainPresetId: string;
   structurePresetId: string;
   itemObjectivePresetId: string;
+  forceStatusPresetId: string;
 }
 
 export const HUNT_IN_ESTALIA_CAMPAIGN_PRESET_ID = 'the-hunt-in-estalia';
@@ -39,6 +46,7 @@ export const CAMPAIGN_PRESETS: readonly CampaignPreset[] = [
     terrainPresetId: STANDARD_TERRAIN_PRESET_ID,
     structurePresetId: STANDARD_STRUCTURES_PRESET_ID,
     itemObjectivePresetId: HUNT_IN_ESTALIA_ITEM_OBJECTIVES_PRESET_ID,
+    forceStatusPresetId: STANDARD_FORCE_STATUSES_PRESET_ID,
   },
 ];
 
@@ -63,5 +71,6 @@ export function campaignFromPreset(presetId: string): CampaignPresetCopy | null 
     structureTypes,
     itemObjectives,
     specialRules: specialRulesFromOldWorldPreset(),
+    forceStatuses: forceStatusesFromStandardPreset(),
   };
 }

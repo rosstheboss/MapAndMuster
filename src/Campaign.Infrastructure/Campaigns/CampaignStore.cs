@@ -118,7 +118,8 @@ public sealed class CampaignStore : ICampaignStore
             campaign.RankingObjectivePoints,
             campaign.SpecialRules,
             campaign.PrivateObjectiveTypes,
-            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds));
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds),
+            campaign.ForceStatuses);
         var playJson = PlayStateJson.Serialize(campaign.PlayState);
         var affected = await _dbContext.Campaigns
             .Where(item => item.Id == campaign.Id && item.Revision == expectedRevision)
@@ -415,7 +416,8 @@ public sealed class CampaignStore : ICampaignStore
                 campaign.RankingObjectivePoints,
                 campaign.SpecialRules,
                 campaign.PrivateObjectiveTypes,
-                campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds)),
+                campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds),
+                campaign.ForceStatuses),
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
@@ -584,6 +586,7 @@ public sealed class CampaignStore : ICampaignStore
             ItemObjectiveTypes = catalogs.ItemObjectiveTypes,
             PublicObjectiveTypes = catalogs.PublicObjectiveTypes,
             SpecialRules = catalogs.SpecialRules,
+            ForceStatuses = catalogs.ForceStatuses,
             PrivateObjectiveTypes = catalogs.PrivateObjectiveTypes,
             BattleScoring = catalogs.BattleScoring,
             RankingObjectivePoints = catalogs.RankingObjectivePoints,

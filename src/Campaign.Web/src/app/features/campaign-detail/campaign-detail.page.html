@@ -76,25 +76,102 @@
         </button>
       </h2>
       @if (isOpen('participants')) {
+        @if (canStaffMembers()) {
+          <form class="stack" (ngSubmit)="searchMembers()">
+            <div class="nested-row">
+              <div class="field grow">
+                <label for="member-search">Add a player</label>
+                <input
+                  id="member-search"
+                  type="search"
+                  [ngModel]="memberQuery()"
+                  (ngModelChange)="memberQuery.set($event)"
+                  name="memberSearch"
+                  placeholder="Search username or display name"
+                />
+              </div>
+              <button type="submit" class="button-secondary">Search</button>
+            </div>
+          </form>
+          @if (memberHits().length > 0) {
+            <ul class="plain-list">
+              @for (hit of memberHits(); track hit.userId) {
+                <li class="nested-row">
+                  <span>{{ hit.displayName }} ({{ hit.username }})</span>
+                  <button type="button" class="button-secondary" (click)="addMember(hit)">Add player</button>
+                </li>
+              }
+            </ul>
+          }
+        }
         @if ((campaign.participants ?? []).length === 0) {
           <p class="muted">No players are attached to this campaign yet.</p>
         } @else {
           <ul class="plain-list">
             @for (participant of campaign.participants ?? []; track participant.userId) {
-              <li>
-                <a class="profile-link" [routerLink]="['/users', participant.username]" [queryParams]="profileFrom()">{{
-                  participant.displayName
-                }}</a>
-                @if (participant.factionName; as faction) {
-                  <span>
-                    · {{ faction }}
-                    @if (participant.subfaction; as subfaction) {
-                      ({{ subfaction }})
+              <li class="stack">
+                <div>
+                  <a
+                    class="profile-link"
+                    [routerLink]="['/users', participant.username]"
+                    [queryParams]="profileFrom()"
+                    >{{ participant.displayName }}</a
+                  >
+                  @if (participant.factionName; as faction) {
+                    <span>
+                      · {{ faction }}
+                      @if (participant.subfaction; as subfaction) {
+                        ({{ subfaction }})
+                      }
+                    </span>
+                  }
+                  @if (participantRoles(participant); as roles) {
+                    <span class="muted"> · {{ roles }}</span>
+                  }
+                </div>
+                @if (canStaffMembers() && participant.isPlayer && !participant.isGameMaster) {
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'staff-faction-' + participant.userId">Assign faction</label>
+                      <select
+                        [id]="'staff-faction-' + participant.userId"
+                        [ngModel]="staffFactionValue(participant)"
+                        (ngModelChange)="onStaffFaction(participant, $event)"
+                        [name]="'staff-faction-' + participant.userId"
+                      >
+                        <option value="">Select a faction</option>
+                        @for (faction of campaign.factions; track faction.id) {
+                          <option [value]="faction.id">{{ faction.name }}</option>
+                        }
+                      </select>
+                    </div>
+                    @if (staffFaction(participant)?.requiresSubfaction) {
+                      <div class="field grow">
+                        <label [attr.for]="'staff-subfaction-' + participant.userId">Subfaction</label>
+                        <select
+                          [id]="'staff-subfaction-' + participant.userId"
+                          [ngModel]="staffSubfactionValue(participant)"
+                          (ngModelChange)="onStaffSubfaction(participant, $event)"
+                          [name]="'staff-subfaction-' + participant.userId"
+                        >
+                          <option value="">Select a subfaction</option>
+                          @for (subfaction of staffFaction(participant)?.subfactions ?? []; track subfaction) {
+                            <option [value]="subfaction">{{ subfaction }}</option>
+                          }
+                        </select>
+                      </div>
                     }
-                  </span>
-                }
-                @if (participantRoles(participant); as roles) {
-                  <span class="muted"> · {{ roles }}</span>
+                    <button type="button" class="button-secondary" (click)="assignFaction(participant)">Assign</button>
+                    @if (kickUserId() === participant.userId) {
+                      <button type="button" class="button-danger" (click)="kickMember(participant)">
+                        Confirm remove
+                      </button>
+                    } @else {
+                      <button type="button" class="button-secondary" (click)="kickMember(participant)">
+                        Remove player
+                      </button>
+                    }
+                  </div>
                 }
               </li>
             }
@@ -565,6 +642,9 @@
               @for (force of myForces(); track force.id) {
                 <fieldset class="stack">
                   <legend>{{ forceLabel(force) }} · {{ territoryName(force.territoryId) }}</legend>
+                  @if (force.statusEffects) {
+                    <p class="muted">{{ force.statusEffects }}</p>
+                  }
                   @if (draftKindsFor(force).length === 0) {
                     <p class="muted">This force is in battle and cannot submit an action.</p>
                   } @else {

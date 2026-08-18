@@ -142,7 +142,7 @@ public sealed class SiteChatNotificationPublisher
             return;
         }
 
-        if (account.EmailNotificationsEnabled)
+        if (account.EmailNotificationsEnabled && !account.IsTestAccount)
         {
             await _outbox.QueueUserNoticeAsync(
                     account.Email,

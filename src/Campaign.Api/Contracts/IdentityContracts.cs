@@ -249,6 +249,15 @@ public sealed class OwnProfileResponse
 
     /// <summary>Gets the default site-chat compose language.</summary>
     public string PreferredChatLanguage { get; init; } = "English";
+
+    /// <summary>Gets whether this is a seeded administrator test account.</summary>
+    public bool IsTestAccount { get; init; }
+
+    /// <summary>Gets the test-account number when this is a seeded test user.</summary>
+    public int? TestAccountNumber { get; init; }
+
+    /// <summary>Gets whether the caller is signed in as a test account on behalf of an administrator.</summary>
+    public bool IsImpersonating { get; init; }
 }
 
 /// <summary>
@@ -359,8 +368,12 @@ public static class ProfileResponses
     /// </summary>
     /// <param name="account">The account.</param>
     /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <param name="isImpersonating">Whether the caller is impersonating a test account.</param>
     /// <returns>The owner response.</returns>
-    public static OwnProfileResponse FromAccount(UserAccount account, bool isAdministrator = false)
+    public static OwnProfileResponse FromAccount(
+        UserAccount account,
+        bool isAdministrator = false,
+        bool isImpersonating = false)
     {
         ArgumentNullException.ThrowIfNull(account);
         return new OwnProfileResponse
@@ -386,6 +399,9 @@ public static class ProfileResponses
             InAppNotificationsEnabled = account.InAppNotificationsEnabled,
             EmailNotificationsEnabled = account.EmailNotificationsEnabled,
             PreferredChatLanguage = account.PreferredChatLanguage,
+            IsTestAccount = account.IsTestAccount,
+            TestAccountNumber = account.TestAccountNumber,
+            IsImpersonating = isImpersonating,
         };
     }
 
@@ -418,4 +434,22 @@ public static class ProfileResponses
             ],
         };
     }
+}
+
+/// <summary>
+/// A seeded administrator test account.
+/// </summary>
+public sealed class TestAccountResponse
+{
+    /// <summary>Gets the account identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the test number from 1 to 30.</summary>
+    public required int Number { get; init; }
+
+    /// <summary>Gets the username.</summary>
+    public required string Username { get; init; }
+
+    /// <summary>Gets the public display name.</summary>
+    public required string DisplayName { get; init; }
 }

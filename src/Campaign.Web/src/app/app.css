@@ -95,6 +95,18 @@
   background: var(--color-danger);
 }
 
+.impersonation-banner {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  background: var(--color-glow);
+  color: #1c1917;
+  font-weight: 600;
+}
+
 .app-main {
   flex: 1;
   width: min(100%, 52rem);

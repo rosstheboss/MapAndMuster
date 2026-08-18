@@ -40,6 +40,12 @@ those rules are implemented. Display names in chat, mentions, the Participants p
 member lists link to that public profile. Profiles opened that way include a Back control that
 returns to the previous in-app screen.
 
+The application seeds Test 1 through Test 30 outside the automated Testing environment. Those
+accounts cannot sign in with a password. An administrator may test as one of them from Test
+users and return to the administrator session afterward. Test accounts receive in-app notices
+only (never email), cannot change their profile, and cannot use public site chat. Campaign chat
+is allowed. Their public display name is always `Test {n}`.
+
 ## Campaign setup
 
 A campaign has a name (3-80 characters), optional description (500 characters), player-slot
@@ -67,7 +73,9 @@ campaign preset. The initial catalog includes The Hunt in Estalia, which copies 
 factions (including that preset's special-rule assignments), standard terrain (including water
 feature flags), standard structures, the reusable special-rule catalog, and that campaign's
 item-objective list (empty until named items are added). Applying a campaign preset fills the
-campaign name only when the name field is empty.
+campaign name only when the name field is empty. The Hunt in Estalia also copies the standard
+force-status catalog (Diseased, Shaken, Confident, Exhausted, Well Rested). Normal is not a
+catalog status; it is the absence of a status.
 
 Optional item objectives may be none, one, or many (at most 50), each with a unique name.
 Defaults are hidden until found, randomly placed, and not allowed on a spawn territory. A
@@ -115,6 +123,17 @@ catalog description with faction-specific wording and flavor omitted. User-creat
 are display-only: they do not execute code and do not change map resolution. The manager writes
 the description for a custom rule.
 
+A campaign may configure named force statuses (at most 20). Each status has a unique name other
+than Normal, effect text shown on the force, an enable trigger, and a clear trigger. A force has
+at most one status; Normal is stored as no status. Setup can copy the standard catalog:
+Diseased (enable when occupying a water-feature territory; clear by Hold while not on water),
+Shaken (enable after a lost battle or forced retreat; clear by Hold), Confident (enable after a
+won battle; clear after a loss or retreat), Exhausted (enable after any resolved battle; clear
+by Hold), and Well Rested (enable after Hold; clear after a move or battle). Catalog order
+matters when more than one enable trigger matches: the first matching status wins, so a loss
+becomes Shaken rather than Exhausted. Effect text is display-only; the app does not resolve
+tabletop modifiers.
+
 The creating user is always a campaign manager (Game Master). If they also participate, they
 occupy one player slot. Private campaigns store a hashed join password; the plaintext password
 is never returned. Publicly viewable campaigns may be opened by any signed-in user. When a
@@ -124,7 +143,13 @@ and faction names reject the same prohibited-language terms as usernames.
 
 The campaign page lists attached members in a Participants panel: each player's display name
 (linked to their public profile), selected faction and subfaction when chosen, and roles
-Manager, Player, and/or Admin when those apply.
+Manager, Player, and/or Admin when those apply. A manager or administrator may search accounts
+(including test users) by username or display name, add a player to a public or private campaign
+without the join password, kick a non-manager player (which notifies them in-app and by email
+unless they are a test account), and assign another player's faction and subfaction. Players may
+still change their own faction until the campaign starts; after launch only staff assignment
+changes it. A kicked player's forces, drafts, and unresolved battles are removed, and carried
+items drop on the territory they occupied.
 
 Near the bottom of the campaign page, a Campaign points panel lists every player occupying a
 slot. Default order is highest total to lowest, then display name. Columns are display name
@@ -177,9 +202,11 @@ Battle N when a round has more than one battle), and a countdown until the curre
 A public site chat sits above those lists. It is not stored on any campaign play log.
 
 A signed-in user may join an upcoming campaign that still has an open player slot. Public
-campaigns join without a password; private campaigns require the join password. Members who are
-not managers may leave. Managers edit instead of joining. Listings open the campaign page with
-Open. There is one campaign page: a member's role and involvement decide which controls appear.
+campaigns join without a password; private campaigns require the join password. A manager or
+administrator may add a player without that password, including after launch while slots remain
+and the campaign is not completed. Members who are not managers may leave. Managers edit instead
+of joining. Listings open the campaign page with Open. There is one campaign page: a member's
+role and involvement decide which controls appear.
 Players submit orders and battle results there. Managers also see schedule extension, and
 managers or administrators can enter a logged debug session to correct orders, re-resolve the
 previous action while the following phase is still open, or override battle results. Upcoming
@@ -199,8 +226,8 @@ map file is deleted when it is no longer used. Deleting a campaign also deletes 
 user-uploaded catalog images. Built-in structure icons are application assets and are never deleted.
 
 Setup sections (details, schedule, visibility, ally groups, factions, subfactions, special
-rules, terrain, structures, missions, item objectives, public objectives, private objectives,
-links, and map) can be expanded or collapsed. Section actions collapse
+rules, force statuses, terrain, structures, missions, item objectives, public objectives, private
+objectives, links, and map) can be expanded or collapsed. Section actions collapse
 with their section. Invalid sections expand automatically when save validation fails. Sections
 start expanded. Setup keeps Back to campaigns, Expand All, Collapse All, and Save or Create in a
 sticky toolbar. Edit campaign also includes Edit map, which opens the map editor without saving
@@ -253,6 +280,8 @@ pause before the next window opens is taken from that next window.
 
 Administrator permissions include GM and player capabilities. Campaign GMs include player
 capabilities and may simultaneously have a Player membership. Multiple GMs may exist.
+Administrators may also test as seeded Test 1–Test 30 accounts; the original administrator
+identity is kept on the session until they return.
 
 When staff act for another party, record:
 
@@ -609,10 +638,11 @@ are stored separately from campaign play logs and never appear in a campaign. Se
 form save: it does not show the saving overlay or the success banner. Failed sends show an error
 on the chat box. The board refreshes while the page is open.
 
-Every signed-in user may post. Player messages are public. `@` tags may name any account on the
-site; unknown usernames are rejected with "You can only tag people who have an account on this
-site." `\@` is a literal `@`. Email-like text is not a tag. Mentions notify only tagged people
-who can see the message. Chat originators and mentions link to public profiles.
+Every signed-in user may post except seeded test accounts. Player messages are public. `@` tags
+may name any non-test account on the site; unknown usernames are rejected with "You can only tag
+people who have an account on this site." `\@` is a literal `@`. Email-like text is not a tag.
+Mentions notify only tagged people who can see the message. Chat originators and mentions link
+to public profiles. Test accounts are omitted from mention autocomplete and cannot post.
 
 A user may block another person. Blocking is stored one-way and hides player messages both ways:
 neither person sees the other's player chat, and mentions of a blocked person do not notify them.
@@ -638,13 +668,14 @@ change language on All Campaigns.
 
 Users may enable in-app notices, email notices, or both on their profile. Stored notices cover
 mentions, private chats, campaign start, campaign end, a new phase after the previous window
-resolves, public site-chat mentions, and administrator site-chat announcements. Live attention
-items always appear when the user still needs to choose a faction,
+resolves, being removed from a campaign, public site-chat mentions, and administrator site-chat
+announcements. Live attention items always appear when the user still needs to choose a faction,
 commit orders, submit a battle result, or record a retreat. Email copies never include hidden
 orders, relics, private chat text, or site-chat bodies; they tell the recipient to sign in and
-open the campaign or All Campaigns. The home page lists items that need attention, then site
-news. When none remain, it shows "No new notifications." Profile editing and the public profile
-live on their own pages. The profile includes a default site-chat compose language.
+open the campaign or All Campaigns. Seeded test accounts never receive email. The home page lists
+items that need attention, then site news. When none remain, it shows "No new notifications."
+Profile editing and the public profile live on their own pages. The profile includes a default
+site-chat compose language.
 
 ## News
 

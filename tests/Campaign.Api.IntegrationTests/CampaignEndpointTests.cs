@@ -361,6 +361,73 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task ManagerCanAddKickAndAssignFactionOnAPrivateCampaign()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("host");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync(
+            "/api/campaigns",
+            ValidCampaignBody("Staff War", isPrivate: true, joinPassword: "join-secret", isPubliclyViewable: false));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var player = _factory.CreateClient();
+        var playerName = UniqueName("joiner");
+        await RegisterConfirmAndLoginAsync(player, $"{playerName}@example.test", playerName);
+        var playerProfile = await player.GetFromJsonAsync<OwnProfileResponse>("/api/auth/me", JsonOptions);
+        Assert.NotNull(playerProfile);
+
+        using var joinWithoutPassword = await player.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/join",
+            new JoinCampaignRequest());
+        Assert.Equal(HttpStatusCode.BadRequest, joinWithoutPassword.StatusCode);
+
+        var hits = await owner.GetFromJsonAsync<UserSearchHitResponse[]>(
+            $"/api/campaigns/{created.Id}/members/search?q={Uri.EscapeDataString(playerName)}",
+            JsonOptions);
+        Assert.NotNull(hits);
+        Assert.Contains(hits, hit => hit.UserId == playerProfile.Id);
+
+        using var added = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/members",
+            new AddCampaignMemberRequest { Revision = created.Revision, UserId = playerProfile.Id });
+        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+        var afterAdd = await added.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(afterAdd);
+        Assert.Contains(afterAdd.Participants, participant => participant.UserId == playerProfile.Id && participant.IsPlayer);
+
+        var south = Assert.Single(afterAdd.Factions, faction => faction.Name == "South");
+        using var assigned = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/faction/assign",
+            new AssignPlayerFactionRequest
+            {
+                Revision = afterAdd.Revision,
+                UserId = playerProfile.Id,
+                FactionId = south.Id,
+            });
+        Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
+
+        var afterAssign = await owner.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(afterAssign);
+        Assert.Contains(
+            afterAssign.Participants,
+            participant => participant.UserId == playerProfile.Id && participant.FactionName == "South");
+
+        using var kicked = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/members/kick",
+            new KickCampaignMemberRequest { Revision = afterAssign.Revision, UserId = playerProfile.Id });
+        Assert.Equal(HttpStatusCode.OK, kicked.StatusCode);
+        var afterKick = await kicked.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(afterKick);
+        Assert.DoesNotContain(afterKick.Participants, participant => participant.UserId == playerProfile.Id);
+
+        var notices = await player.GetFromJsonAsync<HomeAttentionItemResponse[]>("/api/notifications", JsonOptions);
+        Assert.NotNull(notices);
+        Assert.Contains(notices, item => item.Kind == "CampaignKicked" && item.Title == "Removed from campaign");
+    }
+
+    [Fact]
     public async Task MembersCanChatInAnUpcomingCampaignLog()
     {
         using var owner = _factory.CreateClient();

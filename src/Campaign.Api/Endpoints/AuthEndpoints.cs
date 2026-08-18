@@ -86,6 +86,26 @@ public static class AuthEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status401Unauthorized);
 
+        group.MapGet("/test-users", ListTestUsersAsync)
+            .RequireAuthorization()
+            .WithName("ListTestUsers")
+            .Produces<IReadOnlyList<TestAccountResponse>>()
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden);
+
+        group.MapPost("/test-users/{userId:guid}/impersonate", ImpersonateTestUserAsync)
+            .RequireAuthorization()
+            .RequireRateLimiting(IdentityHttp.AuthRateLimitPolicy)
+            .WithName("ImpersonateTestUser")
+            .Produces<OwnProfileResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/stop-impersonation", StopImpersonationAsync)
+            .RequireAuthorization()
+            .WithName("StopImpersonation")
+            .Produces<OwnProfileResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden);
+
         group.MapGet("/external-providers", GetExternalProviders)
             .AllowAnonymous()
             .WithName("GetExternalProviders")
@@ -95,6 +115,8 @@ public static class AuthEndpoints
     private static async Task<IResult> RegisterAsync(
         HttpRequest httpRequest,
         RegisterAccountHandler handler,
+        UserManager<ApplicationUser> userManager,
+        IdentityMaintenance identity,
         CancellationToken cancellationToken)
     {
         RegisterRequest? request;
@@ -173,6 +195,12 @@ public static class AuthEndpoints
                 return IdentityHttp.Problem(result);
             }
 
+            var created = await userManager.FindByIdAsync(result.Value.UserId.ToString()).ConfigureAwait(false);
+            if (created is not null)
+            {
+                await identity.PromoteIfPrivilegedAsync(created).ConfigureAwait(false);
+            }
+
             return Results.Created(
                 $"/api/profiles/{result.Value.Username}",
                 new RegisterResponse(result.Value.UserId, result.Value.Username));
@@ -191,12 +219,13 @@ public static class AuthEndpoints
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
         GetOwnProfileHandler profiles,
+        IdentityMaintenance identity,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var user = await userManager.FindByEmailAsync(request.Email).ConfigureAwait(false);
-        if (user is null)
+        if (user is null || user.IsTestAccount)
         {
             return IdentityHttp.Problem(ErrorCodes.InvalidCredentials, "Email or password is incorrect.");
         }
@@ -218,13 +247,17 @@ public static class AuthEndpoints
             return IdentityHttp.Problem(ErrorCodes.InvalidCredentials, "Email or password is incorrect.");
         }
 
+        await identity.PromoteIfPrivilegedAsync(user).ConfigureAwait(false);
+
         var profile = await profiles.HandleAsync(user.Id, cancellationToken).ConfigureAwait(false);
         if (!profile.IsSuccess || profile.Value is null)
         {
             return IdentityHttp.Problem(profile);
         }
 
-        return Results.Ok(ProfileResponses.FromAccount(profile.Value, await signInManager.UserManager.IsInRoleAsync(user, "Administrator").ConfigureAwait(false)));
+        return Results.Ok(ProfileResponses.FromAccount(
+            profile.Value,
+            await signInManager.UserManager.IsInRoleAsync(user, IdentityMaintenance.AdministratorRole).ConfigureAwait(false)));
     }
 
     private static async Task<IResult> LogoutAsync(SignInManager<ApplicationUser> signInManager)
@@ -250,7 +283,10 @@ public static class AuthEndpoints
             return IdentityHttp.Problem(result);
         }
 
-        return Results.Ok(ProfileResponses.FromAccount(result.Value, principal.IsAdministrator()));
+        return Results.Ok(ProfileResponses.FromAccount(
+            result.Value,
+            principal.IsAdministrator(),
+            principal.GetImpersonatorUserId() is not null));
     }
 
     private static async Task<IResult> ConfirmEmailAsync(
@@ -363,6 +399,89 @@ public static class AuthEndpoints
         }
 
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> ListTestUsersAsync(
+        ClaimsPrincipal principal,
+        IUserAccountStore accounts,
+        CancellationToken cancellationToken)
+    {
+        if (!principal.IsAdministrator())
+        {
+            return IdentityHttp.Problem(ErrorCodes.ImpersonationForbidden, "Only an administrator can list test users.");
+        }
+
+        var users = await accounts.ListTestAccountsAsync(cancellationToken).ConfigureAwait(false);
+        return Results.Ok(users.Select(static user => new TestAccountResponse
+        {
+            Id = user.Id,
+            Number = user.TestAccountNumber ?? 0,
+            Username = user.Username,
+            DisplayName = TestAccountCatalog.TryDisplayName(user, out var name) ? name : user.Username,
+        }).ToArray());
+    }
+
+    private static async Task<IResult> ImpersonateTestUserAsync(
+        Guid userId,
+        ClaimsPrincipal principal,
+        SignInManager<ApplicationUser> signInManager,
+        UserManager<ApplicationUser> userManager,
+        GetOwnProfileHandler profiles,
+        CancellationToken cancellationToken)
+    {
+        var actorId = principal.IsAdministrator() ? principal.GetUserId() : principal.GetImpersonatorUserId();
+        if (actorId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.ImpersonationForbidden, "Only an administrator can test as these users.");
+        }
+
+        var target = await userManager.FindByIdAsync(userId.ToString()).ConfigureAwait(false);
+        if (target is null || !target.IsTestAccount)
+        {
+            return IdentityHttp.Problem(ErrorCodes.TestAccountNotFound, "The test user was not found.");
+        }
+
+        await signInManager.SignInWithClaimsAsync(
+                target,
+                isPersistent: true,
+                [new Claim(IdentityHttp.ImpersonatorClaimType, actorId.Value.ToString())])
+            .ConfigureAwait(false);
+        var profile = await profiles.HandleAsync(target.Id, cancellationToken).ConfigureAwait(false);
+        if (!profile.IsSuccess || profile.Value is null)
+        {
+            return IdentityHttp.Problem(profile);
+        }
+
+        return Results.Ok(ProfileResponses.FromAccount(profile.Value, isAdministrator: false, isImpersonating: true));
+    }
+
+    private static async Task<IResult> StopImpersonationAsync(
+        ClaimsPrincipal principal,
+        SignInManager<ApplicationUser> signInManager,
+        UserManager<ApplicationUser> userManager,
+        GetOwnProfileHandler profiles,
+        CancellationToken cancellationToken)
+    {
+        var impersonatorId = principal.GetImpersonatorUserId();
+        if (impersonatorId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.ImpersonationForbidden, "You are not testing as another user.");
+        }
+
+        var admin = await userManager.FindByIdAsync(impersonatorId.Value.ToString()).ConfigureAwait(false);
+        if (admin is null || !await userManager.IsInRoleAsync(admin, IdentityMaintenance.AdministratorRole).ConfigureAwait(false))
+        {
+            return IdentityHttp.Problem(ErrorCodes.ImpersonationForbidden, "You are not testing as another user.");
+        }
+
+        await signInManager.SignInAsync(admin, isPersistent: true).ConfigureAwait(false);
+        var profile = await profiles.HandleAsync(admin.Id, cancellationToken).ConfigureAwait(false);
+        if (!profile.IsSuccess || profile.Value is null)
+        {
+            return IdentityHttp.Problem(profile);
+        }
+
+        return Results.Ok(ProfileResponses.FromAccount(profile.Value, isAdministrator: true));
     }
 
     private static IResult GetExternalProviders(IConfiguration configuration)

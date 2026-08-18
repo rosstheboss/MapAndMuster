@@ -30,6 +30,9 @@
       Profile
     </a>
     @if (auth.currentUser(); as user) {
+      @if (user.isAdministrator) {
+        <a routerLink="/admin/test-users" routerLinkActive="is-active" class="nav-link">Test users</a>
+      }
       <span class="nav-user">{{ user.username }}</span>
       <button type="button" class="nav-link nav-button" (click)="logout()" [disabled]="loggingOut()">
         <app-icon name="logout" />
@@ -44,6 +47,19 @@
   </nav>
   @if (navError()) {
     <p class="nav-error" role="alert">{{ navError() }}</p>
+  }
+  @if (auth.currentUser()?.isImpersonating) {
+    <p class="impersonation-banner" role="status">
+      Testing as
+      {{
+        auth.currentUser()?.testAccountNumber
+          ? 'Test ' + auth.currentUser()?.testAccountNumber
+          : auth.currentUser()?.username
+      }}.
+      <button type="button" class="nav-link nav-button" (click)="stopImpersonation()" [disabled]="returning()">
+        Return to admin
+      </button>
+    </p>
   }
   <main id="main-content" class="app-main" tabindex="-1">
     <router-outlet />

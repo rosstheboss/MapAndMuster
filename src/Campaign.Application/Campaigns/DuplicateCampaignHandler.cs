@@ -130,6 +130,7 @@ public sealed class DuplicateCampaignHandler
             ItemObjectiveTypes = [.. source.ItemObjectiveTypes],
             PublicObjectiveTypes = [.. source.PublicObjectiveTypes],
             SpecialRules = [.. source.SpecialRules],
+            ForceStatuses = [.. source.ForceStatuses],
             PrivateObjectiveTypes = [.. source.PrivateObjectiveTypes],
             BattleScoring = source.BattleScoring,
             RankingObjectivePoints = source.RankingObjectivePoints,

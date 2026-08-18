@@ -187,7 +187,8 @@ public sealed class CommitOrdersHandler
                     CampaignPlayPipeline.AllyGroups(campaign),
                     utcNow,
                     out var outcome,
-                    out var error))
+                    out var error,
+                    CampaignPlayPipeline.ForceStatuses(campaign)))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -308,7 +309,8 @@ public sealed class SubmitBattleResultHandler
                     out var outcome,
                     out var error,
                     command.WinnerScore,
-                    command.LoserScore))
+                    command.LoserScore,
+                    CampaignPlayPipeline.ForceStatuses(campaign)))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -366,7 +368,7 @@ public sealed class AcceptBattleResultHandler
             command.UserId,
             command.IsAdministrator,
             command.ExpectedRevision,
-            (state, map, _, utcNow) =>
+            (state, map, campaign, utcNow) =>
             {
                 if (!CampaignPlayRules.TryAcceptBattleResult(
                     state,
@@ -374,7 +376,8 @@ public sealed class AcceptBattleResultHandler
                     command.BattleId,
                     utcNow,
                     out var outcome,
-                    out var error))
+                    out var error,
+                    CampaignPlayPipeline.ForceStatuses(campaign)))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -447,7 +450,8 @@ public sealed class ResolveBattleHandler
                     out var next,
                     out var error,
                     command.WinnerScore,
-                    command.LoserScore))
+                    command.LoserScore,
+                    CampaignPlayPipeline.ForceStatuses(campaign)))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -493,7 +497,7 @@ public sealed class SubmitRetreatHandler
             command.UserId,
             command.IsAdministrator,
             command.ExpectedRevision,
-            (state, map, _, utcNow) =>
+            (state, map, campaign, utcNow) =>
             {
                 if (!CampaignPlayRules.TrySubmitRetreat(
                     state,
@@ -503,7 +507,8 @@ public sealed class SubmitRetreatHandler
                     command.TargetTerritoryId,
                     utcNow,
                     out var outcome,
-                    out var error))
+                    out var error,
+                    CampaignPlayPipeline.ForceStatuses(campaign)))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -736,6 +741,7 @@ public sealed class ChooseFactionHandler
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
             SpecialRules = existing.SpecialRules,
+            ForceStatuses = existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
@@ -1429,5 +1435,128 @@ internal static class CampaignDebugAccess
             },
             cancellationToken,
             notifications);
+    }
+}
+
+/// <summary>
+/// Assigns a faction and optional subfaction to another player. The player may still change it before launch.
+/// </summary>
+public sealed class AssignPlayerFactionHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public AssignPlayerFactionHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Sets another player's faction, including after launch for fixes and testing.</summary>
+    public async Task<OperationResult<CampaignPlayDetail>> HandleAsync(
+        AssignPlayerFactionCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var existing = await _campaigns.FindByIdAsync(command.CampaignId, cancellationToken).ConfigureAwait(false);
+        if (existing is null || !CampaignAccess.CanView(existing, command.UserId, command.IsAdministrator))
+        {
+            return OperationResults.Failure<CampaignPlayDetail>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+        }
+
+        if (!CampaignAccess.CanStaffMembers(existing, command.UserId, command.IsAdministrator))
+        {
+            return OperationResults.Failure<CampaignPlayDetail>(
+                ErrorCodes.CampaignForbidden,
+                "Only a campaign manager or administrator can assign a faction.");
+        }
+
+        var target = CampaignMapper.MembershipFor(existing, command.TargetUserId);
+        if (target is null || !target.IsPlayer)
+        {
+            return OperationResults.Failure<CampaignPlayDetail>(
+                ErrorCodes.CampaignMemberNotFound,
+                "That player is not in this campaign.");
+        }
+
+        var faction = existing.Factions.FirstOrDefault(item => item.Id == command.FactionId);
+        if (faction is null)
+        {
+            return OperationResults.Failure<CampaignPlayDetail>("faction.invalid", "Choose a campaign faction.");
+        }
+
+        if (faction.RequiresSubfaction
+            && (string.IsNullOrWhiteSpace(command.Subfaction)
+                || !faction.Subfactions.Contains(command.Subfaction, StringComparer.Ordinal)))
+        {
+            return OperationResults.Failure<CampaignPlayDetail>("faction.subfaction.required", "Choose a subfaction.");
+        }
+
+        var memberships = existing.Memberships.Select(member =>
+            member.UserId == command.TargetUserId
+                ? new StoredCampaignMembership
+                {
+                    UserId = member.UserId,
+                    IsGameMaster = member.IsGameMaster,
+                    IsPlayer = member.IsPlayer,
+                    FactionId = command.FactionId,
+                    Subfaction = string.IsNullOrWhiteSpace(command.Subfaction) ? null : command.Subfaction.Trim(),
+                }
+                : member).ToArray();
+        var updated = CampaignMapClone.CloneWithMemberships(existing, memberships, _clock.UtcNow);
+        if (CampaignLifecycle.HasLaunched(updated, _clock.UtcNow) && updated.PlayState is not null)
+        {
+            var map = CampaignLifecycle.ToPlayMap(updated);
+            var play = CampaignPlayRules.ReassignControllerFaction(updated.PlayState, command.TargetUserId, command.FactionId);
+            var ensured = CampaignPlayRules.EnsureForce(play, map, command.TargetUserId, command.FactionId);
+            var withObjective = PrivateObjectiveRules.EnsurePlayerAssignment(
+                ensured.State,
+                CampaignPlayCatalog.PrivateTypes(updated),
+                command.TargetUserId,
+                _clock.UtcNow,
+                CampaignPlayCatalog.PickIndex);
+            updated = CampaignMapClone.WithPlay(
+                updated,
+                withObjective,
+                ensured.PreserveMap ? updated.MapGraph : CampaignLifecycle.ApplyOwnership(updated.MapGraph!, ensured.Map));
+        }
+
+        var outcome = await _campaigns.UpdateAsync(updated, command.ExpectedRevision, cancellationToken).ConfigureAwait(false);
+        if (!outcome.IsSuccess || outcome.Campaign is null)
+        {
+            return OperationResults.Failure<CampaignPlayDetail>(
+                outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
+                outcome.Message ?? "The faction could not be assigned.");
+        }
+
+        var playDetail = await new GetCampaignPlayHandler(_campaigns, _clock, _accounts, _notifications)
+            .HandleAsync(command.CampaignId, command.UserId, command.IsAdministrator, cancellationToken)
+            .ConfigureAwait(false);
+        if (playDetail.IsSuccess)
+        {
+            return playDetail;
+        }
+
+        return OperationResults.Success(
+            await CampaignPlayMapper.ToDetailAsync(
+                outcome.Campaign,
+                command.UserId,
+                _clock.UtcNow,
+                _accounts,
+                cancellationToken,
+                command.IsAdministrator)
+                .ConfigureAwait(false));
     }
 }

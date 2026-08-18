@@ -68,7 +68,7 @@ public static class ErrorCodes
     /// <summary>The caller is a member but lacks permission for the campaign command.</summary>
     public const string CampaignForbidden = "campaign.forbidden";
 
-    /// <summary>The campaign is not accepting new players.</summary>
+    /// <summary>The campaign is not accepting staff-added players.</summary>
     public const string CampaignJoinClosed = "campaign.join.closed";
 
     /// <summary>Every player slot is already occupied.</summary>
@@ -79,6 +79,15 @@ public static class ErrorCodes
 
     /// <summary>The caller is already a member of the campaign.</summary>
     public const string CampaignAlreadyMember = "campaign.join.already_member";
+
+    /// <summary>The target user is not a kickable player in the campaign.</summary>
+    public const string CampaignMemberNotFound = "campaign.member.not_found";
+
+    /// <summary>The requested test account does not exist.</summary>
+    public const string TestAccountNotFound = "auth.test_account.not_found";
+
+    /// <summary>The caller cannot impersonate or stop impersonation.</summary>
+    public const string ImpersonationForbidden = "auth.impersonation.forbidden";
 
     /// <summary>The campaign has launched and the requested setup field is locked.</summary>
     public const string CampaignLocked = "campaign.locked";

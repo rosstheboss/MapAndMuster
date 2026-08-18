@@ -115,6 +115,9 @@ public sealed class CampaignPlayResponse
     /// <summary>Gets reusable special rules.</summary>
     public IReadOnlyList<SpecialRuleResponse> SpecialRules { get; init; } = [];
 
+    /// <summary>Gets configured force statuses other than Normal.</summary>
+    public IReadOnlyList<ForceStatusResponse> ForceStatuses { get; init; } = [];
+
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon { get; init; }
 
@@ -194,6 +197,12 @@ public sealed class PlayForceResponse
 
     /// <summary>Gets whether the force is locked in battle.</summary>
     public required bool InBattle { get; init; }
+
+    /// <summary>Gets the current status name, or null when Normal.</summary>
+    public string? StatusName { get; init; }
+
+    /// <summary>Gets tabletop effect text for the current status.</summary>
+    public string? StatusEffects { get; init; }
 
     /// <summary>Gets adjacent eligible move destinations.</summary>
     public required IReadOnlyList<Guid> MoveTargets { get; init; }
@@ -761,6 +770,17 @@ public static class PlayResponses
                     Text = rule.Text,
                 }),
             ],
+            ForceStatuses =
+            [
+                .. detail.ForceStatuses.Select(static status => new ForceStatusResponse
+                {
+                    Id = status.Id,
+                    Name = status.Name,
+                    Effects = status.Effects,
+                    EnableTrigger = status.EnableTrigger,
+                    ClearTrigger = status.ClearTrigger,
+                }),
+            ],
             PointsPerBattleWon = detail.PointsPerBattleWon,
             PointsPerBattleDraw = detail.PointsPerBattleDraw,
             UseDifferentialBattleScoring = detail.UseDifferentialBattleScoring,
@@ -775,6 +795,8 @@ public static class PlayResponses
                     TerritoryId = force.TerritoryId,
                     IsMine = force.IsMine,
                     InBattle = force.InBattle,
+                    StatusName = force.StatusName,
+                    StatusEffects = force.StatusEffects,
                     MoveTargets = force.MoveTargets,
                     AvailableActions = force.AvailableActions,
                 }),

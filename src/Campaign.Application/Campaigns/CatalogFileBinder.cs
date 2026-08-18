@@ -158,6 +158,21 @@ internal static class CatalogFileBinder
         ];
     }
 
+    public static IReadOnlyList<StoredForceStatus> BindForceStatuses(IReadOnlyList<ForceStatusSetup> incoming)
+    {
+        return
+        [
+            .. incoming.Select(static status => new StoredForceStatus
+            {
+                Id = status.Id,
+                Name = status.Name,
+                Effects = status.Effects,
+                EnableTrigger = status.EnableTrigger.ToString(),
+                ClearTrigger = status.ClearTrigger.ToString(),
+            }),
+        ];
+    }
+
     public static IReadOnlyList<StoredPrivateObjectiveType> BindPrivateObjectives(
         IReadOnlyList<PrivateObjectiveTypeSetup> incoming)
     {

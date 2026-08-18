@@ -58,6 +58,7 @@ internal static class CampaignLifecycle
             .ToArray();
         var names = catalog.ToDictionary(type => type.Id, type => type.Name);
         var rulesById = catalog.ToDictionary(static type => type.Id);
+        var waterByTerrain = campaign.TerrainTypes.ToDictionary(static type => type.Id, static type => type.IsWaterFeature);
         var conditions = campaign.PlayState?.Structures.ToDictionary(item => item.TerritoryId) ?? [];
         var territories = graph.Territories.Select(territory =>
         {
@@ -69,6 +70,7 @@ internal static class CampaignLifecycle
                 ?? ParseCondition(territory.StructureCondition)
                 ?? StructureCondition.Operational;
             var intact = structureTypeId is not null && condition != StructureCondition.Destroyed;
+            waterByTerrain.TryGetValue(territory.TerrainTypeId, out var isWater);
             return new PlayTerritory(
                 territory.Id,
                 territory.DisplayNumber,
@@ -78,7 +80,8 @@ internal static class CampaignLifecycle
                 intact ? structureName : null,
                 intact ? condition : StructureCondition.Operational,
                 intact && (rules?.IsPillageable ?? false),
-                intact && (rules?.IsDestructible ?? false));
+                intact && (rules?.IsDestructible ?? false),
+                isWater);
         }).ToArray();
         var edges = graph.Adjacencies
             .Select(edge => (edge.TerritoryAId, edge.TerritoryBId))

@@ -25,6 +25,7 @@ export class App {
   protected readonly auth = inject(AuthService);
   protected readonly submitOverlay = inject(FormSubmitOverlayService);
   protected readonly loggingOut = signal(false);
+  protected readonly returning = signal(false);
   protected readonly navError = signal<string | null>(null);
 
   protected async logout(): Promise<void> {
@@ -36,6 +37,19 @@ export class App {
     } catch (error: unknown) {
       this.navError.set(readApiError(error, 'Unable to sign out.'));
       this.loggingOut.set(false);
+    }
+  }
+
+  protected async stopImpersonation(): Promise<void> {
+    this.returning.set(true);
+    this.navError.set(null);
+    try {
+      await this.auth.stopImpersonation();
+      await this.router.navigateByUrl('/admin/test-users');
+    } catch (error: unknown) {
+      this.navError.set(readApiError(error, 'Unable to return to the administrator account.'));
+    } finally {
+      this.returning.set(false);
     }
   }
 }

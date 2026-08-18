@@ -2,10 +2,12 @@ using Campaign.Application.Campaigns;
 using Campaign.Application.Common;
 using Campaign.Application.Identity;
 using Campaign.Application.Maps;
+using Campaign.Application.Notifications;
 using Campaign.Application.Play;
 using Campaign.Application.Ports;
 using Campaign.Domain.Campaigns;
 using Campaign.Domain.Identity;
+using Campaign.Domain.Notifications;
 
 namespace Campaign.Backend.UnitTests.Campaigns;
 
@@ -365,6 +367,197 @@ public sealed class CampaignHandlerTests
             CancellationToken.None);
         Assert.True(left.IsSuccess);
         Assert.DoesNotContain(store.Updated!.Memberships, member => member.UserId == OtherUserId);
+    }
+
+    [Fact]
+    public async Task SearchOmitsCurrentMembersAndAllowsStaff()
+    {
+        var campaign = WithMemberships(
+            StoredCampaignFor(UserId),
+            [
+                new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
+                new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
+            ]);
+        var accounts = new FakeAccounts
+        {
+            SearchHits =
+            [
+                new MentionableAccount { UserId = UserId, Username = "northplayer", DisplayName = "northplayer" },
+                new MentionableAccount { UserId = OtherUserId, Username = "southplayer", DisplayName = "southplayer" },
+                new MentionableAccount { UserId = ThirdUserId, Username = "test1", DisplayName = "Test 1" },
+            ],
+        };
+        var handler = new SearchCampaignUsersHandler(new FakeCampaignStore { Existing = campaign }, accounts);
+
+        var forbidden = await handler.HandleAsync(
+            new SearchCampaignUsersCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                Query = "te",
+            },
+            CancellationToken.None);
+        Assert.False(forbidden.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignForbidden, forbidden.ErrorCode);
+
+        var result = await handler.HandleAsync(
+            new SearchCampaignUsersCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                Query = "te",
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var hit = Assert.Single(result.Value!);
+        Assert.Equal(ThirdUserId, hit.UserId);
+        Assert.Equal("Test 1", hit.DisplayName);
+    }
+
+    [Fact]
+    public async Task ManagerAddsPlayerToPrivateCampaignWithoutPassword()
+    {
+        var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
+        var handler = new AddCampaignMemberHandler(store, new FakeAccounts(), new FakeClock());
+
+        var forbidden = await handler.HandleAsync(
+            new AddCampaignMemberCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = false,
+                CampaignId = store.Existing.Id,
+                TargetUserId = ThirdUserId,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+        Assert.False(forbidden.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignNotFound, forbidden.ErrorCode);
+
+        var result = await handler.HandleAsync(
+            new AddCampaignMemberCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = store.Existing.Id,
+                TargetUserId = OtherUserId,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains(store.Updated!.Memberships, member => member.UserId == OtherUserId && member.IsPlayer && !member.IsGameMaster);
+        Assert.Equal("hash:join-secret", store.Updated.JoinPasswordHash);
+    }
+
+    [Fact]
+    public async Task AddMemberRejectsCompletedCampaignsAndExistingMembers()
+    {
+        var completed = WithCopied(StoredCampaignFor(UserId), startsUtc: Now.AddDays(-60), endsUtc: Now.AddHours(-1));
+        var completedStore = new FakeCampaignStore { Existing = completed };
+        var completedResult = await new AddCampaignMemberHandler(completedStore, new FakeAccounts(), new FakeClock())
+            .HandleAsync(
+                new AddCampaignMemberCommand
+                {
+                    UserId = UserId,
+                    IsAdministrator = false,
+                    CampaignId = completed.Id,
+                    TargetUserId = OtherUserId,
+                    ExpectedRevision = 1,
+                },
+                CancellationToken.None);
+        Assert.False(completedResult.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignJoinClosed, completedResult.ErrorCode);
+
+        var already = WithMemberships(
+            StoredCampaignFor(UserId),
+            [
+                new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
+                new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
+            ]);
+        var alreadyStore = new FakeCampaignStore { Existing = already };
+        var alreadyResult = await new AddCampaignMemberHandler(alreadyStore, new FakeAccounts(), new FakeClock())
+            .HandleAsync(
+                new AddCampaignMemberCommand
+                {
+                    UserId = UserId,
+                    IsAdministrator = false,
+                    CampaignId = already.Id,
+                    TargetUserId = OtherUserId,
+                    ExpectedRevision = 1,
+                },
+                CancellationToken.None);
+        Assert.False(alreadyResult.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignAlreadyMember, alreadyResult.ErrorCode);
+    }
+
+    [Fact]
+    public async Task KickRemovesPlayerAndNotifiesThem()
+    {
+        var campaign = WithMemberships(
+            StoredCampaignFor(UserId),
+            [
+                new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
+                new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var notices = new FakeNoticeStore();
+        var handler = new KickCampaignMemberHandler(
+            store,
+            new FakeClock(),
+            new CampaignNotificationPublisher(notices, new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()));
+
+        var result = await handler.HandleAsync(
+            new KickCampaignMemberCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                TargetUserId = OtherUserId,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.DoesNotContain(store.Updated!.Memberships, member => member.UserId == OtherUserId);
+        var notice = Assert.Single(notices.Added);
+        Assert.Equal(NotificationKind.CampaignKicked, notice.Kind);
+        Assert.Equal(OtherUserId, notice.UserId);
+        Assert.Equal("/campaigns/all", notice.Path);
+        Assert.Contains("Border War", notice.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task KickRejectsRemovingAManager()
+    {
+        var campaign = WithMemberships(
+            StoredCampaignFor(UserId),
+            [
+                new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
+                new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = true, IsPlayer = true },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new KickCampaignMemberHandler(
+            store,
+            new FakeClock(),
+            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()));
+
+        var result = await handler.HandleAsync(
+            new KickCampaignMemberCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                TargetUserId = OtherUserId,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignForbidden, result.ErrorCode);
+        Assert.Null(store.Updated);
     }
 
     [Fact]
@@ -1207,6 +1400,49 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task StaffCanAssignAnotherPlayersFaction()
+    {
+        var campaign = WithMemberships(
+            StoredCampaignFor(UserId),
+            [
+                new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true, FactionId = NorthFactionId },
+                new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true, FactionId = NorthFactionId },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new AssignPlayerFactionHandler(store, new FakeClock(), new FakeAccounts());
+
+        var forbidden = await handler.HandleAsync(
+            new AssignPlayerFactionCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                TargetUserId = OtherUserId,
+                ExpectedRevision = 1,
+                FactionId = SouthFactionId,
+            },
+            CancellationToken.None);
+        Assert.False(forbidden.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignForbidden, forbidden.ErrorCode);
+
+        var result = await handler.HandleAsync(
+            new AssignPlayerFactionCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                TargetUserId = OtherUserId,
+                ExpectedRevision = 1,
+                FactionId = SouthFactionId,
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(SouthFactionId, store.Updated!.Memberships.Single(member => member.UserId == OtherUserId).FactionId);
+        Assert.Equal(NorthFactionId, store.Updated.Memberships.Single(member => member.UserId == UserId).FactionId);
+    }
+
+    [Fact]
     public async Task ListReturnsOnlyMappedViewerFields()
     {
         var store = new FakeCampaignStore();
@@ -1483,9 +1719,46 @@ public sealed class CampaignHandlerTests
         public DateTimeOffset UtcNow => Now;
     }
 
+    private sealed class FakeNoticeStore : IUserNotificationStore
+    {
+        public List<NewUserNotification> Added { get; } = [];
+
+        public Task<bool> TryAddAsync(NewUserNotification notification, DateTimeOffset utcNow, CancellationToken cancellationToken)
+        {
+            Added.Add(notification);
+            return Task.FromResult(true);
+        }
+
+        public Task<IReadOnlyList<UserNotification>> ListUnreadAsync(Guid userId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<UserNotification>>([]);
+
+        public Task<bool> MarkReadAsync(Guid notificationId, Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+    }
+
+    private sealed class FakeEmailOutbox : IEmailOutbox
+    {
+        public Task QueueEmailConfirmationAsync(string email, Guid userId, string token, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task QueuePasswordResetAsync(string email, Guid userId, string token, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task QueueUserNoticeAsync(
+            string email,
+            Guid userId,
+            string subject,
+            string body,
+            string path,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
     private sealed class FakeAccounts : IUserAccountStore
     {
         public HashSet<Guid> AdministratorIds { get; } = [];
+
+        public List<MentionableAccount> SearchHits { get; init; } = [];
 
         public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken) => Task.FromResult(false);
 
@@ -1542,6 +1815,14 @@ public sealed class CampaignHandlerTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult<IReadOnlySet<Guid>>(userIds.Where(AdministratorIds.Contains).ToHashSet());
+        }
+
+        public Task<IReadOnlyList<MentionableAccount>> SearchAsync(
+            string query,
+            int take,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<MentionableAccount>>(SearchHits);
         }
     }
 

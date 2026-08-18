@@ -7,6 +7,7 @@ import { CampaignService } from '../../core/campaigns/campaign.service';
 import type {
   CampaignChatSend,
   CampaignDetail,
+  CampaignFaction,
   CampaignMission,
   CampaignParticipant,
   CampaignPlayDetail,
@@ -16,6 +17,7 @@ import type {
   PlayForce,
   PlayItemObjective,
   PublicObjectiveLeader,
+  UserSearchHit,
 } from '../../core/campaigns/campaign.models';
 import {
   CampaignViewPrefsService,
@@ -153,6 +155,11 @@ export class CampaignDetailPage {
   protected readonly durationUnits = DURATION_UNITS;
   protected readonly factionChoice = signal('');
   protected readonly subfactionChoice = signal('');
+  protected readonly memberQuery = signal('');
+  protected readonly memberHits = signal<UserSearchHit[]>([]);
+  protected readonly staffFactionId = signal<Partial<Record<string, string>>>({});
+  protected readonly staffSubfaction = signal<Partial<Record<string, string>>>({});
+  protected readonly kickUserId = signal<string | null>(null);
   protected readonly roundCount = signal(3);
   protected readonly extensionAmount = signal(1);
   protected readonly extensionUnit = signal('Hours');
@@ -161,9 +168,9 @@ export class CampaignDetailPage {
   protected readonly debugDrafts = signal<Record<string, OrderDraft>>({});
   protected readonly mapAction = signal<MapActionFlow | null>(null);
   protected readonly battleWinner = signal<Record<string, string>>({});
-  protected readonly battleScores = signal<Record<string, { winnerScore: number | null; loserScore: number | null }>>(
-    {},
-  );
+  protected readonly battleScores = signal<
+    Partial<Record<string, { winnerScore: number | null; loserScore: number | null }>>
+  >({});
   protected readonly retreatTarget = signal<Record<string, string>>({});
   private readonly mapRevision = signal(0);
   private logPollStarted = false;
@@ -369,6 +376,117 @@ export class CampaignDetailPage {
     }
 
     return roles.join(', ');
+  }
+
+  protected canStaffMembers(): boolean {
+    const campaign = this.campaign();
+    const user = this.auth.currentUser();
+    return Boolean(campaign && (campaign.canManage || user?.isAdministrator));
+  }
+
+  protected async searchMembers(): Promise<void> {
+    const campaign = this.campaign();
+    const query = this.memberQuery().trim();
+    if (!campaign || query.length < 2) {
+      this.memberHits.set([]);
+      return;
+    }
+
+    try {
+      this.memberHits.set(await this.campaignsApi.searchUsers(campaign.id, query));
+    } catch (error: unknown) {
+      this.error.set(readApiError(error, 'Unable to search users.'));
+    }
+  }
+
+  protected async addMember(hit: UserSearchHit): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return;
+    }
+
+    this.error.set(null);
+    this.successMessage.set(null);
+    try {
+      await this.overlay.run(() => this.campaignsApi.addMember(campaign.id, hit.userId, campaign.revision));
+      this.memberQuery.set('');
+      this.memberHits.set([]);
+      await this.load(campaign.id);
+      this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
+    } catch (error: unknown) {
+      this.error.set(readApiError(error, 'Unable to add that player.'));
+    }
+  }
+
+  protected async kickMember(participant: CampaignParticipant): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return;
+    }
+
+    if (this.kickUserId() !== participant.userId) {
+      this.kickUserId.set(participant.userId);
+      return;
+    }
+
+    this.error.set(null);
+    this.successMessage.set(null);
+    try {
+      await this.overlay.run(() => this.campaignsApi.kickMember(campaign.id, participant.userId, campaign.revision));
+      this.kickUserId.set(null);
+      await this.load(campaign.id);
+      this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
+    } catch (error: unknown) {
+      this.error.set(readApiError(error, 'Unable to remove that player.'));
+      this.kickUserId.set(null);
+    }
+  }
+
+  protected staffFactionValue(participant: CampaignParticipant): string {
+    return this.staffFactionId()[participant.userId] ?? participant.factionId ?? '';
+  }
+
+  protected staffSubfactionValue(participant: CampaignParticipant): string {
+    return this.staffSubfaction()[participant.userId] ?? participant.subfaction ?? '';
+  }
+
+  protected onStaffFaction(participant: CampaignParticipant, factionId: string): void {
+    this.staffFactionId.update((current) => ({ ...current, [participant.userId]: factionId }));
+    this.staffSubfaction.update((current) => ({ ...current, [participant.userId]: '' }));
+  }
+
+  protected onStaffSubfaction(participant: CampaignParticipant, subfaction: string): void {
+    this.staffSubfaction.update((current) => ({ ...current, [participant.userId]: subfaction }));
+  }
+
+  protected staffFaction(participant: CampaignParticipant): CampaignFaction | null {
+    const id = this.staffFactionValue(participant);
+    return this.campaign()?.factions.find((faction) => faction.id === id) ?? null;
+  }
+
+  protected async assignFaction(participant: CampaignParticipant): Promise<void> {
+    const campaign = this.campaign();
+    const factionId = this.staffFactionValue(participant);
+    if (!campaign || !factionId) {
+      return;
+    }
+
+    this.error.set(null);
+    this.successMessage.set(null);
+    try {
+      await this.overlay.run(() =>
+        this.campaignsApi.assignFaction(campaign.id, {
+          revision: this.play()?.revision ?? campaign.revision,
+          userId: participant.userId,
+          factionId,
+          subfaction: this.staffSubfactionValue(participant) || null,
+        }),
+      );
+      await this.load(campaign.id);
+      this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
+    } catch (error: unknown) {
+      this.error.set(readApiError(error, 'Unable to assign that faction.'));
+    }
   }
 
   protected expandAllSections(): void {
@@ -612,7 +730,9 @@ export class CampaignDetailPage {
 
   protected forceLabel(force: PlayForce): string {
     const name = force.controllerUsername ?? 'Player';
-    return `${name} · ${this.factionName(force.factionId)}`;
+    const status = force.statusName?.trim();
+    const base = `${name} · ${this.factionName(force.factionId)}`;
+    return status ? `${base} · ${status}` : base;
   }
 
   protected territoryName(id: string | null | undefined): string {

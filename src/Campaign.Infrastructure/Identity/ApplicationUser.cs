@@ -89,4 +89,10 @@ public sealed class ApplicationUser : IdentityUser<Guid>
     /// Gets or sets the default site-chat compose language.
     /// </summary>
     public string PreferredChatLanguage { get; set; } = "English";
+
+    /// <summary>Gets or sets whether this account is a seeded administrator test user.</summary>
+    public bool IsTestAccount { get; set; }
+
+    /// <summary>Gets or sets the test-account number when <see cref="IsTestAccount"/> is true.</summary>
+    public int? TestAccountNumber { get; set; }
 }

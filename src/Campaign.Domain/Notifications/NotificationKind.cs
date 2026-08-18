@@ -28,4 +28,7 @@ public enum NotificationKind
 
     /// <summary>An administrator sent a site-chat announcement to everyone or to this recipient.</summary>
     SiteAdminMessage = 7,
+
+    /// <summary>A campaign manager removed the recipient from a campaign.</summary>
+    CampaignKicked = 8,
 }

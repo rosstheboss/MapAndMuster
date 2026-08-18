@@ -104,6 +104,13 @@ public sealed class PostSiteChatHandler
             return OperationResults.Failure<SiteChatBoard>(ErrorCodes.ProfileNotFound, "The profile was not found.");
         }
 
+        if (account.IsTestAccount)
+        {
+            return OperationResults.Failure<SiteChatBoard>(
+                "sitechat.test_account",
+                "Test accounts cannot use public site chat.");
+        }
+
         var members = await SiteChatMembers.LoadAsync(_accounts, cancellationToken).ConfigureAwait(false);
         if (!SiteChatRules.TryPost(
                 command.UserId,

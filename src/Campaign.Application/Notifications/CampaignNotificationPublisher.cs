@@ -165,6 +165,28 @@ public sealed class CampaignNotificationPublisher
         }
     }
 
+    /// <summary>
+    /// Notifies a player that a manager removed them from the campaign.
+    /// </summary>
+    public async Task PublishKickedAsync(
+        StoredCampaign campaign,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        var path = campaign.IsPubliclyViewable ? $"/campaigns/{campaign.Id}" : "/campaigns/all";
+        await NotifyAsync(
+                userId,
+                NotificationKind.CampaignKicked,
+                campaign,
+                "Removed from campaign",
+                $"You were removed from {campaign.Name}.",
+                path,
+                $"kicked:{campaign.Id:N}:{userId:N}",
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private async Task NotifyMembersAsync(
         StoredCampaign campaign,
         NotificationKind kind,
@@ -225,7 +247,7 @@ public sealed class CampaignNotificationPublisher
             return;
         }
 
-        if (account.EmailNotificationsEnabled)
+        if (account.EmailNotificationsEnabled && !account.IsTestAccount)
         {
             await _outbox.QueueUserNoticeAsync(
                     account.Email,

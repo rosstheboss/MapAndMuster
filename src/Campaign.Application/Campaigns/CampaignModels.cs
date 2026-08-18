@@ -149,6 +149,9 @@ public sealed class CampaignDetail
     /// <summary>Gets reusable special rules. Empty means none.</summary>
     public IReadOnlyList<SpecialRuleDetail> SpecialRules { get; init; } = [];
 
+    /// <summary>Gets configured force statuses other than Normal.</summary>
+    public IReadOnlyList<ForceStatusDetail> ForceStatuses { get; init; } = [];
+
     /// <summary>Gets private campaign objectives the viewer may see. Secret fields are omitted unless authorized.</summary>
     public IReadOnlyList<PrivateObjectiveTypeDetail> PrivateObjectiveTypes { get; init; } = [];
 
@@ -530,6 +533,9 @@ public sealed class StoredCampaign
     /// <summary>Gets reusable special rules. Empty means none.</summary>
     public IReadOnlyList<StoredSpecialRule> SpecialRules { get; init; } = [];
 
+    /// <summary>Gets configured force statuses other than Normal.</summary>
+    public IReadOnlyList<StoredForceStatus> ForceStatuses { get; init; } = [];
+
     /// <summary>Gets the private campaign objectives. Empty means none.</summary>
     public IReadOnlyList<StoredPrivateObjectiveType> PrivateObjectiveTypes { get; init; } = [];
 
@@ -813,6 +819,27 @@ public sealed class SpecialRuleDetail
 
     /// <summary>Gets the player-facing rule text.</summary>
     public required string Text { get; init; }
+}
+
+/// <summary>
+/// A configured force status other than Normal.
+/// </summary>
+public sealed class ForceStatusDetail
+{
+    /// <summary>Gets the status identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the unique status name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets tabletop effect text.</summary>
+    public required string Effects { get; init; }
+
+    /// <summary>Gets the enable-trigger name.</summary>
+    public required string EnableTrigger { get; init; }
+
+    /// <summary>Gets the clear-trigger name.</summary>
+    public required string ClearTrigger { get; init; }
 }
 
 /// <summary>
@@ -1215,6 +1242,27 @@ public sealed class StoredSpecialRule
 
     /// <summary>Gets the player-facing rule text.</summary>
     public required string Text { get; init; }
+}
+
+/// <summary>
+/// A persisted force status other than Normal.
+/// </summary>
+public sealed class StoredForceStatus
+{
+    /// <summary>Gets the status identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the unique status name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets tabletop effect text.</summary>
+    public required string Effects { get; init; }
+
+    /// <summary>Gets the enable-trigger name.</summary>
+    public required string EnableTrigger { get; init; }
+
+    /// <summary>Gets the clear-trigger name.</summary>
+    public required string ClearTrigger { get; init; }
 }
 
 /// <summary>

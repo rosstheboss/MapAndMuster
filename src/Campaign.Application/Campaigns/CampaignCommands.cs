@@ -97,6 +97,9 @@ public sealed class CreateCampaignCommand
     /// <summary>Gets reusable special rules. Omitted or empty means none.</summary>
     public IReadOnlyList<SpecialRuleInput>? SpecialRules { get; init; }
 
+    /// <summary>Gets configured force statuses other than Normal. Omitted or empty means none.</summary>
+    public IReadOnlyList<ForceStatusInput>? ForceStatuses { get; init; }
+
     /// <summary>Gets private campaign objectives. Omitted or empty means none.</summary>
     public IReadOnlyList<PrivateObjectiveTypeInput>? PrivateObjectiveTypes { get; init; }
 }
@@ -202,6 +205,9 @@ public sealed class UpdateCampaignCommand
     /// <summary>Gets reusable special rules. Omitted or empty means none.</summary>
     public IReadOnlyList<SpecialRuleInput>? SpecialRules { get; init; }
 
+    /// <summary>Gets configured force statuses other than Normal. Omitted or empty means none.</summary>
+    public IReadOnlyList<ForceStatusInput>? ForceStatuses { get; init; }
+
     /// <summary>Gets private campaign objectives. Omitted or empty means none.</summary>
     public IReadOnlyList<PrivateObjectiveTypeInput>? PrivateObjectiveTypes { get; init; }
 }
@@ -285,6 +291,93 @@ public sealed class LeaveCampaignCommand
 
     /// <summary>Gets the campaign identifier.</summary>
     public required Guid CampaignId { get; init; }
+}
+
+/// <summary>
+/// Command for a manager or administrator to search accounts to add to a campaign.
+/// </summary>
+public sealed class SearchCampaignUsersCommand
+{
+    /// <summary>Gets the authenticated staff user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is a system administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the search text.</summary>
+    public required string Query { get; init; }
+}
+
+/// <summary>
+/// Command for a manager or administrator to add a player without a join password.
+/// </summary>
+public sealed class AddCampaignMemberCommand
+{
+    /// <summary>Gets the authenticated staff user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is a system administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the account to add as a player.</summary>
+    public required Guid TargetUserId { get; init; }
+
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int ExpectedRevision { get; init; }
+}
+
+/// <summary>
+/// Command for a manager or administrator to remove a player.
+/// </summary>
+public sealed class KickCampaignMemberCommand
+{
+    /// <summary>Gets the authenticated staff user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is a system administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the player to remove.</summary>
+    public required Guid TargetUserId { get; init; }
+
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int ExpectedRevision { get; init; }
+}
+
+/// <summary>
+/// Command for a manager or administrator to assign another player's faction.
+/// </summary>
+public sealed class AssignPlayerFactionCommand
+{
+    /// <summary>Gets the authenticated staff user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is a system administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the player whose faction is assigned.</summary>
+    public required Guid TargetUserId { get; init; }
+
+    /// <summary>Gets the faction identifier.</summary>
+    public required Guid FactionId { get; init; }
+
+    /// <summary>Gets the optional subfaction name.</summary>
+    public string? Subfaction { get; init; }
+
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int ExpectedRevision { get; init; }
 }
 
 /// <summary>

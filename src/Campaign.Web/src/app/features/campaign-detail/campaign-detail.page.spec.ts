@@ -241,6 +241,7 @@ describe('CampaignDetailPage', () => {
     expect(compiled.querySelector('#faction')).toBeTruthy();
     expect(compiled.textContent).toContain('Campaign log');
     expect(compiled.textContent).toContain('Participants');
+    expect(compiled.textContent).toContain('Add a player');
     expect(compiled.querySelector('a[href^="/users/northplayer"]')?.textContent.trim()).toBe('northplayer');
     expect(compiled.textContent).toContain('Manager, Player');
     expect(compiled.textContent).toContain("Your force starts at that faction's spawn");
@@ -265,6 +266,48 @@ describe('CampaignDetailPage', () => {
     expect(compiled.querySelector('[role="alertdialog"]')?.textContent).toContain('Delete this campaign?');
     expect(compiled.querySelector('app-campaign-map-preview')).toBeNull();
     expect(compiled.textContent).not.toContain('Download map');
+    http.verify();
+  });
+
+  it('asks a manager to confirm before removing a player', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      participants: [
+        ...campaign.participants,
+        {
+          userId: 'user-2',
+          username: 'southplayer',
+          displayName: 'Ada',
+          isPlayer: true,
+          isGameMaster: false,
+          isAdministrator: false,
+          factionName: 'South',
+          subfaction: null,
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Add a player');
+    const remove = [...compiled.querySelectorAll('button')].find(
+      (element) => element.textContent.trim() === 'Remove player',
+    );
+    expect(remove).toBeTruthy();
+    remove!.click();
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Confirm remove');
     http.verify();
   });
 

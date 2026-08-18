@@ -69,6 +69,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<IClock, SystemClock>();
         services.AddScoped<IUserAccountStore, UserAccountStore>();
+        services.AddScoped<IdentityMaintenance>();
         services.AddScoped<ICampaignStore, CampaignStore>();
         services.AddScoped<IUserNotificationStore, UserNotificationStore>();
         services.AddScoped<INewsStore, NewsStore>();

@@ -77,7 +77,8 @@ public sealed class CreateCampaignHandler
                 command.LongestTerritoryChainCampaignPoints,
                 command.MostBattlesWonCampaignPoints,
                 command.SpecialRules,
-                command.PrivateObjectiveTypes))
+                command.PrivateObjectiveTypes,
+                command.ForceStatuses))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -196,7 +197,8 @@ public sealed class UpdateCampaignHandler
                 command.LongestTerritoryChainCampaignPoints,
                 command.MostBattlesWonCampaignPoints,
                 command.SpecialRules,
-                command.PrivateObjectiveTypes))
+                command.PrivateObjectiveTypes,
+                command.ForceStatuses))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -367,6 +369,7 @@ internal static class CampaignPersistenceFactory
             ItemObjectiveTypes = CatalogFileBinder.BindItemObjectives(setup.ItemObjectiveTypes, previousItemObjectiveTypes),
             PublicObjectiveTypes = CatalogFileBinder.BindPublicObjectives(setup.PublicObjectiveTypes),
             SpecialRules = CatalogFileBinder.BindSpecialRules(setup.SpecialRules),
+            ForceStatuses = CatalogFileBinder.BindForceStatuses(setup.ForceStatuses),
             PrivateObjectiveTypes = CatalogFileBinder.BindPrivateObjectives(setup.PrivateObjectiveTypes),
             BattleScoring = setup.BattleScoring,
             RankingObjectivePoints = setup.RankingObjectivePoints,

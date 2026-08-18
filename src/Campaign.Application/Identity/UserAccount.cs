@@ -107,4 +107,10 @@ public sealed class UserAccount
     /// Gets the default site-chat compose language. English when unset.
     /// </summary>
     public string PreferredChatLanguage { get; init; } = nameof(ChatLanguage.English);
+
+    /// <summary>Gets whether this is a seeded administrator test account.</summary>
+    public bool IsTestAccount { get; init; }
+
+    /// <summary>Gets the test-account number when this is a seeded test user.</summary>
+    public int? TestAccountNumber { get; init; }
 }

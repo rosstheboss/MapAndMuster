@@ -21,6 +21,7 @@ import type {
   ResolveItemObjectiveChoicePayload,
   SubmitBattleResultPayload,
   SubmitRetreatPayload,
+  UserSearchHit,
 } from './campaign.models';
 
 @Injectable({ providedIn: 'root' })
@@ -48,6 +49,35 @@ export class CampaignService {
   async leave(campaignId: string): Promise<void> {
     await firstValueFrom(
       this.http.post(`/api/campaigns/${encodeURIComponent(campaignId)}/leave`, {}, { withCredentials: true }),
+    );
+  }
+
+  async searchUsers(campaignId: string, query: string): Promise<UserSearchHit[]> {
+    return firstValueFrom(
+      this.http.get<UserSearchHit[]>(`/api/campaigns/${encodeURIComponent(campaignId)}/members/search`, {
+        params: { q: query },
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async addMember(campaignId: string, userId: string, revision: number): Promise<CampaignDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/members`,
+        { userId, revision },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async kickMember(campaignId: string, userId: string, revision: number): Promise<CampaignDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/members/kick`,
+        { userId, revision },
+        { withCredentials: true },
+      ),
     );
   }
 
@@ -225,6 +255,19 @@ export class CampaignService {
       this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/faction`, payload, {
         withCredentials: true,
       }),
+    );
+  }
+
+  async assignFaction(
+    campaignId: string,
+    payload: ChooseFactionPayload & { userId: string },
+  ): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/faction/assign`,
+        payload,
+        { withCredentials: true },
+      ),
     );
   }
 

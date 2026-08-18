@@ -357,6 +357,8 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector<HTMLTextAreaElement>('#special-rule-description-0')?.value).toContain(
       'one extra adjacent territory',
     );
+    expect(compiled.querySelector<HTMLInputElement>('#force-status-name-0')?.value).toBe('Diseased');
+    expect(compiled.querySelector('#forceStatusPreset')).toBeTruthy();
     expect(compiled.querySelector('#specialRulePreset')).toBeTruthy();
     expect(
       (

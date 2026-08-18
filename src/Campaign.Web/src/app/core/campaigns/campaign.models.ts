@@ -73,6 +73,7 @@ export interface CampaignDetail {
   itemObjectiveTypes?: CampaignItemObjectiveType[];
   publicObjectiveTypes?: CampaignPublicObjectiveType[];
   specialRules?: CampaignSpecialRule[];
+  forceStatuses?: CampaignForceStatus[];
   privateObjectiveTypes?: CampaignPrivateObjectiveType[];
   privateObjectives?: PrivateObjectiveAssignment[];
   privateObjectiveUnclaimedCounts?: PrivateObjectiveUnclaimedCount[];
@@ -193,6 +194,14 @@ export interface CampaignSpecialRule {
   text: string;
 }
 
+export interface CampaignForceStatus {
+  id: string;
+  name: string;
+  effects: string;
+  enableTrigger: string;
+  clearTrigger: string;
+}
+
 export interface CampaignPrivateObjectiveType {
   id: string;
   name?: string | null;
@@ -297,6 +306,7 @@ export interface SaveCampaignPayload {
   itemObjectiveTypes: SaveItemObjectiveTypePayload[];
   publicObjectiveTypes?: SavePublicObjectiveTypePayload[];
   specialRules?: SaveSpecialRulePayload[];
+  forceStatuses?: SaveForceStatusPayload[];
   privateObjectiveTypes?: SavePrivateObjectiveTypePayload[];
   pointsPerBattleWon?: number;
   pointsPerBattleDraw?: number;
@@ -400,6 +410,14 @@ export interface SaveSpecialRulePayload {
   id?: string;
   name: string;
   text?: string | null;
+}
+
+export interface SaveForceStatusPayload {
+  id?: string;
+  name: string;
+  effects?: string | null;
+  enableTrigger: string;
+  clearTrigger: string;
 }
 
 export interface SavePrivateObjectiveTypePayload {
@@ -540,6 +558,8 @@ export interface PlayForce {
   inBattle: boolean;
   moveTargets: string[];
   availableActions: string[];
+  statusName?: string | null;
+  statusEffects?: string | null;
 }
 
 export interface PlayItemObjective {
@@ -650,6 +670,12 @@ export interface CampaignParticipant {
   factionColor?: string | null;
   hasFlagImage?: boolean;
   allyGroupName?: string | null;
+}
+
+export interface UserSearchHit {
+  userId: string;
+  username: string;
+  displayName: string;
 }
 
 export interface SaveOrderDraftPayload {

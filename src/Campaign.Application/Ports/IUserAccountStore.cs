@@ -125,6 +125,30 @@ public interface IUserAccountStore
     {
         return Task.FromResult<IReadOnlyList<UserAccount>>([]);
     }
+
+    /// <summary>
+    /// Searches accounts by username or public display name. Email is omitted.
+    /// </summary>
+    /// <param name="query">The search text.</param>
+    /// <param name="take">The maximum number of hits.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Matching public identities.</returns>
+    Task<IReadOnlyList<MentionableAccount>> SearchAsync(
+        string query,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(query);
+        return Task.FromResult<IReadOnlyList<MentionableAccount>>([]);
+    }
+
+    /// <summary>
+    /// Returns seeded administrator test accounts ordered by number.
+    /// </summary>
+    Task<IReadOnlyList<UserAccount>> ListTestAccountsAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<UserAccount>>([]);
+    }
 }
 
 /// <summary>

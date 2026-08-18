@@ -110,6 +110,11 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("IsTestAccount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -164,6 +169,9 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
 
+                    b.Property<int?>("TestAccountNumber")
+                        .HasColumnType("integer");
+
                     b.Property<string>("TimeZoneId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -187,6 +195,10 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.HasIndex("NormalizedUserName")
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
+
+                    b.HasIndex("TestAccountNumber")
+                        .IsUnique()
+                        .HasFilter("\"TestAccountNumber\" IS NOT NULL");
 
                     b.ToTable("AspNetUsers", (string)null);
                 });

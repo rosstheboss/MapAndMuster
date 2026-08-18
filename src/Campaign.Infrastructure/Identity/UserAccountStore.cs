@@ -165,6 +165,16 @@ public sealed class UserAccountStore : IUserAccountStore
             };
         }
 
+        if (user.IsTestAccount)
+        {
+            return new UpdateProfileOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.CampaignForbidden,
+                Message = "Test accounts cannot change their profile.",
+            };
+        }
+
         user.UserName = request.Username.Value;
         user.FirstName = request.Name.FirstName;
         user.MiddleInitial = request.Name.MiddleInitial?.ToString();
@@ -252,6 +262,7 @@ public sealed class UserAccountStore : IUserAccountStore
         cancellationToken.ThrowIfCancellationRequested();
         var users = await _userManager.Users
             .AsNoTracking()
+            .Where(user => !user.IsTestAccount)
             .OrderBy(user => user.UserName)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -322,6 +333,58 @@ public sealed class UserAccountStore : IUserAccountStore
         return new ChangePasswordOutcome { IsSuccess = true };
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<MentionableAccount>> SearchAsync(
+        string query,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(query);
+        cancellationToken.ThrowIfCancellationRequested();
+        var needle = query.Trim();
+        if (needle.Length < 2 || take <= 0)
+        {
+            return [];
+        }
+
+        var users = await _userManager.Users
+            .AsNoTracking()
+            .OrderBy(user => user.UserName)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return
+        [
+            .. users
+                .Select(user =>
+                {
+                    var account = Map(user);
+                    return new MentionableAccount
+                    {
+                        UserId = account.Id,
+                        Username = account.Username,
+                        DisplayName = ProfileMapper.ToPublic(account).DisplayName,
+                    };
+                })
+                .Where(hit =>
+                    hit.Username.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                    || hit.DisplayName.Contains(needle, StringComparison.OrdinalIgnoreCase))
+                .Take(take),
+        ];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<UserAccount>> ListTestAccountsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var users = await _userManager.Users
+            .AsNoTracking()
+            .Where(user => user.IsTestAccount)
+            .OrderBy(user => user.TestAccountNumber)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return [.. users.Select(Map)];
+    }
+
     private ApplicationUser CreateUser(
         string email,
         Username username,
@@ -388,6 +451,8 @@ public sealed class UserAccountStore : IUserAccountStore
             PreferredChatLanguage = string.IsNullOrWhiteSpace(user.PreferredChatLanguage)
                 ? "English"
                 : user.PreferredChatLanguage,
+            IsTestAccount = user.IsTestAccount,
+            TestAccountNumber = user.TestAccountNumber,
         };
     }
 

@@ -87,4 +87,13 @@ public static class CampaignAccess
         var membership = CampaignMapper.MembershipFor(campaign, userId);
         return membership is not null && !membership.IsGameMaster;
     }
+
+    /// <summary>
+    /// Whether the caller may add, kick, or assign factions for other players.
+    /// </summary>
+    public static bool CanStaffMembers(StoredCampaign campaign, Guid userId, bool isAdministrator)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        return isAdministrator || CampaignMapper.MembershipFor(campaign, userId)?.IsGameMaster == true;
+    }
 }

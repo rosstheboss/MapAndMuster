@@ -40,6 +40,31 @@ public sealed class GetPublicProfileHandlerTests
     }
 
     [Fact]
+    public void TestAccountPublicDisplayNameUsesTheAccountNumber()
+    {
+        var profile = ProfileMapper.ToPublic(new UserAccount
+        {
+            Id = OwnerId,
+            Email = "test1@users.invalid",
+            Username = "test1",
+            FirstName = "Test",
+            LastName = "Account",
+            City = "Testville",
+            Country = "Testland",
+            DisplayNameMode = DisplayNameMode.Username,
+            CreatedUtc = Now,
+            UpdatedUtc = Now,
+            ProfileRevision = 1,
+            EmailConfirmed = true,
+            IsTestAccount = true,
+            TestAccountNumber = 1,
+        });
+
+        Assert.Equal("Test 1", profile.DisplayName);
+        Assert.Equal("test1", profile.Username);
+    }
+
+    [Fact]
     public async Task ReturnsNotFoundForUnknownUsername()
     {
         var handler = CreateHandler([]);

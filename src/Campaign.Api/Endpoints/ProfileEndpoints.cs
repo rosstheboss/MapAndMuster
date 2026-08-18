@@ -73,7 +73,10 @@ public static class ProfileEndpoints
             return IdentityHttp.Problem(result);
         }
 
-        return Results.Ok(ProfileResponses.FromAccount(result.Value, principal.IsAdministrator()));
+        return Results.Ok(ProfileResponses.FromAccount(
+            result.Value,
+            principal.IsAdministrator(),
+            principal.GetImpersonatorUserId() is not null));
     }
 
     private static async Task<IResult> UpdateOwnAsync(
@@ -121,7 +124,10 @@ public static class ProfileEndpoints
             return IdentityHttp.Problem(result);
         }
 
-        return Results.Ok(ProfileResponses.FromAccount(result.Value, principal.IsAdministrator()));
+        return Results.Ok(ProfileResponses.FromAccount(
+            result.Value,
+            principal.IsAdministrator(),
+            principal.GetImpersonatorUserId() is not null));
     }
 
     private static async Task<IResult> UploadAvatarAsync(
@@ -165,7 +171,10 @@ public static class ProfileEndpoints
             return IdentityHttp.Problem(result);
         }
 
-        return Results.Ok(ProfileResponses.FromAccount(result.Value, principal.IsAdministrator()));
+        return Results.Ok(ProfileResponses.FromAccount(
+            result.Value,
+            principal.IsAdministrator(),
+            principal.GetImpersonatorUserId() is not null));
     }
 
     private static async Task<IResult> GetPublicAsync(
