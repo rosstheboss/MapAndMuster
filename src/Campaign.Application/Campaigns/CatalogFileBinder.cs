@@ -46,7 +46,9 @@ internal static class CatalogFileBinder
                 Name = type.Name,
                 Color = type.Color,
                 Missions = BindMissions(type.Missions, previousMissions),
+                CampaignPoints = 0,
                 IsWaterFeature = type.IsWaterFeature,
+                SupplyPoints = type.SupplyPoints,
             }),
         ];
     }
@@ -76,6 +78,9 @@ internal static class CatalogFileBinder
                     IsDestructible = type.IsDestructible,
                     Missions = BindMissions(type.Missions, previousMissions),
                     CampaignPoints = type.CampaignPoints,
+                    SupplyPoints = type.SupplyPoints,
+                    PillageSupplyPoints = type.PillageSupplyPoints,
+                    DestroySupplyPoints = type.DestroySupplyPoints,
                 };
             }),
         ];
@@ -328,6 +333,17 @@ internal static class CatalogFileBinder
                     Url = mission.Url,
                     FileStorageKey = keepFile ? existing?.FileStorageKey : null,
                     FileName = keepFile ? existing?.FileName : null,
+                    ResultQuestions =
+                    [
+                        .. mission.ResultQuestions.Select(static question => new StoredMissionResultQuestion
+                        {
+                            Id = question.Id,
+                            Prompt = question.Prompt,
+                            Kind = question.Kind.ToString(),
+                            BattlePoints = question.BattlePoints,
+                            CampaignPoints = question.CampaignPoints,
+                        }),
+                    ],
                 };
             }),
         ];

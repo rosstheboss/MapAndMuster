@@ -26,12 +26,16 @@ internal static class CatalogJson
         IReadOnlyList<StoredSpecialRule>? specialRules = null,
         IReadOnlyList<StoredPrivateObjectiveType>? privateObjectiveTypes = null,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? factionSpecialRuleIds = null,
-        IReadOnlyList<StoredForceStatus>? forceStatuses = null)
+        IReadOnlyList<StoredForceStatus>? forceStatuses = null,
+        int splitForceSupplyPenaltyPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent,
+        BattleReportRulesSetup? battleReportRules = null,
+        IReadOnlyList<RoundArmyEscalationSetup>? armyEscalations = null)
     {
         ArgumentNullException.ThrowIfNull(terrainTypes);
         ArgumentNullException.ThrowIfNull(structureTypes);
         var scoring = battleScoring ?? BattleScoringSetup.Default;
         var ranking = rankingObjectivePoints ?? GeneralPublicObjectivePoints.None;
+        var reportRules = battleReportRules ?? BattleReportRulesSetup.Default;
         return JsonSerializer.Serialize(
             new CatalogDocument
             {
@@ -56,6 +60,12 @@ internal static class CatalogJson
                 MostTerritoriesCampaignPoints = ranking.MostTerritories,
                 LongestTerritoryChainCampaignPoints = ranking.LongestTerritoryChain,
                 MostBattlesWonCampaignPoints = ranking.MostBattlesWon,
+                SplitForceSupplyPenaltyPercent = splitForceSupplyPenaltyPercent,
+                AlwaysAskGeneralKill = reportRules.AlwaysAskGeneralKill,
+                AlwaysAskSupplyLineDestroyed = reportRules.AlwaysAskSupplyLineDestroyed,
+                GeneralKillCampaignPoints = reportRules.GeneralKillCampaignPoints,
+                SupplyLineDestroyedCampaignPoints = reportRules.SupplyLineDestroyedCampaignPoints,
+                ArmyEscalations = [.. (armyEscalations ?? []).Select(ToDocument)],
             },
             Options);
     }
@@ -70,18 +80,21 @@ internal static class CatalogJson
         IReadOnlyList<StoredSpecialRule> SpecialRules,
         IReadOnlyList<StoredPrivateObjectiveType> PrivateObjectiveTypes,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> FactionSpecialRuleIds,
-        IReadOnlyList<StoredForceStatus> ForceStatuses)
+        IReadOnlyList<StoredForceStatus> ForceStatuses,
+        int SplitForceSupplyPenaltyPercent,
+        BattleReportRulesSetup BattleReportRules,
+        IReadOnlyList<RoundArmyEscalationSetup> ArmyEscalations)
         Deserialize(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), []);
+            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent, BattleReportRulesSetup.Default, []);
         }
 
         var document = JsonSerializer.Deserialize<CatalogDocument>(json, Options);
         if (document is null)
         {
-            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), []);
+            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent, BattleReportRulesSetup.Default, []);
         }
 
         return (
@@ -99,7 +112,18 @@ internal static class CatalogJson
             (document.FactionSpecialRules ?? []).ToDictionary(
                 static item => item.FactionId,
                 static item => (IReadOnlyList<Guid>)item.SpecialRuleIds),
-            [.. (document.ForceStatuses ?? []).Select(FromDocument)]);
+            [.. (document.ForceStatuses ?? []).Select(FromDocument)],
+            document.SplitForceSupplyPenaltyPercent is null
+                || document.SplitForceSupplyPenaltyPercent < 0
+                || document.SplitForceSupplyPenaltyPercent > 100
+                ? HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent
+                : document.SplitForceSupplyPenaltyPercent.Value,
+            new BattleReportRulesSetup(
+                document.AlwaysAskGeneralKill ?? HuntInEstaliaDefaults.AlwaysAskGeneralKill,
+                document.AlwaysAskSupplyLineDestroyed ?? HuntInEstaliaDefaults.AlwaysAskSupplyLineDestroyed,
+                document.GeneralKillCampaignPoints ?? HuntInEstaliaDefaults.GeneralKillCampaignPoints,
+                document.SupplyLineDestroyedCampaignPoints ?? HuntInEstaliaDefaults.SupplyLineDestroyedCampaignPoints),
+            ArmyEscalationsFrom(document));
     }
 
     private static TerrainDocument ToDocument(StoredTerrainType type)
@@ -112,6 +136,7 @@ internal static class CatalogJson
             Missions = [.. type.Missions.Select(ToDocument)],
             CampaignPoints = type.CampaignPoints,
             IsWaterFeature = type.IsWaterFeature,
+            SupplyPoints = type.SupplyPoints,
         };
     }
 
@@ -129,6 +154,9 @@ internal static class CatalogJson
             IsDestructible = type.IsDestructible,
             Missions = [.. type.Missions.Select(ToDocument)],
             CampaignPoints = type.CampaignPoints,
+            SupplyPoints = type.SupplyPoints,
+            PillageSupplyPoints = type.PillageSupplyPoints,
+            DestroySupplyPoints = type.DestroySupplyPoints,
         };
     }
 
@@ -141,6 +169,7 @@ internal static class CatalogJson
             Url = mission.Url,
             FileStorageKey = mission.FileStorageKey,
             FileName = mission.FileName,
+            ResultQuestions = [.. mission.ResultQuestions.Select(ToDocument)],
         };
     }
 
@@ -154,6 +183,7 @@ internal static class CatalogJson
             Missions = [.. type.Missions.Select(FromDocument)],
             CampaignPoints = type.CampaignPoints,
             IsWaterFeature = type.IsWaterFeature,
+            SupplyPoints = type.SupplyPoints > 0 ? type.SupplyPoints : HuntInEstaliaDefaults.SupplyPoints,
         };
     }
 
@@ -172,6 +202,9 @@ internal static class CatalogJson
             IsDestructible = type.IsDestructible ?? flags.IsDestructible,
             Missions = [.. type.Missions.Select(FromDocument)],
             CampaignPoints = type.CampaignPoints,
+            SupplyPoints = type.SupplyPoints > 0 ? type.SupplyPoints : HuntInEstaliaDefaults.SupplyPoints,
+            PillageSupplyPoints = type.PillageSupplyPoints > 0 ? type.PillageSupplyPoints : HuntInEstaliaDefaults.SupplyPoints,
+            DestroySupplyPoints = type.DestroySupplyPoints > 0 ? type.DestroySupplyPoints : HuntInEstaliaDefaults.SupplyPoints,
         };
     }
 
@@ -184,6 +217,7 @@ internal static class CatalogJson
             Url = mission.Url,
             FileStorageKey = mission.FileStorageKey,
             FileName = mission.FileName,
+            ResultQuestions = [.. (mission.ResultQuestions ?? []).Select(FromDocument)],
         };
     }
 
@@ -410,6 +444,64 @@ internal static class CatalogJson
             scoring.AllowNegativeDifferential);
     }
 
+    private static ArmyEscalationDocument ToDocument(RoundArmyEscalationSetup row)
+    {
+        return new ArmyEscalationDocument
+        {
+            RoundNumber = row.RoundNumber,
+            MaxArmyPoints = row.MaxArmyPoints,
+            FreeSupplyPoints = row.FreeSupplyPoints,
+            FreeCharacterCount = row.FreeCharacterCount,
+        };
+    }
+
+    private static MissionQuestionDocument ToDocument(StoredMissionResultQuestion question)
+    {
+        return new MissionQuestionDocument
+        {
+            Id = question.Id,
+            Prompt = question.Prompt,
+            Kind = question.Kind,
+            BattlePoints = question.BattlePoints,
+            CampaignPoints = question.CampaignPoints,
+        };
+    }
+
+    private static StoredMissionResultQuestion FromDocument(MissionQuestionDocument question)
+    {
+        return new StoredMissionResultQuestion
+        {
+            Id = question.Id,
+            Prompt = question.Prompt,
+            Kind = string.IsNullOrWhiteSpace(question.Kind)
+                ? nameof(MissionResultQuestionKind.Boolean)
+                : question.Kind,
+            BattlePoints = Math.Max(0, question.BattlePoints),
+            CampaignPoints = Math.Max(0, question.CampaignPoints),
+        };
+    }
+
+    private static IReadOnlyList<RoundArmyEscalationSetup> ArmyEscalationsFrom(CatalogDocument document)
+    {
+        var rows = document.ArmyEscalations ?? [];
+        if (rows.Count == 0)
+        {
+            return HuntInEstaliaDefaults.ArmyEscalations(CampaignSetupRules.MinRoundCount);
+        }
+
+        return
+        [
+            .. rows
+                .Where(static row => row.RoundNumber > 0)
+                .OrderBy(static row => row.RoundNumber)
+                .Select(static row => new RoundArmyEscalationSetup(
+                    row.RoundNumber,
+                    Math.Max(0, row.MaxArmyPoints),
+                    Math.Max(0, row.FreeSupplyPoints),
+                    Math.Max(0, row.FreeCharacterCount))),
+        ];
+    }
+
     private sealed class CatalogDocument
     {
         public List<TerrainDocument> TerrainTypes { get; set; } = [];
@@ -437,6 +529,18 @@ internal static class CatalogJson
         public int LongestTerritoryChainCampaignPoints { get; set; }
 
         public int MostBattlesWonCampaignPoints { get; set; }
+
+        public int? SplitForceSupplyPenaltyPercent { get; set; }
+
+        public bool? AlwaysAskGeneralKill { get; set; }
+
+        public bool? AlwaysAskSupplyLineDestroyed { get; set; }
+
+        public int? GeneralKillCampaignPoints { get; set; }
+
+        public int? SupplyLineDestroyedCampaignPoints { get; set; }
+
+        public List<ArmyEscalationDocument>? ArmyEscalations { get; set; }
     }
 
     private sealed class BattleScoringDocument
@@ -469,6 +573,8 @@ internal static class CatalogJson
         public int CampaignPoints { get; set; }
 
         public bool IsWaterFeature { get; set; }
+
+        public int SupplyPoints { get; set; } = HuntInEstaliaDefaults.SupplyPoints;
     }
 
     private sealed class StructureDocument
@@ -492,6 +598,12 @@ internal static class CatalogJson
         public List<MissionDocument> Missions { get; set; } = [];
 
         public int CampaignPoints { get; set; }
+
+        public int SupplyPoints { get; set; } = HuntInEstaliaDefaults.SupplyPoints;
+
+        public int PillageSupplyPoints { get; set; } = HuntInEstaliaDefaults.SupplyPoints;
+
+        public int DestroySupplyPoints { get; set; } = HuntInEstaliaDefaults.SupplyPoints;
     }
 
     private sealed class ItemObjectiveDocument
@@ -543,6 +655,32 @@ internal static class CatalogJson
         public string? FileStorageKey { get; set; }
 
         public string? FileName { get; set; }
+
+        public List<MissionQuestionDocument>? ResultQuestions { get; set; }
+    }
+
+    private sealed class MissionQuestionDocument
+    {
+        public Guid Id { get; set; }
+
+        public string Prompt { get; set; } = string.Empty;
+
+        public string Kind { get; set; } = nameof(MissionResultQuestionKind.Boolean);
+
+        public int BattlePoints { get; set; }
+
+        public int CampaignPoints { get; set; }
+    }
+
+    private sealed class ArmyEscalationDocument
+    {
+        public int RoundNumber { get; set; }
+
+        public int MaxArmyPoints { get; set; }
+
+        public int FreeSupplyPoints { get; set; }
+
+        public int FreeCharacterCount { get; set; }
     }
 
     private sealed class ItemChoiceDocument

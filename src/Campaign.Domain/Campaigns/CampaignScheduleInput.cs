@@ -22,4 +22,7 @@ public sealed record CampaignScheduleInput
 
     /// <summary>Gets the ordered action and battle steps that make up one round.</summary>
     public IReadOnlyList<RoundPhaseInput>? Phases { get; init; }
+
+    /// <summary>Gets per-round army size, free supply, and free characters. Omitted values use Hunt in Estalia defaults.</summary>
+    public IReadOnlyList<RoundArmyEscalationInput>? RoundEscalations { get; init; }
 }

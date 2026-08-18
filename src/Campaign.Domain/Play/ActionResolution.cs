@@ -115,6 +115,31 @@ public static class ActionResolution
                 .ToArray();
             if (CreatesBattle(present, factionAllyGroups, broken))
             {
+                var presentIds = present.Select(static force => force.Id).ToArray();
+                var existing = battles.FirstOrDefault(item =>
+                    item.TerritoryId == territoryId
+                    && item.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved);
+                if (existing is not null)
+                {
+                    var mergedIds = existing.ParticipantForceIds.Concat(presentIds).Distinct().ToArray();
+                    var newcomers = presentIds.Except(existing.ParticipantForceIds).ToArray();
+                    var keepPairing = existing.ActiveForceIds.Count > 0;
+                    var updated = existing.With(
+                        participantForceIds: mergedIds,
+                        waitingForceIds: keepPairing
+                            ? existing.WaitingForceIds.Concat(newcomers).Distinct().ToArray()
+                            : [],
+                        activeForceIds: keepPairing ? existing.ActiveForceIds : []);
+                    var index = battles.FindIndex(item => item.Id == existing.Id);
+                    battles[index] = updated;
+                    foreach (var force in present)
+                    {
+                        inBattle.Add(force.Id);
+                    }
+
+                    continue;
+                }
+
                 var battleWindow = NextBattleWindow(state, window);
                 var battle = new CampaignBattle(
                     Guid.NewGuid(),
@@ -122,7 +147,7 @@ public static class ActionResolution
                     window.Id,
                     battleWindow?.Id,
                     BattleStatus.Pending,
-                    [.. present.Select(static force => force.Id)],
+                    presentIds,
                     winnerForceId: null,
                     isDraw: false,
                     utcNow);
@@ -182,7 +207,7 @@ public static class ActionResolution
         ArgumentNullException.ThrowIfNull(factionAllyGroups);
         if (force.InBattle)
         {
-            return [];
+            return [ActionKind.Surrender];
         }
 
         var kinds = new List<ActionKind> { ActionKind.Hold };

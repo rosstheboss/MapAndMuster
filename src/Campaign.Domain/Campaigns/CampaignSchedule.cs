@@ -16,13 +16,15 @@ public sealed class CampaignSchedule
     /// <param name="roundCount">The number of rounds.</param>
     /// <param name="roundLength">The length of each round.</param>
     /// <param name="phases">The ordered action and battle steps in one round.</param>
+    /// <param name="armyEscalations">Per-round army size, free supply, and free characters.</param>
     public CampaignSchedule(
         IanaTimeZone timeZone,
         DateTimeOffset startsUtc,
         DateTimeOffset endsUtc,
         int roundCount,
         ScheduleDuration roundLength,
-        IReadOnlyList<RoundPhaseSetup> phases)
+        IReadOnlyList<RoundPhaseSetup> phases,
+        IReadOnlyList<RoundArmyEscalationSetup>? armyEscalations = null)
     {
         ArgumentNullException.ThrowIfNull(timeZone);
         ArgumentNullException.ThrowIfNull(roundLength);
@@ -33,6 +35,7 @@ public sealed class CampaignSchedule
         RoundCount = roundCount;
         RoundLength = roundLength;
         Phases = phases;
+        ArmyEscalations = armyEscalations ?? HuntInEstaliaDefaults.ArmyEscalations(roundCount);
     }
 
     /// <summary>Gets the campaign time zone used during setup.</summary>
@@ -55,6 +58,9 @@ public sealed class CampaignSchedule
 
     /// <summary>Gets the ordered action and battle steps in one round.</summary>
     public IReadOnlyList<RoundPhaseSetup> Phases { get; }
+
+    /// <summary>Gets per-round army size, free supply, and free-character allowances.</summary>
+    public IReadOnlyList<RoundArmyEscalationSetup> ArmyEscalations { get; }
 
     /// <summary>
     /// Evaluates campaign status from the server clock. Phase boundaries belong to the following phase.

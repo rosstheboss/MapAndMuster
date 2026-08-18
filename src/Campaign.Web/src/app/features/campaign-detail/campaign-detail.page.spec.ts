@@ -85,6 +85,8 @@ const campaign = {
       isAdministrator: false,
       factionName: 'North',
       subfaction: 'Riders',
+      currentSupplyPoints: 4,
+      temporarySupplyPoints: 1,
     },
   ],
   log: [],
@@ -244,6 +246,8 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('Add a player');
     expect(compiled.querySelector('a[href^="/users/northplayer"]')?.textContent.trim()).toBe('northplayer');
     expect(compiled.textContent).toContain('Manager, Player');
+    expect(compiled.textContent).toContain('Supply 4');
+    expect(compiled.textContent).toContain('1 temporary');
     expect(compiled.textContent).toContain("Your force starts at that faction's spawn");
     expect(compiled.textContent).toContain('Public Objectives');
     expect(compiled.textContent).toContain('Private Objectives');
@@ -1070,6 +1074,83 @@ describe('CampaignDetailPage', () => {
     expect(page.isOpen('standings')).toBe(true);
     expect(page.standingsSort()).toEqual({ column: 'displayName', direction: 'asc' });
     expect(document.cookie).toContain(cookieNameFor(campaign.id));
+    http.verify();
+  });
+
+  it('asks for supply-costing units and offers surrender during an open battle', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 3,
+      currentPhaseKind: 'Battle',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        currentPhaseKind: 'Battle',
+        currentPhaseLabel: 'Battle 1',
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: ['Surrender'],
+          },
+        ],
+        battles: [
+          {
+            id: 'battle-1',
+            territoryId: 't1',
+            status: 'AwaitingResults',
+            participantForceIds: ['force-1', 'force-2'],
+            reportingForceIds: ['force-1', 'force-2'],
+            isMine: true,
+            mySubmission: null,
+            opponentSubmission: null,
+            winnerForceId: null,
+            isDraw: false,
+            needsRetreat: false,
+            canSurrender: true,
+            retreatTargets: ['t2'],
+            forceSupplies: [
+              {
+                forceId: 'force-1',
+                userId: 'user-1',
+                forceAllowancePoints: 3,
+                currentSupplyPoints: 4,
+                temporarySupplyPoints: 1,
+                alliedArmyPoints: 1000,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Supply-costing units');
+    expect(compiled.textContent).toContain('Surrender');
+    expect(compiled.textContent).toContain('army cap 1000');
     http.verify();
   });
 });

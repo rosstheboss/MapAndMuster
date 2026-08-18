@@ -299,6 +299,8 @@ public sealed class SubmitBattleResultHandler
                     return PlayMutation.Fail(scoreError);
                 }
 
+                var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
+                var isStaff = command.IsAdministrator || membership?.IsGameMaster == true;
                 if (!CampaignPlayRules.TrySubmitBattleResult(
                     state,
                     command.UserId,
@@ -310,7 +312,14 @@ public sealed class SubmitBattleResultHandler
                     out var error,
                     command.WinnerScore,
                     command.LoserScore,
-                    CampaignPlayPipeline.ForceStatuses(campaign)))
+                    CampaignPlayPipeline.ForceStatuses(campaign),
+                    CampaignPlayCatalog.ToReports(command.Reports),
+                    CampaignPlayCatalog.MissionQuestions(campaign, state.Battles.FirstOrDefault(item => item.Id == command.BattleId)?.TerritoryId ?? Guid.Empty),
+                    isStaff,
+                    map,
+                    CampaignPlayCatalog.Supply(campaign),
+                    CampaignPlayPipeline.AllyGroups(campaign),
+                    CampaignPlayCatalog.PickIndex))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -370,6 +379,8 @@ public sealed class AcceptBattleResultHandler
             command.ExpectedRevision,
             (state, map, campaign, utcNow) =>
             {
+                var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
+                var isStaff = command.IsAdministrator || membership?.IsGameMaster == true;
                 if (!CampaignPlayRules.TryAcceptBattleResult(
                     state,
                     command.UserId,
@@ -377,7 +388,12 @@ public sealed class AcceptBattleResultHandler
                     utcNow,
                     out var outcome,
                     out var error,
-                    CampaignPlayPipeline.ForceStatuses(campaign)))
+                    CampaignPlayPipeline.ForceStatuses(campaign),
+                    isStaff,
+                    map,
+                    CampaignPlayCatalog.Supply(campaign),
+                    CampaignPlayPipeline.AllyGroups(campaign),
+                    CampaignPlayCatalog.PickIndex))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -451,7 +467,13 @@ public sealed class ResolveBattleHandler
                     out var error,
                     command.WinnerScore,
                     command.LoserScore,
-                    CampaignPlayPipeline.ForceStatuses(campaign)))
+                    CampaignPlayPipeline.ForceStatuses(campaign),
+                    CampaignPlayCatalog.ToReports(command.Reports),
+                    CampaignPlayCatalog.MissionQuestions(campaign, state.Battles.FirstOrDefault(item => item.Id == command.BattleId)?.TerritoryId ?? Guid.Empty),
+                    map,
+                    CampaignPlayCatalog.Supply(campaign),
+                    CampaignPlayPipeline.AllyGroups(campaign),
+                    CampaignPlayCatalog.PickIndex))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -509,6 +531,69 @@ public sealed class SubmitRetreatHandler
                     out var outcome,
                     out var error,
                     CampaignPlayPipeline.ForceStatuses(campaign)))
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.FromOutcome(outcome!);
+            },
+            cancellationToken,
+            _notifications);
+    }
+}
+
+/// <summary>
+/// Commits a surrender and retreat while the force is engaged.
+/// </summary>
+public sealed class SubmitSurrenderHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public SubmitSurrenderHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Saves a committed surrender destination.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(SubmitRetreatCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignPlayPipeline.MutateAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, map, campaign, utcNow) =>
+            {
+                if (!CampaignPlayRules.TrySubmitSurrender(
+                    state,
+                    map,
+                    command.UserId,
+                    command.BattleId,
+                    command.TargetTerritoryId,
+                    utcNow,
+                    out var outcome,
+                    out var error,
+                    CampaignPlayPipeline.ForceStatuses(campaign),
+                    CampaignPlayPipeline.AllyGroups(campaign),
+                    campaign.BattleScoring))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -1365,7 +1450,7 @@ internal static class BattleScoreRequirements
         ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(command);
         error = null;
-        if (!campaign.BattleScoring.UseDifferential || command.IsDraw)
+        if (command.Reports is { Count: > 0 } || !campaign.BattleScoring.UseDifferential || command.IsDraw)
         {
             return true;
         }

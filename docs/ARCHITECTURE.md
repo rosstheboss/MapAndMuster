@@ -78,6 +78,10 @@ Modules may initially share a database and process. Keep public module interacti
 - A sanitized raster image is the background.
 - Territories use normalized polygon coordinates stored with the campaign overlay graph as JSONB.
 - Terrain types, structures, and nested missions are stored with the campaign as JSONB catalogs.
+- Named campaign presets live in their own table with catalog JSON, settings JSON, overlay graph
+  JSON, and a map storage key. Only administrators may save or overwrite a preset; managers and
+  administrators may apply one. Preset map and catalog files count as references so campaign
+  file cleanup does not delete them while a preset still uses them.
 - Structure logos, faction flags, and mission documents are stored outside web root; file keys are not
   returned to clients. Replacing or deleting a campaign map, flag, logo, or mission file deletes the
   previous stored file when nothing else references it. Only user-uploaded files are deleted; built-in

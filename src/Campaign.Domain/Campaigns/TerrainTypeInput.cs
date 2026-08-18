@@ -19,4 +19,7 @@ public sealed class TerrainTypeInput
 
     /// <summary>Gets whether this terrain is a water feature. Defaults to false.</summary>
     public bool? IsWaterFeature { get; init; }
+
+    /// <summary>Gets supply points granted by a controlled territory of this terrain. Defaults to 1.</summary>
+    public int? SupplyPoints { get; init; }
 }

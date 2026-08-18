@@ -12,13 +12,20 @@ public sealed class MissionSetup
     /// <param name="name">The mission name.</param>
     /// <param name="url">The optional http or https link.</param>
     /// <param name="clearFile">Whether an existing uploaded file should be removed.</param>
-    public MissionSetup(Guid id, string name, string? url, bool clearFile)
+    /// <param name="resultQuestions">Questions asked when reporting this mission's battle result.</param>
+    public MissionSetup(
+        Guid id,
+        string name,
+        string? url,
+        bool clearFile,
+        IReadOnlyList<MissionResultQuestionSetup>? resultQuestions = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Id = id;
         Name = name;
         Url = url;
         ClearFile = clearFile;
+        ResultQuestions = resultQuestions ?? [];
     }
 
     /// <summary>Gets the mission identifier.</summary>
@@ -32,4 +39,7 @@ public sealed class MissionSetup
 
     /// <summary>Gets whether an existing uploaded file should be removed.</summary>
     public bool ClearFile { get; }
+
+    /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
+    public IReadOnlyList<MissionResultQuestionSetup> ResultQuestions { get; }
 }

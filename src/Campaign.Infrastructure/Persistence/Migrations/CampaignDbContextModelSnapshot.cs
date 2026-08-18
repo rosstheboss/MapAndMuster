@@ -491,6 +491,52 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                     b.ToTable("CampaignSubfactions", (string)null);
                 });
 
+            modelBuilder.Entity("Campaign.Infrastructure.Persistence.Entities.CampaignPresetRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CatalogJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MapGraphJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("MapStorageKey")
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("SettingsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedName")
+                        .IsUnique();
+
+                    b.ToTable("CampaignPresets", (string)null);
+                });
+
             modelBuilder.Entity("Campaign.Infrastructure.Persistence.NewsArticleRecord", b =>
                 {
                     b.Property<Guid>("Id")

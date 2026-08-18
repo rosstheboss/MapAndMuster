@@ -89,6 +89,29 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/{campaignId:guid}/presets", SavePresetAsync)
+            .WithName("SaveCampaignPreset")
+            .Produces<CampaignPresetListItemResponse>(StatusCodes.Status201Created)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/apply-preset", ApplyPresetAsync)
+            .WithName("ApplyCampaignPreset")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        var presets = app.MapGroup("/api/campaign-presets").WithTags("CampaignPresets").RequireAuthorization();
+        presets.MapGet("", ListPresetsAsync)
+            .WithName("ListCampaignPresets")
+            .Produces<IReadOnlyList<CampaignPresetListItemResponse>>();
+        presets.MapGet("/{presetId:guid}", GetPresetAsync)
+            .WithName("GetCampaignPreset")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
         group.MapPut("/{campaignId:guid}", UpdateAsync)
             .WithName("UpdateCampaign")
             .Produces<CampaignDetailResponse>()
@@ -264,6 +287,14 @@ public static class CampaignEndpoints
 
         group.MapPost("/{campaignId:guid}/play/retreat", SubmitRetreatAsync)
             .WithName("SubmitCampaignRetreat")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/surrender", SubmitSurrenderAsync)
+            .WithName("SubmitCampaignSurrender")
             .Produces<CampaignPlayResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
@@ -448,6 +479,11 @@ public static class CampaignEndpoints
                     MostTerritoriesCampaignPoints = request.MostTerritoriesCampaignPoints,
                     LongestTerritoryChainCampaignPoints = request.LongestTerritoryChainCampaignPoints,
                     MostBattlesWonCampaignPoints = request.MostBattlesWonCampaignPoints,
+                    SplitForceSupplyPenaltyPercent = request.SplitForceSupplyPenaltyPercent,
+                    AlwaysAskGeneralKill = request.AlwaysAskGeneralKill,
+                    AlwaysAskSupplyLineDestroyed = request.AlwaysAskSupplyLineDestroyed,
+                    GeneralKillCampaignPoints = request.GeneralKillCampaignPoints,
+                    SupplyLineDestroyedCampaignPoints = request.SupplyLineDestroyedCampaignPoints,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -758,6 +794,11 @@ public static class CampaignEndpoints
                     MostTerritoriesCampaignPoints = request.MostTerritoriesCampaignPoints,
                     LongestTerritoryChainCampaignPoints = request.LongestTerritoryChainCampaignPoints,
                     MostBattlesWonCampaignPoints = request.MostBattlesWonCampaignPoints,
+                    SplitForceSupplyPenaltyPercent = request.SplitForceSupplyPenaltyPercent,
+                    AlwaysAskGeneralKill = request.AlwaysAskGeneralKill,
+                    AlwaysAskSupplyLineDestroyed = request.AlwaysAskSupplyLineDestroyed,
+                    GeneralKillCampaignPoints = request.GeneralKillCampaignPoints,
+                    SupplyLineDestroyedCampaignPoints = request.SupplyLineDestroyedCampaignPoints,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -817,6 +858,105 @@ public static class CampaignEndpoints
         }
 
         return Results.Created($"/api/campaigns/{result.Value.Id}", CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> ListPresetsAsync(
+        ListCampaignPresetsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(result.Value.Select(CampaignResponses.FromPresetListItem).ToArray());
+    }
+
+    private static async Task<IResult> GetPresetAsync(
+        Guid presetId,
+        ClaimsPrincipal principal,
+        GetCampaignPresetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(presetId, userId.Value, cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> SavePresetAsync(
+        Guid campaignId,
+        SaveCampaignPresetRequest request,
+        ClaimsPrincipal principal,
+        SaveCampaignPresetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SaveCampaignPresetCommand
+                {
+                    CampaignId = campaignId,
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    Name = request.Name,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Created($"/api/campaign-presets/{result.Value.Id}", CampaignResponses.FromPresetListItem(result.Value));
+    }
+
+    private static async Task<IResult> ApplyPresetAsync(
+        Guid campaignId,
+        ApplyCampaignPresetRequest request,
+        ClaimsPrincipal principal,
+        ApplyCampaignPresetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ApplyCampaignPresetCommand
+                {
+                    CampaignId = campaignId,
+                    PresetId = request.PresetId,
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    Revision = request.Revision,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
     }
 
     private static async Task<IResult> GetMapAsync(
@@ -1494,6 +1634,7 @@ public static class CampaignEndpoints
                     IsDraw = request.IsDraw,
                     WinnerScore = request.WinnerScore,
                     LoserScore = request.LoserScore,
+                    Reports = PlayResponses.ToReportInputs(request.Reports),
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -1555,6 +1696,34 @@ public static class CampaignEndpoints
         return PlayResult(result);
     }
 
+    private static async Task<IResult> SubmitSurrenderAsync(
+        Guid campaignId,
+        SubmitRetreatRequest request,
+        ClaimsPrincipal principal,
+        SubmitSurrenderHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SubmitRetreatCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                    TargetTerritoryId = request.TargetTerritoryId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
     private static async Task<IResult> ResolveBattleAsync(
         Guid campaignId,
         SubmitBattleResultRequest request,
@@ -1580,6 +1749,7 @@ public static class CampaignEndpoints
                     IsDraw = request.IsDraw,
                     WinnerScore = request.WinnerScore,
                     LoserScore = request.LoserScore,
+                    Reports = PlayResponses.ToReportInputs(request.Reports),
                 },
                 cancellationToken)
             .ConfigureAwait(false);

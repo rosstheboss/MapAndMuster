@@ -28,7 +28,8 @@ public sealed class CampaignPlayState
         DateTimeOffset? debugStartedUtc = null,
         IReadOnlyList<PublicObjectiveAward>? publicObjectiveAwards = null,
         IReadOnlyList<PrivateObjectiveAssignment>? privateObjectives = null,
-        IReadOnlyList<StructureDestructionFact>? structureDestructions = null)
+        IReadOnlyList<StructureDestructionFact>? structureDestructions = null,
+        IReadOnlyList<PlayerSupplyBalance>? playerSupplies = null)
     {
         ArgumentNullException.ThrowIfNull(windows);
         ArgumentNullException.ThrowIfNull(forces);
@@ -60,6 +61,7 @@ public sealed class CampaignPlayState
         PublicObjectiveAwards = publicObjectiveAwards ?? [];
         PrivateObjectives = privateObjectives ?? [];
         StructureDestructions = structureDestructions ?? [];
+        PlayerSupplies = playerSupplies ?? [];
     }
 
     /// <summary>Gets an empty play state.</summary>
@@ -119,6 +121,9 @@ public sealed class CampaignPlayState
     /// <summary>Gets append-only facts for destroyed structures.</summary>
     public IReadOnlyList<StructureDestructionFact> StructureDestructions { get; }
 
+    /// <summary>Gets remaining temporary supply per player.</summary>
+    public IReadOnlyList<PlayerSupplyBalance> PlayerSupplies { get; }
+
     /// <summary>
     /// Returns a copy with replaced collections.
     /// </summary>
@@ -141,7 +146,8 @@ public sealed class CampaignPlayState
         bool clearDebug = false,
         IReadOnlyList<PublicObjectiveAward>? publicObjectiveAwards = null,
         IReadOnlyList<PrivateObjectiveAssignment>? privateObjectives = null,
-        IReadOnlyList<StructureDestructionFact>? structureDestructions = null)
+        IReadOnlyList<StructureDestructionFact>? structureDestructions = null,
+        IReadOnlyList<PlayerSupplyBalance>? playerSupplies = null)
     {
         return new CampaignPlayState(
             windows ?? Windows,
@@ -161,7 +167,8 @@ public sealed class CampaignPlayState
             clearDebug ? null : debugStartedUtc ?? DebugStartedUtc,
             publicObjectiveAwards ?? PublicObjectiveAwards,
             privateObjectives ?? PrivateObjectives,
-            structureDestructions ?? StructureDestructions);
+            structureDestructions ?? StructureDestructions,
+            playerSupplies ?? PlayerSupplies);
     }
 
     /// <summary>

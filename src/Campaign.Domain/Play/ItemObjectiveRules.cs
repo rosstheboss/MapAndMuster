@@ -147,7 +147,7 @@ public static class ItemObjectiveRules
         ArgumentNullException.ThrowIfNull(battle);
         ArgumentNullException.ThrowIfNull(forces);
         ArgumentNullException.ThrowIfNull(log);
-        if (battle.IsDraw || battle.WinnerForceId is not { } winnerId)
+        if (battle.IsDraw || battle.IsNoContest || battle.WinnerForceId is not { } winnerId)
         {
             return items;
         }

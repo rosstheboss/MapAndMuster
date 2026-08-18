@@ -114,8 +114,9 @@ internal static class CampaignPlayMapper
             : [];
 
         var battles = play.Battles
-            .Where(battle => window is not null && battle.BattleWindowId == window.Id)
-            .Select(battle => ToBattle(play, map, battle, viewerUserId))
+            .Where(battle => battle.Status is BattleStatus.Pending or BattleStatus.AwaitingResults or BattleStatus.Disputed
+                || (window is not null && battle.BattleWindowId == window.Id))
+            .Select(battle => ToBattle(play, map, campaign, battle, viewerUserId, canDebug))
             .ToArray();
 
         _ = revealed;
@@ -282,56 +283,131 @@ internal static class CampaignPlayMapper
     private static PlayBattleDetail ToBattle(
         CampaignPlayState play,
         PlayMap map,
+        StoredCampaign campaign,
         CampaignBattle battle,
-        Guid viewerUserId)
+        Guid viewerUserId,
+        bool canStaff)
     {
         var myForce = play.Forces.FirstOrDefault(force =>
             force.ControllerUserId == viewerUserId && battle.ParticipantForceIds.Contains(force.Id));
         var opponent = play.Forces.FirstOrDefault(force =>
             force.ControllerUserId != viewerUserId && battle.ParticipantForceIds.Contains(force.Id));
-        var mine = myForce is null ? null : play.LatestBattleSubmission(battle.Id, viewerUserId);
+        var mine = play.LatestBattleSubmission(battle.Id, viewerUserId);
         var theirs = opponent is null ? null : play.LatestBattleSubmission(battle.Id, opponent.ControllerUserId);
         var needsRetreat = myForce is not null
             && battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved
-            && !battle.IsDraw
-            && battle.WinnerForceId != myForce.Id
-            && !play.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == myForce.Id);
+            && !play.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == myForce.Id)
+            && (battle.IsNoContest || battle.IsDraw || battle.WinnerForceId != myForce.Id);
+        var canSurrender = myForce is not null
+            && myForce.InBattle
+            && battle.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved
+            && !battle.SurrenderedForceIds.Contains(myForce.Id)
+            && !play.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == myForce.Id && item.IsSurrender);
+        var round = play.CurrentWindow()?.RoundNumber
+            ?? (play.Windows.Count > 0 ? play.Windows[^1].RoundNumber : 1);
+        var catalog = CampaignPlayCatalog.Supply(campaign);
+        var questions = CampaignPlayCatalog.MissionQuestions(campaign, battle.TerritoryId);
+        var allies = campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName);
+        var reportingForces = battle.ReportingForceIds
+            .Select(forceId => play.Forces.FirstOrDefault(force => force.Id == forceId))
+            .OfType<CampaignForce>()
+            .ToArray();
+        var sides = BattleMatchRules.Sides(reportingForces, allies, play.BrokenAllyFactionIds);
+        var forceSupplies = battle.ParticipantForceIds
+            .Select(forceId => play.Forces.FirstOrDefault(force => force.Id == forceId))
+            .OfType<CampaignForce>()
+            .Select(force =>
+            {
+                var snapshot = SupplyRules.ForPlayer(play, map, catalog, force.ControllerUserId, round);
+                var sideCount = sides.FirstOrDefault(side => side.Any(member => member.Id == force.Id))?.Count ?? 1;
+                return new PlayBattleForceSupplyDetail
+                {
+                    ForceId = force.Id,
+                    UserId = force.ControllerUserId,
+                    ForceAllowancePoints = snapshot.ForceAllowancePoints,
+                    CurrentSupplyPoints = snapshot.CurrentSupplyPoints,
+                    TemporarySupplyPoints = snapshot.TemporarySupplyPoints,
+                    AlliedArmyPoints = AlliedArmyPointRules.ForceArmyPoints(snapshot.MaxArmyPoints, sideCount),
+                };
+            })
+            .ToArray();
+        var viewerSupply = forceSupplies.FirstOrDefault(item => item.UserId == viewerUserId);
         return new PlayBattleDetail
         {
             Id = battle.Id,
             TerritoryId = battle.TerritoryId,
             Status = battle.Status.ToString(),
             ParticipantForceIds = battle.ParticipantForceIds,
+            ActiveForceIds = battle.ActiveForceIds,
+            WaitingForceIds = battle.WaitingForceIds,
+            ReportingForceIds = battle.ReportingForceIds,
+            IsNoContest = battle.IsNoContest,
             IsMine = myForce is not null,
-            MySubmission = mine is null
-                ? null
-                : new PlayBattleSubmissionDetail
-                {
-                    SubmitterUserId = mine.SubmitterUserId,
-                    WinnerForceId = mine.WinnerForceId,
-                    IsDraw = mine.IsDraw,
-                    WinnerScore = mine.WinnerScore,
-                    LoserScore = mine.LoserScore,
-                },
-            OpponentSubmission = theirs is null || myForce is null
-                ? null
-                : new PlayBattleSubmissionDetail
-                {
-                    SubmitterUserId = theirs.SubmitterUserId,
-                    WinnerForceId = theirs.WinnerForceId,
-                    IsDraw = theirs.IsDraw,
-                    WinnerScore = theirs.WinnerScore,
-                    LoserScore = theirs.LoserScore,
-                },
+            MySubmission = ToSubmission(mine),
+            OpponentSubmission = myForce is null ? null : ToSubmission(theirs),
             WinnerForceId = battle.WinnerForceId,
             IsDraw = battle.IsDraw,
             WinnerScore = battle.WinnerScore,
             LoserScore = battle.LoserScore,
             NeedsRetreat = needsRetreat,
-            RetreatTargets = needsRetreat && myForce is not null
+            CanSurrender = canSurrender,
+            RetreatTargets = (needsRetreat || canSurrender) && myForce is not null
                 ? CampaignPlayRules.EligibleRetreats(map, myForce)
                 : [],
+            ResultQuestions =
+            [
+                .. questions.Select(static question => new MissionResultQuestionDetail
+                {
+                    Id = question.Id,
+                    Prompt = question.Prompt,
+                    Kind = question.Kind.ToString(),
+                    BattlePoints = question.BattlePoints,
+                    CampaignPoints = question.CampaignPoints,
+                }),
+            ],
+            ViewerSupplyPoints = viewerSupply?.CurrentSupplyPoints,
+            ForceSupplies = forceSupplies,
+            CanStaffConfirm = canStaff
+                && battle.Status is BattleStatus.AwaitingResults or BattleStatus.Disputed
+                && play.BattleSubmissions.Any(item => item.BattleId == battle.Id && item.AcceptedSubmissionId is null),
         };
+    }
+
+    private static PlayBattleSubmissionDetail? ToSubmission(BattleResultSubmission? submission)
+    {
+        return submission is null
+            ? null
+            : new PlayBattleSubmissionDetail
+            {
+                SubmitterUserId = submission.SubmitterUserId,
+                WinnerForceId = submission.WinnerForceId,
+                IsDraw = submission.IsDraw,
+                WinnerScore = submission.WinnerScore,
+                LoserScore = submission.LoserScore,
+                Reports =
+                [
+                    .. submission.Reports.Select(static report => new BattleParticipantReportDetail
+                    {
+                        ForceId = report.ForceId,
+                        VictoryPoints = report.VictoryPoints,
+                        ArmyPoints = report.ArmyPoints,
+                        DifferentialBattlePoints = report.DifferentialBattlePoints,
+                        BonusBattlePoints = report.BonusBattlePoints,
+                        KilledEnemyGeneral = report.KilledEnemyGeneral,
+                        DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
+                        SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                        Answers =
+                        [
+                            .. report.Answers.Select(static answer => new BattleQuestionAnswerDetail
+                            {
+                                QuestionId = answer.QuestionId,
+                                BooleanValue = answer.BooleanValue,
+                                BattlePointsValue = answer.BattlePointsValue,
+                            }),
+                        ],
+                    }),
+                ],
+            };
     }
 
     internal static IReadOnlyList<PlayLogEntryDetail> ToLogEntries(
@@ -444,6 +520,15 @@ internal static class CampaignPlayMapper
             var faction = membership.FactionId is { } factionId
                 ? campaign.Factions.FirstOrDefault(item => item.Id == factionId)
                 : null;
+            PlayerSupplySnapshot? supply = null;
+            if (campaign.PlayState is { Forces.Count: > 0 } play && membership.IsPlayer)
+            {
+                var map = CampaignLifecycle.ToPlayMap(campaign);
+                var round = play.CurrentWindow()?.RoundNumber
+                    ?? (play.Windows.Count > 0 ? play.Windows[^1].RoundNumber : 1);
+                supply = SupplyRules.ForPlayer(play, map, CampaignPlayCatalog.Supply(campaign), membership.UserId, round);
+            }
+
             participants.Add(new CampaignParticipantDetail
             {
                 UserId = membership.UserId,
@@ -458,6 +543,12 @@ internal static class CampaignPlayMapper
                 FactionColor = faction?.Color,
                 HasFlagImage = !string.IsNullOrWhiteSpace(faction?.FlagImageStorageKey),
                 AllyGroupName = faction?.AllyGroupName,
+                CurrentSupplyPoints = supply?.CurrentSupplyPoints,
+                TemporarySupplyPoints = supply?.TemporarySupplyPoints,
+                MapSupplyPoints = supply?.MapSupplyPoints,
+                RoundFreeSupplyPoints = supply?.RoundFreeSupplyPoints,
+                MaxArmyPoints = supply?.MaxArmyPoints,
+                FreeCharacterCount = supply?.FreeCharacterCount,
             });
         }
 
@@ -591,7 +682,9 @@ internal static class CampaignPlayMapper
             PlayLogKind.BattleCreated =>
                 $"A battle started in {territory} between {participants}.",
             PlayLogKind.BattleFinalized =>
-                entry.ForceId is { } winner
+                play.Battles.FirstOrDefault(item => item.Id == entry.BattleId)?.IsNoContest == true
+                    ? $"Battle in {territory} ended with no winner."
+                    : entry.ForceId is { } winner
                     ? $"Battle in {territory} was finalized. Winner: {ForceController(play, winner, names)}."
                     : $"Battle in {territory} was finalized as a draw.",
             PlayLogKind.BattleDisputed =>
@@ -602,6 +695,12 @@ internal static class CampaignPlayMapper
                     : $"{actor} overrode the battle result in {territory} as a draw.",
             PlayLogKind.PlayerRetreat =>
                 $"{actor} retreated from {territory} to {target}.",
+            PlayLogKind.PlayerSurrendered =>
+                $"{actor} surrendered in {territory} and retreated to {target}.",
+            PlayLogKind.RetreatCollisionResolved =>
+                $"{actor} was displaced from {territory} to {target} after a retreat collision.",
+            PlayLogKind.BattleMatchAdvanced =>
+                $"The next pairing in {territory} is {participants}.",
             PlayLogKind.DefaultRetreat =>
                 $"A missing retreat for {actor} used the spawn fallback at {target}.",
             PlayLogKind.UnresolvedBattleHeldOpen =>

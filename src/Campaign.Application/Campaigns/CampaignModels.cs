@@ -191,6 +191,25 @@ public sealed class CampaignDetail
     /// <summary>Gets campaign points for most battle wins. Zero ignores the objective.</summary>
     public int MostBattlesWonCampaignPoints { get; init; }
 
+    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    public int SplitForceSupplyPenaltyPercent { get; init; } =
+        Campaign.Domain.Campaigns.HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
+
+    /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
+    public bool AlwaysAskGeneralKill { get; init; } = true;
+
+    /// <summary>Gets whether every battle report asks if the enemy supply line was destroyed.</summary>
+    public bool AlwaysAskSupplyLineDestroyed { get; init; } = true;
+
+    /// <summary>Gets campaign points awarded for a slain enemy general.</summary>
+    public int GeneralKillCampaignPoints { get; init; } = 1;
+
+    /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
+    public int SupplyLineDestroyedCampaignPoints { get; init; } = 1;
+
+    /// <summary>Gets per-round army size, free supply, and free-character allowances.</summary>
+    public IReadOnlyList<RoundArmyEscalationDetail> RoundEscalations { get; init; } = [];
+
     /// <summary>Gets current campaign-point standings for players.</summary>
     public IReadOnlyList<CampaignPointStandingDetail> Standings { get; init; } = [];
 
@@ -319,6 +338,24 @@ public sealed class CampaignParticipantDetail
 
     /// <summary>Gets the ally-group name for the chosen faction, when one applies.</summary>
     public string? AllyGroupName { get; init; }
+
+    /// <summary>Gets the maximum one of this player's forces can spend if assigned the remaining temporary pool.</summary>
+    public int? CurrentSupplyPoints { get; init; }
+
+    /// <summary>Gets remaining player-pool temporary supply, when play has started.</summary>
+    public int? TemporarySupplyPoints { get; init; }
+
+    /// <summary>Gets map supply from connected territories and operational structures.</summary>
+    public int? MapSupplyPoints { get; init; }
+
+    /// <summary>Gets free supply granted this round.</summary>
+    public int? RoundFreeSupplyPoints { get; init; }
+
+    /// <summary>Gets this round's maximum army points size.</summary>
+    public int? MaxArmyPoints { get; init; }
+
+    /// <summary>Gets free characters whose base cost does not count against supply this round.</summary>
+    public int? FreeCharacterCount { get; init; }
 }
 
 /// <summary>
@@ -547,6 +584,17 @@ public sealed class StoredCampaign
     public Campaign.Domain.Campaigns.GeneralPublicObjectivePoints RankingObjectivePoints { get; init; } =
         Campaign.Domain.Campaigns.GeneralPublicObjectivePoints.None;
 
+    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    public int SplitForceSupplyPenaltyPercent { get; init; } =
+        Campaign.Domain.Campaigns.HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
+
+    /// <summary>Gets always-asked battle-report questions and their campaign points.</summary>
+    public Campaign.Domain.Campaigns.BattleReportRulesSetup BattleReportRules { get; init; } =
+        Campaign.Domain.Campaigns.BattleReportRulesSetup.Default;
+
+    /// <summary>Gets per-round army size, free supply, and free-character allowances.</summary>
+    public IReadOnlyList<Campaign.Domain.Campaigns.RoundArmyEscalationSetup> ArmyEscalations { get; init; } = [];
+
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon => BattleScoring.PointsPerWin;
 }
@@ -685,6 +733,9 @@ public sealed class TerrainTypeDetail
     /// <summary>Gets campaign points awarded for currently owning a territory of this terrain.</summary>
     public int CampaignPoints { get; init; }
 
+    /// <summary>Gets supply points granted by a controlled territory of this terrain.</summary>
+    public int SupplyPoints { get; init; } = 1;
+
     /// <summary>Gets whether this terrain is a water feature.</summary>
     public bool IsWaterFeature { get; init; }
 }
@@ -723,6 +774,15 @@ public sealed class StructureTypeDetail
 
     /// <summary>Gets campaign points awarded for currently controlling this structure when it is not destroyed.</summary>
     public int CampaignPoints { get; init; }
+
+    /// <summary>Gets ongoing map supply while this structure is operational.</summary>
+    public int SupplyPoints { get; init; } = 1;
+
+    /// <summary>Gets temporary supply awarded when this structure is pillaged.</summary>
+    public int PillageSupplyPoints { get; init; } = 1;
+
+    /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
+    public int DestroySupplyPoints { get; init; } = 1;
 }
 
 /// <summary>
@@ -1086,6 +1146,48 @@ public sealed class MissionDetail
 
     /// <summary>Gets the original uploaded file name, when a file is stored.</summary>
     public string? FileName { get; init; }
+
+    /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
+    public IReadOnlyList<MissionResultQuestionDetail> ResultQuestions { get; init; } = [];
+}
+
+/// <summary>
+/// A campaign-manager-written question asked on a mission battle report.
+/// </summary>
+public sealed class MissionResultQuestionDetail
+{
+    /// <summary>Gets the question identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the question text.</summary>
+    public required string Prompt { get; init; }
+
+    /// <summary>Gets Boolean or BattlePoints.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets battle points awarded when a boolean answer is true.</summary>
+    public int BattlePoints { get; init; }
+
+    /// <summary>Gets campaign points awarded when the question is scored.</summary>
+    public int CampaignPoints { get; init; }
+}
+
+/// <summary>
+/// Per-round army size and free allowances.
+/// </summary>
+public sealed class RoundArmyEscalationDetail
+{
+    /// <summary>Gets the 1-based round.</summary>
+    public required int RoundNumber { get; init; }
+
+    /// <summary>Gets the maximum army points size for the round.</summary>
+    public required int MaxArmyPoints { get; init; }
+
+    /// <summary>Gets free supply points granted this round.</summary>
+    public required int FreeSupplyPoints { get; init; }
+
+    /// <summary>Gets how many characters have a free base cost against supply.</summary>
+    public required int FreeCharacterCount { get; init; }
 }
 
 /// <summary>
@@ -1107,6 +1209,9 @@ public sealed class StoredTerrainType
 
     /// <summary>Gets campaign points awarded for currently owning a territory of this terrain.</summary>
     public int CampaignPoints { get; init; }
+
+    /// <summary>Gets supply points granted by a controlled territory of this terrain.</summary>
+    public int SupplyPoints { get; init; } = 1;
 
     /// <summary>Gets whether this terrain is a water feature.</summary>
     public bool IsWaterFeature { get; init; }
@@ -1146,6 +1251,15 @@ public sealed class StoredStructureType
 
     /// <summary>Gets campaign points awarded for currently controlling this structure when it is not destroyed.</summary>
     public int CampaignPoints { get; init; }
+
+    /// <summary>Gets ongoing map supply while this structure is operational.</summary>
+    public int SupplyPoints { get; init; } = 1;
+
+    /// <summary>Gets temporary supply awarded when this structure is pillaged.</summary>
+    public int PillageSupplyPoints { get; init; } = 1;
+
+    /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
+    public int DestroySupplyPoints { get; init; } = 1;
 }
 
 /// <summary>
@@ -1338,4 +1452,28 @@ public sealed class StoredMission
 
     /// <summary>Gets the original uploaded file name.</summary>
     public string? FileName { get; init; }
+
+    /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
+    public IReadOnlyList<StoredMissionResultQuestion> ResultQuestions { get; init; } = [];
+}
+
+/// <summary>
+/// A persisted mission result question.
+/// </summary>
+public sealed class StoredMissionResultQuestion
+{
+    /// <summary>Gets the question identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the question text.</summary>
+    public required string Prompt { get; init; }
+
+    /// <summary>Gets Boolean or BattlePoints.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets battle points awarded when a boolean answer is true.</summary>
+    public int BattlePoints { get; init; }
+
+    /// <summary>Gets campaign points awarded when the question is scored.</summary>
+    public int CampaignPoints { get; init; }
 }

@@ -6,6 +6,7 @@ import type {
   CampaignDetail,
   CampaignListItem,
   CampaignPlayDetail,
+  CampaignPresetListItem,
   ChooseFactionPayload,
   ExtendCampaignSchedulePayload,
   MapGraphDetail,
@@ -323,6 +324,14 @@ export class CampaignService {
     );
   }
 
+  async submitSurrender(campaignId: string, payload: SubmitRetreatPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/surrender`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
   async resolveBattle(campaignId: string, payload: SubmitBattleResultPayload): Promise<CampaignPlayDetail> {
     return firstValueFrom(
       this.http.post<CampaignPlayDetail>(
@@ -433,6 +442,38 @@ export class CampaignService {
       this.http.post<CampaignPlayDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/play/item-objectives/choices`,
         payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async listPresets(): Promise<CampaignPresetListItem[]> {
+    return firstValueFrom(this.http.get<CampaignPresetListItem[]>('/api/campaign-presets', { withCredentials: true }));
+  }
+
+  async getPreset(presetId: string): Promise<CampaignDetail> {
+    return firstValueFrom(
+      this.http.get<CampaignDetail>(`/api/campaign-presets/${encodeURIComponent(presetId)}`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async saveAsPreset(campaignId: string, name: string): Promise<CampaignPresetListItem> {
+    return firstValueFrom(
+      this.http.post<CampaignPresetListItem>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/presets`,
+        { name },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async applyPresetMap(campaignId: string, presetId: string, revision: number): Promise<CampaignDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/apply-preset`,
+        { presetId, revision },
         { withCredentials: true },
       ),
     );

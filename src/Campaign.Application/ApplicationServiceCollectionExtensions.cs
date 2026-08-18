@@ -44,6 +44,10 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<AssignPlayerFactionHandler>();
         services.AddScoped<DeleteCampaignHandler>();
         services.AddScoped<DuplicateCampaignHandler>();
+        services.AddScoped<ListCampaignPresetsHandler>();
+        services.AddScoped<GetCampaignPresetHandler>();
+        services.AddScoped<SaveCampaignPresetHandler>();
+        services.AddScoped<ApplyCampaignPresetHandler>();
         services.AddScoped<UploadCampaignMapHandler>();
         services.AddScoped<GetCampaignMapHandler>();
         services.AddScoped<GetCampaignMapGraphHandler>();
@@ -64,6 +68,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<AcceptBattleResultHandler>();
         services.AddScoped<ResolveBattleHandler>();
         services.AddScoped<SubmitRetreatHandler>();
+        services.AddScoped<SubmitSurrenderHandler>();
         services.AddScoped<ExtendCampaignScheduleHandler>();
         services.AddScoped<ChooseFactionHandler>();
         services.AddScoped<EnterCampaignDebugHandler>();

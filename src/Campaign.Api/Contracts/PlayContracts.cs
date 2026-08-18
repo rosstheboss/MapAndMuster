@@ -317,6 +317,18 @@ public sealed class PlayBattleResponse
     /// <summary>Gets participating force identifiers.</summary>
     public required IReadOnlyList<Guid> ParticipantForceIds { get; init; }
 
+    /// <summary>Gets forces in the current tabletop pairing.</summary>
+    public IReadOnlyList<Guid> ActiveForceIds { get; init; } = [];
+
+    /// <summary>Gets forces waiting for a later pairing.</summary>
+    public IReadOnlyList<Guid> WaitingForceIds { get; init; } = [];
+
+    /// <summary>Gets forces that must currently report a tabletop result.</summary>
+    public IReadOnlyList<Guid> ReportingForceIds { get; init; } = [];
+
+    /// <summary>Gets whether every remaining force ran and nobody won.</summary>
+    public bool IsNoContest { get; init; }
+
     /// <summary>Gets whether the viewer participates.</summary>
     public required bool IsMine { get; init; }
 
@@ -343,6 +355,21 @@ public sealed class PlayBattleResponse
 
     /// <summary>Gets eligible retreat destinations.</summary>
     public required IReadOnlyList<Guid> RetreatTargets { get; init; }
+
+    /// <summary>Gets whether the viewer may surrender this engagement.</summary>
+    public bool CanSurrender { get; init; }
+
+    /// <summary>Gets questions to ask when reporting this battle's result.</summary>
+    public IReadOnlyList<MissionResultQuestionResponse> ResultQuestions { get; init; } = [];
+
+    /// <summary>Gets the viewer's current spendable supply, when participating.</summary>
+    public int? ViewerSupplyPoints { get; init; }
+
+    /// <summary>Gets current supply for each participating force.</summary>
+    public IReadOnlyList<PlayBattleForceSupplyResponse> ForceSupplies { get; init; } = [];
+
+    /// <summary>Gets whether a staff member may confirm the outstanding report.</summary>
+    public bool CanStaffConfirm { get; init; }
 }
 
 /// <summary>A battle result the viewer is allowed to see.</summary>
@@ -362,6 +389,75 @@ public sealed class PlayBattleSubmissionResponse
 
     /// <summary>Gets the reported loser score.</summary>
     public int? LoserScore { get; init; }
+
+    /// <summary>Gets structured per-force reports, when submitted.</summary>
+    public IReadOnlyList<BattleParticipantReportResponse> Reports { get; init; } = [];
+}
+
+/// <summary>One force's structured battle report.</summary>
+public sealed class BattleParticipantReportResponse
+{
+    /// <summary>Gets the reported force.</summary>
+    public required Guid ForceId { get; init; }
+
+    /// <summary>Gets tabletop victory points.</summary>
+    public int VictoryPoints { get; init; }
+
+    /// <summary>Gets the army size in points used in the battle.</summary>
+    public int ArmyPoints { get; init; }
+
+    /// <summary>Gets battle points converted from victory points.</summary>
+    public int DifferentialBattlePoints { get; init; }
+
+    /// <summary>Gets bonus battle points from the mission.</summary>
+    public int BonusBattlePoints { get; init; }
+
+    /// <summary>Gets how many supply-costing units this force fielded.</summary>
+    public int SupplyCostingUnitCount { get; init; }
+
+    /// <summary>Gets whether the reporter killed the opponent's general.</summary>
+    public bool KilledEnemyGeneral { get; init; }
+
+    /// <summary>Gets whether the reporter destroyed the enemy supply line.</summary>
+    public bool DestroyedEnemySupplyLine { get; init; }
+
+    /// <summary>Gets answers to extra mission questions.</summary>
+    public IReadOnlyList<BattleQuestionAnswerResponse> Answers { get; init; } = [];
+}
+
+/// <summary>One answer on a stored battle report.</summary>
+public sealed class BattleQuestionAnswerResponse
+{
+    /// <summary>Gets the catalog question.</summary>
+    public required Guid QuestionId { get; init; }
+
+    /// <summary>Gets the true/false answer, when applicable.</summary>
+    public bool? BooleanValue { get; init; }
+
+    /// <summary>Gets the reported battle-point amount, when applicable.</summary>
+    public int? BattlePointsValue { get; init; }
+}
+
+/// <summary>Supply shown next to a force in a battle to resolve.</summary>
+public sealed class PlayBattleForceSupplyResponse
+{
+    /// <summary>Gets the force.</summary>
+    public required Guid ForceId { get; init; }
+
+    /// <summary>Gets the controlling player.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets map-plus-round supply after the split penalty, excluding temporary points.</summary>
+    public required int ForceAllowancePoints { get; init; }
+
+    /// <summary>Gets the maximum this force can spend if assigned the player's entire temporary pool.</summary>
+    public required int CurrentSupplyPoints { get; init; }
+
+    /// <summary>Gets remaining temporary supply.</summary>
+    public required int TemporarySupplyPoints { get; init; }
+
+    /// <summary>Gets this force's army-point cap when fighting with allied extras.</summary>
+    public int AlliedArmyPoints { get; init; }
 }
 
 /// <summary>Request to save a draft order.</summary>
@@ -478,6 +574,53 @@ public sealed class SubmitBattleResultRequest
 
     /// <summary>Gets the loser's tabletop or converted battle score.</summary>
     public int? LoserScore { get; init; }
+
+    /// <summary>Gets structured reports for both participating forces, when used.</summary>
+    public IReadOnlyList<BattleParticipantReportRequest>? Reports { get; init; }
+}
+
+/// <summary>One force's structured battle report in a submit request.</summary>
+public sealed class BattleParticipantReportRequest
+{
+    /// <summary>Gets the reported force.</summary>
+    public required Guid ForceId { get; init; }
+
+    /// <summary>Gets tabletop victory points.</summary>
+    public int VictoryPoints { get; init; }
+
+    /// <summary>Gets the army size in points used in the battle.</summary>
+    public int ArmyPoints { get; init; }
+
+    /// <summary>Gets battle points converted from victory points.</summary>
+    public int DifferentialBattlePoints { get; init; }
+
+    /// <summary>Gets bonus battle points from the mission.</summary>
+    public int BonusBattlePoints { get; init; }
+
+    /// <summary>Gets how many supply-costing units this force fielded.</summary>
+    public int SupplyCostingUnitCount { get; init; }
+
+    /// <summary>Gets whether the reporter killed the opponent's general.</summary>
+    public bool KilledEnemyGeneral { get; init; }
+
+    /// <summary>Gets whether the reporter destroyed the enemy supply line.</summary>
+    public bool DestroyedEnemySupplyLine { get; init; }
+
+    /// <summary>Gets answers to extra mission questions.</summary>
+    public IReadOnlyList<BattleQuestionAnswerRequest>? Answers { get; init; }
+}
+
+/// <summary>One answer to a mission result question.</summary>
+public sealed class BattleQuestionAnswerRequest
+{
+    /// <summary>Gets the catalog question.</summary>
+    public required Guid QuestionId { get; init; }
+
+    /// <summary>Gets the true/false answer, when applicable.</summary>
+    public bool? BooleanValue { get; init; }
+
+    /// <summary>Gets the reported battle-point amount, when applicable.</summary>
+    public int? BattlePointsValue { get; init; }
 }
 
 /// <summary>Request targeting one battle.</summary>
@@ -679,6 +822,9 @@ public static class PlayResponses
                     IsPillageable = type.IsPillageable,
                     IsDestructible = type.IsDestructible,
                     CampaignPoints = type.CampaignPoints,
+                    SupplyPoints = type.SupplyPoints,
+                    PillageSupplyPoints = type.PillageSupplyPoints,
+                    DestroySupplyPoints = type.DestroySupplyPoints,
                     Missions =
                     [
                         .. type.Missions.Select(static mission => new MissionResponse
@@ -688,6 +834,17 @@ public static class PlayResponses
                             Url = mission.Url,
                             HasFile = mission.HasFile,
                             FileName = mission.FileName,
+                            ResultQuestions =
+                            [
+                                .. mission.ResultQuestions.Select(static question => new MissionResultQuestionResponse
+                                {
+                                    Id = question.Id,
+                                    Prompt = question.Prompt,
+                                    Kind = question.Kind,
+                                    BattlePoints = question.BattlePoints,
+                                    CampaignPoints = question.CampaignPoints,
+                                }),
+                            ],
                         }),
                     ],
                 }),
@@ -848,6 +1005,10 @@ public static class PlayResponses
                     TerritoryId = battle.TerritoryId,
                     Status = battle.Status,
                     ParticipantForceIds = battle.ParticipantForceIds,
+                    ActiveForceIds = battle.ActiveForceIds,
+                    WaitingForceIds = battle.WaitingForceIds,
+                    ReportingForceIds = battle.ReportingForceIds,
+                    IsNoContest = battle.IsNoContest,
                     IsMine = battle.IsMine,
                     MySubmission = ToSubmission(battle.MySubmission),
                     OpponentSubmission = ToSubmission(battle.OpponentSubmission),
@@ -856,7 +1017,33 @@ public static class PlayResponses
                     WinnerScore = battle.WinnerScore,
                     LoserScore = battle.LoserScore,
                     NeedsRetreat = battle.NeedsRetreat,
+                    CanSurrender = battle.CanSurrender,
                     RetreatTargets = battle.RetreatTargets,
+                    ResultQuestions =
+                    [
+                        .. battle.ResultQuestions.Select(static question => new MissionResultQuestionResponse
+                        {
+                            Id = question.Id,
+                            Prompt = question.Prompt,
+                            Kind = question.Kind,
+                            BattlePoints = question.BattlePoints,
+                            CampaignPoints = question.CampaignPoints,
+                        }),
+                    ],
+                    ViewerSupplyPoints = battle.ViewerSupplyPoints,
+                    ForceSupplies =
+                    [
+                        .. battle.ForceSupplies.Select(static item => new PlayBattleForceSupplyResponse
+                        {
+                            ForceId = item.ForceId,
+                            UserId = item.UserId,
+                            ForceAllowancePoints = item.ForceAllowancePoints,
+                            CurrentSupplyPoints = item.CurrentSupplyPoints,
+                            TemporarySupplyPoints = item.TemporarySupplyPoints,
+                            AlliedArmyPoints = item.AlliedArmyPoints,
+                        }),
+                    ],
+                    CanStaffConfirm = battle.CanStaffConfirm,
                 }),
             ],
             Log =
@@ -902,6 +1089,58 @@ public static class PlayResponses
                 IsDraw = submission.IsDraw,
                 WinnerScore = submission.WinnerScore,
                 LoserScore = submission.LoserScore,
+                Reports =
+                [
+                    .. submission.Reports.Select(static report => new BattleParticipantReportResponse
+                    {
+                        ForceId = report.ForceId,
+                        VictoryPoints = report.VictoryPoints,
+                        ArmyPoints = report.ArmyPoints,
+                        DifferentialBattlePoints = report.DifferentialBattlePoints,
+                        BonusBattlePoints = report.BonusBattlePoints,
+                        SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                        KilledEnemyGeneral = report.KilledEnemyGeneral,
+                        DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
+                        Answers =
+                        [
+                            .. report.Answers.Select(static answer => new BattleQuestionAnswerResponse
+                            {
+                                QuestionId = answer.QuestionId,
+                                BooleanValue = answer.BooleanValue,
+                                BattlePointsValue = answer.BattlePointsValue,
+                            }),
+                        ],
+                    }),
+                ],
             };
+    }
+
+    /// <summary>
+    /// Maps HTTP battle-report requests onto application inputs.
+    /// </summary>
+    public static IReadOnlyList<BattleParticipantReportInput>? ToReportInputs(
+        IReadOnlyList<BattleParticipantReportRequest>? reports)
+    {
+        return reports?
+            .Select(static report => new BattleParticipantReportInput
+            {
+                ForceId = report.ForceId,
+                VictoryPoints = report.VictoryPoints,
+                ArmyPoints = report.ArmyPoints,
+                DifferentialBattlePoints = report.DifferentialBattlePoints,
+                BonusBattlePoints = report.BonusBattlePoints,
+                SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                KilledEnemyGeneral = report.KilledEnemyGeneral,
+                DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
+                Answers = report.Answers?
+                    .Select(static answer => new BattleQuestionAnswerInput
+                    {
+                        QuestionId = answer.QuestionId,
+                        BooleanValue = answer.BooleanValue,
+                        BattlePointsValue = answer.BattlePointsValue,
+                    })
+                    .ToArray(),
+            })
+            .ToArray();
     }
 }

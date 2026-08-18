@@ -54,7 +54,10 @@ internal static class CampaignLifecycle
                 type.Name,
                 type.IsBuildable,
                 type.IsPillageable,
-                type.IsDestructible))
+                type.IsDestructible,
+                type.SupplyPoints,
+                type.PillageSupplyPoints,
+                type.DestroySupplyPoints))
             .ToArray();
         var names = catalog.ToDictionary(type => type.Id, type => type.Name);
         var rulesById = catalog.ToDictionary(static type => type.Id);
@@ -81,7 +84,8 @@ internal static class CampaignLifecycle
                 intact ? condition : StructureCondition.Operational,
                 intact && (rules?.IsPillageable ?? false),
                 intact && (rules?.IsDestructible ?? false),
-                isWater);
+                isWater,
+                territory.TerrainTypeId);
         }).ToArray();
         var edges = graph.Adjacencies
             .Select(edge => (edge.TerritoryAId, edge.TerritoryBId))

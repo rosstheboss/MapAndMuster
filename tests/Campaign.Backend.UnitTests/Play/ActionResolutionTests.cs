@@ -57,11 +57,11 @@ public sealed class ActionResolutionTests
     }
 
     [Fact]
-    public void EligibleActionsAreEmptyWhileTheForceIsInBattle()
+    public void EligibleActionsAreSurrenderWhileTheForceIsInBattle()
     {
         var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, true);
         var kinds = ActionResolution.EligibleActions(State(force), Map(), force, UnalignedGroups());
-        Assert.Empty(kinds);
+        Assert.Equal([ActionKind.Surrender], kinds);
     }
 
     [Fact]

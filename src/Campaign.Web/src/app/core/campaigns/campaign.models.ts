@@ -87,6 +87,12 @@ export interface CampaignDetail {
   mostTerritoriesCampaignPoints?: number;
   longestTerritoryChainCampaignPoints?: number;
   mostBattlesWonCampaignPoints?: number;
+  splitForceSupplyPenaltyPercent?: number;
+  alwaysAskGeneralKill?: boolean;
+  alwaysAskSupplyLineDestroyed?: boolean;
+  generalKillCampaignPoints?: number;
+  supplyLineDestroyedCampaignPoints?: number;
+  roundEscalations?: RoundArmyEscalation[];
   standings?: CampaignPointStanding[];
   publicObjectiveLeaderboards?: PublicObjectiveLeaderboard[];
   brokenAllyFactionIds?: string[];
@@ -121,12 +127,28 @@ export interface CampaignLink {
   url: string;
 }
 
+export interface RoundArmyEscalation {
+  roundNumber: number;
+  maxArmyPoints: number;
+  freeSupplyPoints: number;
+  freeCharacterCount: number;
+}
+
 export interface CampaignMission {
   id: string;
   name: string;
   url: string | null;
   hasFile: boolean;
   fileName: string | null;
+  resultQuestions?: MissionResultQuestion[];
+}
+
+export interface MissionResultQuestion {
+  id: string;
+  prompt: string;
+  kind: string;
+  battlePoints: number;
+  campaignPoints: number;
 }
 
 export interface CampaignTerrainType {
@@ -136,6 +158,7 @@ export interface CampaignTerrainType {
   missions: CampaignMission[];
   campaignPoints?: number;
   isWaterFeature?: boolean;
+  supplyPoints?: number;
 }
 
 export interface CampaignStructureType {
@@ -149,6 +172,9 @@ export interface CampaignStructureType {
   isDestructible: boolean;
   missions: CampaignMission[];
   campaignPoints?: number;
+  supplyPoints?: number;
+  pillageSupplyPoints?: number;
+  destroySupplyPoints?: number;
 }
 
 export interface CampaignItemObjectiveType {
@@ -280,6 +306,12 @@ export interface HeldItemObjective {
 
 export type ItemObjectivePlacement = 'Random' | 'Placed';
 
+export interface CampaignPresetListItem {
+  id: string;
+  name: string;
+  hasMap: boolean;
+}
+
 export interface SaveCampaignPayload {
   name: string;
   description: string | null;
@@ -318,6 +350,12 @@ export interface SaveCampaignPayload {
   mostTerritoriesCampaignPoints?: number;
   longestTerritoryChainCampaignPoints?: number;
   mostBattlesWonCampaignPoints?: number;
+  splitForceSupplyPenaltyPercent?: number;
+  alwaysAskGeneralKill?: boolean;
+  alwaysAskSupplyLineDestroyed?: boolean;
+  generalKillCampaignPoints?: number;
+  supplyLineDestroyedCampaignPoints?: number;
+  roundEscalations?: RoundArmyEscalation[];
 }
 
 export interface SaveRoundPhasePayload {
@@ -354,6 +392,7 @@ export interface SaveTerrainTypePayload {
   missions: SaveMissionPayload[];
   campaignPoints?: number;
   isWaterFeature?: boolean;
+  supplyPoints?: number;
 }
 
 export interface SaveStructureTypePayload {
@@ -367,6 +406,9 @@ export interface SaveStructureTypePayload {
   isDestructible: boolean;
   missions: SaveMissionPayload[];
   campaignPoints?: number;
+  supplyPoints?: number;
+  pillageSupplyPoints?: number;
+  destroySupplyPoints?: number;
 }
 
 export interface SaveItemObjectiveTypePayload {
@@ -438,6 +480,15 @@ export interface SaveMissionPayload {
   name: string;
   url?: string | null;
   clearFile?: boolean;
+  resultQuestions?: SaveMissionResultQuestionPayload[];
+}
+
+export interface SaveMissionResultQuestionPayload {
+  id?: string;
+  prompt: string;
+  kind?: string;
+  battlePoints?: number;
+  campaignPoints?: number;
 }
 
 export interface MapGraphDetail {
@@ -604,6 +655,10 @@ export interface PlayBattle {
   territoryId: string;
   status: string;
   participantForceIds: string[];
+  activeForceIds?: string[];
+  waitingForceIds?: string[];
+  reportingForceIds?: string[];
+  isNoContest?: boolean;
   isMine: boolean;
   mySubmission: PlayBattleSubmission | null;
   opponentSubmission: PlayBattleSubmission | null;
@@ -613,6 +668,20 @@ export interface PlayBattle {
   loserScore?: number | null;
   needsRetreat: boolean;
   retreatTargets: string[];
+  canSurrender?: boolean;
+  resultQuestions?: MissionResultQuestion[];
+  viewerSupplyPoints?: number | null;
+  forceSupplies?: PlayBattleForceSupply[];
+  canStaffConfirm?: boolean;
+}
+
+export interface PlayBattleForceSupply {
+  forceId: string;
+  userId: string;
+  forceAllowancePoints: number;
+  currentSupplyPoints: number;
+  temporarySupplyPoints: number;
+  alliedArmyPoints?: number;
 }
 
 export interface PlayBattleSubmission {
@@ -621,6 +690,25 @@ export interface PlayBattleSubmission {
   isDraw: boolean;
   winnerScore?: number | null;
   loserScore?: number | null;
+  reports?: BattleParticipantReport[];
+}
+
+export interface BattleParticipantReport {
+  forceId: string;
+  victoryPoints: number;
+  armyPoints: number;
+  differentialBattlePoints: number;
+  bonusBattlePoints: number;
+  supplyCostingUnitCount: number;
+  killedEnemyGeneral: boolean;
+  destroyedEnemySupplyLine: boolean;
+  answers: BattleQuestionAnswer[];
+}
+
+export interface BattleQuestionAnswer {
+  questionId: string;
+  booleanValue?: boolean | null;
+  battlePointsValue?: number | null;
 }
 
 export interface PlayLogEntry {
@@ -670,6 +758,12 @@ export interface CampaignParticipant {
   factionColor?: string | null;
   hasFlagImage?: boolean;
   allyGroupName?: string | null;
+  currentSupplyPoints?: number | null;
+  temporarySupplyPoints?: number | null;
+  mapSupplyPoints?: number | null;
+  roundFreeSupplyPoints?: number | null;
+  maxArmyPoints?: number | null;
+  freeCharacterCount?: number | null;
 }
 
 export interface UserSearchHit {
@@ -735,6 +829,7 @@ export interface SubmitBattleResultPayload {
   isDraw: boolean;
   winnerScore?: number | null;
   loserScore?: number | null;
+  reports?: BattleParticipantReport[];
 }
 
 export interface BattleActionPayload {

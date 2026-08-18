@@ -3,13 +3,14 @@ import { toSignal, takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, type FormArray, type FormControl, type FormGroup } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
-import { readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type {
   CampaignDetail,
   CampaignMission,
   CampaignItemObjectiveType,
+  CampaignPresetListItem,
   CampaignPrivateObjectiveType,
   CampaignPublicObjectiveType,
   CampaignStructureType,
@@ -20,6 +21,11 @@ import type {
 } from '../../core/campaigns/campaign.models';
 import { defaultStructureCatalog, defaultTerrainCatalog } from '../../core/campaigns/catalog-defaults';
 import { CAMPAIGN_PRESETS, campaignFromPreset } from '../../core/campaigns/campaign-presets';
+import {
+  HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
+  HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT,
+  huntInEstaliaArmyEscalations,
+} from '../../core/campaigns/hunt-in-estalia-defaults';
 import {
   FORCE_STATUS_CLEAR_OPTIONS,
   FORCE_STATUS_ENABLE_OPTIONS,
@@ -68,11 +74,19 @@ import {
 type NamedGroup = FormGroup<{ name: FormControl<string> }>;
 type AllyGroupForm = FormGroup<{ name: FormControl<string>; color: FormControl<string> }>;
 type LinkGroup = FormGroup<{ label: FormControl<string>; url: FormControl<string> }>;
+type MissionQuestionGroup = FormGroup<{
+  id: FormControl<string>;
+  prompt: FormControl<string>;
+  kind: FormControl<string>;
+  battlePoints: FormControl<number>;
+  campaignPoints: FormControl<number>;
+}>;
 type MissionGroup = FormGroup<{
   id: FormControl<string>;
   name: FormControl<string>;
   url: FormControl<string>;
   clearFile: FormControl<boolean>;
+  resultQuestions: FormArray<MissionQuestionGroup>;
 }>;
 type FactionGroup = FormGroup<{
   id: FormControl<string>;
@@ -91,6 +105,7 @@ type TerrainGroup = FormGroup<{
   color: FormControl<string>;
   campaignPoints: FormControl<number>;
   isWaterFeature: FormControl<boolean>;
+  supplyPoints: FormControl<number>;
   missions: FormArray<MissionGroup>;
 }>;
 type StructureGroup = FormGroup<{
@@ -105,6 +120,9 @@ type StructureGroup = FormGroup<{
   isPillageable: FormControl<boolean>;
   isDestructible: FormControl<boolean>;
   campaignPoints: FormControl<number>;
+  supplyPoints: FormControl<number>;
+  pillageSupplyPoints: FormControl<number>;
+  destroySupplyPoints: FormControl<number>;
   missions: FormArray<MissionGroup>;
 }>;
 type ItemObjectiveGroup = FormGroup<{
@@ -172,6 +190,12 @@ type PhaseGroup = FormGroup<{
   durationAmount: FormControl<number>;
   durationUnit: FormControl<string>;
 }>;
+type RoundEscalationGroup = FormGroup<{
+  roundNumber: FormControl<number>;
+  maxArmyPoints: FormControl<number>;
+  freeSupplyPoints: FormControl<number>;
+  freeCharacterCount: FormControl<number>;
+}>;
 
 const TOP_LEVEL_SECTION_IDS = [
   'details',
@@ -204,6 +228,7 @@ const TOP_LEVEL_SECTION_IDS = [
 })
 export class CampaignSetupPage {
   private readonly campaignsApi = inject(CampaignService);
+  private readonly auth = inject(AuthService);
   private readonly overlay = inject(FormSubmitOverlayService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
@@ -239,6 +264,8 @@ export class CampaignSetupPage {
   private readonly storedItemObjectiveImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedFlagImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedMissionFiles = signal<ReadonlySet<string>>(new Set());
+  private pendingPresetMapId: string | null = null;
+  private presetsLoaded = false;
 
   protected readonly timeZones = listTimeZones();
   protected readonly durationUnits = DURATION_UNITS;
@@ -247,6 +274,15 @@ export class CampaignSetupPage {
   protected readonly terrainPresets = TERRAIN_PRESETS;
   protected readonly structurePresets = STRUCTURE_PRESETS;
   protected readonly campaignPresets = CAMPAIGN_PRESETS;
+  protected readonly savedPresets = signal<CampaignPresetListItem[]>([]);
+  protected readonly savePresetOpen = signal(false);
+  protected readonly presetNameControl = this.formBuilder.nonNullable.control('');
+  protected readonly isAdministrator = computed(() => this.auth.currentUser()?.isAdministrator === true);
+  protected readonly savedPresetNames = computed(() => this.savedPresets().map((preset) => preset.name));
+  protected readonly allCampaignPresets = computed(() => [
+    ...this.campaignPresets,
+    ...this.savedPresets().map((preset) => ({ id: `saved:${preset.id}`, name: preset.name })),
+  ]);
   protected readonly forceStatusEnableOptions = FORCE_STATUS_ENABLE_OPTIONS;
   protected readonly forceStatusClearOptions = FORCE_STATUS_CLEAR_OPTIONS;
   protected readonly structureSymbols = STRUCTURE_TYPES;
@@ -314,6 +350,14 @@ export class CampaignSetupPage {
     mostTerritoriesCampaignPoints: [0, [minValue(0), maxValue(999)]],
     longestTerritoryChainCampaignPoints: [0, [minValue(0), maxValue(999)]],
     mostBattlesWonCampaignPoints: [0, [minValue(0), maxValue(999)]],
+    splitForceSupplyPenaltyPercent: [HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT, [minValue(0), maxValue(100)]],
+    alwaysAskGeneralKill: [true],
+    alwaysAskSupplyLineDestroyed: [true],
+    generalKillCampaignPoints: [1, [minValue(0), maxValue(999)]],
+    supplyLineDestroyedCampaignPoints: [1, [minValue(0), maxValue(999)]],
+    roundEscalations: this.formBuilder.array<RoundEscalationGroup>(
+      huntInEstaliaArmyEscalations(8).map((row) => this.createRoundEscalationGroup(row)),
+    ),
     phases: this.formBuilder.array<PhaseGroup>([
       this.createPhaseGroup('Action', 3, 'Days'),
       this.createPhaseGroup('Action', 3, 'Days'),
@@ -341,6 +385,10 @@ export class CampaignSetupPage {
       this.loading.set(false);
     }
 
+    this.form.controls.roundCount.valueChanges.pipe(takeUntilDestroyed()).subscribe((count) => {
+      this.syncRoundEscalations(Number(count) || 0);
+    });
+
     this.destroyRef.onDestroy(() => this.revokeMapObjectUrl());
   }
 
@@ -358,6 +406,10 @@ export class CampaignSetupPage {
 
   protected get phases(): FormArray<PhaseGroup> {
     return this.form.controls.phases;
+  }
+
+  protected get roundEscalations(): FormArray<RoundEscalationGroup> {
+    return this.form.controls.roundEscalations;
   }
 
   protected get terrainTypes(): FormArray<TerrainGroup> {
@@ -410,6 +462,22 @@ export class CampaignSetupPage {
 
   protected missionsOf(group: TerrainGroup | StructureGroup): FormArray<MissionGroup> {
     return group.controls.missions;
+  }
+
+  protected questionsOf(mission: MissionGroup): FormArray<MissionQuestionGroup> {
+    return mission.controls.resultQuestions;
+  }
+
+  protected addMissionQuestion(mission: MissionGroup): void {
+    if (mission.controls.resultQuestions.length >= 20) {
+      return;
+    }
+
+    mission.controls.resultQuestions.push(this.createMissionQuestionGroup());
+  }
+
+  protected removeMissionQuestion(mission: MissionGroup, index: number): void {
+    mission.controls.resultQuestions.removeAt(index);
   }
 
   protected isInvalid(name: string): boolean {
@@ -527,7 +595,13 @@ export class CampaignSetupPage {
   }
 
   protected applySelectedCampaignPreset(): void {
-    const copy = campaignFromPreset(this.campaignPresetId.value);
+    const selected = this.campaignPresetId.value;
+    if (selected.startsWith('saved:')) {
+      void this.applySavedCampaignPreset(selected.slice('saved:'.length));
+      return;
+    }
+
+    const copy = campaignFromPreset(selected);
     if (!copy) {
       this.revealErrors(['Select a campaign preset before adding it.']);
       return;
@@ -590,6 +664,113 @@ export class CampaignSetupPage {
     this.applyBattleScoringDefaults();
   }
 
+  private async applySavedCampaignPreset(presetId: string): Promise<void> {
+    this.errorMessages.set([]);
+    try {
+      const preset = await this.campaignsApi.getPreset(presetId);
+      if (!this.form.controls.name.value.trim()) {
+        this.form.controls.name.setValue(preset.name);
+      }
+
+      this.applyCatalogFromDetail(preset);
+      if (this.isEdit() && this.campaignId() && preset.hasMap) {
+        const detail = await this.campaignsApi.applyPresetMap(this.campaignId()!, presetId, this.revision);
+        this.revision = detail.revision;
+        this.hasExistingMap.set(detail.hasMap);
+        this.setStoredMapPreview(detail.id, detail.revision, detail.hasMap);
+      } else if (preset.hasMap) {
+        this.pendingPresetMapId = presetId;
+      }
+    } catch (error: unknown) {
+      this.revealErrors(readApiErrorMessages(error, 'Unable to apply this campaign preset.'));
+    }
+  }
+
+  private applyCatalogFromDetail(campaign: CampaignDetail): void {
+    this.replaceArray(
+      this.specialRules,
+      (campaign.specialRules ?? []).map((rule) => this.createSpecialRuleGroup(rule.id, rule.name, rule.text)),
+    );
+    this.replaceArray(
+      this.forceStatuses,
+      (campaign.forceStatuses ?? []).map((status) =>
+        this.createForceStatusGroup(status.id, status.name, status.effects, status.enableTrigger, status.clearTrigger),
+      ),
+    );
+    this.bumpCatalog();
+    this.replaceArray(
+      this.factions,
+      campaign.factions.map((faction) =>
+        this.createFactionGroup(faction.name, faction.allyGroupName ?? '', faction.subfactions, {
+          id: faction.id,
+          color: faction.color,
+          requiresSubfaction: faction.requiresSubfaction,
+          hasFlagImage: faction.hasFlagImage,
+          specialRuleIds: faction.specialRuleIds ?? [],
+        }),
+      ),
+    );
+    this.replaceArray(
+      this.allyGroups,
+      campaign.allyGroups.map((group) => this.createAllyGroup(group.name, group.color)),
+    );
+    this.replaceArray(
+      this.terrainTypes,
+      campaign.terrainTypes.length > 0
+        ? campaign.terrainTypes.map((type) => this.createTerrainGroupFromDetail(type))
+        : this.createDefaultTerrainGroups(),
+    );
+    this.replaceArray(
+      this.structureTypes,
+      campaign.structureTypes.map((type) => this.createStructureGroupFromDetail(type)),
+    );
+    this.replaceArray(
+      this.itemObjectiveTypes,
+      (campaign.itemObjectiveTypes ?? []).map((item) => this.createItemObjectiveGroupFromDetail(item)),
+    );
+    this.replaceArray(
+      this.publicObjectiveTypes,
+      (campaign.publicObjectiveTypes ?? []).map((item) => this.createPublicObjectiveGroup(item, item.id)),
+    );
+    this.replaceArray(
+      this.privateObjectiveTypes,
+      (campaign.privateObjectiveTypes ?? []).map((item) => this.createPrivateObjectiveGroup(item, item.id)),
+    );
+    this.form.controls.playerCount.setValue(campaign.playerSlotCount);
+    this.form.controls.roundCount.setValue(campaign.roundCount);
+    this.form.controls.roundLengthAmount.setValue(campaign.roundLengthAmount);
+    this.form.controls.roundLengthUnit.setValue(campaign.roundLengthUnit);
+    this.form.controls.pointsPerBattleWon.setValue(campaign.pointsPerBattleWon ?? 2);
+    this.form.controls.pointsPerBattleDraw.setValue(campaign.pointsPerBattleDraw ?? 1);
+    this.form.controls.useDifferentialBattleScoring.setValue(campaign.useDifferentialBattleScoring ?? true);
+    this.form.controls.differentialMultiplier.setValue(campaign.differentialMultiplier ?? 1);
+    this.form.controls.differentialMinimum.setValue(campaign.differentialMinimum ?? 0);
+    this.form.controls.differentialMaximum.setValue(campaign.differentialMaximum ?? 10);
+    this.form.controls.allowNegativeDifferential.setValue(campaign.allowNegativeDifferential ?? false);
+    this.form.controls.mostTerritoriesCampaignPoints.setValue(campaign.mostTerritoriesCampaignPoints ?? 0);
+    this.form.controls.longestTerritoryChainCampaignPoints.setValue(campaign.longestTerritoryChainCampaignPoints ?? 0);
+    this.form.controls.mostBattlesWonCampaignPoints.setValue(campaign.mostBattlesWonCampaignPoints ?? 0);
+    this.form.controls.splitForceSupplyPenaltyPercent.setValue(
+      campaign.splitForceSupplyPenaltyPercent ?? HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT,
+    );
+    this.form.controls.alwaysAskGeneralKill.setValue(campaign.alwaysAskGeneralKill !== false);
+    this.form.controls.alwaysAskSupplyLineDestroyed.setValue(campaign.alwaysAskSupplyLineDestroyed !== false);
+    this.form.controls.generalKillCampaignPoints.setValue(campaign.generalKillCampaignPoints ?? 1);
+    this.form.controls.supplyLineDestroyedCampaignPoints.setValue(campaign.supplyLineDestroyedCampaignPoints ?? 1);
+    this.replaceArray(
+      this.roundEscalations,
+      (campaign.roundEscalations?.length
+        ? campaign.roundEscalations
+        : huntInEstaliaArmyEscalations(campaign.roundCount)
+      ).map((row) => this.createRoundEscalationGroup(row)),
+    );
+    this.replaceArray(
+      this.phases,
+      campaign.phases.map((phase) => this.createPhaseGroup(phase.kind, phase.durationAmount, phase.durationUnit)),
+    );
+    this.refreshPhases();
+  }
+
   private applyBattleScoringDefaults(): void {
     this.form.controls.pointsPerBattleWon.setValue(2);
     this.form.controls.pointsPerBattleDraw.setValue(1);
@@ -598,6 +779,17 @@ export class CampaignSetupPage {
     this.form.controls.differentialMinimum.setValue(0);
     this.form.controls.differentialMaximum.setValue(10);
     this.form.controls.allowNegativeDifferential.setValue(false);
+    this.form.controls.splitForceSupplyPenaltyPercent.setValue(HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT);
+    this.form.controls.alwaysAskGeneralKill.setValue(true);
+    this.form.controls.alwaysAskSupplyLineDestroyed.setValue(true);
+    this.form.controls.generalKillCampaignPoints.setValue(1);
+    this.form.controls.supplyLineDestroyedCampaignPoints.setValue(1);
+    this.replaceArray(
+      this.roundEscalations,
+      huntInEstaliaArmyEscalations(Number(this.form.controls.roundCount.value) || 8).map((row) =>
+        this.createRoundEscalationGroup(row),
+      ),
+    );
   }
 
   protected clearFactions(): void {
@@ -967,6 +1159,19 @@ export class CampaignSetupPage {
         source.controls.clearFile.value,
       ),
     );
+    const added = group.controls.missions.at(-1);
+    this.replaceArray(
+      added.controls.resultQuestions,
+      source.controls.resultQuestions.controls.map((question) =>
+        this.createMissionQuestionGroup(
+          question.controls.id.value,
+          question.controls.prompt.value,
+          question.controls.kind.value,
+          question.controls.battlePoints.value,
+          question.controls.campaignPoints.value,
+        ),
+      ),
+    );
   }
 
   protected onReuseMissionSelected(group: TerrainGroup | StructureGroup, event: Event): void {
@@ -1252,14 +1457,37 @@ export class CampaignSetupPage {
     return this.itemObjectiveImages.get(itemId)?.name ?? null;
   }
 
-  protected async save(): Promise<void> {
-    this.form.markAllAsTouched();
-    this.serverFields.set(new Set());
-    this.successMessage.set(null);
-    const collected = this.collectFailures();
-    if (collected.messages.length > 0) {
-      this.expandSections(collected.sections);
-      this.revealErrors(collected.messages);
+  protected async ensureSavedPresets(): Promise<void> {
+    if (this.presetsLoaded) {
+      return;
+    }
+
+    this.presetsLoaded = true;
+    try {
+      this.savedPresets.set(await this.campaignsApi.listPresets());
+    } catch {
+      this.presetsLoaded = false;
+    }
+  }
+
+  protected openSavePresetDialog(): void {
+    if (!this.isAdministrator()) {
+      return;
+    }
+
+    this.presetNameControl.setValue('');
+    this.savePresetOpen.set(true);
+    void this.ensureSavedPresets();
+  }
+
+  protected closeSavePresetDialog(): void {
+    this.savePresetOpen.set(false);
+  }
+
+  protected async confirmSavePreset(): Promise<void> {
+    const name = this.presetNameControl.value.trim();
+    if (name.length < 3) {
+      this.revealErrors(['Preset name must be at least 3 characters.']);
       return;
     }
 
@@ -1267,73 +1495,46 @@ export class CampaignSetupPage {
     this.errorMessages.set([]);
     try {
       const created = await this.overlay.run(async () => {
-        const payload = this.toPayload();
-        const campaignId = this.campaignId();
-        let detail: CampaignDetail;
-        if (campaignId) {
-          detail = await this.campaignsApi.update(campaignId, { ...payload, revision: this.revision });
-        } else {
-          detail = await this.campaignsApi.create(payload);
+        const persisted = await this.persistCampaignCore();
+        if (!persisted) {
+          return null;
         }
 
-        if (this.mapFile) {
-          detail = await this.campaignsApi.uploadMap(detail.id, this.mapFile, detail.revision);
-        }
-
-        for (const [structureId, file] of this.structureImages) {
-          const structure = this.structureTypes.controls.find((item) => item.controls.id.value === structureId);
-          if (structure?.controls.iconSource.value !== 'image') {
-            continue;
-          }
-
-          detail = await this.campaignsApi.uploadStructureImage(detail.id, structureId, file, detail.revision);
-        }
-
-        for (const [structureId, file] of this.structurePillagedImages) {
-          const structure = this.structureTypes.controls.find((item) => item.controls.id.value === structureId);
-          if (structure?.controls.pillagedIconSource.value !== 'image') {
-            continue;
-          }
-
-          detail = await this.campaignsApi.uploadStructureImage(detail.id, structureId, file, detail.revision, true);
-        }
-
-        for (const [itemId, file] of this.itemObjectiveImages) {
-          const item = this.itemObjectiveTypes.controls.find((entry) => entry.controls.id.value === itemId);
-          if (item?.controls.iconSource.value !== 'image') {
-            continue;
-          }
-
-          detail = await this.campaignsApi.uploadItemObjectiveImage(detail.id, itemId, file, detail.revision);
-        }
-
-        for (const [factionId, file] of this.flagImages) {
-          const faction = this.factions.controls.find((item) => item.controls.id.value === factionId);
-          if (faction?.controls.flagSource.value !== 'image') {
-            continue;
-          }
-
-          detail = await this.campaignsApi.uploadFlagImage(detail.id, factionId, file, detail.revision);
-        }
-
-        for (const [missionId, file] of this.missionFiles) {
-          detail = await this.campaignsApi.uploadMissionFile(detail.id, missionId, file, detail.revision);
-        }
-
-        return { detail, isNew: campaignId === null };
+        await this.campaignsApi.saveAsPreset(persisted.detail.id, name);
+        this.presetsLoaded = false;
+        await this.ensureSavedPresets();
+        return persisted;
       });
+      if (!created) {
+        return;
+      }
 
-      this.revision = created.detail.revision;
-      this.hasExistingMap.set(created.detail.hasMap);
-      this.mapFile = null;
-      this.mapFileName.set(null);
-      this.setStoredMapPreview(created.detail.id, created.detail.revision, created.detail.hasMap);
-      this.structureImages.clear();
-      this.structurePillagedImages.clear();
-      this.itemObjectiveImages.clear();
-      this.flagImages.clear();
-      this.missionFiles.clear();
-      this.rememberStoredFiles(created.detail);
+      this.closeSavePresetDialog();
+      this.applyPersistedCampaign(created);
+      if (created.isNew) {
+        await this.router.navigate(['/campaigns', created.detail.id, 'map']);
+        return;
+      }
+
+      this.revealSuccess();
+    } catch (error: unknown) {
+      this.serverFields.set(new Set(readApiFieldErrors(error)));
+      this.revealErrors(readApiErrorMessages(error, 'Unable to save the campaign preset.'));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async save(): Promise<void> {
+    this.saving.set(true);
+    this.errorMessages.set([]);
+    try {
+      const created = await this.overlay.run(async () => this.persistCampaignCore());
+      if (!created) {
+        return;
+      }
+
+      this.applyPersistedCampaign(created);
       if (created.isNew) {
         await this.router.navigate(['/campaigns', created.detail.id, 'map']);
         return;
@@ -1346,6 +1547,93 @@ export class CampaignSetupPage {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  private async persistCampaignCore(): Promise<{ detail: CampaignDetail; isNew: boolean } | null> {
+    this.form.markAllAsTouched();
+    this.serverFields.set(new Set());
+    this.successMessage.set(null);
+    const collected = this.collectFailures();
+    if (collected.messages.length > 0) {
+      this.expandSections(collected.sections);
+      this.revealErrors(collected.messages);
+      return null;
+    }
+
+    const payload = this.toPayload();
+    const campaignId = this.campaignId();
+    let detail: CampaignDetail;
+    if (campaignId) {
+      detail = await this.campaignsApi.update(campaignId, { ...payload, revision: this.revision });
+    } else {
+      detail = await this.campaignsApi.create(payload);
+    }
+
+    if (this.mapFile) {
+      detail = await this.campaignsApi.uploadMap(detail.id, this.mapFile, detail.revision);
+    }
+
+    if (this.pendingPresetMapId && !this.mapFile) {
+      detail = await this.campaignsApi.applyPresetMap(detail.id, this.pendingPresetMapId, detail.revision);
+      this.pendingPresetMapId = null;
+    }
+
+    for (const [structureId, file] of this.structureImages) {
+      const structure = this.structureTypes.controls.find((item) => item.controls.id.value === structureId);
+      if (structure?.controls.iconSource.value !== 'image') {
+        continue;
+      }
+
+      detail = await this.campaignsApi.uploadStructureImage(detail.id, structureId, file, detail.revision);
+    }
+
+    for (const [structureId, file] of this.structurePillagedImages) {
+      const structure = this.structureTypes.controls.find((item) => item.controls.id.value === structureId);
+      if (structure?.controls.pillagedIconSource.value !== 'image') {
+        continue;
+      }
+
+      detail = await this.campaignsApi.uploadStructureImage(detail.id, structureId, file, detail.revision, true);
+    }
+
+    for (const [itemId, file] of this.itemObjectiveImages) {
+      const item = this.itemObjectiveTypes.controls.find((entry) => entry.controls.id.value === itemId);
+      if (item?.controls.iconSource.value !== 'image') {
+        continue;
+      }
+
+      detail = await this.campaignsApi.uploadItemObjectiveImage(detail.id, itemId, file, detail.revision);
+    }
+
+    for (const [factionId, file] of this.flagImages) {
+      const faction = this.factions.controls.find((item) => item.controls.id.value === factionId);
+      if (faction?.controls.flagSource.value !== 'image') {
+        continue;
+      }
+
+      detail = await this.campaignsApi.uploadFlagImage(detail.id, factionId, file, detail.revision);
+    }
+
+    for (const [missionId, file] of this.missionFiles) {
+      detail = await this.campaignsApi.uploadMissionFile(detail.id, missionId, file, detail.revision);
+    }
+
+    return { detail, isNew: campaignId === null };
+  }
+
+  private applyPersistedCampaign(created: { detail: CampaignDetail; isNew: boolean }): void {
+    this.campaignId.set(created.detail.id);
+    this.revision = created.detail.revision;
+    this.hasExistingMap.set(created.detail.hasMap);
+    this.mapFile = null;
+    this.mapFileName.set(null);
+    this.setStoredMapPreview(created.detail.id, created.detail.revision, created.detail.hasMap);
+    this.structureImages.clear();
+    this.structurePillagedImages.clear();
+    this.itemObjectiveImages.clear();
+    this.flagImages.clear();
+    this.missionFiles.clear();
+    this.rememberStoredFiles(created.detail);
   }
 
   private async loadCampaign(id: string): Promise<void> {
@@ -1453,6 +1741,20 @@ export class CampaignSetupPage {
         campaign.longestTerritoryChainCampaignPoints ?? 0,
       );
       this.form.controls.mostBattlesWonCampaignPoints.setValue(campaign.mostBattlesWonCampaignPoints ?? 0);
+      this.form.controls.splitForceSupplyPenaltyPercent.setValue(
+        campaign.splitForceSupplyPenaltyPercent ?? HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT,
+      );
+      this.form.controls.alwaysAskGeneralKill.setValue(campaign.alwaysAskGeneralKill !== false);
+      this.form.controls.alwaysAskSupplyLineDestroyed.setValue(campaign.alwaysAskSupplyLineDestroyed !== false);
+      this.form.controls.generalKillCampaignPoints.setValue(campaign.generalKillCampaignPoints ?? 1);
+      this.form.controls.supplyLineDestroyedCampaignPoints.setValue(campaign.supplyLineDestroyedCampaignPoints ?? 1);
+      this.replaceArray(
+        this.roundEscalations,
+        (campaign.roundEscalations?.length
+          ? campaign.roundEscalations
+          : huntInEstaliaArmyEscalations(campaign.roundCount)
+        ).map((row) => this.createRoundEscalationGroup(row)),
+      );
       this.replaceArray(
         this.phases,
         campaign.phases.map((phase) => this.createPhaseGroup(phase.kind, phase.durationAmount, phase.durationUnit)),
@@ -1523,7 +1825,55 @@ export class CampaignSetupPage {
       name: [name, maxLength(60)],
       url: [url, [maxLength(2048), httpUrl]],
       clearFile: [clearFile],
+      resultQuestions: this.formBuilder.array<MissionQuestionGroup>([]),
     });
+  }
+
+  private createMissionQuestionGroup(
+    id?: string,
+    prompt = '',
+    kind = 'Boolean',
+    battlePoints = 0,
+    campaignPoints = 0,
+  ): MissionQuestionGroup {
+    return this.formBuilder.nonNullable.group({
+      id: [id ?? this.newId()],
+      prompt: [prompt, maxLength(240)],
+      kind: [kind],
+      battlePoints: [battlePoints, [minValue(0), maxValue(999)]],
+      campaignPoints: [campaignPoints, [minValue(0), maxValue(999)]],
+    });
+  }
+
+  private createRoundEscalationGroup(row: {
+    roundNumber: number;
+    maxArmyPoints: number;
+    freeSupplyPoints: number;
+    freeCharacterCount: number;
+  }): RoundEscalationGroup {
+    return this.formBuilder.nonNullable.group({
+      roundNumber: [row.roundNumber],
+      maxArmyPoints: [row.maxArmyPoints, [minValue(0), maxValue(99999)]],
+      freeSupplyPoints: [row.freeSupplyPoints, [minValue(0), maxValue(999)]],
+      freeCharacterCount: [row.freeCharacterCount, [minValue(0), maxValue(99)]],
+    });
+  }
+
+  private syncRoundEscalations(roundCount: number): void {
+    const count = Math.max(3, Math.min(52, Math.floor(roundCount)));
+    if (!Number.isFinite(count) || this.roundEscalations.length === count) {
+      return;
+    }
+
+    const current = this.roundEscalations.getRawValue();
+    const defaults = huntInEstaliaArmyEscalations(count);
+    this.replaceArray(
+      this.roundEscalations,
+      defaults.map((row) => {
+        const existing = current.find((item) => item.roundNumber === row.roundNumber);
+        return this.createRoundEscalationGroup(existing ?? row);
+      }),
+    );
   }
 
   private createTerrainGroup(
@@ -1540,6 +1890,7 @@ export class CampaignSetupPage {
       color: [color, required],
       campaignPoints: [campaignPoints, [minValue(0), maxValue(999)]],
       isWaterFeature: [isWaterFeature],
+      supplyPoints: [HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS, [minValue(0), maxValue(999)]],
       missions: this.formBuilder.array<MissionGroup>([this.createMissionGroup(undefined, missionName)]),
     });
   }
@@ -1555,6 +1906,7 @@ export class CampaignSetupPage {
       color: [type.color, required],
       campaignPoints: [type.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
       isWaterFeature: [type.isWaterFeature === true],
+      supplyPoints: [type.supplyPoints ?? HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS, [minValue(0), maxValue(999)]],
       missions: this.formBuilder.array<MissionGroup>(missions),
     });
   }
@@ -1583,6 +1935,9 @@ export class CampaignSetupPage {
       isPillageable: [isPillageable],
       isDestructible: [isDestructible],
       campaignPoints: [campaignPoints, [minValue(0), maxValue(999)]],
+      supplyPoints: [HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS, [minValue(0), maxValue(999)]],
+      pillageSupplyPoints: [HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS, [minValue(0), maxValue(999)]],
+      destroySupplyPoints: [HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS, [minValue(0), maxValue(999)]],
       missions: this.formBuilder.array<MissionGroup>(missions ?? []),
     });
   }
@@ -1590,7 +1945,7 @@ export class CampaignSetupPage {
   private createStructureGroupFromDetail(type: CampaignStructureType): StructureGroup {
     const missions =
       type.missions.length > 0 ? type.missions.map((mission) => this.createMissionGroupFromDetail(mission)) : [];
-    return this.createStructureGroup(
+    const group = this.createStructureGroup(
       type.id,
       type.name,
       type.builtinSymbol ?? '',
@@ -1602,10 +1957,30 @@ export class CampaignSetupPage {
       type.isDestructible,
       type.campaignPoints ?? 0,
     );
+    group.patchValue({
+      supplyPoints: type.supplyPoints ?? HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
+      pillageSupplyPoints: type.pillageSupplyPoints ?? HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
+      destroySupplyPoints: type.destroySupplyPoints ?? HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
+    });
+    return group;
   }
 
   private createMissionGroupFromDetail(mission: CampaignMission): MissionGroup {
-    return this.createMissionGroup(mission.id, mission.name, mission.url ?? '', false);
+    const group = this.createMissionGroup(mission.id, mission.name, mission.url ?? '', false);
+    const questions = mission.resultQuestions ?? [];
+    this.replaceArray(
+      group.controls.resultQuestions,
+      questions.map((question) =>
+        this.createMissionQuestionGroup(
+          question.id,
+          question.prompt,
+          question.kind,
+          question.battlePoints,
+          question.campaignPoints,
+        ),
+      ),
+    );
+    return group;
   }
 
   private createItemObjectiveGroup(
@@ -1861,6 +2236,7 @@ export class CampaignSetupPage {
       color: type.color,
       campaignPoints: 0,
       isWaterFeature: type.isWaterFeature,
+      supplyPoints: Number(type.supplyPoints) || HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toMissionPayload(mission)),
@@ -1875,6 +2251,9 @@ export class CampaignSetupPage {
       isPillageable: type.isPillageable,
       isDestructible: type.isDestructible,
       campaignPoints: Number(type.campaignPoints) || 0,
+      supplyPoints: Number(type.supplyPoints) || HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
+      pillageSupplyPoints: Number(type.pillageSupplyPoints) || HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
+      destroySupplyPoints: Number(type.destroySupplyPoints) || HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toMissionPayload(mission)),
@@ -1985,6 +2364,17 @@ export class CampaignSetupPage {
       mostTerritoriesCampaignPoints: Number(value.mostTerritoriesCampaignPoints) || 0,
       longestTerritoryChainCampaignPoints: Number(value.longestTerritoryChainCampaignPoints) || 0,
       mostBattlesWonCampaignPoints: Number(value.mostBattlesWonCampaignPoints) || 0,
+      splitForceSupplyPenaltyPercent: Number(value.splitForceSupplyPenaltyPercent) || 0,
+      alwaysAskGeneralKill: Boolean(value.alwaysAskGeneralKill),
+      alwaysAskSupplyLineDestroyed: Boolean(value.alwaysAskSupplyLineDestroyed),
+      generalKillCampaignPoints: Number(value.generalKillCampaignPoints) || 0,
+      supplyLineDestroyedCampaignPoints: Number(value.supplyLineDestroyedCampaignPoints) || 0,
+      roundEscalations: value.roundEscalations.map((row) => ({
+        roundNumber: Number(row.roundNumber),
+        maxArmyPoints: Number(row.maxArmyPoints) || 0,
+        freeSupplyPoints: Number(row.freeSupplyPoints) || 0,
+        freeCharacterCount: Number(row.freeCharacterCount) || 0,
+      })),
       timeZoneId: value.timeZoneId || 'UTC',
       startsAtLocal: value.startsAtLocal,
       roundCount: Number(value.roundCount),
@@ -1998,11 +2388,18 @@ export class CampaignSetupPage {
     };
   }
 
-  private toMissionPayload(mission: { id: string; name: string; url: string; clearFile: boolean }): {
+  private toMissionPayload(mission: {
+    id: string;
+    name: string;
+    url: string;
+    clearFile: boolean;
+    resultQuestions: { id: string; prompt: string; kind: string; battlePoints: number; campaignPoints: number }[];
+  }): {
     id: string;
     name: string;
     url: string | null;
     clearFile: boolean;
+    resultQuestions: SaveCampaignPayload['terrainTypes'][number]['missions'][number]['resultQuestions'];
   } {
     const hasPendingFile = this.missionFiles.has(mission.id);
     return {
@@ -2010,6 +2407,15 @@ export class CampaignSetupPage {
       name: mission.name.trim(),
       url: hasPendingFile ? null : mission.url.trim() || null,
       clearFile: hasPendingFile ? false : mission.clearFile,
+      resultQuestions: mission.resultQuestions
+        .filter((question) => question.prompt.trim().length > 0)
+        .map((question) => ({
+          id: question.id,
+          prompt: question.prompt.trim(),
+          kind: question.kind,
+          battlePoints: Number(question.battlePoints) || 0,
+          campaignPoints: Number(question.campaignPoints) || 0,
+        })),
     };
   }
 

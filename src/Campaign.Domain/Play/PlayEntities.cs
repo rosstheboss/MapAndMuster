@@ -290,7 +290,11 @@ public sealed class CampaignBattle
         bool isDraw,
         DateTimeOffset createdUtc,
         int? winnerScore = null,
-        int? loserScore = null)
+        int? loserScore = null,
+        IReadOnlyList<Guid>? activeForceIds = null,
+        IReadOnlyList<Guid>? waitingForceIds = null,
+        IReadOnlyList<Guid>? surrenderedForceIds = null,
+        bool isNoContest = false)
     {
         ArgumentNullException.ThrowIfNull(participantForceIds);
         Id = id;
@@ -304,6 +308,10 @@ public sealed class CampaignBattle
         CreatedUtc = createdUtc;
         WinnerScore = winnerScore;
         LoserScore = loserScore;
+        ActiveForceIds = activeForceIds ?? [];
+        WaitingForceIds = waitingForceIds ?? [];
+        SurrenderedForceIds = surrenderedForceIds ?? [];
+        IsNoContest = isNoContest;
     }
 
     /// <summary>Gets the battle identifier.</summary>
@@ -339,6 +347,22 @@ public sealed class CampaignBattle
     /// <summary>Gets the loser's reported tabletop or converted battle score.</summary>
     public int? LoserScore { get; }
 
+    /// <summary>Gets forces in the current tabletop pairing. Empty means every participant.</summary>
+    public IReadOnlyList<Guid> ActiveForceIds { get; }
+
+    /// <summary>Gets forces waiting for a later pairing this phase or the next battle phase.</summary>
+    public IReadOnlyList<Guid> WaitingForceIds { get; }
+
+    /// <summary>Gets forces that have surrendered this engagement.</summary>
+    public IReadOnlyList<Guid> SurrenderedForceIds { get; }
+
+    /// <summary>Gets whether every remaining force ran and nobody won.</summary>
+    public bool IsNoContest { get; }
+
+    /// <summary>Gets forces that must currently report a tabletop result.</summary>
+    public IReadOnlyList<Guid> ReportingForceIds =>
+        ActiveForceIds.Count > 0 ? ActiveForceIds : ParticipantForceIds;
+
     /// <summary>
     /// Returns a copy with an updated result or window assignment.
     /// </summary>
@@ -351,7 +375,12 @@ public sealed class CampaignBattle
         bool clearWinner = false,
         int? winnerScore = null,
         int? loserScore = null,
-        bool assignScores = false)
+        bool assignScores = false,
+        IReadOnlyList<Guid>? activeForceIds = null,
+        IReadOnlyList<Guid>? waitingForceIds = null,
+        IReadOnlyList<Guid>? surrenderedForceIds = null,
+        bool? isNoContest = null,
+        IReadOnlyList<Guid>? participantForceIds = null)
     {
         return new CampaignBattle(
             Id,
@@ -359,12 +388,16 @@ public sealed class CampaignBattle
             SourceWindowId,
             assignWindow ? battleWindowId : battleWindowId ?? BattleWindowId,
             status ?? Status,
-            ParticipantForceIds,
+            participantForceIds ?? ParticipantForceIds,
             clearWinner ? null : winnerForceId ?? WinnerForceId,
             isDraw ?? IsDraw,
             CreatedUtc,
             assignScores ? winnerScore : winnerScore ?? WinnerScore,
-            assignScores ? loserScore : loserScore ?? LoserScore);
+            assignScores ? loserScore : loserScore ?? LoserScore,
+            activeForceIds ?? ActiveForceIds,
+            waitingForceIds ?? WaitingForceIds,
+            surrenderedForceIds ?? SurrenderedForceIds,
+            isNoContest ?? IsNoContest);
     }
 }
 
@@ -385,7 +418,8 @@ public sealed class BattleResultSubmission
         Guid? acceptedSubmissionId,
         DateTimeOffset submittedUtc,
         int? winnerScore = null,
-        int? loserScore = null)
+        int? loserScore = null,
+        IReadOnlyList<BattleParticipantReport>? reports = null)
     {
         Id = id;
         BattleId = battleId;
@@ -396,6 +430,7 @@ public sealed class BattleResultSubmission
         SubmittedUtc = submittedUtc;
         WinnerScore = winnerScore;
         LoserScore = loserScore;
+        Reports = reports ?? [];
     }
 
     /// <summary>Gets the submission identifier.</summary>
@@ -424,6 +459,9 @@ public sealed class BattleResultSubmission
 
     /// <summary>Gets the reported loser score used for differential campaign points.</summary>
     public int? LoserScore { get; }
+
+    /// <summary>Gets per-participant reports when the structured battle form was used.</summary>
+    public IReadOnlyList<BattleParticipantReport> Reports { get; }
 }
 
 /// <summary>
@@ -577,7 +615,14 @@ public sealed class RetreatOrder
     /// <summary>
     /// Initializes a retreat.
     /// </summary>
-    public RetreatOrder(Guid id, Guid battleId, Guid forceId, Guid targetTerritoryId, bool isDefault, DateTimeOffset submittedUtc)
+    public RetreatOrder(
+        Guid id,
+        Guid battleId,
+        Guid forceId,
+        Guid targetTerritoryId,
+        bool isDefault,
+        DateTimeOffset submittedUtc,
+        bool isSurrender = false)
     {
         Id = id;
         BattleId = battleId;
@@ -585,6 +630,7 @@ public sealed class RetreatOrder
         TargetTerritoryId = targetTerritoryId;
         IsDefault = isDefault;
         SubmittedUtc = submittedUtc;
+        IsSurrender = isSurrender;
     }
 
     /// <summary>Gets the retreat identifier.</summary>
@@ -601,6 +647,9 @@ public sealed class RetreatOrder
 
     /// <summary>Gets whether this was the spawn-fallback default.</summary>
     public bool IsDefault { get; }
+
+    /// <summary>Gets whether this retreat was a committed surrender.</summary>
+    public bool IsSurrender { get; }
 
     /// <summary>Gets when the retreat was recorded, in UTC.</summary>
     public DateTimeOffset SubmittedUtc { get; }

@@ -106,6 +106,9 @@ public static class CampaignSetupRules
     /// <summary>Minimum battle phases in a round.</summary>
     public const int MinBattlePhaseCount = 1;
 
+    /// <summary>Maximum result questions nested under one mission.</summary>
+    public const int MaxMissionResultQuestionCount = 20;
+
     /// <summary>Maximum action and battle steps in a round.</summary>
     public const int MaxPhaseCount = 16;
 
@@ -210,6 +213,11 @@ public static class CampaignSetupRules
     /// <param name="specialRules">Reusable special-rule inputs. Omitted or empty means none.</param>
     /// <param name="privateObjectiveTypes">Private-objective inputs. Omitted or empty means none.</param>
     /// <param name="forceStatuses">Force-status inputs other than Normal. Omitted or empty means none.</param>
+    /// <param name="splitForceSupplyPenaltyPercent">Percent subtracted from map-plus-round supply when a player has split forces.</param>
+    /// <param name="alwaysAskGeneralKill">Whether every battle report asks if the enemy general was slain.</param>
+    /// <param name="alwaysAskSupplyLineDestroyed">Whether every battle report asks if the enemy supply line was destroyed.</param>
+    /// <param name="generalKillCampaignPoints">Campaign points awarded for a slain enemy general.</param>
+    /// <param name="supplyLineDestroyedCampaignPoints">Campaign points awarded for destroying the enemy supply line.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
@@ -254,7 +262,12 @@ public static class CampaignSetupRules
         int? mostBattlesWonCampaignPoints = null,
         IReadOnlyList<SpecialRuleInput>? specialRules = null,
         IReadOnlyList<PrivateObjectiveTypeInput>? privateObjectiveTypes = null,
-        IReadOnlyList<ForceStatusInput>? forceStatuses = null)
+        IReadOnlyList<ForceStatusInput>? forceStatuses = null,
+        int? splitForceSupplyPenaltyPercent = null,
+        bool? alwaysAskGeneralKill = null,
+        bool? alwaysAskSupplyLineDestroyed = null,
+        int? generalKillCampaignPoints = null,
+        int? supplyLineDestroyedCampaignPoints = null)
     {
         var collected = new List<DomainError>();
         setup = null;
@@ -365,7 +378,14 @@ public static class CampaignSetupRules
             parsedRanking,
             parsedSpecialRules,
             parsedPrivate,
-            parsedForceStatuses);
+            parsedForceStatuses,
+            ParseSplitForcePenalty(splitForceSupplyPenaltyPercent, collected),
+            ParseBattleReportRules(
+                alwaysAskGeneralKill,
+                alwaysAskSupplyLineDestroyed,
+                generalKillCampaignPoints,
+                supplyLineDestroyedCampaignPoints,
+                collected));
         errors = collected;
         return true;
     }
@@ -759,7 +779,12 @@ public static class CampaignSetupRules
                 name,
                 color,
                 missionsForType,
-                input.IsWaterFeature ?? TerrainCatalog.IsWaterFeature(name)));
+                input.IsWaterFeature ?? TerrainCatalog.IsWaterFeature(name),
+                ParseSupplyPoints(
+                    input.SupplyPoints,
+                    $"terrainTypes[{index}].supplyPoints",
+                    $"Terrain type {index + 1} supply points",
+                    errors)));
         }
 
         return parsed;
@@ -841,6 +866,21 @@ public static class CampaignSetupRules
                     input.CampaignPoints,
                     $"structureTypes[{index}].campaignPoints",
                     $"Structure {index + 1} campaign points",
+                    errors),
+                ParseSupplyPoints(
+                    input.SupplyPoints,
+                    $"structureTypes[{index}].supplyPoints",
+                    $"Structure {index + 1} supply points",
+                    errors),
+                ParseSupplyPoints(
+                    input.PillageSupplyPoints,
+                    $"structureTypes[{index}].pillageSupplyPoints",
+                    $"Structure {index + 1} pillage supply points",
+                    errors),
+                ParseSupplyPoints(
+                    input.DestroySupplyPoints,
+                    $"structureTypes[{index}].destroySupplyPoints",
+                    $"Structure {index + 1} destroy supply points",
                     errors)));
         }
 
@@ -1155,6 +1195,243 @@ public static class CampaignSetupRules
         return value.Value;
     }
 
+    private static int ParseSupplyPoints(int? value, string field, string label, List<DomainError> errors)
+    {
+        return ParseCampaignPoints(value, field, label, errors, HuntInEstaliaDefaults.SupplyPoints);
+    }
+
+    private static int ParseSplitForcePenalty(int? value, List<DomainError> errors)
+    {
+        if (value is null)
+        {
+            return HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
+        }
+
+        if (value < 0 || value > 100)
+        {
+            errors.Add(new DomainError(
+                "splitForceSupplyPenaltyPercent.invalid",
+                "The split-force supply penalty must be between 0 and 100 percent.",
+                "splitForceSupplyPenaltyPercent"));
+            return HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
+        }
+
+        return value.Value;
+    }
+
+    private static BattleReportRulesSetup ParseBattleReportRules(
+        bool? alwaysAskGeneralKill,
+        bool? alwaysAskSupplyLineDestroyed,
+        int? generalKillCampaignPoints,
+        int? supplyLineDestroyedCampaignPoints,
+        List<DomainError> errors)
+    {
+        return new BattleReportRulesSetup(
+            alwaysAskGeneralKill ?? HuntInEstaliaDefaults.AlwaysAskGeneralKill,
+            alwaysAskSupplyLineDestroyed ?? HuntInEstaliaDefaults.AlwaysAskSupplyLineDestroyed,
+            ParseCampaignPoints(
+                generalKillCampaignPoints,
+                "generalKillCampaignPoints",
+                "General-kill campaign points",
+                errors,
+                HuntInEstaliaDefaults.GeneralKillCampaignPoints),
+            ParseCampaignPoints(
+                supplyLineDestroyedCampaignPoints,
+                "supplyLineDestroyedCampaignPoints",
+                "Supply-line campaign points",
+                errors,
+                HuntInEstaliaDefaults.SupplyLineDestroyedCampaignPoints));
+    }
+
+    private static IReadOnlyList<RoundArmyEscalationSetup> ParseArmyEscalations(
+        IReadOnlyList<RoundArmyEscalationInput>? inputs,
+        int roundCount,
+        List<DomainError> errors)
+    {
+        var defaults = HuntInEstaliaDefaults.ArmyEscalations(Math.Max(roundCount, 1));
+        if (inputs is null || inputs.Count == 0)
+        {
+            return defaults;
+        }
+
+        if (inputs.Count > MaxRoundCount)
+        {
+            errors.Add(new DomainError(
+                "roundEscalations.invalid",
+                $"At most {MaxRoundCount} round army rows are allowed.",
+                "roundEscalations"));
+            return defaults;
+        }
+
+        var byRound = new Dictionary<int, RoundArmyEscalationSetup>();
+        for (var index = 0; index < inputs.Count; index++)
+        {
+            var input = inputs[index];
+            var roundNumber = input.RoundNumber ?? index + 1;
+            if (roundNumber < 1 || roundNumber > MaxRoundCount)
+            {
+                errors.Add(new DomainError(
+                    "roundEscalations.round.invalid",
+                    $"Round army row {index + 1} must use a round between 1 and {MaxRoundCount}.",
+                    $"roundEscalations[{index}].roundNumber"));
+                continue;
+            }
+
+            if (!byRound.TryAdd(
+                    roundNumber,
+                    new RoundArmyEscalationSetup(
+                        roundNumber,
+                        ParseCampaignPoints(
+                            input.MaxArmyPoints,
+                            $"roundEscalations[{index}].maxArmyPoints",
+                            $"Round {roundNumber} max army points",
+                            errors,
+                            defaults.FirstOrDefault(row => row.RoundNumber == roundNumber)?.MaxArmyPoints
+                                ?? defaults[^1].MaxArmyPoints),
+                        ParseSupplyPoints(
+                            input.FreeSupplyPoints,
+                            $"roundEscalations[{index}].freeSupplyPoints",
+                            $"Round {roundNumber} free supply points",
+                            errors),
+                        ParseCampaignPoints(
+                            input.FreeCharacterCount,
+                            $"roundEscalations[{index}].freeCharacterCount",
+                            $"Round {roundNumber} free characters",
+                            errors,
+                            defaults.FirstOrDefault(row => row.RoundNumber == roundNumber)?.FreeCharacterCount
+                                ?? defaults[^1].FreeCharacterCount))))
+            {
+                errors.Add(new DomainError(
+                    "roundEscalations.duplicate",
+                    $"Round {roundNumber} already has an army-escalation row.",
+                    $"roundEscalations[{index}].roundNumber"));
+            }
+        }
+
+        var rows = new RoundArmyEscalationSetup[Math.Max(roundCount, 1)];
+        RoundArmyEscalationSetup? last = null;
+        for (var round = 1; round <= rows.Length; round++)
+        {
+            if (byRound.TryGetValue(round, out var row))
+            {
+                last = row;
+                rows[round - 1] = row;
+                continue;
+            }
+
+            var fallback = last ?? defaults.FirstOrDefault(item => item.RoundNumber == round) ?? defaults[^1];
+            rows[round - 1] = new RoundArmyEscalationSetup(
+                round,
+                fallback.MaxArmyPoints,
+                fallback.FreeSupplyPoints,
+                fallback.FreeCharacterCount);
+            last = rows[round - 1];
+        }
+
+        return rows;
+    }
+
+    private static List<MissionResultQuestionSetup> ParseMissionResultQuestions(
+        IReadOnlyList<MissionResultQuestionInput>? inputs,
+        HashSet<Guid> usedIds,
+        string field,
+        string ownerLabel,
+        List<DomainError> errors)
+    {
+        var supplied = inputs?
+            .Where(static question => !string.IsNullOrWhiteSpace(question.Prompt) || question.Id is not null)
+            .ToArray() ?? [];
+        if (supplied.Length == 0)
+        {
+            return [];
+        }
+
+        if (supplied.Length > MaxMissionResultQuestionCount)
+        {
+            errors.Add(new DomainError(
+                "missions.questions.invalid",
+                $"{ownerLabel} can have at most {MaxMissionResultQuestionCount} result questions.",
+                field));
+            return [];
+        }
+
+        var parsed = new List<MissionResultQuestionSetup>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Length; index++)
+        {
+            var input = supplied[index];
+            var prompt = ParseRequiredName(
+                input.Prompt,
+                $"{field}[{index}].prompt",
+                $"{ownerLabel} question {index + 1}",
+                minLength: 1,
+                CatalogTextMaxLength,
+                errors);
+            if (prompt is null)
+            {
+                continue;
+            }
+
+            if (!seen.Add(prompt))
+            {
+                errors.Add(new DomainError(
+                    "missions.questions.duplicate",
+                    $"{ownerLabel} question names must be unique.",
+                    $"{field}[{index}].prompt"));
+                continue;
+            }
+
+            if (!TryParseQuestionKind(input.Kind, index, field, ownerLabel, errors, out var kind))
+            {
+                continue;
+            }
+
+            parsed.Add(new MissionResultQuestionSetup(
+                ResolveId(input.Id, usedIds, $"{field}[{index}].id", errors),
+                prompt,
+                kind,
+                ParseCampaignPoints(
+                    input.BattlePoints,
+                    $"{field}[{index}].battlePoints",
+                    $"{ownerLabel} question {index + 1} battle points",
+                    errors),
+                ParseCampaignPoints(
+                    input.CampaignPoints,
+                    $"{field}[{index}].campaignPoints",
+                    $"{ownerLabel} question {index + 1} campaign points",
+                    errors)));
+        }
+
+        return parsed;
+    }
+
+    private static bool TryParseQuestionKind(
+        string? raw,
+        int index,
+        string field,
+        string ownerLabel,
+        List<DomainError> errors,
+        out MissionResultQuestionKind kind)
+    {
+        kind = MissionResultQuestionKind.Boolean;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return true;
+        }
+
+        if (Enum.TryParse(raw, ignoreCase: true, out kind))
+        {
+            return true;
+        }
+
+        kind = MissionResultQuestionKind.Boolean;
+        errors.Add(new DomainError(
+            "missions.questions.kind.invalid",
+            $"{ownerLabel} question {index + 1} must be Boolean or BattlePoints.",
+            $"{field}[{index}].kind"));
+        return false;
+    }
+
     private static string ParseOptionalItemColor(string? raw, string field, string label, List<DomainError> errors)
     {
         if (string.IsNullOrWhiteSpace(raw))
@@ -1278,7 +1555,13 @@ public static class CampaignSetupRules
             }
 
             var id = ResolveId(mission.Id, usedIds, $"{field}[{missionIndex}].id", errors);
-            var created = new MissionSetup(id, name, url, mission.ClearFile);
+            var questions = ParseMissionResultQuestions(
+                mission.ResultQuestions,
+                usedIds,
+                $"{field}[{missionIndex}].resultQuestions",
+                $"{ownerLabel} mission {missionIndex + 1}",
+                errors);
+            var created = new MissionSetup(id, name, url, mission.ClearFile, questions);
             index.ById[id] = created;
             index.Names[name] = id;
             seenOnOwner.Add(id);
@@ -1612,6 +1895,8 @@ public static class CampaignSetupRules
                 "phases"));
         }
 
+        var armyEscalations = ParseArmyEscalations(schedule.RoundEscalations, schedule.RoundCount, errors);
+
         if (errors.Count > 0)
         {
             return null;
@@ -1623,7 +1908,14 @@ public static class CampaignSetupRules
             endsUtc = CampaignCalendar.Add(endsUtc, timeZone, roundLength);
         }
 
-        return new CampaignSchedule(timeZone, startsUtc, endsUtc, schedule.RoundCount, roundLength, phases);
+        return new CampaignSchedule(
+            timeZone,
+            startsUtc,
+            endsUtc,
+            schedule.RoundCount,
+            roundLength,
+            phases,
+            armyEscalations);
     }
 
     private static List<RoundPhaseSetup> ParsePhases(IReadOnlyList<RoundPhaseInput>? phases, List<DomainError> errors)

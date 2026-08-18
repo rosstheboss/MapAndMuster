@@ -1,3 +1,5 @@
+using Campaign.Domain.Campaigns;
+
 namespace Campaign.Domain.Play;
 
 /// <summary>
@@ -13,7 +15,10 @@ public sealed class StructureTypePlayRules
         string name,
         bool isBuildable,
         bool isPillageable,
-        bool isDestructible)
+        bool isDestructible,
+        int supplyPoints = HuntInEstaliaDefaults.SupplyPoints,
+        int pillageSupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
+        int destroySupplyPoints = HuntInEstaliaDefaults.SupplyPoints)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Id = id;
@@ -21,6 +26,9 @@ public sealed class StructureTypePlayRules
         IsBuildable = isBuildable;
         IsPillageable = isPillageable;
         IsDestructible = isDestructible;
+        SupplyPoints = supplyPoints;
+        PillageSupplyPoints = pillageSupplyPoints;
+        DestroySupplyPoints = destroySupplyPoints;
     }
 
     /// <summary>Gets the structure type identifier.</summary>
@@ -37,4 +45,13 @@ public sealed class StructureTypePlayRules
 
     /// <summary>Gets whether a second Pillage may destroy and remove this structure.</summary>
     public bool IsDestructible { get; }
+
+    /// <summary>Gets ongoing map supply while this structure is operational.</summary>
+    public int SupplyPoints { get; }
+
+    /// <summary>Gets temporary supply awarded when this structure is pillaged.</summary>
+    public int PillageSupplyPoints { get; }
+
+    /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
+    public int DestroySupplyPoints { get; }
 }

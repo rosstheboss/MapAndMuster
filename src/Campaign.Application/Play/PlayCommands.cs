@@ -1,3 +1,5 @@
+using Campaign.Application.Campaigns;
+
 namespace Campaign.Application.Play;
 
 /// <summary>
@@ -79,6 +81,57 @@ public sealed class SubmitBattleResultCommand
 
     /// <summary>Gets the loser's tabletop or converted battle score.</summary>
     public int? LoserScore { get; init; }
+
+    /// <summary>Gets structured reports for both participating forces, when used.</summary>
+    public IReadOnlyList<BattleParticipantReportInput>? Reports { get; init; }
+}
+
+/// <summary>
+/// One force's structured battle report in a submit command.
+/// </summary>
+public sealed class BattleParticipantReportInput
+{
+    /// <summary>Gets the reported force.</summary>
+    public required Guid ForceId { get; init; }
+
+    /// <summary>Gets tabletop victory points.</summary>
+    public int VictoryPoints { get; init; }
+
+    /// <summary>Gets the army size in points used in the battle.</summary>
+    public int ArmyPoints { get; init; }
+
+    /// <summary>Gets battle points converted from victory points.</summary>
+    public int DifferentialBattlePoints { get; init; }
+
+    /// <summary>Gets bonus battle points from the mission.</summary>
+    public int BonusBattlePoints { get; init; }
+
+    /// <summary>Gets how many supply-costing units this force fielded.</summary>
+    public int SupplyCostingUnitCount { get; init; }
+
+    /// <summary>Gets whether the reporter killed the opponent's general.</summary>
+    public bool KilledEnemyGeneral { get; init; }
+
+    /// <summary>Gets whether the reporter destroyed the enemy supply line.</summary>
+    public bool DestroyedEnemySupplyLine { get; init; }
+
+    /// <summary>Gets answers to extra mission questions.</summary>
+    public IReadOnlyList<BattleQuestionAnswerInput>? Answers { get; init; }
+}
+
+/// <summary>
+/// One answer to a mission result question.
+/// </summary>
+public sealed class BattleQuestionAnswerInput
+{
+    /// <summary>Gets the catalog question.</summary>
+    public required Guid QuestionId { get; init; }
+
+    /// <summary>Gets the true/false answer, when applicable.</summary>
+    public bool? BooleanValue { get; init; }
+
+    /// <summary>Gets the reported battle-point amount, when applicable.</summary>
+    public int? BattlePointsValue { get; init; }
 }
 
 /// <summary>
@@ -501,6 +554,18 @@ public sealed class PlayBattleDetail
     /// <summary>Gets participating force identifiers.</summary>
     public required IReadOnlyList<Guid> ParticipantForceIds { get; init; }
 
+    /// <summary>Gets forces in the current tabletop pairing. Empty means every participant.</summary>
+    public IReadOnlyList<Guid> ActiveForceIds { get; init; } = [];
+
+    /// <summary>Gets forces waiting for a later pairing.</summary>
+    public IReadOnlyList<Guid> WaitingForceIds { get; init; } = [];
+
+    /// <summary>Gets forces that must currently report a tabletop result.</summary>
+    public IReadOnlyList<Guid> ReportingForceIds { get; init; } = [];
+
+    /// <summary>Gets whether every remaining force ran and nobody won.</summary>
+    public bool IsNoContest { get; init; }
+
     /// <summary>Gets whether the viewer participates.</summary>
     public required bool IsMine { get; init; }
 
@@ -527,6 +592,21 @@ public sealed class PlayBattleDetail
 
     /// <summary>Gets eligible retreat destinations.</summary>
     public required IReadOnlyList<Guid> RetreatTargets { get; init; }
+
+    /// <summary>Gets whether the viewer may surrender this engagement.</summary>
+    public bool CanSurrender { get; init; }
+
+    /// <summary>Gets questions to ask when reporting this battle's result.</summary>
+    public IReadOnlyList<MissionResultQuestionDetail> ResultQuestions { get; init; } = [];
+
+    /// <summary>Gets the participant's current spendable supply, when the viewer can see it.</summary>
+    public int? ViewerSupplyPoints { get; init; }
+
+    /// <summary>Gets current supply for each participating force.</summary>
+    public IReadOnlyList<PlayBattleForceSupplyDetail> ForceSupplies { get; init; } = [];
+
+    /// <summary>Gets whether a staff member may confirm the outstanding report.</summary>
+    public bool CanStaffConfirm { get; init; }
 }
 
 /// <summary>A battle result the viewer is allowed to see.</summary>
@@ -546,6 +626,75 @@ public sealed class PlayBattleSubmissionDetail
 
     /// <summary>Gets the reported loser score.</summary>
     public int? LoserScore { get; init; }
+
+    /// <summary>Gets structured per-force reports, when submitted.</summary>
+    public IReadOnlyList<BattleParticipantReportDetail> Reports { get; init; } = [];
+}
+
+/// <summary>One force's structured battle report in a play response.</summary>
+public sealed class BattleParticipantReportDetail
+{
+    /// <summary>Gets the reported force.</summary>
+    public required Guid ForceId { get; init; }
+
+    /// <summary>Gets tabletop victory points.</summary>
+    public int VictoryPoints { get; init; }
+
+    /// <summary>Gets the army size in points used in the battle.</summary>
+    public int ArmyPoints { get; init; }
+
+    /// <summary>Gets battle points converted from victory points.</summary>
+    public int DifferentialBattlePoints { get; init; }
+
+    /// <summary>Gets bonus battle points from the mission.</summary>
+    public int BonusBattlePoints { get; init; }
+
+    /// <summary>Gets how many supply-costing units this force fielded.</summary>
+    public int SupplyCostingUnitCount { get; init; }
+
+    /// <summary>Gets whether the reporter killed the opponent's general.</summary>
+    public bool KilledEnemyGeneral { get; init; }
+
+    /// <summary>Gets whether the reporter destroyed the enemy supply line.</summary>
+    public bool DestroyedEnemySupplyLine { get; init; }
+
+    /// <summary>Gets answers to extra mission questions.</summary>
+    public IReadOnlyList<BattleQuestionAnswerDetail> Answers { get; init; } = [];
+}
+
+/// <summary>One answer on a stored battle report.</summary>
+public sealed class BattleQuestionAnswerDetail
+{
+    /// <summary>Gets the catalog question.</summary>
+    public required Guid QuestionId { get; init; }
+
+    /// <summary>Gets the true/false answer, when applicable.</summary>
+    public bool? BooleanValue { get; init; }
+
+    /// <summary>Gets the reported battle-point amount, when applicable.</summary>
+    public int? BattlePointsValue { get; init; }
+}
+
+/// <summary>Supply shown next to a force in a battle to resolve.</summary>
+public sealed class PlayBattleForceSupplyDetail
+{
+    /// <summary>Gets the force.</summary>
+    public required Guid ForceId { get; init; }
+
+    /// <summary>Gets the controlling player.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets map-plus-round supply after the split penalty, excluding temporary points.</summary>
+    public required int ForceAllowancePoints { get; init; }
+
+    /// <summary>Gets the maximum this force can spend if assigned the player's entire temporary pool.</summary>
+    public required int CurrentSupplyPoints { get; init; }
+
+    /// <summary>Gets remaining temporary supply.</summary>
+    public required int TemporarySupplyPoints { get; init; }
+
+    /// <summary>Gets this force's army-point cap when fighting with allied extras, if any.</summary>
+    public int AlliedArmyPoints { get; init; }
 }
 
 /// <summary>A public resolved-action or battle fact. Unrevealed orders are never included.</summary>

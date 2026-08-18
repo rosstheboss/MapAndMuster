@@ -190,7 +190,8 @@ public static class CampaignPlayRules
         CampaignSchedule schedule,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         DateTimeOffset utcNow,
-        IReadOnlyList<ForceStatusSetup>? forceStatuses = null)
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        Func<int, int>? pickIndex = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -227,7 +228,8 @@ public static class CampaignPlayRules
                     factionAllyGroups,
                     closeAt,
                     due,
-                    forceStatuses);
+                    forceStatuses,
+                    pickIndex ?? (static count => 0));
             }
         }
         else if (current.Status == PhaseWindowStatus.Open && current.Kind == RoundPhaseKind.Battle)
@@ -236,7 +238,15 @@ public static class CampaignPlayRules
             {
                 var closeAt = utcNow >= current.EndsUtc ? current.EndsUtc : utcNow;
                 var due = utcNow >= current.EndsUtc;
-                (nextState, nextMap) = CloseBattleWindow(nextState, nextMap, current, closeAt, due, forceStatuses);
+                (nextState, nextMap) = CloseBattleWindow(
+                    nextState,
+                    nextMap,
+                    current,
+                    closeAt,
+                    due,
+                    forceStatuses,
+                    pickIndex ?? (static count => 0),
+                    factionAllyGroups);
             }
         }
 
@@ -298,7 +308,7 @@ public static class CampaignPlayRules
         ArgumentNullException.ThrowIfNull(factionAllyGroups);
         next = null;
         error = null;
-        if (!TryOpenAction(state, userId, forceId, utcNow, requireUncommitted, out var window, out var force, out error))
+        if (!TryOpenAction(state, userId, forceId, utcNow, requireUncommitted, out var window, out var force, out error, allowInBattle: kind == ActionKind.Surrender))
         {
             return false;
         }
@@ -313,6 +323,21 @@ public static class CampaignPlayRules
         {
             error = new DomainError("order.kind.invalid", "Retreat is submitted after a battle, not during an action window.", "kind");
             return false;
+        }
+
+        if (kind == ActionKind.Surrender)
+        {
+            if (!force.InBattle)
+            {
+                error = new DomainError("order.surrender.not_engaged", "Surrender is only available while the force is in battle.", "kind");
+                return false;
+            }
+
+            if (targetTerritoryId is null || !IsEligibleRetreat(map, force, targetTerritoryId.Value))
+            {
+                error = new DomainError("order.target.invalid", "Choose an eligible retreat destination.", "targetTerritoryId");
+                return false;
+            }
         }
 
         if (kind is ActionKind.Move or ActionKind.Split or ActionKind.Retreat && targetTerritoryId is null)
@@ -508,6 +533,15 @@ public static class CampaignPlayRules
             return false;
         }
 
+        if (state.Drafts.Any(item =>
+            item.WindowId == window.Id
+            && item.Kind == ActionKind.Surrender
+            && state.Forces.Any(force => force.Id == item.ForceId && force.ControllerUserId == userId)))
+        {
+            error = new DomainError("order.surrender.locked", "A committed surrender cannot be withdrawn.");
+            return false;
+        }
+
         var commitments = state.Commitments.Where(item => !(item.WindowId == window.Id && item.UserId == userId)).ToArray();
         next = state.With(commitments: commitments);
         return true;
@@ -527,16 +561,40 @@ public static class CampaignPlayRules
         [NotNullWhen(false)] out DomainError? error,
         int? winnerScore = null,
         int? loserScore = null,
-        IReadOnlyList<ForceStatusSetup>? forceStatuses = null)
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        IReadOnlyList<BattleParticipantReport>? reports = null,
+        IReadOnlyList<MissionResultQuestionSetup>? missionQuestions = null,
+        bool isStaff = false,
+        PlayMap? map = null,
+        SupplyCatalog? catalog = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        Func<int, int>? pickIndex = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         outcome = null;
-        if (!TryOpenBattle(state, userId, battleId, utcNow, out var battle, out error))
+        if (!TryOpenBattle(state, userId, battleId, utcNow, out var battle, out error, isStaff))
         {
             return false;
         }
 
-        if (isDraw && winnerForceId is not null)
+        var scoredReports = reports is { Count: > 0 }
+            ? BattleResultRules.WithScoredAnswers(reports, missionQuestions ?? [])
+            : [];
+        if (scoredReports.Count > 0)
+        {
+            if (!BattleResultRules.TryDeriveOutcome(
+                    battle.ReportingForceIds,
+                    scoredReports,
+                    out winnerForceId,
+                    out isDraw,
+                    out winnerScore,
+                    out loserScore,
+                    out error))
+            {
+                return false;
+            }
+        }
+        else if (isDraw && winnerForceId is not null)
         {
             error = new DomainError("battle.result.invalid", "A draw cannot name a winner.", "winnerForceId");
             return false;
@@ -562,8 +620,18 @@ public static class CampaignPlayRules
             null,
             utcNow,
             parsedWinnerScore,
-            parsedLoserScore);
-        var next = AppendBattleSubmission(state, battle, submission, utcNow, notifyManagers: out var notify);
+            parsedLoserScore,
+            scoredReports);
+        var next = AppendBattleSubmission(
+            state,
+            battle,
+            submission,
+            utcNow,
+            out var notify,
+            map,
+            catalog,
+            factionAllyGroups,
+            pickIndex);
         outcome = BattleMutationOutcome(next, utcNow, notify, forceStatuses);
         return true;
     }
@@ -578,29 +646,24 @@ public static class CampaignPlayRules
         DateTimeOffset utcNow,
         [NotNullWhen(true)] out PlayOutcome? outcome,
         [NotNullWhen(false)] out DomainError? error,
-        IReadOnlyList<ForceStatusSetup>? forceStatuses = null)
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        bool isStaff = false,
+        PlayMap? map = null,
+        SupplyCatalog? catalog = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        Func<int, int>? pickIndex = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         outcome = null;
-        if (!TryOpenBattle(state, userId, battleId, utcNow, out var battle, out error))
+        if (!TryOpenBattle(state, userId, battleId, utcNow, out var battle, out error, isStaff))
         {
             return false;
         }
 
-        var opponent = battle.ParticipantForceIds
-            .Select(id => state.Forces.FirstOrDefault(force => force.Id == id))
-            .OfType<CampaignForce>()
-            .FirstOrDefault(force => force.ControllerUserId != userId);
-        if (opponent is null)
-        {
-            error = new DomainError("battle.accept.invalid", "There is no opponent result to accept.");
-            return false;
-        }
-
-        var theirs = state.LatestBattleSubmission(battle.Id, opponent.ControllerUserId);
+        var theirs = LatestConfirmableSubmission(state, battle, userId);
         if (theirs is null)
         {
-            error = new DomainError("battle.accept.missing", "Your opponent has not submitted a result yet.");
+            error = new DomainError("battle.accept.missing", "There is no submitted result to accept yet.");
             return false;
         }
 
@@ -613,8 +676,18 @@ public static class CampaignPlayRules
             theirs.Id,
             utcNow,
             theirs.WinnerScore,
-            theirs.LoserScore);
-        var next = AppendBattleSubmission(state, battle, submission, utcNow, out var notify);
+            theirs.LoserScore,
+            theirs.Reports);
+        var next = AppendBattleSubmission(
+            state,
+            battle,
+            submission,
+            utcNow,
+            out var notify,
+            map,
+            catalog,
+            factionAllyGroups,
+            pickIndex);
         outcome = BattleMutationOutcome(next, utcNow, notify, forceStatuses);
         return true;
     }
@@ -634,7 +707,13 @@ public static class CampaignPlayRules
         [NotNullWhen(false)] out DomainError? error,
         int? winnerScore = null,
         int? loserScore = null,
-        IReadOnlyList<ForceStatusSetup>? forceStatuses = null)
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        IReadOnlyList<BattleParticipantReport>? reports = null,
+        IReadOnlyList<MissionResultQuestionSetup>? missionQuestions = null,
+        PlayMap? map = null,
+        SupplyCatalog? catalog = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        Func<int, int>? pickIndex = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         next = null;
@@ -653,6 +732,22 @@ public static class CampaignPlayRules
         if (battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved)
         {
             error = new DomainError("battle.already_resolved", "That battle is already resolved.");
+            return false;
+        }
+
+        var scoredReports = reports is { Count: > 0 }
+            ? BattleResultRules.WithScoredAnswers(reports, missionQuestions ?? [])
+            : [];
+        if (scoredReports.Count > 0
+            && !BattleResultRules.TryDeriveOutcome(
+                battle.ReportingForceIds,
+                scoredReports,
+                out winnerForceId,
+                out isDraw,
+                out winnerScore,
+                out loserScore,
+                out error))
+        {
             return false;
         }
 
@@ -676,6 +771,15 @@ public static class CampaignPlayRules
             updated,
             utcNow)
             .AppendLog(BattleEntry(PlayLogKind.BattleGmResolved, updated, utcNow, actorUserId));
+        logged = AfterMatchResolved(
+            logged,
+            updated,
+            utcNow,
+            map,
+            catalog,
+            factionAllyGroups,
+            pickIndex,
+            parkForNextBattlePhase: false);
         (next, _) = CloseCompletedBattlePhase(logged, MapUnchanged, utcNow, forceStatuses);
         return true;
     }
@@ -704,17 +808,11 @@ public static class CampaignPlayRules
             return false;
         }
 
-        if (battle.IsDraw)
-        {
-            error = new DomainError("retreat.not_required", "A draw does not require a retreat.");
-            return false;
-        }
-
         var force = state.Forces.FirstOrDefault(item =>
             item.ControllerUserId == userId && battle.ParticipantForceIds.Contains(item.Id));
-        if (force is null || force.Id == battle.WinnerForceId)
+        if (force is null || !ForcesRequiredToRetreat(battle).Contains(force.Id))
         {
-            error = new DomainError("retreat.not_required", "Only a losing force submits a retreat.");
+            error = new DomainError("retreat.not_required", "Only a force that must leave the battlefield submits a retreat.");
             return false;
         }
 
@@ -744,6 +842,125 @@ public static class CampaignPlayRules
             battle.Id,
             ActionKind.Retreat,
             [force.Id]));
+        var (closed, closedMap) = CloseCompletedBattlePhase(next, map, utcNow, forceStatuses);
+        outcome = new PlayOutcome(closed, closedMap, LastEnd(closed, default), RoundCountOf(closed), preserveSchedule: true);
+        return true;
+    }
+
+    /// <summary>
+    /// Commits a surrender and retreat while the force is engaged. It cannot be withdrawn.
+    /// </summary>
+    public static bool TrySubmitSurrender(
+        CampaignPlayState state,
+        PlayMap map,
+        Guid userId,
+        Guid battleId,
+        Guid targetTerritoryId,
+        DateTimeOffset utcNow,
+        [NotNullWhen(true)] out PlayOutcome? outcome,
+        [NotNullWhen(false)] out DomainError? error,
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        BattleScoringSetup? battleScoring = null)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(map);
+        outcome = null;
+        var window = state.CurrentWindow();
+        if (window is null
+            || window.Status != PhaseWindowStatus.Open
+            || window.Kind is not (RoundPhaseKind.Action or RoundPhaseKind.Battle)
+            || utcNow >= window.EndsUtc)
+        {
+            error = new DomainError("order.window.closed", "The current window is not open.");
+            return false;
+        }
+
+        return TryCommitSurrender(
+            state,
+            map,
+            userId,
+            battleId,
+            targetTerritoryId,
+            utcNow,
+            window.Id,
+            out outcome,
+            out error,
+            forceStatuses,
+            factionAllyGroups,
+            battleScoring);
+    }
+
+    private static bool TryCommitSurrender(
+        CampaignPlayState state,
+        PlayMap map,
+        Guid userId,
+        Guid battleId,
+        Guid targetTerritoryId,
+        DateTimeOffset utcNow,
+        Guid? windowId,
+        [NotNullWhen(true)] out PlayOutcome? outcome,
+        [NotNullWhen(false)] out DomainError? error,
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        BattleScoringSetup? battleScoring = null,
+        bool resolveImmediately = true)
+    {
+        outcome = null;
+        var battle = state.Battles.FirstOrDefault(item => item.Id == battleId);
+        if (battle is null || battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved)
+        {
+            error = new DomainError("surrender.not_available", "That battle cannot be surrendered.");
+            return false;
+        }
+
+        var force = state.Forces.FirstOrDefault(item =>
+            item.ControllerUserId == userId && battle.ParticipantForceIds.Contains(item.Id) && item.InBattle);
+        if (force is null)
+        {
+            error = new DomainError("surrender.not_engaged", "Surrender is only available while the force is in battle.");
+            return false;
+        }
+
+        if (battle.SurrenderedForceIds.Contains(force.Id)
+            || state.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == force.Id && item.IsSurrender))
+        {
+            error = new DomainError("surrender.already_committed", "A committed surrender cannot be withdrawn.");
+            return false;
+        }
+
+        if (!IsEligibleRetreat(map, force, targetTerritoryId))
+        {
+            error = new DomainError("retreat.target.invalid", "Choose an adjacent eligible territory or your spawn.", "targetTerritoryId");
+            return false;
+        }
+
+        error = null;
+        var allies = factionAllyGroups ?? new Dictionary<Guid, string?>();
+        var scoring = battleScoring ?? BattleScoringSetup.Default;
+        var retreat = new RetreatOrder(Guid.NewGuid(), battle.Id, force.Id, targetTerritoryId, false, utcNow, isSurrender: true);
+        var surrendered = battle.SurrenderedForceIds.Append(force.Id).Distinct().ToArray();
+        var updatedBattle = battle.With(surrenderedForceIds: surrendered);
+        var next = state.With(
+                retreats: [.. state.Retreats, retreat],
+                battles: ReplaceBattle(state.Battles, updatedBattle))
+            .AppendLog(new PlayLogEntry(
+                Guid.NewGuid(),
+                utcNow,
+                PlayLogKind.PlayerSurrendered,
+                windowId,
+                force.Id,
+                userId,
+                battle.TerritoryId,
+                targetTerritoryId,
+                battle.Id,
+                ActionKind.Surrender,
+                [force.Id]));
+        if (resolveImmediately)
+        {
+            next = ResolveSurrenderedBattle(next, updatedBattle, map, allies, scoring, utcNow);
+        }
+
         var (closed, closedMap) = CloseCompletedBattlePhase(next, map, utcNow, forceStatuses);
         outcome = new PlayOutcome(closed, closedMap, LastEnd(closed, default), RoundCountOf(closed), preserveSchedule: true);
         return true;
@@ -985,9 +1202,16 @@ public static class CampaignPlayRules
 
         var battles = state.Battles
             .Select(battle =>
-                battle.Status == BattleStatus.Pending && (battle.BattleWindowId == windowId || battle.BattleWindowId is null)
-                    ? battle.With(battleWindowId: windowId, status: BattleStatus.AwaitingResults, assignWindow: true)
-                    : battle)
+            {
+                if (battle.Status != BattleStatus.Pending
+                    || (battle.BattleWindowId != windowId && battle.BattleWindowId is not null)
+                    || battle.ParticipantForceIds.Count < 2)
+                {
+                    return battle;
+                }
+
+                return battle.With(battleWindowId: windowId, status: BattleStatus.AwaitingResults, assignWindow: true);
+            })
             .ToArray();
         _ = utcNow;
         return state.With(windows: windows, battles: battles);
@@ -1000,8 +1224,11 @@ public static class CampaignPlayRules
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         DateTimeOffset closeAt,
         bool due,
-        IReadOnlyList<ForceStatusSetup>? forceStatuses = null)
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        Func<int, int>? pickIndex = null)
     {
+        var choose = pickIndex ?? (static count => 0);
+        state = ApplyDeadlineSurrenders(state, map, window, factionAllyGroups, closeAt, due);
         var submissions = state.Submissions.ToList();
         foreach (var force in state.Forces.Where(item => !item.InBattle).OrderBy(static item => item.Id))
         {
@@ -1042,12 +1269,23 @@ public static class CampaignPlayRules
         var snapshot = CaptureWindowSnapshot(state, map, window.Id);
         var withOrders = state.With(submissions: submissions);
         var (resolved, resolvedMap) = ActionResolution.Resolve(withOrders, map, window, factionAllyGroups, closeAt);
+        var structureSupply = map.StructureTypes.ToDictionary(
+            static type => type.Id,
+            static type => new StructureSupplyRules(type.SupplyPoints, type.PillageSupplyPoints, type.DestroySupplyPoints));
+        resolved = resolved.With(
+            playerSupplies: SupplyRules.AwardTemporary(
+                resolved.PlayerSupplies,
+                map,
+                resolvedMap,
+                resolved.Forces,
+                structureSupply));
         var destructions = StructureDestructionRules.Detect(map, resolvedMap, resolved.Forces, closeAt);
         if (destructions.Count > 0)
         {
             resolved = resolved.With(structureDestructions: [.. resolved.StructureDestructions, .. destructions]);
         }
 
+        resolved = AssignOpeningMatches(resolved, resolvedMap, factionAllyGroups, choose);
         var snapshots = resolved.Snapshots.Where(item => item.WindowId != window.Id).Append(snapshot).ToArray();
         resolved = ApplyActionStatuses(resolved.With(snapshots: snapshots), resolvedMap, window, forceStatuses);
         return FinishWindow(resolved, resolvedMap, window, closeAt, due, forceStatuses);
@@ -1059,12 +1297,18 @@ public static class CampaignPlayRules
         PhaseWindow window,
         DateTimeOffset closeAt,
         bool due,
-        IReadOnlyList<ForceStatusSetup>? forceStatuses = null)
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        Func<int, int>? pickIndex = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null)
     {
+        var choose = pickIndex ?? (static count => 0);
+        var allies = factionAllyGroups ?? new Dictionary<Guid, string?>();
+        state = ApplyDeadlineSurrenders(state, map, window, allies, closeAt, due);
         var battles = state.Battles.ToList();
         var log = new List<PlayLogEntry>();
         var notify = false;
         var nextItems = state.ItemObjectives;
+        var finalizedNow = new List<CampaignBattle>();
         foreach (var battle in battles.Where(item => item.BattleWindowId == window.Id).ToArray())
         {
             if (battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved)
@@ -1087,6 +1331,7 @@ public static class CampaignPlayRules
                 ReplaceInPlace(battles, finalized);
                 log.Add(BattleEntry(PlayLogKind.BattleFinalized, finalized, closeAt));
                 nextItems = ItemObjectiveRules.AwardBattleSpoils(nextItems, finalized, state.Forces, closeAt, log);
+                finalizedNow.Add(finalized);
             }
             else if (current.Count == 0 && due)
             {
@@ -1096,6 +1341,18 @@ public static class CampaignPlayRules
         }
 
         var next = state.With(battles: battles, itemObjectives: nextItems).AppendLog([.. log]);
+        foreach (var finalized in finalizedNow)
+        {
+            next = AfterMatchResolved(
+                next,
+                finalized,
+                closeAt,
+                map,
+                catalog: null,
+                allies,
+                choose,
+                parkForNextBattlePhase: true);
+        }
         if (!due && !BattlePhaseComplete(next, window))
         {
             return (next, map);
@@ -1112,7 +1369,7 @@ public static class CampaignPlayRules
             return (next, map);
         }
 
-        next = ApplyRetreats(next, window, closeAt);
+        next = ApplyRetreats(next, map, window, closeAt, pickIndex ?? (static count => 0));
         next = ApplyBattleStatuses(next, map, window, forceStatuses);
         return FinishWindow(next, map, window, closeAt, due, forceStatuses);
     }
@@ -1127,18 +1384,17 @@ public static class CampaignPlayRules
         var log = new List<PlayLogEntry>();
         foreach (var battle in state.Battles.Where(item => item.BattleWindowId == window.Id))
         {
-            if (battle.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved || battle.IsDraw)
+            if (battle.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved)
             {
                 continue;
             }
 
-            foreach (var forceId in battle.ParticipantForceIds)
+            var occupied = new HashSet<Guid>(
+                retreats
+                    .Where(item => item.BattleId == battle.Id)
+                    .Select(item => item.TargetTerritoryId));
+            foreach (var forceId in ForcesRequiredToRetreat(battle))
             {
-                if (forceId == battle.WinnerForceId)
-                {
-                    continue;
-                }
-
                 if (retreats.Any(item => item.BattleId == battle.Id && item.ForceId == forceId))
                 {
                     continue;
@@ -1150,8 +1406,8 @@ public static class CampaignPlayRules
                     continue;
                 }
 
-                var spawn = map.SpawnFor(force.FactionId);
-                var target = spawn?.Id ?? force.TerritoryId;
+                var target = PickSafestRetreat(map, force, occupied);
+                occupied.Add(target);
                 retreats.Add(new RetreatOrder(Guid.NewGuid(), battle.Id, force.Id, target, true, utcNow));
                 log.Add(new PlayLogEntry(
                     Guid.NewGuid(),
@@ -1171,12 +1427,37 @@ public static class CampaignPlayRules
         return state.With(retreats: retreats).AppendLog([.. log]);
     }
 
-    private static CampaignPlayState ApplyRetreats(CampaignPlayState state, PhaseWindow window, DateTimeOffset utcNow)
+    private static CampaignPlayState ApplyRetreats(
+        CampaignPlayState state,
+        PlayMap map,
+        PhaseWindow window,
+        DateTimeOffset utcNow,
+        Func<int, int> pickIndex)
     {
         var forces = state.Forces.ToDictionary(static force => force.Id);
         var origins = new Dictionary<Guid, Guid>();
-        foreach (var battle in state.Battles.Where(item => item.BattleWindowId == window.Id))
+        var staying = new HashSet<Guid>();
+        foreach (var battle in state.Battles)
         {
+            if (battle.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved)
+            {
+                foreach (var forceId in battle.ParticipantForceIds)
+                {
+                    staying.Add(forceId);
+                    if (forces.TryGetValue(forceId, out var openForce))
+                    {
+                        forces[forceId] = openForce.With(inBattle: true);
+                    }
+                }
+
+                continue;
+            }
+
+            if (battle.BattleWindowId != window.Id)
+            {
+                continue;
+            }
+
             foreach (var forceId in battle.ParticipantForceIds)
             {
                 if (!forces.TryGetValue(forceId, out var force))
@@ -1188,19 +1469,21 @@ public static class CampaignPlayRules
                 if (retreat is not null)
                 {
                     origins[forceId] = force.TerritoryId;
-                    forces[forceId] = force.With(territoryId: retreat.TargetTerritoryId, inBattle: false);
+                    forces[forceId] = force.With(territoryId: retreat.TargetTerritoryId, inBattle: staying.Contains(forceId));
                 }
-                else
+                else if (!staying.Contains(forceId))
                 {
                     forces[forceId] = force.With(inBattle: false);
                 }
             }
         }
 
-        var log = new List<PlayLogEntry>();
+        ResolveRetreatCollisions(forces, map, state, pickIndex, utcNow, out var collisionLog);
+        var log = new List<PlayLogEntry>(collisionLog);
         var nextForces = forces.Values.OrderBy(static force => force.Id).ToArray();
         var items = ItemObjectiveRules.DropCarriedByMovers(state.ItemObjectives, origins, utcNow, log);
         items = ItemObjectiveRules.PickUpUnpossessed(items, nextForces, utcNow, log);
+        _ = staying;
         return state.With(forces: nextForces, itemObjectives: items).AppendLog([.. log]);
     }
 
@@ -1279,18 +1562,13 @@ public static class CampaignPlayRules
 
         foreach (var battle in battles)
         {
-            if (battle.IsDraw)
+            if (battle.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved)
             {
                 continue;
             }
 
-            foreach (var forceId in battle.ParticipantForceIds)
+            foreach (var forceId in ForcesRequiredToRetreat(battle))
             {
-                if (forceId == battle.WinnerForceId)
-                {
-                    continue;
-                }
-
                 if (!state.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == forceId))
                 {
                     return false;
@@ -1346,21 +1624,48 @@ public static class CampaignPlayRules
         CampaignBattle battle,
         BattleResultSubmission submission,
         DateTimeOffset utcNow,
-        out IReadOnlyList<Guid> notifyManagers)
+        out IReadOnlyList<Guid> notifyManagers,
+        PlayMap? map = null,
+        SupplyCatalog? catalog = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        Func<int, int>? pickIndex = null)
     {
         _ = utcNow;
         notifyManagers = [];
         var submissions = state.BattleSubmissions.Append(submission).ToArray();
         var nextState = state.With(battleSubmissions: submissions);
+        var participants = battle.ReportingForceIds
+            .Select(id => state.Forces.FirstOrDefault(force => force.Id == id)?.ControllerUserId)
+            .OfType<Guid>()
+            .Distinct()
+            .ToHashSet();
+        if (submission.AcceptedSubmissionId is not null && !participants.Contains(submission.SubmitterUserId))
+        {
+            var resolved = battle.With(
+                status: BattleStatus.Finalized,
+                winnerForceId: submission.WinnerForceId,
+                isDraw: submission.IsDraw,
+                clearWinner: submission.IsDraw,
+                winnerScore: submission.WinnerScore,
+                loserScore: submission.LoserScore,
+                assignScores: true);
+            return AfterMatchResolved(
+                ApplyBattleSpoils(nextState.With(battles: ReplaceBattle(nextState.Battles, resolved)), resolved, utcNow)
+                    .AppendLog(BattleEntry(PlayLogKind.BattleFinalized, resolved, utcNow)),
+                resolved,
+                utcNow,
+                map,
+                catalog,
+                factionAllyGroups,
+                pickIndex,
+                parkForNextBattlePhase: false);
+        }
+
         var current = CurrentSubmissions(nextState, battle);
         if (current.Count >= 2)
         {
             var first = current[0];
-            var equivalent = current.All(item =>
-                item.IsDraw == first.IsDraw
-                && item.WinnerForceId == first.WinnerForceId
-                && item.WinnerScore == first.WinnerScore
-                && item.LoserScore == first.LoserScore);
+            var equivalent = current.All(item => BattleResultRules.AreEquivalent(item, first));
             if (equivalent)
             {
                 var resolved = battle.With(
@@ -1371,8 +1676,16 @@ public static class CampaignPlayRules
                     winnerScore: first.WinnerScore,
                     loserScore: first.LoserScore,
                     assignScores: true);
-                return ApplyBattleSpoils(nextState.With(battles: ReplaceBattle(nextState.Battles, resolved)), resolved, utcNow)
-                    .AppendLog(BattleEntry(PlayLogKind.BattleFinalized, resolved, utcNow));
+                return AfterMatchResolved(
+                    ApplyBattleSpoils(nextState.With(battles: ReplaceBattle(nextState.Battles, resolved)), resolved, utcNow)
+                        .AppendLog(BattleEntry(PlayLogKind.BattleFinalized, resolved, utcNow)),
+                    resolved,
+                    utcNow,
+                    map,
+                    catalog,
+                    factionAllyGroups,
+                    pickIndex,
+                    parkForNextBattlePhase: false);
             }
 
             var disputed = battle.With(status: BattleStatus.Disputed);
@@ -1386,7 +1699,7 @@ public static class CampaignPlayRules
 
     private static IReadOnlyList<BattleResultSubmission> CurrentSubmissions(CampaignPlayState state, CampaignBattle battle)
     {
-        var participants = battle.ParticipantForceIds
+        var participants = battle.ReportingForceIds
             .Select(id => state.Forces.FirstOrDefault(force => force.Id == id)?.ControllerUserId)
             .OfType<Guid>()
             .Distinct()
@@ -1692,7 +2005,8 @@ public static class CampaignPlayRules
         bool requireUncommitted,
         [NotNullWhen(true)] out PhaseWindow? window,
         [NotNullWhen(true)] out CampaignForce? force,
-        [NotNullWhen(false)] out DomainError? error)
+        [NotNullWhen(false)] out DomainError? error,
+        bool allowInBattle = false)
     {
         force = state.Forces.FirstOrDefault(item => item.Id == forceId && item.ControllerUserId == userId);
         window = state.CurrentWindow();
@@ -1709,7 +2023,7 @@ public static class CampaignPlayRules
             return false;
         }
 
-        if (force.InBattle)
+        if (force.InBattle && !allowInBattle)
         {
             error = new DomainError("order.force.in_battle", "A force in battle cannot submit a different action.");
             return false;
@@ -1731,18 +2045,19 @@ public static class CampaignPlayRules
         Guid battleId,
         DateTimeOffset utcNow,
         [NotNullWhen(true)] out CampaignBattle? battle,
-        [NotNullWhen(false)] out DomainError? error)
+        [NotNullWhen(false)] out DomainError? error,
+        bool isStaff = false)
     {
         battle = state.Battles.FirstOrDefault(item => item.Id == battleId);
         error = null;
         var window = state.CurrentWindow();
-        if (window is null || window.Kind != RoundPhaseKind.Battle || window.Status != PhaseWindowStatus.Open)
+        if (window is null || window.Status != PhaseWindowStatus.Open)
         {
             error = new DomainError("battle.window.closed", "The battle phase is not open.");
             return false;
         }
 
-        if (battle is null || battle.BattleWindowId != window.Id)
+        if (battle is null)
         {
             error = new DomainError("battle.not_found", "The battle was not found.");
             return false;
@@ -1754,7 +2069,13 @@ public static class CampaignPlayRules
             return false;
         }
 
-        var participantIds = battle.ParticipantForceIds;
+        if (isStaff)
+        {
+            _ = utcNow;
+            return true;
+        }
+
+        var participantIds = battle.ReportingForceIds;
         var force = state.Forces.FirstOrDefault(item =>
             item.ControllerUserId == userId && participantIds.Contains(item.Id));
         if (force is null)
@@ -1887,6 +2208,478 @@ public static class CampaignPlayRules
         return state.With(forces: ForceStatusRules.Apply(state.Forces, catalog, facts));
     }
 
+    private static IReadOnlyList<Guid> ForcesRequiredToRetreat(CampaignBattle battle)
+    {
+        if (battle.IsNoContest)
+        {
+            return battle.SurrenderedForceIds.Count > 0
+                ? battle.SurrenderedForceIds
+                : battle.ReportingForceIds;
+        }
+
+        var reporting = battle.ReportingForceIds;
+        if (battle.IsDraw)
+        {
+            return reporting;
+        }
+
+        return [.. reporting.Where(forceId => forceId != battle.WinnerForceId)];
+    }
+
+    private static CampaignPlayState ResolveSurrenderedBattle(
+        CampaignPlayState state,
+        CampaignBattle battle,
+        PlayMap map,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        BattleScoringSetup scoring,
+        DateTimeOffset utcNow)
+    {
+        _ = map;
+        var fighting = state.Forces
+            .Where(force =>
+                battle.ParticipantForceIds.Contains(force.Id)
+                && !battle.SurrenderedForceIds.Contains(force.Id)
+                && !state.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == force.Id))
+            .ToArray();
+        var sides = BattleMatchRules.Sides(fighting, factionAllyGroups, state.BrokenAllyFactionIds);
+        if (sides.Count == 0)
+        {
+            var noContest = battle.With(
+                status: BattleStatus.Finalized,
+                isDraw: false,
+                clearWinner: true,
+                isNoContest: true,
+                winnerScore: 0,
+                loserScore: 0,
+                assignScores: true);
+            return AfterMatchResolved(
+                ApplyBattleSpoils(state.With(battles: ReplaceBattle(state.Battles, noContest)), noContest, utcNow)
+                    .AppendLog(BattleEntry(PlayLogKind.BattleFinalized, noContest, utcNow)),
+                noContest,
+                utcNow,
+                map,
+                catalog: null,
+                factionAllyGroups,
+                pickIndex: null,
+                parkForNextBattlePhase: false);
+        }
+
+        if (sides.Count == 1)
+        {
+            var winner = sides[0][0];
+            var maxPoints = scoring.DifferentialMaximum;
+            var won = battle.With(
+                status: BattleStatus.Finalized,
+                winnerForceId: winner.Id,
+                isDraw: false,
+                winnerScore: maxPoints,
+                loserScore: 0,
+                assignScores: true,
+                isNoContest: false);
+            return AfterMatchResolved(
+                ApplyBattleSpoils(state.With(battles: ReplaceBattle(state.Battles, won)), won, utcNow)
+                    .AppendLog(BattleEntry(PlayLogKind.BattleFinalized, won, utcNow)),
+                won,
+                utcNow,
+                map,
+                catalog: null,
+                factionAllyGroups,
+                pickIndex: null,
+                parkForNextBattlePhase: false);
+        }
+
+        var active = BattleMatchRules.NextActiveForceIds(
+            fighting,
+            factionAllyGroups,
+            state.BrokenAllyFactionIds,
+            force => StrengthOf(force, state, map),
+            static _ => 0);
+        var waiting = fighting.Select(static force => force.Id).Except(active).ToArray();
+        var continued = battle.With(activeForceIds: active, waitingForceIds: waiting);
+        return state.With(battles: ReplaceBattle(state.Battles, continued));
+    }
+
+    private static CampaignPlayState ApplyDeadlineSurrenders(
+        CampaignPlayState state,
+        PlayMap map,
+        PhaseWindow window,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        DateTimeOffset closeAt,
+        bool due)
+    {
+        var next = state;
+        var affected = new HashSet<Guid>();
+        foreach (var force in state.Forces.Where(static item => item.InBattle).OrderBy(static item => item.Id))
+        {
+            var committed = next.Commitments.Any(item => item.WindowId == window.Id && item.UserId == force.ControllerUserId);
+            if (!due && !committed)
+            {
+                continue;
+            }
+
+            var draft = next.DraftFor(window.Id, force.Id);
+            if (draft is null || draft.Kind != ActionKind.Surrender || draft.TargetTerritoryId is not { } target)
+            {
+                continue;
+            }
+
+            var battle = next.Battles.FirstOrDefault(item =>
+                item.ParticipantForceIds.Contains(force.Id)
+                && item.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved);
+            if (battle is null)
+            {
+                continue;
+            }
+
+            if (TryCommitSurrender(
+                next,
+                map,
+                force.ControllerUserId,
+                battle.Id,
+                target,
+                closeAt,
+                window.Id,
+                out var outcome,
+                out _,
+                factionAllyGroups: factionAllyGroups,
+                resolveImmediately: false)
+                && outcome is not null)
+            {
+                next = outcome.State;
+                affected.Add(battle.Id);
+            }
+        }
+
+        foreach (var battleId in affected)
+        {
+            var battle = next.Battles.FirstOrDefault(item => item.Id == battleId);
+            if (battle is null || battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved)
+            {
+                continue;
+            }
+
+            next = ResolveSurrenderedBattle(next, battle, map, factionAllyGroups, BattleScoringSetup.Default, closeAt);
+        }
+
+        return next;
+    }
+
+    private static CampaignPlayState AssignOpeningMatches(
+        CampaignPlayState state,
+        PlayMap map,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        Func<int, int> pickIndex)
+    {
+        var battles = new List<CampaignBattle>();
+        var changed = false;
+        foreach (var battle in state.Battles)
+        {
+            if (battle.ActiveForceIds.Count > 0 || battle.WaitingForceIds.Count > 0
+                || battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved)
+            {
+                battles.Add(battle);
+                continue;
+            }
+
+            var fighting = state.Forces.Where(force => battle.ParticipantForceIds.Contains(force.Id)).ToArray();
+            var active = BattleMatchRules.NextActiveForceIds(
+                fighting,
+                factionAllyGroups,
+                state.BrokenAllyFactionIds,
+                force => StrengthOf(force, state, map),
+                pickIndex);
+            var waiting = fighting.Select(static force => force.Id).Except(active).ToArray();
+            if (waiting.Length == 0 && active.Count == fighting.Length)
+            {
+                battles.Add(battle);
+                continue;
+            }
+
+            changed = true;
+            battles.Add(battle.With(activeForceIds: active, waitingForceIds: waiting));
+        }
+
+        return changed ? state.With(battles: battles) : state;
+    }
+
+    private static CampaignPlayState AfterMatchResolved(
+        CampaignPlayState state,
+        CampaignBattle resolved,
+        DateTimeOffset utcNow,
+        PlayMap? map,
+        SupplyCatalog? catalog,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups,
+        Func<int, int>? pickIndex,
+        bool parkForNextBattlePhase)
+    {
+        var spent = SpendReportedSupply(state, resolved, map, catalog);
+        if (resolved.WaitingForceIds.Count == 0 || resolved.IsNoContest)
+        {
+            return spent;
+        }
+
+        var remainingIds = resolved.WaitingForceIds.ToList();
+        if (!resolved.IsDraw && resolved.WinnerForceId is { } winnerId)
+        {
+            remainingIds.Add(winnerId);
+        }
+
+        remainingIds = [.. remainingIds.Distinct()];
+        if (remainingIds.Count == 0)
+        {
+            return spent.With(battles: ReplaceBattle(spent.Battles, resolved.With(waitingForceIds: [])));
+        }
+
+        var remainingForces = spent.Forces.Where(force => remainingIds.Contains(force.Id)).ToArray();
+        var allies = factionAllyGroups ?? new Dictionary<Guid, string?>();
+        var sides = BattleMatchRules.Sides(remainingForces, allies, spent.BrokenAllyFactionIds);
+        var choose = pickIndex ?? (static count => 0);
+        IReadOnlyList<Guid> active = [];
+        IReadOnlyList<Guid> waiting = remainingIds;
+        var followUpStatus = BattleStatus.Pending;
+        Guid? followUpWindow = null;
+        if (map is not null && sides.Count >= 2 && remainingForces.Length >= 2)
+        {
+            active = BattleMatchRules.NextActiveForceIds(
+                remainingForces,
+                allies,
+                spent.BrokenAllyFactionIds,
+                force => StrengthOf(force, spent, map),
+                choose);
+            waiting = remainingIds.Except(active).ToArray();
+            if (!parkForNextBattlePhase)
+            {
+                followUpStatus = BattleStatus.AwaitingResults;
+                followUpWindow = resolved.BattleWindowId;
+            }
+        }
+
+        var followUp = new CampaignBattle(
+            Guid.NewGuid(),
+            resolved.TerritoryId,
+            resolved.SourceWindowId,
+            followUpWindow,
+            followUpStatus,
+            remainingIds,
+            winnerForceId: null,
+            isDraw: false,
+            utcNow,
+            activeForceIds: active,
+            waitingForceIds: waiting);
+        var cleared = resolved.With(waitingForceIds: []);
+        var nextForces = spent.Forces
+            .Select(force => remainingIds.Contains(force.Id) ? force.With(inBattle: true) : force)
+            .ToArray();
+        return spent
+            .With(
+                forces: nextForces,
+                battles: [.. ReplaceBattle(spent.Battles, cleared), followUp])
+            .AppendLog(new PlayLogEntry(
+                Guid.NewGuid(),
+                utcNow,
+                PlayLogKind.BattleMatchAdvanced,
+                followUpWindow ?? resolved.BattleWindowId,
+                resolved.WinnerForceId,
+                actorUserId: null,
+                resolved.TerritoryId,
+                targetTerritoryId: null,
+                followUp.Id,
+                ActionKind.Battle,
+                remainingIds));
+    }
+
+    private static CampaignPlayState SpendReportedSupply(
+        CampaignPlayState state,
+        CampaignBattle resolved,
+        PlayMap? map,
+        SupplyCatalog? catalog)
+    {
+        if (map is null || catalog is null)
+        {
+            return state;
+        }
+
+        var current = CurrentSubmissions(state, resolved);
+        var reports = current.Count > 0
+            ? current[0].Reports
+            : state.BattleSubmissions
+                .Where(item => item.BattleId == resolved.Id)
+                .OrderByDescending(static item => item.SubmittedUtc)
+                .Select(static item => item.Reports)
+                .FirstOrDefault()
+                ?? [];
+        if (reports.Count == 0)
+        {
+            return state;
+        }
+
+        var round = state.CurrentWindow()?.RoundNumber
+            ?? (state.Windows.Count > 0 ? state.Windows[^1].RoundNumber : 1);
+        var tempByPlayer = new Dictionary<Guid, List<int>>();
+        foreach (var report in reports)
+        {
+            var force = state.Forces.FirstOrDefault(item => item.Id == report.ForceId);
+            if (force is null)
+            {
+                continue;
+            }
+
+            var snapshot = SupplyRules.ForPlayer(state, map, catalog, force.ControllerUserId, round);
+            var (_, temporary) = SupplyRules.AllocateSpend(report.SupplyCostingUnitCount, snapshot.ForceAllowancePoints);
+            if (!tempByPlayer.TryGetValue(force.ControllerUserId, out var requested))
+            {
+                requested = [];
+                tempByPlayer[force.ControllerUserId] = requested;
+            }
+
+            requested.Add(temporary);
+        }
+
+        var supplies = state.PlayerSupplies;
+        foreach (var pair in tempByPlayer)
+        {
+            supplies = SupplyRules.SpendTemporary(supplies, pair.Key, pair.Value);
+        }
+
+        return state.With(playerSupplies: supplies);
+    }
+
+    private static void ResolveRetreatCollisions(
+        Dictionary<Guid, CampaignForce> forces,
+        PlayMap map,
+        CampaignPlayState state,
+        Func<int, int> pickIndex,
+        DateTimeOffset utcNow,
+        out List<PlayLogEntry> log)
+    {
+        log = [];
+        var occupied = new Dictionary<Guid, List<CampaignForce>>();
+        foreach (var force in forces.Values)
+        {
+            if (!occupied.TryGetValue(force.TerritoryId, out var list))
+            {
+                list = [];
+                occupied[force.TerritoryId] = list;
+            }
+
+            list.Add(force);
+        }
+
+        var allyGroups = new Dictionary<Guid, string?>();
+        foreach (var group in occupied.Where(static pair => pair.Value.Count > 1))
+        {
+            var sides = BattleMatchRules.Sides(group.Value, allyGroups, state.BrokenAllyFactionIds);
+            if (sides.Count < 2)
+            {
+                continue;
+            }
+
+            var ranked = CombatantStrengthRules.Rank(
+                group.Value,
+                force => StrengthOf(force, state, map),
+                pickIndex);
+            var keeper = ranked[0];
+            var blocked = occupied.Keys.ToHashSet();
+            foreach (var displaced in ranked.Skip(1))
+            {
+                if (!ActionResolution.AreEnemies(keeper.FactionId, displaced.FactionId, allyGroups, state.BrokenAllyFactionIds))
+                {
+                    continue;
+                }
+
+                var target = PickSafestRetreat(map, displaced, blocked);
+                blocked.Add(target);
+                forces[displaced.Id] = displaced.With(territoryId: target, inBattle: false);
+                log.Add(new PlayLogEntry(
+                    Guid.NewGuid(),
+                    utcNow,
+                    PlayLogKind.RetreatCollisionResolved,
+                    state.CurrentWindow()?.Id,
+                    displaced.Id,
+                    displaced.ControllerUserId,
+                    group.Key,
+                    target,
+                    battleId: null,
+                    ActionKind.Retreat,
+                    [keeper.Id, displaced.Id]));
+            }
+        }
+    }
+
+    private static CombatantStrengthRules.Strength StrengthOf(
+        CampaignForce force,
+        CampaignPlayState state,
+        PlayMap map)
+    {
+        var holdings = CombatantStrengthRules.Holdings(map, force.FactionId);
+        var points = 0;
+        foreach (var battle in state.Battles)
+        {
+            if (battle.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved || battle.IsNoContest)
+            {
+                continue;
+            }
+
+            if (battle.WinnerForceId is { } winnerId
+                && state.Forces.FirstOrDefault(item => item.Id == winnerId)?.ControllerUserId == force.ControllerUserId)
+            {
+                points += battle.WinnerScore ?? 1;
+            }
+        }
+
+        var supply = state.PlayerSupplies.FirstOrDefault(item => item.UserId == force.ControllerUserId)?.TemporarySupplyPoints ?? 0;
+        supply += holdings.Territories + holdings.Structures;
+        return new CombatantStrengthRules.Strength(points, holdings.Territories, holdings.Structures, supply);
+    }
+
+    private static BattleResultSubmission? LatestConfirmableSubmission(
+        CampaignPlayState state,
+        CampaignBattle battle,
+        Guid userId)
+    {
+        return state.BattleSubmissions
+            .Where(item => item.BattleId == battle.Id && item.SubmitterUserId != userId)
+            .OrderByDescending(static item => item.SubmittedUtc)
+            .FirstOrDefault();
+    }
+
+    private static Guid PickSafestRetreat(PlayMap map, CampaignForce force, HashSet<Guid> occupied)
+    {
+        var spawn = map.SpawnFor(force.FactionId);
+        PlayTerritory? best = null;
+        var bestRank = int.MaxValue;
+        foreach (var id in EligibleRetreats(map, force))
+        {
+            var territory = map.Territory(id);
+            if (territory is null)
+            {
+                continue;
+            }
+
+            var rank = 3;
+            if (territory.OwnerFactionId == force.FactionId && !occupied.Contains(id))
+            {
+                rank = 0;
+            }
+            else if (!occupied.Contains(id))
+            {
+                rank = 1;
+            }
+            else if (spawn is not null && territory.Id == spawn.Id)
+            {
+                rank = 2;
+            }
+
+            if (rank < bestRank || (rank == bestRank && (best is null || territory.DisplayNumber < best.DisplayNumber)))
+            {
+                best = territory;
+                bestRank = rank;
+            }
+        }
+
+        return best?.Id ?? spawn?.Id ?? force.TerritoryId;
+    }
+
     private static ActionWindowSnapshot CaptureWindowSnapshot(CampaignPlayState state, PlayMap map, Guid windowId)
     {
         return new ActionWindowSnapshot(
@@ -1934,7 +2727,11 @@ public static class CampaignPlayRules
                 territory.SpawnFactionId,
                 captured.StructureTypeId,
                 captured.StructureName,
-                captured.Condition);
+                captured.Condition,
+                territory.IsPillageable,
+                territory.IsDestructible,
+                territory.IsWaterFeature,
+                territory.TerrainTypeId);
         }).ToArray();
         return map.WithTerritories(next);
     }

@@ -120,6 +120,24 @@ public sealed class SaveCampaignRequest
 
     /// <summary>Gets campaign points for most battle wins.</summary>
     public int? MostBattlesWonCampaignPoints { get; init; }
+
+    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    public int? SplitForceSupplyPenaltyPercent { get; init; }
+
+    /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
+    public bool? AlwaysAskGeneralKill { get; init; }
+
+    /// <summary>Gets whether every battle report asks if the enemy supply line was destroyed.</summary>
+    public bool? AlwaysAskSupplyLineDestroyed { get; init; }
+
+    /// <summary>Gets campaign points awarded for a slain enemy general.</summary>
+    public int? GeneralKillCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
+    public int? SupplyLineDestroyedCampaignPoints { get; init; }
+
+    /// <summary>Gets per-round army size, free supply, and free characters.</summary>
+    public IReadOnlyList<RoundArmyEscalationRequest>? RoundEscalations { get; init; }
 }
 
 /// <summary>
@@ -135,6 +153,24 @@ public sealed class RoundPhaseRequest
 
     /// <summary>Gets the duration unit name.</summary>
     public required string DurationUnit { get; init; }
+}
+
+/// <summary>
+/// Per-round army size and free allowances in a save request.
+/// </summary>
+public sealed class RoundArmyEscalationRequest
+{
+    /// <summary>Gets the 1-based round.</summary>
+    public int RoundNumber { get; init; }
+
+    /// <summary>Gets the maximum army points size for the round.</summary>
+    public int? MaxArmyPoints { get; init; }
+
+    /// <summary>Gets free supply points granted this round.</summary>
+    public int? FreeSupplyPoints { get; init; }
+
+    /// <summary>Gets how many characters have a free base cost against supply.</summary>
+    public int? FreeCharacterCount { get; init; }
 }
 
 /// <summary>
@@ -213,6 +249,9 @@ public sealed class TerrainTypeRequest
 
     /// <summary>Gets whether this terrain is a water feature.</summary>
     public bool? IsWaterFeature { get; init; }
+
+    /// <summary>Gets supply points granted by a controlled territory of this terrain.</summary>
+    public int? SupplyPoints { get; init; }
 }
 
 /// <summary>
@@ -249,6 +288,15 @@ public sealed class StructureTypeRequest
 
     /// <summary>Gets campaign points awarded for currently controlling this structure when it is not destroyed.</summary>
     public int? CampaignPoints { get; init; }
+
+    /// <summary>Gets ongoing map supply while this structure is operational.</summary>
+    public int? SupplyPoints { get; init; }
+
+    /// <summary>Gets temporary supply awarded when this structure is pillaged.</summary>
+    public int? PillageSupplyPoints { get; init; }
+
+    /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
+    public int? DestroySupplyPoints { get; init; }
 }
 
 /// <summary>
@@ -438,6 +486,30 @@ public sealed class MissionRequest
 
     /// <summary>Gets whether an existing uploaded file should be removed.</summary>
     public bool ClearFile { get; init; }
+
+    /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
+    public IReadOnlyList<MissionResultQuestionRequest>? ResultQuestions { get; init; }
+}
+
+/// <summary>
+/// A campaign-manager-written question asked on a mission battle report.
+/// </summary>
+public sealed class MissionResultQuestionRequest
+{
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Gets the question text.</summary>
+    public required string Prompt { get; init; }
+
+    /// <summary>Gets Boolean or BattlePoints.</summary>
+    public string? Kind { get; init; }
+
+    /// <summary>Gets battle points awarded when a boolean answer is true.</summary>
+    public int? BattlePoints { get; init; }
+
+    /// <summary>Gets campaign points awarded when the question is scored.</summary>
+    public int? CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -628,6 +700,24 @@ public sealed class CampaignDetailResponse
     /// <summary>Gets campaign points for most battle wins.</summary>
     public int MostBattlesWonCampaignPoints { get; init; }
 
+    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    public int SplitForceSupplyPenaltyPercent { get; init; }
+
+    /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
+    public bool AlwaysAskGeneralKill { get; init; }
+
+    /// <summary>Gets whether every battle report asks if the enemy supply line was destroyed.</summary>
+    public bool AlwaysAskSupplyLineDestroyed { get; init; }
+
+    /// <summary>Gets campaign points awarded for a slain enemy general.</summary>
+    public int GeneralKillCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
+    public int SupplyLineDestroyedCampaignPoints { get; init; }
+
+    /// <summary>Gets per-round army size, free supply, and free characters.</summary>
+    public IReadOnlyList<RoundArmyEscalationResponse> RoundEscalations { get; init; } = [];
+
     /// <summary>Gets current campaign-point standings for players.</summary>
     public IReadOnlyList<CampaignPointStandingResponse> Standings { get; init; } = [];
 
@@ -756,6 +846,24 @@ public sealed class CampaignParticipantResponse
 
     /// <summary>Gets the ally-group name for the chosen faction, when one applies.</summary>
     public string? AllyGroupName { get; init; }
+
+    /// <summary>Gets the maximum one of this player's forces can spend if assigned the remaining temporary pool.</summary>
+    public int? CurrentSupplyPoints { get; init; }
+
+    /// <summary>Gets remaining player-pool temporary supply, when play has started.</summary>
+    public int? TemporarySupplyPoints { get; init; }
+
+    /// <summary>Gets map supply from connected territories and operational structures.</summary>
+    public int? MapSupplyPoints { get; init; }
+
+    /// <summary>Gets free supply granted this round.</summary>
+    public int? RoundFreeSupplyPoints { get; init; }
+
+    /// <summary>Gets this round's maximum army points size.</summary>
+    public int? MaxArmyPoints { get; init; }
+
+    /// <summary>Gets free characters whose base cost does not count against supply this round.</summary>
+    public int? FreeCharacterCount { get; init; }
 }
 
 /// <summary>
@@ -901,6 +1009,9 @@ public sealed class TerrainTypeResponse
     /// <summary>Gets campaign points awarded for currently owning a territory of this terrain.</summary>
     public int CampaignPoints { get; init; }
 
+    /// <summary>Gets supply points granted by a controlled territory of this terrain.</summary>
+    public int SupplyPoints { get; init; } = 1;
+
     /// <summary>Gets whether this terrain is a water feature.</summary>
     public bool IsWaterFeature { get; init; }
 }
@@ -939,6 +1050,15 @@ public sealed class StructureTypeResponse
 
     /// <summary>Gets campaign points awarded for currently controlling this structure when it is not destroyed.</summary>
     public int CampaignPoints { get; init; }
+
+    /// <summary>Gets ongoing map supply while this structure is operational.</summary>
+    public int SupplyPoints { get; init; } = 1;
+
+    /// <summary>Gets temporary supply awarded when this structure is pillaged.</summary>
+    public int PillageSupplyPoints { get; init; } = 1;
+
+    /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
+    public int DestroySupplyPoints { get; init; } = 1;
 }
 
 /// <summary>
@@ -1302,6 +1422,48 @@ public sealed class MissionResponse
 
     /// <summary>Gets the original uploaded file name, when a file is stored.</summary>
     public string? FileName { get; init; }
+
+    /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
+    public IReadOnlyList<MissionResultQuestionResponse> ResultQuestions { get; init; } = [];
+}
+
+/// <summary>
+/// A campaign-manager-written question asked on a mission battle report.
+/// </summary>
+public sealed class MissionResultQuestionResponse
+{
+    /// <summary>Gets the question identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the question text.</summary>
+    public required string Prompt { get; init; }
+
+    /// <summary>Gets Boolean or BattlePoints.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets battle points awarded when a boolean answer is true.</summary>
+    public int BattlePoints { get; init; }
+
+    /// <summary>Gets campaign points awarded when the question is scored.</summary>
+    public int CampaignPoints { get; init; }
+}
+
+/// <summary>
+/// Per-round army size and free allowances in a campaign response.
+/// </summary>
+public sealed class RoundArmyEscalationResponse
+{
+    /// <summary>Gets the 1-based round.</summary>
+    public required int RoundNumber { get; init; }
+
+    /// <summary>Gets the maximum army points size for the round.</summary>
+    public required int MaxArmyPoints { get; init; }
+
+    /// <summary>Gets free supply points granted this round.</summary>
+    public required int FreeSupplyPoints { get; init; }
+
+    /// <summary>Gets how many characters have a free base cost against supply.</summary>
+    public required int FreeCharacterCount { get; init; }
 }
 
 /// <summary>
@@ -1371,6 +1533,42 @@ public sealed class UserSearchHitResponse
 }
 
 /// <summary>
+/// A named campaign preset an administrator saved.
+/// </summary>
+public sealed class CampaignPresetListItemResponse
+{
+    /// <summary>Gets the preset identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the preset name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets whether the preset includes a map image or overlay graph.</summary>
+    public required bool HasMap { get; init; }
+}
+
+/// <summary>
+/// Body for saving the current campaign as a named preset.
+/// </summary>
+public sealed class SaveCampaignPresetRequest
+{
+    /// <summary>Gets the preset name. Matching an existing name overwrites that preset.</summary>
+    public string Name { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Body for copying a saved preset's map onto a campaign.
+/// </summary>
+public sealed class ApplyCampaignPresetRequest
+{
+    /// <summary>Gets the preset identifier.</summary>
+    public Guid PresetId { get; init; }
+
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public int Revision { get; init; }
+}
+
+/// <summary>
 /// Maps campaign application models onto HTTP contracts.
 /// </summary>
 public static class CampaignResponses
@@ -1407,6 +1605,22 @@ public static class CampaignResponses
             CurrentPhaseLabel = item.CurrentPhaseLabel,
             CurrentPhaseEndsUtc = item.CurrentPhaseEndsUtc,
             CanPlay = item.CanPlay,
+        };
+    }
+
+    /// <summary>
+    /// Maps a saved campaign preset list item.
+    /// </summary>
+    /// <param name="item">The preset list item.</param>
+    /// <returns>The HTTP response.</returns>
+    public static CampaignPresetListItemResponse FromPresetListItem(CampaignPresetListItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return new CampaignPresetListItemResponse
+        {
+            Id = item.Id,
+            Name = item.Name,
+            HasMap = item.HasMap,
         };
     }
 
@@ -1459,6 +1673,7 @@ public static class CampaignResponses
                     Name = type.Name,
                     Color = type.Color,
                     CampaignPoints = type.CampaignPoints,
+                    SupplyPoints = type.SupplyPoints,
                     IsWaterFeature = type.IsWaterFeature,
                     Missions =
                     [
@@ -1469,6 +1684,17 @@ public static class CampaignResponses
                             Url = mission.Url,
                             HasFile = mission.HasFile,
                             FileName = mission.FileName,
+                            ResultQuestions =
+                            [
+                                .. mission.ResultQuestions.Select(static question => new MissionResultQuestionResponse
+                                {
+                                    Id = question.Id,
+                                    Prompt = question.Prompt,
+                                    Kind = question.Kind,
+                                    BattlePoints = question.BattlePoints,
+                                    CampaignPoints = question.CampaignPoints,
+                                }),
+                            ],
                         }),
                     ],
                 }),
@@ -1486,6 +1712,9 @@ public static class CampaignResponses
                     IsPillageable = type.IsPillageable,
                     IsDestructible = type.IsDestructible,
                     CampaignPoints = type.CampaignPoints,
+                    SupplyPoints = type.SupplyPoints,
+                    PillageSupplyPoints = type.PillageSupplyPoints,
+                    DestroySupplyPoints = type.DestroySupplyPoints,
                     Missions =
                     [
                         .. type.Missions.Select(static mission => new MissionResponse
@@ -1495,6 +1724,17 @@ public static class CampaignResponses
                             Url = mission.Url,
                             HasFile = mission.HasFile,
                             FileName = mission.FileName,
+                            ResultQuestions =
+                            [
+                                .. mission.ResultQuestions.Select(static question => new MissionResultQuestionResponse
+                                {
+                                    Id = question.Id,
+                                    Prompt = question.Prompt,
+                                    Kind = question.Kind,
+                                    BattlePoints = question.BattlePoints,
+                                    CampaignPoints = question.CampaignPoints,
+                                }),
+                            ],
                         }),
                     ],
                 }),
@@ -1619,6 +1859,21 @@ public static class CampaignResponses
             MostTerritoriesCampaignPoints = detail.MostTerritoriesCampaignPoints,
             LongestTerritoryChainCampaignPoints = detail.LongestTerritoryChainCampaignPoints,
             MostBattlesWonCampaignPoints = detail.MostBattlesWonCampaignPoints,
+            SplitForceSupplyPenaltyPercent = detail.SplitForceSupplyPenaltyPercent,
+            AlwaysAskGeneralKill = detail.AlwaysAskGeneralKill,
+            AlwaysAskSupplyLineDestroyed = detail.AlwaysAskSupplyLineDestroyed,
+            GeneralKillCampaignPoints = detail.GeneralKillCampaignPoints,
+            SupplyLineDestroyedCampaignPoints = detail.SupplyLineDestroyedCampaignPoints,
+            RoundEscalations =
+            [
+                .. detail.RoundEscalations.Select(static row => new RoundArmyEscalationResponse
+                {
+                    RoundNumber = row.RoundNumber,
+                    MaxArmyPoints = row.MaxArmyPoints,
+                    FreeSupplyPoints = row.FreeSupplyPoints,
+                    FreeCharacterCount = row.FreeCharacterCount,
+                }),
+            ],
             Standings = [.. detail.Standings.Select(FromStanding)],
             PublicObjectiveLeaderboards = [.. detail.PublicObjectiveLeaderboards.Select(FromLeaderboard)],
             BrokenAllyFactionIds = detail.BrokenAllyFactionIds,
@@ -1684,6 +1939,12 @@ public static class CampaignResponses
                     FactionColor = participant.FactionColor,
                     HasFlagImage = participant.HasFlagImage,
                     AllyGroupName = participant.AllyGroupName,
+                    CurrentSupplyPoints = participant.CurrentSupplyPoints,
+                    TemporarySupplyPoints = participant.TemporarySupplyPoints,
+                    MapSupplyPoints = participant.MapSupplyPoints,
+                    RoundFreeSupplyPoints = participant.RoundFreeSupplyPoints,
+                    MaxArmyPoints = participant.MaxArmyPoints,
+                    FreeCharacterCount = participant.FreeCharacterCount,
                 }),
             ],
             MentionableMembers =
@@ -1882,6 +2143,7 @@ public static class CampaignResponses
                 Color = type.Color,
                 Missions = ToMissionInputs(type.Missions),
                 IsWaterFeature = type.IsWaterFeature,
+                SupplyPoints = type.SupplyPoints,
             })
             .ToArray();
     }
@@ -1906,6 +2168,9 @@ public static class CampaignResponses
                 IsDestructible = type.IsDestructible,
                 Missions = ToMissionInputs(type.Missions),
                 CampaignPoints = type.CampaignPoints,
+                SupplyPoints = type.SupplyPoints,
+                PillageSupplyPoints = type.PillageSupplyPoints,
+                DestroySupplyPoints = type.DestroySupplyPoints,
             })
             .ToArray();
     }
@@ -2093,6 +2358,16 @@ public static class CampaignResponses
                 Name = mission.Name,
                 Url = mission.Url,
                 ClearFile = mission.ClearFile,
+                ResultQuestions = mission.ResultQuestions?
+                    .Select(static question => new MissionResultQuestionInput
+                    {
+                        Id = question.Id,
+                        Prompt = question.Prompt,
+                        Kind = question.Kind,
+                        BattlePoints = question.BattlePoints,
+                        CampaignPoints = question.CampaignPoints,
+                    })
+                    .ToArray(),
             })
             .ToArray();
     }
@@ -2130,6 +2405,15 @@ public static class CampaignResponses
                     Kind = phase.Kind,
                     DurationAmount = phase.DurationAmount,
                     DurationUnit = phase.DurationUnit,
+                })
+                .ToArray(),
+            RoundEscalations = request.RoundEscalations?
+                .Select(static row => new RoundArmyEscalationInput
+                {
+                    RoundNumber = row.RoundNumber,
+                    MaxArmyPoints = row.MaxArmyPoints,
+                    FreeSupplyPoints = row.FreeSupplyPoints,
+                    FreeCharacterCount = row.FreeCharacterCount,
                 })
                 .ToArray(),
         };

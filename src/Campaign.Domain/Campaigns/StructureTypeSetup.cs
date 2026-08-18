@@ -18,6 +18,9 @@ public sealed class StructureTypeSetup
     /// <param name="isDestructible">Whether a second Pillage may destroy and remove this structure.</param>
     /// <param name="missions">The optional missions.</param>
     /// <param name="campaignPoints">Campaign points awarded for currently controlling this structure.</param>
+    /// <param name="supplyPoints">Ongoing map supply while this structure is operational.</param>
+    /// <param name="pillageSupplyPoints">Temporary supply awarded when this structure is pillaged.</param>
+    /// <param name="destroySupplyPoints">Temporary supply awarded when this structure is destroyed.</param>
     public StructureTypeSetup(
         Guid id,
         string name,
@@ -28,11 +31,17 @@ public sealed class StructureTypeSetup
         bool isPillageable,
         bool isDestructible,
         IReadOnlyList<MissionSetup> missions,
-        int campaignPoints = 0)
+        int campaignPoints = 0,
+        int supplyPoints = HuntInEstaliaDefaults.SupplyPoints,
+        int pillageSupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
+        int destroySupplyPoints = HuntInEstaliaDefaults.SupplyPoints)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(missions);
         ArgumentOutOfRangeException.ThrowIfNegative(campaignPoints);
+        ArgumentOutOfRangeException.ThrowIfNegative(supplyPoints);
+        ArgumentOutOfRangeException.ThrowIfNegative(pillageSupplyPoints);
+        ArgumentOutOfRangeException.ThrowIfNegative(destroySupplyPoints);
         Id = id;
         Name = name;
         BuiltinSymbol = builtinSymbol;
@@ -43,6 +52,9 @@ public sealed class StructureTypeSetup
         IsDestructible = isDestructible;
         Missions = missions;
         CampaignPoints = campaignPoints;
+        SupplyPoints = supplyPoints;
+        PillageSupplyPoints = pillageSupplyPoints;
+        DestroySupplyPoints = destroySupplyPoints;
     }
 
     /// <summary>Gets the structure type identifier.</summary>
@@ -74,4 +86,13 @@ public sealed class StructureTypeSetup
 
     /// <summary>Gets campaign points awarded for currently controlling this structure when it is not destroyed.</summary>
     public int CampaignPoints { get; }
+
+    /// <summary>Gets ongoing map supply while this structure is operational.</summary>
+    public int SupplyPoints { get; }
+
+    /// <summary>Gets temporary supply awarded when this structure is pillaged.</summary>
+    public int PillageSupplyPoints { get; }
+
+    /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
+    public int DestroySupplyPoints { get; }
 }

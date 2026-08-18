@@ -10,6 +10,16 @@
       }
       <button type="button" class="button-secondary" (click)="expandAllSections()">Expand All</button>
       <button type="button" class="button-secondary" (click)="collapseAllSections()">Collapse All</button>
+      @if (isAdministrator()) {
+        <button
+          type="button"
+          class="button-secondary"
+          (click)="openSavePresetDialog()"
+          [disabled]="saving() || loading()"
+        >
+          Save as Preset
+        </button>
+      }
       <button class="button" type="submit" form="campaign-setup-form" [disabled]="saving() || loading()">
         {{ isEdit() ? 'Save campaign' : 'Create campaign' }}
       </button>
@@ -64,9 +74,9 @@
           <div class="nested-row">
             <div class="field grow">
               <label for="campaignPreset">Campaign preset</label>
-              <select id="campaignPreset" [formControl]="campaignPresetId">
+              <select id="campaignPreset" [formControl]="campaignPresetId" (focus)="ensureSavedPresets()">
                 <option value="">Select a preset</option>
-                @for (preset of campaignPresets; track preset.id) {
+                @for (preset of allCampaignPresets(); track preset.id) {
                   <option [value]="preset.id">{{ preset.name }}</option>
                 }
               </select>
@@ -266,6 +276,52 @@
             >
               Add battle phase
             </button>
+          </div>
+          <div class="nested-card stack">
+            <h3>Round army size and free supply</h3>
+            <p class="muted">
+              Each round can raise the army points cap and grant free supply points plus free characters whose base cost
+              does not count against supply. Defaults follow The Hunt in Estalia. Changing the number of rounds keeps
+              values you already entered for overlapping rounds.
+            </p>
+            <div formArrayName="roundEscalations" class="stack">
+              @for (row of roundEscalations.controls; track row; let index = $index) {
+                <div class="nested-row" [formGroupName]="index">
+                  <div class="field">
+                    <label [attr.for]="'round-escalation-points-' + index"
+                      >Round {{ row.controls.roundNumber.value }} max army points</label
+                    >
+                    <input
+                      [id]="'round-escalation-points-' + index"
+                      type="number"
+                      min="0"
+                      max="99999"
+                      formControlName="maxArmyPoints"
+                    />
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'round-escalation-supply-' + index">Free supply points</label>
+                    <input
+                      [id]="'round-escalation-supply-' + index"
+                      type="number"
+                      min="0"
+                      max="999"
+                      formControlName="freeSupplyPoints"
+                    />
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'round-escalation-characters-' + index">Free characters</label>
+                    <input
+                      [id]="'round-escalation-characters-' + index"
+                      type="number"
+                      min="0"
+                      max="99"
+                      formControlName="freeCharacterCount"
+                    />
+                  </div>
+                </div>
+              }
+            </div>
           </div>
         </div>
       </fieldset>
@@ -618,6 +674,53 @@
                 conversion chart.
               </p>
             }
+            <div class="nested-card stack">
+              <h3>Supply and battle reports</h3>
+              <div class="field">
+                <label for="splitForceSupplyPenaltyPercent">Split-force supply penalty (%)</label>
+                <input
+                  id="splitForceSupplyPenaltyPercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  formControlName="splitForceSupplyPenaltyPercent"
+                />
+                <p class="muted">
+                  Subtracted from map and round supply when a player has more than one force. The Hunt in Estalia
+                  default is 25.
+                </p>
+              </div>
+              <label class="choice-row">
+                <input type="checkbox" formControlName="alwaysAskGeneralKill" />
+                Always ask whether the enemy general was slain
+              </label>
+              <div class="field">
+                <label for="generalKillCampaignPoints">Campaign points for slaying the enemy general</label>
+                <input
+                  id="generalKillCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="generalKillCampaignPoints"
+                />
+              </div>
+              <label class="choice-row">
+                <input type="checkbox" formControlName="alwaysAskSupplyLineDestroyed" />
+                Always ask whether the enemy supply line was destroyed
+              </label>
+              <div class="field">
+                <label for="supplyLineDestroyedCampaignPoints"
+                  >Campaign points for destroying the enemy supply line</label
+                >
+                <input
+                  id="supplyLineDestroyedCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="supplyLineDestroyedCampaignPoints"
+                />
+              </div>
+            </div>
           </div>
           <div formArrayName="publicObjectiveTypes" class="stack">
             @for (item of publicObjectiveTypes.controls; track item; let index = $index) {
@@ -1160,6 +1263,16 @@
                     <input type="checkbox" formControlName="isWaterFeature" />
                     Water feature (reminder for faction special rules)
                   </label>
+                  <div class="field">
+                    <label [attr.for]="'terrain-supply-' + index">Supply points</label>
+                    <input
+                      [id]="'terrain-supply-' + index"
+                      type="number"
+                      min="0"
+                      max="999"
+                      formControlName="supplyPoints"
+                    />
+                  </div>
                   <div class="field" formArrayName="missions">
                     <button
                       type="button"
@@ -1216,6 +1329,91 @@
                             } @else if (hasStoredMissionFile(mission.controls.id.value)) {
                               <p class="muted">A document is already stored.</p>
                             }
+                          </div>
+                          <div class="field" formArrayName="resultQuestions">
+                            <h4>Result questions</h4>
+                            <p class="muted">
+                              Extra questions asked when this mission is reported. True/false questions award the
+                              configured points when the answer is yes. Battle-point questions take a reported amount.
+                            </p>
+                            @for (
+                              question of questionsOf(mission).controls;
+                              track question;
+                              let questionIndex = $index
+                            ) {
+                              <div class="nested-card stack" [formGroupName]="questionIndex">
+                                <div class="field">
+                                  <label
+                                    [attr.for]="
+                                      'terrain-question-prompt-' + index + '-' + missionIndex + '-' + questionIndex
+                                    "
+                                    >Question</label
+                                  >
+                                  <input
+                                    [id]="'terrain-question-prompt-' + index + '-' + missionIndex + '-' + questionIndex"
+                                    formControlName="prompt"
+                                    maxlength="240"
+                                  />
+                                </div>
+                                <div class="nested-row">
+                                  <div class="field">
+                                    <label
+                                      [attr.for]="
+                                        'terrain-question-kind-' + index + '-' + missionIndex + '-' + questionIndex
+                                      "
+                                      >Kind</label
+                                    >
+                                    <select
+                                      [id]="'terrain-question-kind-' + index + '-' + missionIndex + '-' + questionIndex"
+                                      formControlName="kind"
+                                    >
+                                      <option value="Boolean">True / false</option>
+                                      <option value="BattlePoints">Battle points amount</option>
+                                    </select>
+                                  </div>
+                                  <div class="field">
+                                    <label
+                                      [attr.for]="
+                                        'terrain-question-bp-' + index + '-' + missionIndex + '-' + questionIndex
+                                      "
+                                      >Battle points</label
+                                    >
+                                    <input
+                                      [id]="'terrain-question-bp-' + index + '-' + missionIndex + '-' + questionIndex"
+                                      type="number"
+                                      min="0"
+                                      max="999"
+                                      formControlName="battlePoints"
+                                    />
+                                  </div>
+                                  <div class="field">
+                                    <label
+                                      [attr.for]="
+                                        'terrain-question-cp-' + index + '-' + missionIndex + '-' + questionIndex
+                                      "
+                                      >Campaign points</label
+                                    >
+                                    <input
+                                      [id]="'terrain-question-cp-' + index + '-' + missionIndex + '-' + questionIndex"
+                                      type="number"
+                                      min="0"
+                                      max="999"
+                                      formControlName="campaignPoints"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    class="button-secondary"
+                                    (click)="removeMissionQuestion(mission, questionIndex)"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            }
+                            <button type="button" class="button-secondary" (click)="addMissionQuestion(mission)">
+                              Add result question
+                            </button>
                           </div>
                         </div>
                       }
@@ -1318,6 +1516,38 @@
                       max="999"
                       formControlName="campaignPoints"
                     />
+                  </div>
+                  <div class="nested-row">
+                    <div class="field">
+                      <label [attr.for]="'structure-supply-' + index">Supply points</label>
+                      <input
+                        [id]="'structure-supply-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="supplyPoints"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'structure-pillage-supply-' + index">Pillage supply points</label>
+                      <input
+                        [id]="'structure-pillage-supply-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="pillageSupplyPoints"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'structure-destroy-supply-' + index">Destroy supply points</label>
+                      <input
+                        [id]="'structure-destroy-supply-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="destroySupplyPoints"
+                      />
+                    </div>
                   </div>
                   <div class="choice-row">
                     <label>
@@ -1502,6 +1732,95 @@
                             } @else if (hasStoredMissionFile(mission.controls.id.value)) {
                               <p class="muted">A document is already stored.</p>
                             }
+                          </div>
+                          <div class="field" formArrayName="resultQuestions">
+                            <h4>Result questions</h4>
+                            <p class="muted">
+                              Extra questions asked when this mission is reported. True/false questions award the
+                              configured points when the answer is yes. Battle-point questions take a reported amount.
+                            </p>
+                            @for (
+                              question of questionsOf(mission).controls;
+                              track question;
+                              let questionIndex = $index
+                            ) {
+                              <div class="nested-card stack" [formGroupName]="questionIndex">
+                                <div class="field">
+                                  <label
+                                    [attr.for]="
+                                      'structure-question-prompt-' + index + '-' + missionIndex + '-' + questionIndex
+                                    "
+                                    >Question</label
+                                  >
+                                  <input
+                                    [id]="
+                                      'structure-question-prompt-' + index + '-' + missionIndex + '-' + questionIndex
+                                    "
+                                    formControlName="prompt"
+                                    maxlength="240"
+                                  />
+                                </div>
+                                <div class="nested-row">
+                                  <div class="field">
+                                    <label
+                                      [attr.for]="
+                                        'structure-question-kind-' + index + '-' + missionIndex + '-' + questionIndex
+                                      "
+                                      >Kind</label
+                                    >
+                                    <select
+                                      [id]="
+                                        'structure-question-kind-' + index + '-' + missionIndex + '-' + questionIndex
+                                      "
+                                      formControlName="kind"
+                                    >
+                                      <option value="Boolean">True / false</option>
+                                      <option value="BattlePoints">Battle points amount</option>
+                                    </select>
+                                  </div>
+                                  <div class="field">
+                                    <label
+                                      [attr.for]="
+                                        'structure-question-bp-' + index + '-' + missionIndex + '-' + questionIndex
+                                      "
+                                      >Battle points</label
+                                    >
+                                    <input
+                                      [id]="'structure-question-bp-' + index + '-' + missionIndex + '-' + questionIndex"
+                                      type="number"
+                                      min="0"
+                                      max="999"
+                                      formControlName="battlePoints"
+                                    />
+                                  </div>
+                                  <div class="field">
+                                    <label
+                                      [attr.for]="
+                                        'structure-question-cp-' + index + '-' + missionIndex + '-' + questionIndex
+                                      "
+                                      >Campaign points</label
+                                    >
+                                    <input
+                                      [id]="'structure-question-cp-' + index + '-' + missionIndex + '-' + questionIndex"
+                                      type="number"
+                                      min="0"
+                                      max="999"
+                                      formControlName="campaignPoints"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    class="button-secondary"
+                                    (click)="removeMissionQuestion(mission, questionIndex)"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            }
+                            <button type="button" class="button-secondary" (click)="addMissionQuestion(mission)">
+                              Add result question
+                            </button>
                           </div>
                         </div>
                       }
@@ -1911,5 +2230,36 @@
         </div>
       </fieldset>
     </form>
+  }
+
+  @if (savePresetOpen()) {
+    <div class="dialog-backdrop">
+      <div
+        class="dialog panel stack"
+        role="dialog"
+        aria-labelledby="save-preset-title"
+        aria-describedby="save-preset-desc"
+      >
+        <h2 id="save-preset-title">Save as preset</h2>
+        <p id="save-preset-desc">
+          Name this campaign preset. Matching an existing name overwrites that preset, including its map.
+        </p>
+        <div class="field">
+          <label for="savePresetName">Preset name</label>
+          <app-filterable-combobox
+            inputId="savePresetName"
+            [formControl]="presetNameControl"
+            [options]="savedPresetNames()"
+            placeholder="Type a name"
+          />
+        </div>
+        <div class="choice-row">
+          <button type="button" class="button" (click)="confirmSavePreset()" [disabled]="saving()">OK</button>
+          <button type="button" class="button-secondary" (click)="closeSavePresetDialog()" [disabled]="saving()">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   }
 </section>

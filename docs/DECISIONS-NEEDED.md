@@ -22,9 +22,21 @@ in an ADR or the relevant domain document and update tests.
    battle. Player-facing action order is Hold, Move, Build, Pillage, Repair, Split, Backstab.
    Competing Build, Pillage, or Repair on the same territory, and other collisions that still
    lack a documented ranking, become Hold. Retreat is battle-phase only. See `docs/DOMAIN.md`.
-6. In a retreat collision, define “strongest” and every tie-break step.
-7. Define territory/control outcomes for three or more combatants and unresolved battles.
-8. Define surrender timing and whether a submitted surrender can be withdrawn.
+6. Resolved: in a retreat collision the strongest force keeps the territory. Strongest is most
+    current campaign points, then most territories, then most structures, then most supply
+    (including remaining temporary supply). Remaining ties are chosen at random and recorded.
+    See `docs/DOMAIN.md`.
+7. Resolved: allied extra players on one side raise that side's round army-point cap by 25
+    percent per extra player, then split the total evenly and round each force up to the next
+    10. More than two opposing sides who do not retreat: the two strongest play first, then
+    remaining opponents strongest-to-weakest in the same battle phase. A force that never
+    played stays in the territory for the next round's battle phase. See `docs/DOMAIN.md`.
+8. Resolved: surrender may be submitted during an action or battle window while the force is
+    engaged. A committed surrender cannot be withdrawn. A surrender left in draft still
+    executes at the deadline. In 1v1 the remaining player wins at maximum victory-point battle
+    points with no extra/mission bonus battle points. In larger fights, allies of a surrendering
+    force may keep fighting or run; if only one side remains it wins; if every remaining force
+    runs, nobody wins and no relic transfers. See `docs/DOMAIN.md`.
 9. Clarify structure ownership versus territory control after repair, capture, backstab, retreat,
    and allied use.
 
@@ -44,8 +56,9 @@ in an ADR or the relevant domain document and update tests.
     loser are off by default. Scores are reported tabletop or already-converted battle points;
     the application does not copy a proprietary conversion chart. Wins and draws are still
     recorded for ranking. See `docs/DOMAIN.md`.
-13. Confirm whether temporary supply belongs to player, faction, or earning force, and define
-    allocation when multiple forces battle in one round.
+13. Resolved: temporary supply belongs to the earning player. That player may spend it on any
+    of their forces. Each spent point applies to exactly one force; split forces cannot share a
+    single point. See `docs/DOMAIN.md`.
 
 ## Content and unfinished rules
 

@@ -35,7 +35,9 @@ Player and Game Master in the same campaign.
   private-objective counts, and relic logos.
 - Secret draft/commit/uncommit order entry with deadline and early-close behavior.
 - Simultaneous action reveal and deterministic, explainable resolution.
-- Battle creation, mission assignment, dual result submissions, disputes, retreats, and scoring.
+- Battle creation, mission assignment, dual result submissions (including early reports during
+  Action windows), agreement or dispute, staff confirmation, retreats, and scoring.
+- Administrators can save campaign settings and map data as named reusable presets.
 - Campaign-point, supply-line, temporary-supply, status, objective, and relic tracking.
 - Configurable force statuses with enable/clear triggers and display-only tabletop effects.
 - Public faction rules and private player/faction/alliance objectives.

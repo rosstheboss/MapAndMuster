@@ -18,7 +18,8 @@ public sealed class PlayTerritory
         StructureCondition structureCondition,
         bool isPillageable = true,
         bool isDestructible = true,
-        bool isWaterFeature = false)
+        bool isWaterFeature = false,
+        Guid? terrainTypeId = null)
     {
         Id = id;
         DisplayNumber = displayNumber;
@@ -30,6 +31,7 @@ public sealed class PlayTerritory
         IsPillageable = isPillageable;
         IsDestructible = isDestructible;
         IsWaterFeature = isWaterFeature;
+        TerrainTypeId = terrainTypeId;
     }
 
     /// <summary>Gets the territory identifier.</summary>
@@ -65,6 +67,9 @@ public sealed class PlayTerritory
     /// <summary>Gets whether this territory's terrain is a water feature.</summary>
     public bool IsWaterFeature { get; }
 
+    /// <summary>Gets the terrain type, when known.</summary>
+    public Guid? TerrainTypeId { get; }
+
     /// <summary>
     /// Returns a copy with updated ownership and structure fields.
     /// </summary>
@@ -87,7 +92,8 @@ public sealed class PlayTerritory
             clearStructure ? StructureCondition.Operational : structureCondition ?? StructureCondition,
             clearStructure ? false : isPillageable ?? IsPillageable,
             clearStructure ? false : isDestructible ?? IsDestructible,
-            IsWaterFeature);
+            IsWaterFeature,
+            TerrainTypeId);
     }
 }
 

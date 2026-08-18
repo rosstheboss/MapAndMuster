@@ -134,6 +134,9 @@ public sealed class DuplicateCampaignHandler
             PrivateObjectiveTypes = [.. source.PrivateObjectiveTypes],
             BattleScoring = source.BattleScoring,
             RankingObjectivePoints = source.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = source.SplitForceSupplyPenaltyPercent,
+            BattleReportRules = source.BattleReportRules,
+            ArmyEscalations = source.ArmyEscalations,
         };
 
         var created = await _campaigns.AddAsync(copy, cancellationToken).ConfigureAwait(false);

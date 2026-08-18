@@ -6,7 +6,9 @@ using System.Text;
 using System.Text.Json;
 using Campaign.Api.Contracts;
 using Campaign.Infrastructure.Email;
+using Campaign.Infrastructure.Identity;
 using Campaign.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Campaign.Api.IntegrationTests;
@@ -125,6 +127,87 @@ public sealed class CampaignEndpointTests
         await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
         using var forbidden = await stranger.PostAsJsonAsync($"/api/campaigns/{created.Id}/duplicate", new { });
         Assert.Equal(HttpStatusCode.NotFound, forbidden.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreatedCampaignUsesHuntInEstaliaSupplyDefaults()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("gm");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Border War"));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        Assert.Equal(25, created.SplitForceSupplyPenaltyPercent);
+        Assert.True(created.AlwaysAskGeneralKill);
+        Assert.True(created.AlwaysAskSupplyLineDestroyed);
+        Assert.Equal(1, created.GeneralKillCampaignPoints);
+        Assert.Equal(1, created.SupplyLineDestroyedCampaignPoints);
+        Assert.Equal(8, created.RoundEscalations.Count);
+        Assert.Equal(1000, created.RoundEscalations[0].MaxArmyPoints);
+        Assert.Equal(0, created.RoundEscalations[0].FreeSupplyPoints);
+        Assert.Equal(1, created.RoundEscalations[2].FreeSupplyPoints);
+        Assert.Equal(1, created.RoundEscalations[2].FreeCharacterCount);
+        Assert.Equal(3, created.RoundEscalations[6].FreeSupplyPoints);
+        Assert.All(created.TerrainTypes, type => Assert.Equal(1, type.SupplyPoints));
+        Assert.All(created.StructureTypes, type =>
+        {
+            Assert.Equal(1, type.SupplyPoints);
+            Assert.Equal(1, type.PillageSupplyPoints);
+            Assert.Equal(1, type.DestroySupplyPoints);
+        });
+    }
+
+    [Fact]
+    public async Task AdministratorCanSaveListAndApplyACampaignPreset()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("adm");
+        var email = $"{username}@example.test";
+        await RegisterConfirmAndLoginAsync(client, email, username);
+
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Border War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var forbidden = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/presets",
+            new SaveCampaignPresetRequest { Name = "Frontier War" });
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+        var forbiddenBody = await forbidden.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.Equal("campaign.forbidden", forbiddenBody?.Code);
+
+        await MakeAdministratorAsync(username);
+        using var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        var presetName = UniqueName("Frontier");
+        using var savedResponse = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/presets",
+            new SaveCampaignPresetRequest { Name = presetName });
+        Assert.Equal(HttpStatusCode.Created, savedResponse.StatusCode);
+        var saved = await savedResponse.Content.ReadFromJsonAsync<CampaignPresetListItemResponse>(JsonOptions);
+        Assert.NotNull(saved);
+        Assert.Equal(presetName, saved.Name);
+
+        var listed = await client.GetFromJsonAsync<CampaignPresetListItemResponse[]>("/api/campaign-presets", JsonOptions);
+        Assert.NotNull(listed);
+        Assert.Contains(listed, item => item.Id == saved.Id && item.Name == presetName);
+
+        var preset = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaign-presets/{saved.Id}", JsonOptions);
+        Assert.NotNull(preset);
+        Assert.Equal(25, preset.SplitForceSupplyPenaltyPercent);
+        Assert.Equal(created.TerrainTypes.Count, preset.TerrainTypes.Count);
+
+        using var appliedResponse = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/apply-preset",
+            new ApplyCampaignPresetRequest { PresetId = saved.Id, Revision = created.Revision });
+        Assert.Equal(HttpStatusCode.OK, appliedResponse.StatusCode);
+        var applied = await appliedResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(applied);
+        Assert.Equal(created.Revision + 1, applied.Revision);
     }
 
     [Fact]
@@ -771,6 +854,21 @@ public sealed class CampaignEndpointTests
             "/api/auth/confirm-email",
             new { userId = payload.UserId, token = payload.Token });
         Assert.Equal(HttpStatusCode.NoContent, confirm.StatusCode);
+    }
+
+    private async Task MakeAdministratorAsync(string username)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+        if (!await roles.RoleExistsAsync("Administrator").ConfigureAwait(false))
+        {
+            Assert.True((await roles.CreateAsync(new IdentityRole<Guid>("Administrator")).ConfigureAwait(false)).Succeeded);
+        }
+
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await users.FindByNameAsync(username).ConfigureAwait(false);
+        Assert.NotNull(user);
+        Assert.True((await users.AddToRoleAsync(user, "Administrator").ConfigureAwait(false)).Succeeded);
     }
 
     private static SaveCampaignRequest ValidCampaignBody(

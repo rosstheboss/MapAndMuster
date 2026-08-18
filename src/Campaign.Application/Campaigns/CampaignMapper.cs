@@ -128,6 +128,7 @@ public static class CampaignMapper
                 Missions = [.. type.Missions.Select(ToMission)],
                 CampaignPoints = type.CampaignPoints,
                 IsWaterFeature = type.IsWaterFeature,
+                SupplyPoints = type.SupplyPoints,
             })],
             StructureTypes = [.. campaign.StructureTypes.Select(static type => new StructureTypeDetail
             {
@@ -141,6 +142,9 @@ public static class CampaignMapper
                 IsDestructible = type.IsDestructible,
                 Missions = [.. type.Missions.Select(ToMission)],
                 CampaignPoints = type.CampaignPoints,
+                SupplyPoints = type.SupplyPoints,
+                PillageSupplyPoints = type.PillageSupplyPoints,
+                DestroySupplyPoints = type.DestroySupplyPoints,
             })],
             ItemObjectiveTypes = [.. campaign.ItemObjectiveTypes.Select(type => ToItemObjectiveType(type, canStaff))],
             PublicObjectiveTypes = [.. campaign.PublicObjectiveTypes.Select(static type => new PublicObjectiveTypeDetail
@@ -177,6 +181,21 @@ public static class CampaignMapper
             MostTerritoriesCampaignPoints = campaign.RankingObjectivePoints.MostTerritories,
             LongestTerritoryChainCampaignPoints = campaign.RankingObjectivePoints.LongestTerritoryChain,
             MostBattlesWonCampaignPoints = campaign.RankingObjectivePoints.MostBattlesWon,
+            SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
+            AlwaysAskGeneralKill = campaign.BattleReportRules.AlwaysAskGeneralKill,
+            AlwaysAskSupplyLineDestroyed = campaign.BattleReportRules.AlwaysAskSupplyLineDestroyed,
+            GeneralKillCampaignPoints = campaign.BattleReportRules.GeneralKillCampaignPoints,
+            SupplyLineDestroyedCampaignPoints = campaign.BattleReportRules.SupplyLineDestroyedCampaignPoints,
+            RoundEscalations =
+            [
+                .. schedule.ArmyEscalations.Select(static row => new RoundArmyEscalationDetail
+                {
+                    RoundNumber = row.RoundNumber,
+                    MaxArmyPoints = row.MaxArmyPoints,
+                    FreeSupplyPoints = row.FreeSupplyPoints,
+                    FreeCharacterCount = row.FreeCharacterCount,
+                }),
+            ],
             BrokenAllyFactionIds = campaign.PlayState?.BrokenAllyFactionIds ?? [],
             AllyGroups = [.. campaign.AllyGroups.Select(static group => new AllyGroupDetail
             {
@@ -517,7 +536,10 @@ public static class CampaignMapper
             campaign.EndsUtc,
             campaign.RoundCount,
             roundLength,
-            phases);
+            phases,
+            campaign.ArmyEscalations.Count == 0
+                ? HuntInEstaliaDefaults.ArmyEscalations(campaign.RoundCount)
+                : campaign.ArmyEscalations);
     }
 
     private static MissionDetail ToMission(StoredMission mission)
@@ -529,6 +551,17 @@ public static class CampaignMapper
             Url = mission.Url,
             HasFile = !string.IsNullOrWhiteSpace(mission.FileStorageKey),
             FileName = mission.FileName,
+            ResultQuestions =
+            [
+                .. mission.ResultQuestions.Select(static question => new MissionResultQuestionDetail
+                {
+                    Id = question.Id,
+                    Prompt = question.Prompt,
+                    Kind = question.Kind,
+                    BattlePoints = question.BattlePoints,
+                    CampaignPoints = question.CampaignPoints,
+                }),
+            ],
         };
     }
 }

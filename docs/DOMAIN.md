@@ -75,7 +75,14 @@ feature flags), standard structures, the reusable special-rule catalog, and that
 item-objective list (empty until named items are added). Applying a campaign preset fills the
 campaign name only when the name field is empty. The Hunt in Estalia also copies the standard
 force-status catalog (Diseased, Shaken, Confident, Exhausted, Well Rested). Normal is not a
-catalog status; it is the absence of a status.
+catalog status; it is the absence of a status. Hunt also applies the default split-force supply
+penalty (25 percent), always-ask general-kill and supply-line questions (1 campaign point each),
+and the per-round army size / free supply / free character table.
+
+An administrator may save the current campaign settings as a named preset from Edit campaign.
+The dialog accepts a new name or autocompletes an existing preset name to overwrite it. Saving
+a preset also stores the map image and overlay graph. Saved presets appear in the campaign
+preset list for later apply.
 
 Optional item objectives may be none, one, or many (at most 50), each with a unique name.
 Defaults are hidden until found, randomly placed, and not allowed on a spawn territory. A
@@ -346,7 +353,10 @@ Player-submittable actions in an open action window are listed in this order:
 Battle-phase and system actions:
 
 - `Retreat`: move a losing/withdrawing force to an eligible territory or spawn fallback. Players
-  submit retreat after a battle, not during an action window.
+  submit retreat after a battle, not during an action window, except as part of surrender.
+- `Surrender`: while a force is engaged, during an action or battle window, commit to leaving
+  the fight and retreat. Once committed it cannot be withdrawn. A surrender left in draft still
+  executes when the window ends.
 - `Battle`: automatic system action created by resolution; players do not submit it directly.
 
 Battle overrides incompatible orders. If Action 1 puts a force in battle, later action slots for
@@ -356,19 +366,53 @@ that force become Battle.
 
 `Pending -> AwaitingResults -> Finalized | Disputed -> GMResolved`
 
-- Each participant may submit one current result; revisions retain history.
+Players may report a battle during the Battle phase or earlier while an Action window is still
+open if they are already in that battle. One player reports both sides. The report includes
+victory points, army size in points, how many supply-costing units they fielded (special, rare,
+and similar; each unit spends one supply point), differential battle points from VP, bonus
+battle points from the mission, whether they killed the enemy general, whether they destroyed
+the enemy supply line, and any extra mission questions the campaign manager configured
+(true/false or a battle-point amount, each awarding battle points and/or campaign points).
+Basic campaign configuration can always ask for general kills and supply-line destruction and
+sets the campaign points those facts award (both on and 1 campaign point by default). The
+application spends reported supply-costing units first from that force's territory/structure
+allowance plus the round bonus, then from the player's temporary pool.
+
+- Each participant may submit one current structured result covering every participating force;
+  revisions retain history.
+- The other participant may agree with the reported result or submit different numbers.
+- A campaign manager or administrator may be the second confirmation.
+- Equivalent submissions (including an accept) finalize immediately.
+- One timely submission becomes authoritative at the battle-phase deadline.
+- Conflicting submissions become Disputed, lock the forces in that battle, and notify managers
+  in-app and by email until a manager confirms (and may edit) the true result.
 - Staff may submit on a participant's behalf with actual/effective actor attribution.
-- Equivalent submissions finalize automatically.
-- A participant may accept the opponent's current submission; that counts as an equivalent
-  submission.
-- One timely submission becomes authoritative at the deadline.
-- Conflicting submissions become Disputed and notify GMs in-app and by email.
-- GM resolution preserves both submissions and appends an authoritative result.
-- Three-or-more-participant engagements require a configured mission/result schema.
+- Winner is the higher total battle points (differential + bonus + answered question BP). A
+  true battle-point tie is not a loss: both forces must retreat. Otherwise only the loser
+  retreats, dropping a carried item objective for the winner to pick up.
+- Players submit retreat after the result is committed, by the end of the Battle phase. A
+  missing retreat uses the safest unoccupied owned territory after other submitted retreats,
+  then any unoccupied territory, then the spawn fallback. If two or more enemy forces would
+  occupy the same territory after retreat, the strongest stays and the others are sent to the
+  next safest eligible destination. Strongest is most current campaign points, then most
+  territories, then most structures, then most supply including remaining temporary supply;
+  a remaining tie is chosen at random and recorded on the play log.
+- Surrender may be committed while engaged during an action or battle window. A committed
+  surrender cannot be uncommitted. In a 1v1 fight the remaining player wins with maximum
+  differential battle points (the scoring clamp, default 10) and no extra or mission bonus
+  battle points. In a larger fight, allies of a surrendering force may keep fighting or also
+  run. If only one side still has a fighting force, that side wins the same way. If every
+  remaining force runs, the battle is a no-contest: nobody wins, ranking does not record a
+  win or draw, and relics do not transfer.
+- When more than one player fights on the same side, that side's round army-point cap increases
+  by 25 percent per extra player, then is divided evenly and each force's share rounds up to
+  the next 10. More than two opposing sides who do not all retreat: the two strongest play the
+  first tabletop game, then remaining opponents play strongest-to-weakest in that same battle
+  phase. A force that never received a game stays in the territory, still in battle, for the
+  next round's battle phase.
 - A battle phase ends early when every engagement is finalized and every required retreat is
   recorded, and also when no battles remain for anyone to report. Unused time is added to the
-  next window. At the deadline, a missing retreat uses
-  the spawn fallback. A battle with no submissions at the deadline stays open for GM resolution
+  next window. A battle with no submissions at the deadline stays open for GM resolution
   until decision 2 in `docs/DECISIONS-NEEDED.md` is recorded.
 
 ## Territory and structures
@@ -528,11 +572,31 @@ Completed campaigns are ordered by most recently finished.
 
 ## Supply
 
-- Normal supply is calculated per force from spawn and connected territory/structure graph.
-- Connected allied territory may participate when alliance rules permit.
-- Temporary supply is a persistent, consumable player resource earned by configured events.
-- Temporary supply is consumed only when an applicable battle occurs.
-- Split forces may use the same connected structures as permitted by the campaign rules.
+- Normal supply is calculated per force from spawn and connected owned or allied territory.
+  Each terrain type and each operational owned structure grants configured supply points
+  (default 1). Pillaging or destroying a structure awards that structure's configured
+  temporary supply points to the acting player.
+- Connected allied territory may participate when alliance rules permit (same ally group,
+  not backstabbed). Only the player's own faction territories and operational structures add
+  map supply.
+- Temporary supply is a persistent, consumable **player** pool. The earning player may assign
+  remaining points to any of their forces. Each spent point applies to exactly one force: a
+  force that uses a point does not leave that same point available to another of the player's
+  forces. Remaining temporary supply is added to the displayed current total as the maximum one
+  force can spend if it is assigned the entire remaining pool.
+- Split forces each receive the same territory/structure map supply after the split-force
+  penalty, with a minimum of 1 map supply each. The round's free supply points are granted in
+  full to every one of that player's forces. Temporary points are not duplicated. The Hunt in
+  Estalia split penalty default is 25 percent and is the application default.
+- Current supply shown on the Participants list is one force's allowance (map after split
+  penalty, plus round free supply) plus remaining temporary supply. A battle to resolve shows
+  each force's allowance and the controlling player's remaining temporary pool separately.
+- When a battle result reports supply-costing units, spend is taken first from that force's
+  allowance and then from the player's temporary pool.
+- Round configuration stores per-round max army points, free supply points, and free characters
+  whose base cost does not count against supply. The Hunt in Estalia table is the application
+  default (round 1: 1000/0/0, then 1250/0/0, 1500/1/1, 1750/1/1, 2000/2/1, 2000/2/2, then
+  2000/3/2 for round 7 and later). Longer campaigns copy the last row.
 - Faction modifiers are data/rules layered over the base calculation.
 
 ## Objectives and relics

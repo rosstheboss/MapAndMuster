@@ -71,6 +71,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IUserAccountStore, UserAccountStore>();
         services.AddScoped<IdentityMaintenance>();
         services.AddScoped<ICampaignStore, CampaignStore>();
+        services.AddScoped<ICampaignPresetStore, CampaignPresetStore>();
         services.AddScoped<IUserNotificationStore, UserNotificationStore>();
         services.AddScoped<INewsStore, NewsStore>();
         services.AddScoped<ISiteChatStore, SiteChatStore>();

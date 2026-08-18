@@ -42,6 +42,11 @@ public static class CampaignPointStandingsRules
                 .Select(id => forcesById.GetValueOrDefault(id))
                 .OfType<CampaignForce>()
                 .ToArray();
+            if (battle.IsNoContest)
+            {
+                continue;
+            }
+
             if (battle.IsDraw)
             {
                 var drawPoints = BattleCampaignPointRules.DrawPoints(scoring, isDraw: true);
@@ -79,6 +84,11 @@ public static class CampaignPointStandingsRules
                 battlePointsByPlayer[force.ControllerUserId] =
                     battlePointsByPlayer.GetValueOrDefault(force.ControllerUserId) + loserPoints;
             }
+        }
+
+        foreach (var (userId, extra) in state.ExtraBattleReportPoints)
+        {
+            battlePointsByPlayer[userId] = battlePointsByPlayer.GetValueOrDefault(userId) + extra;
         }
 
         var activeAwards = new HashSet<(Guid PlayerId, Guid ObjectiveId)>();
@@ -447,6 +457,12 @@ public sealed class CampaignPointScoringState
 
     /// <summary>Gets whether the campaign is completed, so remaining private objectives count.</summary>
     public bool CampaignCompleted { get; init; }
+
+    /// <summary>
+    /// Gets extra campaign points from slain generals, destroyed supply lines, and scored mission questions.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, int> ExtraBattleReportPoints { get; init; } =
+        new Dictionary<Guid, int>();
 }
 
 /// <summary>

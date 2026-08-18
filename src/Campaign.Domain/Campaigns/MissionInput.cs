@@ -16,4 +16,7 @@ public sealed class MissionInput
 
     /// <summary>Gets whether an existing uploaded file should be removed.</summary>
     public bool ClearFile { get; init; }
+
+    /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
+    public IReadOnlyList<MissionResultQuestionInput>? ResultQuestions { get; init; }
 }

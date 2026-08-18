@@ -34,4 +34,13 @@ public sealed class StructureTypeInput
 
     /// <summary>Gets campaign points awarded for currently controlling this structure. Defaults to 0.</summary>
     public int? CampaignPoints { get; init; }
+
+    /// <summary>Gets ongoing map supply while this structure is operational. Defaults to 1.</summary>
+    public int? SupplyPoints { get; init; }
+
+    /// <summary>Gets temporary supply awarded when this structure is pillaged. Defaults to 1.</summary>
+    public int? PillageSupplyPoints { get; init; }
+
+    /// <summary>Gets temporary supply awarded when this structure is destroyed. Defaults to 1.</summary>
+    public int? DestroySupplyPoints { get; init; }
 }

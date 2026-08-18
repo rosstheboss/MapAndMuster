@@ -119,7 +119,10 @@ public sealed class CampaignStore : ICampaignStore
             campaign.SpecialRules,
             campaign.PrivateObjectiveTypes,
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds),
-            campaign.ForceStatuses);
+            campaign.ForceStatuses,
+            campaign.SplitForceSupplyPenaltyPercent,
+            campaign.BattleReportRules,
+            campaign.ArmyEscalations);
         var playJson = PlayStateJson.Serialize(campaign.PlayState);
         var affected = await _dbContext.Campaigns
             .Where(item => item.Id == campaign.Id && item.Revision == expectedRevision)
@@ -246,7 +249,15 @@ public sealed class CampaignStore : ICampaignStore
                     || campaign.Factions.Any(faction => faction.FlagImageStorageKey == storageKey)
                     || (campaign.CatalogJson != null && campaign.CatalogJson.Contains(storageKey)),
                 cancellationToken)
-            .ConfigureAwait(false);
+            .ConfigureAwait(false)
+            || await _dbContext.CampaignPresets
+                .AsNoTracking()
+                .AnyAsync(
+                    preset => preset.MapStorageKey == storageKey
+                        || (preset.CatalogJson != null && preset.CatalogJson.Contains(storageKey))
+                        || (preset.SettingsJson != null && preset.SettingsJson.Contains(storageKey)),
+                    cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -417,7 +428,10 @@ public sealed class CampaignStore : ICampaignStore
                 campaign.SpecialRules,
                 campaign.PrivateObjectiveTypes,
                 campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds),
-                campaign.ForceStatuses),
+                campaign.ForceStatuses,
+                campaign.SplitForceSupplyPenaltyPercent,
+                campaign.BattleReportRules,
+                campaign.ArmyEscalations),
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
@@ -590,6 +604,9 @@ public sealed class CampaignStore : ICampaignStore
             PrivateObjectiveTypes = catalogs.PrivateObjectiveTypes,
             BattleScoring = catalogs.BattleScoring,
             RankingObjectivePoints = catalogs.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = catalogs.SplitForceSupplyPenaltyPercent,
+            BattleReportRules = catalogs.BattleReportRules,
+            ArmyEscalations = catalogs.ArmyEscalations,
             Memberships =
             [
                 .. record.Memberships.Select(membership => new StoredCampaignMembership

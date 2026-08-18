@@ -128,6 +128,14 @@
                   @if (participantRoles(participant); as roles) {
                     <span class="muted"> · {{ roles }}</span>
                   }
+                  @if (typeof participant.currentSupplyPoints === 'number') {
+                    <span class="muted">
+                      · Supply {{ participant.currentSupplyPoints }}
+                      @if ((participant.temporarySupplyPoints ?? 0) > 0) {
+                        ({{ participant.temporarySupplyPoints }} temporary)
+                      }
+                    </span>
+                  }
                 </div>
                 @if (canStaffMembers() && participant.isPlayer && !participant.isGameMaster) {
                   <div class="nested-row">
@@ -757,7 +765,7 @@
       }
     }
 
-    @if (isBattlePhase() && play(); as play) {
+    @if ((isBattlePhase() || hasOpenBattles()) && play(); as play) {
       <div class="panel stack">
         <h2>
           <button
@@ -776,62 +784,154 @@
           @for (battle of play.battles; track battle.id) {
             <article class="stack">
               <h3>{{ territoryName(battle.territoryId) }} · {{ battle.status }}</h3>
-              @if (battle.isMine && battle.status === 'AwaitingResults') {
-                <div class="field">
-                  <label [attr.for]="'winner-' + battle.id">Winner</label>
-                  <select
-                    [id]="'winner-' + battle.id"
-                    [ngModel]="battleWinnerId(battle.id)"
-                    (ngModelChange)="onBattleWinner(battle.id, $event)"
-                    [name]="'winner-' + battle.id"
-                  >
-                    <option value="">Select a winner</option>
-                    @for (forceId of battle.participantForceIds; track forceId) {
-                      <option [value]="forceId">{{ forceLabelById(forceId) }}</option>
+              @if (battle.forceSupplies?.length) {
+                <p class="muted">
+                  @for (supply of battle.forceSupplies; track supply.forceId; let last = $last) {
+                    {{ forceLabelById(supply.forceId) }} supply {{ supply.forceAllowancePoints }}
+                    @if (supply.temporarySupplyPoints > 0) {
+                      ({{ supply.temporarySupplyPoints }} player temporary)
                     }
-                  </select>
-                </div>
-                @if (usesDifferentialScoring()) {
-                  <div class="nested-row">
-                    <div class="field">
-                      <label [attr.for]="'winner-score-' + battle.id">Winner score</label>
-                      <input
-                        [id]="'winner-score-' + battle.id"
-                        type="number"
-                        min="0"
-                        [ngModel]="battleWinnerScore(battle.id)"
-                        (ngModelChange)="onBattleWinnerScore(battle.id, $event)"
-                        [name]="'winner-score-' + battle.id"
-                      />
+                    @if (supply.alliedArmyPoints) {
+                      · army cap {{ supply.alliedArmyPoints }}
+                    }
+                    @if (!last) {
+                      ;
+                    }
+                  }
+                </p>
+              }
+              @if (canReportBattle(battle)) {
+                @for (forceId of reportingForceIds(battle); track forceId) {
+                  <fieldset class="stack">
+                    <legend>{{ forceLabelById(forceId) }}</legend>
+                    <div class="nested-row">
+                      <div class="field">
+                        <label [attr.for]="'vp-' + battle.id + '-' + forceId">Victory points</label>
+                        <input
+                          [id]="'vp-' + battle.id + '-' + forceId"
+                          type="number"
+                          min="0"
+                          [ngModel]="battleReportValue(battle.id, forceId, 'victoryPoints')"
+                          (ngModelChange)="onBattleReportNumber(battle.id, forceId, 'victoryPoints', $event)"
+                          [name]="'vp-' + battle.id + '-' + forceId"
+                        />
+                      </div>
+                      <div class="field">
+                        <label [attr.for]="'army-' + battle.id + '-' + forceId">Army points</label>
+                        <input
+                          [id]="'army-' + battle.id + '-' + forceId"
+                          type="number"
+                          min="0"
+                          [ngModel]="battleReportValue(battle.id, forceId, 'armyPoints')"
+                          (ngModelChange)="onBattleReportNumber(battle.id, forceId, 'armyPoints', $event)"
+                          [name]="'army-' + battle.id + '-' + forceId"
+                        />
+                      </div>
+                      <div class="field">
+                        <label [attr.for]="'supply-units-' + battle.id + '-' + forceId">Supply-costing units</label>
+                        <input
+                          [id]="'supply-units-' + battle.id + '-' + forceId"
+                          type="number"
+                          min="0"
+                          [ngModel]="battleReportValue(battle.id, forceId, 'supplyCostingUnitCount')"
+                          (ngModelChange)="onBattleReportNumber(battle.id, forceId, 'supplyCostingUnitCount', $event)"
+                          [name]="'supply-units-' + battle.id + '-' + forceId"
+                        />
+                      </div>
+                      <p class="muted">{{ supplySpendHint(battle, forceId) }}</p>
+                      <div class="field">
+                        <label [attr.for]="'diff-bp-' + battle.id + '-' + forceId">Differential battle points</label>
+                        <input
+                          [id]="'diff-bp-' + battle.id + '-' + forceId"
+                          type="number"
+                          min="0"
+                          [ngModel]="battleReportValue(battle.id, forceId, 'differentialBattlePoints')"
+                          (ngModelChange)="onBattleReportNumber(battle.id, forceId, 'differentialBattlePoints', $event)"
+                          [name]="'diff-bp-' + battle.id + '-' + forceId"
+                        />
+                      </div>
+                      <div class="field">
+                        <label [attr.for]="'bonus-bp-' + battle.id + '-' + forceId">Bonus battle points</label>
+                        <input
+                          [id]="'bonus-bp-' + battle.id + '-' + forceId"
+                          type="number"
+                          min="0"
+                          [ngModel]="battleReportValue(battle.id, forceId, 'bonusBattlePoints')"
+                          (ngModelChange)="onBattleReportNumber(battle.id, forceId, 'bonusBattlePoints', $event)"
+                          [name]="'bonus-bp-' + battle.id + '-' + forceId"
+                        />
+                      </div>
                     </div>
-                    <div class="field">
-                      <label [attr.for]="'loser-score-' + battle.id">Loser score</label>
-                      <input
-                        [id]="'loser-score-' + battle.id"
-                        type="number"
-                        min="0"
-                        [ngModel]="battleLoserScore(battle.id)"
-                        (ngModelChange)="onBattleLoserScore(battle.id, $event)"
-                        [name]="'loser-score-' + battle.id"
-                      />
-                    </div>
-                  </div>
+                    @if (campaign.alwaysAskGeneralKill !== false) {
+                      <label class="choice-row">
+                        <input
+                          type="checkbox"
+                          [ngModel]="battleReportFlag(battle.id, forceId, 'killedEnemyGeneral')"
+                          (ngModelChange)="onBattleReportFlag(battle.id, forceId, 'killedEnemyGeneral', $event)"
+                          [name]="'general-' + battle.id + '-' + forceId"
+                        />
+                        Killed the enemy general
+                      </label>
+                    }
+                    @if (campaign.alwaysAskSupplyLineDestroyed !== false) {
+                      <label class="choice-row">
+                        <input
+                          type="checkbox"
+                          [ngModel]="battleReportFlag(battle.id, forceId, 'destroyedEnemySupplyLine')"
+                          (ngModelChange)="onBattleReportFlag(battle.id, forceId, 'destroyedEnemySupplyLine', $event)"
+                          [name]="'supply-line-' + battle.id + '-' + forceId"
+                        />
+                        Destroyed the enemy supply line
+                      </label>
+                    }
+                    @for (question of battle.resultQuestions ?? []; track question.id) {
+                      @if (question.kind === 'Boolean') {
+                        <label class="choice-row">
+                          <input
+                            type="checkbox"
+                            [ngModel]="battleQuestionBoolean(battle.id, forceId, question.id)"
+                            (ngModelChange)="onBattleQuestionBoolean(battle.id, forceId, question.id, $event)"
+                            [name]="'q-' + battle.id + '-' + forceId + '-' + question.id"
+                          />
+                          {{ question.prompt }}
+                        </label>
+                      } @else {
+                        <div class="field">
+                          <label [attr.for]="'qbp-' + battle.id + '-' + forceId + '-' + question.id">{{
+                            question.prompt
+                          }}</label>
+                          <input
+                            [id]="'qbp-' + battle.id + '-' + forceId + '-' + question.id"
+                            type="number"
+                            min="0"
+                            [ngModel]="battleQuestionPoints(battle.id, forceId, question.id)"
+                            (ngModelChange)="onBattleQuestionPoints(battle.id, forceId, question.id, $event)"
+                            [name]="'qbp-' + battle.id + '-' + forceId + '-' + question.id"
+                          />
+                        </div>
+                      }
+                    }
+                  </fieldset>
                 }
                 <div class="choice-row">
-                  <button type="button" class="button" (click)="submitBattle(battle, false)">Submit result</button>
-                  <button type="button" class="button-secondary" (click)="submitBattle(battle, true)">
-                    Submit draw
-                  </button>
+                  <button type="button" class="button" (click)="submitBattle(battle)">Submit result</button>
                   @if (battle.opponentSubmission) {
                     <button type="button" class="button-secondary" (click)="acceptBattle(battle)">
-                      Accept opponent result
+                      Agree with reported result
+                    </button>
+                  }
+                  @if (battle.canStaffConfirm) {
+                    <button type="button" class="button-secondary" (click)="acceptBattle(battle)">
+                      Confirm result
                     </button>
                   }
                 </div>
               }
-              @if (battle.needsRetreat) {
+              @if (battle.needsRetreat || battle.canSurrender) {
                 <div class="field">
-                  <label [attr.for]="'retreat-' + battle.id">Retreat destination</label>
+                  <label [attr.for]="'retreat-' + battle.id">{{
+                    battle.canSurrender && !battle.needsRetreat ? 'Surrender destination' : 'Retreat destination'
+                  }}</label>
                   <select
                     [id]="'retreat-' + battle.id"
                     [ngModel]="retreatTargetId(battle.id)"
@@ -844,7 +944,12 @@
                     }
                   </select>
                 </div>
-                <button type="button" class="button" (click)="submitRetreat(battle)">Submit retreat</button>
+                @if (battle.needsRetreat) {
+                  <button type="button" class="button" (click)="submitRetreat(battle)">Submit retreat</button>
+                }
+                @if (battle.canSurrender) {
+                  <button type="button" class="button" (click)="submitSurrender(battle)">Surrender</button>
+                }
               }
             </article>
           }
@@ -932,56 +1037,14 @@
           }
           @if (play.battles.length > 0) {
             <h3>Battle results</h3>
+            <p class="muted">
+              Use the battle report form above, then override here to confirm the true result when reports disagree.
+            </p>
             @for (battle of play.battles; track battle.id) {
-              @if (battle.status === 'Disputed' || battle.status === 'AwaitingResults') {
+              @if (battle.status === 'Disputed' || battle.status === 'AwaitingResults' || battle.status === 'Pending') {
                 <article class="stack">
                   <h4>{{ territoryName(battle.territoryId) }} · {{ battle.status }}</h4>
-                  <div class="field">
-                    <label [attr.for]="'debug-winner-' + battle.id">Winner</label>
-                    <select
-                      [id]="'debug-winner-' + battle.id"
-                      [ngModel]="battleWinnerId(battle.id)"
-                      (ngModelChange)="onBattleWinner(battle.id, $event)"
-                      [name]="'debug-winner-' + battle.id"
-                    >
-                      <option value="">Select a winner</option>
-                      @for (forceId of battle.participantForceIds; track forceId) {
-                        <option [value]="forceId">{{ forceLabelById(forceId) }}</option>
-                      }
-                    </select>
-                  </div>
-                  @if (usesDifferentialScoring()) {
-                    <div class="nested-row">
-                      <div class="field">
-                        <label [attr.for]="'debug-winner-score-' + battle.id">Winner score</label>
-                        <input
-                          [id]="'debug-winner-score-' + battle.id"
-                          type="number"
-                          min="0"
-                          [ngModel]="battleWinnerScore(battle.id)"
-                          (ngModelChange)="onBattleWinnerScore(battle.id, $event)"
-                          [name]="'debug-winner-score-' + battle.id"
-                        />
-                      </div>
-                      <div class="field">
-                        <label [attr.for]="'debug-loser-score-' + battle.id">Loser score</label>
-                        <input
-                          [id]="'debug-loser-score-' + battle.id"
-                          type="number"
-                          min="0"
-                          [ngModel]="battleLoserScore(battle.id)"
-                          (ngModelChange)="onBattleLoserScore(battle.id, $event)"
-                          [name]="'debug-loser-score-' + battle.id"
-                        />
-                      </div>
-                    </div>
-                  }
-                  <div class="choice-row">
-                    <button type="button" class="button" (click)="resolveBattle(battle, false)">Override result</button>
-                    <button type="button" class="button-secondary" (click)="resolveBattle(battle, true)">
-                      Confirm draw
-                    </button>
-                  </div>
+                  <button type="button" class="button" (click)="resolveBattle(battle)">Override result</button>
                 </article>
               }
             }

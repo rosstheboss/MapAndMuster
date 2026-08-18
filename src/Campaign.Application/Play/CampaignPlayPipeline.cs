@@ -59,7 +59,8 @@ internal static class CampaignPlayPipeline
             schedule,
             AllyGroups(campaign),
             utcNow,
-            ForceStatuses(campaign));
+            ForceStatuses(campaign),
+            CampaignPlayCatalog.PickIndex);
         var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, advanced.Map, utcNow, advanced.PreserveSchedule ? campaign.EndsUtc : advanced.EndsUtc);
         var nextGraph = campaign.MapGraph is null || advanced.PreserveMap
             ? campaign.MapGraph
@@ -173,7 +174,8 @@ internal static class CampaignPlayPipeline
             CampaignMapper.ToSchedule(campaign),
             AllyGroups(campaign),
             clock.UtcNow,
-            ForceStatuses(campaign));
+            ForceStatuses(campaign),
+            CampaignPlayCatalog.PickIndex);
         var playMap = advanced.PreserveMap ? workingMap : advanced.Map;
         var endsUtc = mutation.PreserveSchedule && advanced.PreserveSchedule
             ? campaign.EndsUtc

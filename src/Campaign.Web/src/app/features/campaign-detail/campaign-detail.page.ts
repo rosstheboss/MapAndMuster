@@ -12,6 +12,7 @@ import type {
   CampaignParticipant,
   CampaignPlayDetail,
   CampaignSpecialRule,
+  BattleParticipantReport,
   MapGraphDetail,
   PlayBattle,
   PlayForce,
@@ -171,6 +172,7 @@ export class CampaignDetailPage {
   protected readonly battleScores = signal<
     Partial<Record<string, { winnerScore: number | null; loserScore: number | null }>>
   >({});
+  private readonly battleReports = signal<Record<string, BattleParticipantReport[]>>({});
   protected readonly retreatTarget = signal<Record<string, string>>({});
   private readonly mapRevision = signal(0);
   private logPollStarted = false;
@@ -237,6 +239,7 @@ export class CampaignDetailPage {
   );
   protected readonly isActionPhase = computed(() => this.play()?.currentPhaseKind === 'Action');
   protected readonly isBattlePhase = computed(() => this.play()?.currentPhaseKind === 'Battle');
+  protected readonly hasOpenBattles = computed(() => (this.play()?.battles.length ?? 0) > 0);
   protected readonly canDebug = computed(() => this.play()?.canDebug === true);
   protected readonly isDebugActive = computed(() => this.play()?.isDebugActive === true);
   protected readonly showSpawnLocation = computed(() => {
@@ -1009,6 +1012,160 @@ export class CampaignDetailPage {
     this.patchBattleScore(battleId, 'loserScore', value);
   }
 
+  protected canReportBattle(battle: PlayBattle): boolean {
+    return (
+      (battle.isMine || battle.canStaffConfirm === true) &&
+      (battle.status === 'Pending' || battle.status === 'AwaitingResults' || battle.status === 'Disputed')
+    );
+  }
+
+  protected battleReportValue(
+    battleId: string,
+    forceId: string,
+    field: 'victoryPoints' | 'armyPoints' | 'differentialBattlePoints' | 'bonusBattlePoints' | 'supplyCostingUnitCount',
+  ): number {
+    return this.reportFor(battleId, forceId)[field];
+  }
+
+  protected onBattleReportNumber(
+    battleId: string,
+    forceId: string,
+    field: 'victoryPoints' | 'armyPoints' | 'differentialBattlePoints' | 'bonusBattlePoints' | 'supplyCostingUnitCount',
+    value: string | number | null,
+  ): void {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    this.patchReport(battleId, forceId, { [field]: Number.isFinite(parsed) ? Math.max(0, parsed) : 0 });
+  }
+
+  protected battleReportFlag(
+    battleId: string,
+    forceId: string,
+    field: 'killedEnemyGeneral' | 'destroyedEnemySupplyLine',
+  ): boolean {
+    return this.reportFor(battleId, forceId)[field];
+  }
+
+  protected onBattleReportFlag(
+    battleId: string,
+    forceId: string,
+    field: 'killedEnemyGeneral' | 'destroyedEnemySupplyLine',
+    value: boolean,
+  ): void {
+    this.patchReport(battleId, forceId, { [field]: value });
+  }
+
+  protected battleQuestionBoolean(battleId: string, forceId: string, questionId: string): boolean {
+    return this.answerFor(battleId, forceId, questionId).booleanValue === true;
+  }
+
+  protected onBattleQuestionBoolean(battleId: string, forceId: string, questionId: string, value: boolean): void {
+    this.patchAnswer(battleId, forceId, questionId, { booleanValue: value, battlePointsValue: null });
+  }
+
+  protected battleQuestionPoints(battleId: string, forceId: string, questionId: string): number {
+    return this.answerFor(battleId, forceId, questionId).battlePointsValue ?? 0;
+  }
+
+  protected onBattleQuestionPoints(
+    battleId: string,
+    forceId: string,
+    questionId: string,
+    value: string | number | null,
+  ): void {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    this.patchAnswer(battleId, forceId, questionId, {
+      booleanValue: null,
+      battlePointsValue: Number.isFinite(parsed) ? Math.max(0, parsed) : 0,
+    });
+  }
+
+  protected reportingForceIds(battle: PlayBattle): string[] {
+    return battle.reportingForceIds?.length ? battle.reportingForceIds : battle.participantForceIds;
+  }
+
+  protected supplySpendHint(battle: PlayBattle, forceId: string): string {
+    const units = this.reportFor(battle.id, forceId).supplyCostingUnitCount;
+    const supply = battle.forceSupplies?.find((item) => item.forceId === forceId);
+    const allowance = supply?.forceAllowancePoints ?? 0;
+    const recurring = Math.min(units, allowance);
+    const temporary = Math.max(0, units - allowance);
+    if (temporary === 0) {
+      return `Spends ${recurring} from territory and round supply.`;
+    }
+
+    return `Spends ${recurring} from territory and round supply, then ${temporary} temporary.`;
+  }
+
+  private reportsFor(battle: PlayBattle): BattleParticipantReport[] {
+    return this.reportingForceIds(battle).map((forceId) => this.reportFor(battle.id, forceId));
+  }
+
+  private reportFor(battleId: string, forceId: string): BattleParticipantReport {
+    const existing = (this.battleReports()[battleId] ?? []).find((report) => report.forceId === forceId);
+    if (existing) {
+      return existing;
+    }
+
+    return {
+      forceId,
+      victoryPoints: 0,
+      armyPoints: 0,
+      differentialBattlePoints: 0,
+      bonusBattlePoints: 0,
+      supplyCostingUnitCount: 0,
+      killedEnemyGeneral: false,
+      destroyedEnemySupplyLine: false,
+      answers: [],
+    };
+  }
+
+  private answerFor(
+    battleId: string,
+    forceId: string,
+    questionId: string,
+  ): { booleanValue?: boolean | null; battlePointsValue?: number | null } {
+    return (
+      this.reportFor(battleId, forceId).answers.find((answer) => answer.questionId === questionId) ?? {
+        booleanValue: false,
+        battlePointsValue: 0,
+      }
+    );
+  }
+
+  private patchReport(battleId: string, forceId: string, patch: Partial<BattleParticipantReport>): void {
+    this.battleReports.update((current) => {
+      const reports = [...(current[battleId] ?? [])];
+      const index = reports.findIndex((report) => report.forceId === forceId);
+      const next = { ...this.reportFor(battleId, forceId), ...patch };
+      if (index >= 0) {
+        reports[index] = next;
+      } else {
+        reports.push(next);
+      }
+
+      return { ...current, [battleId]: reports };
+    });
+  }
+
+  private patchAnswer(
+    battleId: string,
+    forceId: string,
+    questionId: string,
+    patch: { booleanValue?: boolean | null; battlePointsValue?: number | null },
+  ): void {
+    const report = this.reportFor(battleId, forceId);
+    const answers = [...report.answers];
+    const index = answers.findIndex((answer) => answer.questionId === questionId);
+    const next = { questionId, ...this.answerFor(battleId, forceId, questionId), ...patch };
+    if (index >= 0) {
+      answers[index] = next;
+    } else {
+      answers.push(next);
+    }
+
+    this.patchReport(battleId, forceId, { answers });
+  }
+
   protected leaderboardTitle(kind: string): string {
     switch (kind) {
       case 'MostTerritories':
@@ -1074,22 +1231,19 @@ export class CampaignDetailPage {
     await this.runPlay(() => this.campaignsApi.uncommitOrders(play.id, { revision: play.revision }));
   }
 
-  protected async submitBattle(battle: PlayBattle, isDraw: boolean): Promise<void> {
+  protected async submitBattle(battle: PlayBattle): Promise<void> {
     const play = this.play();
     if (!play) {
       return;
     }
 
-    const winnerForceId = isDraw ? null : this.battleWinner()[battle.id] || null;
-    const scores = this.battleScorePair(battle.id);
     await this.runPlay(() =>
       this.campaignsApi.submitBattleResult(play.id, {
         revision: play.revision,
         battleId: battle.id,
-        winnerForceId,
-        isDraw,
-        winnerScore: this.usesDifferentialScoring() ? scores.winnerScore : null,
-        loserScore: this.usesDifferentialScoring() ? scores.loserScore : null,
+        winnerForceId: null,
+        isDraw: false,
+        reports: this.reportsFor(battle),
       }),
     );
   }
@@ -1103,21 +1257,19 @@ export class CampaignDetailPage {
     await this.runPlay(() => this.campaignsApi.acceptBattleResult(play.id, battle.id, play.revision));
   }
 
-  protected async resolveBattle(battle: PlayBattle, isDraw: boolean): Promise<void> {
+  protected async resolveBattle(battle: PlayBattle): Promise<void> {
     const play = this.play();
     if (!play) {
       return;
     }
 
-    const scores = this.battleScorePair(battle.id);
     await this.runPlay(() =>
       this.campaignsApi.resolveBattle(play.id, {
         revision: play.revision,
         battleId: battle.id,
-        winnerForceId: isDraw ? null : this.battleWinner()[battle.id] || null,
-        isDraw,
-        winnerScore: this.usesDifferentialScoring() ? scores.winnerScore : null,
-        loserScore: this.usesDifferentialScoring() ? scores.loserScore : null,
+        winnerForceId: null,
+        isDraw: false,
+        reports: this.reportsFor(battle),
       }),
     );
   }
@@ -1131,6 +1283,22 @@ export class CampaignDetailPage {
 
     await this.runPlay(() =>
       this.campaignsApi.submitRetreat(play.id, {
+        revision: play.revision,
+        battleId: battle.id,
+        targetTerritoryId,
+      }),
+    );
+  }
+
+  protected async submitSurrender(battle: PlayBattle): Promise<void> {
+    const play = this.play();
+    const targetTerritoryId = this.retreatTarget()[battle.id];
+    if (!play || !targetTerritoryId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.submitSurrender(play.id, {
         revision: play.revision,
         battleId: battle.id,
         targetTerritoryId,

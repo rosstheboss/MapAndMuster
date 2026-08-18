@@ -61,6 +61,7 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector('.setup-toolbar')?.textContent).toContain('Expand All');
     expect(compiled.querySelector('.setup-toolbar')?.textContent).toContain('Collapse All');
     expect(compiled.querySelector('.setup-toolbar button.button')?.textContent).toContain('Create campaign');
+    expect(compiled.querySelector('.setup-toolbar')?.textContent).not.toContain('Save as Preset');
     expect(compiled.querySelector('a[href$="/map"]')).toBeNull();
     expect(compiled.querySelector('#name')).toBeTruthy();
     expect(compiled.querySelector('#playerCount')).toBeTruthy();
@@ -388,6 +389,11 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector('#pointsPerBattleWon')).toBeTruthy();
     expect(compiled.querySelector('#pointsPerBattleDraw')).toBeTruthy();
     expect(compiled.querySelector('#mostTerritoriesCampaignPoints')).toBeTruthy();
+    expect(compiled.querySelector<HTMLInputElement>('#splitForceSupplyPenaltyPercent')?.value).toBe('25');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-0')?.value).toBe('1000');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-supply-2')?.value).toBe('1');
+    expect(compiled.querySelector<HTMLInputElement>('#terrain-supply-0')?.value).toBe('1');
+    expect(compiled.querySelector('#structure-supply-0')).toBeTruthy();
     clickNamedButton(compiled, 'Add public objective');
     await fixture.whenStable();
     fixture.detectChanges();

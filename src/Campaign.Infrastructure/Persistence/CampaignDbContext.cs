@@ -51,6 +51,11 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
     /// </summary>
     public DbSet<SiteChatBlockRecord> SiteChatBlocks => Set<SiteChatBlockRecord>();
 
+    /// <summary>
+    /// Gets named campaign setup presets.
+    /// </summary>
+    public DbSet<CampaignPresetRecord> CampaignPresets => Set<CampaignPresetRecord>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -229,6 +234,19 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.ToTable("SiteChatBlocks");
             entity.HasKey(block => new { block.BlockerUserId, block.BlockedUserId });
             entity.HasIndex(block => block.BlockedUserId);
+        });
+
+        builder.Entity<CampaignPresetRecord>(entity =>
+        {
+            entity.ToTable("CampaignPresets");
+            entity.HasKey(preset => preset.Id);
+            entity.Property(preset => preset.Name).HasMaxLength(80).IsRequired();
+            entity.Property(preset => preset.NormalizedName).HasMaxLength(80).IsRequired();
+            entity.Property(preset => preset.MapStorageKey).HasMaxLength(260);
+            entity.Property(preset => preset.CatalogJson).HasColumnType("jsonb");
+            entity.Property(preset => preset.SettingsJson).HasColumnType("jsonb");
+            entity.Property(preset => preset.MapGraphJson).HasColumnType("jsonb");
+            entity.HasIndex(preset => preset.NormalizedName).IsUnique();
         });
     }
 }

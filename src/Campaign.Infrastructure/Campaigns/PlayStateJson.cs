@@ -96,8 +96,12 @@ internal static class PlayStateJson
                 BattleWindowId = battle.BattleWindowId,
                 Status = battle.Status.ToString(),
                 ParticipantForceIds = [.. battle.ParticipantForceIds],
+                ActiveForceIds = [.. battle.ActiveForceIds],
+                WaitingForceIds = [.. battle.WaitingForceIds],
+                SurrenderedForceIds = [.. battle.SurrenderedForceIds],
                 WinnerForceId = battle.WinnerForceId,
                 IsDraw = battle.IsDraw,
+                IsNoContest = battle.IsNoContest,
                 CreatedUtc = battle.CreatedUtc,
                 WinnerScore = battle.WinnerScore,
                 LoserScore = battle.LoserScore,
@@ -113,6 +117,23 @@ internal static class PlayStateJson
                 SubmittedUtc = item.SubmittedUtc,
                 WinnerScore = item.WinnerScore,
                 LoserScore = item.LoserScore,
+                Reports = [.. item.Reports.Select(static report => new BattleReportDocument
+                {
+                    ForceId = report.ForceId,
+                    VictoryPoints = report.VictoryPoints,
+                    ArmyPoints = report.ArmyPoints,
+                    DifferentialBattlePoints = report.DifferentialBattlePoints,
+                    BonusBattlePoints = report.BonusBattlePoints,
+                    KilledEnemyGeneral = report.KilledEnemyGeneral,
+                    DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
+                    SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                    Answers = [.. report.Answers.Select(static answer => new BattleAnswerDocument
+                    {
+                        QuestionId = answer.QuestionId,
+                        BooleanValue = answer.BooleanValue,
+                        BattlePointsValue = answer.BattlePointsValue,
+                    })],
+                })],
             })],
             Retreats = [.. state.Retreats.Select(static item => new RetreatDocument
             {
@@ -121,6 +142,7 @@ internal static class PlayStateJson
                 ForceId = item.ForceId,
                 TargetTerritoryId = item.TargetTerritoryId,
                 IsDefault = item.IsDefault,
+                IsSurrender = item.IsSurrender,
                 SubmittedUtc = item.SubmittedUtc,
             })],
             BrokenAllyFactionIds = [.. state.BrokenAllyFactionIds],
@@ -215,6 +237,11 @@ internal static class PlayStateJson
                 ActorUserId = item.ActorUserId,
                 DestroyedUtc = item.DestroyedUtc,
             })],
+            PlayerSupplies = [.. state.PlayerSupplies.Select(static item => new PlayerSupplyDocument
+            {
+                UserId = item.UserId,
+                TemporarySupplyPoints = item.TemporarySupplyPoints,
+            })],
         };
     }
 
@@ -267,7 +294,11 @@ internal static class PlayStateJson
                 battle.IsDraw,
                 battle.CreatedUtc,
                 battle.WinnerScore,
-                battle.LoserScore))],
+                battle.LoserScore,
+                battle.ActiveForceIds,
+                battle.WaitingForceIds,
+                battle.SurrenderedForceIds,
+                battle.IsNoContest))],
             [.. document.BattleSubmissions.Select(static item => new BattleResultSubmission(
                 item.Id,
                 item.BattleId,
@@ -277,14 +308,28 @@ internal static class PlayStateJson
                 item.AcceptedSubmissionId,
                 item.SubmittedUtc,
                 item.WinnerScore,
-                item.LoserScore))],
+                item.LoserScore,
+                [.. (item.Reports ?? []).Select(static report => new BattleParticipantReport(
+                    report.ForceId,
+                    Math.Max(0, report.VictoryPoints),
+                    Math.Max(0, report.ArmyPoints),
+                    Math.Max(0, report.DifferentialBattlePoints),
+                    Math.Max(0, report.BonusBattlePoints),
+                    report.KilledEnemyGeneral,
+                    report.DestroyedEnemySupplyLine,
+                    [.. (report.Answers ?? []).Select(static answer => new BattleQuestionAnswer(
+                        answer.QuestionId,
+                        answer.BooleanValue,
+                        answer.BattlePointsValue is null ? null : Math.Max(0, answer.BattlePointsValue.Value)))],
+                    Math.Max(0, report.SupplyCostingUnitCount)))]))],
             [.. document.Retreats.Select(static item => new RetreatOrder(
                 item.Id,
                 item.BattleId,
                 item.ForceId,
                 item.TargetTerritoryId,
                 item.IsDefault,
-                item.SubmittedUtc))],
+                item.SubmittedUtc,
+                item.IsSurrender))],
             document.BrokenAllyFactionIds,
             [.. document.Structures.Select(static item => new TerritoryStructureState(
                 item.TerritoryId,
@@ -340,7 +385,10 @@ internal static class PlayStateJson
                 item.StructureTypeId,
                 item.ActorFactionId,
                 item.ActorUserId,
-                item.DestroyedUtc))]);
+                item.DestroyedUtc))],
+            [.. (document.PlayerSupplies ?? []).Select(static item => new PlayerSupplyBalance(
+                item.UserId,
+                Math.Max(0, item.TemporarySupplyPoints)))]);
     }
 
     private static IReadOnlyList<ActionWindowSnapshot> ToSnapshots(PlayDocument document)
@@ -427,6 +475,7 @@ internal static class PlayStateJson
         public List<PublicObjectiveAwardDocument>? PublicObjectiveAwards { get; set; }
         public List<PrivateObjectiveDocument>? PrivateObjectives { get; set; }
         public List<StructureDestructionDocument>? StructureDestructions { get; set; }
+        public List<PlayerSupplyDocument>? PlayerSupplies { get; set; }
     }
 
     private sealed class WindowDocument
@@ -490,8 +539,12 @@ internal static class PlayStateJson
         public Guid? BattleWindowId { get; set; }
         public string Status { get; set; } = "";
         public List<Guid> ParticipantForceIds { get; set; } = [];
+        public List<Guid> ActiveForceIds { get; set; } = [];
+        public List<Guid> WaitingForceIds { get; set; } = [];
+        public List<Guid> SurrenderedForceIds { get; set; } = [];
         public Guid? WinnerForceId { get; set; }
         public bool IsDraw { get; set; }
+        public bool IsNoContest { get; set; }
         public DateTimeOffset CreatedUtc { get; set; }
         public int? WinnerScore { get; set; }
         public int? LoserScore { get; set; }
@@ -508,6 +561,33 @@ internal static class PlayStateJson
         public DateTimeOffset SubmittedUtc { get; set; }
         public int? WinnerScore { get; set; }
         public int? LoserScore { get; set; }
+        public List<BattleReportDocument>? Reports { get; set; }
+    }
+
+    private sealed class BattleReportDocument
+    {
+        public Guid ForceId { get; set; }
+        public int VictoryPoints { get; set; }
+        public int ArmyPoints { get; set; }
+        public int DifferentialBattlePoints { get; set; }
+        public int BonusBattlePoints { get; set; }
+        public bool KilledEnemyGeneral { get; set; }
+        public bool DestroyedEnemySupplyLine { get; set; }
+        public int SupplyCostingUnitCount { get; set; }
+        public List<BattleAnswerDocument>? Answers { get; set; }
+    }
+
+    private sealed class BattleAnswerDocument
+    {
+        public Guid QuestionId { get; set; }
+        public bool? BooleanValue { get; set; }
+        public int? BattlePointsValue { get; set; }
+    }
+
+    private sealed class PlayerSupplyDocument
+    {
+        public Guid UserId { get; set; }
+        public int TemporarySupplyPoints { get; set; }
     }
 
     private sealed class RetreatDocument
@@ -517,6 +597,7 @@ internal static class PlayStateJson
         public Guid ForceId { get; set; }
         public Guid TargetTerritoryId { get; set; }
         public bool IsDefault { get; set; }
+        public bool IsSurrender { get; set; }
         public DateTimeOffset SubmittedUtc { get; set; }
     }
 

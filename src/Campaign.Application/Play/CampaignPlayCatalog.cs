@@ -163,4 +163,133 @@ internal static class CampaignPlayCatalog
 
         return next;
     }
+
+    public static SupplyCatalog Supply(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        return new SupplyCatalog(
+            campaign.TerrainTypes.ToDictionary(static type => type.Id, static type => type.SupplyPoints),
+            campaign.StructureTypes.ToDictionary(
+                static type => type.Id,
+                static type => new StructureSupplyRules(type.SupplyPoints, type.PillageSupplyPoints, type.DestroySupplyPoints)),
+            campaign.SplitForceSupplyPenaltyPercent,
+            campaign.ArmyEscalations.Count == 0
+                ? HuntInEstaliaDefaults.ArmyEscalations(Math.Max(1, campaign.RoundCount))
+                : campaign.ArmyEscalations,
+            FactionByPlayer(campaign),
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName),
+            campaign.PlayState?.BrokenAllyFactionIds.ToHashSet() ?? []);
+    }
+
+    public static IReadOnlyList<MissionResultQuestionSetup> MissionQuestions(StoredCampaign campaign, Guid territoryId)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        var territory = campaign.MapGraph?.Territories.FirstOrDefault(item => item.Id == territoryId);
+        if (territory is null)
+        {
+            return [];
+        }
+
+        var questions = new List<MissionResultQuestionSetup>();
+        var terrain = campaign.TerrainTypes.FirstOrDefault(type => type.Id == territory.TerrainTypeId);
+        if (terrain is not null)
+        {
+            questions.AddRange(terrain.Missions.SelectMany(static mission => mission.ResultQuestions).Select(ToQuestion));
+        }
+
+        var structureId = campaign.PlayState?.Structures
+            .FirstOrDefault(item => item.TerritoryId == territoryId)
+            ?.StructureTypeId
+            ?? territory.StructureTypeId;
+        var structure = structureId is { } id
+            ? campaign.StructureTypes.FirstOrDefault(type => type.Id == id)
+            : null;
+        if (structure is not null)
+        {
+            questions.AddRange(structure.Missions.SelectMany(static mission => mission.ResultQuestions).Select(ToQuestion));
+        }
+
+        return questions;
+    }
+
+    public static IReadOnlyList<BattleParticipantReport> ToReports(IReadOnlyList<BattleParticipantReportInput>? reports)
+    {
+        if (reports is null || reports.Count == 0)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. reports.Select(static report => new BattleParticipantReport(
+                report.ForceId,
+                report.VictoryPoints,
+                report.ArmyPoints,
+                report.DifferentialBattlePoints,
+                report.BonusBattlePoints,
+                report.KilledEnemyGeneral,
+                report.DestroyedEnemySupplyLine,
+                [
+                    .. (report.Answers ?? []).Select(static answer => new BattleQuestionAnswer(
+                        answer.QuestionId,
+                        answer.BooleanValue,
+                        answer.BattlePointsValue)),
+                ],
+                report.SupplyCostingUnitCount)),
+        ];
+    }
+
+    public static IReadOnlyDictionary<Guid, int> ExtraBattleReportPoints(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        var play = campaign.PlayState ?? CampaignPlayState.Empty;
+        var extras = new Dictionary<Guid, int>();
+        foreach (var battle in play.Battles)
+        {
+            if (battle.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved)
+            {
+                continue;
+            }
+
+            var submission = play.BattleSubmissions
+                .Where(item => item.BattleId == battle.Id
+                    && item.Reports.Count > 0
+                    && item.IsDraw == battle.IsDraw
+                    && item.WinnerForceId == battle.WinnerForceId)
+                .OrderByDescending(static item => item.SubmittedUtc)
+                .FirstOrDefault();
+            if (submission is null)
+            {
+                continue;
+            }
+
+            var questions = MissionQuestions(campaign, battle.TerritoryId);
+            foreach (var report in submission.Reports)
+            {
+                var force = play.Forces.FirstOrDefault(item => item.Id == report.ForceId);
+                if (force is null)
+                {
+                    continue;
+                }
+
+                extras[force.ControllerUserId] = extras.GetValueOrDefault(force.ControllerUserId)
+                    + BattleResultRules.ExtraCampaignPoints(report, campaign.BattleReportRules, questions);
+            }
+        }
+
+        return extras;
+    }
+
+    private static MissionResultQuestionSetup ToQuestion(StoredMissionResultQuestion question)
+    {
+        var kind = Enum.TryParse<MissionResultQuestionKind>(question.Kind, true, out var parsed)
+            ? parsed
+            : MissionResultQuestionKind.Boolean;
+        return new MissionResultQuestionSetup(
+            question.Id,
+            string.IsNullOrWhiteSpace(question.Prompt) ? "Question" : question.Prompt,
+            kind,
+            Math.Max(0, question.BattlePoints),
+            Math.Max(0, question.CampaignPoints));
+    }
 }

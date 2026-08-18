@@ -31,6 +31,9 @@ public enum ActionKind
 
     /// <summary>Automatic system action while a force is locked in battle.</summary>
     Battle = 8,
+
+    /// <summary>Leave an engagement and retreat; once committed it cannot be withdrawn.</summary>
+    Surrender = 9,
 }
 
 /// <summary>
@@ -175,6 +178,15 @@ public enum PlayLogKind
 
     /// <summary>A held item objective was destroyed by a resolved choice.</summary>
     ItemObjectiveDestroyed = 27,
+
+    /// <summary>A player surrendered an engagement.</summary>
+    PlayerSurrendered = 28,
+
+    /// <summary>A retreat collision kept the strongest force in the contested territory.</summary>
+    RetreatCollisionResolved = 29,
+
+    /// <summary>A multi-side engagement scheduled the next tabletop pairing.</summary>
+    BattleMatchAdvanced = 30,
 }
 
 /// <summary>

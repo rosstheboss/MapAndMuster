@@ -30,6 +30,8 @@ public sealed class CampaignSetup
     /// <param name="specialRules">Reusable special rules. Empty means none.</param>
     /// <param name="privateObjectiveTypes">Private campaign objectives. Empty means none.</param>
     /// <param name="forceStatuses">Configured force statuses other than Normal. Empty means none.</param>
+    /// <param name="splitForceSupplyPenaltyPercent">Percent subtracted from map-plus-round supply when a player has split forces.</param>
+    /// <param name="battleReportRules">Always-asked battle-report questions and their campaign points.</param>
     public CampaignSetup(
         string name,
         string? description,
@@ -52,7 +54,9 @@ public sealed class CampaignSetup
         GeneralPublicObjectivePoints? rankingObjectivePoints = null,
         IReadOnlyList<SpecialRuleSetup>? specialRules = null,
         IReadOnlyList<PrivateObjectiveTypeSetup>? privateObjectiveTypes = null,
-        IReadOnlyList<ForceStatusSetup>? forceStatuses = null)
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        int? splitForceSupplyPenaltyPercent = null,
+        BattleReportRulesSetup? battleReportRules = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factions);
@@ -84,6 +88,9 @@ public sealed class CampaignSetup
         SpecialRules = specialRules ?? [];
         PrivateObjectiveTypes = privateObjectiveTypes ?? [];
         ForceStatuses = forceStatuses ?? [];
+        SplitForceSupplyPenaltyPercent = splitForceSupplyPenaltyPercent
+            ?? HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
+        BattleReportRules = battleReportRules ?? BattleReportRulesSetup.Default;
     }
 
     /// <summary>Gets the campaign name.</summary>
@@ -148,6 +155,12 @@ public sealed class CampaignSetup
 
     /// <summary>Gets configured force statuses other than Normal. Empty means none.</summary>
     public IReadOnlyList<ForceStatusSetup> ForceStatuses { get; }
+
+    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    public int SplitForceSupplyPenaltyPercent { get; }
+
+    /// <summary>Gets always-asked battle-report questions and their campaign points.</summary>
+    public BattleReportRulesSetup BattleReportRules { get; }
 
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon => BattleScoring.PointsPerWin;

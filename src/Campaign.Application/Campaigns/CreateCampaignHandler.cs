@@ -78,7 +78,12 @@ public sealed class CreateCampaignHandler
                 command.MostBattlesWonCampaignPoints,
                 command.SpecialRules,
                 command.PrivateObjectiveTypes,
-                command.ForceStatuses))
+                command.ForceStatuses,
+                command.SplitForceSupplyPenaltyPercent,
+                command.AlwaysAskGeneralKill,
+                command.AlwaysAskSupplyLineDestroyed,
+                command.GeneralKillCampaignPoints,
+                command.SupplyLineDestroyedCampaignPoints))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -198,7 +203,12 @@ public sealed class UpdateCampaignHandler
                 command.MostBattlesWonCampaignPoints,
                 command.SpecialRules,
                 command.PrivateObjectiveTypes,
-                command.ForceStatuses))
+                command.ForceStatuses,
+                command.SplitForceSupplyPenaltyPercent,
+                command.AlwaysAskGeneralKill,
+                command.AlwaysAskSupplyLineDestroyed,
+                command.GeneralKillCampaignPoints,
+                command.SupplyLineDestroyedCampaignPoints))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -373,6 +383,9 @@ internal static class CampaignPersistenceFactory
             PrivateObjectiveTypes = CatalogFileBinder.BindPrivateObjectives(setup.PrivateObjectiveTypes),
             BattleScoring = setup.BattleScoring,
             RankingObjectivePoints = setup.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = setup.SplitForceSupplyPenaltyPercent,
+            BattleReportRules = setup.BattleReportRules,
+            ArmyEscalations = setup.Schedule.ArmyEscalations,
         };
     }
 }

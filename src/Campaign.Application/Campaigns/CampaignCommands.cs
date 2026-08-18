@@ -102,6 +102,21 @@ public sealed class CreateCampaignCommand
 
     /// <summary>Gets private campaign objectives. Omitted or empty means none.</summary>
     public IReadOnlyList<PrivateObjectiveTypeInput>? PrivateObjectiveTypes { get; init; }
+
+    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    public int? SplitForceSupplyPenaltyPercent { get; init; }
+
+    /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
+    public bool? AlwaysAskGeneralKill { get; init; }
+
+    /// <summary>Gets whether every battle report asks if the enemy supply line was destroyed.</summary>
+    public bool? AlwaysAskSupplyLineDestroyed { get; init; }
+
+    /// <summary>Gets campaign points awarded for a slain enemy general.</summary>
+    public int? GeneralKillCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
+    public int? SupplyLineDestroyedCampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -210,6 +225,21 @@ public sealed class UpdateCampaignCommand
 
     /// <summary>Gets private campaign objectives. Omitted or empty means none.</summary>
     public IReadOnlyList<PrivateObjectiveTypeInput>? PrivateObjectiveTypes { get; init; }
+
+    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    public int? SplitForceSupplyPenaltyPercent { get; init; }
+
+    /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
+    public bool? AlwaysAskGeneralKill { get; init; }
+
+    /// <summary>Gets whether every battle report asks if the enemy supply line was destroyed.</summary>
+    public bool? AlwaysAskSupplyLineDestroyed { get; init; }
+
+    /// <summary>Gets campaign points awarded for a slain enemy general.</summary>
+    public int? GeneralKillCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
+    public int? SupplyLineDestroyedCampaignPoints { get; init; }
 }
 
 /// <summary>
