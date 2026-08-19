@@ -906,6 +906,8 @@ describe('CampaignDetailPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Reveal hidden objectives');
+    expect(compiled.textContent).toContain('Apply correction');
+    expect(compiled.textContent).toContain('Apply and re-resolve previous');
     expect(compiled.textContent).toContain('Crown');
     expect(compiled.textContent).toContain('(hidden)');
 
@@ -1171,6 +1173,181 @@ describe('CampaignDetailPage', () => {
     );
     expect(compiled.textContent).toContain('Attacker:');
     expect(compiled.textContent).toContain('Defender:');
+    http.verify();
+  });
+
+  it('lets a manager start a ringer battle against an idle enemy force', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 3,
+      currentPhaseKind: 'Battle',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [
+        {
+          id: 't1',
+          displayNumber: 1,
+          name: 'North spawn',
+          description: null,
+          polygon: [],
+          terrainTypeId: '',
+          structureTypeId: null,
+          structureCondition: 'Operational',
+          overlayColor: null,
+          ownerFactionId: '1',
+          spawnFactionId: '1',
+        },
+        {
+          id: 't2',
+          displayNumber: 2,
+          name: 'Midland',
+          description: null,
+          polygon: [],
+          terrainTypeId: '',
+          structureTypeId: null,
+          structureCondition: 'Operational',
+          overlayColor: null,
+          ownerFactionId: null,
+          spawnFactionId: null,
+        },
+      ],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        currentPhaseKind: 'Battle',
+        currentPhaseLabel: 'Battle 1',
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: false,
+            moveTargets: [],
+            availableActions: ['Hold'],
+          },
+          {
+            id: 'force-2',
+            controllerUserId: 'user-2',
+            controllerUsername: 'southplayer',
+            factionId: '2',
+            territoryId: 't2',
+            isMine: false,
+            inBattle: false,
+            moveTargets: [],
+            availableActions: ['Hold'],
+          },
+        ],
+      }),
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Ringer battle');
+    const forceSelect = compiled.querySelector('#ringer-force');
+    expect(forceSelect).toBeTruthy();
+    expect(forceSelect?.textContent).toContain('southplayer');
+    expect(forceSelect?.textContent).not.toContain('northplayer');
+
+    const page = fixture.componentInstance as unknown as { injectRingerBattle: () => Promise<void> };
+    const pending = page.injectRingerBattle();
+    const request = http.expectOne(`/api/campaigns/${campaign.id}/play/inject-ringer`);
+    expect(request.request.body).toEqual({
+      revision: campaign.revision,
+      targetForceId: 'force-2',
+      ringerFactionId: '1',
+      missionId: null,
+      playerIsDefender: false,
+    });
+    request.flush(playState({ currentPhaseKind: 'Battle', currentPhaseLabel: 'Battle 1' }));
+    await pending;
+    await fixture.whenStable();
+    http.verify();
+  });
+
+  it('offers ringer, player, and draw when reporting a ringer battle', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '2',
+      currentRound: 1,
+      currentPhaseNumber: 3,
+      currentPhaseKind: 'Battle',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        currentPhaseKind: 'Battle',
+        currentPhaseLabel: 'Battle 1',
+        factionId: '2',
+        forces: [
+          {
+            id: 'force-2',
+            controllerUserId: 'user-2',
+            controllerUsername: 'southplayer',
+            factionId: '2',
+            territoryId: 't2',
+            isMine: true,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: ['Surrender'],
+          },
+        ],
+        battles: [
+          {
+            id: 'battle-ringer',
+            territoryId: 't2',
+            status: 'AwaitingResults',
+            participantForceIds: ['force-2'],
+            reportingForceIds: ['force-2'],
+            isRinger: true,
+            ringerFactionId: '1',
+            isMine: true,
+            mySubmission: null,
+            opponentSubmission: null,
+            winnerForceId: null,
+            isDraw: false,
+            needsRetreat: false,
+            canSurrender: false,
+            retreatTargets: [],
+          },
+        ],
+      }),
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Winner');
+    expect(compiled.textContent).toContain('Ringer');
+    expect(compiled.textContent).toContain('Player');
+    expect(compiled.textContent).toContain('Draw');
     http.verify();
   });
 });

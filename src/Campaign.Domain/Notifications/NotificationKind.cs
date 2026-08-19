@@ -31,4 +31,7 @@ public enum NotificationKind
 
     /// <summary>A campaign manager removed the recipient from a campaign.</summary>
     CampaignKicked = 8,
+
+    /// <summary>A force reached three missed-order offences and may need to be kicked.</summary>
+    DelinquencyKickRecommendation = 9,
 }

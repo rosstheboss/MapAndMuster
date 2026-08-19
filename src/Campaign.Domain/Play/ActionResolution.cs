@@ -202,7 +202,14 @@ public static class ActionResolution
         var items = ItemObjectiveRules.DropCarriedByMovers(state.ItemObjectives, moveOrigins, utcNow, log);
         items = ItemObjectiveRules.PickUpUnpossessed(items, nextForces, utcNow, log);
 
-        var nextMap = ApplyTerritoryEffects(map, nextForces, resolved, inBattle);
+        var nextMap = ApplyTerritoryEffects(
+            map,
+            nextForces,
+            resolved,
+            inBattle,
+            factionAllyGroups,
+            broken,
+            pickIndex ?? (static count => 0));
         return (
             state.With(
                 forces: nextForces,
@@ -245,12 +252,12 @@ public static class ActionResolution
             kinds.Add(ActionKind.Build);
         }
 
-        if (IsValidPillage(map, force))
+        if (IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds))
         {
             kinds.Add(ActionKind.Pillage);
         }
 
-        if (IsValidRepair(map, force))
+        if (IsValidRepair(map, force, factionAllyGroups, state.BrokenAllyFactionIds))
         {
             kinds.Add(ActionKind.Repair);
         }
@@ -275,6 +282,55 @@ public static class ActionResolution
             .. map.Territories.Select(static territory =>
                 new TerritoryStructureState(territory.Id, territory.StructureTypeId, territory.StructureCondition)),
         ];
+    }
+
+    /// <summary>
+    /// Applies uncontested occupation claims for forces that are not in battle.
+    /// </summary>
+    internal static PlayMap ApplyIdleOccupation(
+        PlayMap map,
+        IReadOnlyList<CampaignForce> forces,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlyCollection<Guid> broken,
+        Func<int, int> pickIndex)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(forces);
+        ArgumentNullException.ThrowIfNull(factionAllyGroups);
+        ArgumentNullException.ThrowIfNull(broken);
+        ArgumentNullException.ThrowIfNull(pickIndex);
+        var next = map.Territories.ToDictionary(static territory => territory.Id);
+        var inBattle = forces.Where(static force => force.InBattle).Select(static force => force.Id).ToHashSet();
+        foreach (var territory in next.Values.ToArray())
+        {
+            if (territory.IsSpawn)
+            {
+                next[territory.Id] = territory.With(ownerFactionId: territory.SpawnFactionId);
+                continue;
+            }
+
+            var occupants = forces
+                .Where(force => force.TerritoryId == territory.Id && !inBattle.Contains(force.Id))
+                .ToArray();
+            if (occupants.Length == 0 || forces.Any(force => force.TerritoryId == territory.Id && inBattle.Contains(force.Id)))
+            {
+                continue;
+            }
+
+            var claimed = ClaimOwner(
+                territory,
+                occupants,
+                map,
+                factionAllyGroups,
+                broken.ToHashSet(),
+                pickIndex);
+            if (claimed != territory.OwnerFactionId)
+            {
+                next[territory.Id] = next[territory.Id].With(ownerFactionId: claimed, assignOwner: true);
+            }
+        }
+
+        return map.WithTerritories([.. next.Values.OrderBy(static territory => territory.DisplayNumber)]);
     }
 
     private static ResolvedOrder Normalize(
@@ -303,12 +359,12 @@ public static class ActionResolution
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
-        if (kind == ActionKind.Pillage && !IsValidPillage(map, force))
+        if (kind == ActionKind.Pillage && !IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
-        if (kind == ActionKind.Repair && !IsValidRepair(map, force))
+        if (kind == ActionKind.Repair && !IsValidRepair(map, force, factionAllyGroups, state.BrokenAllyFactionIds))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
@@ -411,15 +467,14 @@ public static class ActionResolution
         return CanBuildInTerritory(map, force);
     }
 
-    internal static bool IsValidPillage(PlayMap map, CampaignForce force)
+    internal static bool IsValidPillage(
+        PlayMap map,
+        CampaignForce force,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlyCollection<Guid> broken)
     {
         var territory = map.Territory(force.TerritoryId);
         if (territory?.StructureTypeId is null || territory.StructureCondition == StructureCondition.Destroyed)
-        {
-            return false;
-        }
-
-        if (territory.OwnerFactionId == force.FactionId)
         {
             return false;
         }
@@ -434,16 +489,32 @@ public static class ActionResolution
             return false;
         }
 
+        if (territory.OwnerFactionId is { } owner
+            && AreAllies(force.FactionId, owner, factionAllyGroups, broken))
+        {
+            return false;
+        }
+
         return true;
     }
 
-    internal static bool IsValidRepair(PlayMap map, CampaignForce force)
+    internal static bool IsValidRepair(
+        PlayMap map,
+        CampaignForce force,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlyCollection<Guid> broken)
     {
         var territory = map.Territory(force.TerritoryId);
-        return territory is not null
-            && territory.StructureTypeId is not null
-            && territory.StructureCondition == StructureCondition.Pillaged
-            && territory.OwnerFactionId == force.FactionId;
+        if (territory is null
+            || territory.StructureTypeId is null
+            || territory.StructureCondition != StructureCondition.Pillaged
+            || territory.OwnerFactionId is not { } owner)
+        {
+            return false;
+        }
+
+        return owner == force.FactionId
+            || AreAllies(force.FactionId, owner, factionAllyGroups, broken);
     }
 
     internal static bool IsValidBackstab(
@@ -505,6 +576,32 @@ public static class ActionResolution
             || !string.Equals(leftGroup, rightGroup, StringComparison.Ordinal);
     }
 
+    internal static bool AreAllies(
+        Guid leftFactionId,
+        Guid rightFactionId,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlyCollection<Guid> broken)
+    {
+        if (leftFactionId == rightFactionId)
+        {
+            return false;
+        }
+
+        if (broken.Contains(leftFactionId) || broken.Contains(rightFactionId))
+        {
+            return false;
+        }
+
+        if (!factionAllyGroups.TryGetValue(leftFactionId, out var leftGroup)
+            || !factionAllyGroups.TryGetValue(rightFactionId, out var rightGroup))
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(leftGroup)
+            && string.Equals(leftGroup, rightGroup, StringComparison.Ordinal);
+    }
+
     private static List<CampaignForce> Rejoin(
         List<CampaignForce> forces,
         PhaseWindow window,
@@ -540,9 +637,13 @@ public static class ActionResolution
         PlayMap map,
         IReadOnlyList<CampaignForce> forces,
         IReadOnlyDictionary<Guid, ResolvedOrder> resolved,
-        HashSet<Guid> inBattle)
+        HashSet<Guid> inBattle,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        HashSet<Guid> broken,
+        Func<int, int> pickIndex)
     {
         var next = map.Territories.ToDictionary(static territory => territory.Id);
+        var originalOwners = map.Territories.ToDictionary(static territory => territory.Id, static territory => territory.OwnerFactionId);
         foreach (var order in resolved.Values)
         {
             if (!forces.Any(force => force.Id == order.ForceId))
@@ -593,22 +694,125 @@ public static class ActionResolution
                 continue;
             }
 
-            var occupants = forces.Where(force => force.TerritoryId == territory.Id).ToArray();
-            if (occupants.Length == 0 || occupants.Any(force => inBattle.Contains(force.Id)))
+            var occupants = forces
+                .Where(force => force.TerritoryId == territory.Id && !inBattle.Contains(force.Id))
+                .ToArray();
+            if (occupants.Length == 0 || forces.Any(force => force.TerritoryId == territory.Id && inBattle.Contains(force.Id)))
             {
                 continue;
             }
 
-            var factions = occupants.Select(static force => force.FactionId).Distinct().ToArray();
-            if (factions.Length != 1)
+            var claimed = ClaimOwner(
+                territory,
+                occupants,
+                map,
+                factionAllyGroups,
+                broken,
+                pickIndex);
+            if (claimed != territory.OwnerFactionId)
+            {
+                next[territory.Id] = next[territory.Id].With(ownerFactionId: claimed, assignOwner: true);
+            }
+        }
+
+        foreach (var order in resolved.Values)
+        {
+            if (order.Kind != ActionKind.Backstab || !forces.Any(force => force.Id == order.ForceId))
             {
                 continue;
             }
 
-            next[territory.Id] = territory.With(ownerFactionId: factions[0]);
+            var force = forces.First(item => item.Id == order.ForceId);
+            if (inBattle.Contains(force.Id))
+            {
+                continue;
+            }
+
+            var territory = next[force.TerritoryId];
+            if (!originalOwners.TryGetValue(territory.Id, out var previousOwner)
+                || previousOwner is not { } former
+                || former == force.FactionId
+                || territory.OwnerFactionId != force.FactionId)
+            {
+                continue;
+            }
+
+            if (!SameAllyGroup(force.FactionId, former, factionAllyGroups)
+                || !territory.IsPillageable
+                || territory.StructureTypeId is null
+                || territory.StructureCondition != StructureCondition.Operational)
+            {
+                continue;
+            }
+
+            next[territory.Id] = territory.With(structureCondition: StructureCondition.Pillaged);
         }
 
         return map.WithTerritories([.. next.Values.OrderBy(static territory => territory.DisplayNumber)]);
+    }
+
+    private static Guid? ClaimOwner(
+        PlayTerritory territory,
+        CampaignForce[] occupants,
+        PlayMap map,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        HashSet<Guid> broken,
+        Func<int, int> pickIndex)
+    {
+        var factions = occupants.Select(static force => force.FactionId).Distinct().ToArray();
+        if (factions.Length == 1)
+        {
+            var factionId = factions[0];
+            if (territory.OwnerFactionId is { } owner
+                && owner != factionId
+                && AreAllies(factionId, owner, factionAllyGroups, broken))
+            {
+                return owner;
+            }
+
+            return factionId;
+        }
+
+        if (factions.Any(left => factions.Any(right => AreEnemies(left, right, factionAllyGroups, broken))))
+        {
+            return territory.OwnerFactionId;
+        }
+
+        if (territory.OwnerFactionId is { } current
+            && factions.Any(faction => faction == current || AreAllies(faction, current, factionAllyGroups, broken)))
+        {
+            return current;
+        }
+
+        if (territory.OwnerFactionId is not null)
+        {
+            return territory.OwnerFactionId;
+        }
+
+        var ranked = CombatantStrengthRules.Rank(
+            factions,
+            factionId =>
+            {
+                var holdings = CombatantStrengthRules.Holdings(map, factionId);
+                return new CombatantStrengthRules.Strength(0, holdings.Territories, holdings.Structures, 0);
+            },
+            pickIndex);
+        return ranked[0];
+    }
+
+    private static bool SameAllyGroup(
+        Guid leftFactionId,
+        Guid rightFactionId,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups)
+    {
+        if (!factionAllyGroups.TryGetValue(leftFactionId, out var leftGroup)
+            || !factionAllyGroups.TryGetValue(rightFactionId, out var rightGroup))
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(leftGroup)
+            && string.Equals(leftGroup, rightGroup, StringComparison.Ordinal);
     }
 
     private static PhaseWindow? NextBattleWindow(CampaignPlayState state, PhaseWindow actionWindow)

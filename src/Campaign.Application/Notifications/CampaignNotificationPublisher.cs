@@ -163,6 +163,45 @@ public sealed class CampaignNotificationPublisher
                     cancellationToken)
                 .ConfigureAwait(false);
         }
+
+        foreach (var entry in newEntries.Where(static item => item.Kind == PlayLogKind.DelinquencyThreshold))
+        {
+            await NotifyManagersAsync(
+                    next,
+                    NotificationKind.DelinquencyKickRecommendation,
+                    "Possible kick",
+                    $"A force in {next.Name} has reached three missed-order offences and may need to be removed.",
+                    path,
+                    $"delinquency:{next.Id:N}:{entry.ForceId:N}:{entry.Id:N}",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (newEntries.Any(static item => item.Kind == PlayLogKind.BattleDisputed))
+        {
+            await NotifyManagersAsync(
+                    next,
+                    NotificationKind.ActionRequired,
+                    "Disputed battle",
+                    $"A battle in {next.Name} is disputed. Open the campaign to confirm the result.",
+                    path,
+                    $"dispute:{next.Id:N}",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (newEntries.Any(static item => item.Kind == PlayLogKind.DebugActionReresolved))
+        {
+            await NotifyMembersAsync(
+                    next,
+                    NotificationKind.ActionRequired,
+                    "Orders need review",
+                    $"A manager re-resolved the previous action in {next.Name}. Check whether your current orders are still valid.",
+                    path,
+                    $"reresolve:{next.Id:N}:{newEntries.First(static item => item.Kind == PlayLogKind.DebugActionReresolved).Id:N}",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -185,6 +224,30 @@ public sealed class CampaignNotificationPublisher
                 $"kicked:{campaign.Id:N}:{userId:N}",
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task NotifyManagersAsync(
+        StoredCampaign campaign,
+        NotificationKind kind,
+        string title,
+        string body,
+        string path,
+        string dedupeKey,
+        CancellationToken cancellationToken)
+    {
+        foreach (var membership in campaign.Memberships.Where(static member => member.IsGameMaster))
+        {
+            await NotifyAsync(
+                    membership.UserId,
+                    kind,
+                    campaign,
+                    title,
+                    body,
+                    path,
+                    $"{dedupeKey}:{membership.UserId:N}",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task NotifyMembersAsync(

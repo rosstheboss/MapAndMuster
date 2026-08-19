@@ -73,6 +73,7 @@ const CAMPAIGN_SECTIONS = [
   'orders',
   'battles',
   'debug',
+  'ringer',
   'schedule',
   'details',
   'round',
@@ -167,6 +168,10 @@ export class CampaignDetailPage {
   protected readonly extensionAmount = signal(1);
   protected readonly extensionUnit = signal('Hours');
   protected readonly extensionWindowId = signal('');
+  protected readonly ringerForceId = signal('');
+  protected readonly ringerFactionId = signal('');
+  protected readonly ringerMissionId = signal('');
+  protected readonly ringerPlayerIsDefender = signal(false);
   protected readonly drafts = signal<Record<string, OrderDraft>>({});
   protected readonly debugDrafts = signal<Record<string, OrderDraft>>({});
   protected readonly mapAction = signal<MapActionFlow | null>(null);
@@ -394,6 +399,20 @@ export class CampaignDetailPage {
     const campaign = this.campaign();
     const user = this.auth.currentUser();
     return Boolean(campaign && (campaign.canManage || user?.isAdministrator));
+  }
+
+  protected ringerTargetForces(): PlayForce[] {
+    const play = this.play();
+    if (play?.currentPhaseKind !== 'Battle') {
+      return [];
+    }
+
+    const spawnIds = new Set(
+      this.graph()
+        .territories.filter((territory) => Boolean(territory.spawnFactionId))
+        .map((territory) => territory.id),
+    );
+    return play.forces.filter((force) => !force.isMine && !force.inBattle && !spawnIds.has(force.territoryId));
   }
 
   protected async searchMembers(): Promise<void> {
@@ -1022,8 +1041,9 @@ export class CampaignDetailPage {
   }
 
   protected canReportBattle(battle: PlayBattle): boolean {
+    const staff = this.canStaffMembers();
     return (
-      (battle.isMine || battle.canStaffConfirm === true) &&
+      (battle.isMine || staff) &&
       (battle.status === 'Pending' || battle.status === 'AwaitingResults' || battle.status === 'Disputed')
     );
   }
@@ -1390,12 +1410,20 @@ export class CampaignDetailPage {
       return;
     }
 
+    const winnerChoice = this.battleWinner()[battle.id] ?? '';
+    const isDraw = winnerChoice === 'draw';
+    const winnerForceId =
+      battle.isRinger && (winnerChoice === 'ringer' || winnerChoice === '')
+        ? null
+        : winnerChoice && winnerChoice !== 'draw'
+          ? winnerChoice
+          : null;
     await this.runPlay(() =>
       this.campaignsApi.submitBattleResult(play.id, {
         revision: play.revision,
         battleId: battle.id,
-        winnerForceId: null,
-        isDraw: false,
+        winnerForceId,
+        isDraw,
         reports: this.reportsFor(battle),
       }),
     );
@@ -1478,6 +1506,30 @@ export class CampaignDetailPage {
     );
   }
 
+  protected async injectRingerBattle(): Promise<void> {
+    const play = this.play();
+    const campaign = this.campaign();
+    if (!play || !campaign) {
+      return;
+    }
+
+    const targetForceId = this.ringerForceId() || this.ringerTargetForces()[0]?.id;
+    const ringerFactionId = this.ringerFactionId() || campaign.factions[0]?.id;
+    if (!targetForceId || !ringerFactionId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.injectRingerBattle(play.id, {
+        revision: play.revision,
+        targetForceId,
+        ringerFactionId,
+        missionId: this.ringerMissionId() || null,
+        playerIsDefender: this.ringerPlayerIsDefender(),
+      }),
+    );
+  }
+
   protected async enterDebug(): Promise<void> {
     const play = this.play();
     if (!play) {
@@ -1505,7 +1557,7 @@ export class CampaignDetailPage {
     await this.runPlay(() => this.campaignsApi.revealHiddenObjectives(play.id, { revision: play.revision }));
   }
 
-  protected async applyDebugCorrection(force: PlayForce): Promise<void> {
+  protected async applyDebugCorrection(force: PlayForce, reResolvePrevious = false): Promise<void> {
     const play = this.play();
     if (!play) {
       return;
@@ -1519,6 +1571,7 @@ export class CampaignDetailPage {
         kind: draft.kind,
         targetTerritoryId: draft.targetTerritoryId || null,
         structureTypeId: draft.structureTypeId || null,
+        reResolvePrevious,
       }),
     );
   }

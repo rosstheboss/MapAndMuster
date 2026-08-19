@@ -452,6 +452,11 @@ namespace Campaign.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<bool>("EndPhaseEarlyIfAble")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(16)

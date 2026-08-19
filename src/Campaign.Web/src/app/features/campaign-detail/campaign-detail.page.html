@@ -1049,6 +1049,22 @@
                   </fieldset>
                 }
                 <div class="choice-row">
+                  @if (battle.isRinger) {
+                    <label class="field">
+                      Winner
+                      <select
+                        [ngModel]="battleWinner()[battle.id] || ''"
+                        (ngModelChange)="onBattleWinner(battle.id, $event)"
+                        [name]="'ringer-winner-' + battle.id"
+                      >
+                        <option value="">Ringer</option>
+                        @for (forceId of reportingForceIds(battle); track forceId) {
+                          <option [value]="forceId">Player</option>
+                        }
+                        <option value="draw">Draw</option>
+                      </select>
+                    </label>
+                  }
                   <button type="button" class="button" (click)="submitBattle(battle)">Submit result</button>
                   @if (battle.opponentSubmission) {
                     <button type="button" class="button-secondary" (click)="acceptBattle(battle)">
@@ -1168,6 +1184,11 @@
               <button type="button" class="button" (click)="applyDebugCorrection(force)">
                 {{ play.currentPhaseKind === 'Action' ? 'Apply correction' : 'Apply and re-resolve' }}
               </button>
+              @if (play.currentPhaseKind === 'Action') {
+                <button type="button" class="button-secondary" (click)="applyDebugCorrection(force, true)">
+                  Apply and re-resolve previous
+                </button>
+              }
             </fieldset>
           }
           @if (play.battles.length > 0) {
@@ -1189,6 +1210,81 @@
     }
 
     @if (campaign.canManage && play(); as play) {
+      @if (play.currentPhaseKind === 'Battle' && ringerTargetForces().length > 0) {
+        <form class="panel stack" (ngSubmit)="injectRingerBattle()">
+          <h2>
+            <button
+              type="button"
+              class="section-toggle"
+              [attr.aria-expanded]="isOpen('ringer')"
+              (click)="toggleSection('ringer')"
+            >
+              Ringer battle
+            </button>
+          </h2>
+          @if (isOpen('ringer')) {
+            <p class="muted">
+              Start an ephemeral fight against an idle force. The ringer leaves no map army and scores no campaign
+              points.
+            </p>
+            <div class="field">
+              <label for="ringer-force">Target force</label>
+              <select
+                id="ringer-force"
+                [ngModel]="ringerForceId()"
+                (ngModelChange)="ringerForceId.set($event)"
+                name="ringerForce"
+              >
+                @for (force of ringerTargetForces(); track force.id) {
+                  <option [value]="force.id">
+                    {{ force.controllerUsername || 'Force' }} · {{ factionName(force.factionId) }}
+                  </option>
+                }
+              </select>
+            </div>
+            <div class="field">
+              <label for="ringer-faction">Ringer fights as</label>
+              <select
+                id="ringer-faction"
+                [ngModel]="ringerFactionId()"
+                (ngModelChange)="ringerFactionId.set($event)"
+                name="ringerFaction"
+              >
+                @for (faction of campaign.factions; track faction.id) {
+                  <option [value]="faction.id">{{ faction.name }}</option>
+                }
+              </select>
+            </div>
+            @if (campaign.missions && campaign.missions.length > 0) {
+              <div class="field">
+                <label for="ringer-mission">Mission</label>
+                <select
+                  id="ringer-mission"
+                  [ngModel]="ringerMissionId()"
+                  (ngModelChange)="ringerMissionId.set($event)"
+                  name="ringerMission"
+                >
+                  <option value="">Random from the territory pool</option>
+                  @for (mission of campaign.missions; track mission.id) {
+                    <option [value]="mission.id">{{ mission.name }}</option>
+                  }
+                </select>
+              </div>
+            }
+            <label class="choice-row">
+              <input
+                id="ringer-defender"
+                type="checkbox"
+                [ngModel]="ringerPlayerIsDefender()"
+                (ngModelChange)="ringerPlayerIsDefender.set($event)"
+                name="ringerDefender"
+              />
+              Mark the player as the defender
+            </label>
+            <button type="submit" class="button">Start ringer battle</button>
+          }
+        </form>
+      }
       <form class="panel stack" (ngSubmit)="extendSchedule()">
         <h2>
           <button

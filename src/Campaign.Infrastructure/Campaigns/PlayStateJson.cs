@@ -51,6 +51,7 @@ internal static class PlayStateJson
                 StartsUtc = window.StartsUtc,
                 EndsUtc = window.EndsUtc,
                 Status = window.Status.ToString(),
+                EndPhaseEarlyIfAble = window.EndPhaseEarlyIfAble,
             })],
             Forces = [.. state.Forces.Select(static force => new ForceDocument
             {
@@ -108,6 +109,10 @@ internal static class PlayStateJson
                 MissionId = battle.MissionId,
                 AttackerForceId = battle.AttackerForceId,
                 DefenderForceId = battle.DefenderForceId,
+                IsRinger = battle.IsRinger,
+                RingerFactionId = battle.RingerFactionId,
+                InitiatingGmUserId = battle.InitiatingGmUserId,
+                RingerIsAttacker = battle.RingerIsAttacker,
             })],
             BattleSubmissions = [.. state.BattleSubmissions.Select(static item => new BattleSubmissionDocument
             {
@@ -156,6 +161,7 @@ internal static class PlayStateJson
                 TargetTerritoryId = item.TargetTerritoryId,
                 IsDefault = item.IsDefault,
                 IsSurrender = item.IsSurrender,
+                IsStaffCorrection = item.IsStaffCorrection,
                 SubmittedUtc = item.SubmittedUtc,
             })],
             BrokenAllyFactionIds = [.. state.BrokenAllyFactionIds],
@@ -255,6 +261,11 @@ internal static class PlayStateJson
                 UserId = item.UserId,
                 TemporarySupplyPoints = item.TemporarySupplyPoints,
             })],
+            Delinquencies = [.. state.Delinquencies.Select(static item => new DelinquencyDocument
+            {
+                ForceId = item.ForceId,
+                OffenceCount = item.OffenceCount,
+            })],
         };
     }
 
@@ -270,7 +281,8 @@ internal static class PlayStateJson
                 Enum.Parse<DurationUnit>(window.PlannedUnit, true),
                 window.StartsUtc,
                 window.EndsUtc,
-                Enum.Parse<PhaseWindowStatus>(window.Status, true)))],
+                Enum.Parse<PhaseWindowStatus>(window.Status, true),
+                window.EndPhaseEarlyIfAble))],
             [.. document.Forces.Select(static force => new CampaignForce(
                 force.Id,
                 force.ControllerUserId,
@@ -314,7 +326,11 @@ internal static class PlayStateJson
                 battle.IsNoContest,
                 battle.MissionId,
                 battle.AttackerForceId,
-                battle.DefenderForceId))],
+                battle.DefenderForceId,
+                battle.IsRinger,
+                battle.RingerFactionId,
+                battle.InitiatingGmUserId,
+                battle.RingerIsAttacker))],
             [.. document.BattleSubmissions.Select(static item => new BattleResultSubmission(
                 item.Id,
                 item.BattleId,
@@ -355,7 +371,8 @@ internal static class PlayStateJson
                 item.TargetTerritoryId,
                 item.IsDefault,
                 item.SubmittedUtc,
-                item.IsSurrender))],
+                item.IsSurrender,
+                item.IsStaffCorrection))],
             document.BrokenAllyFactionIds,
             [.. document.Structures.Select(static item => new TerritoryStructureState(
                 item.TerritoryId,
@@ -414,7 +431,10 @@ internal static class PlayStateJson
                 item.DestroyedUtc))],
             [.. (document.PlayerSupplies ?? []).Select(static item => new PlayerSupplyBalance(
                 item.UserId,
-                Math.Max(0, item.TemporarySupplyPoints)))]);
+                Math.Max(0, item.TemporarySupplyPoints)))],
+            [.. (document.Delinquencies ?? []).Select(static item => new ForceDelinquency(
+                item.ForceId,
+                Math.Max(0, item.OffenceCount)))]);
     }
 
     private static IReadOnlyList<ActionWindowSnapshot> ToSnapshots(PlayDocument document)
@@ -502,6 +522,7 @@ internal static class PlayStateJson
         public List<PrivateObjectiveDocument>? PrivateObjectives { get; set; }
         public List<StructureDestructionDocument>? StructureDestructions { get; set; }
         public List<PlayerSupplyDocument>? PlayerSupplies { get; set; }
+        public List<DelinquencyDocument>? Delinquencies { get; set; }
     }
 
     private sealed class WindowDocument
@@ -515,6 +536,7 @@ internal static class PlayStateJson
         public DateTimeOffset StartsUtc { get; set; }
         public DateTimeOffset EndsUtc { get; set; }
         public string Status { get; set; } = "";
+        public bool EndPhaseEarlyIfAble { get; set; } = true;
     }
 
     private sealed class ForceDocument
@@ -577,6 +599,10 @@ internal static class PlayStateJson
         public Guid? MissionId { get; set; }
         public Guid? AttackerForceId { get; set; }
         public Guid? DefenderForceId { get; set; }
+        public bool IsRinger { get; set; }
+        public Guid? RingerFactionId { get; set; }
+        public Guid? InitiatingGmUserId { get; set; }
+        public bool RingerIsAttacker { get; set; }
     }
 
     private sealed class BattleSubmissionDocument
@@ -639,7 +665,14 @@ internal static class PlayStateJson
         public Guid TargetTerritoryId { get; set; }
         public bool IsDefault { get; set; }
         public bool IsSurrender { get; set; }
+        public bool IsStaffCorrection { get; set; }
         public DateTimeOffset SubmittedUtc { get; set; }
+    }
+
+    private sealed class DelinquencyDocument
+    {
+        public Guid ForceId { get; set; }
+        public int OffenceCount { get; set; }
     }
 
     private sealed class StructureDocument

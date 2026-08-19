@@ -103,6 +103,7 @@ export interface RoundPhase {
   kind: string;
   durationAmount: number;
   durationUnit: string;
+  endPhaseEarlyIfAble?: boolean;
 }
 
 export interface CampaignFaction {
@@ -372,6 +373,7 @@ export interface SaveRoundPhasePayload {
   kind: string;
   durationAmount: number;
   durationUnit: string;
+  endPhaseEarlyIfAble?: boolean;
 }
 
 export interface SaveFactionPayload {
@@ -677,6 +679,8 @@ export interface PlayBattle {
   waitingForceIds?: string[];
   reportingForceIds?: string[];
   isNoContest?: boolean;
+  isRinger?: boolean;
+  ringerFactionId?: string | null;
   isMine: boolean;
   mySubmission: PlayBattleSubmission | null;
   opponentSubmission: PlayBattleSubmission | null;
@@ -830,6 +834,7 @@ export interface SaveOrderDraftPayload {
   kind: string;
   targetTerritoryId?: string | null;
   structureTypeId?: string | null;
+  reResolvePrevious?: boolean;
 }
 
 export interface PlayRevisionPayload {
@@ -899,6 +904,14 @@ export interface ExtendCampaignSchedulePayload {
   revision: number;
   roundCount: number;
   extensions: { windowId: string; durationAmount: number; durationUnit: string }[];
+}
+
+export interface InjectRingerBattlePayload {
+  revision: number;
+  targetForceId: string;
+  ringerFactionId: string;
+  missionId?: string | null;
+  playerIsDefender?: boolean;
 }
 
 export interface ChooseFactionPayload {

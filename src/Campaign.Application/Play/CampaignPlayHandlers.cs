@@ -696,6 +696,86 @@ public sealed class ExtendCampaignScheduleHandler
 }
 
 /// <summary>
+/// Injects an ephemeral GM ringer battle against an idle player force.
+/// </summary>
+public sealed class InjectRingerBattleHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public InjectRingerBattleHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Starts the ringer fight.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(
+        InjectRingerBattleCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignPlayPipeline.MutateAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, map, campaign, utcNow) =>
+            {
+                var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
+                if (membership?.IsGameMaster != true && !command.IsAdministrator)
+                {
+                    return PlayMutation.Fail(new Domain.Common.DomainError(
+                        ErrorCodes.CampaignForbidden,
+                        "Only a campaign manager or administrator can inject a ringer battle."));
+                }
+
+                if (campaign.Factions.All(faction => faction.Id != command.RingerFactionId))
+                {
+                    return PlayMutation.Fail(new Domain.Common.DomainError(
+                        "ringer.faction.invalid",
+                        "Choose a campaign faction for the ringer.",
+                        "ringerFactionId"));
+                }
+
+                if (!CampaignPlayRules.TryInjectRingerBattle(
+                    state,
+                    map,
+                    command.UserId,
+                    command.TargetForceId,
+                    command.RingerFactionId,
+                    command.MissionId,
+                    command.PlayerIsDefender,
+                    CampaignPlayCatalog.TerrainSetups(campaign),
+                    CampaignPlayCatalog.StructureSetups(campaign),
+                    CampaignPlayPipeline.AllyGroups(campaign),
+                    utcNow,
+                    CampaignPlayCatalog.PickIndex,
+                    out var outcome,
+                    out var error))
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.FromOutcome(outcome!);
+            },
+            cancellationToken,
+            _notifications);
+    }
+}
+
+/// <summary>
 /// Assigns a faction to a player who has not chosen one yet.
 /// </summary>
 public sealed class ChooseFactionHandler
@@ -997,7 +1077,9 @@ public sealed class DebugCorrectOrderHandler
                     out var error,
                     CampaignPlayCatalog.TerrainSetups(campaign),
                     CampaignPlayCatalog.StructureSetups(campaign),
-                    CampaignPlayCatalog.PickIndex))
+                    CampaignPlayCatalog.PickIndex,
+                    CampaignMapper.ToSchedule(campaign),
+                    command.ReResolvePrevious))
                 {
                     return PlayMutation.Fail(error);
                 }

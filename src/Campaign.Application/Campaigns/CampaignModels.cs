@@ -404,6 +404,9 @@ public sealed class RoundPhaseDetail
 
     /// <summary>Gets the duration unit name.</summary>
     public required string DurationUnit { get; init; }
+
+    /// <summary>Gets whether the phase may close as soon as it can resolve. Default is on.</summary>
+    public bool EndPhaseEarlyIfAble { get; init; } = true;
 }
 
 /// <summary>
@@ -618,6 +621,9 @@ public sealed class StoredRoundPhase
 
     /// <summary>Gets the duration unit name.</summary>
     public required string DurationUnit { get; init; }
+
+    /// <summary>Gets whether the phase may close as soon as it can resolve. Default is on.</summary>
+    public bool EndPhaseEarlyIfAble { get; init; } = true;
 }
 
 /// <summary>

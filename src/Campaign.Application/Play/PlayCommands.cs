@@ -48,6 +48,9 @@ public sealed class SaveOrderDraftCommand
 
     /// <summary>Gets the structure type for Build.</summary>
     public Guid? StructureTypeId { get; init; }
+
+    /// <summary>Gets whether to re-resolve the previous action instead of editing the current window.</summary>
+    public bool ReResolvePrevious { get; init; }
 }
 
 /// <summary>
@@ -246,6 +249,36 @@ public sealed class PhaseExtensionInput
 
     /// <summary>Gets the additional unit name.</summary>
     public required string DurationUnit { get; init; }
+}
+
+/// <summary>
+/// Command to inject an ephemeral GM ringer battle.
+/// </summary>
+public sealed class InjectRingerBattleCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the player force to fight.</summary>
+    public required Guid TargetForceId { get; init; }
+
+    /// <summary>Gets the faction the ringer fights as.</summary>
+    public required Guid RingerFactionId { get; init; }
+
+    /// <summary>Gets an optional catalog mission.</summary>
+    public Guid? MissionId { get; init; }
+
+    /// <summary>Gets whether the player is marked as the defender.</summary>
+    public bool PlayerIsDefender { get; init; }
 }
 
 /// <summary>
@@ -595,6 +628,12 @@ public sealed class PlayBattleDetail
 
     /// <summary>Gets whether every remaining force ran and nobody won.</summary>
     public bool IsNoContest { get; init; }
+
+    /// <summary>Gets whether this is an ephemeral GM ringer battle.</summary>
+    public bool IsRinger { get; init; }
+
+    /// <summary>Gets the faction the ringer fights as.</summary>
+    public Guid? RingerFactionId { get; init; }
 
     /// <summary>Gets whether the viewer participates.</summary>
     public required bool IsMine { get; init; }

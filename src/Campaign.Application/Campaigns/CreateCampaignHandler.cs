@@ -375,6 +375,7 @@ internal static class CampaignPersistenceFactory
                     Kind = phase.Kind.ToString(),
                     DurationAmount = phase.Duration.Amount,
                     DurationUnit = phase.Duration.Unit.ToString(),
+                    EndPhaseEarlyIfAble = phase.EndPhaseEarlyIfAble,
                 }),
             ],
             MapGraph = mapGraph,

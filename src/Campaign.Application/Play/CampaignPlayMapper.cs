@@ -378,6 +378,8 @@ internal static class CampaignPlayMapper
             WaitingForceIds = battle.WaitingForceIds,
             ReportingForceIds = battle.ReportingForceIds,
             IsNoContest = battle.IsNoContest,
+            IsRinger = battle.IsRinger,
+            RingerFactionId = battle.RingerFactionId,
             IsMine = myForce is not null,
             MySubmission = ToSubmission(mine),
             OpponentSubmission = myForce is null && !canStaff ? null : ToSubmission(theirs),
@@ -734,7 +736,13 @@ internal static class CampaignPlayMapper
             PlayLogKind.BattleCreated =>
                 $"A battle started in {territory} between {participants}.",
             PlayLogKind.BattleFinalized =>
-                play.Battles.FirstOrDefault(item => item.Id == entry.BattleId)?.IsNoContest == true
+                play.Battles.FirstOrDefault(item => item.Id == entry.BattleId) is { IsRinger: true } ringer
+                    ? ringer.IsNoContest || ringer.IsDraw
+                        ? $"Ringer battle in {territory} ended with no winner."
+                        : ringer.WinnerForceId is { } ringerWinner
+                            ? $"Ringer battle in {territory} was finalized. Winner: {ForceController(play, ringerWinner, names)}."
+                            : $"Ringer battle in {territory} was finalized. The ringer won."
+                    : play.Battles.FirstOrDefault(item => item.Id == entry.BattleId)?.IsNoContest == true
                     ? $"Battle in {territory} ended with no winner."
                     : entry.ForceId is { } winner
                     ? $"Battle in {territory} was finalized. Winner: {ForceController(play, winner, names)}."
@@ -757,6 +765,14 @@ internal static class CampaignPlayMapper
                 $"A missing retreat for {actor} used the spawn fallback at {target}.",
             PlayLogKind.UnresolvedBattleHeldOpen =>
                 $"Battle in {territory} stayed open for a manager because no results were submitted.",
+            PlayLogKind.NoResultForcedRetreat =>
+                $"Neither side reported in {territory}; the fighting forces were forced to retreat.",
+            PlayLogKind.DelinquencyThreshold =>
+                $"{actor}'s force reached three missed-order offences and may be kicked.",
+            PlayLogKind.RingerBattleCreated =>
+                $"{actor} started a ringer battle in {territory}.",
+            PlayLogKind.RingerBattleVoided =>
+                $"The ringer battle in {territory} was voided because nobody reported.",
             PlayLogKind.CampaignStarted =>
                 "The campaign started.",
             PlayLogKind.ScheduleExtended =>

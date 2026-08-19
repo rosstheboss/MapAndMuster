@@ -329,6 +329,12 @@ public sealed class PlayBattleResponse
     /// <summary>Gets whether every remaining force ran and nobody won.</summary>
     public bool IsNoContest { get; init; }
 
+    /// <summary>Gets whether this is an ephemeral GM ringer battle.</summary>
+    public bool IsRinger { get; init; }
+
+    /// <summary>Gets the faction the ringer fights as.</summary>
+    public Guid? RingerFactionId { get; init; }
+
     /// <summary>Gets whether the viewer participates.</summary>
     public required bool IsMine { get; init; }
 
@@ -532,6 +538,9 @@ public sealed class SaveOrderDraftRequest
 
     /// <summary>Gets the structure type for Build.</summary>
     public Guid? StructureTypeId { get; init; }
+
+    /// <summary>Gets whether to re-resolve the previous action instead of editing the current window.</summary>
+    public bool ReResolvePrevious { get; init; }
 }
 
 /// <summary>Request that only carries a revision.</summary>
@@ -785,6 +794,25 @@ public sealed class PhaseExtensionRequest
 
     /// <summary>Gets the additional unit name.</summary>
     public required string DurationUnit { get; init; }
+}
+
+/// <summary>Request to inject an ephemeral GM ringer battle.</summary>
+public sealed class InjectRingerBattleRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the player force to fight.</summary>
+    public required Guid TargetForceId { get; init; }
+
+    /// <summary>Gets the faction the ringer fights as.</summary>
+    public required Guid RingerFactionId { get; init; }
+
+    /// <summary>Gets an optional catalog mission.</summary>
+    public Guid? MissionId { get; init; }
+
+    /// <summary>Gets whether the player is marked as the defender.</summary>
+    public bool PlayerIsDefender { get; init; }
 }
 
 /// <summary>Request to choose a faction.</summary>
@@ -1124,6 +1152,8 @@ public static class PlayResponses
                     WaitingForceIds = battle.WaitingForceIds,
                     ReportingForceIds = battle.ReportingForceIds,
                     IsNoContest = battle.IsNoContest,
+                    IsRinger = battle.IsRinger,
+                    RingerFactionId = battle.RingerFactionId,
                     IsMine = battle.IsMine,
                     MySubmission = ToSubmission(battle.MySubmission),
                     OpponentSubmission = ToSubmission(battle.OpponentSubmission),

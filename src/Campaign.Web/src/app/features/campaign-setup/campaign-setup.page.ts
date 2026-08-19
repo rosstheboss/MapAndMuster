@@ -199,6 +199,7 @@ type PhaseGroup = FormGroup<{
   kind: FormControl<string>;
   durationAmount: FormControl<number>;
   durationUnit: FormControl<string>;
+  endPhaseEarlyIfAble: FormControl<boolean>;
 }>;
 type RoundEscalationGroup = FormGroup<{
   roundNumber: FormControl<number>;
@@ -780,7 +781,14 @@ export class CampaignSetupPage {
     this.applyRoundEscalations(campaign.roundEscalations, campaign.roundCount);
     this.replaceArray(
       this.phases,
-      campaign.phases.map((phase) => this.createPhaseGroup(phase.kind, phase.durationAmount, phase.durationUnit)),
+      campaign.phases.map((phase) =>
+        this.createPhaseGroup(
+          phase.kind,
+          phase.durationAmount,
+          phase.durationUnit,
+          phase.endPhaseEarlyIfAble !== false,
+        ),
+      ),
     );
     this.refreshPhases();
   }
@@ -1763,7 +1771,14 @@ export class CampaignSetupPage {
       this.applyRoundEscalations(campaign.roundEscalations, campaign.roundCount);
       this.replaceArray(
         this.phases,
-        campaign.phases.map((phase) => this.createPhaseGroup(phase.kind, phase.durationAmount, phase.durationUnit)),
+        campaign.phases.map((phase) =>
+          this.createPhaseGroup(
+            phase.kind,
+            phase.durationAmount,
+            phase.durationUnit,
+            phase.endPhaseEarlyIfAble !== false,
+          ),
+        ),
       );
       this.refreshPhases();
       if (this.factions.length < 2) {
@@ -2239,11 +2254,17 @@ export class CampaignSetupPage {
     });
   }
 
-  private createPhaseGroup(kind: string, durationAmount: number, durationUnit: string): PhaseGroup {
+  private createPhaseGroup(
+    kind: string,
+    durationAmount: number,
+    durationUnit: string,
+    endPhaseEarlyIfAble = true,
+  ): PhaseGroup {
     return this.formBuilder.nonNullable.group({
       kind: [kind, required],
       durationAmount: [durationAmount, [required, minValue(1), maxValue(60)]],
       durationUnit: [durationUnit, required],
+      endPhaseEarlyIfAble: [endPhaseEarlyIfAble],
     });
   }
 
@@ -2427,6 +2448,7 @@ export class CampaignSetupPage {
         kind: phase.kind,
         durationAmount: Number(phase.durationAmount),
         durationUnit: phase.durationUnit,
+        endPhaseEarlyIfAble: phase.endPhaseEarlyIfAble,
       })),
     };
   }

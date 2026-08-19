@@ -2046,7 +2046,7 @@ public static class CampaignSetupRules
                 continue;
             }
 
-            parsed.Add(new RoundPhaseSetup(kind, duration));
+            parsed.Add(new RoundPhaseSetup(kind, duration, phase.EndPhaseEarlyIfAble ?? true));
         }
 
         var actionCount = parsed.Count(static phase => phase.Kind == RoundPhaseKind.Action);

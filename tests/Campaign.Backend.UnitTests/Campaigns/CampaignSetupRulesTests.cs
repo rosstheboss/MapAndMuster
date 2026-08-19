@@ -40,6 +40,7 @@ public sealed class CampaignSetupRulesTests
         Assert.Equal(8, setup.Schedule.RoundCount);
         Assert.Equal(DurationUnit.Weeks, setup.Schedule.RoundLength.Unit);
         Assert.Equal(3, setup.Schedule.Phases.Count);
+        Assert.All(setup.Schedule.Phases, phase => Assert.True(phase.EndPhaseEarlyIfAble));
         Assert.Equal(12, setup.TerrainTypes.Count);
         Assert.Equal("Beach", setup.TerrainTypes[0].Name);
         Assert.Equal("Beach control", setup.TerrainTypes[0].Missions[0].Name);

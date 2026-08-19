@@ -131,7 +131,9 @@ public static class BattleMissionRules
 
         if (territory is { StructureTypeId: not null, OwnerFactionId: { } owner })
         {
-            var defender = ordered.FirstOrDefault(force => force.FactionId == owner);
+            var defender = ordered.FirstOrDefault(force =>
+                force.FactionId == owner
+                || ActionResolution.AreAllies(force.FactionId, owner, factionAllyGroups, brokenAllyFactionIds));
             var attacker = ordered.FirstOrDefault(force =>
                 ActionResolution.AreEnemies(force.FactionId, owner, factionAllyGroups, brokenAllyFactionIds));
             if (defender is not null && attacker is not null)

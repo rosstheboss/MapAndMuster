@@ -71,6 +71,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<SubmitRetreatHandler>();
         services.AddScoped<SubmitSurrenderHandler>();
         services.AddScoped<ExtendCampaignScheduleHandler>();
+        services.AddScoped<InjectRingerBattleHandler>();
         services.AddScoped<ChooseFactionHandler>();
         services.AddScoped<EnterCampaignDebugHandler>();
         services.AddScoped<ExitCampaignDebugHandler>();

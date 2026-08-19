@@ -28,6 +28,41 @@ public sealed class SupplyRulesTests
     }
 
     [Fact]
+    public void MapSupplyCountsConnectedAlliedTerrainAndOperationalStructures()
+    {
+        var ally = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
+        var state = EmptyState(forceCount: 1);
+        var map = new PlayMap(
+            [
+                new PlayTerritory(Spawn, 1, Faction, Faction, null, null, StructureCondition.Operational, terrainTypeId: Terrain),
+                new PlayTerritory(
+                    Adjacent,
+                    2,
+                    ally,
+                    null,
+                    Keep,
+                    "Keep",
+                    StructureCondition.Operational,
+                    isPillageable: true,
+                    isDestructible: true,
+                    terrainTypeId: Terrain),
+            ],
+            [(Spawn, Adjacent)],
+            [new StructureTypePlayRules(Keep, "Keep", true, true, true, 1, 1, 1)]);
+        var catalog = new SupplyCatalog(
+            new Dictionary<Guid, int> { [Terrain] = 1 },
+            new Dictionary<Guid, StructureSupplyRules> { [Keep] = new(1, 1, 1) },
+            HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent,
+            HuntInEstaliaDefaults.ArmyEscalations(8),
+            new Dictionary<Guid, Guid> { [Player] = Faction },
+            new Dictionary<Guid, string?> { [Faction] = "League", [ally] = "League" },
+            new HashSet<Guid>());
+        var snapshot = SupplyRules.ForPlayer(state, map, catalog, Player, roundNumber: 1);
+
+        Assert.Equal(3, snapshot.MapSupplyPoints);
+    }
+
+    [Fact]
     public void SplitForcesApplyHuntInEstaliaPercentPenalty()
     {
         var state = EmptyState(forceCount: 2, territoryId: Spawn);

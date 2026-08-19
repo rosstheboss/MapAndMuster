@@ -156,6 +156,9 @@ public sealed class RoundPhaseRequest
 
     /// <summary>Gets the duration unit name.</summary>
     public required string DurationUnit { get; init; }
+
+    /// <summary>Gets whether the phase may close as soon as it can resolve. Default is on.</summary>
+    public bool? EndPhaseEarlyIfAble { get; init; }
 }
 
 /// <summary>
@@ -957,6 +960,9 @@ public sealed class RoundPhaseResponse
 
     /// <summary>Gets the duration unit name.</summary>
     public required string DurationUnit { get; init; }
+
+    /// <summary>Gets whether the phase may close as soon as it can resolve. Default is on.</summary>
+    public bool EndPhaseEarlyIfAble { get; init; } = true;
 }
 
 /// <summary>
@@ -1922,6 +1928,7 @@ public static class CampaignResponses
                     Kind = phase.Kind,
                     DurationAmount = phase.DurationAmount,
                     DurationUnit = phase.DurationUnit,
+                    EndPhaseEarlyIfAble = phase.EndPhaseEarlyIfAble,
                 }),
             ],
             Status = detail.Status,
@@ -2458,6 +2465,7 @@ public static class CampaignResponses
                     Kind = phase.Kind,
                     DurationAmount = phase.DurationAmount,
                     DurationUnit = phase.DurationUnit,
+                    EndPhaseEarlyIfAble = phase.EndPhaseEarlyIfAble,
                 })
                 .ToArray(),
             RoundEscalations = request.RoundEscalations?

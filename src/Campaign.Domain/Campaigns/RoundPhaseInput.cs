@@ -13,4 +13,7 @@ public sealed record RoundPhaseInput
 
     /// <summary>Gets the duration unit name.</summary>
     public string? DurationUnit { get; init; }
+
+    /// <summary>Gets whether the phase may close as soon as it can resolve. Omitted means on.</summary>
+    public bool? EndPhaseEarlyIfAble { get; init; }
 }

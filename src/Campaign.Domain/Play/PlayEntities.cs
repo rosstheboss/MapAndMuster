@@ -19,7 +19,8 @@ public sealed class PhaseWindow
         DurationUnit plannedUnit,
         DateTimeOffset startsUtc,
         DateTimeOffset endsUtc,
-        PhaseWindowStatus status)
+        PhaseWindowStatus status,
+        bool endPhaseEarlyIfAble = true)
     {
         Id = id;
         RoundNumber = roundNumber;
@@ -30,6 +31,7 @@ public sealed class PhaseWindow
         StartsUtc = startsUtc;
         EndsUtc = endsUtc;
         Status = status;
+        EndPhaseEarlyIfAble = endPhaseEarlyIfAble;
     }
 
     /// <summary>Gets the window identifier.</summary>
@@ -59,6 +61,9 @@ public sealed class PhaseWindow
     /// <summary>Gets the window status.</summary>
     public PhaseWindowStatus Status { get; }
 
+    /// <summary>Gets whether this window may close as soon as it can resolve. Default is on.</summary>
+    public bool EndPhaseEarlyIfAble { get; }
+
     /// <summary>
     /// Returns a copy with updated timing or status.
     /// </summary>
@@ -76,7 +81,8 @@ public sealed class PhaseWindow
             PlannedUnit,
             startsUtc ?? StartsUtc,
             endsUtc ?? EndsUtc,
-            status ?? Status);
+            status ?? Status,
+            EndPhaseEarlyIfAble);
     }
 }
 
@@ -297,7 +303,11 @@ public sealed class CampaignBattle
         bool isNoContest = false,
         Guid? missionId = null,
         Guid? attackerForceId = null,
-        Guid? defenderForceId = null)
+        Guid? defenderForceId = null,
+        bool isRinger = false,
+        Guid? ringerFactionId = null,
+        Guid? initiatingGmUserId = null,
+        bool ringerIsAttacker = false)
     {
         ArgumentNullException.ThrowIfNull(participantForceIds);
         Id = id;
@@ -318,6 +328,10 @@ public sealed class CampaignBattle
         MissionId = missionId;
         AttackerForceId = attackerForceId;
         DefenderForceId = defenderForceId;
+        IsRinger = isRinger;
+        RingerFactionId = ringerFactionId;
+        InitiatingGmUserId = initiatingGmUserId;
+        RingerIsAttacker = ringerIsAttacker;
     }
 
     /// <summary>Gets the battle identifier.</summary>
@@ -374,6 +388,18 @@ public sealed class CampaignBattle
     /// <summary>Gets the defending force when the mission uses attacker/defender roles.</summary>
     public Guid? DefenderForceId { get; }
 
+    /// <summary>Gets whether this is an ephemeral GM ringer battle.</summary>
+    public bool IsRinger { get; }
+
+    /// <summary>Gets the faction the ringer fights as.</summary>
+    public Guid? RingerFactionId { get; }
+
+    /// <summary>Gets the manager who injected the ringer battle.</summary>
+    public Guid? InitiatingGmUserId { get; }
+
+    /// <summary>Gets whether the ringer is the attacker. Otherwise the player is the attacker.</summary>
+    public bool RingerIsAttacker { get; }
+
     /// <summary>Gets forces that must currently report a tabletop result.</summary>
     public IReadOnlyList<Guid> ReportingForceIds =>
         ActiveForceIds.Count > 0 ? ActiveForceIds : ParticipantForceIds;
@@ -419,7 +445,11 @@ public sealed class CampaignBattle
             isNoContest ?? IsNoContest,
             assignMission ? missionId : missionId ?? MissionId,
             assignMission ? attackerForceId : attackerForceId ?? AttackerForceId,
-            assignMission ? defenderForceId : defenderForceId ?? DefenderForceId);
+            assignMission ? defenderForceId : defenderForceId ?? DefenderForceId,
+            IsRinger,
+            RingerFactionId,
+            InitiatingGmUserId,
+            RingerIsAttacker);
     }
 }
 
@@ -644,7 +674,8 @@ public sealed class RetreatOrder
         Guid targetTerritoryId,
         bool isDefault,
         DateTimeOffset submittedUtc,
-        bool isSurrender = false)
+        bool isSurrender = false,
+        bool isStaffCorrection = false)
     {
         Id = id;
         BattleId = battleId;
@@ -653,6 +684,7 @@ public sealed class RetreatOrder
         IsDefault = isDefault;
         SubmittedUtc = submittedUtc;
         IsSurrender = isSurrender;
+        IsStaffCorrection = isStaffCorrection;
     }
 
     /// <summary>Gets the retreat identifier.</summary>
@@ -673,8 +705,32 @@ public sealed class RetreatOrder
     /// <summary>Gets whether this retreat was a committed surrender.</summary>
     public bool IsSurrender { get; }
 
+    /// <summary>Gets whether a staff correction assigned this retreat. Those do not increment delinquency.</summary>
+    public bool IsStaffCorrection { get; }
+
     /// <summary>Gets when the retreat was recorded, in UTC.</summary>
     public DateTimeOffset SubmittedUtc { get; }
+}
+
+/// <summary>
+/// Campaign-lifetime missed-order offences for one force.
+/// </summary>
+public sealed class ForceDelinquency
+{
+    /// <summary>
+    /// Initializes a delinquency count.
+    /// </summary>
+    public ForceDelinquency(Guid forceId, int offenceCount)
+    {
+        ForceId = forceId;
+        OffenceCount = offenceCount;
+    }
+
+    /// <summary>Gets the force.</summary>
+    public Guid ForceId { get; }
+
+    /// <summary>Gets how many offences this force has accumulated.</summary>
+    public int OffenceCount { get; }
 }
 
 /// <summary>

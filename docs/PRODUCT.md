@@ -14,8 +14,8 @@ with the ability to extend the campaign.
 
 - **Player:** controls one or more forces, submits orders and battle results, views authorized
   campaign information, and receives public or private objectives.
-- **Game Master:** manages a campaign, may also participate as a player, may control neutral
-  forces, inspects/corrects state with mandatory auditing and notifications, and resolves
+- **Game Master:** manages a campaign, may also participate as a player, may inject ephemeral
+  ringer battles, inspects/corrects state with mandatory auditing and notifications, and resolves
   disputes.
 - **Administrator:** manages the application and may perform GM or player capabilities.
 
@@ -33,17 +33,18 @@ Player and Game Master in the same campaign.
 - Campaign-point standings with sortable current-holdings totals, ranking public-objective
   leaderboards, named public-objective awards, revealed private-objective totals, unclaimed
   private-objective counts, and relic logos.
-- Secret draft/commit/uncommit order entry with deadline and early-close behavior.
+- Secret draft/commit/uncommit order entry with deadline and per-phase early-close behavior.
 - Simultaneous action reveal and deterministic, explainable resolution.
 - Battle creation, mission assignment from structure then terrain catalogs (attacker/defender
   roles when the engagement calls for them), dual result submissions (including early reports during
-  Action windows), agreement or dispute, staff confirmation, retreats, and scoring.
+  Action windows), agreement or dispute, no-result forced retreats, staff confirmation, retreats,
+  scoring, and optional GM ringer battles against idle forces.
 - Administrators can save campaign settings and map data as named reusable presets.
 - Campaign-point, supply-line, temporary-supply, status, objective, and relic tracking.
 - Configurable force statuses with enable/clear triggers and display-only tabletop effects.
 - Public faction rules and private player/faction/alliance objectives.
-- Multiple GMs, neutral forces, campaign extension, corrections, revision history, and audit.
-- Manager add/kick of players and staff assignment of another player's faction.
+- Multiple GMs, ephemeral ringer battles, campaign extension, corrections, revision history, and audit.
+- Manager add/kick of players, delinquency kick recommendations from the third missed-order offence, and staff assignment of another player's faction.
 - In-app and email notifications.
 - Public site-wide chat on All Campaigns, with language flags, block lists, and administrator announcements.
 - Seeded administrator test accounts (Test 1–Test 30) that skip email and public site chat.

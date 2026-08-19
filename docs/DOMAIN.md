@@ -64,7 +64,9 @@ subfaction is required. Later add/remove/rename edits apply only to that campaig
 change the preset. The initial catalog includes Warhammer: The Old World. In that preset,
 Daemons of Chaos includes the subfactions Khorne, Nurgle, Slaanesh, and Tzeentch (alphabetical)
 and requires a subfaction choice. Setup can also clear the faction list (back to two empty
-slots) or clear all ally groups.
+slots) or clear all ally groups. Armies of infamy are out of application scope as a dedicated
+feature. They are ordinary subfaction configuration; if needed later they may be added to a
+campaign preset or faction catalog.
 
 Setup may apply a standard terrain preset or a standard structures preset the same way: applying
 the preset replaces the current list with a copy of the current catalog values. Later catalog
@@ -119,8 +121,9 @@ After launch, a manager may grant a specific still-available catalog objective, 
 still-available one, to a chosen player, faction, or ally group. Private-objective catalog
 entries cannot be added after launch.
 
-Points per finalized battle win are configured with public objectives (default 0). Battle Point
-Difference conversion remains in `docs/DECISIONS-NEEDED.md`.
+Points per finalized battle win are configured with public objectives (default 0). Battle-point
+difference uses the campaign's configured multiplier and clamp; the application does not copy a
+proprietary conversion chart.
 
 A campaign has a reusable special-rule catalog (at most 80), each with a unique name and
 description (stored as text). Factions and item objectives may reuse the same special rule, the
@@ -134,9 +137,10 @@ A campaign may configure named force statuses (at most 20). Each status has a un
 than Normal, effect text shown on the force, an enable trigger, and a clear trigger. A force has
 at most one status; Normal is stored as no status. Setup can copy the standard catalog:
 Diseased (enable when occupying a water-feature territory; clear by Hold while not on water),
-Shaken (enable after a lost battle or forced retreat; clear by Hold), Confident (enable after a
-won battle; clear after a loss or retreat), Exhausted (enable after any resolved battle; clear
-by Hold), and Well Rested (enable after Hold; clear after a move or battle). Catalog order
+Shaken (enable after a lost battle or forced retreat, except a no-result neither-submission
+forced retreat; clear by Hold), Confident (enable after a won battle; clear after a loss or
+retreat), Exhausted (enable after any resolved battle; clear by Hold), and Well Rested (enable
+after Hold; clear after a move or battle). Catalog order
 matters when more than one enable trigger matches: the first matching status wins, so a loss
 becomes Shaken rather than Exhausted. Effect text is display-only; the app does not resolve
 tabletop modifiers.
@@ -214,9 +218,10 @@ administrator may add a player without that password, including after launch whi
 and the campaign is not completed. Members who are not managers may leave. Managers edit instead
 of joining. Listings open the campaign page with Open. There is one campaign page: a member's
 role and involvement decide which controls appear.
-Players submit orders and battle results there. Managers also see schedule extension, and
-managers or administrators can enter a logged debug session to correct orders, re-resolve the
-previous action while the following phase is still open, or override battle results. Upcoming
+Players submit orders and battle results there. Managers also see schedule extension, ringer-battle
+injection during an open battle phase, and managers or administrators can enter a logged debug
+session to correct orders, re-resolve the previous action while the following phase is still open
+(or during the post-campaign grace), or override battle results. Upcoming
 and completed campaigns use the same page without live order controls. The campaign page includes
 a collapsible public log and member chat for upcoming, in-progress, and completed campaigns.
 Your Campaigns also offers Duplicate campaign on every listed campaign. Duplication copies the map overlay, factions, missions, ally
@@ -279,9 +284,12 @@ above 52. They may lengthen the current round by adding time to the current or r
 and battle windows; a window cannot be shortened below the duration already in effect for that
 window. Added rounds use the original phase template and make the campaign longer.
 
-Unused time from an action or battle window that closes early is added to the next window.
-Simultaneous-action resolution runs immediately when an action window closes; any wall-clock
-pause before the next window opens is taken from that next window.
+Each action window and battle phase has an "End phase early if able to resolve" checkbox,
+default on. When it is on, unused time from a window that closes early is added to the next
+window. When it is off, the window stays open until its deadline even if nothing remains to
+resolve, so a manager can still inject a ringer battle during a battle phase. Simultaneous-action
+resolution runs immediately when an action window closes; any wall-clock pause before the next
+window opens is taken from that next window.
 
 ## Role and actor model
 
@@ -293,7 +301,7 @@ identity is kept on the session until they return.
 When staff act for another party, record:
 
 - actual actor: staff user performing the command;
-- effective actor: player or neutral force represented;
+- effective actor: player or ringer battle represented;
 - reason, timestamp, before/after values, revision, and notifications.
 
 ## Action-window lifecycle
@@ -326,8 +334,12 @@ movement and splits, then backstab alliance breaks, then battles from enemy co-l
 `Build`, `Pillage`, `Repair`, or `Backstab` becomes `Hold`. A force may not enter or claim
 another faction's spawn. After movement, enemy forces that occupy the same territory create a
 battle; later action slots for those forces become `Battle`. Same-player forces that share a
-territory rejoin. Uncontested occupation by a single faction claims the territory and plants
-that faction's flag, except that a spawn always keeps its faction's flag. Collisions that still
+territory rejoin. Uncontested occupation claims a non-spawn territory and plants that faction's
+flag, except: a spawn always keeps its faction's flag; a force cannot claim an ally's territory
+or structure without backstabbing first (the previous owner's flag stays while the ally defends);
+two or more allied factions on Neutral land award the claim to the strongest using the retreat
+collision ranking. Enemy capture leaves the structure operational unless a configured special
+rule auto-pillages it. The territory owner owns the occupying structure. Collisions that still
 lack a documented ranking, including competing `Build`, `Pillage`, or `Repair` actions on the
 same territory and competing arrivals, become `Hold` rather than an invented winner.
 
@@ -340,15 +352,20 @@ Player-submittable actions in an open action window are listed in this order:
 - `Build`: create an allowed structure in a non-spawn territory that has no intact structure.
   Only structure types flagged buildable may be chosen. Town, Capital City, City, and Castle
   start not buildable; Supply Depot and Fortification start buildable.
-- `Pillage`: progress an enemy or unowned intact structure that is flagged pillageable from
-  operational to pillaged. A second Pillage against a pillaged structure that is flagged
-  destructible removes it from the map. Capital City starts not pillageable. Capital City, City,
-  and Castle start not destructible. A force cannot pillage a structure it already owns.
-- `Repair`: restore a pillaged structure the force's faction owns.
+- `Pillage`: progress a pillageable intact structure from operational to pillaged. The acting
+  force may pillage a structure its faction owns. Allies cannot pillage an allied structure. A
+  second Pillage against a pillaged structure that is flagged destructible removes it from the
+  map. Capital City starts not pillageable. Capital City, City, and Castle start not
+  destructible.
+- `Repair`: restore a pillaged structure. Only the current territory owner or a current ally of
+  that owner may repair.
 - `Split`: create a second force in an eligible adjacent territory; maximum two per player in
   the supplied rules.
-- `Backstab`: terminate an alliance relationship. If the force shares a territory with a former
-  ally after resolution, a battle is created.
+- `Backstab`: terminate an alliance relationship. If the acting force occupies a former ally's
+  territory and no former-ally force (and no other remaining ally of that former ally) is there,
+  the force claims that territory and auto-pillages the structure when it is pillageable;
+  auto-pillage never destroys. If the backstab forces a battle instead, there is no auto-pillage;
+  a later win is a normal operational capture.
 
 Battle-phase and system actions:
 
@@ -417,20 +434,32 @@ allowance plus the round bonus, then from the player's temporary pool.
   the next 10. More than two opposing sides who do not all retreat: the two strongest play the
   first tabletop game, then remaining opponents play strongest-to-weakest in that same battle
   phase. A force that never received a game stays in the territory, still in battle, for the
-  next round's battle phase.
-- A battle phase ends early when every engagement is finalized and every required retreat is
-  recorded, and also when no battles remain for anyone to report. Unused time is added to the
-  next window. A battle with no submissions at the deadline stays open for GM resolution
-  until decision 2 in `docs/DECISIONS-NEEDED.md` is recorded.
+  next round's battle phase. If a correction adds a force to an already fighting pair, keep the
+  current report; the new force waits and then plays whoever remains as in this multi-force
+  sequence rather than re-pairing by strongest first.
+- If neither side submits a result by the battle-phase deadline, the engagement is a no-contest:
+  every force that fought that tabletop game, including silent allies, is forced to retreat.
+  Those retreats are chosen after all other retreats in the phase, using safest remaining
+  destinations, then spawn. There is no win, draw, battle campaign points, or relic spoils, and
+  Shaken is not applied. One timely submission remains authoritative; the silent opponent is not
+  given a missed-result offence. Waiting other sides stay in the territory. If an ally of the
+  previous owner remains, that owner's flag stays (the ally is only defending). Otherwise a
+  remaining uncontested occupant claims, or remaining opponents start a new battle.
+- A battle phase ends early when its "End phase early if able to resolve" checkbox is on and
+  every engagement is finalized and every required retreat is recorded, and also when that
+  checkbox is on and no battles remain for anyone to report. Unused time is added to the next
+  window. When the checkbox is off, the window stays open until its deadline.
 
 ## Territory and structures
 
 - Adjacency is a graph edge, not an assumption based only on touching pixels.
 - Spawn locations prohibit enemy entry, battle, construction, and capture. The spawn faction's
   flag is always present there.
-- A faction that controls a non-spawn territory displays its flag there.
+- A faction that controls a non-spawn territory displays its flag there. Neutral means no
+  faction owns the territory.
 - At most one structure occupies a territory under the supplied rules.
-- Structure type, owner/controller, and condition are separate concepts.
+- Structure type and condition are separate from each other. Structure ownership follows the
+  territory owner; there is no independent structure owner.
 - Each structure type has Buildable, Pillageable, and Destructible flags configured in campaign
   setup.
 - Conditions are `Operational`, `Pillaged`, and `Destroyed`. Setup and the map editor may place
@@ -441,6 +470,9 @@ allowance plus the round bonus, then from the player's temporary pool.
   example `Town (pillaged)`. Repair restores the operational condition and operational icon.
 - Capital City starts not pillageable and not destructible. City and Castle start pillageable
   but not destructible. Town starts pillageable and destructible.
+- Castle siege mechanics (gates, walls, battering rams, scaling, and inside-the-walls
+  behavior) are out of application scope. Castle remains a structure type. Tabletop castle
+  features stay display-only mission or terrain text; the application does not simulate siege.
 - Each structure type has a built-in operational icon and a built-in pillaged icon. Campaign
   setup may replace either with a user-uploaded 50×50 logo.
 
@@ -489,9 +521,11 @@ questions, and optional attacker/defender flags. Terrain and structure lists att
 or a one-off name with an optional file. A territory uses its structure missions when that structure
 has any; otherwise it uses its terrain missions. When a battle is created, one mission is chosen at
 random from that pool. Attacker/defender missions are used when one force Held or retreated into the
-territory and another Moved or Split in (not Retreat), when a force defends a structure it owns, or
-when a force backstabbed its opponent. Otherwise they are used only if no normal mission exists, and
-attacker/defender roles are then assigned at random. Role priority is backstab, then structure owner,
+territory and another Moved or Split in (not Retreat), when a force defends a structure it or an
+ally owns, or when a force backstabbed its opponent. An ally standing on allied land defends it
+and may use an attack/defend mission; winning does not transfer ownership. Otherwise they are
+used only if no normal mission exists, and attacker/defender roles are then assigned at random.
+Role priority is backstab, then structure owner, then Hold/Retreat versus Move/Split.
 then Hold/Retreat versus Move/Split. Chosen missions appear on the campaign Battles panel with a
 link or file download when present. Attacker/defender missions may grant a signed army-point number
 or percent change and a signed raw supply-point change to one side; after apply, army points are
@@ -586,18 +620,58 @@ Completed campaigns are ordered by most recently finished.
 - Two forces belonging to the same player rejoin when they occupy the same territory. The
   surviving force keeps one action slot afterward, and the rejoin is recorded in the play log.
 - A force has at most one status: Normal, Diseased, Exhausted, Well Rested, Shaken, or
-  Confident, subject to faction exceptions.
-- Neutral forces are forces, not user roles, and every neutral action identifies the GM actor.
+  Confident, subject to faction exceptions. A no-result forced retreat (neither side submitted)
+  does not apply Shaken.
+- Neutral territories are unowned land. They are not armies.
+- A GM or administrator may inject a ringer battle during an open battle phase. The ringer is
+  ephemeral: it is not a `CampaignForce`, does not occupy the map, and leaves no trace win or
+  lose. Drought occupation is not applicable. A participating GM may inject against rivals; the
+  GM's own player force is never affected, even when the ringer uses the same faction.
+- Eligible targets are player forces that are not currently in a battle, including a force that
+  is alone or only with allies who are not backstabbing or being backstabbed. Spawn territories
+  cannot host a ringer fight. Injection is a logged play command, not a debug correction.
+- The GM picks any faction and any catalog mission, or a random mission from that territory's
+  suitable pool, and may mark the player as the defender. Same-faction or allied matchups are
+  allowed; the fight is forced.
+- Ringer supply is that chosen faction's currently owned terrain and operational structures,
+  treated as all connected, plus the round's free supply, with no split penalty and no temporary
+  pool. Army points use the round escalation row for a solo force (no allied 25 percent). The
+  ringer may include mercenaries, not allied extra players. The targeted player uses their real
+  supply and army cap. Mission attacker/defender modifiers still apply.
+- The ringer scores no campaign points. The targeted player may. Either that player or the
+  initiating GM must report; one timely report is authoritative. If neither reports, the ringer
+  fight is void: treat it as never happened (no map change, no scoring, no Decision 3 offence).
+- Player win: they stay, ownership unchanged, they keep a carried relic, and existing battle
+  scoring and statuses apply. Player draw or true battle-point tie: they stay, keep ownership
+  and the relic, and receive configured draw scoring. Player loss: the ringer takes no spoils
+  and vanishes; the player must retreat as after a normal loss; a carried relic is left on the
+  territory with no possessor; a non-spawn territory becomes Neutral. Remaining occupants then
+  use the normal claim rules. The ringer's faction and allies gain nothing.
+
+## Delinquency
+
+Removal after inactivity is never automatic. Each force has a campaign-lifetime offence count.
+An offence is: no draft at all for a required force after that force exists (split forces each
+need their own draft in later windows); no retreat even in draft when a retreat is required; or
+a battle where neither side submitted a result. A no-result battle counts once, not also as a
+missed retreat. Uncommitted drafts are not offences. One side submitting and the other staying
+silent is not a missed-result offence. A forced retreat created by a staff correction is not an
+offence. A voided ringer fight (neither report) is not an offence.
+
+Managers are not notified for the first two offences. From the third offence onward, and again
+on each later offence, every campaign manager is notified in-app and by email that the player
+is a possible kick. The player is not removed unless a manager kicks them.
 
 ## Supply
 
 - Normal supply is calculated per force from spawn and connected owned or allied territory.
-  Each terrain type and each operational owned structure grants configured supply points
-  (default 1). Pillaging or destroying a structure awards that structure's configured
-  temporary supply points to the acting player.
+  Each terrain type and each operational owned or allied structure grants configured supply
+  points (default 1) when the force is connected to it. Allied land and structures count as if
+  owned for supply and for defense, not for structure campaign-point holdings. Pillaging or
+  destroying a structure awards that structure's configured temporary supply points to the
+  acting player.
 - Connected allied territory may participate when alliance rules permit (same ally group,
-  not backstabbed). Only the player's own faction territories and operational structures add
-  map supply.
+  not backstabbed).
 - Temporary supply is a persistent, consumable **player** pool. The earning player may assign
   remaining points to any of their forces. Each spent point applies to exactly one force: a
   force that uses a point does not leave that same point available to another of the player's
@@ -667,10 +741,24 @@ correction, and exiting debug are public log facts. Original orders, results, an
 never overwritten. While the current action window is open, a debug correction saves a staff draft
 without revealing the secret action in the log. After that window has resolved, the previous action
 can be re-resolved only while the following phase is still open, by restoring the captured
-pre-resolution snapshot and appending a staff correction. Manager battle-result overrides also
+pre-resolution snapshot and appending a staff correction. If that following phase ends before
+the GM commits the override, the pending change is void. After the campaign has completed, staff
+have a grace window equal to the next template phase that would have occurred (for example, after
+a final battle phase, the first action length of a hypothetical extra round). If that grace
+elapses with no committed override, the completed state is locked.
+
+Re-resolution uses the corrected previous window and then reapplies other players' actions from
+that snapshot. Players whose force location, battle state, occupied or targeted territory, or
+current-phase order legality changed are notified in-app and by email. Their committed current-phase
+orders return to draft when still legal, or are nullified when no longer legal so they must enter a
+new order. Standings-only changes do not uncommit anyone. If a battle-result override requires a
+retreat, that retreat is assigned automatically (safest destination, same as a missing retreat) and
+does not increment delinquency. Keep a current-phase battle report when the same participants still
+fight in the same territory; otherwise keep it in history but do not apply it to a new engagement.
+
+Manager battle-result overrides also
 require the active debug session. Concurrent debug sessions are not allowed; any manager or
-administrator may exit the current session. Downstream invalidation of later rounds remains in
-`docs/DECISIONS-NEEDED.md`.
+administrator may exit the current session.
 
 A GM reopening or correcting a prior state never mutates history in place. It creates a new
 campaign revision, identifies downstream state requiring recomputation/review, and notifies
@@ -703,7 +791,8 @@ actions after an action window closes (including Hold for every force), attempte
 were invalid or conflicted and became Hold, battles created or finalized, manager battle-result
 overrides, debug enter/exit and debug order corrections, player retreats, automatic force rejoins when the same player's forces occupy one
 territory, and automatic substitutions: missing orders become Hold, deadline-submitted drafts,
-missing retreats using the spawn fallback, and battles held open when resolution cannot finish.
+missing retreats using the spawn fallback, no-result forced retreats, ringer battles (including
+voided neither-report fights), and delinquency notices from the third offence onward.
 Unresolved secret orders, including drafts and unrevealed commitments, are never written to or
 returned in the log. A player may uncommit a committed draft only while the action window is
 still open; after the window closes, orders resolve and cannot be returned to draft.
@@ -756,7 +845,8 @@ Users may enable in-app notices, email notices, or both on their profile. Stored
 mentions, private chats, campaign start, campaign end, a new phase after the previous window
 resolves, being removed from a campaign, public site-chat mentions, and administrator site-chat
 announcements. Live attention items always appear when the user still needs to choose a faction,
-commit orders, submit a battle result, or record a retreat. Email copies never include hidden
+commit orders, submit a battle result, or record a retreat. From the third delinquency offence
+onward, campaign managers are notified that a player is a possible kick. Email copies never include hidden
 orders, relics, private chat text, or site-chat bodies; they tell the recipient to sign in and
 open the campaign or All Campaigns. Seeded test accounts never receive email. The home page lists
 items that need attention, then site news. When none remain, it shows "No new notifications."

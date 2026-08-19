@@ -224,6 +224,7 @@ public static class CampaignMapper
                     Kind = phase.Kind.ToString(),
                     DurationAmount = phase.Duration.Amount,
                     DurationUnit = phase.Duration.Unit.ToString(),
+                    EndPhaseEarlyIfAble = phase.EndPhaseEarlyIfAble,
                 }),
             ],
             Status = progress.Status.ToString(),
@@ -528,7 +529,8 @@ public static class CampaignMapper
         var phases = campaign.Phases
             .Select(phase => new RoundPhaseSetup(
                 Enum.Parse<RoundPhaseKind>(phase.Kind, ignoreCase: true),
-                new ScheduleDuration(phase.DurationAmount, Enum.Parse<DurationUnit>(phase.DurationUnit, ignoreCase: true))))
+                new ScheduleDuration(phase.DurationAmount, Enum.Parse<DurationUnit>(phase.DurationUnit, ignoreCase: true)),
+                phase.EndPhaseEarlyIfAble))
             .ToArray();
 
         return new CampaignSchedule(

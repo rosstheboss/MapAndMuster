@@ -907,7 +907,11 @@ describe('CampaignSetupPage edit', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     const page = fixture.componentInstance as unknown as {
-      form: { getRawValue: () => { phases: { kind: string; durationAmount: number; durationUnit: string }[] } };
+      form: {
+        getRawValue: () => {
+          phases: { kind: string; durationAmount: number; durationUnit: string; endPhaseEarlyIfAble: boolean }[];
+        };
+      };
     };
 
     clickNamedButton(compiled, 'Add action');
@@ -950,10 +954,10 @@ describe('CampaignSetupPage edit', () => {
     expect(phaseKinds(compiled)).toEqual(['Action', 'Action', 'Action', 'Battle']);
     expect(phaseAmounts(compiled)).toEqual(['2', '2', '2', '54']);
     expect(page.form.getRawValue().phases).toEqual([
-      { kind: 'Action', durationAmount: 2, durationUnit: 'Minutes' },
-      { kind: 'Action', durationAmount: 2, durationUnit: 'Minutes' },
-      { kind: 'Action', durationAmount: 2, durationUnit: 'Minutes' },
-      { kind: 'Battle', durationAmount: 54, durationUnit: 'Minutes' },
+      { kind: 'Action', durationAmount: 2, durationUnit: 'Minutes', endPhaseEarlyIfAble: true },
+      { kind: 'Action', durationAmount: 2, durationUnit: 'Minutes', endPhaseEarlyIfAble: true },
+      { kind: 'Action', durationAmount: 2, durationUnit: 'Minutes', endPhaseEarlyIfAble: true },
+      { kind: 'Battle', durationAmount: 54, durationUnit: 'Minutes', endPhaseEarlyIfAble: true },
     ]);
     http.verify();
   });

@@ -8,12 +8,15 @@ in an ADR or the relevant domain document and update tests.
 1. Resolved: a battle phase ends early when every engagement is finalized and every required
    retreat is recorded. Unused time is added to the next action or battle window. See
    `docs/DOMAIN.md`.
-2. If neither battle participant submits a result, is the battle disputed, a forced retreat for
-   both, a GM task, or another outcome?
-3. The draft mentions removal after three missing-action/forced-retreat incidents. Is removal
-   automatic, a GM recommendation, or configurable? What exactly increments the count?
-4. When a prior-round correction changes downstream state, which later actions/results are
-   automatically invalidated versus flagged for GM/player review?
+2. Resolved: if neither side submits a result, the engagement is a no-contest. Every force that
+   fought that tabletop game, including silent allies, is forced to retreat after all other
+   retreats in the phase, then spawn if needed. No win, draw, battle campaign points, or spoils;
+   skip Shaken. Waiting other sides stay. See `docs/DOMAIN.md`.
+3. Resolved: removal is not automatic. Offences are counted per force for the whole campaign.
+   Managers are notified from the third offence onward as a possible kick. See `docs/DOMAIN.md`.
+4. Resolved: only the immediately previous window can be corrected, and only while the following
+   phase is still open (or during a post-campaign grace). Re-resolve that window; uncommit or
+   nullify only directly affected current-phase orders. See `docs/DOMAIN.md`.
 
 ## Resolution details
 
@@ -37,8 +40,9 @@ in an ADR or the relevant domain document and update tests.
     points with no extra/mission bonus battle points. In larger fights, allies of a surrendering
     force may keep fighting or run; if only one side remains it wins; if every remaining force
     runs, nobody wins and no relic transfers. See `docs/DOMAIN.md`.
-9. Clarify structure ownership versus territory control after repair, capture, backstab, retreat,
-   and allied use.
+9. Resolved: the territory owner owns the structure. Enemy capture stays operational unless a
+   special rule auto-pillages. Allies cannot claim allied land without backstabbing. Empty-land
+   backstab claims and auto-pillages (never auto-destroys). See `docs/DOMAIN.md`.
 
 ## Scoring and supply
 
@@ -62,15 +66,18 @@ in an ADR or the relevant domain document and update tests.
 
 ## Content and unfinished rules
 
-14. Define castle gates, walls, battering rams, scaling, and inside-the-walls behavior.
+14. Resolved: castle siege mechanics (gates, walls, battering rams, scaling, and
+    inside-the-walls behavior) are out of application scope. Castle remains an existing
+    structure type. See `docs/DOMAIN.md`.
 15. Resolved: item-objective flavor text, holder choices, and choice results (including
     destroy-and-replace) are configured in campaign setup. Private objectives are a setup
     catalog assigned to players, factions, and ally groups. See `docs/DOMAIN.md`. Placement
     (random or manager-placed), hidden-until-found visibility, spawn eligibility, drop-on-move,
     pickup, battle transfer, and staff reveal in debug mode remain as previously implemented.
-16. Complete armies-of-infamy content or mark it explicitly out of application scope.
-17. Define neutral-force eligibility, drought threshold, scoring, territory capture, relic/objective
-    interaction, and whether a participating GM may control it against their own rivals.
+16. Resolved: armies-of-infamy content is out of application scope. Those lists are ordinary
+    subfaction configuration, not a dedicated feature. See `docs/DOMAIN.md`.
+17. Resolved: a Neutral territory is unowned land. Neutral forces are ephemeral GM ringer
+    battles, not persistent armies. Drought occupation is not applicable. See `docs/DOMAIN.md`.
 
 ## Operations
 

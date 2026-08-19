@@ -307,7 +307,14 @@ public static class SupplyRules
         foreach (var territoryId in connected)
         {
             var territory = map.Territory(territoryId);
-            if (territory is null || territory.OwnerFactionId != factionId)
+            if (territory is null)
+            {
+                continue;
+            }
+
+            var countsForSupply = territory.OwnerFactionId == factionId
+                || (territory.OwnerFactionId is { } owner && InSupplyNetwork(territory, factionId, catalog));
+            if (!countsForSupply)
             {
                 continue;
             }

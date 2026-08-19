@@ -569,6 +569,7 @@ public sealed class CampaignStore : ICampaignStore
                 Kind = phase.Kind,
                 DurationAmount = phase.DurationAmount,
                 DurationUnit = phase.DurationUnit,
+                EndPhaseEarlyIfAble = phase.EndPhaseEarlyIfAble,
                 SortOrder = phaseOrder++,
             });
         }
@@ -679,6 +680,7 @@ public sealed class CampaignStore : ICampaignStore
                         Kind = phase.Kind,
                         DurationAmount = phase.DurationAmount,
                         DurationUnit = phase.DurationUnit,
+                        EndPhaseEarlyIfAble = phase.EndPhaseEarlyIfAble,
                     }),
             ],
         };

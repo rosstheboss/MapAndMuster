@@ -27,7 +27,7 @@ public sealed class ActionResolutionTests
         var kinds = ActionResolution.EligibleActions(state, map, force, AlliedGroups());
 
         Assert.Equal(
-            [ActionKind.Hold, ActionKind.Move, ActionKind.Pillage, ActionKind.Split, ActionKind.Backstab],
+            [ActionKind.Hold, ActionKind.Move, ActionKind.Split, ActionKind.Backstab],
             kinds);
     }
 
@@ -53,7 +53,51 @@ public sealed class ActionResolutionTests
             repairMap,
             repairForce,
             UnalignedGroups());
-        Assert.Equal([ActionKind.Hold, ActionKind.Move, ActionKind.Repair, ActionKind.Split], repairKinds);
+        Assert.Equal([ActionKind.Hold, ActionKind.Move, ActionKind.Pillage, ActionKind.Repair, ActionKind.Split], repairKinds);
+    }
+
+    [Fact]
+    public void OwnerMayPillageOwnStructureAndAlliesMayNot()
+    {
+        var ownerForce = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var allyForce = new CampaignForce(Guid.NewGuid(), PlayerTwo, South, Midland, false);
+        var map = Map(midlandStructureId: TownId, midlandStructureName: "Town", midlandOwner: North);
+        var ownerKinds = ActionResolution.EligibleActions(State(ownerForce), map, ownerForce, AlliedGroups());
+        var allyKinds = ActionResolution.EligibleActions(State(allyForce), map, allyForce, AlliedGroups());
+
+        Assert.Contains(ActionKind.Pillage, ownerKinds);
+        Assert.DoesNotContain(ActionKind.Pillage, allyKinds);
+
+        var alliedRepairMap = Map(
+            midlandStructureId: TownId,
+            midlandStructureName: "Town",
+            midlandOwner: North,
+            midlandCondition: StructureCondition.Pillaged);
+        var allyRepair = ActionResolution.EligibleActions(State(allyForce), alliedRepairMap, allyForce, AlliedGroups());
+        Assert.Contains(ActionKind.Repair, allyRepair);
+    }
+
+    [Fact]
+    public void EmptyLandBackstabClaimsAndAutoPillagesWithoutDestroying()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var map = Map(midlandStructureId: TownId, midlandStructureName: "Town", midlandOwner: South);
+        var resolved = Resolve(State(force, Submit(force.Id, ActionKind.Backstab)), map, AlliedGroups());
+
+        Assert.Equal(North, resolved.Map.Territory(Midland)!.OwnerFactionId);
+        Assert.Equal(StructureCondition.Pillaged, resolved.Map.Territory(Midland)!.StructureCondition);
+        Assert.Equal(TownId, resolved.Map.Territory(Midland)!.StructureTypeId);
+        Assert.Empty(resolved.State.Battles);
+    }
+
+    [Fact]
+    public void AllyOccupyingAlliedLandDoesNotClaimTheFlag()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var map = Map(midlandOwner: South);
+        var resolved = Resolve(State(force, Submit(force.Id, ActionKind.Hold)), map, AlliedGroups());
+
+        Assert.Equal(South, resolved.Map.Territory(Midland)!.OwnerFactionId);
     }
 
     [Fact]

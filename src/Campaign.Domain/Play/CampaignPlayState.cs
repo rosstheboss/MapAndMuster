@@ -29,7 +29,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<PublicObjectiveAward>? publicObjectiveAwards = null,
         IReadOnlyList<PrivateObjectiveAssignment>? privateObjectives = null,
         IReadOnlyList<StructureDestructionFact>? structureDestructions = null,
-        IReadOnlyList<PlayerSupplyBalance>? playerSupplies = null)
+        IReadOnlyList<PlayerSupplyBalance>? playerSupplies = null,
+        IReadOnlyList<ForceDelinquency>? delinquencies = null)
     {
         ArgumentNullException.ThrowIfNull(windows);
         ArgumentNullException.ThrowIfNull(forces);
@@ -62,6 +63,7 @@ public sealed class CampaignPlayState
         PrivateObjectives = privateObjectives ?? [];
         StructureDestructions = structureDestructions ?? [];
         PlayerSupplies = playerSupplies ?? [];
+        Delinquencies = delinquencies ?? [];
     }
 
     /// <summary>Gets an empty play state.</summary>
@@ -124,6 +126,9 @@ public sealed class CampaignPlayState
     /// <summary>Gets remaining temporary supply per player.</summary>
     public IReadOnlyList<PlayerSupplyBalance> PlayerSupplies { get; }
 
+    /// <summary>Gets campaign-lifetime missed-order offences per force.</summary>
+    public IReadOnlyList<ForceDelinquency> Delinquencies { get; }
+
     /// <summary>
     /// Returns a copy with replaced collections.
     /// </summary>
@@ -147,7 +152,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<PublicObjectiveAward>? publicObjectiveAwards = null,
         IReadOnlyList<PrivateObjectiveAssignment>? privateObjectives = null,
         IReadOnlyList<StructureDestructionFact>? structureDestructions = null,
-        IReadOnlyList<PlayerSupplyBalance>? playerSupplies = null)
+        IReadOnlyList<PlayerSupplyBalance>? playerSupplies = null,
+        IReadOnlyList<ForceDelinquency>? delinquencies = null)
     {
         return new CampaignPlayState(
             windows ?? Windows,
@@ -168,7 +174,8 @@ public sealed class CampaignPlayState
             publicObjectiveAwards ?? PublicObjectiveAwards,
             privateObjectives ?? PrivateObjectives,
             structureDestructions ?? StructureDestructions,
-            playerSupplies ?? PlayerSupplies);
+            playerSupplies ?? PlayerSupplies,
+            delinquencies ?? Delinquencies);
     }
 
     /// <summary>

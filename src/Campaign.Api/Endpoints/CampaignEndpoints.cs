@@ -324,6 +324,14 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
 
+        group.MapPost("/{campaignId:guid}/play/inject-ringer", InjectRingerAsync)
+            .WithName("InjectRingerBattle")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
         group.MapPost("/{campaignId:guid}/play/debug/enter", EnterDebugAsync)
             .WithName("EnterCampaignDebug")
             .Produces<CampaignPlayResponse>()
@@ -1834,6 +1842,36 @@ public static class CampaignEndpoints
         return PlayResult(result);
     }
 
+    private static async Task<IResult> InjectRingerAsync(
+        Guid campaignId,
+        InjectRingerBattleRequest request,
+        ClaimsPrincipal principal,
+        InjectRingerBattleHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new InjectRingerBattleCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    TargetForceId = request.TargetForceId,
+                    RingerFactionId = request.RingerFactionId,
+                    MissionId = request.MissionId,
+                    PlayerIsDefender = request.PlayerIsDefender,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
     private static async Task<IResult> EnterDebugAsync(
         Guid campaignId,
         PlayRevisionRequest request,
@@ -1880,6 +1918,7 @@ public static class CampaignEndpoints
                     Kind = request.Kind,
                     TargetTerritoryId = request.TargetTerritoryId,
                     StructureTypeId = request.StructureTypeId,
+                    ReResolvePrevious = request.ReResolvePrevious,
                 },
                 cancellationToken)
             .ConfigureAwait(false);

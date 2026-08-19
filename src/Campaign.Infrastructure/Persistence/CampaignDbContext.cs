@@ -189,6 +189,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.HasKey(phase => phase.Id);
             entity.Property(phase => phase.Kind).HasMaxLength(16).IsRequired();
             entity.Property(phase => phase.DurationUnit).HasMaxLength(16).IsRequired();
+            entity.Property(phase => phase.EndPhaseEarlyIfAble).HasDefaultValue(true);
             entity.HasIndex(phase => phase.CampaignId);
         });
 

@@ -9,6 +9,7 @@ import type {
   CampaignPresetListItem,
   ChooseFactionPayload,
   ExtendCampaignSchedulePayload,
+  InjectRingerBattlePayload,
   MapGraphDetail,
   PlayRevisionPayload,
   PostCampaignChatPayload,
@@ -358,6 +359,16 @@ export class CampaignService {
     return firstValueFrom(
       this.http.post<CampaignPlayDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/play/extend-schedule`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async injectRingerBattle(campaignId: string, payload: InjectRingerBattlePayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/inject-ringer`,
         payload,
         { withCredentials: true },
       ),

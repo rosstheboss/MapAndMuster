@@ -187,6 +187,18 @@ public enum PlayLogKind
 
     /// <summary>A multi-side engagement scheduled the next tabletop pairing.</summary>
     BattleMatchAdvanced = 30,
+
+    /// <summary>Neither side submitted a result, so both sides were forced to retreat.</summary>
+    NoResultForcedRetreat = 31,
+
+    /// <summary>A force reached or passed three missed-order offences.</summary>
+    DelinquencyThreshold = 32,
+
+    /// <summary>A manager injected an ephemeral ringer battle.</summary>
+    RingerBattleCreated = 33,
+
+    /// <summary>A ringer battle was voided because nobody reported.</summary>
+    RingerBattleVoided = 34,
 }
 
 /// <summary>

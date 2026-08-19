@@ -79,13 +79,14 @@ public sealed class PlayTerritory
         string? structureName = null,
         StructureCondition? structureCondition = null,
         bool clearStructure = false,
+        bool assignOwner = false,
         bool? isPillageable = null,
         bool? isDestructible = null)
     {
         return new PlayTerritory(
             Id,
             DisplayNumber,
-            ownerFactionId ?? OwnerFactionId,
+            assignOwner ? ownerFactionId : ownerFactionId ?? OwnerFactionId,
             SpawnFactionId,
             clearStructure ? null : structureTypeId ?? StructureTypeId,
             clearStructure ? null : structureName ?? StructureName,
