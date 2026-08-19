@@ -24,12 +24,14 @@ public static class ActionResolution
         DateTimeOffset utcNow,
         IReadOnlyList<TerrainTypeSetup>? terrainTypes = null,
         IReadOnlyList<StructureTypeSetup>? structureTypes = null,
-        Func<int, int>? pickIndex = null)
+        Func<int, int>? pickIndex = null,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(factionAllyGroups);
+        var rules = specialRules ?? SpecialRuleContext.None;
 
         var forces = state.Forces.ToDictionary(static force => force.Id);
         var acting = forces.Values
@@ -39,7 +41,7 @@ public static class ActionResolution
         var resolved = new Dictionary<Guid, ResolvedOrder>();
         foreach (var force in acting)
         {
-            resolved[force.Id] = Normalize(state, map, window, force, factionAllyGroups);
+            resolved[force.Id] = Normalize(state, map, window, force, factionAllyGroups, rules);
         }
 
         DisallowConflictingStructureActions(resolved);
@@ -55,6 +57,7 @@ public static class ActionResolution
         var occupied = new Dictionary<Guid, List<Guid>>();
         var moveOrigins = new Dictionary<Guid, Guid>();
         var arrivalKinds = new Dictionary<Guid, ActionKind>();
+        var skipClaimTerritories = new HashSet<Guid>();
         foreach (var force in state.Forces.OrderBy(static item => item.Id))
         {
             if (force.InBattle)
@@ -78,7 +81,14 @@ public static class ActionResolution
                 nextForces.Add(force);
                 AddOccupied(occupied, force.TerritoryId, force.Id);
                 arrivalKinds[force.Id] = ActionKind.Hold;
-                var split = new CampaignForce(Guid.NewGuid(), force.ControllerUserId, force.FactionId, splitTarget, false);
+                var split = new CampaignForce(
+                    Guid.NewGuid(),
+                    force.ControllerUserId,
+                    force.FactionId,
+                    splitTarget,
+                    false,
+                    statusName: null,
+                    force.Subfaction);
                 nextForces.Add(split);
                 AddOccupied(occupied, splitTarget, split.Id);
                 arrivalKinds[split.Id] = ActionKind.Split;
@@ -86,7 +96,16 @@ public static class ActionResolution
             }
 
             var destination = order.Kind is ActionKind.Move or ActionKind.Retreat
-                ? order.TargetTerritoryId ?? force.TerritoryId
+                ? FactionSpecialRulePolicies.ResolveMoveDestination(
+                    map,
+                    force,
+                    order.TargetTerritoryId ?? force.TerritoryId,
+                    order.ViaTerritoryId,
+                    state.Forces,
+                    factionAllyGroups,
+                    state.BrokenAllyFactionIds,
+                    state.BrokenAllySubfactions,
+                    rules)
                 : force.TerritoryId;
             if (order.Kind is ActionKind.Move or ActionKind.Retreat && destination != force.TerritoryId)
             {
@@ -97,9 +116,22 @@ public static class ActionResolution
             nextForces.Add(moved);
             AddOccupied(occupied, destination, moved.Id);
             arrivalKinds[force.Id] = order.Kind;
+            if (order.Kind == ActionKind.Move
+                && order.ViaTerritoryId is { } via
+                && via != destination
+                && FactionSpecialRulePolicies.SkipClaiming(
+                    force,
+                    via,
+                    force.TerritoryId,
+                    destination,
+                    via,
+                    rules))
+            {
+                skipClaimTerritories.Add(via);
+            }
         }
 
-        nextForces = Rejoin(nextForces, window, utcNow, log);
+        nextForces = Rejoin(nextForces, window, utcNow, log, arrivalKinds, rules);
         occupied = [];
         foreach (var force in nextForces)
         {
@@ -107,11 +139,25 @@ public static class ActionResolution
         }
 
         var broken = state.BrokenAllyFactionIds.ToHashSet();
+        var brokenSubfactions = state.BrokenAllySubfactions.ToList();
         foreach (var order in resolved.Values)
         {
             if (order.Kind == ActionKind.Backstab && forces.TryGetValue(order.ForceId, out var force))
             {
-                broken.Add(force.FactionId);
+                if (rules.Has(force, SpecialRuleEffectKeys.DividedWeStand)
+                    && !string.IsNullOrWhiteSpace(force.Subfaction))
+                {
+                    if (!brokenSubfactions.Any(item =>
+                        item.FactionId == force.FactionId
+                        && string.Equals(item.Subfaction, force.Subfaction, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        brokenSubfactions.Add(new BrokenAllySubfaction(force.FactionId, force.Subfaction));
+                    }
+                }
+                else
+                {
+                    broken.Add(force.FactionId);
+                }
             }
         }
 
@@ -122,7 +168,7 @@ public static class ActionResolution
             var present = forceIds
                 .Select(id => nextForces.First(force => force.Id == id))
                 .ToArray();
-            if (CreatesBattle(present, factionAllyGroups, broken))
+            if (CreatesBattle(present, map.Territory(territoryId)!, factionAllyGroups, broken, brokenSubfactions, rules))
             {
                 var presentIds = present.Select(static force => force.Id).ToArray();
                 var existing = battles.FirstOrDefault(item =>
@@ -209,12 +255,16 @@ public static class ActionResolution
             inBattle,
             factionAllyGroups,
             broken,
-            pickIndex ?? (static count => 0));
+            pickIndex ?? (static count => 0),
+            skipClaimTerritories,
+            rules,
+            brokenSubfactions);
         return (
             state.With(
                 forces: nextForces,
                 battles: battles,
                 brokenAllyFactionIds: [.. broken.OrderBy(static id => id)],
+                brokenAllySubfactions: [.. brokenSubfactions.OrderBy(static item => item.FactionId).ThenBy(static item => item.Subfaction)],
                 structures: CaptureStructures(nextMap),
                 itemObjectives: items,
                 log: log),
@@ -229,19 +279,21 @@ public static class ActionResolution
         CampaignPlayState state,
         PlayMap map,
         CampaignForce force,
-        IReadOnlyDictionary<Guid, string?> factionAllyGroups)
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(force);
         ArgumentNullException.ThrowIfNull(factionAllyGroups);
+        var rules = specialRules ?? SpecialRuleContext.None;
         if (force.InBattle)
         {
             return [ActionKind.Surrender];
         }
 
         var kinds = new List<ActionKind> { ActionKind.Hold };
-        var moves = CampaignPlayRules.EligibleMoves(map, force);
+        var moves = CampaignPlayRules.EligibleMoves(map, force, state.ItemObjectives, rules);
         if (moves.Count > 0)
         {
             kinds.Add(ActionKind.Move);
@@ -252,7 +304,7 @@ public static class ActionResolution
             kinds.Add(ActionKind.Build);
         }
 
-        if (IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds))
+        if (IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
         {
             kinds.Add(ActionKind.Pillage);
         }
@@ -262,12 +314,12 @@ public static class ActionResolution
             kinds.Add(ActionKind.Repair);
         }
 
-        if (moves.Any(target => IsValidSplit(state, map, force, target)))
+        if (moves.Any(target => IsValidSplit(state, map, force, target, rules)))
         {
             kinds.Add(ActionKind.Split);
         }
 
-        if (IsValidBackstab(force, factionAllyGroups, state.BrokenAllyFactionIds))
+        if (IsValidBackstab(force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
         {
             kinds.Add(ActionKind.Backstab);
         }
@@ -338,28 +390,34 @@ public static class ActionResolution
         PlayMap map,
         PhaseWindow window,
         CampaignForce force,
-        IReadOnlyDictionary<Guid, string?> factionAllyGroups)
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        SpecialRuleContext rules)
     {
         var submission = state.LatestSubmission(window.Id, force.Id);
         var kind = submission?.Kind ?? ActionKind.Hold;
         var target = submission?.TargetTerritoryId;
         var structureTypeId = submission?.StructureTypeId;
-        if (kind == ActionKind.Move && !IsValidMove(map, force, target))
+        var via = submission?.ViaTerritoryId;
+        var destroyImmediately = submission?.DestroyImmediately == true;
+        if (kind == ActionKind.Move
+            && !FactionSpecialRulePolicies.IsValidMove(map, force, target, via, state.ItemObjectives, rules))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
-        if (kind == ActionKind.Split && !IsValidSplit(state, map, force, target))
+        if (kind == ActionKind.Split && !IsValidSplit(state, map, force, target, rules))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
-        if (kind == ActionKind.Build && !IsValidBuild(map, force, structureTypeId))
+        if (kind == ActionKind.Build
+            && (!IsValidBuild(map, force, structureTypeId) || !FactionSpecialRulePolicies.CanBuild(map, force, structureTypeId ?? Guid.Empty, rules)))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
-        if (kind == ActionKind.Pillage && !IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds))
+        if (kind == ActionKind.Pillage
+            && !IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
@@ -369,7 +427,8 @@ public static class ActionResolution
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
-        if (kind == ActionKind.Backstab && !IsValidBackstab(force, factionAllyGroups, state.BrokenAllyFactionIds))
+        if (kind == ActionKind.Backstab
+            && !IsValidBackstab(force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
@@ -386,10 +445,17 @@ public static class ActionResolution
 
         if (kind is ActionKind.Hold or ActionKind.Pillage or ActionKind.Repair or ActionKind.Backstab)
         {
-            return new ResolvedOrder(force.Id, kind, force.TerritoryId, structureTypeId);
+            return new ResolvedOrder(
+                force.Id,
+                kind,
+                force.TerritoryId,
+                structureTypeId,
+                OrderAdjustment.None,
+                via,
+                destroyImmediately && FactionSpecialRulePolicies.CanDestroyImmediately(force, rules));
         }
 
-        return new ResolvedOrder(force.Id, kind, target, structureTypeId);
+        return new ResolvedOrder(force.Id, kind, target, structureTypeId, OrderAdjustment.None, via);
     }
 
     private static void DisallowConflictingStructureActions(Dictionary<Guid, ResolvedOrder> resolved)
@@ -416,25 +482,19 @@ public static class ActionResolution
         }
     }
 
-    private static bool IsValidMove(PlayMap map, CampaignForce force, Guid? targetId)
-    {
-        if (targetId is null || targetId == force.TerritoryId || !map.AreAdjacent(force.TerritoryId, targetId.Value))
-        {
-            return false;
-        }
-
-        var target = map.Territory(targetId.Value);
-        return target is not null && (target.SpawnFactionId is null || target.SpawnFactionId == force.FactionId);
-    }
-
-    private static bool IsValidSplit(CampaignPlayState state, PlayMap map, CampaignForce force, Guid? targetId)
+    private static bool IsValidSplit(
+        CampaignPlayState state,
+        PlayMap map,
+        CampaignForce force,
+        Guid? targetId,
+        SpecialRuleContext rules)
     {
         if (state.Forces.Count(item => item.ControllerUserId == force.ControllerUserId) >= MaxForcesPerPlayer)
         {
             return false;
         }
 
-        return IsValidMove(map, force, targetId);
+        return FactionSpecialRulePolicies.IsValidMove(map, force, targetId, viaId: null, state.ItemObjectives, rules);
     }
 
     internal static bool CanBuildInTerritory(PlayMap map, CampaignForce force)
@@ -471,8 +531,11 @@ public static class ActionResolution
         PlayMap map,
         CampaignForce force,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
-        IReadOnlyCollection<Guid> broken)
+        IReadOnlyCollection<Guid> broken,
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null)
     {
+        var rules = specialRules ?? SpecialRuleContext.None;
         var territory = map.Territory(force.TerritoryId);
         if (territory?.StructureTypeId is null || territory.StructureCondition == StructureCondition.Destroyed)
         {
@@ -490,11 +553,13 @@ public static class ActionResolution
         }
 
         if (territory.OwnerFactionId is { } owner
-            && AreAllies(force.FactionId, owner, factionAllyGroups, broken))
+            && AreAllies(force.FactionId, owner, factionAllyGroups, broken)
+            && !FactionSpecialRulePolicies.CanPillageAllied(force, rules))
         {
             return false;
         }
 
+        _ = brokenSubfactions;
         return true;
     }
 
@@ -520,8 +585,20 @@ public static class ActionResolution
     internal static bool IsValidBackstab(
         CampaignForce force,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
-        IReadOnlyList<Guid> broken)
+        IReadOnlyList<Guid> broken,
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null)
     {
+        var rules = specialRules ?? SpecialRuleContext.None;
+        if (rules.Has(force, SpecialRuleEffectKeys.DividedWeStand)
+            && !string.IsNullOrWhiteSpace(force.Subfaction))
+        {
+            var alreadyBroken = (brokenSubfactions ?? []).Any(item =>
+                item.FactionId == force.FactionId
+                && string.Equals(item.Subfaction, force.Subfaction, StringComparison.OrdinalIgnoreCase));
+            return !alreadyBroken;
+        }
+
         if (broken.Contains(force.FactionId))
         {
             return false;
@@ -532,21 +609,19 @@ public static class ActionResolution
 
     private static bool CreatesBattle(
         CampaignForce[] present,
+        PlayTerritory territory,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
-        HashSet<Guid> broken)
+        HashSet<Guid> broken,
+        IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
+        SpecialRuleContext rules)
     {
-        for (var i = 0; i < present.Length; i++)
-        {
-            for (var j = i + 1; j < present.Length; j++)
-            {
-                if (AreEnemies(present[i].FactionId, present[j].FactionId, factionAllyGroups, broken))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return FactionSpecialRulePolicies.CreatesBattle(
+            present,
+            territory,
+            factionAllyGroups,
+            broken,
+            brokenSubfactions,
+            rules);
     }
 
     internal static bool AreEnemies(
@@ -606,12 +681,21 @@ public static class ActionResolution
         List<CampaignForce> forces,
         PhaseWindow window,
         DateTimeOffset utcNow,
-        List<PlayLogEntry> log)
+        List<PlayLogEntry> log,
+        IReadOnlyDictionary<Guid, ActionKind> arrivalKinds,
+        SpecialRuleContext rules)
     {
         var result = new List<CampaignForce>();
         foreach (var group in forces.GroupBy(static force => (force.ControllerUserId, force.TerritoryId)))
         {
             var members = group.OrderBy(static force => force.Id).ToArray();
+            if (members.Length > 1
+                && !FactionSpecialRulePolicies.ShouldRejoin(members[0], members[1], arrivalKinds, rules))
+            {
+                result.AddRange(members);
+                continue;
+            }
+
             result.Add(members[0]);
             if (members.Length > 1)
             {
@@ -640,8 +724,13 @@ public static class ActionResolution
         HashSet<Guid> inBattle,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         HashSet<Guid> broken,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        HashSet<Guid>? skipClaimTerritories = null,
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null)
     {
+        _ = specialRules;
+        _ = brokenSubfactions;
         var next = map.Territories.ToDictionary(static territory => territory.Id);
         var originalOwners = map.Territories.ToDictionary(static territory => territory.Id, static territory => territory.OwnerFactionId);
         foreach (var order in resolved.Values)
@@ -671,7 +760,11 @@ public static class ActionResolution
             }
             else if (order.Kind == ActionKind.Pillage)
             {
-                if (territory.StructureCondition == StructureCondition.Operational)
+                if (order.DestroyImmediately && territory.IsDestructible)
+                {
+                    next[territory.Id] = territory.With(clearStructure: true);
+                }
+                else if (territory.StructureCondition == StructureCondition.Operational)
                 {
                     next[territory.Id] = territory.With(structureCondition: StructureCondition.Pillaged);
                 }
@@ -691,6 +784,11 @@ public static class ActionResolution
             if (territory.IsSpawn)
             {
                 next[territory.Id] = territory.With(ownerFactionId: territory.SpawnFactionId);
+                continue;
+            }
+
+            if (skipClaimTerritories is not null && skipClaimTerritories.Contains(territory.Id))
+            {
                 continue;
             }
 
@@ -935,7 +1033,9 @@ public static class ActionResolution
         ActionKind Kind,
         Guid? TargetTerritoryId,
         Guid? StructureTypeId,
-        OrderAdjustment Adjustment = OrderAdjustment.None);
+        OrderAdjustment Adjustment = OrderAdjustment.None,
+        Guid? ViaTerritoryId = null,
+        bool DestroyImmediately = false);
 
     private enum OrderAdjustment
     {

@@ -1144,6 +1144,43 @@
                       </button>
                     </div>
                   </fieldset>
+                  @for (subfaction of namedSubfactions(faction); track subfaction) {
+                    <fieldset class="field">
+                      <legend>{{ subfaction }} special rules</legend>
+                      @for (rule of assignedSubfactionSpecialRules(faction, subfaction); track rule.id) {
+                        <div class="nested-row">
+                          <p class="grow">{{ rule.name }}</p>
+                          <button
+                            type="button"
+                            class="button-secondary"
+                            (click)="removeSubfactionSpecialRule(faction, subfaction, rule.id)"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      }
+                      <div class="nested-row">
+                        <div class="field grow">
+                          <label [attr.for]="'subfaction-special-rule-' + index + '-' + subfaction">
+                            Add {{ subfaction }} special rule
+                          </label>
+                          <app-filterable-combobox
+                            [inputId]="'subfaction-special-rule-' + index + '-' + subfaction"
+                            [formControl]="pickControl(faction.controls.id.value + ':' + subfaction)"
+                            [options]="assignableSubfactionSpecialRuleNames(faction, subfaction)"
+                            placeholder="Search or type a name"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          class="button-secondary"
+                          (click)="assignSubfactionSpecialRuleByName(faction, subfaction)"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </fieldset>
+                  }
                   <fieldset class="field">
                     <legend>Flag</legend>
                     <div class="choice-row">

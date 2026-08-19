@@ -123,7 +123,8 @@ public sealed class CampaignStore : ICampaignStore
             campaign.SplitForceSupplyPenaltyPercent,
             campaign.BattleReportRules,
             campaign.ArmyEscalations,
-            campaign.Missions);
+            campaign.Missions,
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules));
         var playJson = PlayStateJson.Serialize(campaign.PlayState);
         var affected = await _dbContext.Campaigns
             .Where(item => item.Id == campaign.Id && item.Revision == expectedRevision)
@@ -433,7 +434,8 @@ public sealed class CampaignStore : ICampaignStore
                 campaign.SplitForceSupplyPenaltyPercent,
                 campaign.BattleReportRules,
                 campaign.ArmyEscalations,
-                campaign.Missions),
+                campaign.Missions,
+                campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules)),
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
@@ -577,7 +579,7 @@ public sealed class CampaignStore : ICampaignStore
 
     private static StoredCampaign ToStored(CampaignRecord record)
     {
-        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
         return new StoredCampaign
         {
             Id = record.Id,
@@ -652,6 +654,7 @@ public sealed class CampaignStore : ICampaignStore
                         AllyGroupName = faction.AllyGroup?.Name,
                         FlagImageStorageKey = faction.FlagImageStorageKey,
                         SpecialRuleIds = FactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
+                        SubfactionSpecialRules = SubfactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
                     }),
             ],
             Links =

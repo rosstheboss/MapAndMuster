@@ -100,7 +100,8 @@ public sealed class CampaignForce
         Guid factionId,
         Guid territoryId,
         bool inBattle,
-        string? statusName = null)
+        string? statusName = null,
+        string? subfaction = null)
     {
         Id = id;
         ControllerUserId = controllerUserId;
@@ -108,6 +109,7 @@ public sealed class CampaignForce
         TerritoryId = territoryId;
         InBattle = inBattle;
         StatusName = string.IsNullOrWhiteSpace(statusName) ? null : statusName.Trim();
+        Subfaction = string.IsNullOrWhiteSpace(subfaction) ? null : subfaction.Trim();
     }
 
     /// <summary>Gets the force identifier.</summary>
@@ -128,8 +130,11 @@ public sealed class CampaignForce
     /// <summary>Gets the current status name, or null when Normal.</summary>
     public string? StatusName { get; }
 
+    /// <summary>Gets the chosen subfaction, when the controller picked one.</summary>
+    public string? Subfaction { get; }
+
     /// <summary>
-    /// Returns a copy with a new location or battle flag. Status is preserved.
+    /// Returns a copy with a new location or battle flag. Status and subfaction are preserved.
     /// </summary>
     public CampaignForce With(Guid? territoryId = null, bool? inBattle = null)
     {
@@ -139,7 +144,8 @@ public sealed class CampaignForce
             FactionId,
             territoryId ?? TerritoryId,
             inBattle ?? InBattle,
-            StatusName);
+            StatusName,
+            Subfaction);
     }
 
     /// <summary>
@@ -147,7 +153,15 @@ public sealed class CampaignForce
     /// </summary>
     public CampaignForce WithStatus(string? statusName)
     {
-        return new CampaignForce(Id, ControllerUserId, FactionId, TerritoryId, InBattle, statusName);
+        return new CampaignForce(Id, ControllerUserId, FactionId, TerritoryId, InBattle, statusName, Subfaction);
+    }
+
+    /// <summary>
+    /// Returns a copy with a replacement faction and optional subfaction.
+    /// </summary>
+    public CampaignForce WithFaction(Guid factionId, string? subfaction)
+    {
+        return new CampaignForce(Id, ControllerUserId, factionId, TerritoryId, InBattle, StatusName, subfaction);
     }
 }
 
@@ -165,7 +179,9 @@ public sealed class OrderDraft
         ActionKind kind,
         Guid? targetTerritoryId,
         Guid? structureTypeId,
-        DateTimeOffset updatedUtc)
+        DateTimeOffset updatedUtc,
+        Guid? viaTerritoryId = null,
+        bool destroyImmediately = false)
     {
         WindowId = windowId;
         ForceId = forceId;
@@ -173,6 +189,8 @@ public sealed class OrderDraft
         TargetTerritoryId = targetTerritoryId;
         StructureTypeId = structureTypeId;
         UpdatedUtc = updatedUtc;
+        ViaTerritoryId = viaTerritoryId;
+        DestroyImmediately = destroyImmediately;
     }
 
     /// <summary>Gets the action window.</summary>
@@ -192,6 +210,12 @@ public sealed class OrderDraft
 
     /// <summary>Gets when the draft was last saved, in UTC.</summary>
     public DateTimeOffset UpdatedUtc { get; }
+
+    /// <summary>Gets the first hop for a two-territory Move, when used.</summary>
+    public Guid? ViaTerritoryId { get; }
+
+    /// <summary>Gets whether a Pillage should destroy the structure in one action.</summary>
+    public bool DestroyImmediately { get; }
 }
 
 /// <summary>
@@ -211,7 +235,9 @@ public sealed class OrderSubmission
         Guid? structureTypeId,
         OrderSource source,
         DateTimeOffset submittedUtc,
-        Guid actorUserId)
+        Guid actorUserId,
+        Guid? viaTerritoryId = null,
+        bool destroyImmediately = false)
     {
         Id = id;
         WindowId = windowId;
@@ -222,6 +248,8 @@ public sealed class OrderSubmission
         Source = source;
         SubmittedUtc = submittedUtc;
         ActorUserId = actorUserId;
+        ViaTerritoryId = viaTerritoryId;
+        DestroyImmediately = destroyImmediately;
     }
 
     /// <summary>Gets the submission identifier.</summary>
@@ -250,6 +278,12 @@ public sealed class OrderSubmission
 
     /// <summary>Gets the user who submitted or whose deadline produced the order.</summary>
     public Guid ActorUserId { get; }
+
+    /// <summary>Gets the first hop for a two-territory Move, when used.</summary>
+    public Guid? ViaTerritoryId { get; }
+
+    /// <summary>Gets whether a Pillage should destroy the structure in one action.</summary>
+    public bool DestroyImmediately { get; }
 }
 
 /// <summary>

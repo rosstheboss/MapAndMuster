@@ -21,7 +21,9 @@ public sealed class BattleParticipantReport
         string? armyListText = null,
         string? armyListGameSystem = null,
         ArmyListBuilder armyListBuilder = ArmyListBuilder.Other,
-        IReadOnlyList<ArmyListSupplyCategory>? supplyCategories = null)
+        IReadOnlyList<ArmyListSupplyCategory>? supplyCategories = null,
+        bool usedExtraBlackPowder = false,
+        int magicalSupplyRerolls = 0)
     {
         ArgumentNullException.ThrowIfNull(answers);
         ArgumentOutOfRangeException.ThrowIfNegative(victoryPoints);
@@ -29,6 +31,7 @@ public sealed class BattleParticipantReport
         ArgumentOutOfRangeException.ThrowIfNegative(differentialBattlePoints);
         ArgumentOutOfRangeException.ThrowIfNegative(bonusBattlePoints);
         ArgumentOutOfRangeException.ThrowIfNegative(supplyCostingUnitCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(magicalSupplyRerolls);
         ForceId = forceId;
         VictoryPoints = victoryPoints;
         ArmyPoints = armyPoints;
@@ -42,6 +45,8 @@ public sealed class BattleParticipantReport
         ArmyListGameSystem = armyListGameSystem;
         ArmyListBuilder = armyListBuilder;
         SupplyCategories = supplyCategories ?? [];
+        UsedExtraBlackPowder = usedExtraBlackPowder;
+        MagicalSupplyRerolls = magicalSupplyRerolls;
     }
 
     /// <summary>Gets the reported force.</summary>
@@ -82,6 +87,15 @@ public sealed class BattleParticipantReport
 
     /// <summary>Gets optional per-category supply amounts filled from a parse or edited by the player.</summary>
     public IReadOnlyList<ArmyListSupplyCategory> SupplyCategories { get; }
+
+    /// <summary>Gets whether Extra Black Powder was used this battle (Prepared for Battle).</summary>
+    public bool UsedExtraBlackPowder { get; }
+
+    /// <summary>Gets leftover composition supply used as Magical Supply rerolls this battle.</summary>
+    public int MagicalSupplyRerolls { get; }
+
+    /// <summary>Supply spent from army-list units plus Extra Black Powder, if used.</summary>
+    public int SupplySpend => SupplyCostingUnitCount + (UsedExtraBlackPowder ? 1 : 0);
 
     /// <summary>
     /// Battle points used to decide the winner before campaign-point conversion.

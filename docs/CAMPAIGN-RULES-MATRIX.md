@@ -67,7 +67,7 @@ for the campaign rules.
 | Faction choice                       | Configure, Enforce            | Players pick a faction (and required subfaction) before they can play; they may change it until the campaign starts, then it is locked. Managers and administrators may assign another player's faction after launch for fixes and testing. |
 | Faction alignments                   | Configure                     | Model alliance groups and unaligned factions per campaign.                                                                     |
 | Faction map rules                    | Configure, Enforce/Calculate  | Structured modifiers may affect movement, supply, spawn, relic sensing, status, pillage, or retreat.                           |
-| Faction tabletop rules               | Configure, Display            | Reusable special-rule catalog (name and description) assigned to factions and item objectives the same way missions are reused. Pre-configured rules copy a generic catalog description (no faction-specific wording or flavor). User-created rules are display-only and do not execute code or change resolution. |
+| Faction tabletop rules               | Configure, Display            | Reusable special-rule catalog (name, description, optional effect key) assigned to factions, subfactions, and item objectives. Hunt in Estalia copies named faction-sheet wording. User-created rules are display-only and do not execute code. |
 | Rule/version changes                 | Configure, Audit              | Record source/version/effective round; activate approved changes at a round boundary.                                          |
 | GM order inspection                  | Secret, Audit                 | Permit inspection only inside a logged debug session; unrevealed orders stay out of the public log. Notify affected players when debug ends. |
 | GM corrections                       | Enforce, Audit                | Enter debug (logged), append staff corrections without overwriting originals, re-resolve the last window only while the following phase is open (or post-campaign grace), uncommit or nullify only directly affected current-phase orders, then exit debug (logged, notifying players). |
@@ -93,11 +93,12 @@ arbitrary scripts.
 - Alternative/random spawn behavior.
 - Forced movement toward a revealed relic.
 - Extra temporary supply from pillage.
+- Extra Black Powder spend declared on the battle result.
+- Magical Supply leftover rerolls declared on the battle result (capped at unused composition supply).
 
 ### Display or battle metadata
 
 - Ambush modifiers.
-- Casting/dispelling resources.
 - One-use battle abilities.
 - Terrain-specific tabletop modifiers.
 - Army unit eligibility and mercenary effects.
@@ -113,6 +114,6 @@ These remain in `DECISIONS-NEEDED.md` and must not be silently resolved by an ag
   application scope. Castle remains a structure type; tabletop castle features stay display-only.
 - Armies-of-infamy content is out of application scope. Those lists are ordinary subfaction
   configuration and may be added later as preset or catalog data.
-- Relic choice options, result groups, destroy-and-replace, and granted secret objectives are configured in setup. Mechanical map modifiers from special rules remain display-only until specified.
+- Relic choice options, result groups, destroy-and-replace, and granted secret objectives are configured in setup. Named Hunt special-rule effect keys are enforced or calculated as documented in DOMAIN.md; remaining tabletop dice effects stay display-only.
 - Exact proprietary battle-point conversion charts are out of scope; managers enter already-converted
   scores or raw victory points and configure multiplier, clamp, and negative-loser behavior.

@@ -1,4 +1,4 @@
-import { specialRuleNamesForFaction } from './special-rule-presets';
+import { specialRuleNamesForFaction, specialRuleNamesForSubfaction } from './special-rule-presets';
 
 export interface FactionPresetFaction {
   name: string;
@@ -6,6 +6,7 @@ export interface FactionPresetFaction {
   subfactions: readonly string[];
   requiresSubfaction: boolean;
   specialRuleNames?: readonly string[];
+  subfactionSpecialRules?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface FactionPreset {
@@ -92,6 +93,7 @@ const WARHAMMER_OLD_WORLD_FACTIONS: readonly FactionPresetFaction[] = [
     subfactions: ['Troll Horde', 'Nomadic Waaagh!'],
     requiresSubfaction: false,
   },
+  { name: 'Renegade Crowns', color: '#C2410C', subfactions: [], requiresSubfaction: false },
   {
     name: 'Tomb Kings of Khemri',
     color: '#EAB308',
@@ -134,6 +136,12 @@ export function sortedPresetFactions(factions: readonly FactionPresetFaction[]):
       requiresSubfaction: faction.requiresSubfaction,
       subfactions: [...faction.subfactions].sort(compareNames),
       specialRuleNames: [...(faction.specialRuleNames ?? specialRuleNamesForFaction(faction.name))],
+      subfactionSpecialRules: Object.fromEntries(
+        [...faction.subfactions].map((name) => [
+          name,
+          [...(faction.subfactionSpecialRules?.[name] ?? specialRuleNamesForSubfaction(faction.name, name))],
+        ]),
+      ),
     }))
     .sort((left, right) => compareNames(left.name, right.name));
 }

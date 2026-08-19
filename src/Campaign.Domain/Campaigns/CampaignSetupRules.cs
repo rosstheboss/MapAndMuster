@@ -665,6 +665,12 @@ public static class CampaignSetupRules
                     knownSpecialRuleIds,
                     $"factions[{index}].specialRuleIds",
                     $"Faction {index + 1}",
+                    errors),
+                ParseSubfactionSpecialRules(
+                    faction.SubfactionSpecialRules,
+                    subfactions,
+                    knownSpecialRuleIds,
+                    index,
                     errors)));
         }
 
@@ -2175,7 +2181,8 @@ public static class CampaignSetupRules
             parsed.Add(new SpecialRuleSetup(
                 ResolveId(input.Id, usedIds, $"specialRules[{index}].id", errors),
                 name,
-                text));
+                text,
+                ParseEffectKey(input.EffectKey, index, errors)));
         }
 
         return parsed;
@@ -2524,6 +2531,85 @@ public static class CampaignSetupRules
         }
 
         return parsed;
+    }
+
+    private static List<SubfactionSpecialRulesSetup> ParseSubfactionSpecialRules(
+        IReadOnlyList<SubfactionSpecialRulesInput>? assignments,
+        IReadOnlyList<string> subfactions,
+        HashSet<Guid> knownSpecialRuleIds,
+        int factionIndex,
+        List<DomainError> errors)
+    {
+        if (assignments is null || assignments.Count == 0)
+        {
+            return [];
+        }
+
+        var knownNames = subfactions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var parsed = new List<SubfactionSpecialRulesSetup>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < assignments.Count; index++)
+        {
+            var input = assignments[index];
+            var field = $"factions[{factionIndex}].subfactionSpecialRules[{index}].name";
+            var name = ParseRequiredName(
+                input.Name,
+                field,
+                $"Faction {factionIndex + 1} subfaction special-rule assignment {index + 1}",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!knownNames.Contains(name))
+            {
+                errors.Add(new DomainError(
+                    $"{field}.unknown",
+                    $"Faction {factionIndex + 1} subfaction special rules reference a subfaction that was not listed.",
+                    field));
+                continue;
+            }
+
+            if (!seen.Add(name))
+            {
+                continue;
+            }
+
+            var canonical = subfactions.First(item => string.Equals(item, name, StringComparison.OrdinalIgnoreCase));
+            parsed.Add(new SubfactionSpecialRulesSetup(
+                canonical,
+                ParseAssignedSpecialRuleIds(
+                    input.SpecialRuleIds,
+                    knownSpecialRuleIds,
+                    $"factions[{factionIndex}].subfactionSpecialRules[{index}].specialRuleIds",
+                    $"Faction {factionIndex + 1} subfaction {canonical}",
+                    errors)));
+        }
+
+        return parsed;
+    }
+
+    private static string? ParseEffectKey(string? raw, int index, List<DomainError> errors)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var key = raw.Trim();
+        if (!SpecialRuleEffectKeys.IsKnown(key))
+        {
+            errors.Add(new DomainError(
+                $"specialRules[{index}].effectKey.invalid",
+                $"Special rule {index + 1} effect key is not a known campaign policy.",
+                $"specialRules[{index}].effectKey"));
+            return null;
+        }
+
+        return key;
     }
 
     private static List<ItemObjectiveChoiceSetup> ParseItemObjectiveChoices(

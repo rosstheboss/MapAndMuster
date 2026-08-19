@@ -207,8 +207,42 @@ public sealed class PlayForceResponse
     /// <summary>Gets adjacent eligible move destinations.</summary>
     public required IReadOnlyList<Guid> MoveTargets { get; init; }
 
+    /// <summary>Gets two-territory Move hops when Crusaders applies.</summary>
+    public IReadOnlyList<PlayMoveHopResponse> MoveHops { get; init; } = [];
+
     /// <summary>Gets player-submittable action kinds available for this force.</summary>
     public required IReadOnlyList<string> AvailableActions { get; init; }
+
+    /// <summary>Gets the force subfaction, when chosen.</summary>
+    public string? Subfaction { get; init; }
+
+    /// <summary>Gets whether this force may Move through an intermediate territory.</summary>
+    public bool CanMoveTwoTerritories { get; init; }
+
+    /// <summary>Gets whether Pillage may destroy the structure in one action.</summary>
+    public bool CanDestroyImmediately { get; init; }
+
+    /// <summary>Gets whether this force may declare Extra Black Powder on a battle result.</summary>
+    public bool CanUseExtraBlackPowder { get; init; }
+
+    /// <summary>Gets whether this force may declare Magical Supply rerolls on a battle result.</summary>
+    public bool CanUseMagicalSupply { get; init; }
+
+    /// <summary>Gets whether a hidden relic is in an adjacent territory.</summary>
+    public bool HiddenRelicNearby { get; init; }
+
+    /// <summary>Gets tabletop or campaign reminders from assigned special rules.</summary>
+    public IReadOnlyList<string> BattleReminders { get; init; } = [];
+}
+
+/// <summary>A two-territory Move hop.</summary>
+public sealed class PlayMoveHopResponse
+{
+    /// <summary>Gets the first territory entered.</summary>
+    public required Guid ViaTerritoryId { get; init; }
+
+    /// <summary>Gets the intended destination.</summary>
+    public required Guid TargetTerritoryId { get; init; }
 }
 
 /// <summary>A visible item objective.</summary>
@@ -271,6 +305,12 @@ public sealed class PlayDraftResponse
 
     /// <summary>Gets the structure type.</summary>
     public Guid? StructureTypeId { get; init; }
+
+    /// <summary>Gets the first hop for a two-territory Move.</summary>
+    public Guid? ViaTerritoryId { get; init; }
+
+    /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
+    public bool DestroyImmediately { get; init; }
 }
 
 /// <summary>A submitted or revealed order.</summary>
@@ -430,6 +470,12 @@ public sealed class BattleParticipantReportResponse
     /// <summary>Gets how many supply-costing units this force fielded.</summary>
     public int SupplyCostingUnitCount { get; init; }
 
+    /// <summary>Gets whether Extra Black Powder was used this battle.</summary>
+    public bool UsedExtraBlackPowder { get; init; }
+
+    /// <summary>Gets leftover composition supply used as Magical Supply rerolls.</summary>
+    public int MagicalSupplyRerolls { get; init; }
+
     /// <summary>Gets optional pasted army-list text.</summary>
     public string? ArmyListText { get; init; }
 
@@ -538,6 +584,12 @@ public sealed class SaveOrderDraftRequest
 
     /// <summary>Gets the structure type for Build.</summary>
     public Guid? StructureTypeId { get; init; }
+
+    /// <summary>Gets the first hop for a two-territory Move.</summary>
+    public Guid? ViaTerritoryId { get; init; }
+
+    /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
+    public bool DestroyImmediately { get; init; }
 
     /// <summary>Gets whether to re-resolve the previous action instead of editing the current window.</summary>
     public bool ReResolvePrevious { get; init; }
@@ -663,6 +715,12 @@ public sealed class BattleParticipantReportRequest
 
     /// <summary>Gets how many supply-costing units this force fielded.</summary>
     public int SupplyCostingUnitCount { get; init; }
+
+    /// <summary>Gets whether Extra Black Powder was used this battle.</summary>
+    public bool UsedExtraBlackPowder { get; init; }
+
+    /// <summary>Gets leftover composition supply used as Magical Supply rerolls.</summary>
+    public int MagicalSupplyRerolls { get; init; }
 
     /// <summary>Gets optional pasted army-list text.</summary>
     public string? ArmyListText { get; init; }
@@ -950,6 +1008,14 @@ public static class PlayResponses
                     RequiresSubfaction = faction.RequiresSubfaction,
                     HasFlagImage = faction.HasFlagImage,
                     SpecialRuleIds = faction.SpecialRuleIds,
+                    SubfactionSpecialRules =
+                    [
+                        .. faction.SubfactionSpecialRules.Select(static item => new SubfactionSpecialRulesResponse
+                        {
+                            Name = item.Name,
+                            SpecialRuleIds = item.SpecialRuleIds,
+                        }),
+                    ],
                 }),
             ],
             StructureTypes =
@@ -1098,7 +1164,22 @@ public static class PlayResponses
                     StatusName = force.StatusName,
                     StatusEffects = force.StatusEffects,
                     MoveTargets = force.MoveTargets,
+                    MoveHops =
+                    [
+                        .. force.MoveHops.Select(static hop => new PlayMoveHopResponse
+                        {
+                            ViaTerritoryId = hop.ViaTerritoryId,
+                            TargetTerritoryId = hop.TargetTerritoryId,
+                        }),
+                    ],
                     AvailableActions = force.AvailableActions,
+                    Subfaction = force.Subfaction,
+                    CanMoveTwoTerritories = force.CanMoveTwoTerritories,
+                    CanDestroyImmediately = force.CanDestroyImmediately,
+                    CanUseExtraBlackPowder = force.CanUseExtraBlackPowder,
+                    CanUseMagicalSupply = force.CanUseMagicalSupply,
+                    HiddenRelicNearby = force.HiddenRelicNearby,
+                    BattleReminders = force.BattleReminders,
                 }),
             ],
             MyDrafts =
@@ -1109,6 +1190,8 @@ public static class PlayResponses
                     Kind = draft.Kind,
                     TargetTerritoryId = draft.TargetTerritoryId,
                     StructureTypeId = draft.StructureTypeId,
+                    ViaTerritoryId = draft.ViaTerritoryId,
+                    DestroyImmediately = draft.DestroyImmediately,
                 }),
             ],
             Orders =
@@ -1129,6 +1212,8 @@ public static class PlayResponses
                     Kind = draft.Kind,
                     TargetTerritoryId = draft.TargetTerritoryId,
                     StructureTypeId = draft.StructureTypeId,
+                    ViaTerritoryId = draft.ViaTerritoryId,
+                    DestroyImmediately = draft.DestroyImmediately,
                 }),
             ],
             Commitments =
@@ -1253,6 +1338,8 @@ public static class PlayResponses
                         DifferentialBattlePoints = report.DifferentialBattlePoints,
                         BonusBattlePoints = report.BonusBattlePoints,
                         SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                        UsedExtraBlackPowder = report.UsedExtraBlackPowder,
+                        MagicalSupplyRerolls = report.MagicalSupplyRerolls,
                         ArmyListText = report.ArmyListText,
                         ArmyListGameSystem = report.ArmyListGameSystem,
                         ArmyListBuilder = report.ArmyListBuilder,
@@ -1297,6 +1384,8 @@ public static class PlayResponses
                 DifferentialBattlePoints = report.DifferentialBattlePoints,
                 BonusBattlePoints = report.BonusBattlePoints,
                 SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                UsedExtraBlackPowder = report.UsedExtraBlackPowder,
+                MagicalSupplyRerolls = report.MagicalSupplyRerolls,
                 ArmyListText = report.ArmyListText,
                 ArmyListGameSystem = report.ArmyListGameSystem,
                 ArmyListBuilder = report.ArmyListBuilder,

@@ -125,13 +125,58 @@ Points per finalized battle win are configured with public objectives (default 0
 difference uses the campaign's configured multiplier and clamp; the application does not copy a
 proprietary conversion chart.
 
-A campaign has a reusable special-rule catalog (at most 80), each with a unique name and
-description (stored as text). Factions and item objectives may reuse the same special rule, the
-same way terrain and structures reuse missions. Applying the Warhammer: The Old World faction
-preset copies that catalog's generic special rules onto the matching factions, including the
-catalog description with faction-specific wording and flavor omitted. User-created special rules
-are display-only: they do not execute code and do not change map resolution. The manager writes
-the description for a custom rule.
+A campaign has a reusable special-rule catalog (at most 80), each with a unique name,
+description, and optional mechanical effect key. Factions and named subfactions may reuse the
+same special rule, the same way terrain and structures reuse missions. Applying the Warhammer:
+The Old World faction preset or The Hunt in Estalia campaign preset copies Hunt faction-sheet
+rules onto matching factions (and daemon gods), including named effect keys the engine enforces.
+User-created special rules omit an effect key and stay display-only: they do not execute code and
+do not change map resolution. The manager writes the description for a custom rule. Daemons of
+Chaos require a subfaction.
+
+Named Hunt effect keys the engine enforces or calculates (matched by key, not display name):
+
+- `Crusaders`: a Move may travel two adjacent hops. The order names the first territory and the
+  landing territory. An enemy in the first hop stops the force there for battle. The first hop is
+  not claimed. The route cannot enter another faction's spawn. Split forces rejoin only when both
+  are moved into the same territory.
+- `Slavers`: each owned unpillaged Town or City grants one extra map supply point.
+- `DividedWeStand`: daemon-god subfactions of the same faction count as allies and may backstab
+  each other by god.
+- `OnlyBloodSatisfies`: Pillage may target an allied structure and may destroy it in one action.
+- `BringersOfThePlague`: never Diseased or Well Rested; beating a force that is not Diseased or
+  Shaken inflicts Diseased.
+- `ArtOfWar`: Retreat may enter any non-enemy-spawn territory and may capture it.
+- `ConduitsOfPower`: a player is told when they are adjacent to a still-hidden relic. After a
+  relic is revealed, they may Move to any territory adjacent to it.
+- `SpawningPools`: owned water-feature territories without a Town, City, or Castle count as a
+  supply depot and fortification without a supply path. Built Supply Depot or Fortification
+  structures grant one extra map supply point. The bonus does not apply to allies.
+- `ToughGuts`: never Diseased.
+- `GreenTide`: cannot Build a Supply Depot; owned empty or pillaged territories count as depots.
+  Allied land is not included.
+- `DefendersOfTheHomeland`: unowned Towns and Cities count as depots regardless of path. Allies
+  still need a connected supply line.
+- `GreatCityOfMagritta`: the force starts at and captures the Capital City.
+- `UndergroundNetwork`: no spawn. The force is placed at random into an empty Town or City (or
+  the Capital City if none are empty), capturing an empty Town or City that is not a spawn or
+  capital. Occupying a spawn with another faction does not start a battle until they leave.
+- `CalledByTheRelic`: after a relic is revealed, Move destinations are only those that reduce
+  distance to the closest revealed relic (ties allowed) until the relic is captured or battle is
+  forced.
+- `Undead`: never Shaken, Diseased, Well Rested, or Confident.
+- `NorthernRaiders`: Pillage awards at least two temporary supply points.
+- `PreparedForBattle`: on a battle result, the player may declare Extra Black Powder; that spends
+  one extra supply point for the battle.
+- `MagicalSupply`: on a battle result, the player declares how many leftover unused composition
+  supply points they used as one-per-battle casting or dispelling rerolls. Those leftover points
+  are not spent from the campaign pool and cannot be saved for later battles.
+
+Tabletop-only Hunt keys stay as catalog text and battle reminders: `ExpertAmbushers`,
+`SafeInWater`, `Alluring`, `Treacherous`, `ItIsGoingInTheBook`, `RulersOfStone`,
+`Determined`, `ForHire`, `RelicOfAPastAge`, `FreshCorpses`,
+`NavigatorsOfTheForests`, and `HealedByNature`. The application does not resolve tabletop dice
+or army-list mercenary slots.
 
 A campaign may configure named force statuses (at most 20). Each status has a unique name other
 than Normal, effect text shown on the force, an enable trigger, and a clear trigger. A force has
@@ -143,7 +188,9 @@ retreat), Exhausted (enable after any resolved battle; clear by Hold), and Well 
 after Hold; clear after a move or battle). Catalog order
 matters when more than one enable trigger matches: the first matching status wins, so a loss
 becomes Shaken rather than Exhausted. Effect text is display-only; the app does not resolve
-tabletop modifiers.
+tabletop modifiers. Named effect keys can refuse a status: `Undead` never Shaken, Diseased, Well
+Rested, or Confident; `BringersOfThePlague` never Diseased or Well Rested; `ToughGuts` never
+Diseased.
 
 The creating user is always a campaign manager (Game Master). If they also participate, they
 occupy one player slot. Private campaigns store a hashed join password; the plaintext password
@@ -326,7 +373,9 @@ a player slot) must choose that faction before they can play. A participant who 
 faction may do so until they have one and cannot submit orders for a round until they do. A player
 may change their chosen faction until the campaign starts. After the campaign has started, a chosen
 faction cannot be changed. Each player force starts at that faction's spawn territory
-when the campaign launches or when they join play later; subfactions use the same spawn.
+when the campaign launches or when they join play later; subfactions use the same spawn unless a
+named effect key relocates them (`GreatCityOfMagritta` to the Capital City,
+`UndergroundNetwork` to a random empty Town or City).
 
 Orders resolve simultaneously against the window's starting map state. Processing order is
 movement and splits, then backstab alliance breaks, then battles from enemy co-location, then
@@ -348,15 +397,18 @@ same territory and competing arrivals, become `Hold` rather than an invented win
 Player-submittable actions in an open action window are listed in this order:
 
 - `Hold`: remain and receive applicable resting effects.
-- `Move`: travel to an allowed adjacent territory; invalid move becomes Hold.
+- `Move`: travel to an allowed adjacent territory; invalid move becomes Hold. `Crusaders` may
+  name a first hop and a landing territory two steps away. `ConduitsOfPower` and
+  `CalledByTheRelic` can add or restrict destinations after a relic is involved.
 - `Build`: create an allowed structure in a non-spawn territory that has no intact structure.
   Only structure types flagged buildable may be chosen. Town, Capital City, City, and Castle
   start not buildable; Supply Depot and Fortification start buildable.
 - `Pillage`: progress a pillageable intact structure from operational to pillaged. The acting
-  force may pillage a structure its faction owns. Allies cannot pillage an allied structure. A
-  second Pillage against a pillaged structure that is flagged destructible removes it from the
-  map. Capital City starts not pillageable. Capital City, City, and Castle start not
-  destructible.
+  force may pillage a structure its faction owns. Allies cannot pillage an allied structure unless
+  `OnlyBloodSatisfies` applies, which may also destroy in a single Pillage. `NorthernRaiders`
+  awards two temporary supply points rather than one. A second Pillage against a pillaged
+  structure that is flagged destructible removes it from the map. Capital City starts not
+  pillageable. Capital City, City, and Castle start not destructible.
 - `Repair`: restore a pillaged structure. Only the current territory owner or a current ally of
   that owner may repair.
 - `Split`: create a second force in an eligible adjacent territory; maximum two per player in
@@ -371,6 +423,7 @@ Battle-phase and system actions:
 
 - `Retreat`: move a losing/withdrawing force to an eligible territory or spawn fallback. Players
   submit retreat after a battle, not during an action window, except as part of surrender.
+  `ArtOfWar` may retreat into any non-enemy-spawn territory and may capture it.
 - `Surrender`: while a force is engaged, during an action or battle window, commit to leaving
   the fight and retreat. Once committed it cannot be withdrawn. A surrender left in draft still
   executes when the window ends.
@@ -390,7 +443,9 @@ and similar; each unit spends one supply point), differential battle points from
 battle points from the mission, whether they killed the enemy general, whether they destroyed
 the enemy supply line, and any extra mission questions the campaign manager configured
 (true/false or a battle-point amount, each awarding battle points and/or campaign points).
-A player may optionally paste army-list text for each force. That text is informational: the
+A force with Prepared for Battle may declare Extra Black Powder (spending one extra supply
+point). A force with Magical Supply may declare leftover unused composition supply used as
+casting or dispelling rerolls this battle only. A player may optionally paste army-list text for each force. That text is informational: the
 opponent and campaign manager can read it to check the list by hand. The player may also choose
 Warhammer: The Old World and a builder. Other (the default) does not parse the text. New Recruit
 and Old World Builder attempt to recognize that app's text export and fill army points plus
@@ -693,7 +748,9 @@ is a possible kick. The player is not removed unless a manager kicks them.
   newly added rounds default to 1000/1/1. The Hunt in Estalia preset uses 500/1/1, 750/1/1, 1000/1/1,
   1250/2/1, 1500/2/1, 2000/2/2, 2500/3/2, then 3000/3/2 for round 8 and later. Longer Hunt campaigns
   copy the last row. Changing the round count keeps values already entered for overlapping rounds.
-- Faction modifiers are data/rules layered over the base calculation.
+- Faction modifiers are data/rules layered over the base calculation. Hunt keys that add map
+  supply without inventing a new structure type are `Slavers`, `SpawningPools`, `GreenTide`, and
+  `DefendersOfTheHomeland`.
 
 ## Objectives and relics
 

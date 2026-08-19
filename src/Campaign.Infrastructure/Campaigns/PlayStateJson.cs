@@ -53,15 +53,7 @@ internal static class PlayStateJson
                 Status = window.Status.ToString(),
                 EndPhaseEarlyIfAble = window.EndPhaseEarlyIfAble,
             })],
-            Forces = [.. state.Forces.Select(static force => new ForceDocument
-            {
-                Id = force.Id,
-                ControllerUserId = force.ControllerUserId,
-                FactionId = force.FactionId,
-                TerritoryId = force.TerritoryId,
-                InBattle = force.InBattle,
-                StatusName = force.StatusName,
-            })],
+            Forces = [.. state.Forces.Select(ToForce)],
             Drafts = [.. state.Drafts.Select(static draft => new DraftDocument
             {
                 WindowId = draft.WindowId,
@@ -70,6 +62,8 @@ internal static class PlayStateJson
                 TargetTerritoryId = draft.TargetTerritoryId,
                 StructureTypeId = draft.StructureTypeId,
                 UpdatedUtc = draft.UpdatedUtc,
+                ViaTerritoryId = draft.ViaTerritoryId,
+                DestroyImmediately = draft.DestroyImmediately,
             })],
             Submissions = [.. state.Submissions.Select(static item => new SubmissionDocument
             {
@@ -82,6 +76,8 @@ internal static class PlayStateJson
                 Source = item.Source.ToString(),
                 SubmittedUtc = item.SubmittedUtc,
                 ActorUserId = item.ActorUserId,
+                ViaTerritoryId = item.ViaTerritoryId,
+                DestroyImmediately = item.DestroyImmediately,
             })],
             Commitments = [.. state.Commitments.Select(static item => new CommitmentDocument
             {
@@ -138,6 +134,8 @@ internal static class PlayStateJson
                     ArmyListText = report.ArmyListText,
                     ArmyListGameSystem = report.ArmyListGameSystem,
                     ArmyListBuilder = report.ArmyListBuilder.ToString(),
+                    UsedExtraBlackPowder = report.UsedExtraBlackPowder,
+                    MagicalSupplyRerolls = report.MagicalSupplyRerolls,
                     SupplyCategories = [.. report.SupplyCategories.Select(static category => new ArmyListCategoryDocument
                     {
                         Name = category.Name,
@@ -165,6 +163,11 @@ internal static class PlayStateJson
                 SubmittedUtc = item.SubmittedUtc,
             })],
             BrokenAllyFactionIds = [.. state.BrokenAllyFactionIds],
+            BrokenAllySubfactions = [.. state.BrokenAllySubfactions.Select(static item => new BrokenAllySubfactionDocument
+            {
+                FactionId = item.FactionId,
+                Subfaction = item.Subfaction,
+            })],
             Structures = [.. state.Structures.Select(static item => new StructureDocument
             {
                 TerritoryId = item.TerritoryId,
@@ -196,15 +199,7 @@ internal static class PlayStateJson
             Snapshots = [.. state.Snapshots.Select(static item => new SnapshotDocument
             {
                 WindowId = item.WindowId,
-                Forces = [.. item.Forces.Select(static force => new ForceDocument
-                {
-                    Id = force.Id,
-                    ControllerUserId = force.ControllerUserId,
-                    FactionId = force.FactionId,
-                    TerritoryId = force.TerritoryId,
-                    InBattle = force.InBattle,
-                    StatusName = force.StatusName,
-                })],
+                Forces = [.. item.Forces.Select(ToForce)],
                 Structures = [.. item.Structures.Select(static structure => new StructureDocument
                 {
                     TerritoryId = structure.TerritoryId,
@@ -283,20 +278,16 @@ internal static class PlayStateJson
                 window.EndsUtc,
                 Enum.Parse<PhaseWindowStatus>(window.Status, true),
                 window.EndPhaseEarlyIfAble))],
-            [.. document.Forces.Select(static force => new CampaignForce(
-                force.Id,
-                force.ControllerUserId,
-                force.FactionId,
-                force.TerritoryId,
-                force.InBattle,
-                force.StatusName))],
+            [.. document.Forces.Select(FromForce)],
             [.. document.Drafts.Select(static draft => new OrderDraft(
                 draft.WindowId,
                 draft.ForceId,
                 Enum.Parse<ActionKind>(draft.Kind, true),
                 draft.TargetTerritoryId,
                 draft.StructureTypeId,
-                draft.UpdatedUtc))],
+                draft.UpdatedUtc,
+                draft.ViaTerritoryId,
+                draft.DestroyImmediately))],
             [.. document.Submissions.Select(static item => new OrderSubmission(
                 item.Id,
                 item.WindowId,
@@ -306,7 +297,9 @@ internal static class PlayStateJson
                 item.StructureTypeId,
                 Enum.Parse<OrderSource>(item.Source, true),
                 item.SubmittedUtc,
-                item.ActorUserId))],
+                item.ActorUserId,
+                item.ViaTerritoryId,
+                item.DestroyImmediately))],
             [.. document.Commitments.Select(static item => new PlayerCommitment(item.WindowId, item.UserId, item.CommittedUtc))],
             [.. document.Battles.Select(static battle => new CampaignBattle(
                 battle.Id,
@@ -341,29 +334,7 @@ internal static class PlayStateJson
                 item.SubmittedUtc,
                 item.WinnerScore,
                 item.LoserScore,
-                [.. (item.Reports ?? []).Select(static report => new BattleParticipantReport(
-                    report.ForceId,
-                    Math.Max(0, report.VictoryPoints),
-                    Math.Max(0, report.ArmyPoints),
-                    Math.Max(0, report.DifferentialBattlePoints),
-                    Math.Max(0, report.BonusBattlePoints),
-                    report.KilledEnemyGeneral,
-                    report.DestroyedEnemySupplyLine,
-                    [.. (report.Answers ?? []).Select(static answer => new BattleQuestionAnswer(
-                        answer.QuestionId,
-                        answer.BooleanValue,
-                        answer.BattlePointsValue is null ? null : Math.Max(0, answer.BattlePointsValue.Value)))],
-                    Math.Max(0, report.SupplyCostingUnitCount),
-                    string.IsNullOrWhiteSpace(report.ArmyListText) ? null : report.ArmyListText.Trim(),
-                    ArmyListRules.NormalizeGameSystem(report.ArmyListGameSystem),
-                    ArmyListRules.ParseBuilder(report.ArmyListBuilder),
-                    [.. (report.SupplyCategories ?? [])
-                        .Where(static category => !string.IsNullOrWhiteSpace(category.Name))
-                        .Select(static category => new ArmyListSupplyCategory(
-                            category.Name,
-                            Math.Max(0, category.UnitCount),
-                            Math.Max(0, category.SupplyPoints),
-                            category.CostsSupply))]))]))],
+                [.. (item.Reports ?? []).Select(FromBattleReport)]))],
             [.. document.Retreats.Select(static item => new RetreatOrder(
                 item.Id,
                 item.BattleId,
@@ -434,7 +405,10 @@ internal static class PlayStateJson
                 Math.Max(0, item.TemporarySupplyPoints)))],
             [.. (document.Delinquencies ?? []).Select(static item => new ForceDelinquency(
                 item.ForceId,
-                Math.Max(0, item.OffenceCount)))]);
+                Math.Max(0, item.OffenceCount)))],
+            [.. (document.BrokenAllySubfactions ?? []).Select(static item => new BrokenAllySubfaction(
+                item.FactionId,
+                item.Subfaction))]);
     }
 
     private static IReadOnlyList<ActionWindowSnapshot> ToSnapshots(PlayDocument document)
@@ -443,13 +417,7 @@ internal static class PlayStateJson
         [
             .. (document.Snapshots ?? []).Select(static item => new ActionWindowSnapshot(
                 item.WindowId,
-                [.. item.Forces.Select(static force => new CampaignForce(
-                    force.Id,
-                    force.ControllerUserId,
-                    force.FactionId,
-                    force.TerritoryId,
-                    force.InBattle,
-                    force.StatusName))],
+                [.. item.Forces.Select(FromForce)],
                 [.. item.Structures.Select(static structure => new TerritoryStructureState(
                     structure.TerritoryId,
                     structure.StructureTypeId,
@@ -484,6 +452,39 @@ internal static class PlayStateJson
         };
     }
 
+    private static BattleParticipantReport FromBattleReport(BattleReportDocument report)
+    {
+        return new BattleParticipantReport(
+            report.ForceId,
+            Math.Max(0, report.VictoryPoints),
+            Math.Max(0, report.ArmyPoints),
+            Math.Max(0, report.DifferentialBattlePoints),
+            Math.Max(0, report.BonusBattlePoints),
+            report.KilledEnemyGeneral,
+            report.DestroyedEnemySupplyLine,
+            [
+                .. (report.Answers ?? []).Select(static answer => new BattleQuestionAnswer(
+                    answer.QuestionId,
+                    answer.BooleanValue,
+                    answer.BattlePointsValue is null ? null : Math.Max(0, answer.BattlePointsValue.Value))),
+            ],
+            Math.Max(0, report.SupplyCostingUnitCount),
+            string.IsNullOrWhiteSpace(report.ArmyListText) ? null : report.ArmyListText.Trim(),
+            ArmyListRules.NormalizeGameSystem(report.ArmyListGameSystem),
+            ArmyListRules.ParseBuilder(report.ArmyListBuilder),
+            [
+                .. (report.SupplyCategories ?? [])
+                    .Where(static category => !string.IsNullOrWhiteSpace(category.Name))
+                    .Select(static category => new ArmyListSupplyCategory(
+                        category.Name,
+                        Math.Max(0, category.UnitCount),
+                        Math.Max(0, category.SupplyPoints),
+                        category.CostsSupply)),
+            ],
+            report.UsedExtraBlackPowder,
+            Math.Max(0, report.MagicalSupplyRerolls));
+    }
+
     private static CampaignItemObjective FromItem(ItemObjectiveDocument item)
     {
         return new CampaignItemObjective(
@@ -501,6 +502,32 @@ internal static class PlayStateJson
             item.ResolvedChoiceId);
     }
 
+    private static ForceDocument ToForce(CampaignForce force)
+    {
+        return new ForceDocument
+        {
+            Id = force.Id,
+            ControllerUserId = force.ControllerUserId,
+            FactionId = force.FactionId,
+            TerritoryId = force.TerritoryId,
+            InBattle = force.InBattle,
+            StatusName = force.StatusName,
+            Subfaction = force.Subfaction,
+        };
+    }
+
+    private static CampaignForce FromForce(ForceDocument force)
+    {
+        return new CampaignForce(
+            force.Id,
+            force.ControllerUserId,
+            force.FactionId,
+            force.TerritoryId,
+            force.InBattle,
+            force.StatusName,
+            force.Subfaction);
+    }
+
     private sealed class PlayDocument
     {
         public List<WindowDocument> Windows { get; set; } = [];
@@ -512,6 +539,7 @@ internal static class PlayStateJson
         public List<BattleSubmissionDocument> BattleSubmissions { get; set; } = [];
         public List<RetreatDocument> Retreats { get; set; } = [];
         public List<Guid> BrokenAllyFactionIds { get; set; } = [];
+        public List<BrokenAllySubfactionDocument> BrokenAllySubfactions { get; set; } = [];
         public List<StructureDocument> Structures { get; set; } = [];
         public List<ItemObjectiveDocument>? ItemObjectives { get; set; }
         public List<LogDocument> Log { get; set; } = [];
@@ -547,6 +575,7 @@ internal static class PlayStateJson
         public Guid TerritoryId { get; set; }
         public bool InBattle { get; set; }
         public string? StatusName { get; set; }
+        public string? Subfaction { get; set; }
     }
 
     private sealed class DraftDocument
@@ -557,6 +586,8 @@ internal static class PlayStateJson
         public Guid? TargetTerritoryId { get; set; }
         public Guid? StructureTypeId { get; set; }
         public DateTimeOffset UpdatedUtc { get; set; }
+        public Guid? ViaTerritoryId { get; set; }
+        public bool DestroyImmediately { get; set; }
     }
 
     private sealed class SubmissionDocument
@@ -570,6 +601,8 @@ internal static class PlayStateJson
         public string Source { get; set; } = "";
         public DateTimeOffset SubmittedUtc { get; set; }
         public Guid ActorUserId { get; set; }
+        public Guid? ViaTerritoryId { get; set; }
+        public bool DestroyImmediately { get; set; }
     }
 
     private sealed class CommitmentDocument
@@ -577,6 +610,12 @@ internal static class PlayStateJson
         public Guid WindowId { get; set; }
         public Guid UserId { get; set; }
         public DateTimeOffset CommittedUtc { get; set; }
+    }
+
+    private sealed class BrokenAllySubfactionDocument
+    {
+        public Guid FactionId { get; set; }
+        public string Subfaction { get; set; } = "";
     }
 
     private sealed class BattleDocument
@@ -629,6 +668,8 @@ internal static class PlayStateJson
         public bool KilledEnemyGeneral { get; set; }
         public bool DestroyedEnemySupplyLine { get; set; }
         public int SupplyCostingUnitCount { get; set; }
+        public bool UsedExtraBlackPowder { get; set; }
+        public int MagicalSupplyRerolls { get; set; }
         public string? ArmyListText { get; set; }
         public string? ArmyListGameSystem { get; set; }
         public string? ArmyListBuilder { get; set; }

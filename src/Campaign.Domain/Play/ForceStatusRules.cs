@@ -61,11 +61,13 @@ public static class ForceStatusRules
     public static IReadOnlyList<CampaignForce> Apply(
         IReadOnlyList<CampaignForce> forces,
         IReadOnlyList<ForceStatusSetup> statuses,
-        IReadOnlyDictionary<Guid, Facts> factsByForceId)
+        IReadOnlyDictionary<Guid, Facts> factsByForceId,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(forces);
         ArgumentNullException.ThrowIfNull(statuses);
         ArgumentNullException.ThrowIfNull(factsByForceId);
+        var rules = specialRules ?? SpecialRuleContext.None;
         if (statuses.Count == 0)
         {
             return forces;
@@ -90,15 +92,23 @@ public static class ForceStatusRules
                     next = null;
                 }
 
+                if (next is not null && !FactionSpecialRulePolicies.AllowsStatus(force, next, rules))
+                {
+                    next = null;
+                }
+
                 if (next is null)
                 {
                     foreach (var candidate in statuses)
                     {
-                        if (MatchesEnable(candidate.EnableTrigger, facts))
+                        if (!MatchesEnable(candidate.EnableTrigger, facts)
+                            || !FactionSpecialRulePolicies.AllowsStatus(force, candidate.Name, rules))
                         {
-                            next = candidate.Name;
-                            break;
+                            continue;
                         }
+
+                        next = candidate.Name;
+                        break;
                     }
                 }
 

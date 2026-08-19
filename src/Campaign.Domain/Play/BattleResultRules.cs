@@ -170,8 +170,66 @@ public static class BattleResultRules
                 report.ArmyListText,
                 report.ArmyListGameSystem,
                 report.ArmyListBuilder,
-                report.SupplyCategories)),
+                report.SupplyCategories,
+                report.UsedExtraBlackPowder,
+                report.MagicalSupplyRerolls)),
         ];
+    }
+
+    /// <summary>
+    /// Extra Black Powder and Magical Supply may be declared only by forces that have those keys.
+    /// Magical Supply rerolls cannot exceed leftover unused composition supply when a leftover map is provided.
+    /// </summary>
+    public static bool TryValidateSpecialRuleUses(
+        IReadOnlyList<BattleParticipantReport> reports,
+        IReadOnlyList<CampaignForce> forces,
+        SpecialRuleContext rules,
+        IReadOnlyDictionary<Guid, int>? leftoverSupplyByForce,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        ArgumentNullException.ThrowIfNull(reports);
+        ArgumentNullException.ThrowIfNull(forces);
+        ArgumentNullException.ThrowIfNull(rules);
+        error = null;
+        foreach (var report in reports)
+        {
+            var force = forces.FirstOrDefault(item => item.Id == report.ForceId);
+            if (force is null)
+            {
+                continue;
+            }
+
+            if (report.UsedExtraBlackPowder && !rules.Has(force, SpecialRuleEffectKeys.PreparedForBattle))
+            {
+                error = new DomainError(
+                    "battle.result.extra_black_powder.forbidden",
+                    "Only a force with Prepared for Battle can use Extra Black Powder.",
+                    "usedExtraBlackPowder");
+                return false;
+            }
+
+            if (report.MagicalSupplyRerolls > 0 && !rules.Has(force, SpecialRuleEffectKeys.MagicalSupply))
+            {
+                error = new DomainError(
+                    "battle.result.magical_supply.forbidden",
+                    "Only a force with Magical Supply can declare leftover supply as rerolls.",
+                    "magicalSupplyRerolls");
+                return false;
+            }
+
+            if (leftoverSupplyByForce is not null
+                && leftoverSupplyByForce.TryGetValue(report.ForceId, out var leftover)
+                && report.MagicalSupplyRerolls > leftover)
+            {
+                error = new DomainError(
+                    "battle.result.magical_supply.exceeds_leftover",
+                    "Magical Supply rerolls cannot exceed leftover unused supply for this battle.",
+                    "magicalSupplyRerolls");
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool ReportEquals(BattleParticipantReport left, BattleParticipantReport right)
@@ -183,6 +241,8 @@ public static class BattleResultRules
             || left.KilledEnemyGeneral != right.KilledEnemyGeneral
             || left.DestroyedEnemySupplyLine != right.DestroyedEnemySupplyLine
             || left.SupplyCostingUnitCount != right.SupplyCostingUnitCount
+            || left.UsedExtraBlackPowder != right.UsedExtraBlackPowder
+            || left.MagicalSupplyRerolls != right.MagicalSupplyRerolls
             || left.Answers.Count != right.Answers.Count)
         {
             return false;

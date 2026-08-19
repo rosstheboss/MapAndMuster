@@ -115,6 +115,12 @@ export interface CampaignFaction {
   requiresSubfaction: boolean;
   hasFlagImage: boolean;
   specialRuleIds?: string[];
+  subfactionSpecialRules?: SubfactionSpecialRules[];
+}
+
+export interface SubfactionSpecialRules {
+  name: string;
+  specialRuleIds: string[];
 }
 
 export interface CampaignAllyGroup {
@@ -228,6 +234,7 @@ export interface CampaignSpecialRule {
   id: string;
   name: string;
   text: string;
+  effectKey?: string | null;
 }
 
 export interface CampaignForceStatus {
@@ -385,6 +392,7 @@ export interface SaveFactionPayload {
   requiresSubfaction: boolean;
   clearFlagImage?: boolean;
   specialRuleIds?: string[];
+  subfactionSpecialRules?: SubfactionSpecialRules[];
 }
 
 export interface SaveAllyGroupPayload {
@@ -464,6 +472,7 @@ export interface SaveSpecialRulePayload {
   id?: string;
   name: string;
   text?: string | null;
+  effectKey?: string | null;
 }
 
 export interface SaveForceStatusPayload {
@@ -628,9 +637,22 @@ export interface PlayForce {
   isMine: boolean;
   inBattle: boolean;
   moveTargets: string[];
+  moveHops?: PlayMoveHop[];
   availableActions: string[];
   statusName?: string | null;
   statusEffects?: string | null;
+  subfaction?: string | null;
+  canMoveTwoTerritories?: boolean;
+  canDestroyImmediately?: boolean;
+  canUseExtraBlackPowder?: boolean;
+  canUseMagicalSupply?: boolean;
+  hiddenRelicNearby?: boolean;
+  battleReminders?: string[];
+}
+
+export interface PlayMoveHop {
+  viaTerritoryId: string;
+  targetTerritoryId: string;
 }
 
 export interface PlayItemObjective {
@@ -655,6 +677,8 @@ export interface PlayDraft {
   kind: string;
   targetTerritoryId: string | null;
   structureTypeId: string | null;
+  viaTerritoryId?: string | null;
+  destroyImmediately?: boolean;
 }
 
 export interface PlayOrder {
@@ -731,6 +755,8 @@ export interface BattleParticipantReport {
   differentialBattlePoints: number;
   bonusBattlePoints: number;
   supplyCostingUnitCount: number;
+  usedExtraBlackPowder?: boolean;
+  magicalSupplyRerolls?: number;
   armyListText?: string | null;
   armyListGameSystem?: string | null;
   armyListBuilder?: string | null;
@@ -834,6 +860,8 @@ export interface SaveOrderDraftPayload {
   kind: string;
   targetTerritoryId?: string | null;
   structureTypeId?: string | null;
+  viaTerritoryId?: string | null;
+  destroyImmediately?: boolean;
   reResolvePrevious?: boolean;
 }
 

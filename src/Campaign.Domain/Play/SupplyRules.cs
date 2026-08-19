@@ -79,7 +79,8 @@ public static class SupplyRules
         PlayMap before,
         PlayMap after,
         IReadOnlyList<CampaignForce> forces,
-        IReadOnlyDictionary<Guid, StructureSupplyRules> structures)
+        IReadOnlyDictionary<Guid, StructureSupplyRules> structures,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(structures);
         var catalog = new SupplyCatalog(
@@ -89,7 +90,8 @@ public static class SupplyRules
             armyEscalations: [],
             factionByPlayer: new Dictionary<Guid, Guid>(),
             allyGroupByFaction: new Dictionary<Guid, string?>(),
-            brokenAllyFactionIds: new HashSet<Guid>());
+            brokenAllyFactionIds: new HashSet<Guid>(),
+            specialRules);
         return AwardTemporary(current, before, after, forces, catalog);
     }
 
@@ -123,11 +125,16 @@ public static class SupplyRules
             }
 
             var awarded = 0;
+            var actor = forces.FirstOrDefault(force => force.TerritoryId == previous.Id && !force.InBattle);
             if (previous.StructureCondition == StructureCondition.Operational
                 && next.StructureCondition == StructureCondition.Pillaged
                 && next.StructureTypeId == structureTypeId)
             {
                 awarded = rules.PillageSupplyPoints;
+                if (actor is not null && catalog.SpecialRules.Has(actor, SpecialRuleEffectKeys.NorthernRaiders))
+                {
+                    awarded = Math.Max(2, awarded);
+                }
             }
             else if (previous.StructureTypeId is not null && next.StructureTypeId is null)
             {
@@ -139,7 +146,6 @@ public static class SupplyRules
                 continue;
             }
 
-            var actor = forces.FirstOrDefault(force => force.TerritoryId == previous.Id && !force.InBattle);
             if (actor is null)
             {
                 continue;
@@ -331,10 +337,91 @@ public static class SupplyRules
             {
                 total += structure.SupplyPoints;
             }
+
+            total += ExtraMapSupply(territory, factionId, catalog, userId);
         }
 
+        total += PathIndependentSupply(map, catalog, factionId, userId, connected);
         _ = state;
         return total;
+    }
+
+    private static int ExtraMapSupply(PlayTerritory territory, Guid factionId, SupplyCatalog catalog, Guid userId)
+    {
+        var subfaction = catalog.SubfactionByPlayer.GetValueOrDefault(userId);
+        var rules = catalog.SpecialRules;
+        var extra = 0;
+        var name = territory.StructureName;
+        if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.Slavers)
+            && territory.OwnerFactionId == factionId
+            && territory.StructureCondition == StructureCondition.Operational
+            && StructureKinds.IsTownOrCity(name))
+        {
+            extra += 1;
+        }
+
+        if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.SpawningPools)
+            && territory.OwnerFactionId == factionId)
+        {
+            if (territory.IsWaterFeature && !StructureKinds.IsSettlement(name)
+                && (territory.StructureTypeId is null || territory.StructureCondition != StructureCondition.Operational))
+            {
+                extra += HuntInEstaliaDefaults.SupplyPoints;
+            }
+
+            if (territory.StructureCondition == StructureCondition.Operational
+                && (StructureKinds.IsSupplyDepot(name) || StructureKinds.IsFortification(name)))
+            {
+                extra += 1;
+            }
+        }
+
+        if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.GreenTide)
+            && territory.OwnerFactionId == factionId
+            && (territory.StructureTypeId is null || territory.StructureCondition == StructureCondition.Pillaged))
+        {
+            extra += HuntInEstaliaDefaults.SupplyPoints;
+        }
+
+        return extra;
+    }
+
+    private static int PathIndependentSupply(
+        PlayMap map,
+        SupplyCatalog catalog,
+        Guid factionId,
+        Guid userId,
+        HashSet<Guid> connected)
+    {
+        var subfaction = catalog.SubfactionByPlayer.GetValueOrDefault(userId);
+        var rules = catalog.SpecialRules;
+        var extra = 0;
+        foreach (var territory in map.Territories)
+        {
+            if (connected.Contains(territory.Id))
+            {
+                continue;
+            }
+
+            if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.SpawningPools)
+                && territory.OwnerFactionId == factionId
+                && territory.IsWaterFeature
+                && !StructureKinds.IsSettlement(territory.StructureName)
+                && (territory.StructureTypeId is null || territory.StructureCondition != StructureCondition.Operational))
+            {
+                extra += HuntInEstaliaDefaults.SupplyPoints;
+            }
+
+            if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.DefendersOfTheHomeland)
+                && territory.OwnerFactionId is null
+                && territory.StructureCondition == StructureCondition.Operational
+                && StructureKinds.IsTownOrCity(territory.StructureName))
+            {
+                extra += HuntInEstaliaDefaults.SupplyPoints;
+            }
+        }
+
+        return extra;
     }
 
     private static HashSet<Guid> ConnectedTerritoryIds(PlayMap map, SupplyCatalog catalog, Guid factionId)

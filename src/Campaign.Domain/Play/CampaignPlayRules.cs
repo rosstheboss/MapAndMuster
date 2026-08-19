@@ -24,13 +24,16 @@ public static class CampaignPlayRules
         Func<int, int>? pickIndex = null,
         IReadOnlyList<PrivateObjectiveTypePlayRules>? privateObjectiveTypes = null,
         IReadOnlyList<Guid>? factionIds = null,
-        IReadOnlyList<Guid>? allyGroupIds = null)
+        IReadOnlyList<Guid>? allyGroupIds = null,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(schedule);
         ArgumentNullException.ThrowIfNull(players);
 
+        var rules = specialRules ?? SpecialRuleContext.None;
+        var choose = pickIndex ?? (static count => 0);
         var seededMap = ApplySpawnFlags(map);
         if (state.Windows.Count > 0)
         {
@@ -49,15 +52,32 @@ public static class CampaignPlayRules
         }
 
         var forces = new List<CampaignForce>();
+        var nextMap = seededMap;
         foreach (var player in players.Where(static item => item.FactionId.HasValue).OrderBy(static item => item.UserId))
         {
-            var spawn = seededMap.SpawnFor(player.FactionId!.Value);
-            if (spawn is null)
+            var placement = FactionSpecialRulePolicies.StartingPlacement(
+                nextMap,
+                player.FactionId!.Value,
+                player.Subfaction,
+                forces,
+                rules,
+                choose);
+            if (placement is null)
             {
                 continue;
             }
 
-            forces.Add(new CampaignForce(Guid.NewGuid(), player.UserId, player.FactionId.Value, spawn.Id, false));
+            forces.Add(new CampaignForce(
+                Guid.NewGuid(),
+                player.UserId,
+                player.FactionId.Value,
+                placement.Value.TerritoryId,
+                false,
+                subfaction: player.Subfaction));
+            if (placement.Value.Capture)
+            {
+                nextMap = FactionSpecialRulePolicies.Capture(nextMap, placement.Value.TerritoryId, player.FactionId.Value);
+            }
         }
 
         var items = ItemObjectiveRules.Seed(
@@ -83,7 +103,7 @@ public static class CampaignPlayRules
             [],
             [],
             [],
-            CaptureStructures(seededMap),
+            CaptureStructures(nextMap),
             items,
             state.Log,
             privateObjectives: privateObjectives)
@@ -99,7 +119,7 @@ public static class CampaignPlayRules
                 null,
                 null,
                 []));
-        return new PlayOutcome(started, seededMap, schedule.EndsUtc, schedule.RoundCount);
+        return new PlayOutcome(started, nextMap, schedule.EndsUtc, schedule.RoundCount);
     }
 
     /// <summary>
@@ -109,7 +129,10 @@ public static class CampaignPlayRules
         CampaignPlayState state,
         PlayMap map,
         Guid userId,
-        Guid factionId)
+        Guid factionId,
+        string? subfaction = null,
+        SpecialRuleContext? specialRules = null,
+        Func<int, int>? pickIndex = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -118,14 +141,25 @@ public static class CampaignPlayRules
             return new PlayOutcome(state, map, default, 0, preserveSchedule: true);
         }
 
-        var spawn = map.SpawnFor(factionId);
-        if (spawn is null)
+        var rules = specialRules ?? SpecialRuleContext.None;
+        var placement = FactionSpecialRulePolicies.StartingPlacement(
+            map,
+            factionId,
+            subfaction,
+            state.Forces,
+            rules,
+            pickIndex ?? (static count => 0));
+        if (placement is null)
         {
             return new PlayOutcome(state, ApplySpawnFlags(map), default, 0, preserveSchedule: true);
         }
 
-        var forces = state.Forces.Append(new CampaignForce(Guid.NewGuid(), userId, factionId, spawn.Id, false)).ToArray();
-        return new PlayOutcome(state.With(forces: forces), ApplySpawnFlags(map), default, 0, preserveSchedule: true);
+        var nextMap = placement.Value.Capture
+            ? FactionSpecialRulePolicies.Capture(map, placement.Value.TerritoryId, factionId)
+            : ApplySpawnFlags(map);
+        var forces = state.Forces.Append(
+            new CampaignForce(Guid.NewGuid(), userId, factionId, placement.Value.TerritoryId, false, subfaction: subfaction)).ToArray();
+        return new PlayOutcome(state.With(forces: forces), nextMap, default, 0, preserveSchedule: true);
     }
 
     /// <summary>
@@ -175,7 +209,7 @@ public static class CampaignPlayRules
         ArgumentNullException.ThrowIfNull(state);
         var forces = state.Forces
             .Select(force => force.ControllerUserId == userId && force.FactionId != factionId
-                ? new CampaignForce(force.Id, force.ControllerUserId, factionId, force.TerritoryId, force.InBattle, force.StatusName)
+                ? force.WithFaction(factionId, force.Subfaction)
                 : force)
             .ToArray();
         return state.With(forces: forces);
@@ -193,7 +227,8 @@ public static class CampaignPlayRules
         IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
         Func<int, int>? pickIndex = null,
         IReadOnlyList<TerrainTypeSetup>? terrainTypes = null,
-        IReadOnlyList<StructureTypeSetup>? structureTypes = null)
+        IReadOnlyList<StructureTypeSetup>? structureTypes = null,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -234,7 +269,8 @@ public static class CampaignPlayRules
                     forceStatuses,
                     pickIndex ?? (static count => 0),
                     terrainTypes,
-                    structureTypes);
+                    structureTypes,
+                    specialRules);
             }
         }
         else if (current.Status == PhaseWindowStatus.Open && current.Kind == RoundPhaseKind.Battle)
@@ -251,7 +287,8 @@ public static class CampaignPlayRules
                     due,
                     forceStatuses,
                     pickIndex ?? (static count => 0),
-                    factionAllyGroups);
+                    factionAllyGroups,
+                    specialRules);
             }
         }
 
@@ -311,11 +348,15 @@ public static class CampaignPlayRules
         DateTimeOffset utcNow,
         [NotNullWhen(true)] out CampaignPlayState? next,
         [NotNullWhen(false)] out DomainError? error,
-        bool requireUncommitted = true)
+        bool requireUncommitted = true,
+        Guid? viaTerritoryId = null,
+        bool destroyImmediately = false,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(factionAllyGroups);
+        var rules = specialRules ?? SpecialRuleContext.None;
         next = null;
         error = null;
         if (!TryOpenAction(state, userId, forceId, utcNow, requireUncommitted, out var window, out var force, out error, allowInBattle: kind == ActionKind.Surrender))
@@ -356,13 +397,6 @@ public static class CampaignPlayRules
             return false;
         }
 
-        if (kind is ActionKind.Move or ActionKind.Split
-            && (targetTerritoryId is null || !map.AreAdjacent(force.TerritoryId, targetTerritoryId.Value)))
-        {
-            error = new DomainError("order.target.invalid", "That territory is not adjacent.", "targetTerritoryId");
-            return false;
-        }
-
         if (kind is ActionKind.Move or ActionKind.Split or ActionKind.Retreat
             && targetTerritoryId is { } destinationId)
         {
@@ -372,6 +406,13 @@ public static class CampaignPlayRules
                 error = new DomainError("order.spawn.forbidden", "A force cannot enter another faction's spawn.", "targetTerritoryId");
                 return false;
             }
+        }
+
+        if (kind is ActionKind.Move or ActionKind.Split
+            && !FactionSpecialRulePolicies.IsValidMove(map, force, targetTerritoryId, viaTerritoryId, state.ItemObjectives, rules))
+        {
+            error = new DomainError("order.target.invalid", "That territory is not a legal destination.", "targetTerritoryId");
+            return false;
         }
 
         if (kind == ActionKind.Split && state.Forces.Count(item => item.ControllerUserId == force.ControllerUserId) >= ActionResolution.MaxForcesPerPlayer)
@@ -396,8 +437,8 @@ public static class CampaignPlayRules
 
             if (map.StructureTypes.Count > 0)
             {
-                var rules = map.StructureRules(structureTypeId.Value);
-                if (rules is null || !rules.IsBuildable)
+                var structureRules = map.StructureRules(structureTypeId.Value);
+                if (structureRules is null || !structureRules.IsBuildable)
                 {
                     error = new DomainError("order.build.not_buildable", "That structure cannot be built.", "structureTypeId");
                     return false;
@@ -411,7 +452,7 @@ public static class CampaignPlayRules
             }
         }
 
-        if (kind == ActionKind.Pillage && !ActionResolution.IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds))
+        if (kind == ActionKind.Pillage && !ActionResolution.IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
         {
             error = new DomainError("order.pillage.invalid", "Pillage requires a pillageable structure that is not allied.", "kind");
             return false;
@@ -423,13 +464,37 @@ public static class CampaignPlayRules
             return false;
         }
 
-        if (kind == ActionKind.Backstab && !ActionResolution.IsValidBackstab(force, factionAllyGroups, state.BrokenAllyFactionIds))
+        if (kind == ActionKind.Backstab && !ActionResolution.IsValidBackstab(force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
         {
             error = new DomainError("order.backstab.invalid", "Backstab requires an active alliance.", "kind");
             return false;
         }
 
-        var draft = new OrderDraft(window.Id, force.Id, kind, targetTerritoryId, structureTypeId, utcNow);
+        if (kind == ActionKind.Build
+            && structureTypeId is { } buildType
+            && !FactionSpecialRulePolicies.CanBuild(map, force, buildType, rules))
+        {
+            error = new DomainError("order.build.not_buildable", "That structure cannot be built.", "structureTypeId");
+            return false;
+        }
+
+        if (kind == ActionKind.Pillage
+            && destroyImmediately
+            && !FactionSpecialRulePolicies.CanDestroyImmediately(force, rules))
+        {
+            error = new DomainError("order.pillage.destroy_forbidden", "This force cannot destroy a structure in a single Pillage.", "destroyImmediately");
+            return false;
+        }
+
+        var draft = new OrderDraft(
+            window.Id,
+            force.Id,
+            kind,
+            targetTerritoryId,
+            structureTypeId,
+            utcNow,
+            viaTerritoryId,
+            destroyImmediately);
         var drafts = state.Drafts.Where(item => !(item.WindowId == window.Id && item.ForceId == force.Id)).Append(draft).ToArray();
         next = state.With(drafts: drafts);
         return true;
@@ -446,7 +511,8 @@ public static class CampaignPlayRules
         DateTimeOffset utcNow,
         [NotNullWhen(true)] out PlayOutcome? outcome,
         [NotNullWhen(false)] out DomainError? error,
-        IReadOnlyList<ForceStatusSetup>? forceStatuses = null)
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -492,7 +558,9 @@ public static class CampaignPlayRules
                 draft.StructureTypeId,
                 OrderSource.Commit,
                 utcNow,
-                userId));
+                userId,
+                draft.ViaTerritoryId,
+                draft.DestroyImmediately));
         }
 
         var commitments = state.Commitments.Append(new PlayerCommitment(window.Id, userId, utcNow)).ToArray();
@@ -509,7 +577,11 @@ public static class CampaignPlayRules
                 factionAllyGroups,
                 utcNow,
                 due: false,
-                forceStatuses);
+                forceStatuses,
+                pickIndex: null,
+                terrainTypes: null,
+                structureTypes: null,
+                specialRules);
             outcome = new PlayOutcome(closed, closedMap, LastEnd(closed, window.EndsUtc), RoundCountOf(closed));
             return true;
         }
@@ -626,6 +698,12 @@ public static class CampaignPlayRules
         }
 
         if (!TryNormalizeBattleScores(isDraw, winnerScore, loserScore, out var parsedWinnerScore, out var parsedLoserScore, out error))
+        {
+            return false;
+        }
+
+        if (scoredReports.Count > 0
+            && !TryValidateBattleSpecialRuleUses(state, scoredReports, map, catalog, out error))
         {
             return false;
         }
@@ -772,6 +850,12 @@ public static class CampaignPlayRules
 
         error = null;
         if (!TryNormalizeBattleScores(isDraw, winnerScore, loserScore, out var parsedWinnerScore, out var parsedLoserScore, out error))
+        {
+            return false;
+        }
+
+        if (scoredReports.Count > 0
+            && !TryValidateBattleSpecialRuleUses(state, scoredReports, map, catalog, out error))
         {
             return false;
         }
@@ -1150,12 +1234,19 @@ public static class CampaignPlayRules
     }
 
     /// <summary>
-    /// Adjacent territories a force may Move or Split into (never another faction's spawn).
+    /// Adjacent territories a force may Move or Split into (never another faction's spawn), plus
+    /// special-rule extra destinations.
     /// </summary>
-    public static IReadOnlyList<Guid> EligibleMoves(PlayMap map, CampaignForce force)
+    public static IReadOnlyList<Guid> EligibleMoves(
+        PlayMap map,
+        CampaignForce force,
+        IReadOnlyList<CampaignItemObjective>? items = null,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(force);
+        var rules = specialRules ?? SpecialRuleContext.None;
+        var catalogItems = items ?? [];
         var ids = new List<Guid>();
         foreach (var neighborId in map.Neighbors(force.TerritoryId))
         {
@@ -1173,16 +1264,73 @@ public static class CampaignPlayRules
             ids.Add(neighborId);
         }
 
+        foreach (var extra in FactionSpecialRulePolicies.RelicAdjacentMoveTargets(map, force, catalogItems, rules))
+        {
+            if (!ids.Contains(extra))
+            {
+                ids.Add(extra);
+            }
+        }
+
+        var pursuit = FactionSpecialRulePolicies.RelicPursuitTargets(map, force, catalogItems, rules);
+        if (pursuit.Count > 0)
+        {
+            return pursuit;
+        }
+
         return ids;
     }
 
     /// <summary>
-    /// Eligible retreat destinations: adjacent non-enemy-spawn territories, plus own spawn.
+    /// Two-territory Move hops for Crusaders.
     /// </summary>
-    public static IReadOnlyList<Guid> EligibleRetreats(PlayMap map, CampaignForce force)
+    public static IReadOnlyList<MoveHop> EligibleMoveHops(
+        PlayMap map,
+        CampaignForce force,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(force);
+        var rules = specialRules ?? SpecialRuleContext.None;
+        if (!rules.Has(force, SpecialRuleEffectKeys.Crusaders))
+        {
+            return [];
+        }
+
+        var hops = new List<MoveHop>();
+        foreach (var via in map.Neighbors(force.TerritoryId))
+        {
+            if (!FactionSpecialRulePolicies.CanEnter(map, force, via))
+            {
+                continue;
+            }
+
+            foreach (var destination in map.Neighbors(via))
+            {
+                if (destination == force.TerritoryId || !FactionSpecialRulePolicies.CanEnter(map, force, destination))
+                {
+                    continue;
+                }
+
+                hops.Add(new MoveHop(via, destination));
+            }
+        }
+
+        return hops;
+    }
+
+    /// <summary>
+    /// Eligible retreat destinations: adjacent non-enemy-spawn territories, plus own spawn.
+    /// The Art of War allows any non-enemy-spawn territory.
+    /// </summary>
+    public static IReadOnlyList<Guid> EligibleRetreats(
+        PlayMap map,
+        CampaignForce force,
+        SpecialRuleContext? specialRules = null)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(force);
+        var rules = specialRules ?? SpecialRuleContext.None;
         var ids = new List<Guid>();
         var spawn = map.SpawnFor(force.FactionId);
         if (spawn is not null)
@@ -1190,7 +1338,10 @@ public static class CampaignPlayRules
             ids.Add(spawn.Id);
         }
 
-        foreach (var neighborId in map.Neighbors(force.TerritoryId))
+        var candidates = rules.Has(force, SpecialRuleEffectKeys.ArtOfWar)
+            ? map.Territories.Select(static territory => territory.Id)
+            : map.Neighbors(force.TerritoryId);
+        foreach (var neighborId in candidates)
         {
             var neighbor = map.Territory(neighborId);
             if (neighbor is null)
@@ -1206,6 +1357,15 @@ public static class CampaignPlayRules
             if (!ids.Contains(neighborId))
             {
                 ids.Add(neighborId);
+            }
+        }
+
+        if (rules.Has(force, SpecialRuleEffectKeys.GreatCityOfMagritta))
+        {
+            var capital = map.Territories.FirstOrDefault(static territory => StructureKinds.IsCapitalCity(territory.StructureName));
+            if (capital is not null && !ids.Contains(capital.Id))
+            {
+                ids.Add(capital.Id);
             }
         }
 
@@ -1296,7 +1456,8 @@ public static class CampaignPlayRules
         IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
         Func<int, int>? pickIndex = null,
         IReadOnlyList<TerrainTypeSetup>? terrainTypes = null,
-        IReadOnlyList<StructureTypeSetup>? structureTypes = null)
+        IReadOnlyList<StructureTypeSetup>? structureTypes = null,
+        SpecialRuleContext? specialRules = null)
     {
         var choose = pickIndex ?? (static count => 0);
         state = ApplyDeadlineSurrenders(state, map, window, factionAllyGroups, closeAt, due);
@@ -1333,7 +1494,9 @@ public static class CampaignPlayRules
                     draft.StructureTypeId,
                     OrderSource.DeadlineDraft,
                     closeAt,
-                    force.ControllerUserId));
+                    force.ControllerUserId,
+                    draft.ViaTerritoryId,
+                    draft.DestroyImmediately));
             }
         }
 
@@ -1347,7 +1510,8 @@ public static class CampaignPlayRules
             closeAt,
             terrainTypes,
             structureTypes,
-            choose);
+            choose,
+            specialRules);
         var structureSupply = map.StructureTypes.ToDictionary(
             static type => type.Id,
             static type => new StructureSupplyRules(type.SupplyPoints, type.PillageSupplyPoints, type.DestroySupplyPoints));
@@ -1357,7 +1521,8 @@ public static class CampaignPlayRules
                 map,
                 resolvedMap,
                 resolved.Forces,
-                structureSupply));
+                structureSupply,
+                specialRules));
         var destructions = StructureDestructionRules.Detect(map, resolvedMap, resolved.Forces, closeAt);
         if (destructions.Count > 0)
         {
@@ -1366,7 +1531,7 @@ public static class CampaignPlayRules
 
         resolved = AssignOpeningMatches(resolved, resolvedMap, factionAllyGroups, choose);
         var snapshots = resolved.Snapshots.Where(item => item.WindowId != window.Id).Append(snapshot).ToArray();
-        resolved = ApplyActionStatuses(resolved.With(snapshots: snapshots), resolvedMap, window, forceStatuses);
+        resolved = ApplyActionStatuses(resolved.With(snapshots: snapshots), resolvedMap, window, forceStatuses, specialRules);
         var missing = submissions
             .Where(item => item.WindowId == window.Id && item.Source == OrderSource.DeadlineHold)
             .Select(item => item.ForceId);
@@ -1382,7 +1547,8 @@ public static class CampaignPlayRules
         bool due,
         IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
         Func<int, int>? pickIndex = null,
-        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null)
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        SpecialRuleContext? specialRules = null)
     {
         var choose = pickIndex ?? (static count => 0);
         var allies = factionAllyGroups ?? new Dictionary<Guid, string?>();
@@ -1502,7 +1668,7 @@ public static class CampaignPlayRules
         }
 
         next = ApplyRetreats(next, map, window, closeAt, pickIndex ?? (static count => 0));
-        next = ApplyBattleStatuses(next, map, window, forceStatuses);
+        next = ApplyBattleStatuses(next, map, window, forceStatuses, specialRules);
         var claimedMap = ApplyOccupationClaims(next, map, allies, choose);
         return FinishWindow(next, claimedMap, window, closeAt, due, forceStatuses);
     }
@@ -2004,6 +2170,9 @@ public static class CampaignPlayRules
     /// <param name="reResolvePrevious">
     /// When true, re-resolves the previous action even if the current window is an open action phase.
     /// </param>
+    /// <param name="viaTerritoryId">The first hop for a two-territory Move.</param>
+    /// <param name="destroyImmediately">Whether Pillage destroys the structure immediately.</param>
+    /// <param name="specialRules">Mechanical special-rule assignments.</param>
     public static bool TryDebugCorrectOrder(
         CampaignPlayState state,
         Guid actorUserId,
@@ -2021,7 +2190,10 @@ public static class CampaignPlayRules
         IReadOnlyList<StructureTypeSetup>? structureTypes = null,
         Func<int, int>? pickIndex = null,
         CampaignSchedule? schedule = null,
-        bool reResolvePrevious = false)
+        bool reResolvePrevious = false,
+        Guid? viaTerritoryId = null,
+        bool destroyImmediately = false,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -2055,7 +2227,10 @@ public static class CampaignPlayRules
                 utcNow,
                 out var drafted,
                 out error,
-                requireUncommitted: false))
+                requireUncommitted: false,
+                viaTerritoryId,
+                destroyImmediately,
+                specialRules))
             {
                 return false;
             }
@@ -2145,7 +2320,10 @@ public static class CampaignPlayRules
             lastAction.EndsUtc.AddTicks(-1),
             out _,
             out error,
-            requireUncommitted: false))
+            requireUncommitted: false,
+            viaTerritoryId,
+            destroyImmediately,
+            specialRules))
         {
             return false;
         }
@@ -2649,7 +2827,8 @@ public static class CampaignPlayRules
         CampaignPlayState state,
         PlayMap map,
         PhaseWindow window,
-        IReadOnlyList<ForceStatusSetup>? statuses)
+        IReadOnlyList<ForceStatusSetup>? statuses,
+        SpecialRuleContext? specialRules = null)
     {
         var catalog = statuses ?? [];
         if (catalog.Count == 0)
@@ -2662,17 +2841,19 @@ public static class CampaignPlayRules
             force => ForceStatusRules.FromAction(
                 state.LatestSubmission(window.Id, force.Id)?.Kind,
                 map.Territory(force.TerritoryId)?.IsWaterFeature == true));
-        return state.With(forces: ForceStatusRules.Apply(state.Forces, catalog, facts));
+        return state.With(forces: ForceStatusRules.Apply(state.Forces, catalog, facts, specialRules));
     }
 
     private static CampaignPlayState ApplyBattleStatuses(
         CampaignPlayState state,
         PlayMap map,
         PhaseWindow window,
-        IReadOnlyList<ForceStatusSetup>? statuses)
+        IReadOnlyList<ForceStatusSetup>? statuses,
+        SpecialRuleContext? specialRules = null)
     {
         var catalog = statuses ?? [];
-        if (catalog.Count == 0)
+        var rules = specialRules ?? SpecialRuleContext.None;
+        if (catalog.Count == 0 && !rules.AnyoneHas(SpecialRuleEffectKeys.BringersOfThePlague))
         {
             return state;
         }
@@ -2697,7 +2878,38 @@ public static class CampaignPlayRules
                 map.Territory(force.TerritoryId)?.IsWaterFeature == true);
         }
 
-        return state.With(forces: ForceStatusRules.Apply(state.Forces, catalog, facts));
+        var applied = catalog.Count == 0
+            ? state.Forces
+            : ForceStatusRules.Apply(state.Forces, catalog, facts, rules);
+        var byId = applied.ToDictionary(static force => force.Id);
+        foreach (var battle in battles.Where(static item =>
+                     !item.IsDraw && !item.IsNoContest && item.WinnerForceId is not null))
+        {
+            var winner = byId.GetValueOrDefault(battle.WinnerForceId!.Value);
+            if (winner is null)
+            {
+                continue;
+            }
+
+            foreach (var loserId in battle.ParticipantForceIds.Where(id => id != winner.Id))
+            {
+                var loser = byId.GetValueOrDefault(loserId);
+                if (loser is null)
+                {
+                    continue;
+                }
+
+                var inflicted = FactionSpecialRulePolicies.StatusInflictedOnLoser(winner, loser, rules);
+                if (inflicted is null || !FactionSpecialRulePolicies.AllowsStatus(loser, inflicted, rules))
+                {
+                    continue;
+                }
+
+                byId[loser.Id] = loser.WithStatus(inflicted);
+            }
+        }
+
+        return state.With(forces: [.. applied.Select(force => byId[force.Id])]);
     }
 
     private static IReadOnlyList<Guid> ForcesRequiredToRetreat(CampaignBattle battle)
@@ -3017,7 +3229,7 @@ public static class CampaignPlayRules
             }
 
             var snapshot = SupplyRules.ForPlayer(state, map, catalog, force.ControllerUserId, round);
-            var (_, temporary) = SupplyRules.AllocateSpend(report.SupplyCostingUnitCount, snapshot.ForceAllowancePoints);
+            var (_, temporary) = SupplyRules.AllocateSpend(report.SupplySpend, snapshot.ForceAllowancePoints);
             if (!tempByPlayer.TryGetValue(force.ControllerUserId, out var requested))
             {
                 requested = [];
@@ -3034,6 +3246,40 @@ public static class CampaignPlayRules
         }
 
         return state.With(playerSupplies: supplies);
+    }
+
+    private static bool TryValidateBattleSpecialRuleUses(
+        CampaignPlayState state,
+        IReadOnlyList<BattleParticipantReport> reports,
+        PlayMap? map,
+        SupplyCatalog? catalog,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        Dictionary<Guid, int>? leftover = null;
+        if (map is not null && catalog is not null)
+        {
+            leftover = [];
+            var round = state.CurrentWindow()?.RoundNumber
+                ?? (state.Windows.Count > 0 ? state.Windows[^1].RoundNumber : 1);
+            foreach (var report in reports)
+            {
+                var force = state.Forces.FirstOrDefault(item => item.Id == report.ForceId);
+                if (force is null)
+                {
+                    continue;
+                }
+
+                var snapshot = SupplyRules.ForPlayer(state, map, catalog, force.ControllerUserId, round);
+                leftover[force.Id] = Math.Max(0, snapshot.CurrentSupplyPoints - report.SupplyCostingUnitCount);
+            }
+        }
+
+        return BattleResultRules.TryValidateSpecialRuleUses(
+            reports,
+            state.Forces,
+            catalog?.SpecialRules ?? SpecialRuleContext.None,
+            leftover,
+            out error);
     }
 
     private static void ResolveRetreatCollisions(
@@ -3182,7 +3428,8 @@ public static class CampaignPlayRules
                 force.FactionId,
                 force.TerritoryId,
                 force.InBattle,
-                force.StatusName))],
+                force.StatusName,
+                force.Subfaction))],
             state.Structures,
             state.BrokenAllyFactionIds,
             [.. map.Territories.Select(static territory => new TerritorySnapshot(
@@ -3234,7 +3481,8 @@ public static class CampaignPlayRules
 /// </summary>
 /// <param name="UserId">The player.</param>
 /// <param name="FactionId">The chosen faction, if any.</param>
-public sealed record PlayerFactionAssignment(Guid UserId, Guid? FactionId);
+/// <param name="Subfaction">The chosen subfaction, if any.</param>
+public sealed record PlayerFactionAssignment(Guid UserId, Guid? FactionId, string? Subfaction = null);
 
 /// <summary>
 /// Extra time to add to one remaining phase window.

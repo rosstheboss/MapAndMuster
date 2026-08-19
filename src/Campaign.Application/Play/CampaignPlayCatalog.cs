@@ -178,7 +178,39 @@ internal static class CampaignPlayCatalog
             ArmyEscalationDefaults.PadToRoundCount(campaign.ArmyEscalations, Math.Max(1, campaign.RoundCount)),
             FactionByPlayer(campaign),
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName),
-            campaign.PlayState?.BrokenAllyFactionIds.ToHashSet() ?? []);
+            campaign.PlayState?.BrokenAllyFactionIds.ToHashSet() ?? [],
+            SpecialRules(campaign),
+            SubfactionsByPlayer(campaign));
+    }
+
+    public static SpecialRuleContext SpecialRules(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        var catalog = campaign.SpecialRules
+            .Select(static rule => new SpecialRuleSetup(rule.Id, rule.Name, rule.Text, rule.EffectKey))
+            .ToArray();
+        var factionIds = campaign.Factions.ToDictionary(
+            static faction => faction.Id,
+            static faction => (IReadOnlyList<Guid>)faction.SpecialRuleIds);
+        var subfactionIds = new Dictionary<(Guid FactionId, string Subfaction), IReadOnlyList<Guid>>();
+        foreach (var faction in campaign.Factions)
+        {
+            foreach (var assignment in faction.SubfactionSpecialRules)
+            {
+                subfactionIds[(faction.Id, assignment.Name)] = assignment.SpecialRuleIds;
+            }
+        }
+
+        return new SpecialRuleContext(catalog, factionIds, subfactionIds);
+    }
+
+    public static IReadOnlyDictionary<Guid, string?> SubfactionsByPlayer(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        return campaign.Memberships
+            .Where(static member => member.IsPlayer)
+            .GroupBy(static member => member.UserId)
+            .ToDictionary(static group => group.Key, static group => group.First().Subfaction);
     }
 
     public static IReadOnlyList<MissionResultQuestionSetup> MissionQuestions(
@@ -356,7 +388,9 @@ internal static class CampaignPlayCatalog
                     armyListText,
                     ArmyListRules.NormalizeGameSystem(report.ArmyListGameSystem),
                     ArmyListRules.ParseBuilder(report.ArmyListBuilder),
-                    normalizedCategories));
+                    normalizedCategories,
+                    report.UsedExtraBlackPowder,
+                    Math.Max(0, report.MagicalSupplyRerolls)));
         }
 
         mapped = next;

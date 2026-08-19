@@ -30,7 +30,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<PrivateObjectiveAssignment>? privateObjectives = null,
         IReadOnlyList<StructureDestructionFact>? structureDestructions = null,
         IReadOnlyList<PlayerSupplyBalance>? playerSupplies = null,
-        IReadOnlyList<ForceDelinquency>? delinquencies = null)
+        IReadOnlyList<ForceDelinquency>? delinquencies = null,
+        IReadOnlyList<BrokenAllySubfaction>? brokenAllySubfactions = null)
     {
         ArgumentNullException.ThrowIfNull(windows);
         ArgumentNullException.ThrowIfNull(forces);
@@ -64,6 +65,7 @@ public sealed class CampaignPlayState
         StructureDestructions = structureDestructions ?? [];
         PlayerSupplies = playerSupplies ?? [];
         Delinquencies = delinquencies ?? [];
+        BrokenAllySubfactions = brokenAllySubfactions ?? [];
     }
 
     /// <summary>Gets an empty play state.</summary>
@@ -129,6 +131,9 @@ public sealed class CampaignPlayState
     /// <summary>Gets campaign-lifetime missed-order offences per force.</summary>
     public IReadOnlyList<ForceDelinquency> Delinquencies { get; }
 
+    /// <summary>Gets daemon-god (or other) subfactions that left their implicit alliance.</summary>
+    public IReadOnlyList<BrokenAllySubfaction> BrokenAllySubfactions { get; }
+
     /// <summary>
     /// Returns a copy with replaced collections.
     /// </summary>
@@ -153,7 +158,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<PrivateObjectiveAssignment>? privateObjectives = null,
         IReadOnlyList<StructureDestructionFact>? structureDestructions = null,
         IReadOnlyList<PlayerSupplyBalance>? playerSupplies = null,
-        IReadOnlyList<ForceDelinquency>? delinquencies = null)
+        IReadOnlyList<ForceDelinquency>? delinquencies = null,
+        IReadOnlyList<BrokenAllySubfaction>? brokenAllySubfactions = null)
     {
         return new CampaignPlayState(
             windows ?? Windows,
@@ -175,7 +181,8 @@ public sealed class CampaignPlayState
             privateObjectives ?? PrivateObjectives,
             structureDestructions ?? StructureDestructions,
             playerSupplies ?? PlayerSupplies,
-            delinquencies ?? Delinquencies);
+            delinquencies ?? Delinquencies,
+            brokenAllySubfactions ?? BrokenAllySubfactions);
     }
 
     /// <summary>

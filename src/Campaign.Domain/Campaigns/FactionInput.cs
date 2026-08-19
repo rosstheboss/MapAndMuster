@@ -28,4 +28,7 @@ public sealed class FactionInput
 
     /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
     public IReadOnlyList<Guid>? SpecialRuleIds { get; init; }
+
+    /// <summary>Gets special-rule assignments for named subfactions.</summary>
+    public IReadOnlyList<SubfactionSpecialRulesInput>? SubfactionSpecialRules { get; init; }
 }

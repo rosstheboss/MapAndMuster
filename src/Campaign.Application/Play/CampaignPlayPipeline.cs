@@ -34,7 +34,7 @@ internal static class CampaignPlayPipeline
         var map = CampaignLifecycle.ToPlayMap(campaign);
         var players = campaign.Memberships
             .Where(static member => member.IsPlayer)
-            .Select(member => new PlayerFactionAssignment(member.UserId, member.FactionId))
+            .Select(member => new PlayerFactionAssignment(member.UserId, member.FactionId, member.Subfaction))
             .ToArray();
         var itemTypes = CampaignPlayCatalog.ItemPlayRules(campaign);
         var placements = (campaign.MapGraph?.ItemObjectivePlacements ?? [])
@@ -51,7 +51,8 @@ internal static class CampaignPlayPipeline
             CampaignPlayCatalog.PickIndex,
             CampaignPlayCatalog.PrivateTypes(campaign),
             [.. campaign.Factions.Select(static faction => faction.Id)],
-            [.. campaign.AllyGroups.Select(static group => group.Id)]);
+            [.. campaign.AllyGroups.Select(static group => group.Id)],
+            CampaignPlayCatalog.SpecialRules(campaign));
         var schedule = CampaignMapper.ToSchedule(campaign);
         var advanced = CampaignPlayRules.Advance(
             seeded.State,
@@ -62,7 +63,8 @@ internal static class CampaignPlayPipeline
             ForceStatuses(campaign),
             CampaignPlayCatalog.PickIndex,
             CampaignPlayCatalog.TerrainSetups(campaign),
-            CampaignPlayCatalog.StructureSetups(campaign));
+            CampaignPlayCatalog.StructureSetups(campaign),
+            CampaignPlayCatalog.SpecialRules(campaign));
         var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, advanced.Map, utcNow, advanced.PreserveSchedule ? campaign.EndsUtc : advanced.EndsUtc);
         var nextGraph = campaign.MapGraph is null || advanced.PreserveMap
             ? campaign.MapGraph
@@ -179,7 +181,8 @@ internal static class CampaignPlayPipeline
             ForceStatuses(campaign),
             CampaignPlayCatalog.PickIndex,
             CampaignPlayCatalog.TerrainSetups(campaign),
-            CampaignPlayCatalog.StructureSetups(campaign));
+            CampaignPlayCatalog.StructureSetups(campaign),
+            CampaignPlayCatalog.SpecialRules(campaign));
         var playMap = advanced.PreserveMap ? workingMap : advanced.Map;
         var endsUtc = mutation.PreserveSchedule && advanced.PreserveSchedule
             ? campaign.EndsUtc

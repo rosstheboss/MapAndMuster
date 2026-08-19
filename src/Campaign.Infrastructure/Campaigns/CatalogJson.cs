@@ -30,7 +30,8 @@ internal static class CatalogJson
         int splitForceSupplyPenaltyPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent,
         BattleReportRulesSetup? battleReportRules = null,
         IReadOnlyList<RoundArmyEscalationSetup>? armyEscalations = null,
-        IReadOnlyList<StoredMission>? missions = null)
+        IReadOnlyList<StoredMission>? missions = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>? subfactionSpecialRules = null)
     {
         ArgumentNullException.ThrowIfNull(terrainTypes);
         ArgumentNullException.ThrowIfNull(structureTypes);
@@ -55,6 +56,14 @@ internal static class CatalogJson
                             FactionId = pair.Key,
                             SpecialRuleIds = [.. pair.Value],
                         }),
+                    .. (subfactionSpecialRules ?? new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>())
+                        .SelectMany(static pair => pair.Value.Select(item =>
+                            new FactionSpecialRulesDocument
+                            {
+                                FactionId = pair.Key,
+                                SubfactionName = item.Name,
+                                SpecialRuleIds = [.. item.SpecialRuleIds],
+                            })),
                 ],
                 PointsPerBattleWon = scoring.PointsPerWin,
                 BattleScoring = ToDocument(scoring),
@@ -82,6 +91,7 @@ internal static class CatalogJson
         IReadOnlyList<StoredSpecialRule> SpecialRules,
         IReadOnlyList<StoredPrivateObjectiveType> PrivateObjectiveTypes,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> FactionSpecialRuleIds,
+        IReadOnlyDictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>> SubfactionSpecialRuleIds,
         IReadOnlyList<StoredForceStatus> ForceStatuses,
         int SplitForceSupplyPenaltyPercent,
         BattleReportRulesSetup BattleReportRules,
@@ -91,13 +101,13 @@ internal static class CatalogJson
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent, BattleReportRulesSetup.Default, [], []);
+            return EmptyCatalog();
         }
 
         var document = JsonSerializer.Deserialize<CatalogDocument>(json, Options);
         if (document is null)
         {
-            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent, BattleReportRulesSetup.Default, [], []);
+            return EmptyCatalog();
         }
 
         var terrains = document.TerrainTypes.Select(FromDocument).ToArray();
@@ -105,6 +115,7 @@ internal static class CatalogJson
         var catalogMissions = MergeMissions(
             (document.Missions ?? []).Select(FromDocument),
             terrains.SelectMany(static type => type.Missions).Concat(structures.SelectMany(static type => type.Missions)));
+        var factionRules = document.FactionSpecialRules ?? [];
         return (
             terrains,
             structures,
@@ -117,9 +128,24 @@ internal static class CatalogJson
                 Math.Max(0, document.MostBattlesWonCampaignPoints)),
             [.. (document.SpecialRules ?? []).Select(FromDocument)],
             [.. (document.PrivateObjectiveTypes ?? []).Select(FromDocument)],
-            (document.FactionSpecialRules ?? []).ToDictionary(
-                static item => item.FactionId,
-                static item => (IReadOnlyList<Guid>)item.SpecialRuleIds),
+            factionRules
+                .Where(static item => string.IsNullOrWhiteSpace(item.SubfactionName))
+                .GroupBy(static item => item.FactionId)
+                .ToDictionary(
+                    static group => group.Key,
+                    static group => (IReadOnlyList<Guid>)group.SelectMany(static item => item.SpecialRuleIds).Distinct().ToArray()),
+            factionRules
+                .Where(static item => !string.IsNullOrWhiteSpace(item.SubfactionName))
+                .GroupBy(static item => item.FactionId)
+                .ToDictionary(
+                    static group => group.Key,
+                    static group => (IReadOnlyList<SubfactionSpecialRulesDetail>)group
+                        .Select(static item => new SubfactionSpecialRulesDetail
+                        {
+                            Name = item.SubfactionName!,
+                            SpecialRuleIds = item.SpecialRuleIds,
+                        })
+                        .ToArray()),
             [.. (document.ForceStatuses ?? []).Select(FromDocument)],
             document.SplitForceSupplyPenaltyPercent is null
                 || document.SplitForceSupplyPenaltyPercent < 0
@@ -133,6 +159,26 @@ internal static class CatalogJson
                 document.SupplyLineDestroyedCampaignPoints ?? HuntInEstaliaDefaults.SupplyLineDestroyedCampaignPoints),
             ArmyEscalationsFrom(document),
             catalogMissions);
+    }
+
+    private static (
+        IReadOnlyList<StoredTerrainType>,
+        IReadOnlyList<StoredStructureType>,
+        IReadOnlyList<StoredItemObjectiveType>,
+        IReadOnlyList<StoredPublicObjectiveType>,
+        BattleScoringSetup,
+        GeneralPublicObjectivePoints,
+        IReadOnlyList<StoredSpecialRule>,
+        IReadOnlyList<StoredPrivateObjectiveType>,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>,
+        IReadOnlyDictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>,
+        IReadOnlyList<StoredForceStatus>,
+        int,
+        BattleReportRulesSetup,
+        IReadOnlyList<RoundArmyEscalationSetup>,
+        IReadOnlyList<StoredMission>) EmptyCatalog()
+    {
+        return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent, BattleReportRulesSetup.Default, [], []);
     }
 
     private static IReadOnlyList<StoredMission> MergeMissions(
@@ -312,6 +358,7 @@ internal static class CatalogJson
             Id = rule.Id,
             Name = rule.Name,
             Text = rule.Text,
+            EffectKey = rule.EffectKey,
         };
     }
 
@@ -404,6 +451,7 @@ internal static class CatalogJson
             Id = rule.Id,
             Name = rule.Name,
             Text = rule.Text ?? string.Empty,
+            EffectKey = rule.EffectKey,
         };
     }
 
@@ -774,6 +822,8 @@ internal static class CatalogJson
         public string Name { get; set; } = string.Empty;
 
         public string? Text { get; set; }
+
+        public string? EffectKey { get; set; }
     }
 
     private sealed class ForceStatusDocument
@@ -815,6 +865,8 @@ internal static class CatalogJson
     private sealed class FactionSpecialRulesDocument
     {
         public Guid FactionId { get; set; }
+
+        public string? SubfactionName { get; set; }
 
         public List<Guid> SpecialRuleIds { get; set; } = [];
     }

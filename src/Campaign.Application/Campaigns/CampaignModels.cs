@@ -437,6 +437,21 @@ public sealed class FactionDetail
 
     /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+
+    /// <summary>Gets special-rule assignments for named subfactions.</summary>
+    public IReadOnlyList<SubfactionSpecialRulesDetail> SubfactionSpecialRules { get; init; } = [];
+}
+
+/// <summary>
+/// Special rules assigned to one named subfaction.
+/// </summary>
+public sealed class SubfactionSpecialRulesDetail
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets special-rule identifiers assigned to this subfaction.</summary>
+    public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
 }
 
 /// <summary>
@@ -675,6 +690,9 @@ public sealed class StoredFaction
 
     /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+
+    /// <summary>Gets special-rule assignments for named subfactions.</summary>
+    public IReadOnlyList<SubfactionSpecialRulesDetail> SubfactionSpecialRules { get; init; } = [];
 }
 
 /// <summary>
@@ -891,6 +909,9 @@ public sealed class SpecialRuleDetail
 
     /// <summary>Gets the player-facing rule text.</summary>
     public required string Text { get; init; }
+
+    /// <summary>Gets the mechanical policy key, when this rule is enforced or calculated.</summary>
+    public string? EffectKey { get; init; }
 }
 
 /// <summary>
@@ -1392,6 +1413,9 @@ public sealed class StoredSpecialRule
 
     /// <summary>Gets the player-facing rule text.</summary>
     public required string Text { get; init; }
+
+    /// <summary>Gets the mechanical policy key, when this rule is enforced or calculated.</summary>
+    public string? EffectKey { get; init; }
 }
 
 /// <summary>

@@ -18,9 +18,9 @@ describe('campaign presets', () => {
     expect(copy!.structureTypes.some((entry) => entry.name === 'Town')).toBe(true);
     expect(copy!.itemObjectives).toEqual([]);
     expect(copy!.specialRules.length).toBeGreaterThan(0);
-    expect(copy!.specialRules.some((rule) => rule.name === 'Forced March')).toBe(true);
-    expect(copy!.specialRules.find((rule) => rule.name === 'Forced March')?.description).toContain(
-      'one extra adjacent territory',
+    expect(copy!.specialRules.some((rule) => rule.name === 'Crusaders')).toBe(true);
+    expect(copy!.specialRules.find((rule) => rule.name === 'Crusaders')?.description).toContain(
+      'two adjacent territories',
     );
     expect(copy!.forceStatuses.map((status) => status.name)).toEqual([
       'Diseased',
@@ -30,10 +30,15 @@ describe('campaign presets', () => {
       'Well Rested',
     ]);
     expect(copy!.factions.find((faction) => faction.name === 'Beastmen Brayherds')?.specialRuleNames).toEqual([
-      'Scattered Arrival',
-      'Harsh Reaving',
-      'Living Ground',
+      'Expert Ambushers',
     ]);
+    expect(copy!.factions.find((faction) => faction.name === 'Daemons of Chaos')?.subfactionSpecialRules).toEqual({
+      Khorne: ['Only Blood Satisfies!'],
+      Nurgle: ['Bringers of the Plague'],
+      Slaanesh: ['Alluring'],
+      Tzeentch: ['Magical Supply'],
+    });
+    expect(copy!.factions.some((faction) => faction.name === 'Renegade Crowns')).toBe(true);
     expect(copy!.terrainTypes.find((entry) => entry.name === 'Sea')?.isWaterFeature).toBe(true);
     expect(campaignFromPreset('unknown')).toBeNull();
   });

@@ -49,6 +49,12 @@ public sealed class SaveOrderDraftCommand
     /// <summary>Gets the structure type for Build.</summary>
     public Guid? StructureTypeId { get; init; }
 
+    /// <summary>Gets the first hop for a two-territory Move.</summary>
+    public Guid? ViaTerritoryId { get; init; }
+
+    /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
+    public bool DestroyImmediately { get; init; }
+
     /// <summary>Gets whether to re-resolve the previous action instead of editing the current window.</summary>
     public bool ReResolvePrevious { get; init; }
 }
@@ -111,6 +117,12 @@ public sealed class BattleParticipantReportInput
 
     /// <summary>Gets how many supply-costing units this force fielded.</summary>
     public int SupplyCostingUnitCount { get; init; }
+
+    /// <summary>Gets whether Extra Black Powder was used this battle.</summary>
+    public bool UsedExtraBlackPowder { get; init; }
+
+    /// <summary>Gets leftover composition supply used as Magical Supply rerolls.</summary>
+    public int MagicalSupplyRerolls { get; init; }
 
     /// <summary>Gets optional pasted army-list text.</summary>
     public string? ArmyListText { get; init; }
@@ -553,8 +565,42 @@ public sealed class PlayForceDetail
     /// <summary>Gets adjacent eligible move destinations.</summary>
     public required IReadOnlyList<Guid> MoveTargets { get; init; }
 
+    /// <summary>Gets two-territory Move hops when Crusaders applies.</summary>
+    public IReadOnlyList<PlayMoveHopDetail> MoveHops { get; init; } = [];
+
     /// <summary>Gets player-submittable action kinds available for this force.</summary>
     public required IReadOnlyList<string> AvailableActions { get; init; }
+
+    /// <summary>Gets the force subfaction, when chosen.</summary>
+    public string? Subfaction { get; init; }
+
+    /// <summary>Gets whether this force may Move through an intermediate territory.</summary>
+    public bool CanMoveTwoTerritories { get; init; }
+
+    /// <summary>Gets whether Pillage may destroy the structure in one action.</summary>
+    public bool CanDestroyImmediately { get; init; }
+
+    /// <summary>Gets whether this force may declare Extra Black Powder on a battle result.</summary>
+    public bool CanUseExtraBlackPowder { get; init; }
+
+    /// <summary>Gets whether this force may declare Magical Supply rerolls on a battle result.</summary>
+    public bool CanUseMagicalSupply { get; init; }
+
+    /// <summary>Gets whether a hidden relic is in an adjacent territory.</summary>
+    public bool HiddenRelicNearby { get; init; }
+
+    /// <summary>Gets tabletop or campaign reminders from assigned special rules.</summary>
+    public IReadOnlyList<string> BattleReminders { get; init; } = [];
+}
+
+/// <summary>A two-territory Move hop.</summary>
+public sealed class PlayMoveHopDetail
+{
+    /// <summary>Gets the first territory entered.</summary>
+    public required Guid ViaTerritoryId { get; init; }
+
+    /// <summary>Gets the intended destination.</summary>
+    public required Guid TargetTerritoryId { get; init; }
 }
 
 /// <summary>The viewer's draft.</summary>
@@ -571,6 +617,12 @@ public sealed class PlayDraftDetail
 
     /// <summary>Gets the structure type.</summary>
     public Guid? StructureTypeId { get; init; }
+
+    /// <summary>Gets the first hop for a two-territory Move.</summary>
+    public Guid? ViaTerritoryId { get; init; }
+
+    /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
+    public bool DestroyImmediately { get; init; }
 }
 
 /// <summary>A submitted or revealed order.</summary>
@@ -729,6 +781,12 @@ public sealed class BattleParticipantReportDetail
 
     /// <summary>Gets how many supply-costing units this force fielded.</summary>
     public int SupplyCostingUnitCount { get; init; }
+
+    /// <summary>Gets whether Extra Black Powder was used this battle.</summary>
+    public bool UsedExtraBlackPowder { get; init; }
+
+    /// <summary>Gets leftover composition supply used as Magical Supply rerolls.</summary>
+    public int MagicalSupplyRerolls { get; init; }
 
     /// <summary>Gets optional pasted army-list text.</summary>
     public string? ArmyListText { get; init; }

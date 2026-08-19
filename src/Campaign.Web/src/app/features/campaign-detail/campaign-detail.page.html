@@ -655,6 +655,22 @@
                   @if (force.statusEffects) {
                     <p class="muted">{{ force.statusEffects }}</p>
                   }
+                  @if (force.hiddenRelicNearby) {
+                    <p class="muted">A hidden relic is in an adjacent territory.</p>
+                  }
+                  @if (force.battleReminders?.length) {
+                    <ul>
+                      @for (reminder of force.battleReminders; track reminder) {
+                        <li class="muted">{{ reminder }}</li>
+                      }
+                    </ul>
+                  }
+                  @if (force.hiddenRelicNearby) {
+                    <p class="muted">A hidden relic is in an adjacent territory.</p>
+                  }
+                  @for (reminder of force.battleReminders ?? []; track reminder) {
+                    <p class="muted">{{ reminder }}</p>
+                  }
                   @if (draftKindsFor(force).length === 0) {
                     <p class="muted">This force is in battle and cannot submit an action.</p>
                   } @else {
@@ -673,6 +689,22 @@
                         </select>
                       </div>
                       @if (draftFor(force.id).kind === 'Move' || draftFor(force.id).kind === 'Split') {
+                        @if (force.canMoveTwoTerritories) {
+                          <div class="field grow">
+                            <label [attr.for]="'via-' + force.id">First territory</label>
+                            <select
+                              [id]="'via-' + force.id"
+                              [ngModel]="draftFor(force.id).viaTerritoryId"
+                              (ngModelChange)="onDraftVia(force.id, $event)"
+                              [name]="'via-' + force.id"
+                            >
+                              <option value="">Direct move</option>
+                              @for (target of viaTargets(force); track target) {
+                                <option [value]="target">{{ territoryName(target) }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
                         <div class="field grow">
                           <label [attr.for]="'target-' + force.id">Destination</label>
                           <select
@@ -682,7 +714,10 @@
                             [name]="'target-' + force.id"
                           >
                             <option value="">Select a territory</option>
-                            @for (target of force.moveTargets; track target) {
+                            @for (
+                              target of destinationsForVia(force, draftFor(force.id).viaTerritoryId);
+                              track target
+                            ) {
                               <option [value]="target">{{ territoryName(target) }}</option>
                             }
                           </select>
@@ -724,6 +759,17 @@
                           Pillage requires an intact enemy or unowned pillageable structure in this territory.
                         }
                       </p>
+                      @if (force.canDestroyImmediately) {
+                        <label>
+                          <input
+                            type="checkbox"
+                            [ngModel]="draftFor(force.id).destroyImmediately"
+                            (ngModelChange)="onDraftDestroyImmediately(force.id, $event)"
+                            [name]="'destroy-' + force.id"
+                          />
+                          Destroy the structure in this Pillage
+                        </label>
+                      }
                     }
                     @if (draftFor(force.id).kind === 'Repair') {
                       <p class="muted">Repair the pillaged structure in {{ territoryName(force.territoryId) }}.</p>
@@ -880,6 +926,36 @@
                       </div>
                       <p class="muted">{{ supplySpendHint(battle, forceId) }}</p>
                     </div>
+                    @if (canUseExtraBlackPowder(forceId)) {
+                      <label class="choice-row">
+                        <input
+                          type="checkbox"
+                          [ngModel]="battleReportFlag(battle.id, forceId, 'usedExtraBlackPowder')"
+                          (ngModelChange)="onBattleReportFlag(battle.id, forceId, 'usedExtraBlackPowder', $event)"
+                          [name]="'extra-powder-' + battle.id + '-' + forceId"
+                        />
+                        Used Extra Black Powder (spend 1 supply point)
+                      </label>
+                    }
+                    @if (canUseMagicalSupply(forceId)) {
+                      <div class="field">
+                        <label [attr.for]="'magical-supply-' + battle.id + '-' + forceId">
+                          Magical Supply rerolls used
+                        </label>
+                        <input
+                          [id]="'magical-supply-' + battle.id + '-' + forceId"
+                          type="number"
+                          min="0"
+                          [ngModel]="magicalSupplyRerolls(battle.id, forceId)"
+                          (ngModelChange)="onMagicalSupplyRerolls(battle.id, forceId, $event)"
+                          [name]="'magical-supply-' + battle.id + '-' + forceId"
+                        />
+                        <p class="muted">
+                          Leftover unused composition supply for this battle only: one casting or dispelling reroll
+                          each.
+                        </p>
+                      </div>
+                    }
                     <div class="field">
                       <label [attr.for]="'army-list-' + battle.id + '-' + forceId">Army list (optional text)</label>
                       <textarea
@@ -972,6 +1048,9 @@
                         <p>Submitted army list</p>
                         <pre class="army-list-preview">{{ submittedList }}</pre>
                       </div>
+                    }
+                    @if (opponentSpecialRuleUse(battle, forceId); as specialUse) {
+                      <p class="muted">{{ specialUse }}</p>
                     }
                     <div class="nested-row">
                       <div class="field">
@@ -1447,6 +1526,21 @@
                     </li>
                   }
                 </ul>
+              }
+              @for (assignment of faction.subfactionSpecialRules ?? []; track assignment.name) {
+                @if (specialRulesFor(assignment.specialRuleIds).length > 0) {
+                  <p class="muted">{{ assignment.name }}</p>
+                  <ul>
+                    @for (rule of specialRulesFor(assignment.specialRuleIds); track rule.id) {
+                      <li>
+                        <strong>{{ rule.name }}</strong>
+                        @if (rule.text) {
+                          — {{ rule.text }}
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
               }
             </li>
           }

@@ -89,7 +89,8 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
             campaign.SplitForceSupplyPenaltyPercent,
             campaign.BattleReportRules,
             campaign.ArmyEscalations,
-            campaign.Missions);
+            campaign.Missions,
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules));
         record.SettingsJson = CampaignPresetSettingsJson.Serialize(campaign);
         record.MapGraphJson = campaign.MapGraph is null ? null : MapGraphJson.Serialize(campaign.MapGraph);
         record.MapStorageKey = campaign.MapStorageKey;
@@ -128,7 +129,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
 
     private static StoredCampaign ToStored(CampaignPresetRecord record)
     {
-        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, _, ForceStatuses, SplitForceSupplyPenaltyPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
         var settings = CampaignPresetSettingsJson.Deserialize(record.SettingsJson);
         var created = record.CreatedUtc;
         return new StoredCampaign
@@ -146,7 +147,25 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
             UpdatedUtc = record.UpdatedUtc,
             CreatedByUserId = record.CreatedByUserId,
             Memberships = [],
-            Factions = settings.Factions,
+            Factions =
+            [
+                .. settings.Factions.Select(faction => new StoredFaction
+                {
+                    Id = faction.Id,
+                    Name = faction.Name,
+                    Color = faction.Color,
+                    Subfactions = faction.Subfactions,
+                    AllyGroupName = faction.AllyGroupName,
+                    RequiresSubfaction = faction.RequiresSubfaction,
+                    FlagImageStorageKey = faction.FlagImageStorageKey,
+                    SpecialRuleIds = faction.SpecialRuleIds.Count > 0
+                        ? faction.SpecialRuleIds
+                        : FactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
+                    SubfactionSpecialRules = faction.SubfactionSpecialRules.Count > 0
+                        ? faction.SubfactionSpecialRules
+                        : SubfactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
+                }),
+            ],
             AllyGroups = settings.AllyGroups,
             Links = settings.Links,
             TimeZoneId = string.IsNullOrWhiteSpace(settings.TimeZoneId) ? "UTC" : settings.TimeZoneId,

@@ -119,6 +119,13 @@ public static class CampaignMapper
                 RequiresSubfaction = faction.RequiresSubfaction,
                 HasFlagImage = !string.IsNullOrWhiteSpace(faction.FlagImageStorageKey),
                 SpecialRuleIds = faction.SpecialRuleIds,
+                SubfactionSpecialRules = faction.SubfactionSpecialRules
+                    .Select(static item => new SubfactionSpecialRulesDetail
+                    {
+                        Name = item.Name,
+                        SpecialRuleIds = item.SpecialRuleIds,
+                    })
+                    .ToArray(),
             })],
             TerrainTypes = [.. campaign.TerrainTypes.Select(static type => new TerrainTypeDetail
             {
@@ -159,6 +166,7 @@ public static class CampaignMapper
                 Id = rule.Id,
                 Name = rule.Name,
                 Text = rule.Text,
+                EffectKey = rule.EffectKey,
             })],
             Missions = [.. CatalogMissions(campaign).Select(ToMission)],
             ForceStatuses = [.. campaign.ForceStatuses.Select(static status => new ForceStatusDetail

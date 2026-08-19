@@ -205,11 +205,11 @@ describe('CampaignSetupPage', () => {
       };
     };
 
-    page.specialRulePresetPick.setValue('Forced March');
+    page.specialRulePresetPick.setValue('Crusaders');
     page.addPickedSpecialRule();
     fixture.detectChanges();
-    expect(page.specialRules.at(0).controls.name.value).toBe('Forced March');
-    expect(page.specialRules.at(0).controls.text.value).toContain('one extra adjacent territory');
+    expect(page.specialRules.at(0).controls.name.value).toBe('Crusaders');
+    expect(page.specialRules.at(0).controls.text.value).toContain('two adjacent territories');
     expect((fixture.nativeElement as HTMLElement).querySelector('#specialRulePreset')).toBeTruthy();
     expect((fixture.nativeElement as HTMLElement).querySelector('#faction-special-rule-0')).toBeTruthy();
     expect(
@@ -219,7 +219,7 @@ describe('CampaignSetupPage', () => {
     ).toBe('Description');
 
     const factionId = page.factions.at(0).controls.id.value;
-    page.pickControl(factionId).setValue('Forced March');
+    page.pickControl(factionId).setValue('Crusaders');
     page.assignSpecialRuleByName(page.factions.at(0).controls.specialRuleIds, factionId);
     expect(page.factions.at(0).controls.specialRuleIds.value).toEqual([page.specialRules.at(0).controls.id.value]);
   });
@@ -310,7 +310,7 @@ describe('CampaignSetupPage', () => {
     fixture.detectChanges();
 
     const names = factionNames(compiled);
-    expect(names).toHaveLength(17);
+    expect(names).toHaveLength(18);
     expect(names[0]).toBe('Beastmen Brayherds');
     expect(names[names.length - 1]).toBe('Wood Elf Realms');
     expect(compiled.querySelector<HTMLInputElement>('#subfaction-0-0')?.value).toBe('Minotaur Blood Herd');
@@ -322,9 +322,16 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector<HTMLInputElement>(`#subfaction-${daemonsIndex}-2`)?.value).toBe('Slaanesh');
     expect(compiled.querySelector<HTMLInputElement>(`#subfaction-${daemonsIndex}-3`)?.value).toBe('Tzeentch');
     const daemonsGroup = page.factions.at(daemonsIndex) as unknown as {
-      controls: { requiresSubfaction: { value: boolean } };
+      controls: {
+        requiresSubfaction: { value: boolean };
+        subfactionSpecialRuleIds: { value: Record<string, string[]> };
+      };
     };
     expect(daemonsGroup.controls.requiresSubfaction.value).toBe(true);
+    expect(daemonsGroup.controls.subfactionSpecialRuleIds.value['Khorne'].length).toBeGreaterThan(0);
+    expect(daemonsGroup.controls.subfactionSpecialRuleIds.value['Nurgle'].length).toBeGreaterThan(0);
+    expect(daemonsGroup.controls.subfactionSpecialRuleIds.value['Slaanesh'].length).toBeGreaterThan(0);
+    expect(daemonsGroup.controls.subfactionSpecialRuleIds.value['Tzeentch'].length).toBeGreaterThan(0);
     expect(compiled.querySelector('#terrain-name-0')).toBeTruthy();
     expect(compiled.querySelector<HTMLInputElement>('#terrain-name-0')?.value).toBe('Beach');
     const terrainNames = [...compiled.querySelectorAll<HTMLInputElement>('input[id^="terrain-name-"]')].map(
@@ -423,9 +430,9 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector<HTMLInputElement>('#name')?.value).toBe('The Hunt in Estalia');
     expect(factionNames(compiled)[0]).toBe('Beastmen Brayherds');
     expect(compiled.querySelector('#item-objective-name-0')).toBeNull();
-    expect(compiled.querySelector<HTMLInputElement>('#special-rule-name-0')?.value).toBe('Forced March');
+    expect(compiled.querySelector<HTMLInputElement>('#special-rule-name-0')?.value).toBe('Expert Ambushers');
     expect(compiled.querySelector<HTMLTextAreaElement>('#special-rule-description-0')?.value).toContain(
-      'one extra adjacent territory',
+      'Ambushing rolls',
     );
     expect(compiled.querySelector<HTMLInputElement>('#force-status-name-0')?.value).toBe('Diseased');
     expect(compiled.querySelector('#forceStatusPreset')).toBeTruthy();

@@ -13,4 +13,7 @@ public sealed class SpecialRuleInput
 
     /// <summary>Gets the rule text shown to players.</summary>
     public string? Text { get; init; }
+
+    /// <summary>Gets the mechanical policy key, when this rule is enforced or calculated.</summary>
+    public string? EffectKey { get; init; }
 }

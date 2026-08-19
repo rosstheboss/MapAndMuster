@@ -17,7 +17,9 @@ public sealed class SupplyCatalog
         IReadOnlyList<RoundArmyEscalationSetup> armyEscalations,
         IReadOnlyDictionary<Guid, Guid> factionByPlayer,
         IReadOnlyDictionary<Guid, string?> allyGroupByFaction,
-        IReadOnlySet<Guid> brokenAllyFactionIds)
+        IReadOnlySet<Guid> brokenAllyFactionIds,
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyDictionary<Guid, string?>? subfactionByPlayer = null)
     {
         ArgumentNullException.ThrowIfNull(terrainSupplyByType);
         ArgumentNullException.ThrowIfNull(structures);
@@ -33,6 +35,8 @@ public sealed class SupplyCatalog
         FactionByPlayer = factionByPlayer;
         AllyGroupByFaction = allyGroupByFaction;
         BrokenAllyFactionIds = brokenAllyFactionIds;
+        SpecialRules = specialRules ?? SpecialRuleContext.None;
+        SubfactionByPlayer = subfactionByPlayer ?? new Dictionary<Guid, string?>();
     }
 
     /// <summary>Gets supply points for each terrain type.</summary>
@@ -55,6 +59,12 @@ public sealed class SupplyCatalog
 
     /// <summary>Gets factions that left their ally group.</summary>
     public IReadOnlySet<Guid> BrokenAllyFactionIds { get; }
+
+    /// <summary>Gets mechanical special rules.</summary>
+    public SpecialRuleContext SpecialRules { get; }
+
+    /// <summary>Gets each player's chosen subfaction.</summary>
+    public IReadOnlyDictionary<Guid, string?> SubfactionByPlayer { get; }
 }
 
 /// <summary>

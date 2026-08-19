@@ -90,6 +90,8 @@ interface OrderDraft {
   kind: string;
   targetTerritoryId: string;
   structureTypeId: string;
+  viaTerritoryId: string;
+  destroyImmediately: boolean;
 }
 
 interface MapActionFlow {
@@ -955,11 +957,27 @@ export class CampaignDetailPage {
   }
 
   protected draftFor(forceId: string): OrderDraft {
-    return this.drafts()[forceId] ?? { kind: 'Hold', targetTerritoryId: '', structureTypeId: '' };
+    return (
+      this.drafts()[forceId] ?? {
+        kind: 'Hold',
+        targetTerritoryId: '',
+        structureTypeId: '',
+        viaTerritoryId: '',
+        destroyImmediately: false,
+      }
+    );
   }
 
   protected debugDraftFor(forceId: string): OrderDraft {
-    return this.debugDrafts()[forceId] ?? { kind: 'Hold', targetTerritoryId: '', structureTypeId: '' };
+    return (
+      this.debugDrafts()[forceId] ?? {
+        kind: 'Hold',
+        targetTerritoryId: '',
+        structureTypeId: '',
+        viaTerritoryId: '',
+        destroyImmediately: false,
+      }
+    );
   }
 
   protected savedDraft(forceId: string): { kind: string; targetTerritoryId: string | null } | null {
@@ -974,6 +992,8 @@ export class CampaignDetailPage {
         kind,
         targetTerritoryId: kind === 'Move' || kind === 'Split' ? current.targetTerritoryId : '',
         structureTypeId: kind === 'Build' ? current.structureTypeId : '',
+        viaTerritoryId: kind === 'Move' || kind === 'Split' ? current.viaTerritoryId : '',
+        destroyImmediately: kind === 'Pillage' ? current.destroyImmediately : false,
       },
     }));
   }
@@ -981,6 +1001,31 @@ export class CampaignDetailPage {
   protected onDraftTarget(forceId: string, targetTerritoryId: string): void {
     const current = this.draftFor(forceId);
     this.drafts.update((drafts) => ({ ...drafts, [forceId]: { ...current, targetTerritoryId } }));
+  }
+
+  protected onDraftVia(forceId: string, viaTerritoryId: string): void {
+    const current = this.draftFor(forceId);
+    this.drafts.update((drafts) => ({ ...drafts, [forceId]: { ...current, viaTerritoryId } }));
+  }
+
+  protected onDraftDestroyImmediately(forceId: string, destroyImmediately: boolean): void {
+    const current = this.draftFor(forceId);
+    this.drafts.update((drafts) => ({ ...drafts, [forceId]: { ...current, destroyImmediately } }));
+  }
+
+  protected viaTargets(force: PlayForce): string[] {
+    return [...new Set((force.moveHops ?? []).map((hop) => hop.viaTerritoryId))];
+  }
+
+  protected destinationsForVia(force: PlayForce, viaTerritoryId: string): string[] {
+    if (!viaTerritoryId) {
+      return force.moveTargets;
+    }
+
+    const hopTargets = (force.moveHops ?? [])
+      .filter((hop) => hop.viaTerritoryId === viaTerritoryId)
+      .map((hop) => hop.targetTerritoryId);
+    return [...new Set([...force.moveTargets, ...hopTargets])];
   }
 
   protected onDraftStructure(forceId: string, structureTypeId: string): void {
@@ -996,6 +1041,8 @@ export class CampaignDetailPage {
         kind,
         targetTerritoryId: kind === 'Move' || kind === 'Split' ? current.targetTerritoryId : '',
         structureTypeId: kind === 'Build' ? current.structureTypeId : '',
+        viaTerritoryId: kind === 'Move' || kind === 'Split' ? current.viaTerritoryId : '',
+        destroyImmediately: kind === 'Pillage' ? current.destroyImmediately : false,
       },
     }));
   }
@@ -1069,15 +1116,15 @@ export class CampaignDetailPage {
   protected battleReportFlag(
     battleId: string,
     forceId: string,
-    field: 'killedEnemyGeneral' | 'destroyedEnemySupplyLine',
+    field: 'killedEnemyGeneral' | 'destroyedEnemySupplyLine' | 'usedExtraBlackPowder',
   ): boolean {
-    return this.reportFor(battleId, forceId)[field];
+    return this.reportFor(battleId, forceId)[field] === true;
   }
 
   protected onBattleReportFlag(
     battleId: string,
     forceId: string,
-    field: 'killedEnemyGeneral' | 'destroyedEnemySupplyLine',
+    field: 'killedEnemyGeneral' | 'destroyedEnemySupplyLine' | 'usedExtraBlackPowder',
     value: boolean,
   ): void {
     this.patchReport(battleId, forceId, { [field]: value });
@@ -1113,7 +1160,8 @@ export class CampaignDetailPage {
   }
 
   protected supplySpendHint(battle: PlayBattle, forceId: string): string {
-    const units = this.reportFor(battle.id, forceId).supplyCostingUnitCount;
+    const report = this.reportFor(battle.id, forceId);
+    const units = report.supplyCostingUnitCount + (report.usedExtraBlackPowder === true ? 1 : 0);
     const supply = battle.forceSupplies?.find((item) => item.forceId === forceId);
     const allowance = supply?.forceAllowancePoints ?? 0;
     const recurring = Math.min(units, allowance);
@@ -1123,6 +1171,47 @@ export class CampaignDetailPage {
     }
 
     return `Spends ${recurring} from territory and round supply, then ${temporary} temporary.`;
+  }
+
+  protected canUseExtraBlackPowder(forceId: string): boolean {
+    return this.playForce(forceId)?.canUseExtraBlackPowder === true;
+  }
+
+  protected canUseMagicalSupply(forceId: string): boolean {
+    return this.playForce(forceId)?.canUseMagicalSupply === true;
+  }
+
+  protected magicalSupplyRerolls(battleId: string, forceId: string): number {
+    return this.reportFor(battleId, forceId).magicalSupplyRerolls ?? 0;
+  }
+
+  protected onMagicalSupplyRerolls(battleId: string, forceId: string, value: string | number | null): void {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    this.patchReport(battleId, forceId, {
+      magicalSupplyRerolls: Number.isFinite(parsed) ? Math.max(0, parsed) : 0,
+    });
+  }
+
+  protected opponentSpecialRuleUse(battle: PlayBattle, forceId: string): string | null {
+    const report = battle.opponentSubmission?.reports?.find((item) => item.forceId === forceId);
+    if (!report) {
+      return null;
+    }
+
+    const parts: string[] = [];
+    if (report.usedExtraBlackPowder === true) {
+      parts.push('Used Extra Black Powder');
+    }
+
+    if ((report.magicalSupplyRerolls ?? 0) > 0) {
+      parts.push(`Magical Supply rerolls: ${report.magicalSupplyRerolls}`);
+    }
+
+    return parts.length > 0 ? parts.join(' · ') : null;
+  }
+
+  private playForce(forceId: string): PlayForce | undefined {
+    return this.play()?.forces.find((force) => force.id === forceId);
   }
 
   protected standardSupplyBreakdown(supply: PlayBattleForceSupply): string {
@@ -1282,6 +1371,8 @@ export class CampaignDetailPage {
       differentialBattlePoints: 0,
       bonusBattlePoints: 0,
       supplyCostingUnitCount: 0,
+      usedExtraBlackPowder: false,
+      magicalSupplyRerolls: 0,
       armyListText: '',
       armyListGameSystem: 'WarhammerTheOldWorld',
       armyListBuilder: 'Other',
@@ -1382,6 +1473,8 @@ export class CampaignDetailPage {
         kind: draft.kind,
         targetTerritoryId: draft.targetTerritoryId || null,
         structureTypeId: draft.structureTypeId || null,
+        viaTerritoryId: draft.viaTerritoryId || null,
+        destroyImmediately: draft.destroyImmediately,
       }),
     );
   }
@@ -1571,6 +1664,8 @@ export class CampaignDetailPage {
         kind: draft.kind,
         targetTerritoryId: draft.targetTerritoryId || null,
         structureTypeId: draft.structureTypeId || null,
+        viaTerritoryId: draft.viaTerritoryId || null,
+        destroyImmediately: draft.destroyImmediately,
         reResolvePrevious,
       }),
     );
@@ -1787,6 +1882,8 @@ export class CampaignDetailPage {
         kind: flow.kind,
         targetTerritoryId: flow.targetTerritoryId,
         structureTypeId: flow.structureTypeId,
+        viaTerritoryId: '',
+        destroyImmediately: false,
       },
     }));
     this.cancelMapAction();
@@ -1867,7 +1964,9 @@ export class CampaignDetailPage {
     return (
       saved?.kind === draft.kind &&
       (saved.targetTerritoryId ?? '') === draft.targetTerritoryId &&
-      (saved.structureTypeId ?? '') === draft.structureTypeId
+      (saved.structureTypeId ?? '') === draft.structureTypeId &&
+      (saved.viaTerritoryId ?? '') === draft.viaTerritoryId &&
+      (saved.destroyImmediately === true) === draft.destroyImmediately
     );
   }
 
@@ -1896,6 +1995,8 @@ export class CampaignDetailPage {
         kind: saved?.kind ?? 'Hold',
         targetTerritoryId: saved?.targetTerritoryId ?? '',
         structureTypeId: saved?.structureTypeId ?? '',
+        viaTerritoryId: saved?.viaTerritoryId ?? '',
+        destroyImmediately: saved?.destroyImmediately === true,
       };
     }
 
@@ -1907,6 +2008,8 @@ export class CampaignDetailPage {
         kind: saved?.kind ?? 'Hold',
         targetTerritoryId: saved?.targetTerritoryId ?? '',
         structureTypeId: saved?.structureTypeId ?? '',
+        viaTerritoryId: saved?.viaTerritoryId ?? '',
+        destroyImmediately: saved?.destroyImmediately === true,
       };
     }
 

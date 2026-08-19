@@ -28,6 +28,13 @@ internal static class CatalogFileBinder
                     RequiresSubfaction = faction.RequiresSubfaction,
                     FlagImageStorageKey = faction.ClearFlagImage ? null : existing?.FlagImageStorageKey,
                     SpecialRuleIds = faction.SpecialRuleIds,
+                    SubfactionSpecialRules = faction.SubfactionSpecialRules
+                        .Select(static item => new SubfactionSpecialRulesDetail
+                        {
+                            Name = item.Name,
+                            SpecialRuleIds = item.SpecialRuleIds,
+                        })
+                        .ToArray(),
                 };
             }),
         ];
@@ -163,6 +170,7 @@ internal static class CatalogFileBinder
                 Id = rule.Id,
                 Name = rule.Name,
                 Text = rule.Text,
+                EffectKey = rule.EffectKey,
             }),
         ];
     }

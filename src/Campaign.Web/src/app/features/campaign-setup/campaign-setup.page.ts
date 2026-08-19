@@ -108,6 +108,7 @@ type FactionGroup = FormGroup<{
   clearFlagImage: FormControl<boolean>;
   subfactions: FormArray<NamedGroup>;
   specialRuleIds: FormControl<string[]>;
+  subfactionSpecialRuleIds: FormControl<Record<string, string[]>>;
 }>;
 type TerrainGroup = FormGroup<{
   id: FormControl<string>;
@@ -173,6 +174,7 @@ type SpecialRuleGroup = FormGroup<{
   id: FormControl<string>;
   name: FormControl<string>;
   text: FormControl<string>;
+  effectKey: FormControl<string>;
 }>;
 type ForceStatusGroup = FormGroup<{
   id: FormControl<string>;
@@ -557,7 +559,12 @@ export class CampaignSetupPage {
       return;
     }
 
-    this.ensureSpecialRulesFromNames(factions.flatMap((faction) => [...(faction.specialRuleNames ?? [])]));
+    this.ensureSpecialRulesFromNames([
+      ...factions.flatMap((faction) => [...(faction.specialRuleNames ?? [])]),
+      ...factions.flatMap((faction) =>
+        Object.values(faction.subfactionSpecialRules ?? {}).flatMap((names) => [...names]),
+      ),
+    ]);
     const ruleIds = this.specialRuleIdsByName();
     this.replaceArray(
       this.factions,
@@ -568,6 +575,7 @@ export class CampaignSetupPage {
           specialRuleIds: (faction.specialRuleNames ?? [])
             .map((name) => ruleIds.get(name))
             .filter((id): id is string => !!id),
+          subfactionSpecialRuleIds: this.subfactionRuleIdsFromNames(faction.subfactionSpecialRules, ruleIds),
         }),
       ),
     );
@@ -630,7 +638,9 @@ export class CampaignSetupPage {
 
     this.replaceArray(
       this.specialRules,
-      copy.specialRules.map((rule) => this.createSpecialRuleGroup(undefined, rule.name, rule.description)),
+      copy.specialRules.map((rule) =>
+        this.createSpecialRuleGroup(undefined, rule.name, rule.description, rule.effectKey),
+      ),
     );
     this.replaceArray(
       this.forceStatuses,
@@ -649,6 +659,7 @@ export class CampaignSetupPage {
           specialRuleIds: (faction.specialRuleNames ?? [])
             .map((name) => ruleIds.get(name))
             .filter((id): id is string => !!id),
+          subfactionSpecialRuleIds: this.subfactionRuleIdsFromNames(faction.subfactionSpecialRules, ruleIds),
         }),
       ),
     );
@@ -706,7 +717,9 @@ export class CampaignSetupPage {
   private applyCatalogFromDetail(campaign: CampaignDetail): void {
     this.replaceArray(
       this.specialRules,
-      (campaign.specialRules ?? []).map((rule) => this.createSpecialRuleGroup(rule.id, rule.name, rule.text)),
+      (campaign.specialRules ?? []).map((rule) =>
+        this.createSpecialRuleGroup(rule.id, rule.name, rule.text, rule.effectKey ?? undefined),
+      ),
     );
     this.replaceArray(
       this.forceStatuses,
@@ -724,6 +737,7 @@ export class CampaignSetupPage {
           requiresSubfaction: faction.requiresSubfaction,
           hasFlagImage: faction.hasFlagImage,
           specialRuleIds: faction.specialRuleIds ?? [],
+          subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
         }),
       ),
     );
@@ -958,7 +972,9 @@ export class CampaignSetupPage {
     }
 
     const preset = this.presetSpecialRule(name);
-    this.specialRules.push(this.createSpecialRuleGroup(undefined, preset?.name ?? name, preset?.description ?? ''));
+    this.specialRules.push(
+      this.createSpecialRuleGroup(undefined, preset?.name ?? name, preset?.description ?? '', preset?.effectKey),
+    );
     this.specialRulePresetPick.setValue('');
     this.bumpCatalog();
   }
@@ -1030,7 +1046,7 @@ export class CampaignSetupPage {
       }
 
       const preset = this.presetSpecialRule(name);
-      rule = this.createSpecialRuleGroup(undefined, preset?.name ?? name, preset?.description ?? '');
+      rule = this.createSpecialRuleGroup(undefined, preset?.name ?? name, preset?.description ?? '', preset?.effectKey);
       this.specialRules.push(rule);
     }
 
@@ -1695,6 +1711,7 @@ export class CampaignSetupPage {
             requiresSubfaction: faction.requiresSubfaction,
             hasFlagImage: faction.hasFlagImage,
             specialRuleIds: faction.specialRuleIds ?? [],
+            subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
           }),
         ),
       );
@@ -1722,7 +1739,9 @@ export class CampaignSetupPage {
       );
       this.replaceArray(
         this.specialRules,
-        (campaign.specialRules ?? []).map((rule) => this.createSpecialRuleGroup(rule.id, rule.name, rule.text)),
+        (campaign.specialRules ?? []).map((rule) =>
+          this.createSpecialRuleGroup(rule.id, rule.name, rule.text, rule.effectKey ?? undefined),
+        ),
       );
       this.replaceArray(
         this.missions,
@@ -1803,6 +1822,7 @@ export class CampaignSetupPage {
       requiresSubfaction?: boolean;
       hasFlagImage?: boolean;
       specialRuleIds?: readonly string[];
+      subfactionSpecialRuleIds?: Record<string, string[]>;
     },
   ): FactionGroup {
     const names = subfactions.length > 0 ? subfactions : [''];
@@ -1816,6 +1836,9 @@ export class CampaignSetupPage {
       clearFlagImage: [false],
       subfactions: this.formBuilder.array<NamedGroup>(names.map((value) => this.createNamedGroup(value))),
       specialRuleIds: [options?.specialRuleIds ? [...options.specialRuleIds] : []],
+      subfactionSpecialRuleIds: this.formBuilder.nonNullable.control<Record<string, string[]>>(
+        options?.subfactionSpecialRuleIds ? { ...options.subfactionSpecialRuleIds } : {},
+      ),
     });
   }
 
@@ -2103,11 +2126,12 @@ export class CampaignSetupPage {
     });
   }
 
-  private createSpecialRuleGroup(id?: string, name = '', text = ''): SpecialRuleGroup {
+  private createSpecialRuleGroup(id?: string, name = '', text = '', effectKey?: string): SpecialRuleGroup {
     const group = this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
       name: [name, [maxLength(60)]],
       text: [text, maxLength(2000)],
+      effectKey: [effectKey ?? ''],
     });
     group.controls.name.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((value) => {
       this.fillSpecialRuleText(group, value);
@@ -2119,6 +2143,7 @@ export class CampaignSetupPage {
   private fillSpecialRuleText(group: SpecialRuleGroup, name: string): void {
     const preset = this.presetSpecialRule(name);
     if (!preset) {
+      group.controls.effectKey.setValue('');
       return;
     }
 
@@ -2126,6 +2151,8 @@ export class CampaignSetupPage {
     if (!current.trim() || OLD_WORLD_SPECIAL_RULES.some((rule) => rule.description === current)) {
       group.controls.text.setValue(preset.description);
     }
+
+    group.controls.effectKey.setValue(preset.effectKey ?? '');
   }
 
   private createPrivateObjectiveGroup(
@@ -2177,6 +2204,70 @@ export class CampaignSetupPage {
     return new Map(this.specialRules.controls.map((rule) => [rule.controls.name.value, rule.controls.id.value]));
   }
 
+  private subfactionRuleIdsFromNames(
+    mapping: Readonly<Record<string, readonly string[]>> | undefined,
+    ruleIds: Map<string, string>,
+  ): Record<string, string[]> {
+    const next: Record<string, string[]> = {};
+    for (const [name, names] of Object.entries(mapping ?? {})) {
+      next[name] = names.map((ruleName) => ruleIds.get(ruleName)).filter((id): id is string => !!id);
+    }
+
+    return next;
+  }
+
+  private subfactionRuleIdsFromDetail(
+    assignments: readonly { name: string; specialRuleIds: readonly string[] }[] | undefined,
+  ): Record<string, string[]> {
+    const next: Record<string, string[]> = {};
+    for (const assignment of assignments ?? []) {
+      next[assignment.name] = [...assignment.specialRuleIds];
+    }
+
+    return next;
+  }
+
+  protected namedSubfactions(faction: FactionGroup): string[] {
+    return faction.controls.subfactions.controls
+      .map((item) => item.controls.name.value.trim())
+      .filter((name) => name.length > 0);
+  }
+
+  protected subfactionSpecialRuleControl(faction: FactionGroup, subfaction: string): FormControl<string[]> {
+    const current = faction.controls.subfactionSpecialRuleIds.value[subfaction] ?? [];
+    return this.formBuilder.nonNullable.control([...current]);
+  }
+
+  protected assignedSubfactionSpecialRules(faction: FactionGroup, subfaction: string): { id: string; name: string }[] {
+    const ids = faction.controls.subfactionSpecialRuleIds.value[subfaction] ?? [];
+    return this.assignedSpecialRules(this.formBuilder.nonNullable.control(ids));
+  }
+
+  protected assignableSubfactionSpecialRuleNames(faction: FactionGroup, subfaction: string): string[] {
+    const ids = faction.controls.subfactionSpecialRuleIds.value[subfaction] ?? [];
+    return this.assignableSpecialRuleNames(this.formBuilder.nonNullable.control(ids));
+  }
+
+  protected assignSubfactionSpecialRuleByName(faction: FactionGroup, subfaction: string): void {
+    const ownerId = `${faction.controls.id.value}:${subfaction}`;
+    const control = this.formBuilder.nonNullable.control([
+      ...(faction.controls.subfactionSpecialRuleIds.value[subfaction] ?? []),
+    ]);
+    this.assignSpecialRuleByName(control, ownerId);
+    faction.controls.subfactionSpecialRuleIds.setValue({
+      ...faction.controls.subfactionSpecialRuleIds.value,
+      [subfaction]: control.value,
+    });
+  }
+
+  protected removeSubfactionSpecialRule(faction: FactionGroup, subfaction: string, ruleId: string): void {
+    const current = faction.controls.subfactionSpecialRuleIds.value[subfaction] ?? [];
+    faction.controls.subfactionSpecialRuleIds.setValue({
+      ...faction.controls.subfactionSpecialRuleIds.value,
+      [subfaction]: current.filter((id) => id !== ruleId),
+    });
+  }
+
   private findSpecialRuleByName(name: string): SpecialRuleGroup | undefined {
     const needle = name.trim().toLowerCase();
     return this.specialRules.controls.find((rule) => rule.controls.name.value.trim().toLowerCase() === needle);
@@ -2199,7 +2290,7 @@ export class CampaignSetupPage {
 
       const preset = this.presetSpecialRule(trimmed);
       this.specialRules.push(
-        this.createSpecialRuleGroup(undefined, preset?.name ?? trimmed, preset?.description ?? ''),
+        this.createSpecialRuleGroup(undefined, preset?.name ?? trimmed, preset?.description ?? '', preset?.effectKey),
       );
       seen.add((preset?.name ?? trimmed).toLowerCase());
     }
@@ -2214,6 +2305,12 @@ export class CampaignSetupPage {
   private dropAssignedSpecialRule(ruleId: string): void {
     for (const faction of this.factions.controls) {
       faction.controls.specialRuleIds.setValue(faction.controls.specialRuleIds.value.filter((id) => id !== ruleId));
+      const next: Record<string, string[]> = {};
+      for (const [name, ids] of Object.entries(faction.controls.subfactionSpecialRuleIds.value)) {
+        next[name] = ids.filter((id) => id !== ruleId);
+      }
+
+      faction.controls.subfactionSpecialRuleIds.setValue(next);
     }
 
     for (const item of this.itemObjectiveTypes.controls) {
@@ -2289,6 +2386,9 @@ export class CampaignSetupPage {
       subfactions: faction.subfactions.map((item) => item.name.trim()).filter((name) => name.length > 0),
       clearFlagImage: faction.flagSource === 'color' || faction.clearFlagImage,
       specialRuleIds: faction.specialRuleIds,
+      subfactionSpecialRules: Object.entries(faction.subfactionSpecialRuleIds)
+        .filter(([name]) => faction.subfactions.some((item) => item.name.trim() === name))
+        .map(([name, specialRuleIds]) => ({ name, specialRuleIds })),
     }));
     const links = value.links
       .filter((link) => link.label.trim().length > 0 || link.url.trim().length > 0)
@@ -2356,6 +2456,7 @@ export class CampaignSetupPage {
         id: rule.id,
         name: rule.name.trim(),
         text: rule.text.trim() || null,
+        effectKey: rule.effectKey.trim() || null,
       }));
     const forceStatuses = value.forceStatuses
       .filter((status) => status.name.trim().length > 0)

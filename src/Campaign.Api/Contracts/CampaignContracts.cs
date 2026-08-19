@@ -207,6 +207,21 @@ public sealed class FactionRequest
 
     /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
     public IReadOnlyList<Guid>? SpecialRuleIds { get; init; }
+
+    /// <summary>Gets special-rule assignments for named subfactions.</summary>
+    public IReadOnlyList<SubfactionSpecialRulesRequest>? SubfactionSpecialRules { get; init; }
+}
+
+/// <summary>
+/// Special rules assigned to one named subfaction in a save request.
+/// </summary>
+public sealed class SubfactionSpecialRulesRequest
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets special-rule identifiers assigned to this subfaction.</summary>
+    public IReadOnlyList<Guid>? SpecialRuleIds { get; init; }
 }
 
 /// <summary>
@@ -417,6 +432,9 @@ public sealed class SpecialRuleRequest
 
     /// <summary>Gets the player-facing rule text.</summary>
     public string? Text { get; init; }
+
+    /// <summary>Gets the mechanical policy key, when this rule is enforced or calculated.</summary>
+    public string? EffectKey { get; init; }
 }
 
 /// <summary>
@@ -993,6 +1011,21 @@ public sealed class FactionResponse
 
     /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+
+    /// <summary>Gets special-rule assignments for named subfactions.</summary>
+    public IReadOnlyList<SubfactionSpecialRulesResponse> SubfactionSpecialRules { get; init; } = [];
+}
+
+/// <summary>
+/// Special rules assigned to one named subfaction.
+/// </summary>
+public sealed class SubfactionSpecialRulesResponse
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets special-rule identifiers assigned to this subfaction.</summary>
+    public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
 }
 
 /// <summary>
@@ -1209,6 +1242,9 @@ public sealed class SpecialRuleResponse
 
     /// <summary>Gets the player-facing rule text.</summary>
     public required string Text { get; init; }
+
+    /// <summary>Gets the mechanical policy key, when this rule is enforced or calculated.</summary>
+    public string? EffectKey { get; init; }
 }
 
 /// <summary>
@@ -1723,6 +1759,14 @@ public static class CampaignResponses
                     RequiresSubfaction = faction.RequiresSubfaction,
                     HasFlagImage = faction.HasFlagImage,
                     SpecialRuleIds = faction.SpecialRuleIds,
+                    SubfactionSpecialRules =
+                    [
+                        .. faction.SubfactionSpecialRules.Select(static item => new SubfactionSpecialRulesResponse
+                        {
+                            Name = item.Name,
+                            SpecialRuleIds = item.SpecialRuleIds,
+                        }),
+                    ],
                 }),
             ],
             TerrainTypes =
@@ -1811,6 +1855,7 @@ public static class CampaignResponses
                     Id = rule.Id,
                     Name = rule.Name,
                     Text = rule.Text,
+                    EffectKey = rule.EffectKey,
                 }),
             ],
             Missions = [.. detail.Missions.Select(FromMission)],
@@ -2132,6 +2177,13 @@ public static class CampaignResponses
                 RequiresSubfaction = faction.RequiresSubfaction,
                 ClearFlagImage = faction.ClearFlagImage,
                 SpecialRuleIds = faction.SpecialRuleIds,
+                SubfactionSpecialRules = faction.SubfactionSpecialRules?
+                    .Select(static item => new SubfactionSpecialRulesInput
+                    {
+                        Name = item.Name,
+                        SpecialRuleIds = item.SpecialRuleIds,
+                    })
+                    .ToArray(),
             }),
         ];
     }
@@ -2248,6 +2300,7 @@ public static class CampaignResponses
                 Id = rule.Id,
                 Name = rule.Name,
                 Text = rule.Text,
+                EffectKey = rule.EffectKey,
             })
             .ToArray();
     }

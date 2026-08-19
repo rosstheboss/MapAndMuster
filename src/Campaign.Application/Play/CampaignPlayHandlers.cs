@@ -132,7 +132,10 @@ public sealed class SaveOrderDraftHandler
                     campaign.StructureTypes.Select(static type => type.Id).ToHashSet(),
                     utcNow,
                     out var next,
-                    out var error))
+                    out var error,
+                    viaTerritoryId: command.ViaTerritoryId,
+                    destroyImmediately: command.DestroyImmediately,
+                    specialRules: CampaignPlayCatalog.SpecialRules(campaign)))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -188,7 +191,8 @@ public sealed class CommitOrdersHandler
                     utcNow,
                     out var outcome,
                     out var error,
-                    CampaignPlayPipeline.ForceStatuses(campaign)))
+                    CampaignPlayPipeline.ForceStatuses(campaign),
+                    CampaignPlayCatalog.SpecialRules(campaign)))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -843,7 +847,14 @@ public sealed class ChooseFactionHandler
         if (CampaignLifecycle.HasLaunched(updated, _clock.UtcNow) && updated.PlayState is not null)
         {
             var map = CampaignLifecycle.ToPlayMap(updated);
-            var ensured = CampaignPlayRules.EnsureForce(updated.PlayState, map, command.UserId, command.FactionId);
+            var ensured = CampaignPlayRules.EnsureForce(
+                updated.PlayState,
+                map,
+                command.UserId,
+                command.FactionId,
+                string.IsNullOrWhiteSpace(command.Subfaction) ? null : command.Subfaction.Trim(),
+                CampaignPlayCatalog.SpecialRules(updated),
+                CampaignPlayCatalog.PickIndex);
             var withObjective = PrivateObjectiveRules.EnsurePlayerAssignment(
                 ensured.State,
                 CampaignPlayCatalog.PrivateTypes(updated),
@@ -1079,7 +1090,10 @@ public sealed class DebugCorrectOrderHandler
                     CampaignPlayCatalog.StructureSetups(campaign),
                     CampaignPlayCatalog.PickIndex,
                     CampaignMapper.ToSchedule(campaign),
-                    command.ReResolvePrevious))
+                    command.ReResolvePrevious,
+                    command.ViaTerritoryId,
+                    command.DestroyImmediately,
+                    CampaignPlayCatalog.SpecialRules(campaign)))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -1701,7 +1715,14 @@ public sealed class AssignPlayerFactionHandler
         {
             var map = CampaignLifecycle.ToPlayMap(updated);
             var play = CampaignPlayRules.ReassignControllerFaction(updated.PlayState, command.TargetUserId, command.FactionId);
-            var ensured = CampaignPlayRules.EnsureForce(play, map, command.TargetUserId, command.FactionId);
+            var ensured = CampaignPlayRules.EnsureForce(
+                play,
+                map,
+                command.TargetUserId,
+                command.FactionId,
+                string.IsNullOrWhiteSpace(command.Subfaction) ? null : command.Subfaction.Trim(),
+                CampaignPlayCatalog.SpecialRules(updated),
+                CampaignPlayCatalog.PickIndex);
             var withObjective = PrivateObjectiveRules.EnsurePlayerAssignment(
                 ensured.State,
                 CampaignPlayCatalog.PrivateTypes(updated),

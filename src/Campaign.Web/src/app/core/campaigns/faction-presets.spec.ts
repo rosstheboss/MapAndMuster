@@ -36,6 +36,7 @@ describe('faction presets', () => {
       'Lizardmen',
       'Ogre Kingdoms',
       'Orc & Goblin Tribes',
+      'Renegade Crowns',
       'Skaven',
       'Tomb Kings of Khemri',
       'Vampire Counts',
@@ -47,9 +48,7 @@ describe('faction presets', () => {
       'Wild Herd',
     ]);
     expect(factions!.find((faction) => faction.name === 'Beastmen Brayherds')?.specialRuleNames).toEqual([
-      'Scattered Arrival',
-      'Harsh Reaving',
-      'Living Ground',
+      'Expert Ambushers',
     ]);
     expect(factions!.find((faction) => faction.name === 'Warriors of Chaos')?.subfactions).toEqual([
       'Heralds of Darkness',
@@ -63,6 +62,12 @@ describe('faction presets', () => {
     const daemons = factions!.find((faction) => faction.name === 'Daemons of Chaos');
     expect(daemons?.subfactions).toEqual(['Khorne', 'Nurgle', 'Slaanesh', 'Tzeentch']);
     expect(daemons?.requiresSubfaction).toBe(true);
+    expect(daemons?.subfactionSpecialRules).toEqual({
+      Khorne: ['Only Blood Satisfies!'],
+      Nurgle: ['Bringers of the Plague'],
+      Slaanesh: ['Alluring'],
+      Tzeentch: ['Magical Supply'],
+    });
     const colors = factions!.map((faction) => faction.color.toUpperCase());
     expect(new Set(colors).size).toBe(colors.length);
   });

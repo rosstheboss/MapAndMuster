@@ -1598,6 +1598,8 @@ public static class CampaignEndpoints
                     Kind = request.Kind,
                     TargetTerritoryId = request.TargetTerritoryId,
                     StructureTypeId = request.StructureTypeId,
+                    ViaTerritoryId = request.ViaTerritoryId,
+                    DestroyImmediately = request.DestroyImmediately,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -1918,6 +1920,8 @@ public static class CampaignEndpoints
                     Kind = request.Kind,
                     TargetTerritoryId = request.TargetTerritoryId,
                     StructureTypeId = request.StructureTypeId,
+                    ViaTerritoryId = request.ViaTerritoryId,
+                    DestroyImmediately = request.DestroyImmediately,
                     ReResolvePrevious = request.ReResolvePrevious,
                 },
                 cancellationToken)

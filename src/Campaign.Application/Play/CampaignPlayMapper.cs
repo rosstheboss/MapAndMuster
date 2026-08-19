@@ -20,6 +20,8 @@ internal static class CampaignPlayMapper
         var progress = CampaignLifecycle.Progress(campaign, utcNow);
         var play = campaign.PlayState ?? CampaignPlayState.Empty;
         var map = CampaignLifecycle.ToPlayMap(campaign);
+        var specialRules = CampaignPlayCatalog.SpecialRules(campaign);
+        var allyGroups = campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName);
         var window = play.CurrentWindow();
         var names = await UsernamesAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
         var participants = accounts is null
@@ -184,15 +186,25 @@ internal static class CampaignPlayMapper
                         .FirstOrDefault(status => string.Equals(status.Name, force.StatusName, StringComparison.OrdinalIgnoreCase))
                         ?.Effects,
                     MoveTargets = force.ControllerUserId == viewerUserId || staffView
-                        ? CampaignPlayRules.EligibleMoves(map, force)
+                        ? CampaignPlayRules.EligibleMoves(map, force, play.ItemObjectives, specialRules)
+                        : [],
+                    MoveHops = force.ControllerUserId == viewerUserId || staffView
+                        ? [.. CampaignPlayRules.EligibleMoveHops(map, force, specialRules).Select(static hop => new PlayMoveHopDetail
+                        {
+                            ViaTerritoryId = hop.ViaTerritoryId,
+                            TargetTerritoryId = hop.TargetTerritoryId,
+                        })]
                         : [],
                     AvailableActions = force.ControllerUserId == viewerUserId || staffView
-                        ? [.. ActionResolution.EligibleActions(
-                            play,
-                            map,
-                            force,
-                            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName)).Select(static kind => kind.ToString())]
+                        ? [.. ActionResolution.EligibleActions(play, map, force, allyGroups, specialRules).Select(static kind => kind.ToString())]
                         : [],
+                    Subfaction = force.Subfaction,
+                    CanMoveTwoTerritories = specialRules.Has(force, SpecialRuleEffectKeys.Crusaders),
+                    CanDestroyImmediately = FactionSpecialRulePolicies.CanDestroyImmediately(force, specialRules),
+                    CanUseExtraBlackPowder = specialRules.Has(force, SpecialRuleEffectKeys.PreparedForBattle),
+                    CanUseMagicalSupply = specialRules.Has(force, SpecialRuleEffectKeys.MagicalSupply),
+                    HiddenRelicNearby = FactionSpecialRulePolicies.HiddenRelicAdjacent(map, force, play.ItemObjectives, specialRules),
+                    BattleReminders = BattleRemindersFor(campaign, force, specialRules),
                 }),
             ],
             MyDrafts = currentActionId is { } draftWindow
@@ -206,6 +218,8 @@ internal static class CampaignPlayMapper
                             Kind = draft.Kind.ToString(),
                             TargetTerritoryId = draft.TargetTerritoryId,
                             StructureTypeId = draft.StructureTypeId,
+                            ViaTerritoryId = draft.ViaTerritoryId,
+                            DestroyImmediately = draft.DestroyImmediately,
                         }),
                 ]
                 : [],
@@ -244,10 +258,12 @@ internal static class CampaignPlayMapper
                     .Select(draft => new PlayDraftDetail
                     {
                         ForceId = draft.ForceId,
-                        Kind = draft.Kind.ToString(),
-                        TargetTerritoryId = draft.TargetTerritoryId,
-                        StructureTypeId = draft.StructureTypeId,
-                    }),
+                    Kind = draft.Kind.ToString(),
+                    TargetTerritoryId = draft.TargetTerritoryId,
+                    StructureTypeId = draft.StructureTypeId,
+                    ViaTerritoryId = draft.ViaTerritoryId,
+                    DestroyImmediately = draft.DestroyImmediately,
+                }),
             ];
         }
 
@@ -275,6 +291,8 @@ internal static class CampaignPlayMapper
                     Kind = (submission?.Kind ?? ActionKind.Hold).ToString(),
                     TargetTerritoryId = submission?.TargetTerritoryId,
                     StructureTypeId = submission?.StructureTypeId,
+                    ViaTerritoryId = submission?.ViaTerritoryId,
+                    DestroyImmediately = submission?.DestroyImmediately == true,
                 };
             }),
         ];
@@ -390,7 +408,7 @@ internal static class CampaignPlayMapper
             NeedsRetreat = needsRetreat,
             CanSurrender = canSurrender,
             RetreatTargets = (needsRetreat || canSurrender) && myForce is not null
-                ? CampaignPlayRules.EligibleRetreats(map, myForce)
+                ? CampaignPlayRules.EligibleRetreats(map, myForce, CampaignPlayCatalog.SpecialRules(campaign))
                 : [],
             ResultQuestions =
             [
@@ -437,6 +455,8 @@ internal static class CampaignPlayMapper
                         KilledEnemyGeneral = report.KilledEnemyGeneral,
                         DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
                         SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                        UsedExtraBlackPowder = report.UsedExtraBlackPowder,
+                        MagicalSupplyRerolls = report.MagicalSupplyRerolls,
                         ArmyListText = report.ArmyListText,
                         ArmyListGameSystem = report.ArmyListGameSystem,
                         ArmyListBuilder = report.ArmyListBuilder.ToString(),
@@ -858,5 +878,20 @@ internal static class CampaignPlayMapper
 
         var playTerritory = map.Territory(territoryId.Value);
         return playTerritory is null ? "a territory" : $"territory {playTerritory.DisplayNumber}";
+    }
+
+    private static IReadOnlyList<string> BattleRemindersFor(
+        StoredCampaign campaign,
+        CampaignForce force,
+        SpecialRuleContext rules)
+    {
+        return
+        [
+            .. campaign.SpecialRules
+                .Where(rule => !string.IsNullOrWhiteSpace(rule.EffectKey)
+                    && rules.Has(force, rule.EffectKey!)
+                    && !string.IsNullOrWhiteSpace(rule.Text))
+                .Select(static rule => $"{rule.Name}: {rule.Text}"),
+        ];
     }
 }
