@@ -125,7 +125,7 @@ internal static class CampaignPlayMapper
             Id = campaign.Id,
             Name = campaign.Name,
             Revision = campaign.Revision,
-            CanManage = membership?.IsGameMaster == true,
+            CanManage = membership?.IsGameMaster == true || isAdministrator,
             CanDebug = canDebug,
             IsDebugActive = isDebugActive,
             DebugActorUserId = play.DebugActorUserId,
@@ -306,13 +306,17 @@ internal static class CampaignPlayMapper
         var round = play.CurrentWindow()?.RoundNumber
             ?? (play.Windows.Count > 0 ? play.Windows[^1].RoundNumber : 1);
         var catalog = CampaignPlayCatalog.Supply(campaign);
-        var questions = CampaignPlayCatalog.MissionQuestions(campaign, battle.TerritoryId);
+        var questions = CampaignPlayCatalog.MissionQuestions(campaign, battle.TerritoryId, battle.MissionId);
         var allies = campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName);
         var reportingForces = battle.ReportingForceIds
             .Select(forceId => play.Forces.FirstOrDefault(force => force.Id == forceId))
             .OfType<CampaignForce>()
             .ToArray();
         var sides = BattleMatchRules.Sides(reportingForces, allies, play.BrokenAllyFactionIds);
+        var mission = battle.MissionId is { } missionId
+            ? CampaignPlayCatalog.FindMission(campaign, missionId)
+            : null;
+        var missionSetup = mission is null ? null : CampaignPlayCatalog.ToMissionSetup(mission);
         var forceSupplies = battle.ParticipantForceIds
             .Select(forceId => play.Forces.FirstOrDefault(force => force.Id == forceId))
             .OfType<CampaignForce>()
@@ -320,14 +324,46 @@ internal static class CampaignPlayMapper
             {
                 var snapshot = SupplyRules.ForPlayer(play, map, catalog, force.ControllerUserId, round);
                 var sideCount = sides.FirstOrDefault(side => side.Any(member => member.Id == force.Id))?.Count ?? 1;
+                var alliedArmy = AlliedArmyPointRules.ForceArmyPoints(snapshot.MaxArmyPoints, sideCount);
+                var armyAdvantaged = missionSetup is not null
+                    && MissionAdvantageRules.IsAdvantagedSide(
+                        force.Id,
+                        missionSetup.ArmyPointsAdvantageSide,
+                        battle.AttackerForceId,
+                        battle.DefenderForceId,
+                        sides);
+                var supplyAdvantaged = missionSetup is not null
+                    && MissionAdvantageRules.IsAdvantagedSide(
+                        force.Id,
+                        missionSetup.SupplyPointsAdvantageSide,
+                        battle.AttackerForceId,
+                        battle.DefenderForceId,
+                        sides);
+                var mapSupply = missionSetup is null
+                    ? snapshot.MapSupplyPoints
+                    : MissionAdvantageRules.ApplySupplyPoints(snapshot.MapSupplyPoints, missionSetup, supplyAdvantaged);
+                var allowance = missionSetup is null
+                    ? snapshot.ForceAllowancePoints
+                    : MissionAdvantageRules.ApplySupplyPoints(snapshot.ForceAllowancePoints, missionSetup, supplyAdvantaged);
+                var current = missionSetup is null
+                    ? snapshot.CurrentSupplyPoints
+                    : MissionAdvantageRules.ApplySupplyPoints(snapshot.CurrentSupplyPoints, missionSetup, supplyAdvantaged);
                 return new PlayBattleForceSupplyDetail
                 {
                     ForceId = force.Id,
                     UserId = force.ControllerUserId,
-                    ForceAllowancePoints = snapshot.ForceAllowancePoints,
-                    CurrentSupplyPoints = snapshot.CurrentSupplyPoints,
+                    ForceAllowancePoints = allowance,
+                    CurrentSupplyPoints = current,
                     TemporarySupplyPoints = snapshot.TemporarySupplyPoints,
-                    AlliedArmyPoints = AlliedArmyPointRules.ForceArmyPoints(snapshot.MaxArmyPoints, sideCount),
+                    MapSupplyPoints = mapSupply,
+                    RoundFreeSupplyPoints = snapshot.RoundFreeSupplyPoints,
+                    SplitPenaltyPoints = snapshot.SplitPenaltyPoints,
+                    RoundMaxArmyPoints = snapshot.MaxArmyPoints,
+                    AlliedArmyPoints = missionSetup is null
+                        ? alliedArmy
+                        : MissionAdvantageRules.ApplyArmyPoints(alliedArmy, missionSetup, armyAdvantaged),
+                    FreeCharacterCount = snapshot.FreeCharacterCount,
+                    IsSplit = snapshot.IsSplit,
                 };
             })
             .ToArray();
@@ -344,7 +380,7 @@ internal static class CampaignPlayMapper
             IsNoContest = battle.IsNoContest,
             IsMine = myForce is not null,
             MySubmission = ToSubmission(mine),
-            OpponentSubmission = myForce is null ? null : ToSubmission(theirs),
+            OpponentSubmission = myForce is null && !canStaff ? null : ToSubmission(theirs),
             WinnerForceId = battle.WinnerForceId,
             IsDraw = battle.IsDraw,
             WinnerScore = battle.WinnerScore,
@@ -370,6 +406,9 @@ internal static class CampaignPlayMapper
             CanStaffConfirm = canStaff
                 && battle.Status is BattleStatus.AwaitingResults or BattleStatus.Disputed
                 && play.BattleSubmissions.Any(item => item.BattleId == battle.Id && item.AcceptedSubmissionId is null),
+            Mission = mission is null ? null : CampaignMapper.ToMission(mission),
+            AttackerForceId = battle.AttackerForceId,
+            DefenderForceId = battle.DefenderForceId,
         };
     }
 
@@ -396,6 +435,19 @@ internal static class CampaignPlayMapper
                         KilledEnemyGeneral = report.KilledEnemyGeneral,
                         DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
                         SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                        ArmyListText = report.ArmyListText,
+                        ArmyListGameSystem = report.ArmyListGameSystem,
+                        ArmyListBuilder = report.ArmyListBuilder.ToString(),
+                        SupplyCategories =
+                        [
+                            .. report.SupplyCategories.Select(static category => new ArmyListSupplyCategoryDetail
+                            {
+                                Name = category.Name,
+                                UnitCount = category.UnitCount,
+                                SupplyPoints = category.SupplyPoints,
+                                CostsSupply = category.CostsSupply,
+                            }),
+                        ],
                         Answers =
                         [
                             .. report.Answers.Select(static answer => new BattleQuestionAnswerDetail

@@ -65,6 +65,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<CommitOrdersHandler>();
         services.AddScoped<UncommitOrdersHandler>();
         services.AddScoped<SubmitBattleResultHandler>();
+        services.AddScoped<ParseArmyListHandler>();
         services.AddScoped<AcceptBattleResultHandler>();
         services.AddScoped<ResolveBattleHandler>();
         services.AddScoped<SubmitRetreatHandler>();

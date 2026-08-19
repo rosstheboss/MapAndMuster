@@ -41,7 +41,7 @@ internal static class CampaignPointStandingsMapper
         var conditions = play.Structures.ToDictionary(static item => item.TerritoryId);
         var territories = graph is null
             ? Array.Empty<CampaignPointTerritory>()
-            : graph.Territories.Select(territory =>
+            : [.. graph.Territories.Select(territory =>
             {
                 conditions.TryGetValue(territory.Id, out var structure);
                 var structureTypeId = structure?.StructureTypeId ?? territory.StructureTypeId;
@@ -53,12 +53,10 @@ internal static class CampaignPointStandingsMapper
                     territory.OwnerFactionId,
                     structureTypeId,
                     condition);
-            }).ToArray();
+            })];
         var adjacencies = graph is null
             ? Array.Empty<CampaignPointAdjacency>()
-            : graph.Adjacencies
-                .Select(static edge => new CampaignPointAdjacency(edge.TerritoryAId, edge.TerritoryBId))
-                .ToArray();
+            : [.. graph.Adjacencies.Select(static edge => new CampaignPointAdjacency(edge.TerritoryAId, edge.TerritoryBId))];
 
         var calculated = CampaignPointStandingsRules.Calculate(new CampaignPointScoringState
         {

@@ -173,12 +173,11 @@
             </div>
           </div>
           <div class="nested-row">
-            <div class="field" [class.invalid]="isInvalid('roundCount')">
+            <div class="field grow" [class.invalid]="isInvalid('roundCount')">
               <label for="roundCount">Number of rounds <span class="required-marker" aria-hidden="true">*</span></label>
               <input id="roundCount" type="number" min="3" max="52" formControlName="roundCount" aria-required="true" />
-              <p class="muted">Between 3 and 52.</p>
             </div>
-            <div class="field" [class.invalid]="isInvalid('roundLengthAmount')">
+            <div class="field grow" [class.invalid]="isInvalid('roundLengthAmount')">
               <label for="roundLengthAmount"
                 >Round length <span class="required-marker" aria-hidden="true">*</span></label
               >
@@ -191,7 +190,7 @@
                 aria-required="true"
               />
             </div>
-            <div class="field">
+            <div class="field grow">
               <label for="roundLengthUnit">Round length unit</label>
               <select id="roundLengthUnit" formControlName="roundLengthUnit">
                 @for (unit of durationUnits; track unit) {
@@ -278,49 +277,58 @@
             </button>
           </div>
           <div class="nested-card stack">
-            <h3>Round army size and free supply</h3>
-            <p class="muted">
-              Each round can raise the army points cap and grant free supply points plus free characters whose base cost
-              does not count against supply. Defaults follow The Hunt in Estalia. Changing the number of rounds keeps
-              values you already entered for overlapping rounds.
-            </p>
-            <div formArrayName="roundEscalations" class="stack">
-              @for (row of roundEscalations.controls; track row; let index = $index) {
-                <div class="nested-row" [formGroupName]="index">
-                  <div class="field">
-                    <label [attr.for]="'round-escalation-points-' + index"
-                      >Round {{ row.controls.roundNumber.value }} max army points</label
-                    >
-                    <input
-                      [id]="'round-escalation-points-' + index"
-                      type="number"
-                      min="0"
-                      max="99999"
-                      formControlName="maxArmyPoints"
-                    />
+            <button
+              type="button"
+              class="section-toggle nested-toggle"
+              [attr.aria-expanded]="isOpen('round-army')"
+              (click)="toggleSection('round-army')"
+            >
+              Round army size and free supply
+            </button>
+            <div [hidden]="!isOpen('round-army')">
+              <p class="muted">
+                Each round can raise the army points cap and grant free supply points plus free characters whose base
+                cost does not count against supply. Changing the number of rounds keeps values you already entered for
+                overlapping rounds.
+              </p>
+              <div formArrayName="roundEscalations" class="stack">
+                @for (row of roundEscalations.controls; track row; let index = $index) {
+                  <div class="nested-row" [formGroupName]="index">
+                    <div class="field">
+                      <label [attr.for]="'round-escalation-points-' + index"
+                        >Round {{ row.controls.roundNumber.value }} max army points</label
+                      >
+                      <input
+                        [id]="'round-escalation-points-' + index"
+                        type="number"
+                        min="10"
+                        max="100000"
+                        formControlName="maxArmyPoints"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'round-escalation-supply-' + index">Free supply points</label>
+                      <input
+                        [id]="'round-escalation-supply-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="freeSupplyPoints"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'round-escalation-characters-' + index">Free characters</label>
+                      <input
+                        [id]="'round-escalation-characters-' + index"
+                        type="number"
+                        min="0"
+                        max="99"
+                        formControlName="freeCharacterCount"
+                      />
+                    </div>
                   </div>
-                  <div class="field">
-                    <label [attr.for]="'round-escalation-supply-' + index">Free supply points</label>
-                    <input
-                      [id]="'round-escalation-supply-' + index"
-                      type="number"
-                      min="0"
-                      max="999"
-                      formControlName="freeSupplyPoints"
-                    />
-                  </div>
-                  <div class="field">
-                    <label [attr.for]="'round-escalation-characters-' + index">Free characters</label>
-                    <input
-                      [id]="'round-escalation-characters-' + index"
-                      type="number"
-                      min="0"
-                      max="99"
-                      formControlName="freeCharacterCount"
-                    />
-                  </div>
-                </div>
-              }
+                }
+              </div>
             </div>
           </div>
         </div>
@@ -1196,6 +1204,209 @@
           <button
             type="button"
             class="section-toggle"
+            [attr.aria-expanded]="isOpen('missions')"
+            (click)="toggleSection('missions')"
+          >
+            Missions (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('missions')">
+          <p class="muted">
+            Reusable missions live here: name, optional link or PDF/Word file, result questions, and attacker/defender
+            settings. Terrain and structure lists then pick a catalog mission or a one-off name. Unassigned catalog
+            missions are kept. Up to 80 missions.
+          </p>
+          <div formArrayName="missions" class="stack">
+            @for (mission of missions.controls; track mission; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [attr.aria-expanded]="isOpen('mission-item-' + index)"
+                  (click)="toggleSection('mission-item-' + index)"
+                >
+                  {{ itemLabel(mission.controls.name.value, 'Mission ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('mission-item-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'catalog-mission-name-' + index">Mission {{ index + 1 }} name</label>
+                      <input [id]="'catalog-mission-name-' + index" formControlName="name" maxlength="60" />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removeCatalogMission(index)">Remove</button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'catalog-mission-url-' + index">Mission URL (optional)</label>
+                    <input [id]="'catalog-mission-url-' + index" formControlName="url" maxlength="2048" />
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'catalog-mission-file-' + index">Mission file (optional PDF or Word)</label>
+                    <input
+                      [id]="'catalog-mission-file-' + index"
+                      type="file"
+                      accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      (change)="onMissionFileSelected(mission.controls.id.value, $event)"
+                    />
+                    @if (missionFileName(mission.controls.id.value); as fileName) {
+                      <p class="muted">Selected: {{ fileName }}</p>
+                    } @else if (hasStoredMissionFile(mission.controls.id.value)) {
+                      <p class="muted">A document is already stored.</p>
+                    }
+                  </div>
+                  <div class="field" formArrayName="resultQuestions">
+                    <h4>Result questions</h4>
+                    <p class="muted">
+                      Extra questions asked when this mission is reported. True/false questions award the configured
+                      points when the answer is yes. Battle-point questions take a reported amount.
+                    </p>
+                    @for (question of questionsOf(mission).controls; track question; let questionIndex = $index) {
+                      <div class="nested-card stack" [formGroupName]="questionIndex">
+                        <div class="field">
+                          <label [attr.for]="'catalog-question-prompt-' + index + '-' + questionIndex">Question</label>
+                          <input
+                            [id]="'catalog-question-prompt-' + index + '-' + questionIndex"
+                            formControlName="prompt"
+                            maxlength="240"
+                          />
+                        </div>
+                        <div class="nested-row">
+                          <div class="field">
+                            <label [attr.for]="'catalog-question-kind-' + index + '-' + questionIndex">Kind</label>
+                            <select
+                              [id]="'catalog-question-kind-' + index + '-' + questionIndex"
+                              formControlName="kind"
+                            >
+                              <option value="Boolean">True / false</option>
+                              <option value="BattlePoints">Battle points amount</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label [attr.for]="'catalog-question-bp-' + index + '-' + questionIndex"
+                              >Battle points</label
+                            >
+                            <input
+                              [id]="'catalog-question-bp-' + index + '-' + questionIndex"
+                              type="number"
+                              min="0"
+                              max="999"
+                              formControlName="battlePoints"
+                            />
+                          </div>
+                          <div class="field">
+                            <label [attr.for]="'catalog-question-cp-' + index + '-' + questionIndex"
+                              >Campaign points</label
+                            >
+                            <input
+                              [id]="'catalog-question-cp-' + index + '-' + questionIndex"
+                              type="number"
+                              min="0"
+                              max="999"
+                              formControlName="campaignPoints"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            class="button-secondary"
+                            (click)="removeMissionQuestion(mission, questionIndex)"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    }
+                    <button type="button" class="button-secondary" (click)="addMissionQuestion(mission)">
+                      Add result question
+                    </button>
+                  </div>
+                  <label class="choice-row">
+                    <input [id]="'catalog-mission-ad-' + index" type="checkbox" formControlName="isAttackerDefender" />
+                    Attacker/defender mission
+                  </label>
+                  @if (mission.controls.isAttackerDefender.value) {
+                    <label class="choice-row">
+                      <input
+                        [id]="'catalog-mission-ap-adv-' + index"
+                        type="checkbox"
+                        formControlName="hasArmyPointsAdvantage"
+                      />
+                      Army points advantage
+                    </label>
+                    @if (mission.controls.hasArmyPointsAdvantage.value) {
+                      <div class="nested-row">
+                        <div class="field">
+                          <label [attr.for]="'catalog-mission-ap-side-' + index">Side</label>
+                          <select [id]="'catalog-mission-ap-side-' + index" formControlName="armyPointsAdvantageSide">
+                            <option value="Attacker">Attacker</option>
+                            <option value="Defender">Defender</option>
+                          </select>
+                        </div>
+                        <div class="field grow">
+                          <label [attr.for]="'catalog-mission-ap-amount-' + index">Amount</label>
+                          <input
+                            [id]="'catalog-mission-ap-amount-' + index"
+                            type="number"
+                            formControlName="armyPointsAdvantageAmount"
+                          />
+                          <p class="muted">Signed number or percent. After apply, army points are never below 500.</p>
+                        </div>
+                        <label class="choice-row">
+                          <input type="checkbox" formControlName="armyPointsAdvantageIsPercent" />
+                          Percent
+                        </label>
+                      </div>
+                    }
+                    <label class="choice-row">
+                      <input
+                        [id]="'catalog-mission-sp-adv-' + index"
+                        type="checkbox"
+                        formControlName="hasSupplyPointsAdvantage"
+                      />
+                      Supply points advantage
+                    </label>
+                    @if (mission.controls.hasSupplyPointsAdvantage.value) {
+                      <div class="nested-row">
+                        <div class="field">
+                          <label [attr.for]="'catalog-mission-sp-side-' + index">Side</label>
+                          <select [id]="'catalog-mission-sp-side-' + index" formControlName="supplyPointsAdvantageSide">
+                            <option value="Attacker">Attacker</option>
+                            <option value="Defender">Defender</option>
+                          </select>
+                        </div>
+                        <div class="field grow">
+                          <label [attr.for]="'catalog-mission-sp-amount-' + index">Supply points</label>
+                          <input
+                            [id]="'catalog-mission-sp-amount-' + index"
+                            type="number"
+                            formControlName="supplyPointsAdvantageAmount"
+                          />
+                          <p class="muted">
+                            Signed raw supply points, not a percent. After apply, supply is never below 1.
+                          </p>
+                        </div>
+                      </div>
+                    }
+                  }
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            id="add-catalog-mission"
+            type="button"
+            class="button-secondary"
+            (click)="addCatalogMission()"
+            [disabled]="missions.length >= 80"
+          >
+            Add mission
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
             [attr.aria-expanded]="isOpen('terrain')"
             (click)="toggleSection('terrain')"
           >
@@ -1204,9 +1415,9 @@
         </legend>
         <div [hidden]="!isOpen('terrain')">
           <p class="muted">
-            At least one terrain type is required. Each type needs a unique color and at least one mission. Missions may
-            use an http or https link or a PDF/Word file. Adding a preset replaces the current terrain list with a copy
-            you can then edit. The preset itself is not changed.
+            At least one terrain type is required. Each type needs a unique color and at least one mission. Pick a
+            catalog mission or type a one-off name with an optional file. Adding a preset replaces the current terrain
+            list with a copy you can then edit. The preset itself is not changed.
           </p>
           <div class="nested-row">
             <div class="field grow">
@@ -1283,17 +1494,25 @@
                       Missions
                     </button>
                     <div [hidden]="!isOpen('terrain-missions-' + index)">
+                      <p class="muted">
+                        Choose a catalog mission or type a one-off name. Optional file upload is for one-off missions.
+                      </p>
                       @for (mission of missionsOf(terrain).controls; track mission; let missionIndex = $index) {
-                        <div class="nested-card stack" [formGroupName]="missionIndex">
+                        <div
+                          class="nested-card stack"
+                          [formGroupName]="missionIndex"
+                          (focusout)="onAttachedMissionName(terrain, missionIndex, mission.controls.name.value)"
+                        >
                           <div class="nested-row">
                             <div class="field grow">
                               <label [attr.for]="'terrain-mission-name-' + index + '-' + missionIndex"
                                 >Mission name</label
                               >
-                              <input
-                                [id]="'terrain-mission-name-' + index + '-' + missionIndex"
+                              <app-filterable-combobox
+                                [inputId]="'terrain-mission-name-' + index + '-' + missionIndex"
                                 formControlName="name"
-                                maxlength="60"
+                                [options]="catalogMissionNames()"
+                                placeholder="Search a catalog mission or type a name"
                               />
                             </div>
                             <button
@@ -1304,135 +1523,27 @@
                               Remove
                             </button>
                           </div>
-                          <div class="field">
-                            <label [attr.for]="'terrain-mission-url-' + index + '-' + missionIndex"
-                              >Mission URL (optional)</label
-                            >
-                            <input
-                              [id]="'terrain-mission-url-' + index + '-' + missionIndex"
-                              formControlName="url"
-                              maxlength="2048"
-                            />
-                          </div>
-                          <div class="field">
-                            <label [attr.for]="'terrain-mission-file-' + index + '-' + missionIndex">
-                              Mission file (optional PDF or Word)
-                            </label>
-                            <input
-                              [id]="'terrain-mission-file-' + index + '-' + missionIndex"
-                              type="file"
-                              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                              (change)="onMissionFileSelected(mission.controls.id.value, $event)"
-                            />
-                            @if (missionFileName(mission.controls.id.value); as fileName) {
-                              <p class="muted">Selected: {{ fileName }}</p>
-                            } @else if (hasStoredMissionFile(mission.controls.id.value)) {
-                              <p class="muted">A document is already stored.</p>
-                            }
-                          </div>
-                          <div class="field" formArrayName="resultQuestions">
-                            <h4>Result questions</h4>
-                            <p class="muted">
-                              Extra questions asked when this mission is reported. True/false questions award the
-                              configured points when the answer is yes. Battle-point questions take a reported amount.
-                            </p>
-                            @for (
-                              question of questionsOf(mission).controls;
-                              track question;
-                              let questionIndex = $index
-                            ) {
-                              <div class="nested-card stack" [formGroupName]="questionIndex">
-                                <div class="field">
-                                  <label
-                                    [attr.for]="
-                                      'terrain-question-prompt-' + index + '-' + missionIndex + '-' + questionIndex
-                                    "
-                                    >Question</label
-                                  >
-                                  <input
-                                    [id]="'terrain-question-prompt-' + index + '-' + missionIndex + '-' + questionIndex"
-                                    formControlName="prompt"
-                                    maxlength="240"
-                                  />
-                                </div>
-                                <div class="nested-row">
-                                  <div class="field">
-                                    <label
-                                      [attr.for]="
-                                        'terrain-question-kind-' + index + '-' + missionIndex + '-' + questionIndex
-                                      "
-                                      >Kind</label
-                                    >
-                                    <select
-                                      [id]="'terrain-question-kind-' + index + '-' + missionIndex + '-' + questionIndex"
-                                      formControlName="kind"
-                                    >
-                                      <option value="Boolean">True / false</option>
-                                      <option value="BattlePoints">Battle points amount</option>
-                                    </select>
-                                  </div>
-                                  <div class="field">
-                                    <label
-                                      [attr.for]="
-                                        'terrain-question-bp-' + index + '-' + missionIndex + '-' + questionIndex
-                                      "
-                                      >Battle points</label
-                                    >
-                                    <input
-                                      [id]="'terrain-question-bp-' + index + '-' + missionIndex + '-' + questionIndex"
-                                      type="number"
-                                      min="0"
-                                      max="999"
-                                      formControlName="battlePoints"
-                                    />
-                                  </div>
-                                  <div class="field">
-                                    <label
-                                      [attr.for]="
-                                        'terrain-question-cp-' + index + '-' + missionIndex + '-' + questionIndex
-                                      "
-                                      >Campaign points</label
-                                    >
-                                    <input
-                                      [id]="'terrain-question-cp-' + index + '-' + missionIndex + '-' + questionIndex"
-                                      type="number"
-                                      min="0"
-                                      max="999"
-                                      formControlName="campaignPoints"
-                                    />
-                                  </div>
-                                  <button
-                                    type="button"
-                                    class="button-secondary"
-                                    (click)="removeMissionQuestion(mission, questionIndex)"
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              </div>
-                            }
-                            <button type="button" class="button-secondary" (click)="addMissionQuestion(mission)">
-                              Add result question
-                            </button>
-                          </div>
+                          @if (!isCatalogMission(mission)) {
+                            <div class="field">
+                              <label [attr.for]="'terrain-mission-file-' + index + '-' + missionIndex">
+                                Mission file (optional PDF or Word)
+                              </label>
+                              <input
+                                [id]="'terrain-mission-file-' + index + '-' + missionIndex"
+                                type="file"
+                                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                (change)="onMissionFileSelected(mission.controls.id.value, $event)"
+                              />
+                              @if (missionFileName(mission.controls.id.value); as fileName) {
+                                <p class="muted">Selected: {{ fileName }}</p>
+                              } @else if (hasStoredMissionFile(mission.controls.id.value)) {
+                                <p class="muted">A document is already stored.</p>
+                              }
+                            </div>
+                          }
                         </div>
                       }
-                      <div class="choice-row">
-                        <button type="button" class="button-secondary" (click)="addMission(terrain)">
-                          Add mission
-                        </button>
-                        @if (reusableMissions(terrain).length > 0) {
-                          <label class="reuse-mission">
-                            Use uploaded mission
-                            <select [id]="'terrain-reuse-' + index" (change)="onReuseMissionSelected(terrain, $event)">
-                              <option value="">Select a mission</option>
-                              @for (mission of reusableMissions(terrain); track mission.id) {
-                                <option [value]="mission.id">{{ mission.name }}</option>
-                              }
-                            </select>
-                          </label>
-                        }
-                      </div>
+                      <button type="button" class="button-secondary" (click)="addMission(terrain)">Add mission</button>
                     </div>
                   </div>
                 </div>
@@ -1686,17 +1797,25 @@
                       Missions (optional)
                     </button>
                     <div [hidden]="!isOpen('structure-missions-' + index)">
+                      <p class="muted">
+                        Choose a catalog mission or type a one-off name. Optional file upload is for one-off missions.
+                      </p>
                       @for (mission of missionsOf(structure).controls; track mission; let missionIndex = $index) {
-                        <div class="nested-card stack" [formGroupName]="missionIndex">
+                        <div
+                          class="nested-card stack"
+                          [formGroupName]="missionIndex"
+                          (focusout)="onAttachedMissionName(structure, missionIndex, mission.controls.name.value)"
+                        >
                           <div class="nested-row">
                             <div class="field grow">
                               <label [attr.for]="'structure-mission-name-' + index + '-' + missionIndex"
                                 >Mission name</label
                               >
-                              <input
-                                [id]="'structure-mission-name-' + index + '-' + missionIndex"
+                              <app-filterable-combobox
+                                [inputId]="'structure-mission-name-' + index + '-' + missionIndex"
                                 formControlName="name"
-                                maxlength="60"
+                                [options]="catalogMissionNames()"
+                                placeholder="Search a catalog mission or type a name"
                               />
                             </div>
                             <button
@@ -1707,142 +1826,29 @@
                               Remove
                             </button>
                           </div>
-                          <div class="field">
-                            <label [attr.for]="'structure-mission-url-' + index + '-' + missionIndex">
-                              Mission URL (optional)
-                            </label>
-                            <input
-                              [id]="'structure-mission-url-' + index + '-' + missionIndex"
-                              formControlName="url"
-                              maxlength="2048"
-                            />
-                          </div>
-                          <div class="field">
-                            <label [attr.for]="'structure-mission-file-' + index + '-' + missionIndex">
-                              Mission file (optional PDF or Word)
-                            </label>
-                            <input
-                              [id]="'structure-mission-file-' + index + '-' + missionIndex"
-                              type="file"
-                              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                              (change)="onMissionFileSelected(mission.controls.id.value, $event)"
-                            />
-                            @if (missionFileName(mission.controls.id.value); as fileName) {
-                              <p class="muted">Selected: {{ fileName }}</p>
-                            } @else if (hasStoredMissionFile(mission.controls.id.value)) {
-                              <p class="muted">A document is already stored.</p>
-                            }
-                          </div>
-                          <div class="field" formArrayName="resultQuestions">
-                            <h4>Result questions</h4>
-                            <p class="muted">
-                              Extra questions asked when this mission is reported. True/false questions award the
-                              configured points when the answer is yes. Battle-point questions take a reported amount.
-                            </p>
-                            @for (
-                              question of questionsOf(mission).controls;
-                              track question;
-                              let questionIndex = $index
-                            ) {
-                              <div class="nested-card stack" [formGroupName]="questionIndex">
-                                <div class="field">
-                                  <label
-                                    [attr.for]="
-                                      'structure-question-prompt-' + index + '-' + missionIndex + '-' + questionIndex
-                                    "
-                                    >Question</label
-                                  >
-                                  <input
-                                    [id]="
-                                      'structure-question-prompt-' + index + '-' + missionIndex + '-' + questionIndex
-                                    "
-                                    formControlName="prompt"
-                                    maxlength="240"
-                                  />
-                                </div>
-                                <div class="nested-row">
-                                  <div class="field">
-                                    <label
-                                      [attr.for]="
-                                        'structure-question-kind-' + index + '-' + missionIndex + '-' + questionIndex
-                                      "
-                                      >Kind</label
-                                    >
-                                    <select
-                                      [id]="
-                                        'structure-question-kind-' + index + '-' + missionIndex + '-' + questionIndex
-                                      "
-                                      formControlName="kind"
-                                    >
-                                      <option value="Boolean">True / false</option>
-                                      <option value="BattlePoints">Battle points amount</option>
-                                    </select>
-                                  </div>
-                                  <div class="field">
-                                    <label
-                                      [attr.for]="
-                                        'structure-question-bp-' + index + '-' + missionIndex + '-' + questionIndex
-                                      "
-                                      >Battle points</label
-                                    >
-                                    <input
-                                      [id]="'structure-question-bp-' + index + '-' + missionIndex + '-' + questionIndex"
-                                      type="number"
-                                      min="0"
-                                      max="999"
-                                      formControlName="battlePoints"
-                                    />
-                                  </div>
-                                  <div class="field">
-                                    <label
-                                      [attr.for]="
-                                        'structure-question-cp-' + index + '-' + missionIndex + '-' + questionIndex
-                                      "
-                                      >Campaign points</label
-                                    >
-                                    <input
-                                      [id]="'structure-question-cp-' + index + '-' + missionIndex + '-' + questionIndex"
-                                      type="number"
-                                      min="0"
-                                      max="999"
-                                      formControlName="campaignPoints"
-                                    />
-                                  </div>
-                                  <button
-                                    type="button"
-                                    class="button-secondary"
-                                    (click)="removeMissionQuestion(mission, questionIndex)"
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              </div>
-                            }
-                            <button type="button" class="button-secondary" (click)="addMissionQuestion(mission)">
-                              Add result question
-                            </button>
-                          </div>
+                          @if (!isCatalogMission(mission)) {
+                            <div class="field">
+                              <label [attr.for]="'structure-mission-file-' + index + '-' + missionIndex">
+                                Mission file (optional PDF or Word)
+                              </label>
+                              <input
+                                [id]="'structure-mission-file-' + index + '-' + missionIndex"
+                                type="file"
+                                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                (change)="onMissionFileSelected(mission.controls.id.value, $event)"
+                              />
+                              @if (missionFileName(mission.controls.id.value); as fileName) {
+                                <p class="muted">Selected: {{ fileName }}</p>
+                              } @else if (hasStoredMissionFile(mission.controls.id.value)) {
+                                <p class="muted">A document is already stored.</p>
+                              }
+                            </div>
+                          }
                         </div>
                       }
-                      <div class="choice-row">
-                        <button type="button" class="button-secondary" (click)="addMission(structure)">
-                          Add mission
-                        </button>
-                        @if (reusableMissions(structure).length > 0) {
-                          <label class="reuse-mission">
-                            Use uploaded mission
-                            <select
-                              [id]="'structure-reuse-' + index"
-                              (change)="onReuseMissionSelected(structure, $event)"
-                            >
-                              <option value="">Select a mission</option>
-                              @for (mission of reusableMissions(structure); track mission.id) {
-                                <option [value]="mission.id">{{ mission.name }}</option>
-                              }
-                            </select>
-                          </label>
-                        }
-                      </div>
+                      <button type="button" class="button-secondary" (click)="addMission(structure)">
+                        Add mission
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -84,7 +84,7 @@ public static class ForceStatusRules
                 var current = force.StatusName is { } name && byName.TryGetValue(name, out var status)
                     ? status
                     : null;
-                string? next = force.StatusName;
+                var next = force.StatusName;
                 if (current is not null && MatchesClear(current.ClearTrigger, facts))
                 {
                     next = null;

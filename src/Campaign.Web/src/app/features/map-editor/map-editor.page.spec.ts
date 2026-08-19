@@ -137,6 +137,7 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Clear Unsaved Changes');
     expect(compiled.textContent).toContain('Save Map');
     expect(compiled.textContent).toContain('Download map');
+    expect(compiled.textContent).toContain('Edit campaign');
     expect(compiled.textContent).toContain('100%');
     expect(compiled.textContent).toContain('Fit');
     expect(compiled.textContent).not.toContain('Fit to panel');

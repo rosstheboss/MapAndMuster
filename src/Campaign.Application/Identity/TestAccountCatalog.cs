@@ -11,13 +11,22 @@ public static class TestAccountCatalog
     public const int Count = 30;
 
     /// <summary>Username prefix plus the account number, for example test1.</summary>
-    public static string Username(int number) => $"test{number}";
+    public static string Username(int number)
+    {
+        return $"test{number}";
+    }
 
     /// <summary>Non-deliverable mailbox used only as a unique Identity email.</summary>
-    public static string Email(int number) => $"test{number}@users.invalid";
+    public static string Email(int number)
+    {
+        return $"test{number}@users.invalid";
+    }
 
     /// <summary>Public display name, for example Test 12.</summary>
-    public static string DisplayName(int number) => $"Test {number}";
+    public static string DisplayName(int number)
+    {
+        return $"Test {number}";
+    }
 
     /// <summary>
     /// Returns the forced display name for a seeded test account.

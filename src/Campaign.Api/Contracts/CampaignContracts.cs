@@ -85,6 +85,9 @@ public sealed class SaveCampaignRequest
     /// <summary>Gets reusable special rules. Omitted or empty means none.</summary>
     public IReadOnlyList<SpecialRuleRequest>? SpecialRules { get; init; }
 
+    /// <summary>Gets reusable missions. Omitted means nested terrain and structure missions only.</summary>
+    public IReadOnlyList<MissionRequest>? Missions { get; init; }
+
     /// <summary>Gets configured force statuses other than Normal. Omitted or empty means none.</summary>
     public IReadOnlyList<ForceStatusRequest>? ForceStatuses { get; init; }
 
@@ -489,6 +492,30 @@ public sealed class MissionRequest
 
     /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
     public IReadOnlyList<MissionResultQuestionRequest>? ResultQuestions { get; init; }
+
+    /// <summary>Gets whether this mission is used for attacker/defender engagements.</summary>
+    public bool IsAttackerDefender { get; init; }
+
+    /// <summary>Gets whether attacker or defender army points are adjusted.</summary>
+    public bool HasArmyPointsAdvantage { get; init; }
+
+    /// <summary>Gets Attacker or Defender for the army-point adjustment.</summary>
+    public string? ArmyPointsAdvantageSide { get; init; }
+
+    /// <summary>Gets whether the army-point amount is a percent of the cap.</summary>
+    public bool ArmyPointsAdvantageIsPercent { get; init; }
+
+    /// <summary>Gets the signed army-point number or percent change.</summary>
+    public int ArmyPointsAdvantageAmount { get; init; }
+
+    /// <summary>Gets whether attacker or defender supply points are adjusted.</summary>
+    public bool HasSupplyPointsAdvantage { get; init; }
+
+    /// <summary>Gets Attacker or Defender for the supply-point adjustment.</summary>
+    public string? SupplyPointsAdvantageSide { get; init; }
+
+    /// <summary>Gets the signed raw supply-point change.</summary>
+    public int SupplyPointsAdvantageAmount { get; init; }
 }
 
 /// <summary>
@@ -657,6 +684,9 @@ public sealed class CampaignDetailResponse
 
     /// <summary>Gets reusable special rules. Empty means none.</summary>
     public IReadOnlyList<SpecialRuleResponse> SpecialRules { get; init; } = [];
+
+    /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
+    public IReadOnlyList<MissionResponse> Missions { get; init; } = [];
 
     /// <summary>Gets configured force statuses other than Normal.</summary>
     public IReadOnlyList<ForceStatusResponse> ForceStatuses { get; init; } = [];
@@ -1425,6 +1455,30 @@ public sealed class MissionResponse
 
     /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
     public IReadOnlyList<MissionResultQuestionResponse> ResultQuestions { get; init; } = [];
+
+    /// <summary>Gets whether this mission is used for attacker/defender engagements.</summary>
+    public bool IsAttackerDefender { get; init; }
+
+    /// <summary>Gets whether attacker or defender army points are adjusted.</summary>
+    public bool HasArmyPointsAdvantage { get; init; }
+
+    /// <summary>Gets Attacker or Defender for the army-point adjustment.</summary>
+    public string ArmyPointsAdvantageSide { get; init; } = "Defender";
+
+    /// <summary>Gets whether the army-point amount is a percent of the cap.</summary>
+    public bool ArmyPointsAdvantageIsPercent { get; init; }
+
+    /// <summary>Gets the signed army-point number or percent change.</summary>
+    public int ArmyPointsAdvantageAmount { get; init; }
+
+    /// <summary>Gets whether attacker or defender supply points are adjusted.</summary>
+    public bool HasSupplyPointsAdvantage { get; init; }
+
+    /// <summary>Gets Attacker or Defender for the supply-point adjustment.</summary>
+    public string SupplyPointsAdvantageSide { get; init; } = "Defender";
+
+    /// <summary>Gets the signed raw supply-point change.</summary>
+    public int SupplyPointsAdvantageAmount { get; init; }
 }
 
 /// <summary>
@@ -1675,28 +1729,7 @@ public static class CampaignResponses
                     CampaignPoints = type.CampaignPoints,
                     SupplyPoints = type.SupplyPoints,
                     IsWaterFeature = type.IsWaterFeature,
-                    Missions =
-                    [
-                        .. type.Missions.Select(static mission => new MissionResponse
-                        {
-                            Id = mission.Id,
-                            Name = mission.Name,
-                            Url = mission.Url,
-                            HasFile = mission.HasFile,
-                            FileName = mission.FileName,
-                            ResultQuestions =
-                            [
-                                .. mission.ResultQuestions.Select(static question => new MissionResultQuestionResponse
-                                {
-                                    Id = question.Id,
-                                    Prompt = question.Prompt,
-                                    Kind = question.Kind,
-                                    BattlePoints = question.BattlePoints,
-                                    CampaignPoints = question.CampaignPoints,
-                                }),
-                            ],
-                        }),
-                    ],
+                    Missions = [.. type.Missions.Select(FromMission)],
                 }),
             ],
             StructureTypes =
@@ -1715,28 +1748,7 @@ public static class CampaignResponses
                     SupplyPoints = type.SupplyPoints,
                     PillageSupplyPoints = type.PillageSupplyPoints,
                     DestroySupplyPoints = type.DestroySupplyPoints,
-                    Missions =
-                    [
-                        .. type.Missions.Select(static mission => new MissionResponse
-                        {
-                            Id = mission.Id,
-                            Name = mission.Name,
-                            Url = mission.Url,
-                            HasFile = mission.HasFile,
-                            FileName = mission.FileName,
-                            ResultQuestions =
-                            [
-                                .. mission.ResultQuestions.Select(static question => new MissionResultQuestionResponse
-                                {
-                                    Id = question.Id,
-                                    Prompt = question.Prompt,
-                                    Kind = question.Kind,
-                                    BattlePoints = question.BattlePoints,
-                                    CampaignPoints = question.CampaignPoints,
-                                }),
-                            ],
-                        }),
-                    ],
+                    Missions = [.. type.Missions.Select(FromMission)],
                 }),
             ],
             ItemObjectiveTypes =
@@ -1795,6 +1807,7 @@ public static class CampaignResponses
                     Text = rule.Text,
                 }),
             ],
+            Missions = [.. detail.Missions.Select(FromMission)],
             ForceStatuses =
             [
                 .. detail.ForceStatuses.Select(static status => new ForceStatusResponse
@@ -2349,7 +2362,7 @@ public static class CampaignResponses
         };
     }
 
-    private static MissionInput[]? ToMissionInputs(IReadOnlyList<MissionRequest>? missions)
+    internal static MissionInput[]? ToMissionInputs(IReadOnlyList<MissionRequest>? missions)
     {
         return missions?
             .Select(static mission => new MissionInput
@@ -2368,8 +2381,48 @@ public static class CampaignResponses
                         CampaignPoints = question.CampaignPoints,
                     })
                     .ToArray(),
+                IsAttackerDefender = mission.IsAttackerDefender,
+                HasArmyPointsAdvantage = mission.HasArmyPointsAdvantage,
+                ArmyPointsAdvantageSide = mission.ArmyPointsAdvantageSide,
+                ArmyPointsAdvantageIsPercent = mission.ArmyPointsAdvantageIsPercent,
+                ArmyPointsAdvantageAmount = mission.ArmyPointsAdvantageAmount,
+                HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
+                SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
+                SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
             })
             .ToArray();
+    }
+
+    internal static MissionResponse FromMission(MissionDetail mission)
+    {
+        ArgumentNullException.ThrowIfNull(mission);
+        return new MissionResponse
+        {
+            Id = mission.Id,
+            Name = mission.Name,
+            Url = mission.Url,
+            HasFile = mission.HasFile,
+            FileName = mission.FileName,
+            ResultQuestions =
+            [
+                .. mission.ResultQuestions.Select(static question => new MissionResultQuestionResponse
+                {
+                    Id = question.Id,
+                    Prompt = question.Prompt,
+                    Kind = question.Kind,
+                    BattlePoints = question.BattlePoints,
+                    CampaignPoints = question.CampaignPoints,
+                }),
+            ],
+            IsAttackerDefender = mission.IsAttackerDefender,
+            HasArmyPointsAdvantage = mission.HasArmyPointsAdvantage,
+            ArmyPointsAdvantageSide = mission.ArmyPointsAdvantageSide,
+            ArmyPointsAdvantageIsPercent = mission.ArmyPointsAdvantageIsPercent,
+            ArmyPointsAdvantageAmount = mission.ArmyPointsAdvantageAmount,
+            HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
+            SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
+            SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
+        };
     }
 
     /// <summary>

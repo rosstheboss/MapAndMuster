@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using Campaign.Application.Campaigns;
 using Campaign.Domain.Campaigns;
+using Campaign.Domain.Common;
 using Campaign.Domain.Play;
 
 namespace Campaign.Application.Play;
@@ -173,17 +175,24 @@ internal static class CampaignPlayCatalog
                 static type => type.Id,
                 static type => new StructureSupplyRules(type.SupplyPoints, type.PillageSupplyPoints, type.DestroySupplyPoints)),
             campaign.SplitForceSupplyPenaltyPercent,
-            campaign.ArmyEscalations.Count == 0
-                ? HuntInEstaliaDefaults.ArmyEscalations(Math.Max(1, campaign.RoundCount))
-                : campaign.ArmyEscalations,
+            ArmyEscalationDefaults.PadToRoundCount(campaign.ArmyEscalations, Math.Max(1, campaign.RoundCount)),
             FactionByPlayer(campaign),
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName),
             campaign.PlayState?.BrokenAllyFactionIds.ToHashSet() ?? []);
     }
 
-    public static IReadOnlyList<MissionResultQuestionSetup> MissionQuestions(StoredCampaign campaign, Guid territoryId)
+    public static IReadOnlyList<MissionResultQuestionSetup> MissionQuestions(
+        StoredCampaign campaign,
+        Guid territoryId,
+        Guid? missionId = null)
     {
         ArgumentNullException.ThrowIfNull(campaign);
+        if (missionId is { } assignedId)
+        {
+            var assigned = FindMission(campaign, assignedId);
+            return assigned is null ? [] : [.. assigned.ResultQuestions.Select(ToQuestion)];
+        }
+
         var territory = campaign.MapGraph?.Territories.FirstOrDefault(item => item.Id == territoryId);
         if (territory is null)
         {
@@ -212,31 +221,146 @@ internal static class CampaignPlayCatalog
         return questions;
     }
 
-    public static IReadOnlyList<BattleParticipantReport> ToReports(IReadOnlyList<BattleParticipantReportInput>? reports)
+    public static StoredMission? FindMission(StoredCampaign campaign, Guid missionId)
     {
-        if (reports is null || reports.Count == 0)
-        {
-            return [];
-        }
+        ArgumentNullException.ThrowIfNull(campaign);
+        return CampaignMapper.CatalogMissions(campaign).FirstOrDefault(item => item.Id == missionId)
+            ?? campaign.TerrainTypes.SelectMany(static type => type.Missions).FirstOrDefault(item => item.Id == missionId)
+            ?? campaign.StructureTypes.SelectMany(static type => type.Missions).FirstOrDefault(item => item.Id == missionId);
+    }
 
+    public static IReadOnlyList<TerrainTypeSetup> TerrainSetups(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
         return
         [
-            .. reports.Select(static report => new BattleParticipantReport(
-                report.ForceId,
-                report.VictoryPoints,
-                report.ArmyPoints,
-                report.DifferentialBattlePoints,
-                report.BonusBattlePoints,
-                report.KilledEnemyGeneral,
-                report.DestroyedEnemySupplyLine,
-                [
-                    .. (report.Answers ?? []).Select(static answer => new BattleQuestionAnswer(
-                        answer.QuestionId,
-                        answer.BooleanValue,
-                        answer.BattlePointsValue)),
-                ],
-                report.SupplyCostingUnitCount)),
+            .. campaign.TerrainTypes.Select(static type => new TerrainTypeSetup(
+                type.Id,
+                type.Name,
+                type.Color,
+                [.. type.Missions.Select(ToMissionSetup)],
+                type.IsWaterFeature,
+                type.SupplyPoints)),
         ];
+    }
+
+    public static IReadOnlyList<StructureTypeSetup> StructureSetups(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        return
+        [
+            .. campaign.StructureTypes.Select(static type => new StructureTypeSetup(
+                type.Id,
+                type.Name,
+                type.BuiltinSymbol,
+                false,
+                false,
+                type.IsBuildable,
+                type.IsPillageable,
+                type.IsDestructible,
+                [.. type.Missions.Select(ToMissionSetup)],
+                type.CampaignPoints,
+                type.SupplyPoints,
+                type.PillageSupplyPoints,
+                type.DestroySupplyPoints)),
+        ];
+    }
+
+    public static MissionSetup ToMissionSetup(StoredMission mission)
+    {
+        ArgumentNullException.ThrowIfNull(mission);
+        return new MissionSetup(
+            mission.Id,
+            mission.Name,
+            mission.Url,
+            false,
+            [.. mission.ResultQuestions.Select(ToQuestion)],
+            mission.IsAttackerDefender,
+            mission.HasArmyPointsAdvantage,
+            Enum.TryParse<MissionAdvantageSide>(mission.ArmyPointsAdvantageSide, true, out var armySide)
+                ? armySide
+                : MissionAdvantageSide.Defender,
+            mission.ArmyPointsAdvantageIsPercent,
+            mission.ArmyPointsAdvantageAmount,
+            mission.HasSupplyPointsAdvantage,
+            Enum.TryParse<MissionAdvantageSide>(mission.SupplyPointsAdvantageSide, true, out var supplySide)
+                ? supplySide
+                : MissionAdvantageSide.Defender,
+            mission.SupplyPointsAdvantageAmount);
+    }
+
+    public static bool TryToReports(
+        IReadOnlyList<BattleParticipantReportInput>? reports,
+        [NotNullWhen(true)] out IReadOnlyList<BattleParticipantReport>? mapped,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        mapped = [];
+        error = null;
+        if (reports is null || reports.Count == 0)
+        {
+            return true;
+        }
+
+        var next = new List<BattleParticipantReport>(reports.Count);
+        foreach (var report in reports)
+        {
+            if (!ArmyListRules.TryNormalizeText(report.ArmyListText, out error, out var armyListText))
+            {
+                mapped = null;
+                return false;
+            }
+
+            var rawCategories = new List<ArmyListSupplyCategory>();
+            foreach (var category in report.SupplyCategories ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(category.Name))
+                {
+                    error = new DomainError(
+                        "armyListCategories.name",
+                        $"Category names must be 1 to {ArmyListRules.CategoryNameMaxLength} characters.",
+                        "supplyCategories");
+                    mapped = null;
+                    return false;
+                }
+
+                rawCategories.Add(
+                    new ArmyListSupplyCategory(
+                        category.Name,
+                        Math.Max(0, category.UnitCount),
+                        Math.Max(0, category.SupplyPoints),
+                        category.CostsSupply));
+            }
+
+            if (!ArmyListRules.TryNormalizeCategories(rawCategories, out error, out var normalizedCategories))
+            {
+                mapped = null;
+                return false;
+            }
+
+            next.Add(
+                new BattleParticipantReport(
+                    report.ForceId,
+                    report.VictoryPoints,
+                    report.ArmyPoints,
+                    report.DifferentialBattlePoints,
+                    report.BonusBattlePoints,
+                    report.KilledEnemyGeneral,
+                    report.DestroyedEnemySupplyLine,
+                    [
+                        .. (report.Answers ?? []).Select(static answer => new BattleQuestionAnswer(
+                            answer.QuestionId,
+                            answer.BooleanValue,
+                            answer.BattlePointsValue)),
+                    ],
+                    report.SupplyCostingUnitCount,
+                    armyListText,
+                    ArmyListRules.NormalizeGameSystem(report.ArmyListGameSystem),
+                    ArmyListRules.ParseBuilder(report.ArmyListBuilder),
+                    normalizedCategories));
+        }
+
+        mapped = next;
+        return true;
     }
 
     public static IReadOnlyDictionary<Guid, int> ExtraBattleReportPoints(StoredCampaign campaign)
@@ -263,7 +387,7 @@ internal static class CampaignPlayCatalog
                 continue;
             }
 
-            var questions = MissionQuestions(campaign, battle.TerritoryId);
+            var questions = MissionQuestions(campaign, battle.TerritoryId, battle.MissionId);
             foreach (var report in submission.Reports)
             {
                 var force = play.Forces.FirstOrDefault(item => item.Id == report.ForceId);

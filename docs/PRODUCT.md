@@ -35,7 +35,8 @@ Player and Game Master in the same campaign.
   private-objective counts, and relic logos.
 - Secret draft/commit/uncommit order entry with deadline and early-close behavior.
 - Simultaneous action reveal and deterministic, explainable resolution.
-- Battle creation, mission assignment, dual result submissions (including early reports during
+- Battle creation, mission assignment from structure then terrain catalogs (attacker/defender
+  roles when the engagement calls for them), dual result submissions (including early reports during
   Action windows), agreement or dispute, staff confirmation, retreats, and scoring.
 - Administrators can save campaign settings and map data as named reusable presets.
 - Campaign-point, supply-line, temporary-supply, status, objective, and relic tracking.
@@ -50,9 +51,11 @@ Player and Game Master in the same campaign.
 ## Product boundaries
 
 The application does not simulate tabletop battles or validate complete tabletop army lists in
-the initial scope. It may store submitted lists and calculate campaign-level composition
-allowances. Tabletop-only terrain and faction rules are displayed with assigned missions but
-are not mechanically simulated unless later specified.
+the initial scope. It may store submitted list text and calculate campaign-level composition
+allowances. For Warhammer: The Old World, pasted New Recruit or Old World Builder text may be
+parsed to suggest supply amounts; the player confirms or corrects those numbers. Tabletop-only
+terrain and faction rules are displayed with assigned missions but are not mechanically
+simulated unless later specified.
 
 Bundled content remains generic. Administrators provide their own campaign text, maps,
 missions, factions, rules, and imagery at runtime.

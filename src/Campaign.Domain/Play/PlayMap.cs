@@ -90,8 +90,8 @@ public sealed class PlayTerritory
             clearStructure ? null : structureTypeId ?? StructureTypeId,
             clearStructure ? null : structureName ?? StructureName,
             clearStructure ? StructureCondition.Operational : structureCondition ?? StructureCondition,
-            clearStructure ? false : isPillageable ?? IsPillageable,
-            clearStructure ? false : isDestructible ?? IsDestructible,
+            !clearStructure && (isPillageable ?? IsPillageable),
+            !clearStructure && (isDestructible ?? IsDestructible),
             IsWaterFeature,
             TerrainTypeId);
     }

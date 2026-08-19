@@ -17,8 +17,10 @@
             <button type="button" class="button" (click)="enterDebug()">Debug</button>
           }
         }
-        @if (campaign.canManage && campaign.status === 'Scheduled') {
-          <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
+        @if (canStaffMembers()) {
+          @if (campaign.status === 'Scheduled') {
+            <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
+          }
           <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'map']">Edit map</a>
         }
       </div>
@@ -784,21 +786,59 @@
           @for (battle of play.battles; track battle.id) {
             <article class="stack">
               <h3>{{ territoryName(battle.territoryId) }} · {{ battle.status }}</h3>
-              @if (battle.forceSupplies?.length) {
-                <p class="muted">
-                  @for (supply of battle.forceSupplies; track supply.forceId; let last = $last) {
-                    {{ forceLabelById(supply.forceId) }} supply {{ supply.forceAllowancePoints }}
-                    @if (supply.temporarySupplyPoints > 0) {
-                      ({{ supply.temporarySupplyPoints }} player temporary)
-                    }
-                    @if (supply.alliedArmyPoints) {
-                      · army cap {{ supply.alliedArmyPoints }}
-                    }
-                    @if (!last) {
-                      ;
-                    }
+              @if (battle.mission; as mission) {
+                <p>
+                  Mission:
+                  @if (mission.url) {
+                    <a [href]="mission.url" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
+                  } @else if (missionFileUrl(mission); as href) {
+                    <a [href]="href" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
+                  } @else {
+                    {{ mission.name }}
                   }
                 </p>
+                @if (battle.attackerForceId) {
+                  <p class="muted">Attacker: {{ forceLabelById(battle.attackerForceId) }}</p>
+                }
+                @if (battle.defenderForceId) {
+                  <p class="muted">Defender: {{ forceLabelById(battle.defenderForceId) }}</p>
+                }
+              }
+              @if (battle.forceSupplies?.length) {
+                <ul class="plain-list battle-supply">
+                  @for (supply of battle.forceSupplies; track supply.forceId) {
+                    <li>
+                      <strong>{{ forceLabelById(supply.forceId) }}</strong>
+                      <span
+                        >Army points this battle: {{ supply.alliedArmyPoints ?? supply.roundMaxArmyPoints ?? 0 }}</span
+                      >
+                      @if (
+                        (supply.roundMaxArmyPoints ?? 0) > 0 &&
+                        (supply.alliedArmyPoints ?? supply.roundMaxArmyPoints) !== supply.roundMaxArmyPoints
+                      ) {
+                        <span class="muted">
+                          (allied share of round cap {{ supply.roundMaxArmyPoints }}
+                          @if (supply.freeCharacterCount) {
+                            · {{ supply.freeCharacterCount }} free characters
+                          }
+                          )
+                        </span>
+                      } @else if (supply.freeCharacterCount) {
+                        <span class="muted">· {{ supply.freeCharacterCount }} free characters this round</span>
+                      }
+                      <span>
+                        Standard supply: {{ supply.forceAllowancePoints }}
+                        <span class="muted">({{ standardSupplyBreakdown(supply) }})</span>
+                      </span>
+                      <span>
+                        Temporary supply: {{ supply.temporarySupplyPoints }}
+                        @if (supply.isSplit) {
+                          <span class="muted">· split-force penalty applied</span>
+                        }
+                      </span>
+                    </li>
+                  }
+                </ul>
               }
               @if (canReportBattle(battle)) {
                 @for (forceId of reportingForceIds(battle); track forceId) {
@@ -839,6 +879,101 @@
                         />
                       </div>
                       <p class="muted">{{ supplySpendHint(battle, forceId) }}</p>
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'army-list-' + battle.id + '-' + forceId">Army list (optional text)</label>
+                      <textarea
+                        [id]="'army-list-' + battle.id + '-' + forceId"
+                        rows="8"
+                        maxlength="20000"
+                        [ngModel]="armyListText(battle.id, forceId)"
+                        (ngModelChange)="onArmyListText(battle.id, forceId, $event)"
+                        [name]="'army-list-' + battle.id + '-' + forceId"
+                      ></textarea>
+                      <p class="muted">
+                        Paste the list so the opponent and campaign manager can check it. Automatic supply fill is only
+                        for Warhammer: The Old World lists from
+                        <a href="https://www.newrecruit.eu/" rel="noopener noreferrer" target="_blank">New Recruit</a>
+                        or
+                        <a href="https://old-world-builder.com/" rel="noopener noreferrer" target="_blank"
+                          >Old World Builder</a
+                        >.
+                      </p>
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'army-game-' + battle.id + '-' + forceId">Verify list for</label>
+                      <select
+                        [id]="'army-game-' + battle.id + '-' + forceId"
+                        [ngModel]="armyListGameSystem(battle.id, forceId)"
+                        (ngModelChange)="onArmyListGameSystem(battle.id, forceId, $event)"
+                        [name]="'army-game-' + battle.id + '-' + forceId"
+                      >
+                        <option value="WarhammerTheOldWorld">Warhammer: The Old World</option>
+                      </select>
+                    </div>
+                    <fieldset class="builder-options">
+                      <legend>Army builder</legend>
+                      <div class="choice-row">
+                        <label>
+                          <input
+                            type="radio"
+                            [name]="'builder-' + battle.id + '-' + forceId"
+                            [ngModel]="armyListBuilder(battle.id, forceId)"
+                            (ngModelChange)="onArmyListBuilder(battle.id, forceId, $event)"
+                            value="Other"
+                          />
+                          Other
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            [name]="'builder-' + battle.id + '-' + forceId"
+                            [ngModel]="armyListBuilder(battle.id, forceId)"
+                            (ngModelChange)="onArmyListBuilder(battle.id, forceId, $event)"
+                            value="NewRecruit"
+                          />
+                          New Recruit
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            [name]="'builder-' + battle.id + '-' + forceId"
+                            [ngModel]="armyListBuilder(battle.id, forceId)"
+                            (ngModelChange)="onArmyListBuilder(battle.id, forceId, $event)"
+                            value="OldWorldBuilder"
+                          />
+                          Old World Builder
+                        </label>
+                      </div>
+                    </fieldset>
+                    @if (armyListParseMessage(battle.id, forceId); as parseMessage) {
+                      <p class="error" role="status">{{ parseMessage }}</p>
+                    }
+                    @for (category of armyListCategories(battle.id, forceId); track category.name) {
+                      <div class="nested-row">
+                        <div class="field">
+                          <label [attr.for]="'cat-supply-' + battle.id + '-' + forceId + '-' + category.name">
+                            {{ category.name }} supply points
+                          </label>
+                          <input
+                            [id]="'cat-supply-' + battle.id + '-' + forceId + '-' + category.name"
+                            type="number"
+                            min="0"
+                            [ngModel]="category.supplyPoints"
+                            (ngModelChange)="onArmyListCategorySupply(battle.id, forceId, category.name, $event)"
+                            [name]="'cat-supply-' + battle.id + '-' + forceId + '-' + category.name"
+                          />
+                        </div>
+                        <p class="muted">{{ category.unitCount }} units counted</p>
+                      </div>
+                    }
+                    @if (opponentArmyList(battle, forceId); as submittedList) {
+                      <div class="field">
+                        <p>Submitted army list</p>
+                        <pre class="army-list-preview">{{ submittedList }}</pre>
+                      </div>
+                    }
+                    <div class="nested-row">
                       <div class="field">
                         <label [attr.for]="'diff-bp-' + battle.id + '-' + forceId">Differential battle points</label>
                         <input

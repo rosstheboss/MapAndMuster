@@ -53,34 +53,51 @@ public sealed class ChangePasswordHandlerTests
 
         public int Calls { get; private set; }
 
-        public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<bool> UsernameExistsAsync(string username, Guid? userIdToIgnore, CancellationToken cancellationToken) =>
+        public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
+
+        public Task<bool> UsernameExistsAsync(string username, Guid? userIdToIgnore, CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
 
         public Task<CreateLocalAccountOutcome> CreateLocalAccountAsync(
             CreateLocalAccountRequest request,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
 
         public Task<CreateLocalAccountOutcome> CreateExternalAccountAsync(
             CreateExternalAccountRequest request,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
 
-        public Task<UserAccount?> FindByIdAsync(Guid userId, CancellationToken cancellationToken) =>
+        public Task<UserAccount?> FindByIdAsync(Guid userId, CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
 
-        public Task<UserAccount?> FindByUsernameAsync(string username, CancellationToken cancellationToken) =>
+        public Task<UserAccount?> FindByUsernameAsync(string username, CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
 
         public Task<UpdateProfileOutcome> UpdateProfileAsync(
             UpdateStoredProfileRequest request,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
 
-        public Task<string?> ReplaceAvatarKeyAsync(Guid userId, string? avatarStorageKey, CancellationToken cancellationToken) =>
+        public Task<string?> ReplaceAvatarKeyAsync(Guid userId, string? avatarStorageKey, CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
 
         public Task<ChangePasswordOutcome> ChangePasswordAsync(
             Guid userId,

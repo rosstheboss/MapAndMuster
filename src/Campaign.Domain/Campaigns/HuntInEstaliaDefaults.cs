@@ -1,7 +1,7 @@
 namespace Campaign.Domain.Campaigns;
 
 /// <summary>
-/// Bundled Hunt in Estalia values used as application defaults for supply and army escalation.
+/// Bundled Hunt in Estalia values for supply clamps, battle-report defaults, and that preset's army table.
 /// </summary>
 public static class HuntInEstaliaDefaults
 {
@@ -13,6 +13,12 @@ public static class HuntInEstaliaDefaults
 
     /// <summary>Each split force keeps at least this many map supply points after the penalty.</summary>
     public const int SplitForceMinimumMapSupply = 1;
+
+    /// <summary>Army points after an attacker/defender mission advantage are never below this.</summary>
+    public const int MinimumArmyPoints = 500;
+
+    /// <summary>Supply points after an attacker/defender mission advantage are never below this.</summary>
+    public const int MinimumSupplyPoints = 1;
 
     /// <summary>Percent added to a side's round army-point cap for each extra allied player in the same fight.</summary>
     public const int AlliedExtraPlayerArmyPercent = 25;
@@ -34,14 +40,14 @@ public static class HuntInEstaliaDefaults
 
     private static readonly (int MaxArmyPoints, int FreeSupplyPoints, int FreeCharacterCount)[] Template =
     [
-        (1000, 0, 0),
-        (1250, 0, 0),
-        (1500, 1, 1),
-        (1750, 1, 1),
-        (2000, 2, 1),
+        (500, 1, 1),
+        (750, 1, 1),
+        (1000, 1, 1),
+        (1250, 2, 1),
+        (1500, 2, 1),
         (2000, 2, 2),
-        (2000, 3, 2),
-        (2000, 3, 2),
+        (2500, 3, 2),
+        (3000, 3, 2),
     ];
 
     /// <summary>
@@ -56,12 +62,12 @@ public static class HuntInEstaliaDefaults
         var last = Template[^1];
         for (var round = 1; round <= roundCount; round++)
         {
-            var entry = round <= Template.Length ? Template[round - 1] : last;
+            var (MaxArmyPoints, FreeSupplyPoints, FreeCharacterCount) = round <= Template.Length ? Template[round - 1] : last;
             rows[round - 1] = new RoundArmyEscalationSetup(
                 round,
-                entry.MaxArmyPoints,
-                entry.FreeSupplyPoints,
-                entry.FreeCharacterCount);
+                MaxArmyPoints,
+                FreeSupplyPoints,
+                FreeCharacterCount);
         }
 
         return rows;

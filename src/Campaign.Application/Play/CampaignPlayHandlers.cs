@@ -301,6 +301,11 @@ public sealed class SubmitBattleResultHandler
 
                 var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
                 var isStaff = command.IsAdministrator || membership?.IsGameMaster == true;
+                if (!CampaignPlayCatalog.TryToReports(command.Reports, out var reports, out var reportError))
+                {
+                    return PlayMutation.Fail(reportError);
+                }
+
                 if (!CampaignPlayRules.TrySubmitBattleResult(
                     state,
                     command.UserId,
@@ -313,7 +318,7 @@ public sealed class SubmitBattleResultHandler
                     command.WinnerScore,
                     command.LoserScore,
                     CampaignPlayPipeline.ForceStatuses(campaign),
-                    CampaignPlayCatalog.ToReports(command.Reports),
+                    reports,
                     CampaignPlayCatalog.MissionQuestions(campaign, state.Battles.FirstOrDefault(item => item.Id == command.BattleId)?.TerritoryId ?? Guid.Empty),
                     isStaff,
                     map,
@@ -456,6 +461,11 @@ public sealed class ResolveBattleHandler
                     return PlayMutation.Fail(scoreError);
                 }
 
+                if (!CampaignPlayCatalog.TryToReports(command.Reports, out var reports, out var reportError))
+                {
+                    return PlayMutation.Fail(reportError);
+                }
+
                 if (!CampaignPlayRules.TryResolveBattle(
                     state,
                     command.UserId,
@@ -468,7 +478,7 @@ public sealed class ResolveBattleHandler
                     command.WinnerScore,
                     command.LoserScore,
                     CampaignPlayPipeline.ForceStatuses(campaign),
-                    CampaignPlayCatalog.ToReports(command.Reports),
+                    reports,
                     CampaignPlayCatalog.MissionQuestions(campaign, state.Battles.FirstOrDefault(item => item.Id == command.BattleId)?.TerritoryId ?? Guid.Empty),
                     map,
                     CampaignPlayCatalog.Supply(campaign),
@@ -826,6 +836,7 @@ public sealed class ChooseFactionHandler
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
             SpecialRules = existing.SpecialRules,
+            Missions = existing.Missions,
             ForceStatuses = existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
@@ -983,7 +994,10 @@ public sealed class DebugCorrectOrderHandler
                     campaign.StructureTypes.Select(static type => type.Id).ToHashSet(),
                     utcNow,
                     out var outcome,
-                    out var error))
+                    out var error,
+                    CampaignPlayCatalog.TerrainSetups(campaign),
+                    CampaignPlayCatalog.StructureSetups(campaign),
+                    CampaignPlayCatalog.PickIndex))
                 {
                     return PlayMutation.Fail(error);
                 }

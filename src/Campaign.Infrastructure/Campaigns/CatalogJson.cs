@@ -29,7 +29,8 @@ internal static class CatalogJson
         IReadOnlyList<StoredForceStatus>? forceStatuses = null,
         int splitForceSupplyPenaltyPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent,
         BattleReportRulesSetup? battleReportRules = null,
-        IReadOnlyList<RoundArmyEscalationSetup>? armyEscalations = null)
+        IReadOnlyList<RoundArmyEscalationSetup>? armyEscalations = null,
+        IReadOnlyList<StoredMission>? missions = null)
     {
         ArgumentNullException.ThrowIfNull(terrainTypes);
         ArgumentNullException.ThrowIfNull(structureTypes);
@@ -66,6 +67,7 @@ internal static class CatalogJson
                 GeneralKillCampaignPoints = reportRules.GeneralKillCampaignPoints,
                 SupplyLineDestroyedCampaignPoints = reportRules.SupplyLineDestroyedCampaignPoints,
                 ArmyEscalations = [.. (armyEscalations ?? []).Select(ToDocument)],
+                Missions = [.. (missions ?? []).Select(ToDocument)],
             },
             Options);
     }
@@ -83,23 +85,29 @@ internal static class CatalogJson
         IReadOnlyList<StoredForceStatus> ForceStatuses,
         int SplitForceSupplyPenaltyPercent,
         BattleReportRulesSetup BattleReportRules,
-        IReadOnlyList<RoundArmyEscalationSetup> ArmyEscalations)
+        IReadOnlyList<RoundArmyEscalationSetup> ArmyEscalations,
+        IReadOnlyList<StoredMission> Missions)
         Deserialize(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent, BattleReportRulesSetup.Default, []);
+            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent, BattleReportRulesSetup.Default, [], []);
         }
 
         var document = JsonSerializer.Deserialize<CatalogDocument>(json, Options);
         if (document is null)
         {
-            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent, BattleReportRulesSetup.Default, []);
+            return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent, BattleReportRulesSetup.Default, [], []);
         }
 
+        var terrains = document.TerrainTypes.Select(FromDocument).ToArray();
+        var structures = document.StructureTypes.Select(FromDocument).ToArray();
+        var catalogMissions = MergeMissions(
+            (document.Missions ?? []).Select(FromDocument),
+            terrains.SelectMany(static type => type.Missions).Concat(structures.SelectMany(static type => type.Missions)));
         return (
-            [.. document.TerrainTypes.Select(FromDocument)],
-            [.. document.StructureTypes.Select(FromDocument)],
+            terrains,
+            structures,
             [.. (document.ItemObjectiveTypes ?? []).Select(FromDocument)],
             [.. (document.PublicObjectiveTypes ?? []).Select(FromDocument)],
             BattleScoringFrom(document),
@@ -123,7 +131,21 @@ internal static class CatalogJson
                 document.AlwaysAskSupplyLineDestroyed ?? HuntInEstaliaDefaults.AlwaysAskSupplyLineDestroyed,
                 document.GeneralKillCampaignPoints ?? HuntInEstaliaDefaults.GeneralKillCampaignPoints,
                 document.SupplyLineDestroyedCampaignPoints ?? HuntInEstaliaDefaults.SupplyLineDestroyedCampaignPoints),
-            ArmyEscalationsFrom(document));
+            ArmyEscalationsFrom(document),
+            catalogMissions);
+    }
+
+    private static IReadOnlyList<StoredMission> MergeMissions(
+        IEnumerable<StoredMission> catalog,
+        IEnumerable<StoredMission> nested)
+    {
+        var merged = new Dictionary<Guid, StoredMission>();
+        foreach (var mission in catalog.Concat(nested))
+        {
+            merged.TryAdd(mission.Id, mission);
+        }
+
+        return [.. merged.Values];
     }
 
     private static TerrainDocument ToDocument(StoredTerrainType type)
@@ -170,6 +192,14 @@ internal static class CatalogJson
             FileStorageKey = mission.FileStorageKey,
             FileName = mission.FileName,
             ResultQuestions = [.. mission.ResultQuestions.Select(ToDocument)],
+            IsAttackerDefender = mission.IsAttackerDefender,
+            HasArmyPointsAdvantage = mission.HasArmyPointsAdvantage,
+            ArmyPointsAdvantageSide = mission.ArmyPointsAdvantageSide,
+            ArmyPointsAdvantageIsPercent = mission.ArmyPointsAdvantageIsPercent,
+            ArmyPointsAdvantageAmount = mission.ArmyPointsAdvantageAmount,
+            HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
+            SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
+            SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
         };
     }
 
@@ -189,7 +219,7 @@ internal static class CatalogJson
 
     private static StoredStructureType FromDocument(StructureDocument type)
     {
-        var flags = StructureCatalog.DefaultFlags(type.Name, type.BuiltinSymbol);
+        var (IsBuildable, IsPillageable, IsDestructible) = StructureCatalog.DefaultFlags(type.Name, type.BuiltinSymbol);
         return new StoredStructureType
         {
             Id = type.Id,
@@ -197,9 +227,9 @@ internal static class CatalogJson
             BuiltinSymbol = type.BuiltinSymbol,
             ImageStorageKey = type.ImageStorageKey,
             PillagedImageStorageKey = type.PillagedImageStorageKey,
-            IsBuildable = type.IsBuildable ?? flags.IsBuildable,
-            IsPillageable = type.IsPillageable ?? flags.IsPillageable,
-            IsDestructible = type.IsDestructible ?? flags.IsDestructible,
+            IsBuildable = type.IsBuildable ?? IsBuildable,
+            IsPillageable = type.IsPillageable ?? IsPillageable,
+            IsDestructible = type.IsDestructible ?? IsDestructible,
             Missions = [.. type.Missions.Select(FromDocument)],
             CampaignPoints = type.CampaignPoints,
             SupplyPoints = type.SupplyPoints > 0 ? type.SupplyPoints : HuntInEstaliaDefaults.SupplyPoints,
@@ -218,6 +248,18 @@ internal static class CatalogJson
             FileStorageKey = mission.FileStorageKey,
             FileName = mission.FileName,
             ResultQuestions = [.. (mission.ResultQuestions ?? []).Select(FromDocument)],
+            IsAttackerDefender = mission.IsAttackerDefender,
+            HasArmyPointsAdvantage = mission.HasArmyPointsAdvantage,
+            ArmyPointsAdvantageSide = string.IsNullOrWhiteSpace(mission.ArmyPointsAdvantageSide)
+                ? "Defender"
+                : mission.ArmyPointsAdvantageSide,
+            ArmyPointsAdvantageIsPercent = mission.ArmyPointsAdvantageIsPercent,
+            ArmyPointsAdvantageAmount = mission.ArmyPointsAdvantageAmount,
+            HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
+            SupplyPointsAdvantageSide = string.IsNullOrWhiteSpace(mission.SupplyPointsAdvantageSide)
+                ? "Defender"
+                : mission.SupplyPointsAdvantageSide,
+            SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
         };
     }
 
@@ -486,7 +528,7 @@ internal static class CatalogJson
         var rows = document.ArmyEscalations ?? [];
         if (rows.Count == 0)
         {
-            return HuntInEstaliaDefaults.ArmyEscalations(CampaignSetupRules.MinRoundCount);
+            return [];
         }
 
         return
@@ -541,6 +583,8 @@ internal static class CatalogJson
         public int? SupplyLineDestroyedCampaignPoints { get; set; }
 
         public List<ArmyEscalationDocument>? ArmyEscalations { get; set; }
+
+        public List<MissionDocument>? Missions { get; set; }
     }
 
     private sealed class BattleScoringDocument
@@ -657,6 +701,22 @@ internal static class CatalogJson
         public string? FileName { get; set; }
 
         public List<MissionQuestionDocument>? ResultQuestions { get; set; }
+
+        public bool IsAttackerDefender { get; set; }
+
+        public bool HasArmyPointsAdvantage { get; set; }
+
+        public string? ArmyPointsAdvantageSide { get; set; }
+
+        public bool ArmyPointsAdvantageIsPercent { get; set; }
+
+        public int ArmyPointsAdvantageAmount { get; set; }
+
+        public bool HasSupplyPointsAdvantage { get; set; }
+
+        public string? SupplyPointsAdvantageSide { get; set; }
+
+        public int SupplyPointsAdvantageAmount { get; set; }
     }
 
     private sealed class MissionQuestionDocument

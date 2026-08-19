@@ -370,6 +370,15 @@ public sealed class PlayBattleResponse
 
     /// <summary>Gets whether a staff member may confirm the outstanding report.</summary>
     public bool CanStaffConfirm { get; init; }
+
+    /// <summary>Gets the mission assigned to this battle, when one was chosen.</summary>
+    public MissionResponse? Mission { get; init; }
+
+    /// <summary>Gets the attacking force when the mission uses attacker/defender roles.</summary>
+    public Guid? AttackerForceId { get; init; }
+
+    /// <summary>Gets the defending force when the mission uses attacker/defender roles.</summary>
+    public Guid? DefenderForceId { get; init; }
 }
 
 /// <summary>A battle result the viewer is allowed to see.</summary>
@@ -415,6 +424,18 @@ public sealed class BattleParticipantReportResponse
     /// <summary>Gets how many supply-costing units this force fielded.</summary>
     public int SupplyCostingUnitCount { get; init; }
 
+    /// <summary>Gets optional pasted army-list text.</summary>
+    public string? ArmyListText { get; init; }
+
+    /// <summary>Gets the game system selected for list verification.</summary>
+    public string? ArmyListGameSystem { get; init; }
+
+    /// <summary>Gets the army builder selected for automatic supply parsing.</summary>
+    public string? ArmyListBuilder { get; init; }
+
+    /// <summary>Gets optional per-category supply amounts.</summary>
+    public IReadOnlyList<ArmyListSupplyCategoryResponse> SupplyCategories { get; init; } = [];
+
     /// <summary>Gets whether the reporter killed the opponent's general.</summary>
     public bool KilledEnemyGeneral { get; init; }
 
@@ -438,6 +459,22 @@ public sealed class BattleQuestionAnswerResponse
     public int? BattlePointsValue { get; init; }
 }
 
+/// <summary>One army-composition category on a stored battle report.</summary>
+public sealed class ArmyListSupplyCategoryResponse
+{
+    /// <summary>Gets the category label.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets how many top-level units were counted.</summary>
+    public int UnitCount { get; init; }
+
+    /// <summary>Gets declared supply points for this category.</summary>
+    public int SupplyPoints { get; init; }
+
+    /// <summary>Gets whether this category spends supply by default.</summary>
+    public bool CostsSupply { get; init; }
+}
+
 /// <summary>Supply shown next to a force in a battle to resolve.</summary>
 public sealed class PlayBattleForceSupplyResponse
 {
@@ -456,8 +493,26 @@ public sealed class PlayBattleForceSupplyResponse
     /// <summary>Gets remaining temporary supply.</summary>
     public required int TemporarySupplyPoints { get; init; }
 
-    /// <summary>Gets this force's army-point cap when fighting with allied extras.</summary>
+    /// <summary>Gets map supply from connected owned territories and operational structures.</summary>
+    public int MapSupplyPoints { get; init; }
+
+    /// <summary>Gets free supply granted this round.</summary>
+    public int RoundFreeSupplyPoints { get; init; }
+
+    /// <summary>Gets supply subtracted because the player currently has split forces.</summary>
+    public int SplitPenaltyPoints { get; init; }
+
+    /// <summary>Gets the configured round army-point cap before allied extras.</summary>
+    public int RoundMaxArmyPoints { get; init; }
+
+    /// <summary>Gets this force's army-point cap for the tabletop game, including allied extras.</summary>
     public int AlliedArmyPoints { get; init; }
+
+    /// <summary>Gets free characters whose base cost does not count against supply this round.</summary>
+    public int FreeCharacterCount { get; init; }
+
+    /// <summary>Gets whether the controlling player currently has split forces.</summary>
+    public bool IsSplit { get; init; }
 }
 
 /// <summary>Request to save a draft order.</summary>
@@ -600,6 +655,18 @@ public sealed class BattleParticipantReportRequest
     /// <summary>Gets how many supply-costing units this force fielded.</summary>
     public int SupplyCostingUnitCount { get; init; }
 
+    /// <summary>Gets optional pasted army-list text.</summary>
+    public string? ArmyListText { get; init; }
+
+    /// <summary>Gets the game system selected for list verification.</summary>
+    public string? ArmyListGameSystem { get; init; }
+
+    /// <summary>Gets the army builder selected for automatic supply parsing.</summary>
+    public string? ArmyListBuilder { get; init; }
+
+    /// <summary>Gets optional per-category supply amounts.</summary>
+    public IReadOnlyList<ArmyListSupplyCategoryRequest>? SupplyCategories { get; init; }
+
     /// <summary>Gets whether the reporter killed the opponent's general.</summary>
     public bool KilledEnemyGeneral { get; init; }
 
@@ -608,6 +675,54 @@ public sealed class BattleParticipantReportRequest
 
     /// <summary>Gets answers to extra mission questions.</summary>
     public IReadOnlyList<BattleQuestionAnswerRequest>? Answers { get; init; }
+}
+
+/// <summary>One army-composition category on a battle report.</summary>
+public sealed class ArmyListSupplyCategoryRequest
+{
+    /// <summary>Gets the category label.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets how many top-level units were counted.</summary>
+    public int UnitCount { get; init; }
+
+    /// <summary>Gets declared supply points for this category.</summary>
+    public int SupplyPoints { get; init; }
+
+    /// <summary>Gets whether this category spends supply by default.</summary>
+    public bool CostsSupply { get; init; }
+}
+
+/// <summary>Request to parse pasted army-list text without submitting a battle result.</summary>
+public sealed class ParseArmyListRequest
+{
+    /// <summary>Gets the game system to parse for.</summary>
+    public string? GameSystem { get; init; }
+
+    /// <summary>Gets the selected army builder.</summary>
+    public string? Builder { get; init; }
+
+    /// <summary>Gets the pasted army-list text.</summary>
+    public string? Text { get; init; }
+}
+
+/// <summary>Parsed army points and supply amounts, or a failed parse.</summary>
+public sealed class ParseArmyListResponse
+{
+    /// <summary>Gets whether the text was recognized and amounts were filled.</summary>
+    public required bool Parsed { get; init; }
+
+    /// <summary>Gets a player-facing message when parsing was attempted and failed.</summary>
+    public string? Message { get; init; }
+
+    /// <summary>Gets army points read from the list header.</summary>
+    public int ArmyPoints { get; init; }
+
+    /// <summary>Gets supply-costing units summed from special, rare, and similar categories.</summary>
+    public int SupplyCostingUnitCount { get; init; }
+
+    /// <summary>Gets per-category unit counts and default supply amounts.</summary>
+    public IReadOnlyList<ArmyListSupplyCategoryResponse> Categories { get; init; } = [];
 }
 
 /// <summary>One answer to a mission result question.</summary>
@@ -1040,10 +1155,19 @@ public static class PlayResponses
                             ForceAllowancePoints = item.ForceAllowancePoints,
                             CurrentSupplyPoints = item.CurrentSupplyPoints,
                             TemporarySupplyPoints = item.TemporarySupplyPoints,
+                            MapSupplyPoints = item.MapSupplyPoints,
+                            RoundFreeSupplyPoints = item.RoundFreeSupplyPoints,
+                            SplitPenaltyPoints = item.SplitPenaltyPoints,
+                            RoundMaxArmyPoints = item.RoundMaxArmyPoints,
                             AlliedArmyPoints = item.AlliedArmyPoints,
+                            FreeCharacterCount = item.FreeCharacterCount,
+                            IsSplit = item.IsSplit,
                         }),
                     ],
                     CanStaffConfirm = battle.CanStaffConfirm,
+                    Mission = battle.Mission is null ? null : CampaignResponses.FromMission(battle.Mission),
+                    AttackerForceId = battle.AttackerForceId,
+                    DefenderForceId = battle.DefenderForceId,
                 }),
             ],
             Log =
@@ -1099,6 +1223,19 @@ public static class PlayResponses
                         DifferentialBattlePoints = report.DifferentialBattlePoints,
                         BonusBattlePoints = report.BonusBattlePoints,
                         SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                        ArmyListText = report.ArmyListText,
+                        ArmyListGameSystem = report.ArmyListGameSystem,
+                        ArmyListBuilder = report.ArmyListBuilder,
+                        SupplyCategories =
+                        [
+                            .. report.SupplyCategories.Select(static category => new ArmyListSupplyCategoryResponse
+                            {
+                                Name = category.Name,
+                                UnitCount = category.UnitCount,
+                                SupplyPoints = category.SupplyPoints,
+                                CostsSupply = category.CostsSupply,
+                            }),
+                        ],
                         KilledEnemyGeneral = report.KilledEnemyGeneral,
                         DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
                         Answers =
@@ -1130,6 +1267,18 @@ public static class PlayResponses
                 DifferentialBattlePoints = report.DifferentialBattlePoints,
                 BonusBattlePoints = report.BonusBattlePoints,
                 SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                ArmyListText = report.ArmyListText,
+                ArmyListGameSystem = report.ArmyListGameSystem,
+                ArmyListBuilder = report.ArmyListBuilder,
+                SupplyCategories = report.SupplyCategories?
+                    .Select(static category => new ArmyListSupplyCategoryInput
+                    {
+                        Name = category.Name,
+                        UnitCount = category.UnitCount,
+                        SupplyPoints = category.SupplyPoints,
+                        CostsSupply = category.CostsSupply,
+                    })
+                    .ToArray(),
                 KilledEnemyGeneral = report.KilledEnemyGeneral,
                 DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
                 Answers = report.Answers?
@@ -1142,5 +1291,30 @@ public static class PlayResponses
                     .ToArray(),
             })
             .ToArray();
+    }
+
+    /// <summary>
+    /// Maps a parsed army list onto the HTTP response.
+    /// </summary>
+    public static ParseArmyListResponse FromParse(ArmyListParseDetail detail)
+    {
+        ArgumentNullException.ThrowIfNull(detail);
+        return new ParseArmyListResponse
+        {
+            Parsed = detail.Parsed,
+            Message = detail.Message,
+            ArmyPoints = detail.ArmyPoints,
+            SupplyCostingUnitCount = detail.SupplyCostingUnitCount,
+            Categories =
+            [
+                .. detail.Categories.Select(static category => new ArmyListSupplyCategoryResponse
+                {
+                    Name = category.Name,
+                    UnitCount = category.UnitCount,
+                    SupplyPoints = category.SupplyPoints,
+                    CostsSupply = category.CostsSupply,
+                }),
+            ],
+        };
     }
 }

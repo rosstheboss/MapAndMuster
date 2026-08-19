@@ -38,11 +38,11 @@ public static class ItemObjectiveCatalog
             return true;
         }
 
-        foreach (var entry in All)
+        foreach (var (Symbol, Label) in All)
         {
-            if (string.Equals(entry.Label, value, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(Label, value, StringComparison.OrdinalIgnoreCase))
             {
-                symbol = entry.Symbol;
+                symbol = Symbol;
                 return true;
             }
         }

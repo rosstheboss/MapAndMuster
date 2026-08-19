@@ -60,7 +60,9 @@ internal static class CampaignPlayPipeline
             AllyGroups(campaign),
             utcNow,
             ForceStatuses(campaign),
-            CampaignPlayCatalog.PickIndex);
+            CampaignPlayCatalog.PickIndex,
+            CampaignPlayCatalog.TerrainSetups(campaign),
+            CampaignPlayCatalog.StructureSetups(campaign));
         var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, advanced.Map, utcNow, advanced.PreserveSchedule ? campaign.EndsUtc : advanced.EndsUtc);
         var nextGraph = campaign.MapGraph is null || advanced.PreserveMap
             ? campaign.MapGraph
@@ -175,7 +177,9 @@ internal static class CampaignPlayPipeline
             AllyGroups(campaign),
             clock.UtcNow,
             ForceStatuses(campaign),
-            CampaignPlayCatalog.PickIndex);
+            CampaignPlayCatalog.PickIndex,
+            CampaignPlayCatalog.TerrainSetups(campaign),
+            CampaignPlayCatalog.StructureSetups(campaign));
         var playMap = advanced.PreserveMap ? workingMap : advanced.Map;
         var endsUtc = mutation.PreserveSchedule && advanced.PreserveSchedule
             ? campaign.EndsUtc
@@ -286,6 +290,7 @@ internal static class CampaignPlayPipeline
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
             SpecialRules = existing.SpecialRules,
+            Missions = existing.Missions,
             ForceStatuses = existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,

@@ -15,6 +15,9 @@
           <button type="button" class="button-secondary" (click)="requestUploadSvg()">Upload SVG</button>
           <input #svgFile type="file" accept=".svg,image/svg+xml" hidden (change)="onSvgFile($event)" />
         }
+        @if (canManage() && campaign.status === 'Scheduled') {
+          <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
+        }
         <a class="button-secondary" [routerLink]="['/campaigns', campaign.id]">Back to campaign</a>
       }
     </div>

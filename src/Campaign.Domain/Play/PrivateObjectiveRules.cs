@@ -64,7 +64,10 @@ public sealed class PrivateObjectiveTypePlayRules
     public IReadOnlyList<Guid> TerritoryIds { get; }
 
     /// <summary>Gets whether this catalog entry may be assigned to <paramref name="kind"/>.</summary>
-    public bool Allows(PrivateObjectiveHolderKind kind) => AllowedHolderKinds.Contains(kind);
+    public bool Allows(PrivateObjectiveHolderKind kind)
+    {
+        return AllowedHolderKinds.Contains(kind);
+    }
 }
 
 /// <summary>

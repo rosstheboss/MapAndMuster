@@ -541,6 +541,8 @@ describe('CampaignDetailPage', () => {
     fixture.detectChanges();
     expect(compiled.textContent).toContain('Town (pillaged)');
     expect(compiled.textContent).toContain('Forces: northplayer · North');
+    expect(compiled.textContent).toContain('Edit map');
+    expect(compiled.textContent).not.toContain('Edit campaign');
     http.verify();
   });
 
@@ -1140,6 +1142,15 @@ describe('CampaignDetailPage', () => {
                 alliedArmyPoints: 1000,
               },
             ],
+            mission: {
+              id: 'mission-1',
+              name: 'Meeting engagement',
+              url: 'https://example.test/missions/meeting',
+              hasFile: false,
+              fileName: null,
+            },
+            attackerForceId: 'force-2',
+            defenderForceId: 'force-1',
           },
         ],
       }),
@@ -1149,8 +1160,17 @@ describe('CampaignDetailPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Supply-costing units');
+    expect(compiled.textContent).toContain('Army list (optional text)');
+    expect(compiled.textContent).toContain('Army points this battle: 1000');
+    expect(compiled.textContent).toContain('Standard supply: 3');
+    expect(compiled.textContent).toContain('Temporary supply: 1');
     expect(compiled.textContent).toContain('Surrender');
-    expect(compiled.textContent).toContain('army cap 1000');
+    expect(compiled.textContent).toContain('Meeting engagement');
+    expect(compiled.querySelector('a[href="https://example.test/missions/meeting"]')?.textContent).toContain(
+      'Meeting engagement',
+    );
+    expect(compiled.textContent).toContain('Attacker:');
+    expect(compiled.textContent).toContain('Defender:');
     http.verify();
   });
 });

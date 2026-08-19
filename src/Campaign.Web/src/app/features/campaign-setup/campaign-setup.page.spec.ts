@@ -63,6 +63,7 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector('.setup-toolbar button.button')?.textContent).toContain('Create campaign');
     expect(compiled.querySelector('.setup-toolbar')?.textContent).not.toContain('Save as Preset');
     expect(compiled.querySelector('a[href$="/map"]')).toBeNull();
+    expect(compiled.querySelector('#add-catalog-mission')).toBeTruthy();
     expect(compiled.querySelector('#name')).toBeTruthy();
     expect(compiled.querySelector('#playerCount')).toBeTruthy();
     expect(compiled.querySelector('#city')).toBeTruthy();
@@ -91,6 +92,74 @@ describe('CampaignSetupPage', () => {
       button.textContent.trim().startsWith('Factions'),
     );
     expect(factionsToggle?.getAttribute('aria-expanded')).toBe('true');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('shows one army-size row per round with generic defaults', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector<HTMLInputElement>('#roundCount')?.value).toBe('8');
+    expect(compiled.querySelector<HTMLInputElement>('#roundLengthAmount')?.value).toBe('1');
+    expect(compiled.querySelector<HTMLSelectElement>('#roundLengthUnit')?.value).toBe('Weeks');
+    expect(compiled.textContent).not.toContain('Between 3 and 52.');
+    expect(compiled.textContent).not.toContain('Between 10 and 100000.');
+    expect(compiled.textContent).toContain('Each round can raise the army points cap');
+    expect(compiled.textContent).toContain(
+      'Changing the number of rounds keeps values you already entered for overlapping rounds.',
+    );
+    expect(compiled.textContent).not.toContain('Defaults follow The Hunt in Estalia.');
+    const armyToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
+      button.textContent.trim().startsWith('Round army size and free supply'),
+    );
+    expect(armyToggle?.getAttribute('aria-expanded')).toBe('true');
+    armyToggle?.click();
+    fixture.detectChanges();
+    expect(armyToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(compiled.querySelector('#round-escalation-points-7')).toBeTruthy();
+    expect(compiled.querySelector('#round-escalation-points-8')).toBeNull();
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-0')?.value).toBe('1000');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-supply-0')?.value).toBe('1');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-characters-0')?.value).toBe('1');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-7')?.value).toBe('1000');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-supply-7')?.value).toBe('1');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-characters-7')?.value).toBe('1');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('keeps overlapping army-size values when the round count changes', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      form: { controls: { roundCount: { setValue: (value: number) => void } } };
+      roundEscalations: {
+        length: number;
+        at: (index: number) => {
+          controls: {
+            maxArmyPoints: { value: number; setValue: (value: number) => void };
+            freeSupplyPoints: { value: number };
+            freeCharacterCount: { value: number };
+          };
+        };
+      };
+    };
+    page.roundEscalations.at(0).controls.maxArmyPoints.setValue(777);
+    page.form.controls.roundCount.setValue(4);
+    fixture.detectChanges();
+    expect(page.roundEscalations.length).toBe(4);
+    expect(page.roundEscalations.at(0).controls.maxArmyPoints.value).toBe(777);
+
+    page.form.controls.roundCount.setValue(8);
+    fixture.detectChanges();
+    expect(page.roundEscalations.length).toBe(8);
+    expect(page.roundEscalations.at(0).controls.maxArmyPoints.value).toBe(777);
+    expect(page.roundEscalations.at(7).controls.maxArmyPoints.value).toBe(1000);
+    expect(page.roundEscalations.at(7).controls.freeSupplyPoints.value).toBe(1);
+    expect(page.roundEscalations.at(7).controls.freeCharacterCount.value).toBe(1);
     TestBed.inject(HttpTestingController).verify();
   });
 
@@ -390,8 +459,16 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector('#pointsPerBattleDraw')).toBeTruthy();
     expect(compiled.querySelector('#mostTerritoriesCampaignPoints')).toBeTruthy();
     expect(compiled.querySelector<HTMLInputElement>('#splitForceSupplyPenaltyPercent')?.value).toBe('25');
-    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-0')?.value).toBe('1000');
-    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-supply-2')?.value).toBe('1');
+    expect(compiled.querySelector('#round-escalation-points-7')).toBeTruthy();
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-0')?.value).toBe('500');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-0')?.min).toBe('10');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-0')?.max).toBe('100000');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-supply-0')?.value).toBe('1');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-characters-0')?.value).toBe('1');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-6')?.value).toBe('2500');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-supply-6')?.value).toBe('3');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-characters-6')?.value).toBe('2');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-7')?.value).toBe('3000');
     expect(compiled.querySelector<HTMLInputElement>('#terrain-supply-0')?.value).toBe('1');
     expect(compiled.querySelector('#structure-supply-0')).toBeTruthy();
     clickNamedButton(compiled, 'Add public objective');
@@ -422,6 +499,36 @@ describe('CampaignSetupPage', () => {
       'Campaign maps must be 20 MB or smaller.',
     );
     expect(input.value).toBe('');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('rejects round army points outside 10 to 100000', async () => {
+    HTMLElement.prototype.scrollIntoView = () => undefined;
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      roundEscalations: {
+        at: (index: number) => { controls: { maxArmyPoints: { setValue: (value: number) => void } } };
+      };
+      save: () => Promise<void>;
+    };
+    page.roundEscalations.at(0).controls.maxArmyPoints.setValue(9);
+    await page.save();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect([...compiled.querySelectorAll('.error-banner p')].map((node) => node.textContent.trim())).toContain(
+      'Round 1 max army points must be at least 10.',
+    );
+
+    page.roundEscalations.at(0).controls.maxArmyPoints.setValue(100001);
+    await page.save();
+    fixture.detectChanges();
+    expect([...compiled.querySelectorAll('.error-banner p')].map((node) => node.textContent.trim())).toContain(
+      'Round 1 max army points must be at most 100000.',
+    );
     TestBed.inject(HttpTestingController).verify();
   });
 
@@ -465,6 +572,60 @@ describe('CampaignSetupPage', () => {
     expect(detailsToggle?.getAttribute('aria-expanded')).toBe('true');
     expect(compiled.querySelector('#name')?.closest('[hidden]')).toBeNull();
     expect(compiled.textContent).toContain('Pillaged icon');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('adds catalog attacker/defender missions and keeps terrain pickers as name lists', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const addCatalog = compiled.querySelector<HTMLButtonElement>('#add-catalog-mission');
+    expect(addCatalog).toBeTruthy();
+    addCatalog!.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('#catalog-mission-name-0')).toBeTruthy();
+    const attackerDefender = compiled.querySelector<HTMLInputElement>('#catalog-mission-ad-0');
+    expect(attackerDefender).toBeTruthy();
+    attackerDefender!.click();
+    fixture.detectChanges();
+
+    const armyAdvantage = compiled.querySelector<HTMLInputElement>('#catalog-mission-ap-adv-0');
+    expect(armyAdvantage).toBeTruthy();
+    armyAdvantage!.click();
+    fixture.detectChanges();
+
+    const supplyAdvantage = compiled.querySelector<HTMLInputElement>('#catalog-mission-sp-adv-0');
+    expect(supplyAdvantage).toBeTruthy();
+    supplyAdvantage!.click();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      missions: {
+        getRawValue: () => { name: string; isAttackerDefender: boolean }[];
+        at: (index: number) => {
+          controls: {
+            name: { setValue: (value: string) => void };
+          };
+        };
+      };
+      catalogMissionNames: () => string[];
+    };
+    page.missions.at(0).controls.name.setValue('Meeting engagement');
+    fixture.detectChanges();
+    expect(compiled.querySelector('#catalog-mission-ap-side-0')).toBeTruthy();
+    expect(compiled.querySelector('#catalog-mission-sp-side-0')).toBeTruthy();
+    expect(compiled.querySelector('#catalog-mission-ap-amount-0')).toBeTruthy();
+    expect(compiled.querySelector('#terrain-mission-url-0-0')).toBeNull();
+    expect(compiled.querySelector('#terrain-question-prompt-0-0-0')).toBeNull();
+    expect(compiled.textContent).not.toContain('Use uploaded mission');
+    expect(page.missions.getRawValue()[0]).toMatchObject({
+      name: 'Meeting engagement',
+      isAttackerDefender: true,
+    });
+    expect(page.catalogMissionNames()).toContain('Meeting engagement');
     TestBed.inject(HttpTestingController).verify();
   });
 });
@@ -575,6 +736,98 @@ describe('CampaignSetupPage edit', () => {
     expect(compiled.querySelector('app-campaign-map-preview img')?.getAttribute('src')).toContain(
       `/api/campaigns/${campaignId}/map?v=2`,
     );
+    http.verify();
+  });
+
+  it('pads stored army-size rows to the campaign round count', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      id: campaignId,
+      name: 'Border War',
+      description: 'A contested frontier.',
+      playerSlotCount: 8,
+      occupiedPlayerSlots: 1,
+      isPrivate: false,
+      isPubliclyViewable: true,
+      creatorIsParticipant: true,
+      city: null,
+      region: null,
+      country: null,
+      hasMap: true,
+      canManage: true,
+      isParticipant: true,
+      revision: 2,
+      createdUtc: '2026-08-13T00:00:00+00:00',
+      updatedUtc: '2026-08-13T00:00:00+00:00',
+      factions: [
+        {
+          id: '1',
+          name: 'North',
+          color: '#2563EB',
+          subfactions: [],
+          allyGroupName: null,
+          requiresSubfaction: false,
+          hasFlagImage: false,
+        },
+        {
+          id: '2',
+          name: 'South',
+          color: '#DC2626',
+          subfactions: [],
+          allyGroupName: null,
+          requiresSubfaction: false,
+          hasFlagImage: false,
+        },
+      ],
+      allyGroups: [],
+      links: [],
+      terrainTypes: [],
+      structureTypes: [],
+      timeZoneId: 'UTC',
+      startsAtLocal: '2099-01-05T12:00',
+      startsUtc: '2099-01-05T12:00:00+00:00',
+      endsUtc: '2099-03-02T12:00:00+00:00',
+      roundCount: 8,
+      roundLengthAmount: 1,
+      roundLengthUnit: 'Weeks',
+      phases: [
+        { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+        { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+        { kind: 'Battle', durationAmount: 1, durationUnit: 'Days' },
+      ],
+      roundEscalations: [
+        { roundNumber: 1, maxArmyPoints: 500, freeSupplyPoints: 2, freeCharacterCount: 3 },
+        { roundNumber: 2, maxArmyPoints: 750, freeSupplyPoints: 2, freeCharacterCount: 3 },
+        { roundNumber: 3, maxArmyPoints: 900, freeSupplyPoints: 2, freeCharacterCount: 3 },
+      ],
+      status: 'Scheduled',
+      currentRound: null,
+      currentPhaseNumber: null,
+      currentPhaseKind: null,
+      currentPhaseStartsUtc: null,
+      currentPhaseEndsUtc: null,
+      factionId: null,
+      subfaction: null,
+      canPlay: false,
+      canChooseFaction: false,
+      canChat: true,
+      mentionableMembers: [],
+      log: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('#round-escalation-points-7')).toBeTruthy();
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-0')?.value).toBe('500');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-supply-0')?.value).toBe('2');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-characters-0')?.value).toBe('3');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-2')?.value).toBe('900');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-3')?.value).toBe('1000');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-supply-3')?.value).toBe('1');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-characters-3')?.value).toBe('1');
+    expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-7')?.value).toBe('1000');
     http.verify();
   });
 

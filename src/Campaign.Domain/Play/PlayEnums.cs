@@ -221,3 +221,18 @@ public enum ChatChannelKind
     /// <summary>Visible to the sender and current members whose faction is in one ally group.</summary>
     AllyGroup = 3,
 }
+
+/// <summary>
+/// Army-list builder whose text export may be parsed when reporting a battle.
+/// </summary>
+public enum ArmyListBuilder
+{
+    /// <summary>Do not parse the pasted list; the player enters supply amounts by hand.</summary>
+    Other = 0,
+
+    /// <summary>Parse New Recruit text output for Warhammer: The Old World.</summary>
+    NewRecruit = 1,
+
+    /// <summary>Parse Old World Builder text output for Warhammer: The Old World.</summary>
+    OldWorldBuilder = 2,
+}

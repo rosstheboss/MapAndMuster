@@ -18,9 +18,11 @@ import type {
   ItemObjectiveChoice,
   ItemObjectiveChoiceResult,
   SaveCampaignPayload,
+  SaveMissionPayload,
 } from '../../core/campaigns/campaign.models';
 import { defaultStructureCatalog, defaultTerrainCatalog } from '../../core/campaigns/catalog-defaults';
 import { CAMPAIGN_PRESETS, campaignFromPreset } from '../../core/campaigns/campaign-presets';
+import { defaultArmyEscalations } from '../../core/campaigns/army-escalation-defaults';
 import {
   HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
   HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT,
@@ -87,6 +89,14 @@ type MissionGroup = FormGroup<{
   url: FormControl<string>;
   clearFile: FormControl<boolean>;
   resultQuestions: FormArray<MissionQuestionGroup>;
+  isAttackerDefender: FormControl<boolean>;
+  hasArmyPointsAdvantage: FormControl<boolean>;
+  armyPointsAdvantageSide: FormControl<string>;
+  armyPointsAdvantageIsPercent: FormControl<boolean>;
+  armyPointsAdvantageAmount: FormControl<number>;
+  hasSupplyPointsAdvantage: FormControl<boolean>;
+  supplyPointsAdvantageSide: FormControl<string>;
+  supplyPointsAdvantageAmount: FormControl<number>;
 }>;
 type FactionGroup = FormGroup<{
   id: FormControl<string>;
@@ -207,6 +217,7 @@ const TOP_LEVEL_SECTION_IDS = [
   'privateObjectives',
   'allies',
   'factions',
+  'missions',
   'terrain',
   'structures',
   'itemObjectives',
@@ -337,6 +348,7 @@ export class CampaignSetupPage {
     structureTypes: this.formBuilder.array<StructureGroup>(this.createDefaultStructureGroups()),
     itemObjectiveTypes: this.formBuilder.array<ItemObjectiveGroup>([]),
     specialRules: this.formBuilder.array<SpecialRuleGroup>([]),
+    missions: this.formBuilder.array<MissionGroup>([]),
     forceStatuses: this.formBuilder.array<ForceStatusGroup>([]),
     privateObjectiveTypes: this.formBuilder.array<PrivateObjectiveGroup>([]),
     publicObjectiveTypes: this.formBuilder.array<PublicObjectiveGroup>([]),
@@ -356,7 +368,7 @@ export class CampaignSetupPage {
     generalKillCampaignPoints: [1, [minValue(0), maxValue(999)]],
     supplyLineDestroyedCampaignPoints: [1, [minValue(0), maxValue(999)]],
     roundEscalations: this.formBuilder.array<RoundEscalationGroup>(
-      huntInEstaliaArmyEscalations(8).map((row) => this.createRoundEscalationGroup(row)),
+      defaultArmyEscalations(8).map((row) => this.createRoundEscalationGroup(row)),
     ),
     phases: this.formBuilder.array<PhaseGroup>([
       this.createPhaseGroup('Action', 3, 'Days'),
@@ -426,6 +438,10 @@ export class CampaignSetupPage {
 
   protected get specialRules(): FormArray<SpecialRuleGroup> {
     return this.form.controls.specialRules;
+  }
+
+  protected get missions(): FormArray<MissionGroup> {
+    return this.form.controls.missions;
   }
 
   protected get forceStatuses(): FormArray<ForceStatusGroup> {
@@ -736,6 +752,10 @@ export class CampaignSetupPage {
       this.privateObjectiveTypes,
       (campaign.privateObjectiveTypes ?? []).map((item) => this.createPrivateObjectiveGroup(item, item.id)),
     );
+    this.replaceArray(
+      this.missions,
+      this.catalogMissionsFrom(campaign).map((mission) => this.createMissionGroupFromDetail(mission)),
+    );
     this.form.controls.playerCount.setValue(campaign.playerSlotCount);
     this.form.controls.roundCount.setValue(campaign.roundCount);
     this.form.controls.roundLengthAmount.setValue(campaign.roundLengthAmount);
@@ -757,13 +777,7 @@ export class CampaignSetupPage {
     this.form.controls.alwaysAskSupplyLineDestroyed.setValue(campaign.alwaysAskSupplyLineDestroyed !== false);
     this.form.controls.generalKillCampaignPoints.setValue(campaign.generalKillCampaignPoints ?? 1);
     this.form.controls.supplyLineDestroyedCampaignPoints.setValue(campaign.supplyLineDestroyedCampaignPoints ?? 1);
-    this.replaceArray(
-      this.roundEscalations,
-      (campaign.roundEscalations?.length
-        ? campaign.roundEscalations
-        : huntInEstaliaArmyEscalations(campaign.roundCount)
-      ).map((row) => this.createRoundEscalationGroup(row)),
-    );
+    this.applyRoundEscalations(campaign.roundEscalations, campaign.roundCount);
     this.replaceArray(
       this.phases,
       campaign.phases.map((phase) => this.createPhaseGroup(phase.kind, phase.durationAmount, phase.durationUnit)),
@@ -1137,65 +1151,57 @@ export class CampaignSetupPage {
     group.controls.missions.push(this.createMissionGroup());
   }
 
-  protected addReusedMission(group: TerrainGroup | StructureGroup, missionId: string): void {
-    if (!missionId || group.controls.missions.length >= 20) {
+  protected addCatalogMission(): void {
+    if (this.missions.length >= 80) {
       return;
     }
 
-    if (group.controls.missions.controls.some((mission) => mission.controls.id.value === missionId)) {
-      return;
-    }
-
-    const source = this.findMission(missionId);
-    if (!source) {
-      return;
-    }
-
-    group.controls.missions.push(
-      this.createMissionGroup(
-        source.controls.id.value,
-        source.controls.name.value,
-        source.controls.url.value,
-        source.controls.clearFile.value,
-      ),
-    );
-    const added = group.controls.missions.at(-1);
-    this.replaceArray(
-      added.controls.resultQuestions,
-      source.controls.resultQuestions.controls.map((question) =>
-        this.createMissionQuestionGroup(
-          question.controls.id.value,
-          question.controls.prompt.value,
-          question.controls.kind.value,
-          question.controls.battlePoints.value,
-          question.controls.campaignPoints.value,
-        ),
-      ),
-    );
+    this.missions.push(this.createMissionGroup());
   }
 
-  protected onReuseMissionSelected(group: TerrainGroup | StructureGroup, event: Event): void {
-    const select = event.target as HTMLSelectElement;
-    this.addReusedMission(group, select.value);
-    select.value = '';
-  }
-
-  protected reusableMissions(group: TerrainGroup | StructureGroup): { id: string; name: string }[] {
-    const used = new Set(group.controls.missions.controls.map((mission) => mission.controls.id.value));
-    const seen = new Map<string, { id: string; name: string }>();
+  protected removeCatalogMission(index: number): void {
+    const missionId = this.missions.at(index).controls.id.value;
+    this.missionFiles.delete(missionId);
+    this.missions.removeAt(index);
     for (const owner of [...this.terrainTypes.controls, ...this.structureTypes.controls]) {
-      for (const mission of owner.controls.missions.controls) {
-        const name = mission.controls.name.value.trim();
-        const id = mission.controls.id.value;
-        if (!name || used.has(id) || seen.has(id)) {
-          continue;
-        }
-
-        seen.set(id, { id, name });
+      const attached = owner.controls.missions.controls.findIndex((mission) => mission.controls.id.value === missionId);
+      if (attached >= 0) {
+        owner.controls.missions.removeAt(attached);
       }
     }
+  }
 
-    return [...seen.values()].sort((left, right) => left.name.localeCompare(right.name));
+  protected catalogMissionNames(): string[] {
+    return this.missions.controls
+      .map((mission) => mission.controls.name.value.trim())
+      .filter((name) => name.length > 0)
+      .sort((left, right) => left.localeCompare(right));
+  }
+
+  protected isCatalogMission(mission: MissionGroup): boolean {
+    const id = mission.controls.id.value;
+    return this.missions.controls.some((item) => item.controls.id.value === id);
+  }
+
+  protected onAttachedMissionName(group: TerrainGroup | StructureGroup, missionIndex: number, name: string): void {
+    const mission = group.controls.missions.at(missionIndex);
+    const trimmed = name.trim();
+    mission.controls.name.setValue(name);
+    const match = this.missions.controls.find(
+      (item) => item.controls.name.value.trim().toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (match) {
+      mission.controls.id.setValue(match.controls.id.value);
+      mission.controls.url.setValue(match.controls.url.value);
+      return;
+    }
+
+    const catalogIds = new Set(this.missions.controls.map((item) => item.controls.id.value));
+    if (trimmed.length > 0 && catalogIds.has(mission.controls.id.value)) {
+      mission.controls.id.setValue(this.newId());
+      mission.controls.url.setValue('');
+      this.replaceArray(mission.controls.resultQuestions, []);
+    }
   }
 
   protected setPillagedIconSource(structure: StructureGroup, source: 'symbol' | 'image'): void {
@@ -1247,9 +1253,11 @@ export class CampaignSetupPage {
   protected removeMission(group: TerrainGroup | StructureGroup, index: number): void {
     const missionId = group.controls.missions.at(index).controls.id.value;
     group.controls.missions.removeAt(index);
-    const stillUsed = [...this.terrainTypes.controls, ...this.structureTypes.controls].some((owner) =>
-      owner.controls.missions.controls.some((mission) => mission.controls.id.value === missionId),
-    );
+    const stillUsed =
+      this.missions.controls.some((mission) => mission.controls.id.value === missionId) ||
+      [...this.terrainTypes.controls, ...this.structureTypes.controls].some((owner) =>
+        owner.controls.missions.controls.some((mission) => mission.controls.id.value === missionId),
+      );
     if (!stillUsed) {
       this.missionFiles.delete(missionId);
     }
@@ -1709,6 +1717,10 @@ export class CampaignSetupPage {
         (campaign.specialRules ?? []).map((rule) => this.createSpecialRuleGroup(rule.id, rule.name, rule.text)),
       );
       this.replaceArray(
+        this.missions,
+        this.catalogMissionsFrom(campaign).map((mission) => this.createMissionGroupFromDetail(mission)),
+      );
+      this.replaceArray(
         this.forceStatuses,
         (campaign.forceStatuses ?? []).map((status) =>
           this.createForceStatusGroup(
@@ -1748,13 +1760,7 @@ export class CampaignSetupPage {
       this.form.controls.alwaysAskSupplyLineDestroyed.setValue(campaign.alwaysAskSupplyLineDestroyed !== false);
       this.form.controls.generalKillCampaignPoints.setValue(campaign.generalKillCampaignPoints ?? 1);
       this.form.controls.supplyLineDestroyedCampaignPoints.setValue(campaign.supplyLineDestroyedCampaignPoints ?? 1);
-      this.replaceArray(
-        this.roundEscalations,
-        (campaign.roundEscalations?.length
-          ? campaign.roundEscalations
-          : huntInEstaliaArmyEscalations(campaign.roundCount)
-        ).map((row) => this.createRoundEscalationGroup(row)),
-      );
+      this.applyRoundEscalations(campaign.roundEscalations, campaign.roundCount);
       this.replaceArray(
         this.phases,
         campaign.phases.map((phase) => this.createPhaseGroup(phase.kind, phase.durationAmount, phase.durationUnit)),
@@ -1819,13 +1825,27 @@ export class CampaignSetupPage {
     return crypto.randomUUID();
   }
 
-  private createMissionGroup(id?: string, name = '', url = '', clearFile = false): MissionGroup {
+  private createMissionGroup(
+    id?: string,
+    name = '',
+    url = '',
+    clearFile = false,
+    extra?: Partial<CampaignMission>,
+  ): MissionGroup {
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
       name: [name, maxLength(60)],
       url: [url, [maxLength(2048), httpUrl]],
       clearFile: [clearFile],
       resultQuestions: this.formBuilder.array<MissionQuestionGroup>([]),
+      isAttackerDefender: [extra?.isAttackerDefender ?? false],
+      hasArmyPointsAdvantage: [extra?.hasArmyPointsAdvantage ?? false],
+      armyPointsAdvantageSide: [extra?.armyPointsAdvantageSide ?? 'Defender'],
+      armyPointsAdvantageIsPercent: [extra?.armyPointsAdvantageIsPercent ?? false],
+      armyPointsAdvantageAmount: [extra?.armyPointsAdvantageAmount ?? 0],
+      hasSupplyPointsAdvantage: [extra?.hasSupplyPointsAdvantage ?? false],
+      supplyPointsAdvantageSide: [extra?.supplyPointsAdvantageSide ?? 'Defender'],
+      supplyPointsAdvantageAmount: [extra?.supplyPointsAdvantageAmount ?? 0],
     });
   }
 
@@ -1845,6 +1865,24 @@ export class CampaignSetupPage {
     });
   }
 
+  private applyRoundEscalations(
+    rows:
+      | readonly {
+          roundNumber: number;
+          maxArmyPoints: number;
+          freeSupplyPoints: number;
+          freeCharacterCount: number;
+        }[]
+      | undefined,
+    roundCount: number,
+  ): void {
+    this.replaceArray(
+      this.roundEscalations,
+      (rows ?? []).map((row) => this.createRoundEscalationGroup(row)),
+    );
+    this.syncRoundEscalations(roundCount);
+  }
+
   private createRoundEscalationGroup(row: {
     roundNumber: number;
     maxArmyPoints: number;
@@ -1853,7 +1891,7 @@ export class CampaignSetupPage {
   }): RoundEscalationGroup {
     return this.formBuilder.nonNullable.group({
       roundNumber: [row.roundNumber],
-      maxArmyPoints: [row.maxArmyPoints, [minValue(0), maxValue(99999)]],
+      maxArmyPoints: [row.maxArmyPoints, [minValue(10), maxValue(100000)]],
       freeSupplyPoints: [row.freeSupplyPoints, [minValue(0), maxValue(999)]],
       freeCharacterCount: [row.freeCharacterCount, [minValue(0), maxValue(99)]],
     });
@@ -1861,12 +1899,16 @@ export class CampaignSetupPage {
 
   private syncRoundEscalations(roundCount: number): void {
     const count = Math.max(3, Math.min(52, Math.floor(roundCount)));
-    if (!Number.isFinite(count) || this.roundEscalations.length === count) {
+    if (!Number.isFinite(count)) {
       return;
     }
 
     const current = this.roundEscalations.getRawValue();
-    const defaults = huntInEstaliaArmyEscalations(count);
+    if (current.length === count && current.every((row, index) => row.roundNumber === index + 1)) {
+      return;
+    }
+
+    const defaults = defaultArmyEscalations(count);
     this.replaceArray(
       this.roundEscalations,
       defaults.map((row) => {
@@ -1966,7 +2008,7 @@ export class CampaignSetupPage {
   }
 
   private createMissionGroupFromDetail(mission: CampaignMission): MissionGroup {
-    const group = this.createMissionGroup(mission.id, mission.name, mission.url ?? '', false);
+    const group = this.createMissionGroup(mission.id, mission.name, mission.url ?? '', false, mission);
     const questions = mission.resultQuestions ?? [];
     this.replaceArray(
       group.controls.resultQuestions,
@@ -2239,7 +2281,7 @@ export class CampaignSetupPage {
       supplyPoints: Number(type.supplyPoints) || HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
-        .map((mission) => this.toMissionPayload(mission)),
+        .map((mission) => this.toAttachedMissionPayload(mission)),
     }));
     const structureTypes = value.structureTypes.map((type) => ({
       id: type.id,
@@ -2256,7 +2298,7 @@ export class CampaignSetupPage {
       destroySupplyPoints: Number(type.destroySupplyPoints) || HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
-        .map((mission) => this.toMissionPayload(mission)),
+        .map((mission) => this.toAttachedMissionPayload(mission)),
     }));
     const itemObjectiveTypes = value.itemObjectiveTypes
       .filter((type) => type.name.trim().length > 0)
@@ -2351,6 +2393,7 @@ export class CampaignSetupPage {
       structureTypes,
       itemObjectiveTypes,
       specialRules,
+      missions: this.mergedMissionPayloads(value),
       forceStatuses,
       privateObjectiveTypes,
       publicObjectiveTypes,
@@ -2394,13 +2437,15 @@ export class CampaignSetupPage {
     url: string;
     clearFile: boolean;
     resultQuestions: { id: string; prompt: string; kind: string; battlePoints: number; campaignPoints: number }[];
-  }): {
-    id: string;
-    name: string;
-    url: string | null;
-    clearFile: boolean;
-    resultQuestions: SaveCampaignPayload['terrainTypes'][number]['missions'][number]['resultQuestions'];
-  } {
+    isAttackerDefender?: boolean;
+    hasArmyPointsAdvantage?: boolean;
+    armyPointsAdvantageSide?: string;
+    armyPointsAdvantageIsPercent?: boolean;
+    armyPointsAdvantageAmount?: number;
+    hasSupplyPointsAdvantage?: boolean;
+    supplyPointsAdvantageSide?: string;
+    supplyPointsAdvantageAmount?: number;
+  }): SaveMissionPayload {
     const hasPendingFile = this.missionFiles.has(mission.id);
     return {
       id: mission.id,
@@ -2416,7 +2461,66 @@ export class CampaignSetupPage {
           battlePoints: Number(question.battlePoints) || 0,
           campaignPoints: Number(question.campaignPoints) || 0,
         })),
+      isAttackerDefender: Boolean(mission.isAttackerDefender),
+      hasArmyPointsAdvantage: Boolean(mission.hasArmyPointsAdvantage),
+      armyPointsAdvantageSide: mission.armyPointsAdvantageSide ?? 'Defender',
+      armyPointsAdvantageIsPercent: Boolean(mission.armyPointsAdvantageIsPercent),
+      armyPointsAdvantageAmount: Number(mission.armyPointsAdvantageAmount) || 0,
+      hasSupplyPointsAdvantage: Boolean(mission.hasSupplyPointsAdvantage),
+      supplyPointsAdvantageSide: mission.supplyPointsAdvantageSide ?? 'Defender',
+      supplyPointsAdvantageAmount: Number(mission.supplyPointsAdvantageAmount) || 0,
     };
+  }
+
+  private toAttachedMissionPayload(mission: {
+    id: string;
+    name: string;
+    url: string;
+    clearFile: boolean;
+    resultQuestions: { id: string; prompt: string; kind: string; battlePoints: number; campaignPoints: number }[];
+  }): SaveMissionPayload {
+    const catalogById = this.missions.controls.find((item) => item.controls.id.value === mission.id);
+    if (catalogById) {
+      return this.toMissionPayload(catalogById.getRawValue());
+    }
+
+    const catalogByName = this.missions.controls.find(
+      (item) => item.controls.name.value.trim().toLowerCase() === mission.name.trim().toLowerCase(),
+    );
+    if (catalogByName) {
+      return this.toMissionPayload(catalogByName.getRawValue());
+    }
+
+    return this.toMissionPayload(mission);
+  }
+
+  private mergedMissionPayloads(value: ReturnType<typeof this.form.getRawValue>): SaveMissionPayload[] {
+    const catalog = value.missions
+      .filter((mission) => mission.name.trim().length > 0)
+      .map((mission) => this.toMissionPayload(mission));
+    const seen = new Set(catalog.map((mission) => mission.id));
+    const extras = [...value.terrainTypes, ...value.structureTypes].flatMap((type) =>
+      type.missions
+        .filter((mission) => mission.name.trim().length > 0 && !seen.has(mission.id))
+        .map((mission) => {
+          seen.add(mission.id);
+          return this.toMissionPayload(mission);
+        }),
+    );
+    return [...catalog, ...extras];
+  }
+
+  private catalogMissionsFrom(campaign: CampaignDetail): CampaignMission[] {
+    if ((campaign.missions ?? []).length > 0) {
+      return campaign.missions ?? [];
+    }
+
+    const seen = new Map<string, CampaignMission>();
+    for (const mission of [...campaign.terrainTypes, ...campaign.structureTypes].flatMap((type) => type.missions)) {
+      seen.set(mission.id, mission);
+    }
+
+    return [...seen.values()];
   }
 
   private collectFailures(): { messages: string[]; sections: string[] } {
@@ -2738,6 +2842,15 @@ export class CampaignSetupPage {
       usedPrivateNames.add(key);
     });
 
+    this.roundEscalations.controls.forEach((row) => {
+      const roundNumber = row.controls.roundNumber.value;
+      const message = describeControlError(row.controls.maxArmyPoints, `Round ${roundNumber} max army points`);
+      if (message) {
+        failures.push(message);
+        sections.add('schedule');
+      }
+    });
+
     const roundLengthError = describeControlError(this.form.controls.roundLengthAmount, 'Round length');
     if (!roundLengthError) {
       const roundLengthMessage = durationRangeMessage(
@@ -2810,6 +2923,25 @@ export class CampaignSetupPage {
     });
 
     const missionNames = new Map<string, string>();
+    this.missions.controls.forEach((mission, index) => {
+      const name = mission.controls.name.value.trim();
+      if (!name) {
+        return;
+      }
+
+      const key = name.toLowerCase();
+      const id = mission.controls.id.value;
+      const existing = missionNames.get(key);
+      if (existing && existing !== id) {
+        sections.add('missions');
+        sections.add(`mission-item-${index}`);
+        if (!failures.includes('Mission names must be unique.')) {
+          failures.push('Mission names must be unique.');
+        }
+      } else {
+        missionNames.set(key, id);
+      }
+    });
     const owners: { group: TerrainGroup | StructureGroup; section: string; nested: string }[] = [
       ...this.terrainTypes.controls.map((group, index) => ({
         group,
@@ -2853,6 +2985,11 @@ export class CampaignSetupPage {
   }
 
   private findMission(missionId: string): MissionGroup | null {
+    const catalog = this.missions.controls.find((mission) => mission.controls.id.value === missionId);
+    if (catalog) {
+      return catalog;
+    }
+
     for (const owner of [...this.terrainTypes.controls, ...this.structureTypes.controls]) {
       const match = owner.controls.missions.controls.find((mission) => mission.controls.id.value === missionId);
       if (match) {
@@ -2868,7 +3005,10 @@ export class CampaignSetupPage {
   }
 
   private allSectionIds(): string[] {
-    const ids: string[] = [...TOP_LEVEL_SECTION_IDS];
+    const ids: string[] = [...TOP_LEVEL_SECTION_IDS, 'round-army'];
+    this.missions.controls.forEach((_, index) => {
+      ids.push(`mission-item-${index}`);
+    });
     this.factions.controls.forEach((_, index) => {
       ids.push(`faction-item-${index}`, `faction-sub-${index}`);
     });
@@ -2910,8 +3050,11 @@ export class CampaignSetupPage {
     );
     this.storedMissionFiles.set(
       new Set(
-        [...campaign.terrainTypes, ...campaign.structureTypes]
-          .flatMap((type) => type.missions)
+        [
+          ...(campaign.missions ?? []),
+          ...campaign.terrainTypes.flatMap((type) => type.missions),
+          ...campaign.structureTypes.flatMap((type) => type.missions),
+        ]
           .filter((mission) => mission.hasFile)
           .map((mission) => mission.id),
       ),

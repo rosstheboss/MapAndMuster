@@ -149,6 +149,9 @@ public sealed class CampaignDetail
     /// <summary>Gets reusable special rules. Empty means none.</summary>
     public IReadOnlyList<SpecialRuleDetail> SpecialRules { get; init; } = [];
 
+    /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
+    public IReadOnlyList<MissionDetail> Missions { get; init; } = [];
+
     /// <summary>Gets configured force statuses other than Normal.</summary>
     public IReadOnlyList<ForceStatusDetail> ForceStatuses { get; init; } = [];
 
@@ -569,6 +572,9 @@ public sealed class StoredCampaign
 
     /// <summary>Gets reusable special rules. Empty means none.</summary>
     public IReadOnlyList<StoredSpecialRule> SpecialRules { get; init; } = [];
+
+    /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
+    public IReadOnlyList<StoredMission> Missions { get; init; } = [];
 
     /// <summary>Gets configured force statuses other than Normal.</summary>
     public IReadOnlyList<StoredForceStatus> ForceStatuses { get; init; } = [];
@@ -1149,6 +1155,30 @@ public sealed class MissionDetail
 
     /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
     public IReadOnlyList<MissionResultQuestionDetail> ResultQuestions { get; init; } = [];
+
+    /// <summary>Gets whether this mission is used for attacker/defender engagements.</summary>
+    public bool IsAttackerDefender { get; init; }
+
+    /// <summary>Gets whether attacker or defender army points are adjusted.</summary>
+    public bool HasArmyPointsAdvantage { get; init; }
+
+    /// <summary>Gets Attacker or Defender for the army-point adjustment.</summary>
+    public string ArmyPointsAdvantageSide { get; init; } = nameof(Campaign.Domain.Campaigns.MissionAdvantageSide.Defender);
+
+    /// <summary>Gets whether the army-point amount is a percent of the cap.</summary>
+    public bool ArmyPointsAdvantageIsPercent { get; init; }
+
+    /// <summary>Gets the signed army-point number or percent change.</summary>
+    public int ArmyPointsAdvantageAmount { get; init; }
+
+    /// <summary>Gets whether attacker or defender supply points are adjusted.</summary>
+    public bool HasSupplyPointsAdvantage { get; init; }
+
+    /// <summary>Gets Attacker or Defender for the supply-point adjustment.</summary>
+    public string SupplyPointsAdvantageSide { get; init; } = nameof(Campaign.Domain.Campaigns.MissionAdvantageSide.Defender);
+
+    /// <summary>Gets the signed raw supply-point change.</summary>
+    public int SupplyPointsAdvantageAmount { get; init; }
 }
 
 /// <summary>
@@ -1455,6 +1485,30 @@ public sealed class StoredMission
 
     /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
     public IReadOnlyList<StoredMissionResultQuestion> ResultQuestions { get; init; } = [];
+
+    /// <summary>Gets whether this mission is used for attacker/defender engagements.</summary>
+    public bool IsAttackerDefender { get; init; }
+
+    /// <summary>Gets whether attacker or defender army points are adjusted.</summary>
+    public bool HasArmyPointsAdvantage { get; init; }
+
+    /// <summary>Gets Attacker or Defender for the army-point adjustment.</summary>
+    public string ArmyPointsAdvantageSide { get; init; } = "Defender";
+
+    /// <summary>Gets whether the army-point amount is a percent of the cap.</summary>
+    public bool ArmyPointsAdvantageIsPercent { get; init; }
+
+    /// <summary>Gets the signed army-point number or percent change.</summary>
+    public int ArmyPointsAdvantageAmount { get; init; }
+
+    /// <summary>Gets whether attacker or defender supply points are adjusted.</summary>
+    public bool HasSupplyPointsAdvantage { get; init; }
+
+    /// <summary>Gets Attacker or Defender for the supply-point adjustment.</summary>
+    public string SupplyPointsAdvantageSide { get; init; } = "Defender";
+
+    /// <summary>Gets the signed raw supply-point change.</summary>
+    public int SupplyPointsAdvantageAmount { get; init; }
 }
 
 /// <summary>

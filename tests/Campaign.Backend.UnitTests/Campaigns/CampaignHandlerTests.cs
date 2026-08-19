@@ -1729,20 +1729,28 @@ public sealed class CampaignHandlerTests
             return Task.FromResult(true);
         }
 
-        public Task<IReadOnlyList<UserNotification>> ListUnreadAsync(Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<UserNotification>>([]);
+        public Task<IReadOnlyList<UserNotification>> ListUnreadAsync(Guid userId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<UserNotification>>([]);
+        }
 
-        public Task<bool> MarkReadAsync(Guid notificationId, Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken) =>
-            Task.FromResult(true);
+        public Task<bool> MarkReadAsync(Guid notificationId, Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(true);
+        }
     }
 
     private sealed class FakeEmailOutbox : IEmailOutbox
     {
-        public Task QueueEmailConfirmationAsync(string email, Guid userId, string token, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task QueueEmailConfirmationAsync(string email, Guid userId, string token, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task QueuePasswordResetAsync(string email, Guid userId, string token, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task QueuePasswordResetAsync(string email, Guid userId, string token, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
 
         public Task QueueUserNoticeAsync(
             string email,
@@ -1750,8 +1758,10 @@ public sealed class CampaignHandlerTests
             string subject,
             string body,
             string path,
-            CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+            CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeAccounts : IUserAccountStore
@@ -1760,16 +1770,25 @@ public sealed class CampaignHandlerTests
 
         public List<MentionableAccount> SearchHits { get; init; } = [];
 
-        public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(false);
+        }
 
-        public Task<bool> UsernameExistsAsync(string username, Guid? userIdToIgnore, CancellationToken cancellationToken) =>
-            Task.FromResult(false);
+        public Task<bool> UsernameExistsAsync(string username, Guid? userIdToIgnore, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(false);
+        }
 
-        public Task<CreateLocalAccountOutcome> CreateLocalAccountAsync(CreateLocalAccountRequest request, CancellationToken cancellationToken) =>
+        public Task<CreateLocalAccountOutcome> CreateLocalAccountAsync(CreateLocalAccountRequest request, CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
 
-        public Task<CreateLocalAccountOutcome> CreateExternalAccountAsync(CreateExternalAccountRequest request, CancellationToken cancellationToken) =>
+        public Task<CreateLocalAccountOutcome> CreateExternalAccountAsync(CreateExternalAccountRequest request, CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
 
         public Task<UserAccount?> FindByIdAsync(Guid userId, CancellationToken cancellationToken)
         {
@@ -1794,21 +1813,29 @@ public sealed class CampaignHandlerTests
             });
         }
 
-        public Task<UserAccount?> FindByUsernameAsync(string username, CancellationToken cancellationToken) =>
-            Task.FromResult<UserAccount?>(null);
+        public Task<UserAccount?> FindByUsernameAsync(string username, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<UserAccount?>(null);
+        }
 
-        public Task<UpdateProfileOutcome> UpdateProfileAsync(UpdateStoredProfileRequest request, CancellationToken cancellationToken) =>
+        public Task<UpdateProfileOutcome> UpdateProfileAsync(UpdateStoredProfileRequest request, CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
 
         public Task<ChangePasswordOutcome> ChangePasswordAsync(
             Guid userId,
             string currentPassword,
             string newPassword,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken)
+        {
             throw new NotSupportedException();
+        }
 
-        public Task<string?> ReplaceAvatarKeyAsync(Guid userId, string? avatarStorageKey, CancellationToken cancellationToken) =>
-            Task.FromResult<string?>(null);
+        public Task<string?> ReplaceAvatarKeyAsync(Guid userId, string? avatarStorageKey, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<string?>(null);
+        }
 
         public Task<IReadOnlySet<Guid>> FindAdministratorIdsAsync(
             IReadOnlyList<Guid> userIds,

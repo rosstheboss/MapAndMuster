@@ -277,6 +277,13 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
 
+        group.MapPost("/{campaignId:guid}/play/parse-army-list", ParseArmyListAsync)
+            .WithName("ParseCampaignArmyList")
+            .Produces<ParseArmyListResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status401Unauthorized)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
         group.MapPost("/{campaignId:guid}/play/accept-result", AcceptBattleResultAsync)
             .WithName("AcceptCampaignBattleResult")
             .Produces<CampaignPlayResponse>()
@@ -467,6 +474,7 @@ public static class CampaignEndpoints
                     ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
                     PublicObjectiveTypes = CampaignResponses.ToPublicObjectiveTypeInputs(request.PublicObjectiveTypes),
                     SpecialRules = CampaignResponses.ToSpecialRuleInputs(request.SpecialRules),
+                    Missions = CampaignResponses.ToMissionInputs(request.Missions),
                     ForceStatuses = CampaignResponses.ToForceStatusInputs(request.ForceStatuses),
                     PrivateObjectiveTypes = CampaignResponses.ToPrivateObjectiveTypeInputs(request.PrivateObjectiveTypes),
                     PointsPerBattleWon = request.PointsPerBattleWon,
@@ -782,6 +790,7 @@ public static class CampaignEndpoints
                     ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
                     PublicObjectiveTypes = CampaignResponses.ToPublicObjectiveTypeInputs(request.PublicObjectiveTypes),
                     SpecialRules = CampaignResponses.ToSpecialRuleInputs(request.SpecialRules),
+                    Missions = CampaignResponses.ToMissionInputs(request.Missions),
                     ForceStatuses = CampaignResponses.ToForceStatusInputs(request.ForceStatuses),
                     PrivateObjectiveTypes = CampaignResponses.ToPrivateObjectiveTypeInputs(request.PrivateObjectiveTypes),
                     PointsPerBattleWon = request.PointsPerBattleWon,
@@ -1639,6 +1648,39 @@ public static class CampaignEndpoints
                 cancellationToken)
             .ConfigureAwait(false);
         return PlayResult(result);
+    }
+
+    private static async Task<IResult> ParseArmyListAsync(
+        Guid campaignId,
+        ParseArmyListRequest request,
+        ClaimsPrincipal principal,
+        ParseArmyListHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ParseArmyListCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    GameSystem = request.GameSystem,
+                    Builder = request.Builder,
+                    Text = request.Text,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(PlayResponses.FromParse(result.Value));
     }
 
     private static async Task<IResult> AcceptBattleResultAsync(

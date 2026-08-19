@@ -13,8 +13,10 @@ import type {
   CampaignPlayDetail,
   CampaignSpecialRule,
   BattleParticipantReport,
+  ArmyListSupplyCategory,
   MapGraphDetail,
   PlayBattle,
+  PlayBattleForceSupply,
   PlayForce,
   PlayItemObjective,
   PublicObjectiveLeader,
@@ -173,13 +175,20 @@ export class CampaignDetailPage {
     Partial<Record<string, { winnerScore: number | null; loserScore: number | null }>>
   >({});
   private readonly battleReports = signal<Record<string, BattleParticipantReport[]>>({});
+  private readonly armyListParseMessages = signal<Record<string, string>>({});
+  private readonly armyListParseTimers = new Map<string, ReturnType<typeof setTimeout>>();
   protected readonly retreatTarget = signal<Record<string, string>>({});
   private readonly mapRevision = signal(0);
   private logPollStarted = false;
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
-    this.destroyRef.onDestroy(() => this.persistViewPrefs());
+    this.destroyRef.onDestroy(() => {
+      this.persistViewPrefs();
+      for (const timer of this.armyListParseTimers.values()) {
+        globalThis.clearTimeout(timer);
+      }
+    });
     if (id) {
       void this.load(id);
     } else {
@@ -1096,6 +1105,146 @@ export class CampaignDetailPage {
     return `Spends ${recurring} from territory and round supply, then ${temporary} temporary.`;
   }
 
+  protected standardSupplyBreakdown(supply: PlayBattleForceSupply): string {
+    const parts = [`map ${supply.mapSupplyPoints ?? 0}`];
+    if ((supply.roundFreeSupplyPoints ?? 0) > 0) {
+      parts.push(`round +${supply.roundFreeSupplyPoints}`);
+    }
+    if ((supply.splitPenaltyPoints ?? 0) > 0) {
+      parts.push(`split −${supply.splitPenaltyPoints}`);
+    }
+
+    return parts.join(' · ');
+  }
+
+  protected armyListText(battleId: string, forceId: string): string {
+    return this.reportFor(battleId, forceId).armyListText ?? '';
+  }
+
+  protected onArmyListText(battleId: string, forceId: string, value: string): void {
+    this.patchReport(battleId, forceId, { armyListText: value });
+    this.scheduleArmyListParse(battleId, forceId);
+  }
+
+  protected armyListGameSystem(battleId: string, forceId: string): string {
+    return this.reportFor(battleId, forceId).armyListGameSystem ?? 'WarhammerTheOldWorld';
+  }
+
+  protected onArmyListGameSystem(battleId: string, forceId: string, value: string): void {
+    this.patchReport(battleId, forceId, { armyListGameSystem: value });
+    this.scheduleArmyListParse(battleId, forceId);
+  }
+
+  protected armyListBuilder(battleId: string, forceId: string): string {
+    return this.reportFor(battleId, forceId).armyListBuilder ?? 'Other';
+  }
+
+  protected onArmyListBuilder(battleId: string, forceId: string, value: string): void {
+    this.patchReport(battleId, forceId, { armyListBuilder: value });
+    this.setArmyListParseMessage(battleId, forceId, '');
+    this.scheduleArmyListParse(battleId, forceId);
+  }
+
+  protected armyListParseMessage(battleId: string, forceId: string): string {
+    return this.armyListParseMessages()[this.armyListKey(battleId, forceId)] ?? '';
+  }
+
+  protected armyListCategories(battleId: string, forceId: string): ArmyListSupplyCategory[] {
+    return this.reportFor(battleId, forceId).supplyCategories ?? [];
+  }
+
+  protected onArmyListCategorySupply(
+    battleId: string,
+    forceId: string,
+    name: string,
+    value: string | number | null,
+  ): void {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    const supplyPoints = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    const report = this.reportFor(battleId, forceId);
+    const categories = (report.supplyCategories ?? []).map((category) =>
+      category.name === name ? { ...category, supplyPoints } : category,
+    );
+    const supplyCostingUnitCount = categories
+      .filter((category) => category.costsSupply)
+      .reduce((sum, category) => sum + category.supplyPoints, 0);
+    this.patchReport(battleId, forceId, { supplyCategories: categories, supplyCostingUnitCount });
+  }
+
+  protected opponentArmyList(battle: PlayBattle, forceId: string): string | null {
+    const text = battle.opponentSubmission?.reports?.find((report) => report.forceId === forceId)?.armyListText?.trim();
+    return text ?? null;
+  }
+
+  private scheduleArmyListParse(battleId: string, forceId: string): void {
+    const key = this.armyListKey(battleId, forceId);
+    const existing = this.armyListParseTimers.get(key);
+    if (existing) {
+      globalThis.clearTimeout(existing);
+    }
+
+    this.armyListParseTimers.set(
+      key,
+      globalThis.setTimeout(() => {
+        this.armyListParseTimers.delete(key);
+        void this.parseArmyList(battleId, forceId);
+      }, 400),
+    );
+  }
+
+  private async parseArmyList(battleId: string, forceId: string): Promise<void> {
+    const play = this.play();
+    const report = this.reportFor(battleId, forceId);
+    const builder = report.armyListBuilder ?? 'Other';
+    if (!play || builder === 'Other' || !(report.armyListText ?? '').trim()) {
+      this.setArmyListParseMessage(battleId, forceId, '');
+      return;
+    }
+
+    try {
+      const result = await this.campaignsApi.parseArmyList(play.id, {
+        gameSystem: report.armyListGameSystem ?? 'WarhammerTheOldWorld',
+        builder,
+        text: report.armyListText,
+      });
+      if (!result.parsed) {
+        this.setArmyListParseMessage(battleId, forceId, result.message ?? '');
+        return;
+      }
+
+      this.setArmyListParseMessage(battleId, forceId, '');
+      this.patchReport(battleId, forceId, {
+        armyPoints: result.armyPoints,
+        supplyCostingUnitCount: result.supplyCostingUnitCount,
+        supplyCategories: result.categories,
+      });
+    } catch {
+      this.setArmyListParseMessage(
+        battleId,
+        forceId,
+        'The list could not be parsed. Enter the supply points manually.',
+      );
+    }
+  }
+
+  private setArmyListParseMessage(battleId: string, forceId: string, message: string): void {
+    const key = this.armyListKey(battleId, forceId);
+    this.armyListParseMessages.update((current) => {
+      const next = { ...current };
+      if (message) {
+        next[key] = message;
+      } else {
+        delete next[key];
+      }
+
+      return next;
+    });
+  }
+
+  private armyListKey(battleId: string, forceId: string): string {
+    return `${battleId}:${forceId}`;
+  }
+
   private reportsFor(battle: PlayBattle): BattleParticipantReport[] {
     return this.reportingForceIds(battle).map((forceId) => this.reportFor(battle.id, forceId));
   }
@@ -1113,6 +1262,10 @@ export class CampaignDetailPage {
       differentialBattlePoints: 0,
       bonusBattlePoints: 0,
       supplyCostingUnitCount: 0,
+      armyListText: '',
+      armyListGameSystem: 'WarhammerTheOldWorld',
+      armyListBuilder: 'Other',
+      supplyCategories: [],
       killedEnemyGeneral: false,
       destroyedEnemySupplyLine: false,
       answers: [],

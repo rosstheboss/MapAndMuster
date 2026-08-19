@@ -17,7 +17,11 @@ public sealed class BattleParticipantReport
         bool killedEnemyGeneral,
         bool destroyedEnemySupplyLine,
         IReadOnlyList<BattleQuestionAnswer> answers,
-        int supplyCostingUnitCount = 0)
+        int supplyCostingUnitCount = 0,
+        string? armyListText = null,
+        string? armyListGameSystem = null,
+        ArmyListBuilder armyListBuilder = ArmyListBuilder.Other,
+        IReadOnlyList<ArmyListSupplyCategory>? supplyCategories = null)
     {
         ArgumentNullException.ThrowIfNull(answers);
         ArgumentOutOfRangeException.ThrowIfNegative(victoryPoints);
@@ -34,6 +38,10 @@ public sealed class BattleParticipantReport
         DestroyedEnemySupplyLine = destroyedEnemySupplyLine;
         Answers = answers;
         SupplyCostingUnitCount = supplyCostingUnitCount;
+        ArmyListText = armyListText;
+        ArmyListGameSystem = armyListGameSystem;
+        ArmyListBuilder = armyListBuilder;
+        SupplyCategories = supplyCategories ?? [];
     }
 
     /// <summary>Gets the reported force.</summary>
@@ -62,6 +70,18 @@ public sealed class BattleParticipantReport
 
     /// <summary>Gets how many supply-costing units (special, rare, and similar) this force fielded.</summary>
     public int SupplyCostingUnitCount { get; }
+
+    /// <summary>Gets optional pasted army-list text for opponent and staff review.</summary>
+    public string? ArmyListText { get; }
+
+    /// <summary>Gets the game system selected when the list was pasted, when any.</summary>
+    public string? ArmyListGameSystem { get; }
+
+    /// <summary>Gets which army builder produced the pasted text, when parsing was attempted.</summary>
+    public ArmyListBuilder ArmyListBuilder { get; }
+
+    /// <summary>Gets optional per-category supply amounts filled from a parse or edited by the player.</summary>
+    public IReadOnlyList<ArmyListSupplyCategory> SupplyCategories { get; }
 
     /// <summary>
     /// Battle points used to decide the winner before campaign-point conversion.

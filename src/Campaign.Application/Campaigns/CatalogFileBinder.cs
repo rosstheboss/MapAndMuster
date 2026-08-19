@@ -35,9 +35,11 @@ internal static class CatalogFileBinder
 
     public static IReadOnlyList<StoredTerrainType> BindTerrains(
         IReadOnlyList<TerrainTypeSetup> incoming,
-        IReadOnlyList<StoredTerrainType>? previous)
+        IReadOnlyList<StoredTerrainType>? previous,
+        IReadOnlyList<StoredMission>? extraMissions = null)
     {
-        var previousMissions = IndexMissions(previous?.SelectMany(static type => type.Missions));
+        var previousMissions = IndexMissions(
+            (previous?.SelectMany(static type => type.Missions) ?? []).Concat(extraMissions ?? []));
         return
         [
             .. incoming.Select(type => new StoredTerrainType
@@ -55,10 +57,12 @@ internal static class CatalogFileBinder
 
     public static IReadOnlyList<StoredStructureType> BindStructures(
         IReadOnlyList<StructureTypeSetup> incoming,
-        IReadOnlyList<StoredStructureType>? previous)
+        IReadOnlyList<StoredStructureType>? previous,
+        IReadOnlyList<StoredMission>? extraMissions = null)
     {
         var previousById = previous?.ToDictionary(static type => type.Id) ?? [];
-        var previousMissions = IndexMissions(previous?.SelectMany(static type => type.Missions));
+        var previousMissions = IndexMissions(
+            (previous?.SelectMany(static type => type.Missions) ?? []).Concat(extraMissions ?? []));
         return
         [
             .. incoming.Select(type =>
@@ -279,6 +283,14 @@ internal static class CatalogFileBinder
         {
             yield return key;
         }
+
+        foreach (var mission in campaign.Missions)
+        {
+            if (IsUserUploadedFileKey(mission.FileStorageKey))
+            {
+                yield return mission.FileStorageKey;
+            }
+        }
     }
 
     public static IEnumerable<string> UnusedStorageKeys(StoredCampaign previous, StoredCampaign current)
@@ -316,7 +328,7 @@ internal static class CatalogFileBinder
         return storageKey[..slash] is "maps" or "structures" or "flags" or "missions" or "items";
     }
 
-    private static IReadOnlyList<StoredMission> BindMissions(
+    public static IReadOnlyList<StoredMission> BindMissions(
         IReadOnlyList<MissionSetup> incoming,
         Dictionary<Guid, StoredMission> previous)
     {
@@ -344,12 +356,20 @@ internal static class CatalogFileBinder
                             CampaignPoints = question.CampaignPoints,
                         }),
                     ],
+                    IsAttackerDefender = mission.IsAttackerDefender,
+                    HasArmyPointsAdvantage = mission.HasArmyPointsAdvantage,
+                    ArmyPointsAdvantageSide = mission.ArmyPointsAdvantageSide.ToString(),
+                    ArmyPointsAdvantageIsPercent = mission.ArmyPointsAdvantageIsPercent,
+                    ArmyPointsAdvantageAmount = mission.ArmyPointsAdvantageAmount,
+                    HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
+                    SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide.ToString(),
+                    SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
                 };
             }),
         ];
     }
 
-    private static Dictionary<Guid, StoredMission> IndexMissions(IEnumerable<StoredMission>? missions)
+    public static Dictionary<Guid, StoredMission> IndexMissions(IEnumerable<StoredMission>? missions)
     {
         var indexed = new Dictionary<Guid, StoredMission>();
         if (missions is null)

@@ -83,7 +83,8 @@ public sealed class CreateCampaignHandler
                 command.AlwaysAskGeneralKill,
                 command.AlwaysAskSupplyLineDestroyed,
                 command.GeneralKillCampaignPoints,
-                command.SupplyLineDestroyedCampaignPoints))
+                command.SupplyLineDestroyedCampaignPoints,
+                command.Missions))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -208,7 +209,8 @@ public sealed class UpdateCampaignHandler
                 command.AlwaysAskGeneralKill,
                 command.AlwaysAskSupplyLineDestroyed,
                 command.GeneralKillCampaignPoints,
-                command.SupplyLineDestroyedCampaignPoints))
+                command.SupplyLineDestroyedCampaignPoints,
+                command.Missions))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -264,7 +266,8 @@ public sealed class UpdateCampaignHandler
             existing.TerrainTypes,
             existing.StructureTypes,
             existing.Factions,
-            existing.ItemObjectiveTypes);
+            existing.ItemObjectiveTypes,
+            existing.Missions);
 
         var outcome = await _campaigns
             .UpdateAsync(updated, command.ExpectedRevision, cancellationToken)
@@ -309,7 +312,8 @@ internal static class CampaignPersistenceFactory
         IReadOnlyList<StoredTerrainType>? previousTerrainTypes = null,
         IReadOnlyList<StoredStructureType>? previousStructureTypes = null,
         IReadOnlyList<StoredFaction>? previousFactions = null,
-        IReadOnlyList<StoredItemObjectiveType>? previousItemObjectiveTypes = null)
+        IReadOnlyList<StoredItemObjectiveType>? previousItemObjectiveTypes = null,
+        IReadOnlyList<StoredMission>? previousMissions = null)
     {
         var allyGroups = setup.AllyGroups
             .Select(group => new StoredAllyGroup
@@ -374,11 +378,17 @@ internal static class CampaignPersistenceFactory
                 }),
             ],
             MapGraph = mapGraph,
-            TerrainTypes = CatalogFileBinder.BindTerrains(setup.TerrainTypes, previousTerrainTypes),
-            StructureTypes = CatalogFileBinder.BindStructures(setup.StructureTypes, previousStructureTypes),
+            TerrainTypes = CatalogFileBinder.BindTerrains(setup.TerrainTypes, previousTerrainTypes, previousMissions),
+            StructureTypes = CatalogFileBinder.BindStructures(setup.StructureTypes, previousStructureTypes, previousMissions),
             ItemObjectiveTypes = CatalogFileBinder.BindItemObjectives(setup.ItemObjectiveTypes, previousItemObjectiveTypes),
             PublicObjectiveTypes = CatalogFileBinder.BindPublicObjectives(setup.PublicObjectiveTypes),
             SpecialRules = CatalogFileBinder.BindSpecialRules(setup.SpecialRules),
+            Missions = CatalogFileBinder.BindMissions(
+                setup.Missions,
+                CatalogFileBinder.IndexMissions(
+                    (previousMissions ?? [])
+                        .Concat(previousTerrainTypes?.SelectMany(static type => type.Missions) ?? [])
+                        .Concat(previousStructureTypes?.SelectMany(static type => type.Missions) ?? []))),
             ForceStatuses = CatalogFileBinder.BindForceStatuses(setup.ForceStatuses),
             PrivateObjectiveTypes = CatalogFileBinder.BindPrivateObjectives(setup.PrivateObjectiveTypes),
             BattleScoring = setup.BattleScoring,

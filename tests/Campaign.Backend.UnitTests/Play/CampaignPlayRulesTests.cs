@@ -153,7 +153,7 @@ public sealed class CampaignPlayRulesTests
         Assert.True(CampaignPlayRules.TrySaveDraft(
             state, PlayerOne, force.Id, ActionKind.Hold, null, null, map, schedule.StartsUtc, out state, out _));
         Assert.True(CampaignPlayRules.TryCommit(state, map, PlayerOne, AllyGroups(), schedule.StartsUtc, out var committed, out _));
-        Assert.False(committed!.State.Windows[0].Status == PhaseWindowStatus.Resolved);
+        Assert.NotEqual(PhaseWindowStatus.Resolved, committed!.State.Windows[0].Status);
         _ = schedule;
     }
 
@@ -570,10 +570,10 @@ public sealed class CampaignPlayRulesTests
                 eastForce,
             ],
             battles: [battle],
-            windows: state.Windows.Select(window =>
+            windows: [.. state.Windows.Select(window =>
                 window.Kind == RoundPhaseKind.Battle
                     ? window.With(status: PhaseWindowStatus.Open)
-                    : window.With(status: PhaseWindowStatus.Resolved)).ToArray());
+                    : window.With(status: PhaseWindowStatus.Resolved))]);
 
         var ranked = CombatantStrengthRules.Rank(
             state.Forces,

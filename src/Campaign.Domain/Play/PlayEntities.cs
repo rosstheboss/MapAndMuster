@@ -294,7 +294,10 @@ public sealed class CampaignBattle
         IReadOnlyList<Guid>? activeForceIds = null,
         IReadOnlyList<Guid>? waitingForceIds = null,
         IReadOnlyList<Guid>? surrenderedForceIds = null,
-        bool isNoContest = false)
+        bool isNoContest = false,
+        Guid? missionId = null,
+        Guid? attackerForceId = null,
+        Guid? defenderForceId = null)
     {
         ArgumentNullException.ThrowIfNull(participantForceIds);
         Id = id;
@@ -312,6 +315,9 @@ public sealed class CampaignBattle
         WaitingForceIds = waitingForceIds ?? [];
         SurrenderedForceIds = surrenderedForceIds ?? [];
         IsNoContest = isNoContest;
+        MissionId = missionId;
+        AttackerForceId = attackerForceId;
+        DefenderForceId = defenderForceId;
     }
 
     /// <summary>Gets the battle identifier.</summary>
@@ -359,6 +365,15 @@ public sealed class CampaignBattle
     /// <summary>Gets whether every remaining force ran and nobody won.</summary>
     public bool IsNoContest { get; }
 
+    /// <summary>Gets the mission chosen for this engagement, when one was assigned.</summary>
+    public Guid? MissionId { get; }
+
+    /// <summary>Gets the attacking force when the mission uses attacker/defender roles.</summary>
+    public Guid? AttackerForceId { get; }
+
+    /// <summary>Gets the defending force when the mission uses attacker/defender roles.</summary>
+    public Guid? DefenderForceId { get; }
+
     /// <summary>Gets forces that must currently report a tabletop result.</summary>
     public IReadOnlyList<Guid> ReportingForceIds =>
         ActiveForceIds.Count > 0 ? ActiveForceIds : ParticipantForceIds;
@@ -380,7 +395,11 @@ public sealed class CampaignBattle
         IReadOnlyList<Guid>? waitingForceIds = null,
         IReadOnlyList<Guid>? surrenderedForceIds = null,
         bool? isNoContest = null,
-        IReadOnlyList<Guid>? participantForceIds = null)
+        IReadOnlyList<Guid>? participantForceIds = null,
+        Guid? missionId = null,
+        Guid? attackerForceId = null,
+        Guid? defenderForceId = null,
+        bool assignMission = false)
     {
         return new CampaignBattle(
             Id,
@@ -397,7 +416,10 @@ public sealed class CampaignBattle
             activeForceIds ?? ActiveForceIds,
             waitingForceIds ?? WaitingForceIds,
             surrenderedForceIds ?? SurrenderedForceIds,
-            isNoContest ?? IsNoContest);
+            isNoContest ?? IsNoContest,
+            assignMission ? missionId : missionId ?? MissionId,
+            assignMission ? attackerForceId : attackerForceId ?? AttackerForceId,
+            assignMission ? defenderForceId : defenderForceId ?? DefenderForceId);
     }
 }
 

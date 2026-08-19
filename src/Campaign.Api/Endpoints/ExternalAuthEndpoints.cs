@@ -187,7 +187,7 @@ public static class ExternalAuthEndpoints
             return IdentityHttp.Problem(ErrorCodes.ExternalProfileIncomplete, "Finish signing in with the external provider first.");
         }
 
-        Stream? avatar = await DownloadAvatarAsync(
+        var avatar = await DownloadAvatarAsync(
                 httpClientFactory,
                 principal.FindFirstValue(ExternalAuthentication.AvatarUrlClaim),
                 cancellationToken)

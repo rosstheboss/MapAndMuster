@@ -21,7 +21,10 @@ public static class ActionResolution
         PlayMap map,
         PhaseWindow window,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
-        DateTimeOffset utcNow)
+        DateTimeOffset utcNow,
+        IReadOnlyList<TerrainTypeSetup>? terrainTypes = null,
+        IReadOnlyList<StructureTypeSetup>? structureTypes = null,
+        Func<int, int>? pickIndex = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -51,12 +54,14 @@ public static class ActionResolution
         var nextForces = new List<CampaignForce>();
         var occupied = new Dictionary<Guid, List<Guid>>();
         var moveOrigins = new Dictionary<Guid, Guid>();
+        var arrivalKinds = new Dictionary<Guid, ActionKind>();
         foreach (var force in state.Forces.OrderBy(static item => item.Id))
         {
             if (force.InBattle)
             {
                 nextForces.Add(force);
                 AddOccupied(occupied, force.TerritoryId, force.Id);
+                arrivalKinds[force.Id] = ActionKind.Hold;
                 continue;
             }
 
@@ -64,6 +69,7 @@ public static class ActionResolution
             {
                 nextForces.Add(force);
                 AddOccupied(occupied, force.TerritoryId, force.Id);
+                arrivalKinds[force.Id] = ActionKind.Hold;
                 continue;
             }
 
@@ -71,9 +77,11 @@ public static class ActionResolution
             {
                 nextForces.Add(force);
                 AddOccupied(occupied, force.TerritoryId, force.Id);
+                arrivalKinds[force.Id] = ActionKind.Hold;
                 var split = new CampaignForce(Guid.NewGuid(), force.ControllerUserId, force.FactionId, splitTarget, false);
                 nextForces.Add(split);
                 AddOccupied(occupied, splitTarget, split.Id);
+                arrivalKinds[split.Id] = ActionKind.Split;
                 continue;
             }
 
@@ -88,6 +96,7 @@ public static class ActionResolution
             var moved = force.With(territoryId: destination);
             nextForces.Add(moved);
             AddOccupied(occupied, destination, moved.Id);
+            arrivalKinds[force.Id] = order.Kind;
         }
 
         nextForces = Rejoin(nextForces, window, utcNow, log);
@@ -141,6 +150,17 @@ public static class ActionResolution
                 }
 
                 var battleWindow = NextBattleWindow(state, window);
+                var assignment = terrainTypes is null
+                    ? null
+                    : BattleMissionRules.Choose(
+                        map.Territory(territoryId),
+                        present,
+                        arrivalKinds,
+                        factionAllyGroups,
+                        broken,
+                        terrainTypes,
+                        structureTypes ?? [],
+                        pickIndex ?? (static count => 0));
                 var battle = new CampaignBattle(
                     Guid.NewGuid(),
                     territoryId,
@@ -150,7 +170,10 @@ public static class ActionResolution
                     presentIds,
                     winnerForceId: null,
                     isDraw: false,
-                    utcNow);
+                    utcNow,
+                    missionId: assignment?.MissionId,
+                    attackerForceId: assignment?.AttackerForceId,
+                    defenderForceId: assignment?.DefenderForceId);
                 battles.Add(battle);
                 log.Add(new PlayLogEntry(
                     Guid.NewGuid(),

@@ -577,6 +577,100 @@ public sealed class CampaignSetupRulesTests
         Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
     }
 
+    [Theory]
+    [InlineData(10)]
+    [InlineData(100000)]
+    public void AcceptsRoundArmyPointsInRange(int points)
+    {
+        var schedule = WeekSchedule() with
+        {
+            RoundEscalations = [new RoundArmyEscalationInput { RoundNumber = 1, MaxArmyPoints = points }],
+        };
+        var succeeded = TryMinimal("Border War", out var errors, schedule, out var setup);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        Assert.Equal(points, setup.Schedule.ArmyEscalations[0].MaxArmyPoints);
+    }
+
+    [Fact]
+    public void UsesGenericArmyEscalationsWhenOmitted()
+    {
+        var succeeded = TryMinimal("Border War", out var errors, WeekSchedule(), out var setup);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        Assert.Equal(8, setup.Schedule.ArmyEscalations.Count);
+        Assert.All(
+            setup.Schedule.ArmyEscalations,
+            row =>
+            {
+                Assert.Equal(1000, row.MaxArmyPoints);
+                Assert.Equal(1, row.FreeSupplyPoints);
+                Assert.Equal(1, row.FreeCharacterCount);
+            });
+    }
+
+    [Fact]
+    public void PadsMissingArmyEscalationRoundsWithGenericDefaults()
+    {
+        var schedule = WeekSchedule() with
+        {
+            RoundEscalations =
+            [
+                new RoundArmyEscalationInput
+                {
+                    RoundNumber = 1,
+                    MaxArmyPoints = 500,
+                    FreeSupplyPoints = 2,
+                    FreeCharacterCount = 3,
+                },
+                new RoundArmyEscalationInput
+                {
+                    RoundNumber = 2,
+                    MaxArmyPoints = 750,
+                    FreeSupplyPoints = 2,
+                    FreeCharacterCount = 3,
+                },
+                new RoundArmyEscalationInput
+                {
+                    RoundNumber = 3,
+                    MaxArmyPoints = 900,
+                    FreeSupplyPoints = 2,
+                    FreeCharacterCount = 3,
+                },
+            ],
+        };
+        var succeeded = TryMinimal("Border War", out var errors, schedule, out var setup);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        Assert.Equal(8, setup.Schedule.ArmyEscalations.Count);
+        Assert.Equal(500, setup.Schedule.ArmyEscalations[0].MaxArmyPoints);
+        Assert.Equal(2, setup.Schedule.ArmyEscalations[0].FreeSupplyPoints);
+        Assert.Equal(3, setup.Schedule.ArmyEscalations[0].FreeCharacterCount);
+        Assert.Equal(900, setup.Schedule.ArmyEscalations[2].MaxArmyPoints);
+        Assert.Equal(1000, setup.Schedule.ArmyEscalations[3].MaxArmyPoints);
+        Assert.Equal(1, setup.Schedule.ArmyEscalations[3].FreeSupplyPoints);
+        Assert.Equal(1, setup.Schedule.ArmyEscalations[3].FreeCharacterCount);
+        Assert.Equal(1000, setup.Schedule.ArmyEscalations[7].MaxArmyPoints);
+    }
+
+    [Theory]
+    [InlineData(9)]
+    [InlineData(100001)]
+    public void RejectsRoundArmyPointsOutsideRange(int points)
+    {
+        var schedule = WeekSchedule() with
+        {
+            RoundEscalations = [new RoundArmyEscalationInput { RoundNumber = 1, MaxArmyPoints = points }],
+        };
+        var succeeded = TryMinimal("Border War", out var errors, schedule);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Field == "roundEscalations[0].maxArmyPoints");
+    }
+
     [Fact]
     public void AcceptsMonthLengthRoundsWhenPhasesMatch()
     {
@@ -825,6 +919,69 @@ public sealed class CampaignSetupRulesTests
         Assert.NotNull(setup);
         Assert.Equal(sharedId, setup.TerrainTypes[0].Missions[0].Id);
         Assert.Equal(sharedId, setup.StructureTypes[0].Missions[0].Id);
+    }
+
+    [Fact]
+    public void KeepsUnassignedCatalogMissionsAndAttackerDefenderSettings()
+    {
+        var catalogId = Guid.NewGuid();
+        var unusedId = Guid.NewGuid();
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            [
+                new TerrainTypeInput
+                {
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [new MissionInput { Id = catalogId, Name = "Meeting engagement" }],
+                },
+            ],
+            structureTypes: [],
+            out var setup,
+            out _,
+            out var errors,
+            missions:
+            [
+                new MissionInput { Id = catalogId, Name = "Meeting engagement" },
+                new MissionInput
+                {
+                    Id = unusedId,
+                    Name = "Hold the line",
+                    IsAttackerDefender = true,
+                    HasArmyPointsAdvantage = true,
+                    ArmyPointsAdvantageSide = "Defender",
+                    ArmyPointsAdvantageIsPercent = true,
+                    ArmyPointsAdvantageAmount = 20,
+                    HasSupplyPointsAdvantage = true,
+                    SupplyPointsAdvantageSide = "Defender",
+                    SupplyPointsAdvantageAmount = 2,
+                },
+            ]);
+
+        Assert.True(succeeded);
+        Assert.Empty(errors);
+        Assert.NotNull(setup);
+        Assert.Equal(2, setup.Missions.Count);
+        Assert.Contains(setup.Missions, mission => mission.Id == unusedId && mission.IsAttackerDefender);
+        var assault = setup.Missions.Single(mission => mission.Id == unusedId);
+        Assert.True(assault.HasArmyPointsAdvantage);
+        Assert.Equal(MissionAdvantageSide.Defender, assault.ArmyPointsAdvantageSide);
+        Assert.True(assault.ArmyPointsAdvantageIsPercent);
+        Assert.Equal(20, assault.ArmyPointsAdvantageAmount);
+        Assert.True(assault.HasSupplyPointsAdvantage);
+        Assert.Equal(2, assault.SupplyPointsAdvantageAmount);
+        Assert.Equal(catalogId, setup.TerrainTypes[0].Missions[0].Id);
     }
 
     [Fact]

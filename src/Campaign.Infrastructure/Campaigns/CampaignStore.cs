@@ -122,7 +122,8 @@ public sealed class CampaignStore : ICampaignStore
             campaign.ForceStatuses,
             campaign.SplitForceSupplyPenaltyPercent,
             campaign.BattleReportRules,
-            campaign.ArmyEscalations);
+            campaign.ArmyEscalations,
+            campaign.Missions);
         var playJson = PlayStateJson.Serialize(campaign.PlayState);
         var affected = await _dbContext.Campaigns
             .Where(item => item.Id == campaign.Id && item.Revision == expectedRevision)
@@ -431,7 +432,8 @@ public sealed class CampaignStore : ICampaignStore
                 campaign.ForceStatuses,
                 campaign.SplitForceSupplyPenaltyPercent,
                 campaign.BattleReportRules,
-                campaign.ArmyEscalations),
+                campaign.ArmyEscalations,
+                campaign.Missions),
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
@@ -574,7 +576,7 @@ public sealed class CampaignStore : ICampaignStore
 
     private static StoredCampaign ToStored(CampaignRecord record)
     {
-        var catalogs = CatalogJson.Deserialize(record.CatalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
         return new StoredCampaign
         {
             Id = record.Id,
@@ -595,18 +597,19 @@ public sealed class CampaignStore : ICampaignStore
             CreatedByUserId = record.CreatedByUserId,
             MapGraph = MapGraphJson.Deserialize(record.MapGraphJson),
             PlayState = PlayStateJson.Deserialize(record.PlayStateJson),
-            TerrainTypes = catalogs.TerrainTypes,
-            StructureTypes = catalogs.StructureTypes,
-            ItemObjectiveTypes = catalogs.ItemObjectiveTypes,
-            PublicObjectiveTypes = catalogs.PublicObjectiveTypes,
-            SpecialRules = catalogs.SpecialRules,
-            ForceStatuses = catalogs.ForceStatuses,
-            PrivateObjectiveTypes = catalogs.PrivateObjectiveTypes,
-            BattleScoring = catalogs.BattleScoring,
-            RankingObjectivePoints = catalogs.RankingObjectivePoints,
-            SplitForceSupplyPenaltyPercent = catalogs.SplitForceSupplyPenaltyPercent,
-            BattleReportRules = catalogs.BattleReportRules,
-            ArmyEscalations = catalogs.ArmyEscalations,
+            TerrainTypes = TerrainTypes,
+            StructureTypes = StructureTypes,
+            ItemObjectiveTypes = ItemObjectiveTypes,
+            PublicObjectiveTypes = PublicObjectiveTypes,
+            SpecialRules = SpecialRules,
+            ForceStatuses = ForceStatuses,
+            PrivateObjectiveTypes = PrivateObjectiveTypes,
+            BattleScoring = BattleScoring,
+            RankingObjectivePoints = RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = SplitForceSupplyPenaltyPercent,
+            BattleReportRules = BattleReportRules,
+            ArmyEscalations = ArmyEscalations,
+            Missions = Missions,
             Memberships =
             [
                 .. record.Memberships.Select(membership => new StoredCampaignMembership
@@ -647,7 +650,7 @@ public sealed class CampaignStore : ICampaignStore
                         ],
                         AllyGroupName = faction.AllyGroup?.Name,
                         FlagImageStorageKey = faction.FlagImageStorageKey,
-                        SpecialRuleIds = catalogs.FactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
+                        SpecialRuleIds = FactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
                     }),
             ],
             Links =

@@ -22,6 +22,8 @@ import type {
   ResolveItemObjectiveChoicePayload,
   SubmitBattleResultPayload,
   SubmitRetreatPayload,
+  ParseArmyListPayload,
+  ParseArmyListResult,
   UserSearchHit,
 } from './campaign.models';
 
@@ -300,6 +302,16 @@ export class CampaignService {
     return firstValueFrom(
       this.http.post<CampaignPlayDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/play/battle-result`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async parseArmyList(campaignId: string, payload: ParseArmyListPayload): Promise<ParseArmyListResult> {
+    return firstValueFrom(
+      this.http.post<ParseArmyListResult>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/parse-army-list`,
         payload,
         { withCredentials: true },
       ),

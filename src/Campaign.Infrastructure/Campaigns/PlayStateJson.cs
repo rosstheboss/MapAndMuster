@@ -105,6 +105,9 @@ internal static class PlayStateJson
                 CreatedUtc = battle.CreatedUtc,
                 WinnerScore = battle.WinnerScore,
                 LoserScore = battle.LoserScore,
+                MissionId = battle.MissionId,
+                AttackerForceId = battle.AttackerForceId,
+                DefenderForceId = battle.DefenderForceId,
             })],
             BattleSubmissions = [.. state.BattleSubmissions.Select(static item => new BattleSubmissionDocument
             {
@@ -127,6 +130,16 @@ internal static class PlayStateJson
                     KilledEnemyGeneral = report.KilledEnemyGeneral,
                     DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
                     SupplyCostingUnitCount = report.SupplyCostingUnitCount,
+                    ArmyListText = report.ArmyListText,
+                    ArmyListGameSystem = report.ArmyListGameSystem,
+                    ArmyListBuilder = report.ArmyListBuilder.ToString(),
+                    SupplyCategories = [.. report.SupplyCategories.Select(static category => new ArmyListCategoryDocument
+                    {
+                        Name = category.Name,
+                        UnitCount = category.UnitCount,
+                        SupplyPoints = category.SupplyPoints,
+                        CostsSupply = category.CostsSupply,
+                    })],
                     Answers = [.. report.Answers.Select(static answer => new BattleAnswerDocument
                     {
                         QuestionId = answer.QuestionId,
@@ -298,7 +311,10 @@ internal static class PlayStateJson
                 battle.ActiveForceIds,
                 battle.WaitingForceIds,
                 battle.SurrenderedForceIds,
-                battle.IsNoContest))],
+                battle.IsNoContest,
+                battle.MissionId,
+                battle.AttackerForceId,
+                battle.DefenderForceId))],
             [.. document.BattleSubmissions.Select(static item => new BattleResultSubmission(
                 item.Id,
                 item.BattleId,
@@ -321,7 +337,17 @@ internal static class PlayStateJson
                         answer.QuestionId,
                         answer.BooleanValue,
                         answer.BattlePointsValue is null ? null : Math.Max(0, answer.BattlePointsValue.Value)))],
-                    Math.Max(0, report.SupplyCostingUnitCount)))]))],
+                    Math.Max(0, report.SupplyCostingUnitCount),
+                    string.IsNullOrWhiteSpace(report.ArmyListText) ? null : report.ArmyListText.Trim(),
+                    ArmyListRules.NormalizeGameSystem(report.ArmyListGameSystem),
+                    ArmyListRules.ParseBuilder(report.ArmyListBuilder),
+                    [.. (report.SupplyCategories ?? [])
+                        .Where(static category => !string.IsNullOrWhiteSpace(category.Name))
+                        .Select(static category => new ArmyListSupplyCategory(
+                            category.Name,
+                            Math.Max(0, category.UnitCount),
+                            Math.Max(0, category.SupplyPoints),
+                            category.CostsSupply))]))]))],
             [.. document.Retreats.Select(static item => new RetreatOrder(
                 item.Id,
                 item.BattleId,
@@ -548,6 +574,9 @@ internal static class PlayStateJson
         public DateTimeOffset CreatedUtc { get; set; }
         public int? WinnerScore { get; set; }
         public int? LoserScore { get; set; }
+        public Guid? MissionId { get; set; }
+        public Guid? AttackerForceId { get; set; }
+        public Guid? DefenderForceId { get; set; }
     }
 
     private sealed class BattleSubmissionDocument
@@ -574,7 +603,19 @@ internal static class PlayStateJson
         public bool KilledEnemyGeneral { get; set; }
         public bool DestroyedEnemySupplyLine { get; set; }
         public int SupplyCostingUnitCount { get; set; }
+        public string? ArmyListText { get; set; }
+        public string? ArmyListGameSystem { get; set; }
+        public string? ArmyListBuilder { get; set; }
+        public List<ArmyListCategoryDocument>? SupplyCategories { get; set; }
         public List<BattleAnswerDocument>? Answers { get; set; }
+    }
+
+    private sealed class ArmyListCategoryDocument
+    {
+        public string Name { get; set; } = string.Empty;
+        public int UnitCount { get; set; }
+        public int SupplyPoints { get; set; }
+        public bool CostsSupply { get; set; }
     }
 
     private sealed class BattleAnswerDocument

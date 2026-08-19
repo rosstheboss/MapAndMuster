@@ -20,10 +20,10 @@ public sealed class SupplyRulesTests
         var snapshot = SupplyRules.ForPlayer(state, map, Catalog(), Player, roundNumber: 1);
 
         Assert.Equal(3, snapshot.MapSupplyPoints);
-        Assert.Equal(0, snapshot.RoundFreeSupplyPoints);
+        Assert.Equal(1, snapshot.RoundFreeSupplyPoints);
         Assert.Equal(0, snapshot.SplitPenaltyPoints);
-        Assert.Equal(3, snapshot.CurrentSupplyPoints);
-        Assert.Equal(1000, snapshot.MaxArmyPoints);
+        Assert.Equal(4, snapshot.CurrentSupplyPoints);
+        Assert.Equal(500, snapshot.MaxArmyPoints);
         Assert.False(snapshot.IsSplit);
     }
 

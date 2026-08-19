@@ -324,13 +324,13 @@ public static class CampaignPointStandingsRules
         var previous = (Primary: int.MinValue, Secondary: int.MinValue);
         var rank = 0;
         var index = 0;
-        foreach (var row in ordered)
+        foreach (var (UserId, Primary, Secondary) in ordered)
         {
             index++;
-            if (row.Primary != previous.Primary || row.Secondary != previous.Secondary)
+            if (Primary != previous.Primary || Secondary != previous.Secondary)
             {
                 rank = index;
-                previous = (row.Primary, row.Secondary);
+                previous = (Primary, Secondary);
             }
 
             if (rank > LeaderboardSize)
@@ -339,10 +339,10 @@ public static class CampaignPointStandingsRules
             }
 
             entries.Add(new PublicObjectiveLeader(
-                row.UserId,
+                UserId,
                 rank,
-                row.Primary,
-                row.Secondary,
+                Primary,
+                Secondary,
                 rank == 1));
         }
 

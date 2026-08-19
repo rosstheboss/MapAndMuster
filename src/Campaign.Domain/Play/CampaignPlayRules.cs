@@ -191,7 +191,9 @@ public static class CampaignPlayRules
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         DateTimeOffset utcNow,
         IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
-        Func<int, int>? pickIndex = null)
+        Func<int, int>? pickIndex = null,
+        IReadOnlyList<TerrainTypeSetup>? terrainTypes = null,
+        IReadOnlyList<StructureTypeSetup>? structureTypes = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -229,7 +231,9 @@ public static class CampaignPlayRules
                     closeAt,
                     due,
                     forceStatuses,
-                    pickIndex ?? (static count => 0));
+                    pickIndex ?? (static count => 0),
+                    terrainTypes,
+                    structureTypes);
             }
         }
         else if (current.Status == PhaseWindowStatus.Open && current.Kind == RoundPhaseKind.Battle)
@@ -1225,7 +1229,9 @@ public static class CampaignPlayRules
         DateTimeOffset closeAt,
         bool due,
         IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
-        Func<int, int>? pickIndex = null)
+        Func<int, int>? pickIndex = null,
+        IReadOnlyList<TerrainTypeSetup>? terrainTypes = null,
+        IReadOnlyList<StructureTypeSetup>? structureTypes = null)
     {
         var choose = pickIndex ?? (static count => 0);
         state = ApplyDeadlineSurrenders(state, map, window, factionAllyGroups, closeAt, due);
@@ -1268,7 +1274,15 @@ public static class CampaignPlayRules
 
         var snapshot = CaptureWindowSnapshot(state, map, window.Id);
         var withOrders = state.With(submissions: submissions);
-        var (resolved, resolvedMap) = ActionResolution.Resolve(withOrders, map, window, factionAllyGroups, closeAt);
+        var (resolved, resolvedMap) = ActionResolution.Resolve(
+            withOrders,
+            map,
+            window,
+            factionAllyGroups,
+            closeAt,
+            terrainTypes,
+            structureTypes,
+            choose);
         var structureSupply = map.StructureTypes.ToDictionary(
             static type => type.Id,
             static type => new StructureSupplyRules(type.SupplyPoints, type.PillageSupplyPoints, type.DestroySupplyPoints));
@@ -1796,7 +1810,10 @@ public static class CampaignPlayRules
         IReadOnlySet<Guid>? knownStructureTypeIds,
         DateTimeOffset utcNow,
         [NotNullWhen(true)] out PlayOutcome? outcome,
-        [NotNullWhen(false)] out DomainError? error)
+        [NotNullWhen(false)] out DomainError? error,
+        IReadOnlyList<TerrainTypeSetup>? terrainTypes = null,
+        IReadOnlyList<StructureTypeSetup>? structureTypes = null,
+        Func<int, int>? pickIndex = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -1954,7 +1971,10 @@ public static class CampaignPlayRules
             restoredMap,
             lastAction,
             factionAllyGroups,
-            utcNow);
+            utcNow,
+            terrainTypes,
+            structureTypes,
+            pickIndex);
         var battles = resolved.Battles
             .Select(item =>
                 item.SourceWindowId == lastAction.Id && item.Status == BattleStatus.Pending
@@ -2446,7 +2466,7 @@ public static class CampaignPlayRules
                 spent.BrokenAllyFactionIds,
                 force => StrengthOf(force, spent, map),
                 choose);
-            waiting = remainingIds.Except(active).ToArray();
+            waiting = [.. remainingIds.Except(active)];
             if (!parkForNextBattlePhase)
             {
                 followUpStatus = BattleStatus.AwaitingResults;
@@ -2611,7 +2631,7 @@ public static class CampaignPlayRules
         CampaignPlayState state,
         PlayMap map)
     {
-        var holdings = CombatantStrengthRules.Holdings(map, force.FactionId);
+        var (Territories, Structures) = CombatantStrengthRules.Holdings(map, force.FactionId);
         var points = 0;
         foreach (var battle in state.Battles)
         {
@@ -2628,8 +2648,8 @@ public static class CampaignPlayRules
         }
 
         var supply = state.PlayerSupplies.FirstOrDefault(item => item.UserId == force.ControllerUserId)?.TemporarySupplyPoints ?? 0;
-        supply += holdings.Territories + holdings.Structures;
-        return new CombatantStrengthRules.Strength(points, holdings.Territories, holdings.Structures, supply);
+        supply += Territories + Structures;
+        return new CombatantStrengthRules.Strength(points, Territories, Structures, supply);
     }
 
     private static BattleResultSubmission? LatestConfirmableSubmission(

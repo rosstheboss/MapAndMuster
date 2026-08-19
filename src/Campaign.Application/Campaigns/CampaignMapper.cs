@@ -36,7 +36,7 @@ public static class CampaignMapper
             OccupiedPlayerSlots = OccupiedPlayerSlots(campaign),
             IsPrivate = campaign.IsPrivate,
             IsPubliclyViewable = campaign.IsPubliclyViewable,
-            CanManage = membership?.IsGameMaster == true,
+            CanManage = membership?.IsGameMaster == true || isAdministrator,
             IsParticipant = membership?.IsPlayer == true,
             CanView = CampaignAccess.CanView(campaign, viewerUserId, isAdministrator),
             CanJoin = CampaignAccess.CanJoin(campaign, viewerUserId, utcNow),
@@ -104,7 +104,7 @@ public static class CampaignMapper
             Region = campaign.Region,
             Country = campaign.Country,
             HasMap = !string.IsNullOrWhiteSpace(campaign.MapStorageKey),
-            CanManage = membership?.IsGameMaster == true,
+            CanManage = membership?.IsGameMaster == true || isAdministrator,
             IsParticipant = membership?.IsPlayer == true,
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
@@ -160,6 +160,7 @@ public static class CampaignMapper
                 Name = rule.Name,
                 Text = rule.Text,
             })],
+            Missions = [.. CatalogMissions(campaign).Select(ToMission)],
             ForceStatuses = [.. campaign.ForceStatuses.Select(static status => new ForceStatusDetail
             {
                 Id = status.Id,
@@ -537,12 +538,10 @@ public static class CampaignMapper
             campaign.RoundCount,
             roundLength,
             phases,
-            campaign.ArmyEscalations.Count == 0
-                ? HuntInEstaliaDefaults.ArmyEscalations(campaign.RoundCount)
-                : campaign.ArmyEscalations);
+            ArmyEscalationDefaults.PadToRoundCount(campaign.ArmyEscalations, Math.Max(1, campaign.RoundCount)));
     }
 
-    private static MissionDetail ToMission(StoredMission mission)
+    internal static MissionDetail ToMission(StoredMission mission)
     {
         return new MissionDetail
         {
@@ -562,6 +561,32 @@ public static class CampaignMapper
                     CampaignPoints = question.CampaignPoints,
                 }),
             ],
+            IsAttackerDefender = mission.IsAttackerDefender,
+            HasArmyPointsAdvantage = mission.HasArmyPointsAdvantage,
+            ArmyPointsAdvantageSide = mission.ArmyPointsAdvantageSide,
+            ArmyPointsAdvantageIsPercent = mission.ArmyPointsAdvantageIsPercent,
+            ArmyPointsAdvantageAmount = mission.ArmyPointsAdvantageAmount,
+            HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
+            SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
+            SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
         };
+    }
+
+    internal static IReadOnlyList<StoredMission> CatalogMissions(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        if (campaign.Missions.Count > 0)
+        {
+            return campaign.Missions;
+        }
+
+        var seen = new Dictionary<Guid, StoredMission>();
+        foreach (var mission in campaign.TerrainTypes.SelectMany(static type => type.Missions)
+            .Concat(campaign.StructureTypes.SelectMany(static type => type.Missions)))
+        {
+            seen.TryAdd(mission.Id, mission);
+        }
+
+        return [.. seen.Values];
     }
 }

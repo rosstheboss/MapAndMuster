@@ -373,6 +373,14 @@ and similar; each unit spends one supply point), differential battle points from
 battle points from the mission, whether they killed the enemy general, whether they destroyed
 the enemy supply line, and any extra mission questions the campaign manager configured
 (true/false or a battle-point amount, each awarding battle points and/or campaign points).
+A player may optionally paste army-list text for each force. That text is informational: the
+opponent and campaign manager can read it to check the list by hand. The player may also choose
+Warhammer: The Old World and a builder. Other (the default) does not parse the text. New Recruit
+and Old World Builder attempt to recognize that app's text export and fill army points plus
+supply amounts for Characters, Core, Special, Rare, and similar categories. Special, rare,
+mercenary, and allied units default to one supply point each; the player may correct those
+amounts. If the text cannot be parsed, the player is told to enter supply points manually.
+Automatic parsing is only implemented for Warhammer: The Old World.
 Basic campaign configuration can always ask for general kills and supply-line destruction and
 sets the campaign points those facts award (both on and 1 campaign point by default). The
 application spends reported supply-costing units first from that force's territory/structure
@@ -475,11 +483,22 @@ destructible. Each structure uses either a built-in icon or an uploaded logo ima
 Clearing or replacing an uploaded logo deletes only that uploaded file. Built-in icons remain in the
 application.
 Uploaded structure logos are limited to 50×50 pixels; larger images are shrunk to that size.
-Structures start with no missions. Structures may have zero or more missions. A territory uses its structure
-missions when that structure has any; otherwise it uses its terrain missions. Mission attachments are an http/https
-URL or a stored PDF/Word file, not both. Mission names are unique across the campaign. An already
-configured mission may be selected again for another terrain or structure instead of uploading a
-duplicate file. New uploads and reused missions may be mixed.
+Structures start with no missions. Structures may have zero or more missions. Reusable missions are
+configured in the Missions catalog: name, an optional http/https URL or stored PDF/Word file, result
+questions, and optional attacker/defender flags. Terrain and structure lists attach a catalog mission
+or a one-off name with an optional file. A territory uses its structure missions when that structure
+has any; otherwise it uses its terrain missions. When a battle is created, one mission is chosen at
+random from that pool. Attacker/defender missions are used when one force Held or retreated into the
+territory and another Moved or Split in (not Retreat), when a force defends a structure it owns, or
+when a force backstabbed its opponent. Otherwise they are used only if no normal mission exists, and
+attacker/defender roles are then assigned at random. Role priority is backstab, then structure owner,
+then Hold/Retreat versus Move/Split. Chosen missions appear on the campaign Battles panel with a
+link or file download when present. Attacker/defender missions may grant a signed army-point number
+or percent change and a signed raw supply-point change to one side; after apply, army points are
+never below 500 and supply points are never below 1. Mission names are unique across the campaign.
+Unassigned catalog missions are kept. Mission attachments are an http/https URL or a stored PDF/Word
+file, not both. An already configured mission may be selected again for another terrain or structure
+instead of uploading a duplicate file. New uploads and reused missions may be mixed.
 
 Hovering or selecting a territory, while editing or viewing, shows Name, Description, structures,
 ownership (or Neutral), spawn-location faction, adjacent territories, terrain, and missions.
@@ -590,13 +609,16 @@ Completed campaigns are ordered by most recently finished.
   Estalia split penalty default is 25 percent and is the application default.
 - Current supply shown on the Participants list is one force's allowance (map after split
   penalty, plus round free supply) plus remaining temporary supply. A battle to resolve shows
-  each force's allowance and the controlling player's remaining temporary pool separately.
+  each force's army-point cap for that game (round maximum, raised 25 percent per extra allied
+  player then split and rounded up to 10), standard supply after the split-force penalty and
+  round free-supply bonus, and the controlling player's remaining temporary pool separately.
 - When a battle result reports supply-costing units, spend is taken first from that force's
   allowance and then from the player's temporary pool.
-- Round configuration stores per-round max army points, free supply points, and free characters
-  whose base cost does not count against supply. The Hunt in Estalia table is the application
-  default (round 1: 1000/0/0, then 1250/0/0, 1500/1/1, 1750/1/1, 2000/2/1, 2000/2/2, then
-  2000/3/2 for round 7 and later). Longer campaigns copy the last row.
+- Round configuration stores one army-escalation row per round: max army points (10–100000), free
+  supply points, and free characters whose base cost does not count against supply. Omitted rows and
+  newly added rounds default to 1000/1/1. The Hunt in Estalia preset uses 500/1/1, 750/1/1, 1000/1/1,
+  1250/2/1, 1500/2/1, 2000/2/2, 2500/3/2, then 3000/3/2 for round 8 and later. Longer Hunt campaigns
+  copy the last row. Changing the round count keeps values already entered for overlapping rounds.
 - Faction modifiers are data/rules layered over the base calculation.
 
 ## Objectives and relics

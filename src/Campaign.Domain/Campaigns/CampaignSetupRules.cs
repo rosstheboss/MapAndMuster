@@ -67,6 +67,12 @@ public static class CampaignSetupRules
     /// <summary>Maximum campaign points for one configured source.</summary>
     public const int MaxCampaignPoints = 999;
 
+    /// <summary>Minimum per-round army-point cap.</summary>
+    public const int MinRoundArmyPoints = 10;
+
+    /// <summary>Maximum per-round army-point cap.</summary>
+    public const int MaxRoundArmyPoints = 100000;
+
     /// <summary>Maximum length of special-rule, flavor, and private-objective text.</summary>
     public const int CatalogTextMaxLength = 2000;
 
@@ -78,6 +84,9 @@ public static class CampaignSetupRules
 
     /// <summary>Maximum missions nested under one terrain type or structure.</summary>
     public const int MaxMissionsPerCatalogItem = 20;
+
+    /// <summary>Maximum missions in the campaign catalog.</summary>
+    public const int MaxMissionCatalogCount = 80;
 
     /// <summary>Maximum length of faction, subfaction, and ally-group names.</summary>
     public const int NamedItemMaxLength = 60;
@@ -218,6 +227,7 @@ public static class CampaignSetupRules
     /// <param name="alwaysAskSupplyLineDestroyed">Whether every battle report asks if the enemy supply line was destroyed.</param>
     /// <param name="generalKillCampaignPoints">Campaign points awarded for a slain enemy general.</param>
     /// <param name="supplyLineDestroyedCampaignPoints">Campaign points awarded for destroying the enemy supply line.</param>
+    /// <param name="missions">Reusable mission catalog inputs. Omitted means nested terrain and structure missions only.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
@@ -267,7 +277,8 @@ public static class CampaignSetupRules
         bool? alwaysAskGeneralKill = null,
         bool? alwaysAskSupplyLineDestroyed = null,
         int? generalKillCampaignPoints = null,
-        int? supplyLineDestroyedCampaignPoints = null)
+        int? supplyLineDestroyedCampaignPoints = null,
+        IReadOnlyList<MissionInput>? missions = null)
     {
         var collected = new List<DomainError>();
         setup = null;
@@ -321,6 +332,15 @@ public static class CampaignSetupRules
         var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, specialRuleIds, collected);
         ValidateAllyMembership(parsedFactions, parsedGroups, collected);
         var parsedLinks = ParseLinks(links, collected);
+        _ = ParseMissions(
+            missions,
+            usedIds,
+            missionIndex,
+            "missions",
+            "Mission catalog",
+            requireAtLeastOne: false,
+            collected,
+            maxCount: MaxMissionCatalogCount);
         var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, collected);
         var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, collected);
         var structureTypeIds = parsedStructures.Select(static type => type.Id).ToHashSet();
@@ -385,7 +405,8 @@ public static class CampaignSetupRules
                 alwaysAskSupplyLineDestroyed,
                 generalKillCampaignPoints,
                 supplyLineDestroyedCampaignPoints,
-                collected));
+                collected),
+            [.. missionIndex.ById.Values]);
         errors = collected;
         return true;
     }
@@ -851,16 +872,16 @@ public static class CampaignSetupRules
                 continue;
             }
 
-            var flags = StructureCatalog.DefaultFlags(name, builtin);
+            var (IsBuildable, IsPillageable, IsDestructible) = StructureCatalog.DefaultFlags(name, builtin);
             parsed.Add(new StructureTypeSetup(
                 ResolveId(input.Id, usedIds, $"structureTypes[{index}].id", errors),
                 name,
                 builtin,
                 input.ClearImage,
                 input.ClearPillagedImage,
-                input.IsBuildable ?? flags.IsBuildable,
-                input.IsPillageable ?? flags.IsPillageable,
-                input.IsDestructible ?? flags.IsDestructible,
+                input.IsBuildable ?? IsBuildable,
+                input.IsPillageable ?? IsPillageable,
+                input.IsDestructible ?? IsDestructible,
                 missionsForType,
                 ParseCampaignPoints(
                     input.CampaignPoints,
@@ -1171,6 +1192,30 @@ public static class CampaignSetupRules
         return value.Value;
     }
 
+    private static int ParseRoundArmyPoints(
+        int? value,
+        string field,
+        string label,
+        List<DomainError> errors,
+        int fallback)
+    {
+        if (value is null)
+        {
+            return fallback;
+        }
+
+        if (value < MinRoundArmyPoints || value > MaxRoundArmyPoints)
+        {
+            errors.Add(new DomainError(
+                $"{field}.invalid",
+                $"{label} must be between {MinRoundArmyPoints} and {MaxRoundArmyPoints}.",
+                field));
+            return fallback;
+        }
+
+        return value.Value;
+    }
+
     private static int ParseCampaignPoints(
         int? value,
         string field,
@@ -1248,7 +1293,7 @@ public static class CampaignSetupRules
         int roundCount,
         List<DomainError> errors)
     {
-        var defaults = HuntInEstaliaDefaults.ArmyEscalations(Math.Max(roundCount, 1));
+        var defaults = ArmyEscalationDefaults.ForRoundCount(Math.Max(roundCount, 1));
         if (inputs is null || inputs.Count == 0)
         {
             return defaults;
@@ -1281,7 +1326,7 @@ public static class CampaignSetupRules
                     roundNumber,
                     new RoundArmyEscalationSetup(
                         roundNumber,
-                        ParseCampaignPoints(
+                        ParseRoundArmyPoints(
                             input.MaxArmyPoints,
                             $"roundEscalations[{index}].maxArmyPoints",
                             $"Round {roundNumber} max army points",
@@ -1309,23 +1354,20 @@ public static class CampaignSetupRules
         }
 
         var rows = new RoundArmyEscalationSetup[Math.Max(roundCount, 1)];
-        RoundArmyEscalationSetup? last = null;
         for (var round = 1; round <= rows.Length; round++)
         {
             if (byRound.TryGetValue(round, out var row))
             {
-                last = row;
                 rows[round - 1] = row;
                 continue;
             }
 
-            var fallback = last ?? defaults.FirstOrDefault(item => item.RoundNumber == round) ?? defaults[^1];
+            var fallback = defaults.FirstOrDefault(item => item.RoundNumber == round) ?? defaults[^1];
             rows[round - 1] = new RoundArmyEscalationSetup(
                 round,
                 fallback.MaxArmyPoints,
                 fallback.FreeSupplyPoints,
                 fallback.FreeCharacterCount);
-            last = rows[round - 1];
         }
 
         return rows;
@@ -1481,7 +1523,8 @@ public static class CampaignSetupRules
         string field,
         string ownerLabel,
         bool requireAtLeastOne,
-        List<DomainError> errors)
+        List<DomainError> errors,
+        int? maxCount = null)
     {
         var supplied = missions?
             .Where(static mission =>
@@ -1496,11 +1539,12 @@ public static class CampaignSetupRules
             return [];
         }
 
-        if (supplied.Length > MaxMissionsPerCatalogItem)
+        var limit = maxCount ?? MaxMissionsPerCatalogItem;
+        if (supplied.Length > limit)
         {
             errors.Add(new DomainError(
                 "missions.invalid",
-                $"{ownerLabel} can have at most {MaxMissionsPerCatalogItem} missions.",
+                $"{ownerLabel} can have at most {limit} missions.",
                 field));
             return [];
         }
@@ -1561,7 +1605,26 @@ public static class CampaignSetupRules
                 $"{field}[{missionIndex}].resultQuestions",
                 $"{ownerLabel} mission {missionIndex + 1}",
                 errors);
-            var created = new MissionSetup(id, name, url, mission.ClearFile, questions);
+            var created = new MissionSetup(
+                id,
+                name,
+                url,
+                mission.ClearFile,
+                questions,
+                mission.IsAttackerDefender,
+                mission.HasArmyPointsAdvantage,
+                ParseAdvantageSide(
+                    mission.ArmyPointsAdvantageSide,
+                    $"{field}[{missionIndex}].armyPointsAdvantageSide",
+                    errors),
+                mission.ArmyPointsAdvantageIsPercent,
+                mission.ArmyPointsAdvantageAmount,
+                mission.HasSupplyPointsAdvantage,
+                ParseAdvantageSide(
+                    mission.SupplyPointsAdvantageSide,
+                    $"{field}[{missionIndex}].supplyPointsAdvantageSide",
+                    errors),
+                mission.SupplyPointsAdvantageAmount);
             index.ById[id] = created;
             index.Names[name] = id;
             seenOnOwner.Add(id);
@@ -1577,6 +1640,26 @@ public static class CampaignSetupRules
         }
 
         return parsed;
+    }
+
+    private static MissionAdvantageSide ParseAdvantageSide(string? raw, string field, List<DomainError> errors)
+    {
+        if (string.IsNullOrWhiteSpace(raw)
+            || string.Equals(raw, nameof(MissionAdvantageSide.Defender), StringComparison.OrdinalIgnoreCase))
+        {
+            return MissionAdvantageSide.Defender;
+        }
+
+        if (string.Equals(raw, nameof(MissionAdvantageSide.Attacker), StringComparison.OrdinalIgnoreCase))
+        {
+            return MissionAdvantageSide.Attacker;
+        }
+
+        errors.Add(new DomainError(
+            "missions.advantageSide.invalid",
+            "Advantage side must be Attacker or Defender.",
+            field));
+        return MissionAdvantageSide.Defender;
     }
 
     private static MissionSetup? TryReuseMission(
@@ -2273,7 +2356,7 @@ public static class CampaignSetupRules
                 requiredCount = 1;
             }
 
-            Guid? structureTypeId = input.StructureTypeId;
+            var structureTypeId = input.StructureTypeId;
             if (automaticKind is PrivateObjectiveAutomaticKind.ControlStructureType
                 or PrivateObjectiveAutomaticKind.PillageStructureType
                 or PrivateObjectiveAutomaticKind.DestroyStructureType)
@@ -2548,7 +2631,7 @@ public static class CampaignSetupRules
                 $"Item objective {itemIndex + 1} choice result state",
                 errors,
                 NamedItemMaxLength);
-            Guid? granted = input.GrantedPrivateObjectiveTypeId;
+            var granted = input.GrantedPrivateObjectiveTypeId;
             if (granted is { } grantedId && grantedId != Guid.Empty && !knownPrivateObjectiveIds.Contains(grantedId))
             {
                 errors.Add(new DomainError(

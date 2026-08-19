@@ -99,8 +99,10 @@ file sealed class FakeNewsStore : INewsStore
         });
     }
 
-    public Task<NewsArticle?> FindByIdAsync(Guid articleId, CancellationToken cancellationToken) =>
-        Task.FromResult(_articles.FirstOrDefault(item => item.Id == articleId));
+    public Task<NewsArticle?> FindByIdAsync(Guid articleId, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(_articles.FirstOrDefault(item => item.Id == articleId));
+    }
 
     public Task<NewsArticle> AddAsync(NewsArticle article, CancellationToken cancellationToken)
     {
@@ -108,57 +110,85 @@ file sealed class FakeNewsStore : INewsStore
         return Task.FromResult(article);
     }
 
-    public Task<NewsArticle?> UpdateAsync(NewsArticle article, CancellationToken cancellationToken) =>
-        Task.FromResult<NewsArticle?>(article);
+    public Task<NewsArticle?> UpdateAsync(NewsArticle article, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<NewsArticle?>(article);
+    }
 
-    public Task<bool> DeleteAsync(Guid articleId, CancellationToken cancellationToken) => Task.FromResult(true);
+    public Task<bool> DeleteAsync(Guid articleId, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(true);
+    }
 }
 
 file sealed class FakeNoticeStore : IUserNotificationStore
 {
-    public Task<bool> TryAddAsync(NewUserNotification notification, DateTimeOffset utcNow, CancellationToken cancellationToken) =>
-        Task.FromResult(true);
+    public Task<bool> TryAddAsync(NewUserNotification notification, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(true);
+    }
 
-    public Task<IReadOnlyList<UserNotification>> ListUnreadAsync(Guid userId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<UserNotification>>([]);
+    public Task<IReadOnlyList<UserNotification>> ListUnreadAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<UserNotification>>([]);
+    }
 
-    public Task<bool> MarkReadAsync(Guid notificationId, Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken) =>
-        Task.FromResult(false);
+    public Task<bool> MarkReadAsync(Guid notificationId, Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(false);
+    }
 }
 
 file sealed class EmptyCampaignStore : ICampaignStore
 {
-    public Task<StoredCampaign> AddAsync(StoredCampaign campaign, CancellationToken cancellationToken) =>
+    public Task<StoredCampaign> AddAsync(StoredCampaign campaign, CancellationToken cancellationToken)
+    {
         throw new NotSupportedException();
+    }
 
-    public Task<StoredCampaign?> FindByIdAsync(Guid campaignId, CancellationToken cancellationToken) =>
-        Task.FromResult<StoredCampaign?>(null);
+    public Task<StoredCampaign?> FindByIdAsync(Guid campaignId, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<StoredCampaign?>(null);
+    }
 
-    public Task<IReadOnlyList<StoredCampaign>> ListForUserAsync(Guid userId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<StoredCampaign>>([]);
+    public Task<IReadOnlyList<StoredCampaign>> ListForUserAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<StoredCampaign>>([]);
+    }
 
     public Task<IReadOnlyList<StoredCampaign>> ListDiscoverableAsync(
         Guid userId,
         bool isAdministrator,
         DateTimeOffset utcNow,
-        CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<StoredCampaign>>([]);
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<StoredCampaign>>([]);
+    }
 
-    public Task<UpdateStoredCampaignOutcome> UpdateAsync(StoredCampaign campaign, int expectedRevision, CancellationToken cancellationToken) =>
+    public Task<UpdateStoredCampaignOutcome> UpdateAsync(StoredCampaign campaign, int expectedRevision, CancellationToken cancellationToken)
+    {
         throw new NotSupportedException();
+    }
 
-    public Task<bool> DeleteAsync(Guid campaignId, CancellationToken cancellationToken) => Task.FromResult(false);
+    public Task<bool> DeleteAsync(Guid campaignId, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(false);
+    }
 
-    public Task<bool> IsStorageKeyInUseAsync(string storageKey, Guid? excludingCampaignId, CancellationToken cancellationToken) =>
-        Task.FromResult(false);
+    public Task<bool> IsStorageKeyInUseAsync(string storageKey, Guid? excludingCampaignId, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(false);
+    }
 
     public Task<UpdateStoredCampaignOutcome> UpdateMapGraphAsync(
         Guid campaignId,
         StoredMapGraph graph,
         int expectedRevision,
         DateTimeOffset updatedUtc,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
         throw new NotSupportedException();
+    }
 
     public Task<UpdateStoredCampaignOutcome> UpdatePlayStateAsync(
         Guid campaignId,
@@ -168,8 +198,10 @@ file sealed class EmptyCampaignStore : ICampaignStore
         int roundCount,
         int expectedRevision,
         DateTimeOffset updatedUtc,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
         throw new NotSupportedException();
+    }
 }
 
 file sealed class FakeProfileStore : IUserAccountStore
@@ -190,33 +222,52 @@ file sealed class FakeProfileStore : IUserAccountStore
         EmailConfirmed = true,
     };
 
-    public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken) => Task.FromResult(false);
+    public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(false);
+    }
 
-    public Task<bool> UsernameExistsAsync(string username, Guid? userIdToIgnore, CancellationToken cancellationToken) =>
-        Task.FromResult(false);
+    public Task<bool> UsernameExistsAsync(string username, Guid? userIdToIgnore, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(false);
+    }
 
-    public Task<CreateLocalAccountOutcome> CreateLocalAccountAsync(CreateLocalAccountRequest request, CancellationToken cancellationToken) =>
+    public Task<CreateLocalAccountOutcome> CreateLocalAccountAsync(CreateLocalAccountRequest request, CancellationToken cancellationToken)
+    {
         throw new NotSupportedException();
+    }
 
-    public Task<CreateLocalAccountOutcome> CreateExternalAccountAsync(CreateExternalAccountRequest request, CancellationToken cancellationToken) =>
+    public Task<CreateLocalAccountOutcome> CreateExternalAccountAsync(CreateExternalAccountRequest request, CancellationToken cancellationToken)
+    {
         throw new NotSupportedException();
+    }
 
-    public Task<UserAccount?> FindByIdAsync(Guid userId, CancellationToken cancellationToken) =>
-        Task.FromResult<UserAccount?>(userId == User.Id ? User : null);
+    public Task<UserAccount?> FindByIdAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<UserAccount?>(userId == User.Id ? User : null);
+    }
 
-    public Task<UserAccount?> FindByUsernameAsync(string username, CancellationToken cancellationToken) =>
-        Task.FromResult<UserAccount?>(null);
+    public Task<UserAccount?> FindByUsernameAsync(string username, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<UserAccount?>(null);
+    }
 
-    public Task<UpdateProfileOutcome> UpdateProfileAsync(UpdateStoredProfileRequest request, CancellationToken cancellationToken) =>
+    public Task<UpdateProfileOutcome> UpdateProfileAsync(UpdateStoredProfileRequest request, CancellationToken cancellationToken)
+    {
         throw new NotSupportedException();
+    }
 
     public Task<ChangePasswordOutcome> ChangePasswordAsync(
         Guid userId,
         string currentPassword,
         string newPassword,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
         throw new NotSupportedException();
+    }
 
-    public Task<string?> ReplaceAvatarKeyAsync(Guid userId, string? avatarStorageKey, CancellationToken cancellationToken) =>
-        Task.FromResult<string?>(null);
+    public Task<string?> ReplaceAvatarKeyAsync(Guid userId, string? avatarStorageKey, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<string?>(null);
+    }
 }

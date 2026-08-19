@@ -223,7 +223,10 @@ public sealed class CampaignChatRulesTests
         ];
     }
 
-    private static IReadOnlyList<CampaignChatAllyGroup> AllyGroups() => [];
+    private static IReadOnlyList<CampaignChatAllyGroup> AllyGroups()
+    {
+        return [];
+    }
 
     private static Campaign.Domain.Campaigns.CampaignSchedule CreateSchedule(DateTimeOffset startsUtc)
     {

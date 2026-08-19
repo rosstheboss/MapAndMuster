@@ -166,7 +166,11 @@ public static class BattleResultRules
                         return new BattleQuestionAnswer(answer.QuestionId, answer.BooleanValue, points);
                     }),
                 ],
-                report.SupplyCostingUnitCount)),
+                report.SupplyCostingUnitCount,
+                report.ArmyListText,
+                report.ArmyListGameSystem,
+                report.ArmyListBuilder,
+                report.SupplyCategories)),
         ];
     }
 

@@ -117,6 +117,9 @@ public sealed class CreateCampaignCommand
 
     /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
     public int? SupplyLineDestroyedCampaignPoints { get; init; }
+
+    /// <summary>Gets reusable missions. Omitted means nested terrain and structure missions only.</summary>
+    public IReadOnlyList<MissionInput>? Missions { get; init; }
 }
 
 /// <summary>
@@ -240,6 +243,9 @@ public sealed class UpdateCampaignCommand
 
     /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
     public int? SupplyLineDestroyedCampaignPoints { get; init; }
+
+    /// <summary>Gets reusable missions. Omitted means nested terrain and structure missions only.</summary>
+    public IReadOnlyList<MissionInput>? Missions { get; init; }
 }
 
 /// <summary>

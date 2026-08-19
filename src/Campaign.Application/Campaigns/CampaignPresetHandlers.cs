@@ -233,6 +233,7 @@ public sealed class ApplyCampaignPresetHandler
             ItemObjectiveTypes = campaign.ItemObjectiveTypes,
             PublicObjectiveTypes = campaign.PublicObjectiveTypes,
             SpecialRules = campaign.SpecialRules,
+            Missions = campaign.Missions,
             ForceStatuses = campaign.ForceStatuses,
             PrivateObjectiveTypes = campaign.PrivateObjectiveTypes,
             BattleScoring = campaign.BattleScoring,

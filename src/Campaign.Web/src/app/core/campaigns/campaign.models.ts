@@ -73,6 +73,7 @@ export interface CampaignDetail {
   itemObjectiveTypes?: CampaignItemObjectiveType[];
   publicObjectiveTypes?: CampaignPublicObjectiveType[];
   specialRules?: CampaignSpecialRule[];
+  missions?: CampaignMission[];
   forceStatuses?: CampaignForceStatus[];
   privateObjectiveTypes?: CampaignPrivateObjectiveType[];
   privateObjectives?: PrivateObjectiveAssignment[];
@@ -141,6 +142,14 @@ export interface CampaignMission {
   hasFile: boolean;
   fileName: string | null;
   resultQuestions?: MissionResultQuestion[];
+  isAttackerDefender?: boolean;
+  hasArmyPointsAdvantage?: boolean;
+  armyPointsAdvantageSide?: string;
+  armyPointsAdvantageIsPercent?: boolean;
+  armyPointsAdvantageAmount?: number;
+  hasSupplyPointsAdvantage?: boolean;
+  supplyPointsAdvantageSide?: string;
+  supplyPointsAdvantageAmount?: number;
 }
 
 export interface MissionResultQuestion {
@@ -338,6 +347,7 @@ export interface SaveCampaignPayload {
   itemObjectiveTypes: SaveItemObjectiveTypePayload[];
   publicObjectiveTypes?: SavePublicObjectiveTypePayload[];
   specialRules?: SaveSpecialRulePayload[];
+  missions?: SaveMissionPayload[];
   forceStatuses?: SaveForceStatusPayload[];
   privateObjectiveTypes?: SavePrivateObjectiveTypePayload[];
   pointsPerBattleWon?: number;
@@ -481,6 +491,14 @@ export interface SaveMissionPayload {
   url?: string | null;
   clearFile?: boolean;
   resultQuestions?: SaveMissionResultQuestionPayload[];
+  isAttackerDefender?: boolean;
+  hasArmyPointsAdvantage?: boolean;
+  armyPointsAdvantageSide?: string;
+  armyPointsAdvantageIsPercent?: boolean;
+  armyPointsAdvantageAmount?: number;
+  hasSupplyPointsAdvantage?: boolean;
+  supplyPointsAdvantageSide?: string;
+  supplyPointsAdvantageAmount?: number;
 }
 
 export interface SaveMissionResultQuestionPayload {
@@ -673,6 +691,9 @@ export interface PlayBattle {
   viewerSupplyPoints?: number | null;
   forceSupplies?: PlayBattleForceSupply[];
   canStaffConfirm?: boolean;
+  mission?: CampaignMission | null;
+  attackerForceId?: string | null;
+  defenderForceId?: string | null;
 }
 
 export interface PlayBattleForceSupply {
@@ -681,7 +702,13 @@ export interface PlayBattleForceSupply {
   forceAllowancePoints: number;
   currentSupplyPoints: number;
   temporarySupplyPoints: number;
+  mapSupplyPoints?: number;
+  roundFreeSupplyPoints?: number;
+  splitPenaltyPoints?: number;
+  roundMaxArmyPoints?: number;
   alliedArmyPoints?: number;
+  freeCharacterCount?: number;
+  isSplit?: boolean;
 }
 
 export interface PlayBattleSubmission {
@@ -700,9 +727,34 @@ export interface BattleParticipantReport {
   differentialBattlePoints: number;
   bonusBattlePoints: number;
   supplyCostingUnitCount: number;
+  armyListText?: string | null;
+  armyListGameSystem?: string | null;
+  armyListBuilder?: string | null;
+  supplyCategories?: ArmyListSupplyCategory[];
   killedEnemyGeneral: boolean;
   destroyedEnemySupplyLine: boolean;
   answers: BattleQuestionAnswer[];
+}
+
+export interface ArmyListSupplyCategory {
+  name: string;
+  unitCount: number;
+  supplyPoints: number;
+  costsSupply: boolean;
+}
+
+export interface ParseArmyListPayload {
+  gameSystem?: string | null;
+  builder?: string | null;
+  text?: string | null;
+}
+
+export interface ParseArmyListResult {
+  parsed: boolean;
+  message?: string | null;
+  armyPoints: number;
+  supplyCostingUnitCount: number;
+  categories: ArmyListSupplyCategory[];
 }
 
 export interface BattleQuestionAnswer {

@@ -35,7 +35,7 @@ public sealed class CampaignSchedule
         RoundCount = roundCount;
         RoundLength = roundLength;
         Phases = phases;
-        ArmyEscalations = armyEscalations ?? HuntInEstaliaDefaults.ArmyEscalations(roundCount);
+        ArmyEscalations = armyEscalations ?? ArmyEscalationDefaults.ForRoundCount(roundCount);
     }
 
     /// <summary>Gets the campaign time zone used during setup.</summary>

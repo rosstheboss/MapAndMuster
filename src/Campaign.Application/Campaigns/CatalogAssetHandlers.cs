@@ -1,4 +1,5 @@
 using Campaign.Application.Common;
+using Campaign.Application.Play;
 using Campaign.Application.Ports;
 
 namespace Campaign.Application.Campaigns;
@@ -576,7 +577,7 @@ public sealed class UploadMissionFileHandler
         var newKey = await _assets
             .SaveAsync("missions", processed.Content, processed.FileExtension, processed.ContentType, cancellationToken)
             .ConfigureAwait(false);
-        if (!TryReplaceMission(newTerrains.ToList(), newStructures.ToList(), command.MissionId, processed, out _, out var boundTerrains, out var boundStructures, newKey))
+        if (!TryReplaceMission([.. newTerrains], [.. newStructures], command.MissionId, processed, out _, out var boundTerrains, out var boundStructures, newKey))
         {
             await _assets.DeleteAsync(newKey, cancellationToken).ConfigureAwait(false);
             return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The mission was not found.");
@@ -744,9 +745,7 @@ public sealed class GetMissionFileHandler
             return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
-        var mission = campaign.TerrainTypes.SelectMany(static type => type.Missions)
-            .Concat(campaign.StructureTypes.SelectMany(static type => type.Missions))
-            .FirstOrDefault(item => item.Id == missionId);
+        var mission = CampaignPlayCatalog.FindMission(campaign, missionId);
         if (mission is null || string.IsNullOrWhiteSpace(mission.FileStorageKey))
         {
             return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The mission file was not found.");

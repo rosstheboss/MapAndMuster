@@ -32,6 +32,7 @@ public sealed class CampaignSetup
     /// <param name="forceStatuses">Configured force statuses other than Normal. Empty means none.</param>
     /// <param name="splitForceSupplyPenaltyPercent">Percent subtracted from map-plus-round supply when a player has split forces.</param>
     /// <param name="battleReportRules">Always-asked battle-report questions and their campaign points.</param>
+    /// <param name="missions">Reusable missions. Empty means only nested terrain and structure missions.</param>
     public CampaignSetup(
         string name,
         string? description,
@@ -56,7 +57,8 @@ public sealed class CampaignSetup
         IReadOnlyList<PrivateObjectiveTypeSetup>? privateObjectiveTypes = null,
         IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
         int? splitForceSupplyPenaltyPercent = null,
-        BattleReportRulesSetup? battleReportRules = null)
+        BattleReportRulesSetup? battleReportRules = null,
+        IReadOnlyList<MissionSetup>? missions = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factions);
@@ -91,6 +93,7 @@ public sealed class CampaignSetup
         SplitForceSupplyPenaltyPercent = splitForceSupplyPenaltyPercent
             ?? HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
         BattleReportRules = battleReportRules ?? BattleReportRulesSetup.Default;
+        Missions = missions ?? [];
     }
 
     /// <summary>Gets the campaign name.</summary>
@@ -161,6 +164,9 @@ public sealed class CampaignSetup
 
     /// <summary>Gets always-asked battle-report questions and their campaign points.</summary>
     public BattleReportRulesSetup BattleReportRules { get; }
+
+    /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
+    public IReadOnlyList<MissionSetup> Missions { get; }
 
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon => BattleScoring.PointsPerWin;

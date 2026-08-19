@@ -88,7 +88,8 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
             campaign.ForceStatuses,
             campaign.SplitForceSupplyPenaltyPercent,
             campaign.BattleReportRules,
-            campaign.ArmyEscalations);
+            campaign.ArmyEscalations,
+            campaign.Missions);
         record.SettingsJson = CampaignPresetSettingsJson.Serialize(campaign);
         record.MapGraphJson = campaign.MapGraph is null ? null : MapGraphJson.Serialize(campaign.MapGraph);
         record.MapStorageKey = campaign.MapStorageKey;
@@ -127,7 +128,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
 
     private static StoredCampaign ToStored(CampaignPresetRecord record)
     {
-        var catalogs = CatalogJson.Deserialize(record.CatalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, _, ForceStatuses, SplitForceSupplyPenaltyPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
         var settings = CampaignPresetSettingsJson.Deserialize(record.SettingsJson);
         var created = record.CreatedUtc;
         return new StoredCampaign
@@ -156,18 +157,19 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
             RoundLengthUnit = string.IsNullOrWhiteSpace(settings.RoundLengthUnit) ? "Weeks" : settings.RoundLengthUnit,
             Phases = settings.Phases,
             MapGraph = MapGraphJson.Deserialize(record.MapGraphJson),
-            TerrainTypes = catalogs.TerrainTypes,
-            StructureTypes = catalogs.StructureTypes,
-            ItemObjectiveTypes = catalogs.ItemObjectiveTypes,
-            PublicObjectiveTypes = catalogs.PublicObjectiveTypes,
-            SpecialRules = catalogs.SpecialRules,
-            ForceStatuses = catalogs.ForceStatuses,
-            PrivateObjectiveTypes = catalogs.PrivateObjectiveTypes,
-            BattleScoring = catalogs.BattleScoring,
-            RankingObjectivePoints = catalogs.RankingObjectivePoints,
-            SplitForceSupplyPenaltyPercent = catalogs.SplitForceSupplyPenaltyPercent,
-            BattleReportRules = catalogs.BattleReportRules,
-            ArmyEscalations = catalogs.ArmyEscalations,
+            TerrainTypes = TerrainTypes,
+            StructureTypes = StructureTypes,
+            ItemObjectiveTypes = ItemObjectiveTypes,
+            PublicObjectiveTypes = PublicObjectiveTypes,
+            SpecialRules = SpecialRules,
+            ForceStatuses = ForceStatuses,
+            PrivateObjectiveTypes = PrivateObjectiveTypes,
+            BattleScoring = BattleScoring,
+            RankingObjectivePoints = RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = SplitForceSupplyPenaltyPercent,
+            BattleReportRules = BattleReportRules,
+            ArmyEscalations = ArmyEscalations,
+            Missions = Missions,
         };
     }
 }

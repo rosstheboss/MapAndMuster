@@ -65,7 +65,7 @@ public sealed class GetCampaignMapGraphHandler
             MapGraphMapper.ToDetail(
                 campaign.Id,
                 campaign.Revision,
-                membership?.IsGameMaster == true,
+                membership?.IsGameMaster == true || isAdministrator,
                 graph,
                 stored.ItemObjectivePlacements));
     }

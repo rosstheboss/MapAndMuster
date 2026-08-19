@@ -164,7 +164,7 @@ public partial class AddCampaignSetup : Migration
         migrationBuilder.CreateIndex(
             name: "IX_CampaignMemberships_CampaignId_UserId",
             table: "CampaignMemberships",
-            columns: new[] { "CampaignId", "UserId" },
+            columns: ["CampaignId", "UserId"],
             unique: true);
 #pragma warning restore CA1861
 

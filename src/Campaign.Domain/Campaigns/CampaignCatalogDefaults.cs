@@ -35,14 +35,14 @@ public static class CampaignCatalogDefaults
         [
             .. StructureCatalog.All.Select(static entry =>
             {
-                var flags = StructureCatalog.DefaultFlags(entry.Type);
+                var (IsBuildable, IsPillageable, IsDestructible) = StructureCatalog.DefaultFlags(entry.Type);
                 return new StructureTypeInput
                 {
                     Name = entry.Label,
                     BuiltinSymbol = entry.Type.ToString(),
-                    IsBuildable = flags.IsBuildable,
-                    IsPillageable = flags.IsPillageable,
-                    IsDestructible = flags.IsDestructible,
+                    IsBuildable = IsBuildable,
+                    IsPillageable = IsPillageable,
+                    IsDestructible = IsDestructible,
                 };
             }),
         ];

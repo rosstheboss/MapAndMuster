@@ -146,11 +146,14 @@ public sealed class CampaignEndpointTests
         Assert.Equal(1, created.GeneralKillCampaignPoints);
         Assert.Equal(1, created.SupplyLineDestroyedCampaignPoints);
         Assert.Equal(8, created.RoundEscalations.Count);
-        Assert.Equal(1000, created.RoundEscalations[0].MaxArmyPoints);
-        Assert.Equal(0, created.RoundEscalations[0].FreeSupplyPoints);
-        Assert.Equal(1, created.RoundEscalations[2].FreeSupplyPoints);
-        Assert.Equal(1, created.RoundEscalations[2].FreeCharacterCount);
-        Assert.Equal(3, created.RoundEscalations[6].FreeSupplyPoints);
+        Assert.All(
+            created.RoundEscalations,
+            row =>
+            {
+                Assert.Equal(1000, row.MaxArmyPoints);
+                Assert.Equal(1, row.FreeSupplyPoints);
+                Assert.Equal(1, row.FreeCharacterCount);
+            });
         Assert.All(created.TerrainTypes, type => Assert.Equal(1, type.SupplyPoints));
         Assert.All(created.StructureTypes, type =>
         {
@@ -814,6 +817,67 @@ public sealed class CampaignEndpointTests
         Assert.Equal(HttpStatusCode.BadRequest, changed.StatusCode);
         var error = await changed.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
         Assert.Equal("faction.already_chosen", error?.Code);
+    }
+
+    [Fact]
+    public async Task ParseArmyListFillsOldWorldBuilderSupplyCategories()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("list");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("List War"));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var parsedResponse = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/parse-army-list",
+            new ParseArmyListRequest
+            {
+                GameSystem = "WarhammerTheOldWorld",
+                Builder = "OldWorldBuilder",
+                Text =
+                    """
+                    ===
+                    Frontier Host [1500 points]
+                    The Old World, North Kingdom, Open War
+                    ===
+
+                    ++ Special [100 points] ++
+
+                    Cannon [100 points]
+
+                    ++ Rare [100 points] ++
+
+                    Great Cannon [100 points]
+
+                    ---
+                    Created with "Old World Builder"
+
+                    [https://old-world-builder.com]
+                    """,
+            });
+        Assert.Equal(HttpStatusCode.OK, parsedResponse.StatusCode);
+        var parsed = await parsedResponse.Content.ReadFromJsonAsync<ParseArmyListResponse>(JsonOptions);
+        Assert.NotNull(parsed);
+        Assert.True(parsed.Parsed);
+        Assert.Equal(1500, parsed.ArmyPoints);
+        Assert.Equal(2, parsed.SupplyCostingUnitCount);
+
+        using var failedResponse = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/parse-army-list",
+            new ParseArmyListRequest
+            {
+                GameSystem = "WarhammerTheOldWorld",
+                Builder = "NewRecruit",
+                Text = "not a New Recruit list",
+            });
+        Assert.Equal(HttpStatusCode.OK, failedResponse.StatusCode);
+        var failed = await failedResponse.Content.ReadFromJsonAsync<ParseArmyListResponse>(JsonOptions);
+        Assert.NotNull(failed);
+        Assert.False(failed.Parsed);
+        Assert.NotNull(failed.Message);
+        Assert.Contains("could not be parsed", failed.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task RegisterConfirmAndLoginAsync(HttpClient client, string email, string username)
