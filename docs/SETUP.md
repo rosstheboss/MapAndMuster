@@ -50,7 +50,7 @@ Copy `.env.example` to a gitignored `.env` file, or store the same values in ASP
 
 Restore the local `dotnet-ef` tool with `dotnet tool restore` from the repository root when adding or inspecting EF Core migrations.
 
-The Angular dev server proxies `/api` to `http://localhost:5219`. Start PostgreSQL and Mailpit, apply migrations by running `Campaign.Api`, then run `npm --prefix src/Campaign.Web start`. Confirmation and password-reset emails appear in Mailpit at `http://localhost:8025`.
+The Angular dev server proxies `/api` to `http://localhost:5219`. Start PostgreSQL and Mailpit, then run `Campaign.Api` with the **http** launch profile (`http://localhost:5219`) so migrations apply. In Development the API does not redirect HTTP to HTTPS; that redirect would send the browser to `https://localhost:7247` and fail CORS from `http://localhost:4200`. Then run `npm --prefix src/Campaign.Web start`. Confirmation and password-reset emails appear in Mailpit at `http://localhost:8025`.
 
 To send those messages to a real inbox while testing, override SMTP in user secrets (do not commit credentials). Restart `Campaign.Api` after changing them. Sign up with the address that should receive the mail, or call resend-confirmation for an existing unconfirmed account. Example Gmail app-password settings:
 

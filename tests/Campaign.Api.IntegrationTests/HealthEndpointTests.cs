@@ -21,4 +21,16 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [Fact]
+    public async Task DevelopmentHealthIsNotRedirectedToHttps()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder => builder.UseSetting("HTTPS_PORT", "7247"));
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        using var response = await client.GetAsync(new Uri("/health", UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
 }

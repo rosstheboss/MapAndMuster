@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Campaign.Api.Contracts;
 using Campaign.Application.Common;
 using Campaign.Application.Identity;
@@ -153,7 +154,16 @@ public static class AuthEndpoints
         }
         else
         {
-            request = await httpRequest.ReadFromJsonAsync<RegisterRequest>(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                request = await httpRequest.ReadFromJsonAsync<RegisterRequest>(cancellationToken).ConfigureAwait(false);
+            }
+            catch (JsonException)
+            {
+                return IdentityHttp.Problem(
+                    "request.invalid",
+                    "A complete registration body is required.");
+            }
         }
 
         if (request is null)

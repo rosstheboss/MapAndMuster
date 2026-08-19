@@ -87,7 +87,13 @@ if (app.Environment.IsDevelopment())
 
 if (!app.Environment.IsEnvironment("Testing"))
 {
-    app.UseHttpsRedirection();
+    // The Angular dev server proxies /api over HTTP. Visual Studio still sets an HTTPS port from
+    // the https launch profile, which would 307 the browser onto a different origin and fail CORS.
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseHttpsRedirection();
+    }
+
     app.UseRateLimiter();
 }
 

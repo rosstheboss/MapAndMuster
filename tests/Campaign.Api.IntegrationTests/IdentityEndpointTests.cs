@@ -347,6 +347,19 @@ public sealed class IdentityEndpointTests
     }
 
     [Fact]
+    public async Task RegisterRejectsJsonMissingRequiredProperties()
+    {
+        using var client = _factory.CreateClient();
+        using var content = new StringContent("{}", Encoding.UTF8, "application/json");
+        using var response = await client.PostAsync("/api/auth/register", content);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.NotNull(body);
+        Assert.Equal("request.invalid", body.Code);
+        Assert.Contains("complete registration body", body.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task WeakPasswordIsRejectedWithFieldErrors()
     {
         using var client = _factory.CreateClient();
