@@ -27,6 +27,7 @@ import type {
   ParseArmyListResult,
   UserSearchHit,
 } from './campaign.models';
+import { filenameFromContentDisposition, type CampaignLogExportRequest } from './campaign-log';
 
 @Injectable({ providedIn: 'root' })
 export class CampaignService {
@@ -500,5 +501,27 @@ export class CampaignService {
         { withCredentials: true },
       ),
     );
+  }
+
+  async exportLog(campaignId: string, request: CampaignLogExportRequest): Promise<{ blob: Blob; filename: string }> {
+    const response = await firstValueFrom(
+      this.http.get(`/api/campaigns/${encodeURIComponent(campaignId)}/log-export`, {
+        params: {
+          includePublicChat: String(request.includePublicChat),
+          includeGameLog: String(request.includeGameLog),
+          format: request.format,
+        },
+        observe: 'response',
+        responseType: 'blob',
+        withCredentials: true,
+      }),
+    );
+    return {
+      blob: response.body ?? new Blob(),
+      filename: filenameFromContentDisposition(
+        response.headers.get('content-disposition'),
+        `campaign-log.${request.format}`,
+      ),
+    };
   }
 }

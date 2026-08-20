@@ -4,6 +4,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 
+import { AuthService } from '../../core/auth/auth.service';
+import type { OwnProfile } from '../../core/auth/auth.models';
 import { FACTION_PRESETS, WARHAMMER_OLD_WORLD_PRESET_ID } from '../../core/campaigns/faction-presets';
 import { HUNT_IN_ESTALIA_CAMPAIGN_PRESET_ID } from '../../core/campaigns/campaign-presets';
 import { STANDARD_STRUCTURES_PRESET_ID } from '../../core/campaigns/structure-presets';
@@ -93,6 +95,58 @@ describe('CampaignSetupPage', () => {
     );
     expect(factionsToggle?.getAttribute('aria-expanded')).toBe('true');
     TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('lets an administrator look up The Hunt in Estalia when saving a preset', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    TestBed.inject(AuthService).currentUser.set(administratorProfile());
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.setup-toolbar')?.textContent).toContain('Save as Preset');
+    clickNamedButton(compiled, 'Save as Preset');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/campaign-presets').flush([]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const input = compiled.querySelector<HTMLInputElement>('#savePresetName')!;
+    expect(input).toBeTruthy();
+    input.dispatchEvent(new Event('focus'));
+    input.value = 'hunt';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const options = [...compiled.querySelectorAll('[role="option"]')].map((item) => item.textContent.trim());
+    expect(options).toEqual(['The Hunt in Estalia']);
+    http.verify();
+  });
+
+  it('lists a saved Hunt preset once in the apply dropdown', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const select = compiled.querySelector<HTMLSelectElement>('#campaignPreset')!;
+    select.dispatchEvent(new Event('focus'));
+    const http = TestBed.inject(HttpTestingController);
+    http
+      .expectOne('/api/campaign-presets')
+      .flush([{ id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', name: ' The Hunt in Estalia ', hasMap: true }]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const huntOptions = [...select.options].filter(
+      (option) => option.textContent.trim().toLowerCase() === 'the hunt in estalia',
+    );
+    expect(huntOptions).toHaveLength(1);
+    expect(huntOptions[0]?.value).toBe('saved:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
+    http.verify();
   });
 
   it('shows one army-size row per round with generic defaults', async () => {
@@ -969,3 +1023,29 @@ describe('CampaignSetupPage edit', () => {
     http.verify();
   });
 });
+
+function administratorProfile(): OwnProfile {
+  return {
+    id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    email: 'admin@example.test',
+    username: 'admin',
+    firstName: 'Ada',
+    middleInitial: null,
+    lastName: 'Admin',
+    suffix: null,
+    city: 'Halifax',
+    region: null,
+    country: 'Canada',
+    displayNameMode: 'Username',
+    timeZoneId: 'UTC',
+    hasAvatar: false,
+    createdUtc: '2026-08-13T00:00:00+00:00',
+    updatedUtc: '2026-08-13T00:00:00+00:00',
+    profileRevision: 1,
+    emailConfirmed: true,
+    isAdministrator: true,
+    inAppNotificationsEnabled: true,
+    emailNotificationsEnabled: true,
+    preferredChatLanguage: 'English',
+  };
+}

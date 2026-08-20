@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
+import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type {
   CampaignDetail,
@@ -21,7 +22,7 @@ import type {
   SaveMissionPayload,
 } from '../../core/campaigns/campaign.models';
 import { defaultStructureCatalog, defaultTerrainCatalog } from '../../core/campaigns/catalog-defaults';
-import { CAMPAIGN_PRESETS, campaignFromPreset } from '../../core/campaigns/campaign-presets';
+import { campaignFromPreset, campaignPresetApplyOptions } from '../../core/campaigns/campaign-presets';
 import { defaultArmyEscalations } from '../../core/campaigns/army-escalation-defaults';
 import {
   HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
@@ -234,6 +235,7 @@ const TOP_LEVEL_SECTION_IDS = [
     ReactiveFormsModule,
     RouterLink,
     FilterableComboboxComponent,
+    SaveCampaignPresetDialogComponent,
     MapSymbolComponent,
     CampaignMapPreviewComponent,
   ],
@@ -287,16 +289,10 @@ export class CampaignSetupPage {
   protected readonly factionPresets = FACTION_PRESETS;
   protected readonly terrainPresets = TERRAIN_PRESETS;
   protected readonly structurePresets = STRUCTURE_PRESETS;
-  protected readonly campaignPresets = CAMPAIGN_PRESETS;
   protected readonly savedPresets = signal<CampaignPresetListItem[]>([]);
   protected readonly savePresetOpen = signal(false);
-  protected readonly presetNameControl = this.formBuilder.nonNullable.control('');
   protected readonly isAdministrator = computed(() => this.auth.currentUser()?.isAdministrator === true);
-  protected readonly savedPresetNames = computed(() => this.savedPresets().map((preset) => preset.name));
-  protected readonly allCampaignPresets = computed(() => [
-    ...this.campaignPresets,
-    ...this.savedPresets().map((preset) => ({ id: `saved:${preset.id}`, name: preset.name })),
-  ]);
+  protected readonly allCampaignPresets = computed(() => campaignPresetApplyOptions(this.savedPresets()));
   protected readonly forceStatusEnableOptions = FORCE_STATUS_ENABLE_OPTIONS;
   protected readonly forceStatusClearOptions = FORCE_STATUS_CLEAR_OPTIONS;
   protected readonly structureSymbols = STRUCTURE_TYPES;
@@ -1507,17 +1503,14 @@ export class CampaignSetupPage {
       return;
     }
 
-    this.presetNameControl.setValue('');
     this.savePresetOpen.set(true);
-    void this.ensureSavedPresets();
   }
 
   protected closeSavePresetDialog(): void {
     this.savePresetOpen.set(false);
   }
 
-  protected async confirmSavePreset(): Promise<void> {
-    const name = this.presetNameControl.value.trim();
+  protected async confirmSavePreset(name: string): Promise<void> {
     if (name.length < 3) {
       this.revealErrors(['Preset name must be at least 3 characters.']);
       return;

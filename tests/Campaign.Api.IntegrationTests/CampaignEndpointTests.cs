@@ -214,6 +214,119 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task AdministratorSavePresetOverwritesANameThatDiffersOnlyByWhitespace()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("predup");
+        var email = $"{username}@example.test";
+        await RegisterConfirmAndLoginAsync(client, email, username);
+
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Whitespace Border"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        await MakeAdministratorAsync(username);
+        using var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        var presetName = $"The Hunt {UniqueName("in")}";
+        using var firstResponse = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/presets",
+            new SaveCampaignPresetRequest { Name = presetName });
+        Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
+        var first = await firstResponse.Content.ReadFromJsonAsync<CampaignPresetListItemResponse>(JsonOptions);
+        Assert.NotNull(first);
+
+        using var secondResponse = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/presets",
+            new SaveCampaignPresetRequest { Name = $"  {presetName.Replace(" ", "  ", StringComparison.Ordinal)}  " });
+        Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
+        var second = await secondResponse.Content.ReadFromJsonAsync<CampaignPresetListItemResponse>(JsonOptions);
+        Assert.NotNull(second);
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(presetName, second.Name);
+
+        var listed = await client.GetFromJsonAsync<CampaignPresetListItemResponse[]>("/api/campaign-presets", JsonOptions);
+        Assert.NotNull(listed);
+        Assert.Equal(1, listed.Count(item => item.Id == first.Id));
+        Assert.Equal(1, listed.Count(item => item.Name == presetName));
+    }
+
+    [Fact]
+    public async Task AdministratorSavePresetCopiesMapFileAndOverlayGraph()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("premap");
+        var email = $"{username}@example.test";
+        await RegisterConfirmAndLoginAsync(client, email, username);
+
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Mapped Border"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var pngContent = new MultipartFormDataContent();
+        var png = new ByteArrayContent(PngBytes);
+        png.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        pngContent.Add(png, "map", "map.png");
+        pngContent.Add(new StringContent(created.Revision.ToString(CultureInfo.InvariantCulture)), "revision");
+        using var pngResponse = await client.PostAsync($"/api/campaigns/{created.Id}/map", pngContent);
+        Assert.Equal(HttpStatusCode.OK, pngResponse.StatusCode);
+        var mapped = await pngResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(mapped);
+
+        var territoryId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var plainsId = mapped.TerrainTypes.Single(type => type.Name == "Plains").Id;
+        using var graphResponse = await client.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}/map/graph",
+            new SaveMapGraphRequest
+            {
+                Revision = mapped.Revision,
+                Territories = [GraphTerritory(territoryId, 1, 0.1, 0.1, 0.3, "Northmarch", plainsId)],
+            });
+        Assert.Equal(HttpStatusCode.OK, graphResponse.StatusCode);
+
+        await MakeAdministratorAsync(username);
+        using var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        var presetName = UniqueName("HuntMap");
+        using var savedResponse = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/presets",
+            new SaveCampaignPresetRequest { Name = presetName });
+        Assert.Equal(HttpStatusCode.Created, savedResponse.StatusCode);
+        var saved = await savedResponse.Content.ReadFromJsonAsync<CampaignPresetListItemResponse>(JsonOptions);
+        Assert.NotNull(saved);
+        Assert.True(saved.HasMap);
+
+        var preset = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaign-presets/{saved.Id}", JsonOptions);
+        Assert.NotNull(preset);
+        Assert.True(preset.HasMap);
+
+        using var targetResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Empty Border"));
+        var target = await targetResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(target);
+
+        using var appliedResponse = await client.PostAsJsonAsync(
+            $"/api/campaigns/{target.Id}/apply-preset",
+            new ApplyCampaignPresetRequest { PresetId = saved.Id, Revision = target.Revision });
+        Assert.Equal(HttpStatusCode.OK, appliedResponse.StatusCode);
+        var applied = await appliedResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(applied);
+        Assert.True(applied.HasMap);
+
+        var graph = await client.GetFromJsonAsync<MapGraphResponse>($"/api/campaigns/{target.Id}/map/graph", JsonOptions);
+        Assert.NotNull(graph);
+        Assert.Equal("Northmarch", graph.Territories.Single().Name);
+        Assert.Equal(
+            target.TerrainTypes.Single(type => type.Name == "Plains").Id,
+            graph.Territories.Single().TerrainTypeId);
+
+        using var mapResponse = await client.GetAsync($"/api/campaigns/{target.Id}/map");
+        Assert.Equal(HttpStatusCode.OK, mapResponse.StatusCode);
+        Assert.Equal("image/png", mapResponse.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
     public async Task UnauthenticatedAccessIsRejected()
     {
         using var client = _factory.CreateClient();
@@ -617,6 +730,72 @@ public sealed class CampaignEndpointTests
         Assert.NotNull(outsiderView);
         Assert.DoesNotContain(outsiderView.Log, item => item.Summary == "Keep this between us");
         Assert.DoesNotContain(JsonSerializer.Serialize(outsiderView), "Keep this between us");
+    }
+
+    [Fact]
+    public async Task ManagersCanDownloadPublicAndGameLogsWithoutPrivateChat()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("host");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Log Export War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var player = _factory.CreateClient();
+        var playerName = UniqueName("joiner");
+        await RegisterConfirmAndLoginAsync(player, $"{playerName}@example.test", playerName);
+        using var joined = await player.PostAsJsonAsync($"/api/campaigns/{created.Id}/join", new JoinCampaignRequest());
+        Assert.Equal(HttpStatusCode.OK, joined.StatusCode);
+
+        var beforeChat = await owner.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(beforeChat);
+        var playerId = beforeChat.MentionableMembers.Single(member => member.Username == playerName).UserId;
+
+        using var publicPosted = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/chat",
+            new PostCampaignChatRequest { Revision = beforeChat.Revision, Message = "Hello everyone" });
+        Assert.Equal(HttpStatusCode.OK, publicPosted.StatusCode);
+        var afterPublic = await publicPosted.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(afterPublic);
+
+        using var privatePosted = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/chat",
+            new PostCampaignChatRequest
+            {
+                Revision = afterPublic.Revision,
+                Message = "Keep this between us",
+                ChannelKind = "Direct",
+                TargetId = playerId,
+            });
+        Assert.Equal(HttpStatusCode.OK, privatePosted.StatusCode);
+
+        using var text = await owner.GetAsync(
+            $"/api/campaigns/{created.Id}/log-export?includePublicChat=true&includeGameLog=true&format=txt");
+        Assert.Equal(HttpStatusCode.OK, text.StatusCode);
+        Assert.Equal("text/plain", text.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("filename=", text.Content.Headers.ContentDisposition?.ToString(), StringComparison.OrdinalIgnoreCase);
+        var body = await text.Content.ReadAsStringAsync();
+        Assert.Contains("Hello everyone", body, StringComparison.Ordinal);
+        Assert.Contains($"{ownerName}:", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("Keep this between us", body, StringComparison.Ordinal);
+
+        using var csv = await owner.GetAsync(
+            $"/api/campaigns/{created.Id}/log-export?includePublicChat=true&includeGameLog=false&format=csv");
+        Assert.Equal(HttpStatusCode.OK, csv.StatusCode);
+        Assert.Equal("text/csv", csv.Content.Headers.ContentType?.MediaType);
+        var csvBody = await csv.Content.ReadAsStringAsync();
+        Assert.StartsWith("OccurredUtc,LocalTimestamp,Source,Kind,Originator,Summary", csvBody, StringComparison.Ordinal);
+        Assert.Contains("PublicChat", csvBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("Keep this between us", csvBody, StringComparison.Ordinal);
+
+        using var forbidden = await player.GetAsync(
+            $"/api/campaigns/{created.Id}/log-export?includePublicChat=true&includeGameLog=true&format=txt");
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        using var emptySelection = await owner.GetAsync(
+            $"/api/campaigns/{created.Id}/log-export?includePublicChat=false&includeGameLog=false&format=txt");
+        Assert.Equal(HttpStatusCode.BadRequest, emptySelection.StatusCode);
     }
 
     [Fact]

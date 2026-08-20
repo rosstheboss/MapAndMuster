@@ -18,6 +18,16 @@
         @if (canManage() && campaign.status === 'Scheduled') {
           <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
         }
+        @if (isAdministrator()) {
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="openSavePresetDialog()"
+            [disabled]="saving() || loading()"
+          >
+            Save as Preset
+          </button>
+        }
         <a class="button-secondary" [routerLink]="['/campaigns', campaign.id]">Back to campaign</a>
       }
     </div>
@@ -523,5 +533,14 @@
         </aside>
       </div>
     }
+  }
+
+  @if (isAdministrator()) {
+    <app-save-campaign-preset-dialog
+      [open]="savePresetOpen()"
+      [saving]="saving()"
+      (closed)="closeSavePresetDialog()"
+      (confirmed)="confirmSavePreset($event)"
+    />
   }
 </section>

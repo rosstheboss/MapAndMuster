@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { readApiErrorMessages } from '../../core/auth/auth.service';
+import { AuthService } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type { CampaignDetail, CampaignMission, MapGraphDetail } from '../../core/campaigns/campaign.models';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
@@ -46,6 +47,7 @@ import {
 } from '../../core/maps/map-graph.models';
 import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
+import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 
 export type MapEditorTool = 'draw' | 'erase' | 'select' | 'connect';
@@ -53,13 +55,21 @@ export type OverlayColorMode = 'random' | 'terrain' | 'manual';
 
 @Component({
   selector: 'app-map-editor-page',
-  imports: [FormsModule, RouterLink, CampaignMapViewComponent, MapSymbolComponent, InstantDatePipe],
+  imports: [
+    FormsModule,
+    RouterLink,
+    CampaignMapViewComponent,
+    MapSymbolComponent,
+    InstantDatePipe,
+    SaveCampaignPresetDialogComponent,
+  ],
   templateUrl: './map-editor.page.html',
   styleUrl: './map-editor.page.css',
 })
 export class MapEditorPage {
   private readonly campaignsApi = inject(CampaignService);
   private readonly overlay = inject(FormSubmitOverlayService);
+  private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
@@ -85,6 +95,7 @@ export class MapEditorPage {
   protected readonly confirmingDownload = signal(false);
   protected readonly downloading = signal(false);
   protected readonly pendingDownload = signal<'map' | 'svg' | null>(null);
+  protected readonly savePresetOpen = signal(false);
   private readonly svgFileInput = viewChild<ElementRef<HTMLInputElement>>('svgFile');
 
   protected readonly drawTools: MapEditorTool[] = ['draw', 'erase', 'select'];
@@ -103,6 +114,7 @@ export class MapEditorPage {
   private readonly historyVersion = signal(0);
 
   protected readonly canManage = computed(() => this.campaign()?.canManage === true);
+  protected readonly isAdministrator = computed(() => this.auth.currentUser()?.isAdministrator === true);
   protected readonly canUndo = computed(() => {
     this.historyVersion();
     return this.drawing().length > 0 || this.undoStack.length > 0;
@@ -924,6 +936,57 @@ export class MapEditorPage {
 
   protected requestUploadSvg(): void {
     this.svgFileInput()?.nativeElement.click();
+  }
+
+  protected openSavePresetDialog(): void {
+    if (!this.isAdministrator() || !this.campaign()) {
+      return;
+    }
+
+    this.savePresetOpen.set(true);
+  }
+
+  protected closeSavePresetDialog(): void {
+    this.savePresetOpen.set(false);
+  }
+
+  protected async confirmSavePreset(name: string): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign || !this.isAdministrator()) {
+      return;
+    }
+
+    if (name.length < 3) {
+      this.revealErrors(['Preset name must be at least 3 characters.']);
+      return;
+    }
+
+    this.saving.set(true);
+    this.errorMessages.set([]);
+    this.successMessage.set(null);
+    try {
+      const saved = await this.overlay.run(async () => {
+        if (this.hasUnsavedEdits()) {
+          const graphSaved = await this.save();
+          if (!graphSaved) {
+            return false;
+          }
+        }
+
+        await this.campaignsApi.saveAsPreset(campaign.id, name);
+        return true;
+      });
+      if (!saved) {
+        return;
+      }
+
+      this.closeSavePresetDialog();
+      this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
+    } catch (error: unknown) {
+      this.revealErrors(readApiErrorMessages(error, 'Unable to save the campaign preset.'));
+    } finally {
+      this.saving.set(false);
+    }
   }
 
   protected async onSvgFile(event: Event): Promise<void> {

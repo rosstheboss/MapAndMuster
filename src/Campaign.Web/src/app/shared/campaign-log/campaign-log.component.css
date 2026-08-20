@@ -57,10 +57,12 @@
 .log-filters {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.75rem 1.25rem;
   margin: 0;
   padding: 0;
   border: 0;
+  width: 100%;
 }
 
 .log-filters legend {
@@ -72,6 +74,34 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+}
+
+.log-download {
+  margin-left: auto;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(28 25 23 / 45%);
+}
+
+.dialog {
+  width: min(100%, 28rem);
+}
+
+.dialog h2 {
+  margin: 0;
+}
+
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
 }
 
 .channel-badge {

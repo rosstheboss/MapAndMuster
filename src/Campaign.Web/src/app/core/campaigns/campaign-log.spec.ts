@@ -1,5 +1,6 @@
 import {
   campaignLogComposerSize,
+  filenameFromContentDisposition,
   filterChatRecipients,
   formatLogTimestamp,
   matchChatRecipient,
@@ -97,5 +98,16 @@ describe('chat recipient matching', () => {
     expect(matchChatRecipient(channels, members, 'bobisthebest')?.targetId).toBe('2');
     expect(recipientFieldLabel(channels[1], members)).toBe('bobisthebest');
     expect(recipientSuggestionLabel(channels[1], members)).toBe('Bob (bobisthebest)');
+  });
+});
+
+describe('campaign log download filename', () => {
+  it('reads a UTF-8 content-disposition file name', () => {
+    expect(
+      filenameFromContentDisposition(
+        "attachment; filename=border-war-log.txt; filename*=UTF-8''border-war-log.txt",
+        'campaign-log.txt',
+      ),
+    ).toBe('border-war-log.txt');
   });
 });

@@ -14,7 +14,75 @@
       <input type="checkbox" [ngModel]="showGameLog()" (ngModelChange)="showGameLog.set($event)" />
       Game log
     </label>
+    @if (canExport()) {
+      <button type="button" class="button-secondary log-download" (click)="openExportDialog()" [disabled]="exporting()">
+        Download log
+      </button>
+    }
   </fieldset>
+  @if (exportOpen()) {
+    <div class="dialog-backdrop">
+      <div
+        class="dialog panel stack"
+        role="dialog"
+        aria-labelledby="download-log-title"
+        aria-describedby="download-log-desc"
+      >
+        <h2 id="download-log-title">Download campaign log</h2>
+        <p id="download-log-desc">Save public chat and game-log facts as one file. Private chats are never included.</p>
+        <fieldset class="log-filters">
+          <legend>Include</legend>
+          <label>
+            <input type="checkbox" [ngModel]="exportPublicChat()" (ngModelChange)="exportPublicChat.set($event)" />
+            Public chat
+          </label>
+          <label>
+            <input type="checkbox" [ngModel]="exportGameLog()" (ngModelChange)="exportGameLog.set($event)" />
+            Game log
+          </label>
+        </fieldset>
+        <fieldset class="log-filters">
+          <legend>File type</legend>
+          <label>
+            <input
+              type="radio"
+              name="log-export-format"
+              value="txt"
+              [ngModel]="exportFormat()"
+              (ngModelChange)="setExportFormat($event)"
+            />
+            Text (.txt)
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="log-export-format"
+              value="csv"
+              [ngModel]="exportFormat()"
+              (ngModelChange)="setExportFormat($event)"
+            />
+            CSV (.csv)
+          </label>
+        </fieldset>
+        @if (!canConfirmExport()) {
+          <p class="error" role="alert">Choose public chat, the game log, or both.</p>
+        }
+        <div class="choice-row">
+          <button
+            type="button"
+            class="button"
+            (click)="confirmExport()"
+            [disabled]="!canConfirmExport() || exporting()"
+          >
+            Download
+          </button>
+          <button type="button" class="button-secondary" (click)="closeExportDialog()" [disabled]="exporting()">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  }
   <div
     class="log-scroll"
     #scroller

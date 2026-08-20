@@ -149,7 +149,7 @@ internal static class CampaignPlayMapper
             CurrentPhaseStartsUtc = progress.CurrentPhaseStartsUtc,
             CurrentPhaseEndsUtc = progress.CurrentPhaseEndsUtc,
             CurrentWindowId = window?.Id,
-            HasMap = !string.IsNullOrWhiteSpace(campaign.MapStorageKey),
+            HasMap = CampaignMapper.HasMapData(campaign),
             FactionId = membership?.FactionId,
             CanChooseFaction = CampaignMapper.CanChooseFaction(membership, progress.Status),
             IsCommitted = currentActionId is { } id

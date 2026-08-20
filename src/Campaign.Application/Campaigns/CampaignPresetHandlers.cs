@@ -1,4 +1,5 @@
 using Campaign.Application.Common;
+using Campaign.Application.Maps;
 using Campaign.Application.Ports;
 using Campaign.Domain.Campaigns;
 
@@ -106,7 +107,7 @@ public sealed class SaveCampaignPresetHandler
                 "Only administrators can save a campaign as a preset.");
         }
 
-        var name = command.Name.Trim();
+        var name = CampaignSetupRules.CollapseName(command.Name);
         if (name.Length < CampaignSetupRules.NameMinLength || name.Length > CampaignSetupRules.NameMaxLength)
         {
             return OperationResults.Failure<CampaignPresetListItem>(
@@ -226,7 +227,7 @@ public sealed class ApplyCampaignPresetHandler
             RoundLengthAmount = campaign.RoundLengthAmount,
             RoundLengthUnit = campaign.RoundLengthUnit,
             Phases = campaign.Phases,
-            MapGraph = preset.MapGraph,
+            MapGraph = CampaignOverlayRemap.ForCampaign(preset.MapGraph, preset, campaign),
             PlayState = campaign.PlayState,
             TerrainTypes = campaign.TerrainTypes,
             StructureTypes = campaign.StructureTypes,

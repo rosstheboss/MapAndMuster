@@ -25,6 +25,8 @@ Required early suites:
 - Campaign-point components and graph objectives.
 - Public-objective award/revoke facts and hidden item-objective standings secrecy.
 - Battle-submission equivalence, single submission, disagreement, and GM resolution.
+- Campaign-preset save copies map image and overlay; apply remaps overlay catalog identifiers by name.
+  Saving the same name after trimming whitespace overwrites the previous preset.
 
 ## Backend integration tests
 
@@ -48,6 +50,8 @@ Cover:
 - Home notification board empty and populated states, and administrator-only news edits.
 - Manager add and kick of players (including private campaigns without the join password), staff
   faction assignment, and administrator impersonation of seeded test accounts.
+- Administrator save-as-preset copies the map file and overlay graph; applying onto another campaign
+  remaps overlay terrain identifiers onto that campaign's catalog.
 
 ## Angular tests
 
@@ -59,10 +63,12 @@ Cover components/services for:
 - Countdown display without treating the browser clock as authoritative.
 - Map territory selection, force markers, polygon editing including Close Territory enclose and
   shared-border versus overhang checks, move drop validity, keyboard alternatives, and metadata forms.
+  Administrators can save as a preset from the map editor; the save-name lookup includes The Hunt in
+  Estalia.
 - Permission-based navigation without relying on it as backend security.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
 - Campaign log display, member chat including typable recipient autocomplete and public/private/game-log filters, live log refresh, chat send errors without the save success
-  banner, `@` mention autocomplete limited to current members, and clickable originator and mention names.
+  banner, `@` mention autocomplete limited to current members, clickable originator and mention names, and manager or administrator download of public chat and/or game-log facts as text or CSV.
 - Public site chat on All Campaigns, including language filters, block toggles, administrator compose, and cookie-stored language preferences.
 - Participants panel names, factions, and Manager/Player/Admin roles, including manager add/search/kick and staff faction assignment.
 - Administrator test-users page and the impersonation banner with Return to admin.

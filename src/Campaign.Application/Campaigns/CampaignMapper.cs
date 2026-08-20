@@ -103,7 +103,7 @@ public static class CampaignMapper
             City = campaign.City,
             Region = campaign.Region,
             Country = campaign.Country,
-            HasMap = !string.IsNullOrWhiteSpace(campaign.MapStorageKey),
+            HasMap = HasMapData(campaign),
             CanManage = membership?.IsGameMaster == true || isAdministrator,
             IsParticipant = membership?.IsPlayer == true,
             Revision = campaign.Revision,
@@ -598,5 +598,12 @@ public static class CampaignMapper
         }
 
         return [.. seen.Values];
+    }
+
+    internal static bool HasMapData(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        return !string.IsNullOrWhiteSpace(campaign.MapStorageKey)
+            || campaign.MapGraph?.Territories.Count > 0;
     }
 }

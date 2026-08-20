@@ -50,6 +50,18 @@ export const CAMPAIGN_PRESETS: readonly CampaignPreset[] = [
   },
 ];
 
+export function formatCampaignPresetName(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter((part) => part.length > 0)
+    .join(' ');
+}
+
+function presetNameKey(name: string): string {
+  return formatCampaignPresetName(name).toLowerCase();
+}
+
 export function campaignFromPreset(presetId: string): CampaignPresetCopy | null {
   const preset = CAMPAIGN_PRESETS.find((entry) => entry.id === presetId);
   if (!preset) {
@@ -73,4 +85,40 @@ export function campaignFromPreset(presetId: string): CampaignPresetCopy | null 
     specialRules: specialRulesFromOldWorldPreset(),
     forceStatuses: forceStatusesFromStandardPreset(),
   };
+}
+
+export function campaignPresetSaveNames(savedNames: readonly string[]): string[] {
+  const names = new Map<string, string>();
+  for (const preset of CAMPAIGN_PRESETS) {
+    names.set(presetNameKey(preset.name), formatCampaignPresetName(preset.name));
+  }
+
+  for (const name of savedNames) {
+    const collapsed = formatCampaignPresetName(name);
+    if (collapsed) {
+      names.set(presetNameKey(collapsed), collapsed);
+    }
+  }
+
+  return [...names.values()].sort((left, right) => left.localeCompare(right));
+}
+
+export function campaignPresetApplyOptions(
+  saved: readonly { id: string; name: string }[],
+): { id: string; name: string }[] {
+  const options = new Map<string, { id: string; name: string }>();
+  for (const preset of CAMPAIGN_PRESETS) {
+    options.set(presetNameKey(preset.name), { id: preset.id, name: formatCampaignPresetName(preset.name) });
+  }
+
+  for (const preset of saved) {
+    const name = formatCampaignPresetName(preset.name);
+    if (!name) {
+      continue;
+    }
+
+    options.set(presetNameKey(name), { id: `saved:${preset.id}`, name });
+  }
+
+  return [...options.values()].sort((left, right) => left.name.localeCompare(right.name));
 }

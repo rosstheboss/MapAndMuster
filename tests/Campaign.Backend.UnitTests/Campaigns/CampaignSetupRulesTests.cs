@@ -1353,6 +1353,16 @@ public sealed class CampaignSetupRulesTests
         Assert.Contains(rejected, error => error.Code == "forceStatuses.normal");
     }
 
+    [Fact]
+    public void UniqueNameKeyTreatsWhitespaceAsEquivalent()
+    {
+        Assert.Equal("The Hunt in Estalia", CampaignSetupRules.CollapseName("  The Hunt   in Estalia\t"));
+        Assert.Equal("THE HUNT IN ESTALIA", CampaignSetupRules.UniqueNameKey("  The Hunt   in Estalia\t"));
+        Assert.Equal(
+            CampaignSetupRules.UniqueNameKey("The Hunt in Estalia"),
+            CampaignSetupRules.UniqueNameKey("the hunt in estalia"));
+    }
+
     private static IReadOnlyList<FactionInput> TwoFactions()
     {
         return

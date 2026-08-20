@@ -81,10 +81,14 @@ catalog status; it is the absence of a status. Hunt also applies the default spl
 penalty (25 percent), always-ask general-kill and supply-line questions (1 campaign point each),
 and the per-round army size / free supply / free character table.
 
-An administrator may save the current campaign settings as a named preset from Edit campaign.
-The dialog accepts a new name or autocompletes an existing preset name to overwrite it. Saving
-a preset also stores the map image and overlay graph. Saved presets appear in the campaign
-preset list for later apply.
+An administrator may save the current campaign settings as a named preset from Edit campaign or
+Edit map. The dialog accepts a new name or autocompletes an existing saved preset or The Hunt in
+Estalia. Names that match after trimming and collapsing whitespace overwrite the previous saved
+preset instead of creating another. Saving a preset also stores the map image and overlay graph.
+Applying a saved preset onto another campaign remaps overlay catalog identifiers by name onto that
+campaign's terrain, structures, factions, and item objectives. Saved presets appear in the campaign
+preset list for later apply. A saved preset with the same collapsed name as a built-in catalog
+preset replaces that catalog entry in the apply list.
 
 Optional item objectives may be none, one, or many (at most 50), each with a unique name.
 Defaults are hidden until found, randomly placed, and not allowed on a spawn territory. A
@@ -533,7 +537,9 @@ allowance plus the round bonus, then from the player's temporary pool.
 
 ### Map overlay editor
 
-After campaign creation, the creating manager is taken to the map editor. Territories are drawn as
+After campaign creation, the creating manager is taken to the map editor. Draw, connect, color, and
+save controls stay sticky at the top of the viewport while they fit; when the toolbar is taller
+than 40 percent of the viewport it scrolls inside itself. Territories are drawn as
 an overlay on the rectangular raster map; the image itself is not modified. Overlay coordinates are
 normalized to the unit square. Drawing stays inside the image rectangle. Territories may share a
 border but their interiors must not overlap. The drawing cursor highlights when it is about to snap
@@ -838,11 +844,15 @@ group. The compose recipient is a typable field with mouse and keyboard autocomp
 Everyone and member usernames. Private messages are stored on the play log with audience metadata and are filtered on
 read. They are returned only to the sender and the selected audience. Campaign managers do not
 receive other members' private chats. A system administrator may inspect all private chats only
-while they are the active debug actor on that campaign. Private chat never appears in exports or
-the visible log unless the viewer enables the private-chat filter for themselves.
+while they are the active debug actor on that campaign. Private chat never appears in exports.
+It appears in the visible log only when the viewer enables the private-chat filter for themselves.
 
 Independent filters show public chat, private chats the viewer is allowed to see, and/or the
-game log. Game-log facts always go to the public channel. The log records campaign start,
+game log. Game-log facts always go to the public channel. A campaign manager or administrator
+may download public chat and/or game-log facts as one text or CSV file at any time, including
+before launch, during play, and after the campaign ends. That file is the same payload a later
+outbound sender would use. Private chats are omitted from the download even when the caller can
+see them on screen. The log records campaign start,
 manager extensions of remaining phases or rounds, resolved
 actions after an action window closes (including Hold for every force), attempted actions that
 were invalid or conflicted and became Hold, battles created or finalized, manager battle-result

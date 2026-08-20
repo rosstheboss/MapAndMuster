@@ -49,6 +49,77 @@ public sealed class CampaignPresetHandlerTests
         Assert.Equal("Frontier War", result.Value.Name);
         Assert.True(result.Value.HasMap);
         Assert.Single(presets.Items);
+        Assert.Equal("maps/border.png", presets.Items[0].MapStorageKey);
+        Assert.NotNull(presets.Items[0].MapGraph);
+        Assert.Equal("Northmarch", presets.Items[0].MapGraph!.Territories[0].Name);
+    }
+
+    [Fact]
+    public async Task ApplyCopiesMapImageAndOverlayGraph()
+    {
+        var campaigns = new PresetCampaignStore();
+        var originalGraph = campaigns.Campaign.MapGraph;
+        var originalKey = campaigns.Campaign.MapStorageKey;
+        var presets = new FakePresetStore();
+        var saved = await new SaveCampaignPresetHandler(campaigns, presets, new FixedClock()).HandleAsync(
+            new SaveCampaignPresetCommand
+            {
+                CampaignId = campaigns.Campaign.Id,
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+                Name = "Frontier War",
+            },
+            CancellationToken.None);
+        campaigns.StripMap();
+
+        var result = await new ApplyCampaignPresetHandler(campaigns, presets, new FixedClock()).HandleAsync(
+            new ApplyCampaignPresetCommand
+            {
+                CampaignId = campaigns.Campaign.Id,
+                PresetId = saved.Value!.Id,
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+                Revision = campaigns.Campaign.Revision,
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.HasMap);
+        Assert.Equal(originalKey, campaigns.Campaign.MapStorageKey);
+        Assert.Equal(originalGraph!.Territories[0].Name, campaigns.Campaign.MapGraph!.Territories[0].Name);
+    }
+
+    [Fact]
+    public async Task ApplyRemapsOverlayTerrainOntoTheTargetCatalog()
+    {
+        var campaigns = new PresetCampaignStore();
+        var presets = new FakePresetStore();
+        var saved = await new SaveCampaignPresetHandler(campaigns, presets, new FixedClock()).HandleAsync(
+            new SaveCampaignPresetCommand
+            {
+                CampaignId = campaigns.Campaign.Id,
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+                Name = "Frontier War",
+            },
+            CancellationToken.None);
+        var targetTerrain = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        campaigns.RetargetPlains(targetTerrain);
+
+        var result = await new ApplyCampaignPresetHandler(campaigns, presets, new FixedClock()).HandleAsync(
+            new ApplyCampaignPresetCommand
+            {
+                CampaignId = campaigns.Campaign.Id,
+                PresetId = saved.Value!.Id,
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+                Revision = campaigns.Campaign.Revision,
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Northmarch", campaigns.Campaign.MapGraph!.Territories[0].Name);
+        Assert.Equal(targetTerrain, campaigns.Campaign.MapGraph.Territories[0].TerrainTypeId);
     }
 
     [Fact]
@@ -82,6 +153,38 @@ public sealed class CampaignPresetHandlerTests
         Assert.Single(presets.Items);
         Assert.Equal("frontier war", presets.Items[0].Name);
     }
+
+    [Fact]
+    public async Task SaveOverwritesWhenTheNameDiffersOnlyByWhitespace()
+    {
+        var campaigns = new PresetCampaignStore();
+        var presets = new FakePresetStore();
+        var handler = new SaveCampaignPresetHandler(campaigns, presets, new FixedClock());
+        var first = await handler.HandleAsync(
+            new SaveCampaignPresetCommand
+            {
+                CampaignId = campaigns.Campaign.Id,
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+                Name = "The Hunt in Estalia",
+            },
+            CancellationToken.None);
+        var second = await handler.HandleAsync(
+            new SaveCampaignPresetCommand
+            {
+                CampaignId = campaigns.Campaign.Id,
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+                Name = "  The Hunt   in Estalia  ",
+            },
+            CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(first.Value!.Id, second.Value!.Id);
+        Assert.Single(presets.Items);
+        Assert.Equal("The Hunt in Estalia", presets.Items[0].Name);
+    }
 }
 
 file sealed class FixedClock : IClock
@@ -111,9 +214,10 @@ file sealed class FakePresetStore : ICampaignPresetStore
         DateTimeOffset utcNow,
         CancellationToken cancellationToken)
     {
-        var existing = Items.FirstOrDefault(item =>
-            string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
-        var stored = Copy(campaign, existing?.Id ?? Guid.NewGuid(), name.Trim(), createdByUserId, utcNow);
+        var displayName = CampaignSetupRules.CollapseName(name);
+        var key = CampaignSetupRules.UniqueNameKey(displayName);
+        var existing = Items.FirstOrDefault(item => CampaignSetupRules.UniqueNameKey(item.Name) == key);
+        var stored = Copy(campaign, existing?.Id ?? Guid.NewGuid(), displayName, createdByUserId, utcNow);
         if (existing is not null)
         {
             Items.Remove(existing);
@@ -193,60 +297,30 @@ file sealed class FakePresetStore : ICampaignPresetStore
 
 file sealed class PresetCampaignStore : ICampaignStore
 {
-    public StoredCampaign Campaign { get; } = new()
+    public StoredCampaign Campaign { get; set; } = CreateCampaign();
+
+    public void StripMap()
     {
-        Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
-        Name = "Border War",
-        PlayerSlotCount = 8,
-        IsPrivate = false,
-        IsPubliclyViewable = true,
-        CreatorIsParticipant = true,
-        MapStorageKey = "maps/border.png",
-        Revision = 2,
-        CreatedUtc = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
-        UpdatedUtc = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
-        CreatedByUserId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
-        Memberships = [],
-        Factions =
-        [
-            new StoredFaction
-            {
-                Id = Guid.Parse("33333333-3333-3333-3333-333333333333"),
-                Name = "North",
-                Color = "#2563EB",
-                Subfactions = [],
-                RequiresSubfaction = false,
-            },
-            new StoredFaction
-            {
-                Id = Guid.Parse("44444444-4444-4444-4444-444444444444"),
-                Name = "South",
-                Color = "#DC2626",
-                Subfactions = [],
-                RequiresSubfaction = false,
-            },
-        ],
-        AllyGroups = [],
-        Links = [],
-        TimeZoneId = "UTC",
-        StartsUtc = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero),
-        EndsUtc = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero),
-        RoundCount = 8,
-        RoundLengthAmount = 1,
-        RoundLengthUnit = "Weeks",
-        Phases =
-        [
-            new StoredRoundPhase { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
-            new StoredRoundPhase { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
-            new StoredRoundPhase { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
-        ],
-        MapGraph = new StoredMapGraph { Territories = [], Adjacencies = [] },
-        TerrainTypes = [],
-        StructureTypes = [],
-        SplitForceSupplyPenaltyPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent,
-        BattleReportRules = BattleReportRulesSetup.Default,
-        ArmyEscalations = HuntInEstaliaDefaults.ArmyEscalations(8),
-    };
+        Campaign = CloneCampaign(Campaign, "maps/other.png", new StoredMapGraph { Territories = [], Adjacencies = [] });
+    }
+
+    public void RetargetPlains(Guid terrainId)
+    {
+        Campaign = CloneCampaign(
+            Campaign,
+            "maps/other.png",
+            new StoredMapGraph { Territories = [], Adjacencies = [] },
+            terrainTypes:
+            [
+                new StoredTerrainType
+                {
+                    Id = terrainId,
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [],
+                },
+            ]);
+    }
 
     public Task<StoredCampaign> AddAsync(StoredCampaign campaign, CancellationToken cancellationToken)
     {
@@ -277,7 +351,164 @@ file sealed class PresetCampaignStore : ICampaignStore
         int expectedRevision,
         CancellationToken cancellationToken)
     {
-        throw new NotSupportedException();
+        if (campaign.Id != Campaign.Id || expectedRevision != Campaign.Revision)
+        {
+            return Task.FromResult(new UpdateStoredCampaignOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.ConcurrencyConflict,
+                Message = "The campaign was changed by another request. Reload and try again.",
+            });
+        }
+
+        Campaign = CloneCampaign(campaign, campaign.MapStorageKey, campaign.MapGraph, Campaign.Revision + 1);
+        return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Campaign });
+    }
+
+    private static StoredCampaign CreateCampaign()
+    {
+        return new StoredCampaign
+        {
+            Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            Name = "Border War",
+            PlayerSlotCount = 8,
+            IsPrivate = false,
+            IsPubliclyViewable = true,
+            CreatorIsParticipant = true,
+            MapStorageKey = "maps/border.png",
+            Revision = 2,
+            CreatedUtc = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
+            UpdatedUtc = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
+            CreatedByUserId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            Memberships = [],
+            Factions =
+            [
+                new StoredFaction
+                {
+                    Id = Guid.Parse("33333333-3333-3333-3333-333333333333"),
+                    Name = "North",
+                    Color = "#2563EB",
+                    Subfactions = [],
+                    RequiresSubfaction = false,
+                },
+                new StoredFaction
+                {
+                    Id = Guid.Parse("44444444-4444-4444-4444-444444444444"),
+                    Name = "South",
+                    Color = "#DC2626",
+                    Subfactions = [],
+                    RequiresSubfaction = false,
+                },
+            ],
+            AllyGroups = [],
+            Links = [],
+            TimeZoneId = "UTC",
+            StartsUtc = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero),
+            EndsUtc = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero),
+            RoundCount = 8,
+            RoundLengthAmount = 1,
+            RoundLengthUnit = "Weeks",
+            Phases =
+            [
+                new StoredRoundPhase { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new StoredRoundPhase { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new StoredRoundPhase { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+            ],
+            MapGraph = SampleGraph(),
+            TerrainTypes =
+            [
+                new StoredTerrainType
+                {
+                    Id = Guid.Parse("66666666-6666-6666-6666-666666666666"),
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [],
+                },
+            ],
+            StructureTypes = [],
+            SplitForceSupplyPenaltyPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent,
+            BattleReportRules = BattleReportRulesSetup.Default,
+            ArmyEscalations = HuntInEstaliaDefaults.ArmyEscalations(8),
+        };
+    }
+
+    private static StoredMapGraph SampleGraph()
+    {
+        return new StoredMapGraph
+        {
+            Territories =
+            [
+                new TerritoryDetail
+                {
+                    Id = Guid.Parse("55555555-5555-5555-5555-555555555555"),
+                    DisplayNumber = 1,
+                    Name = "Northmarch",
+                    Polygon =
+                    [
+                        new MapPointDetail { X = 0.1, Y = 0.1 },
+                        new MapPointDetail { X = 0.3, Y = 0.1 },
+                        new MapPointDetail { X = 0.3, Y = 0.3 },
+                        new MapPointDetail { X = 0.1, Y = 0.3 },
+                    ],
+                    TerrainTypeId = Guid.Parse("66666666-6666-6666-6666-666666666666"),
+                },
+            ],
+            Adjacencies = [],
+        };
+    }
+
+    private static StoredCampaign CloneCampaign(
+        StoredCampaign campaign,
+        string? mapStorageKey,
+        StoredMapGraph? mapGraph,
+        int? revision = null,
+        IReadOnlyList<StoredTerrainType>? terrainTypes = null)
+    {
+        return new StoredCampaign
+        {
+            Id = campaign.Id,
+            Name = campaign.Name,
+            Description = campaign.Description,
+            PlayerSlotCount = campaign.PlayerSlotCount,
+            IsPrivate = campaign.IsPrivate,
+            IsPubliclyViewable = campaign.IsPubliclyViewable,
+            JoinPasswordHash = campaign.JoinPasswordHash,
+            CreatorIsParticipant = campaign.CreatorIsParticipant,
+            City = campaign.City,
+            Region = campaign.Region,
+            Country = campaign.Country,
+            MapStorageKey = mapStorageKey,
+            Revision = revision ?? campaign.Revision,
+            CreatedUtc = campaign.CreatedUtc,
+            UpdatedUtc = campaign.UpdatedUtc,
+            CreatedByUserId = campaign.CreatedByUserId,
+            Memberships = campaign.Memberships,
+            Factions = campaign.Factions,
+            AllyGroups = campaign.AllyGroups,
+            Links = campaign.Links,
+            TimeZoneId = campaign.TimeZoneId,
+            StartsUtc = campaign.StartsUtc,
+            EndsUtc = campaign.EndsUtc,
+            RoundCount = campaign.RoundCount,
+            RoundLengthAmount = campaign.RoundLengthAmount,
+            RoundLengthUnit = campaign.RoundLengthUnit,
+            Phases = campaign.Phases,
+            MapGraph = mapGraph,
+            PlayState = campaign.PlayState,
+            TerrainTypes = terrainTypes ?? campaign.TerrainTypes,
+            StructureTypes = campaign.StructureTypes,
+            ItemObjectiveTypes = campaign.ItemObjectiveTypes,
+            PublicObjectiveTypes = campaign.PublicObjectiveTypes,
+            SpecialRules = campaign.SpecialRules,
+            Missions = campaign.Missions,
+            ForceStatuses = campaign.ForceStatuses,
+            PrivateObjectiveTypes = campaign.PrivateObjectiveTypes,
+            BattleScoring = campaign.BattleScoring,
+            RankingObjectivePoints = campaign.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
+            BattleReportRules = campaign.BattleReportRules,
+            ArmyEscalations = campaign.ArmyEscalations,
+        };
     }
 
     public Task<bool> DeleteAsync(Guid campaignId, CancellationToken cancellationToken)

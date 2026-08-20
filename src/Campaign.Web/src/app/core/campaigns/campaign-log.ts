@@ -4,6 +4,14 @@ export const CAMPAIGN_LOG_POLL_MS = 3_000;
 export const CAMPAIGN_LOG_COMPOSER_MIN_LINES = 1;
 export const CAMPAIGN_LOG_COMPOSER_MAX_LINES = 5;
 
+export type CampaignLogExportFormat = 'txt' | 'csv';
+
+export interface CampaignLogExportRequest {
+  includePublicChat: boolean;
+  includeGameLog: boolean;
+  format: CampaignLogExportFormat;
+}
+
 export interface CampaignLogMember {
   userId: string;
   username: string;
@@ -269,6 +277,30 @@ export function recipientSuggestionLabel(channel: ChatChannel, members: readonly
   }
 
   return channel.label;
+}
+
+export function filenameFromContentDisposition(header: string | null, fallback: string): string {
+  if (!header) {
+    return fallback;
+  }
+
+  const utf = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf?.[1]) {
+    try {
+      return decodeURIComponent(utf[1]);
+    } catch {
+      return utf[1];
+    }
+  }
+
+  const quoted = /filename="([^"]+)"/i.exec(header);
+  if (quoted?.[1]) {
+    return quoted[1];
+  }
+
+  const plain = /filename=([^;]+)/i.exec(header);
+  const value = plain?.[1]?.trim();
+  return value && value.length > 0 ? value : fallback;
 }
 
 function formatParts(date: Date, timeZone: string): string {

@@ -49,6 +49,13 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
 
+        group.MapGet("/{campaignId:guid}/log-export", ExportLogAsync)
+            .WithName("ExportCampaignLog")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
         group.MapPost("/{campaignId:guid}/join", JoinAsync)
             .WithName("JoinCampaign")
             .Produces<CampaignListItemResponse>()
@@ -570,6 +577,49 @@ public static class CampaignEndpoints
         }
 
         return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> ExportLogAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        ExportCampaignLogHandler handler,
+        CancellationToken cancellationToken,
+        bool includePublicChat = true,
+        bool includeGameLog = true,
+        string format = "txt")
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!CampaignLogExport.TryParseFormat(format, out var exportFormat))
+        {
+            return IdentityHttp.Problem(ErrorCodes.ValidationFailed, "Choose a text (.txt) or CSV (.csv) file.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ExportCampaignLogCommand
+                {
+                    CampaignId = campaignId,
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    IncludePublicChat = includePublicChat,
+                    IncludeGameLog = includeGameLog,
+                    Format = exportFormat,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(
+            result.Value.Content,
+            result.Value.ContentType,
+            result.Value.DownloadName);
     }
 
     private static async Task<IResult> JoinAsync(

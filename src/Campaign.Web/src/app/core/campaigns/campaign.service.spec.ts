@@ -112,4 +112,28 @@ describe('CampaignService', () => {
     expect((await saving).revision).toBe(3);
     http.verify();
   });
+
+  it('downloads a campaign log export', async () => {
+    const service = TestBed.inject(CampaignService);
+    const http = TestBed.inject(HttpTestingController);
+    const pending = service.exportLog('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', {
+      includePublicChat: true,
+      includeGameLog: false,
+      format: 'csv',
+    });
+    const request = http.expectOne(
+      (item) =>
+        item.method === 'GET' &&
+        item.url === '/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/log-export' &&
+        item.params.get('includePublicChat') === 'true' &&
+        item.params.get('includeGameLog') === 'false' &&
+        item.params.get('format') === 'csv',
+    );
+    request.flush(new Blob(['OccurredUtc']), {
+      headers: { 'Content-Disposition': 'attachment; filename="border-war-log.csv"' },
+    });
+    const file = await pending;
+    expect(file.filename).toBe('border-war-log.csv');
+    http.verify();
+  });
 });

@@ -4,7 +4,8 @@
 
 - **Public:** revealed map state, standings (with hidden item-objective sources omitted), public objectives, revealed or completed private-objective names and points, unclaimed private-objective counts, configured public faction special-rule names and descriptions,
   the campaign log, in-campaign chat, public site-wide chat, and the live play board returned to viewers (force
-  positions and revealed facts; drafts and unrevealed orders remain omitted).
+  positions and revealed facts; drafts and unrevealed orders remain omitted). Campaign log file
+  downloads for managers and administrators include only public chat and game-log facts.
 - **Participant-private:** own drafts/orders, unrevealed private objectives, item-objective flavor and eligible choices, account data, site-chat block lists.
 - **Shared-private:** faction/alliance private-objective data visible only to authorized group members.
 - **Staff-sensitive:** unrevealed orders/relics, correction tools, moderation notes, full audit.
@@ -73,7 +74,7 @@ staff review requires them.
 - Generic seed content must not contain proprietary game text or artwork.
 - Private-campaign join passwords are hashed. They are never returned in API payloads.
 - Join privacy (`IsPrivate`) is separate from public viewing (`IsPubliclyViewable`). Hidden
-  campaigns return 404 to non-members for detail, map, and catalog reads after the caller is
+  campaigns return 404 to non-members for detail, map, catalog, and log-export reads after the caller is
   authorized as a signed-in user. Upcoming hidden campaigns remain listable on All Campaigns so
   players can join. A manager or administrator may add a player without the join password.
 - Seeded test accounts cannot sign in with a password. Only an administrator (or an administrator
@@ -87,7 +88,8 @@ avoid exposing hidden order/relic/objective details and must never include priva
 or site-chat bodies; direct the recipient to authenticate for sensitive content. Private campaign
 chat is omitted from unauthorized API payloads, including campaign-manager views. Only a system
 administrator who is the active debug actor on that campaign may inspect other members' private
-chats. Public site chat is visible to every signed-in user except when a player-to-player block
+chats. Campaign log file downloads are limited to campaign managers and administrators and never
+include private chat. Public site chat is visible to every signed-in user except when a player-to-player block
 hides those two authors from each other; administrator site-chat announcements are never hidden
 that way.
 

@@ -34,7 +34,12 @@ import {
   type StandingsSortColumn,
 } from '../../core/campaigns/campaign-view-prefs.service';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
-import { CAMPAIGN_LOG_POLL_MS, mergeCampaignLog, type CampaignLogSync } from '../../core/campaigns/campaign-log';
+import {
+  CAMPAIGN_LOG_POLL_MS,
+  mergeCampaignLog,
+  type CampaignLogExportRequest,
+  type CampaignLogSync,
+} from '../../core/campaigns/campaign-log';
 import {
   actionNumberAt,
   DURATION_UNITS,
@@ -144,6 +149,7 @@ export class CampaignDetailPage {
   protected readonly confirmingDelete = signal(false);
   protected readonly deleting = signal(false);
   protected readonly downloading = signal(false);
+  protected readonly downloadingLog = signal(false);
   protected readonly chatBusy = signal(false);
   protected readonly chatError = signal<string | null>(null);
   protected readonly openSections = signal(openSections());
@@ -591,6 +597,24 @@ export class CampaignDetailPage {
       this.chatError.set(readApiError(error, 'Unable to send that chat message.'));
     } finally {
       this.chatBusy.set(false);
+    }
+  }
+
+  protected async downloadLog(request: CampaignLogExportRequest): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return;
+    }
+
+    this.downloadingLog.set(true);
+    this.error.set(null);
+    try {
+      const file = await this.campaignsApi.exportLog(campaign.id, request);
+      downloadBlob(file.blob, file.filename);
+    } catch (error: unknown) {
+      this.error.set(readApiError(error, 'Unable to download the campaign log.'));
+    } finally {
+      this.downloadingLog.set(false);
     }
   }
 

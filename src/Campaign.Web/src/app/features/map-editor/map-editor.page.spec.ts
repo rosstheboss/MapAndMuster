@@ -5,6 +5,8 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 
+import { AuthService } from '../../core/auth/auth.service';
+import type { OwnProfile } from '../../core/auth/auth.models';
 import { TERRAIN_TYPES } from '../../core/maps/terrain';
 import { STRUCTURE_TYPES } from '../../core/maps/structures';
 import type { MapPoint } from '../../core/maps/geometry';
@@ -138,6 +140,7 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Save Map');
     expect(compiled.textContent).toContain('Download map');
     expect(compiled.textContent).toContain('Edit campaign');
+    expect(compiled.textContent).not.toContain('Save as Preset');
     expect(compiled.textContent).toContain('100%');
     expect(compiled.textContent).toContain('Fit');
     expect(compiled.textContent).not.toContain('Fit to panel');
@@ -186,6 +189,30 @@ describe('MapEditorPage', () => {
     expect(generate).toBeTruthy();
     generate?.click();
     fixture.detectChanges();
+    http.verify();
+  });
+
+  it('lets an administrator save the current map as a preset', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    TestBed.inject(AuthService).currentUser.set(administratorProfile());
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush(emptyGraph);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.page-header')?.textContent).toContain('Save as Preset');
+    const savePreset = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Save as Preset',
+    );
+    savePreset?.click();
+    fixture.detectChanges();
+    http.expectOne('/api/campaign-presets').flush([]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('#savePresetName')).toBeTruthy();
     http.verify();
   });
 
@@ -973,5 +1000,31 @@ function namedSquare(id: string, displayNumber: number, name: string, x: number)
     overlayColor: null,
     ownerFactionId: null,
     spawnFactionId: null,
+  };
+}
+
+function administratorProfile(): OwnProfile {
+  return {
+    id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    email: 'admin@example.test',
+    username: 'admin',
+    firstName: 'Ada',
+    middleInitial: null,
+    lastName: 'Admin',
+    suffix: null,
+    city: 'Halifax',
+    region: null,
+    country: 'Canada',
+    displayNameMode: 'Username',
+    timeZoneId: 'UTC',
+    hasAvatar: false,
+    createdUtc: '2026-08-13T00:00:00+00:00',
+    updatedUtc: '2026-08-13T00:00:00+00:00',
+    profileRevision: 1,
+    emailConfirmed: true,
+    isAdministrator: true,
+    inAppNotificationsEnabled: true,
+    emailNotificationsEnabled: true,
+    preferredChatLanguage: 'English',
   };
 }

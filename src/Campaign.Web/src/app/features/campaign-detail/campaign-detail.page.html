@@ -54,6 +54,8 @@
       [members]="campaign.mentionableMembers"
       [channels]="campaign.chatChannels ?? []"
       [canChat]="campaign.canChat"
+      [canExport]="canStaffMembers()"
+      [exporting]="downloadingLog()"
       [timeZoneId]="timeZoneId()"
       [sending]="chatBusy()"
       [sendError]="chatError()"
@@ -64,6 +66,7 @@
       (channelChange)="onChatChannelChange($event)"
       (scrollChange)="onChatScrollChange($event)"
       (send)="postChat($event)"
+      (downloadLog)="downloadLog($event)"
     />
 
     <div class="panel stack">

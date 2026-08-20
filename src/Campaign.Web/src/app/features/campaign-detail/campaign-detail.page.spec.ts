@@ -348,6 +348,7 @@ describe('CampaignDetailPage', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('northplayer:');
     expect(compiled.textContent).toContain('Hey, everybody! This is a message to all of you.');
+    expect(compiled.textContent).toContain('Download log');
     const page = fixture.componentInstance as unknown as {
       postChat(payload: { message: string; channelKind: string; targetId: string | null }): Promise<void>;
     };

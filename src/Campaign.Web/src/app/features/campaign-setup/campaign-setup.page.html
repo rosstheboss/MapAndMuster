@@ -2279,34 +2279,12 @@
     </form>
   }
 
-  @if (savePresetOpen()) {
-    <div class="dialog-backdrop">
-      <div
-        class="dialog panel stack"
-        role="dialog"
-        aria-labelledby="save-preset-title"
-        aria-describedby="save-preset-desc"
-      >
-        <h2 id="save-preset-title">Save as preset</h2>
-        <p id="save-preset-desc">
-          Name this campaign preset. Matching an existing name overwrites that preset, including its map.
-        </p>
-        <div class="field">
-          <label for="savePresetName">Preset name</label>
-          <app-filterable-combobox
-            inputId="savePresetName"
-            [formControl]="presetNameControl"
-            [options]="savedPresetNames()"
-            placeholder="Type a name"
-          />
-        </div>
-        <div class="choice-row">
-          <button type="button" class="button" (click)="confirmSavePreset()" [disabled]="saving()">OK</button>
-          <button type="button" class="button-secondary" (click)="closeSavePresetDialog()" [disabled]="saving()">
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
+  @if (isAdministrator()) {
+    <app-save-campaign-preset-dialog
+      [open]="savePresetOpen()"
+      [saving]="saving()"
+      (closed)="closeSavePresetDialog()"
+      (confirmed)="confirmSavePreset($event)"
+    />
   }
 </section>

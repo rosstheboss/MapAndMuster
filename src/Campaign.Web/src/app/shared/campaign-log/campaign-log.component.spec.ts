@@ -165,6 +165,43 @@ describe('CampaignLogComponent', () => {
     expect(compiled.textContent).not.toContain('Secret to south');
   });
 
+  it('lets staff choose a public and game log download', () => {
+    const fixture = TestBed.createComponent(CampaignLogComponent);
+    fixture.componentRef.setInput('canExport', true);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Download log');
+    const download = [...compiled.querySelectorAll('button')].find(
+      (element) => element.textContent.trim() === 'Download log',
+    );
+    expect(download).toBeTruthy();
+    download!.click();
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Download campaign log');
+    expect(compiled.textContent).toContain('Text (.txt)');
+    expect(compiled.textContent).toContain('CSV (.csv)');
+
+    const page = fixture.componentInstance as unknown as {
+      exportPublicChat: { set(value: boolean): void };
+      confirmExport(): void;
+    };
+    let emitted: { includePublicChat: boolean; includeGameLog: boolean; format: string } | null = null;
+    fixture.componentInstance.downloadLog.subscribe((request) => {
+      emitted = request;
+    });
+    page.exportPublicChat.set(false);
+    fixture.detectChanges();
+    page.confirmExport();
+    expect(emitted).toEqual({ includePublicChat: false, includeGameLog: true, format: 'txt' });
+  });
+
+  it('hides log download unless the viewer may export', () => {
+    const fixture = TestBed.createComponent(CampaignLogComponent);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Download log');
+  });
+
   it('hides compose controls until the viewer has joined', () => {
     const fixture = TestBed.createComponent(CampaignLogComponent);
     fixture.componentRef.setInput('canChat', false);

@@ -1,5 +1,6 @@
 using Campaign.Application.Campaigns;
 using Campaign.Application.Ports;
+using Campaign.Domain.Campaigns;
 using Campaign.Infrastructure.Persistence;
 using Campaign.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -59,10 +60,18 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(campaign);
 
-        var normalized = name.Trim().ToUpperInvariant();
-        var record = await _dbContext.CampaignPresets
-            .FirstOrDefaultAsync(preset => preset.NormalizedName == normalized, cancellationToken)
-            .ConfigureAwait(false);
+        var displayName = CampaignSetupRules.CollapseName(name);
+        var normalized = CampaignSetupRules.UniqueNameKey(displayName);
+        var matches = (await _dbContext.CampaignPresets.ToListAsync(cancellationToken).ConfigureAwait(false))
+            .Where(preset => CampaignSetupRules.UniqueNameKey(preset.Name) == normalized)
+            .OrderByDescending(preset => preset.UpdatedUtc)
+            .ThenByDescending(preset => preset.Id)
+            .ToList();
+        var record = matches.Count > 0 ? matches[0] : null;
+        if (matches.Count > 1)
+        {
+            _dbContext.CampaignPresets.RemoveRange(matches.Skip(1));
+        }
         if (record is null)
         {
             record = new CampaignPresetRecord
@@ -73,7 +82,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
             _dbContext.CampaignPresets.Add(record);
         }
 
-        record.Name = name.Trim();
+        record.Name = displayName;
         record.NormalizedName = normalized;
         record.CatalogJson = CatalogJson.Serialize(
             campaign.TerrainTypes,

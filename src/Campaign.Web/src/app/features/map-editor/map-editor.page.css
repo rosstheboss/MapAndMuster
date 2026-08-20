@@ -3,10 +3,16 @@
 }
 
 .toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   flex-flow: column nowrap;
   gap: 0.55rem;
   align-items: stretch;
+  max-height: 40vh;
+  overflow: auto;
+  background: var(--color-surface);
 }
 
 .last-saved {

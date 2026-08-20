@@ -36,6 +36,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<ListDiscoverableCampaignsHandler>();
         services.AddScoped<GetCampaignHandler>();
         services.AddScoped<PostCampaignChatHandler>();
+        services.AddScoped<ExportCampaignLogHandler>();
         services.AddScoped<JoinCampaignHandler>();
         services.AddScoped<LeaveCampaignHandler>();
         services.AddScoped<SearchCampaignUsersHandler>();

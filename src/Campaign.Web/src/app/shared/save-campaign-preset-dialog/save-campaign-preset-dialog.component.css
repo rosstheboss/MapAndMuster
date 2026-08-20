@@ -1,0 +1,23 @@
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(28 25 23 / 45%);
+}
+
+.dialog {
+  width: min(100%, 28rem);
+}
+
+.dialog h2 {
+  margin: 0;
+}
+
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}

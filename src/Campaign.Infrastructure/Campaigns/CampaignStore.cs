@@ -126,6 +126,7 @@ public sealed class CampaignStore : ICampaignStore
             campaign.Missions,
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules));
         var playJson = PlayStateJson.Serialize(campaign.PlayState);
+        var mapGraphJson = campaign.MapGraph is null ? null : MapGraphJson.Serialize(campaign.MapGraph);
         var affected = await _dbContext.Campaigns
             .Where(item => item.Id == campaign.Id && item.Revision == expectedRevision)
             .ExecuteUpdateAsync(
@@ -141,6 +142,7 @@ public sealed class CampaignStore : ICampaignStore
                     .SetProperty(item => item.Region, campaign.Region)
                     .SetProperty(item => item.Country, campaign.Country)
                     .SetProperty(item => item.MapStorageKey, campaign.MapStorageKey)
+                    .SetProperty(item => item.MapGraphJson, mapGraphJson)
                     .SetProperty(item => item.CatalogJson, catalogJson)
                     .SetProperty(item => item.PlayStateJson, playJson)
                     .SetProperty(item => item.TimeZoneId, campaign.TimeZoneId)

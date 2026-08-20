@@ -122,6 +122,23 @@ public static class CampaignSetupRules
     public const int MaxPhaseCount = 16;
 
     /// <summary>
+    /// Collapses surrounding and repeated whitespace so names compare as one after trimming.
+    /// </summary>
+    public static string CollapseName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        return string.Join(' ', name.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>
+    /// Case-insensitive uniqueness key for a campaign or preset name.
+    /// </summary>
+    public static string UniqueNameKey(string name)
+    {
+        return CollapseName(name).ToUpperInvariant();
+    }
+
+    /// <summary>
     /// Validates campaign setup and, when successful, returns the normalized configuration plus any new join password.
     /// </summary>
     /// <param name="name">The campaign name.</param>

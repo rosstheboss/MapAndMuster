@@ -14,6 +14,8 @@ import {
   recipientFieldLabel,
   recipientSuggestionLabel,
   splitLogMessage,
+  type CampaignLogExportFormat,
+  type CampaignLogExportRequest,
   type CampaignLogMember,
 } from '../../core/campaigns/campaign-log';
 
@@ -33,10 +35,13 @@ export class CampaignLogComponent {
   readonly sending = input(false);
   readonly sendError = input<string | null>(null);
   readonly expanded = input(true);
+  readonly canExport = input(false);
+  readonly exporting = input(false);
   readonly initialChannelKey = input('Public:');
   readonly initialScrollTop = input<number | null>(null);
 
   readonly send = output<CampaignChatSend>();
+  readonly downloadLog = output<CampaignLogExportRequest>();
   readonly expandedChange = output<boolean>();
   readonly channelChange = output<string>();
   readonly scrollChange = output<number>();
@@ -50,6 +55,10 @@ export class CampaignLogComponent {
   protected readonly showPublicChat = signal(true);
   protected readonly showPrivateChat = signal(false);
   protected readonly showGameLog = signal(true);
+  protected readonly exportOpen = signal(false);
+  protected readonly exportPublicChat = signal(true);
+  protected readonly exportGameLog = signal(true);
+  protected readonly exportFormat = signal<CampaignLogExportFormat>('txt');
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly composer = viewChild<ElementRef<HTMLTextAreaElement>>('composer');
   private readonly recipientInput = viewChild<ElementRef<HTMLInputElement>>('recipient');
@@ -166,6 +175,40 @@ export class CampaignLogComponent {
 
   protected originatorText(entry: PlayLogEntry): string {
     return `${entry.originator}:`;
+  }
+
+  protected canConfirmExport(): boolean {
+    return this.exportPublicChat() || this.exportGameLog();
+  }
+
+  protected openExportDialog(): void {
+    this.exportPublicChat.set(true);
+    this.exportGameLog.set(true);
+    this.exportFormat.set('txt');
+    this.exportOpen.set(true);
+  }
+
+  protected closeExportDialog(): void {
+    this.exportOpen.set(false);
+  }
+
+  protected setExportFormat(value: string): void {
+    if (value === 'txt' || value === 'csv') {
+      this.exportFormat.set(value);
+    }
+  }
+
+  protected confirmExport(): void {
+    if (!this.canConfirmExport() || this.exporting()) {
+      return;
+    }
+
+    this.downloadLog.emit({
+      includePublicChat: this.exportPublicChat(),
+      includeGameLog: this.exportGameLog(),
+      format: this.exportFormat(),
+    });
+    this.exportOpen.set(false);
   }
 
   protected formatTimestamp(value: string): string {
