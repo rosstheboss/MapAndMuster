@@ -9,7 +9,12 @@ import { SaveCampaignPresetDialogComponent } from './save-campaign-preset-dialog
 @Component({
   imports: [SaveCampaignPresetDialogComponent],
   template: `
-    <app-save-campaign-preset-dialog [open]="open()" [saving]="false" (confirmed)="name = $event" (closed)="open.set(false)" />
+    <app-save-campaign-preset-dialog
+      [open]="open()"
+      [saving]="false"
+      (confirmed)="name = $event"
+      (closed)="open.set(false)"
+    />
   `,
 })
 class HostComponent {

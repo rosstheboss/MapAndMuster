@@ -7,6 +7,7 @@ New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
 Push-Location $root
 try {
     dotnet tool restore
+    dotnet restore Campaign.sln
     dotnet ef migrations bundle `
         --project (Join-Path $root 'src/Campaign.Infrastructure/Campaign.Infrastructure.csproj') `
         --startup-project (Join-Path $root 'src/Campaign.Api/Campaign.Api.csproj') `
