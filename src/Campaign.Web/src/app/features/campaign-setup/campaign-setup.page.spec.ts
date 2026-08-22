@@ -67,6 +67,7 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector('a[href$="/map"]')).toBeNull();
     expect(compiled.querySelector('#add-catalog-mission')).toBeTruthy();
     expect(compiled.querySelector('#name')).toBeTruthy();
+    expect(compiled.querySelector('label[for="playerCount"]')?.textContent).toContain('Max Number of Players');
     expect(compiled.querySelector('#playerCount')).toBeTruthy();
     expect(compiled.querySelector('#city')).toBeTruthy();
     expect(compiled.querySelector('#country')).toBeTruthy();
@@ -967,6 +968,60 @@ describe('CampaignSetupPage edit', () => {
     http.verify();
   });
 
+  it('shows save status next to save campaign after success or failure', async () => {
+    HTMLElement.prototype.scrollIntoView = () => undefined;
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    const campaign = scheduledEditCampaign(campaignId);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      form: { controls: { name: { setValue(value: string): void } } };
+      discardUnsavedChanges: () => void;
+      lastSavedAtUtc: () => string | null;
+      save: () => Promise<void>;
+    };
+
+    expect(compiled.querySelector('.save-status')).toBeNull();
+    expect(compiled.textContent).not.toContain('Last saved');
+
+    page.form.controls.name.setValue('Frontier War');
+    fixture.detectChanges();
+    const saving = page.save();
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({ ...campaign, name: 'Frontier War', revision: 3 });
+    await saving;
+    fixture.detectChanges();
+
+    expect(compiled.textContent).toContain('Successfully saved changes.');
+    expect(compiled.textContent).toContain('Last saved');
+    expect(page.lastSavedAtUtc()).toBeTruthy();
+    expect(compiled.querySelector('.save-status.is-success')).toBeTruthy();
+    expect(compiled.querySelector('[aria-label="Campaign saved"]')).toBeTruthy();
+
+    page.form.controls.name.setValue('Western War');
+    fixture.detectChanges();
+    page.discardUnsavedChanges();
+    fixture.detectChanges();
+    expect(compiled.querySelector('.save-status')).toBeNull();
+    expect(compiled.textContent).toContain('Last saved');
+
+    page.form.controls.name.setValue('Broken War');
+    fixture.detectChanges();
+    const failing = page.save();
+    http
+      .expectOne(`/api/campaigns/${campaignId}`)
+      .flush({ title: 'Unable to save the campaign.' }, { status: 400, statusText: 'Bad Request' });
+    await failing;
+    fixture.detectChanges();
+    expect(compiled.querySelector('.save-status.is-failure')).toBeTruthy();
+    expect(compiled.querySelector('[aria-label="Campaign save failed"]')).toBeTruthy();
+    expect(compiled.textContent).toContain('Last saved');
+    http.verify();
+  });
+
   it('pads stored army-size rows to the campaign round count', async () => {
     const fixture = TestBed.createComponent(CampaignSetupPage);
     const http = TestBed.inject(HttpTestingController);
@@ -1190,6 +1245,92 @@ describe('CampaignSetupPage edit', () => {
     http.verify();
   });
 });
+
+function scheduledEditCampaign(campaignId: string) {
+  return {
+    id: campaignId,
+    name: 'Border War',
+    description: 'A contested frontier.',
+    playerSlotCount: 8,
+    occupiedPlayerSlots: 1,
+    isPrivate: false,
+    isPubliclyViewable: true,
+    creatorIsParticipant: true,
+    city: null,
+    region: null,
+    country: null,
+    hasMap: true,
+    canManage: true,
+    isParticipant: true,
+    revision: 2,
+    createdUtc: '2026-08-13T00:00:00+00:00',
+    updatedUtc: '2026-08-13T00:00:00+00:00',
+    factions: [
+      {
+        id: '1',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+      {
+        id: '2',
+        name: 'South',
+        color: '#DC2626',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+    ],
+    allyGroups: [],
+    links: [],
+    terrainTypes: [
+      {
+        id: 'terrain-1',
+        name: 'Plains',
+        color: '#7CB342',
+        missions: [
+          {
+            id: 'mission-1',
+            name: 'Meeting engagement',
+            url: null,
+            hasFile: false,
+            fileName: null,
+          },
+        ],
+      },
+    ],
+    structureTypes: [],
+    timeZoneId: 'UTC',
+    startsAtLocal: '2099-01-05T12:00',
+    startsUtc: '2099-01-05T12:00:00+00:00',
+    endsUtc: '2099-03-02T12:00:00+00:00',
+    roundCount: 8,
+    roundLengthAmount: 1,
+    roundLengthUnit: 'Weeks',
+    phases: [
+      { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+      { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+      { kind: 'Battle', durationAmount: 1, durationUnit: 'Days' },
+    ],
+    status: 'Scheduled',
+    currentRound: null,
+    currentPhaseNumber: null,
+    currentPhaseKind: null,
+    currentPhaseStartsUtc: null,
+    currentPhaseEndsUtc: null,
+    factionId: null,
+    subfaction: null,
+    canPlay: false,
+    canChooseFaction: false,
+    canChat: true,
+    mentionableMembers: [],
+    log: [],
+  };
+}
 
 function administratorProfile(): OwnProfile {
   return {

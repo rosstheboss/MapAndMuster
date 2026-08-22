@@ -62,8 +62,10 @@ import {
 import { STRUCTURE_PRESETS, structureTypesFromPreset } from '../../core/campaigns/structure-presets';
 import { TERRAIN_PRESETS, terrainTypesFromPreset } from '../../core/campaigns/terrain-presets';
 import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
-import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { CampaignMapPreviewComponent } from '../../shared/campaign-map-preview/campaign-map-preview.component';
+import { IconComponent } from '../../shared/icon/icon.component';
+import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
+import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 import { STRUCTURE_TYPES } from '../../core/maps/structures';
 import {
   describeControlError,
@@ -238,6 +240,8 @@ const TOP_LEVEL_SECTION_IDS = [
     RouterLink,
     FilterableComboboxComponent,
     SaveCampaignPresetDialogComponent,
+    IconComponent,
+    InstantDatePipe,
     MapSymbolComponent,
     CampaignMapPreviewComponent,
   ],
@@ -258,6 +262,8 @@ export class CampaignSetupPage {
   protected readonly saving = signal(false);
   protected readonly errorMessages = signal<string[]>([]);
   protected readonly successMessage = signal<string | null>(null);
+  protected readonly lastSavedAtUtc = signal<string | null>(null);
+  protected readonly saveStatus = signal<'success' | 'failure' | null>(null);
   protected readonly serverFields = signal<ReadonlySet<string>>(new Set());
   protected readonly campaignId = signal<string | null>(null);
   protected readonly hasExistingMap = signal(false);
@@ -562,6 +568,7 @@ export class CampaignSetupPage {
     this.captureBaseline();
     this.successMessage.set(null);
     this.errorMessages.set([]);
+    this.saveStatus.set(null);
   }
 
   protected sectionHeaderDirty(id: string): boolean {
@@ -1654,6 +1661,7 @@ export class CampaignSetupPage {
     try {
       const created = await this.overlay.run(async () => this.persistCampaignCore());
       if (!created) {
+        this.saveStatus.set('failure');
         return;
       }
 
@@ -1663,8 +1671,11 @@ export class CampaignSetupPage {
         return;
       }
 
+      this.lastSavedAtUtc.set(new Date().toISOString());
+      this.saveStatus.set('success');
       this.revealSuccess();
     } catch (error: unknown) {
+      this.saveStatus.set('failure');
       this.serverFields.set(new Set(readApiFieldErrors(error)));
       this.revealErrors(readApiErrorMessages(error, 'Unable to save the campaign.'));
     } finally {
@@ -3031,7 +3042,7 @@ export class CampaignSetupPage {
     const labels: Record<string, string> = {
       name: 'Campaign name',
       description: 'Description',
-      playerCount: 'Number of players',
+      playerCount: 'Max Number of Players',
       city: 'City',
       startsAtLocal: 'Start date and time',
       timeZoneId: 'Campaign time zone',

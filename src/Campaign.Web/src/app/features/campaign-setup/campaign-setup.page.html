@@ -38,6 +38,14 @@
       >
         {{ isEdit() ? 'Save campaign' : 'Create campaign' }}
       </button>
+      @if (saveStatus() === 'success') {
+        <app-icon class="save-status is-success" name="check" label="Campaign saved" />
+      } @else if (saveStatus() === 'failure') {
+        <app-icon class="save-status is-failure" name="x" label="Campaign save failed" />
+      }
+      @if (lastSavedAtUtc(); as savedAt) {
+        <p class="muted last-saved">Last saved {{ savedAt | instantDate: form.controls.timeZoneId.value }}</p>
+      }
     </div>
   </div>
 
@@ -114,7 +122,9 @@
           </div>
 
           <div class="field" [class.invalid]="isInvalid('playerCount')">
-            <label for="playerCount">Number of players <span class="required-marker" aria-hidden="true">*</span></label>
+            <label for="playerCount"
+              >Max Number of Players <span class="required-marker" aria-hidden="true">*</span></label
+            >
             <input
               id="playerCount"
               type="number"

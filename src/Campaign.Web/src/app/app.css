@@ -109,13 +109,10 @@
 
 .app-main {
   flex: 1;
-  width: min(100%, 52rem);
+  /* Same desktop cap as the map editor; narrower viewports keep 100% width. */
+  width: min(100%, 90rem);
   margin: 0 auto;
   padding: 1rem;
-}
-
-.app-main:has(.map-editor) {
-  width: min(100%, 90rem);
 }
 
 .app-main:focus {
