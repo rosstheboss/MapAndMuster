@@ -109,6 +109,7 @@
 
 .app-main {
   flex: 1;
+
   /* Same desktop cap as the map editor; narrower viewports keep 100% width. */
   width: min(100%, 90rem);
   margin: 0 auto;
