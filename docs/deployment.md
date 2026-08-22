@@ -1,6 +1,6 @@
-# Deployment (Phase 1)
+# Deployment (Phase 1–2)
 
-This is the repository runbook for production-ready artifacts. Account provisioning, DNS, and the
+This is the repository runbook for production-ready artifacts and CI. Account provisioning, DNS, and the
 Render blueprint belong to later phases of `docs/AGENT_DEPLOYMENT_PLAN.md`.
 
 ## Artifacts
@@ -93,6 +93,23 @@ production until that database has been approved and backed up.
 Prefer additive schema changes (new nullable columns, new tables) that the running API can ignore,
 then deploy code that uses them, then remove unused columns in a later release. Avoid one-step
 renames or destructive drops against a live campaign database.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on pull requests, pushes to `main`, and `workflow_dispatch`. It
+does not deploy.
+
+Jobs:
+
+- backend restore, format, Release build, and tests (including Testcontainers PostgreSQL)
+- Angular `npm ci` and `npm run verify` (lint, unit tests, production build)
+- API Docker image build (no push; no Worker image)
+- EF Core migration bundle applied to an empty GitHub Actions PostgreSQL 17 service
+- Playwright after backend and frontend succeed
+
+`.github/workflows/nightly.yml` runs around 02:00 America/Indiana/Indianapolis (06:00 UTC during
+EDT) and on `workflow_dispatch`. It reuses `ci.yml` and adds NuGet high/critical audit plus
+`npm audit --audit-level=high`. It does not deploy.
 
 ## Local development
 

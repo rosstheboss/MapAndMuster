@@ -48,7 +48,7 @@ docker compose up -d
 
 Copy `.env.example` to a gitignored `.env` file, or store the same values in ASP.NET user secrets for `Campaign.Api`. Do not commit production credentials. Environment and secret conventions are in `docs/environments.md` and `docs/secrets.md`.
 
-Restore the local `dotnet-ef` tool with `dotnet tool restore` from the repository root when adding or inspecting EF Core migrations. Production schema deployment uses `eng/build-migrations.*` and `eng/run-migrations.*`; see `docs/deployment.md`.
+Restore the local `dotnet-ef` tool with `dotnet tool restore` from the repository root when adding or inspecting EF Core migrations. The API startup project references `Microsoft.EntityFrameworkCore.Design` (PrivateAssets) so `dotnet ef` and `eng/build-migrations.*` can run. Production schema deployment uses `eng/build-migrations.*` and `eng/run-migrations.*`; see `docs/deployment.md`.
 
 The Angular dev server proxies `/api` to `http://localhost:5219`. Start PostgreSQL and Mailpit, then run `Campaign.Api` with the **http** launch profile (`http://localhost:5219`) so migrations apply. In Development the API does not redirect HTTP to HTTPS; that redirect would send the browser to `https://localhost:7247` and fail CORS from `http://localhost:4200`. Then run `npm --prefix src/Campaign.Web start`. Confirmation and password-reset emails appear in Mailpit at `http://localhost:8025`. The API health endpoints are `GET /health/live`, `GET /health/ready`, and `GET /health`.
 
@@ -73,4 +73,7 @@ Google, Facebook, and Discord sign-in are optional. Leave those settings empty f
 
 ## Verification
 
-Run `eng/verify.ps1` or `eng/verify.sh` from the repository root. CI runs the same logical checks.
+Run `eng/verify.ps1` or `eng/verify.sh` from the repository root. GitHub Actions runs the same
+logical checks plus API Docker image builds and EF migration bundles against a temporary PostgreSQL
+service (`.github/workflows/ci.yml`). A scheduled nightly workflow (`.github/workflows/nightly.yml`)
+repeats CI and adds NuGet/npm audits. Neither workflow deploys production.

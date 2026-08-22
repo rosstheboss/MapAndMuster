@@ -58,7 +58,9 @@ initial production topology.
 - `tests/Campaign.Api.IntegrationTests` — `WebApplicationFactory` plus Testcontainers PostgreSQL
 - `src/Campaign.Web` Vitest
 - `tests/Campaign.Web.E2E` Playwright
-- CI: `.github/workflows/quality.yml` (Phase 2 will add dedicated `ci.yml` / `nightly.yml`)
+- CI: `.github/workflows/ci.yml` on pull requests and pushes to `main` (backend, frontend,
+  API Docker image, EF migrations against temporary PostgreSQL, Playwright). Nightly
+  `.github/workflows/nightly.yml` re-runs CI and adds dependency audits. Neither workflow deploys.
 
 ## Secrets and development values in source
 

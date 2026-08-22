@@ -1,0 +1,45 @@
+name: Nightly
+
+on:
+  schedule:
+    # Approximately 02:00 America/Indiana/Indianapolis during EDT (UTC-4).
+    # During EST this is 01:00 local. GitHub Actions cron is UTC-only.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: src/Campaign.Web/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            src/Campaign.Web/package-lock.json
+            tests/Campaign.Web.E2E/package-lock.json
+      - name: Restore with high and critical NuGet audit
+        run: >-
+          dotnet restore Campaign.sln
+          /p:NuGetAudit=true
+          /p:NuGetAuditMode=all
+          /p:NuGetAuditLevel=high
+          /p:WarningsAsErrors=NU1903;NU1904
+      - name: List known vulnerable .NET packages
+        run: dotnet list Campaign.sln package --vulnerable --include-transitive
+      - name: npm audit (web)
+        run: npm ci && npm audit --audit-level=high
+        working-directory: src/Campaign.Web
+      - name: npm audit (e2e)
+        run: npm ci && npm audit --audit-level=high
+        working-directory: tests/Campaign.Web.E2E
