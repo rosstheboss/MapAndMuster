@@ -58,7 +58,7 @@ initial production topology.
 - `tests/MapAndMuster.Api.IntegrationTests` — `WebApplicationFactory` plus Testcontainers PostgreSQL
 - `src/MapAndMuster.Web` Vitest
 - `tests/MapAndMuster.Web.E2E` Playwright
-- CI: `.github/workflows/ci.yml` on pull requests and pushes to `main` (backend, frontend,
+- CI: `.github/workflows/ci.yml` on pull requests and pushes to `master` (backend, frontend,
   API Docker image, EF migrations against temporary PostgreSQL, Playwright). Nightly
   `.github/workflows/nightly.yml` re-runs CI and adds dependency audits. Neither workflow deploys.
   Manual smoke checks: `.github/workflows/smoke-test.yml`.

@@ -591,8 +591,8 @@ Create:
 
 Run at minimum on:
 
-- pull requests targeting `main`
-- pushes to `main`
+- pull requests targeting `master`
+- pushes to `master`
 
 Optionally include relevant development branches if the repository already uses them.
 
@@ -1173,9 +1173,9 @@ The agent's implementation work is complete when all applicable items below are 
 
 ## CI
 
-- [ ] PR/main CI builds .NET
-- [ ] PR/main CI runs .NET tests
-- [ ] PR/main CI builds Angular
+- [ ] PR/master CI builds .NET
+- [ ] PR/master CI runs .NET tests
+- [ ] PR/master CI builds Angular
 - [ ] Docker images are validated
 - [ ] nightly workflow exists
 - [ ] nightly workflow validates migrations against temporary PostgreSQL where feasible

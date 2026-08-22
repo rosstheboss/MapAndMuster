@@ -26,6 +26,7 @@ services:
     region: ohio
     dockerfilePath: ./src/MapAndMuster.Api/Dockerfile
     dockerContext: .
+    branch: master
     healthCheckPath: /health
     autoDeployTrigger: checksPass
     disk:
@@ -63,6 +64,7 @@ services:
   - type: web
     name: mapandmuster-web
     runtime: static
+    branch: master
     autoDeployTrigger: checksPass
     buildCommand: npm --prefix src/MapAndMuster.Web ci && npm --prefix src/MapAndMuster.Web run build
     staticPublishPath: src/MapAndMuster.Web/dist/mapandmuster-web/browser

@@ -35,7 +35,7 @@ Public origin               https://mapandmuster.com (no www)
 
 ## Prerequisites
 
-- GitHub repository with Actions enabled and a green CI run on `main`
+- GitHub repository with Actions enabled and a green CI run on `master`
   (`.github/workflows/ci.yml`)
 - Render account and an approved paid plan (Postgres is not free)
 - Cloudflare account and a domain you control
@@ -53,7 +53,7 @@ A fresh checkout can:
 - build `src/MapAndMuster.Api/Dockerfile`
 - apply EF migrations to an empty PostgreSQL 17 database
 
-CI does that on every pull request and `main` push. Nightly re-runs CI and audits
+CI does that on every pull request and `master` push. Nightly re-runs CI and audits
 dependencies. Neither workflow deploys. The smoke workflow
 (`.github/workflows/smoke-test.yml`) is manual `workflow_dispatch` only.
 
@@ -92,7 +92,7 @@ There is no Worker. Do not add one.
 4. Enter every `sync: false` value (see below). Do not paste secrets into Git.
 5. Apply. Wait until Postgres is available before expecting `/health` to be ready.
 
-Auto-deploy is `checksPass`: Render deploys `main` only after GitHub checks pass.
+Auto-deploy is `checksPass`: Render deploys `master` only after GitHub checks pass.
 
 ### Values to enter at apply time
 
@@ -352,7 +352,7 @@ Use `ASPNETCORE_ENVIRONMENT=Development` or supply Production/Staging variables 
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on pull requests, pushes to `main`, and `workflow_dispatch`.
+`.github/workflows/ci.yml` runs on pull requests, pushes to `master`, and `workflow_dispatch`.
 It does not deploy.
 
 `.github/workflows/nightly.yml` runs around 02:00 America/Indiana/Indianapolis (06:00 UTC

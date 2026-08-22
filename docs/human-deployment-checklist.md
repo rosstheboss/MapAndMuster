@@ -17,13 +17,13 @@ Render resource names are `mapandmuster-api`, `mapandmuster-web`, and `mapandmus
 - [x] Resend + SMTP provider switch (`Email__Provider`)
 - [x] OAuth settings externalized (`docs/authentication-production.md`)
 - [x] EF migration bundle scripts (`eng/build-migrations.*`, `eng/run-migrations.*`)
-- [x] CI on pull requests and `main`; nightly audits; no production deploy
+- [x] CI on pull requests and `master`; nightly audits; no production deploy
 - [x] `render.yaml` (API + static site + Postgres 17; no Worker)
 - [x] Smoke scripts and `.github/workflows/smoke-test.yml` (`workflow_dispatch` only)
 
 ## Accounts / billing
 
-- [ ] Confirm the GitHub repository and that Actions runs on `main`
+- [ ] Confirm the GitHub repository and that Actions runs on `master`
       → GitHub → **Actions** → CI must be green
 - [ ] Create a Render account/workspace
       → [dashboard.render.com](https://dashboard.render.com)
