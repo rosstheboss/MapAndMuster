@@ -25,4 +25,12 @@ public sealed class HuntInEstaliaDefaultsTests
         Assert.Equal(2, rows[8].FreeCharacterCount);
         Assert.Equal(9, rows[8].RoundNumber);
     }
+
+    [Fact]
+    public void SplitForceSupplyPenaltyDefaultsToRawValueOfOne()
+    {
+        Assert.Equal(1, HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue);
+        Assert.False(HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent);
+        Assert.Equal(25, HuntInEstaliaDefaults.LegacySplitForceSupplyPenaltyPercent);
+    }
 }

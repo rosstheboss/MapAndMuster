@@ -137,6 +137,7 @@ public sealed class DuplicateCampaignHandler
             BattleScoring = source.BattleScoring,
             RankingObjectivePoints = source.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = source.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = source.SplitForceSupplyPenaltyIsPercent,
             BattleReportRules = source.BattleReportRules,
             ArmyEscalations = source.ArmyEscalations,
         };
@@ -218,7 +219,9 @@ public sealed class DuplicateCampaignHandler
                     StructureTypeId = territory.StructureTypeId,
                     OverlayColor = territory.OverlayColor,
                     OwnerFactionId = Remap(territory.OwnerFactionId, factionIds),
+                    OwnerSubfaction = territory.OwnerSubfaction,
                     SpawnFactionId = Remap(territory.SpawnFactionId, factionIds),
+                    SpawnSubfaction = territory.SpawnSubfaction,
                     StructureCondition = territory.StructureCondition,
                 }),
             ],

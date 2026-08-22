@@ -417,6 +417,10 @@ internal static class CampaignMapClone
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
+            BattleReportRules = existing.BattleReportRules,
+            ArmyEscalations = existing.ArmyEscalations,
             PlayState = existing.PlayState,
         };
     }
@@ -468,6 +472,10 @@ internal static class CampaignMapClone
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
+            BattleReportRules = existing.BattleReportRules,
+            ArmyEscalations = existing.ArmyEscalations,
             PlayState = existing.PlayState,
         };
     }
@@ -517,6 +525,10 @@ internal static class CampaignMapClone
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
+            BattleReportRules = existing.BattleReportRules,
+            ArmyEscalations = existing.ArmyEscalations,
             PlayState = existing.PlayState,
         };
     }
@@ -567,6 +579,10 @@ internal static class CampaignMapClone
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
+            BattleReportRules = existing.BattleReportRules,
+            ArmyEscalations = existing.ArmyEscalations,
             PlayState = playState ?? existing.PlayState,
         };
     }
@@ -618,6 +634,10 @@ internal static class CampaignMapClone
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
+            BattleReportRules = existing.BattleReportRules,
+            ArmyEscalations = existing.ArmyEscalations,
             PlayState = play,
         };
     }

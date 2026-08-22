@@ -20,13 +20,49 @@
   align-self: center;
 }
 
+.save-status {
+  width: 1.35rem;
+  height: 1.35rem;
+  align-self: center;
+}
+
+.save-status.is-success {
+  color: #16a34a;
+}
+
+.save-status.is-failure {
+  color: #dc2626;
+}
+
+.tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
 .tool-group {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+  align-items: center;
 }
 
-.button-secondary.is-active,
+.tool-toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  background: var(--color-nested);
+}
+
+.tool-toggle-group .button-secondary.is-active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
 .list-button.is-active {
   outline: 3px solid var(--color-glow, #f59e0b);
   outline-offset: 2px;
@@ -36,21 +72,202 @@
   display: grid;
   gap: 1rem;
   grid-template-columns: minmax(0, 1fr);
+  align-items: start;
 }
 
 @media (width >= 64rem) {
   .editor-layout {
     grid-template-columns: minmax(0, 1fr) 22rem;
-    align-items: start;
+    align-items: stretch;
   }
+
+  .editor-layout.is-list-collapsed {
+    grid-template-columns: minmax(0, 1fr) 2.75rem;
+  }
+}
+
+.map-column {
+  min-width: 0;
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
 }
 
 .map-pane {
   min-width: 0;
 }
 
+.map-pane app-campaign-map-view {
+  --map-viewport-height: min(calc(70vh + 10rem), 52rem);
+}
+
+.territory-editor {
+  display: grid;
+  gap: 0.55rem;
+  height: max-content;
+}
+
+.territory-editor-body {
+  /* Identity row uses a two-line description; labels can wrap. Keep this tall enough
+     that the three field rows fit without a scrollbar, so the map does not shift. */
+  height: calc(7.25rem + (2.5rem + 0.35rem + var(--touch-min)) * 2 + 0.65rem * 2);
+  overflow: auto;
+}
+
+.territory-editor-fields {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.editor-row {
+  display: grid;
+  gap: 0.65rem 0.85rem;
+  align-items: end;
+}
+
+.editor-row-identity {
+  grid-template-columns: minmax(8rem, 1fr) minmax(12rem, 2fr);
+}
+
+.editor-row-catalog {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.editor-row-control {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.territory-editor .field textarea {
+  min-height: 2.75rem;
+}
+
+.territory-editor-fields .delete-territory {
+  align-self: end;
+}
+
+@media (width < 48rem) {
+  .editor-row-identity,
+  .editor-row-catalog,
+  .editor-row-control {
+    grid-template-columns: 1fr;
+  }
+}
+
+.selected-territory-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0.15rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.section-toggle::after {
+  content: '▾';
+  font-weight: 400;
+}
+
+.section-toggle[aria-expanded='false']::after {
+  content: '▸';
+}
+
+.side-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 22rem;
+  overflow: hidden;
+}
+
+@media (width >= 64rem) {
+  .side-pane {
+    /* Do not let the list grow the grid row past the map column. */
+    height: 0;
+    min-height: 100%;
+    max-height: 100%;
+  }
+}
+
+.side-pane.is-collapsed {
+  width: 2.75rem;
+  padding: 0.35rem;
+}
+
+.side-pane-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0.15rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.side-pane.is-collapsed .side-pane-toggle {
+  justify-content: center;
+  padding: 0.2rem;
+}
+
+.side-pane-chevron {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+  transform: rotate(-90deg);
+}
+
+.side-pane:not(.is-collapsed) .side-pane-chevron {
+  transform: rotate(90deg);
+}
+
+.side-pane-toggle.has-dirty {
+  border-bottom: 2px solid var(--color-dirty);
+}
+
 .side-pane h2 {
   margin: 0;
+}
+
+.territory-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.35rem;
+  overflow: hidden auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+@media (width < 64rem) {
+  .side-pane,
+  .side-pane.is-collapsed {
+    width: auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
 }
 
 .meta {
@@ -76,14 +293,6 @@
   gap: 0.35rem;
 }
 
-.territory-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 0.35rem;
-}
-
 .list-button {
   width: 100%;
   min-height: var(--touch-min);
@@ -94,6 +303,7 @@
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   background: var(--color-surface);
+  color: var(--color-text);
   font: inherit;
   text-align: left;
   cursor: pointer;

@@ -2,7 +2,8 @@ namespace Campaign.Domain.Maps;
 
 /// <summary>
 /// Geometry helpers for overlay polygons on the rectangular map image.
-/// Coordinates are normalized to the unit square. Shared borders are allowed; overlapping interiors are not.
+/// Coordinates are normalized to the unit square. Shared borders and traces that sit along a border
+/// are allowed; interiors that actually cover each other are not.
 /// </summary>
 public static class PolygonGeometry
 {
@@ -11,6 +12,9 @@ public static class PolygonGeometry
 
     /// <summary>Minimum shared-border length, as a fraction of the map, required to suggest adjacency.</summary>
     public const double MinSharedBorderLength = 0.008;
+
+    /// <summary>How close a vertex or traced edge may sit to a shared border without counting as interior overlap.</summary>
+    public const double BorderTraceTolerance = 0.002;
 
     /// <summary>Squared distance used when snapping a drawing cursor to an existing vertex.</summary>
     public const double SnapDistance = 0.018;
@@ -82,7 +86,10 @@ public static class PolygonGeometry
     }
 
     /// <summary>
-    /// Gets whether two polygons' interiors overlap. Shared vertices and collinear shared borders are allowed.
+    /// Gets whether two polygons' interiors overlap. Shared vertices, collinear shared borders, and
+    /// traces that sit along a border are allowed. A wrapping coastline whose vertex-average falls
+    /// inside a neighbor is not treated as overlap unless a vertex or crossing actually enters that
+    /// neighbor's interior.
     /// </summary>
     /// <param name="left">The first polygon.</param>
     /// <param name="right">The second polygon.</param>
@@ -101,12 +108,12 @@ public static class PolygonGeometry
             return true;
         }
 
-        if (HasVertexStrictlyInside(left, right) || HasVertexStrictlyInside(right, left))
+        if (HasVertexDeepInside(left, right) || HasVertexDeepInside(right, left))
         {
             return true;
         }
 
-        return HasInteriorSampleInside(left, right) || HasInteriorSampleInside(right, left);
+        return HasSharedInteriorSample(left, right) || HasSharedInteriorSample(right, left);
     }
 
     /// <summary>
@@ -291,7 +298,7 @@ public static class PolygonGeometry
             {
                 var b1 = right[j];
                 var b2 = right[(j + 1) % rightCount];
-                if (SegmentsProperlyIntersect(a1, a2, b1, b2))
+                if (SegmentsCrossThroughInterior(a1, a2, b1, b2))
                 {
                     return true;
                 }
@@ -301,11 +308,11 @@ public static class PolygonGeometry
         return false;
     }
 
-    private static bool HasVertexStrictlyInside(IReadOnlyList<MapPoint> vertices, IReadOnlyList<MapPoint> polygon)
+    private static bool HasVertexDeepInside(IReadOnlyList<MapPoint> vertices, IReadOnlyList<MapPoint> polygon)
     {
         foreach (var vertex in vertices)
         {
-            if (ContainsStrict(polygon, vertex))
+            if (ContainsDeepInterior(polygon, vertex))
             {
                 return true;
             }
@@ -314,24 +321,75 @@ public static class PolygonGeometry
         return false;
     }
 
-    private static bool HasInteriorSampleInside(IReadOnlyList<MapPoint> source, IReadOnlyList<MapPoint> other)
+    private static bool HasSharedInteriorSample(IReadOnlyList<MapPoint> source, IReadOnlyList<MapPoint> other)
     {
         var center = Centroid(source);
-        if (ContainsStrict(other, center))
+        if (IsSharedInteriorPoint(source, other, center))
         {
             return true;
         }
 
-        foreach (var vertex in source)
+        var count = source.Count;
+        for (var i = 0; i < count; i++)
         {
-            var sample = new MapPoint((vertex.X + center.X) / 2, (vertex.Y + center.Y) / 2);
-            if (ContainsStrict(other, sample))
+            var vertex = source[i];
+            if (IsSharedInteriorPoint(source, other, new MapPoint((vertex.X + center.X) / 2, (vertex.Y + center.Y) / 2)))
+            {
+                return true;
+            }
+
+            var next = source[(i + 1) % count];
+            var mid = new MapPoint((vertex.X + next.X) / 2, (vertex.Y + next.Y) / 2);
+            var inward = InsetToward(mid, center, BorderTraceTolerance * 2);
+            if (inward is not null && IsSharedInteriorPoint(source, other, inward.Value))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static MapPoint? InsetToward(MapPoint from, MapPoint toward, double distance)
+    {
+        var dx = toward.X - from.X;
+        var dy = toward.Y - from.Y;
+        var length = Math.Sqrt((dx * dx) + (dy * dy));
+        if (length < Epsilon)
+        {
+            return null;
+        }
+
+        return new MapPoint(from.X + (dx / length * distance), from.Y + (dy / length * distance));
+    }
+
+    private static bool IsSharedInteriorPoint(
+        IReadOnlyList<MapPoint> source,
+        IReadOnlyList<MapPoint> other,
+        MapPoint sample)
+    {
+        return ContainsDeepInterior(source, sample) && ContainsDeepInterior(other, sample);
+    }
+
+    private static bool ContainsDeepInterior(IReadOnlyList<MapPoint> polygon, MapPoint point)
+    {
+        return ContainsStrict(polygon, point) && DistanceToBoundary(polygon, point) > BorderTraceTolerance;
+    }
+
+    private static double DistanceToBoundary(IReadOnlyList<MapPoint> polygon, MapPoint point)
+    {
+        var best = double.PositiveInfinity;
+        var count = polygon.Count;
+        for (var i = 0; i < count; i++)
+        {
+            var distance = PointDistanceToSegment(polygon[i], polygon[(i + 1) % count], point);
+            if (distance < best)
+            {
+                best = distance;
+            }
+        }
+
+        return best;
     }
 
     private static bool IsOnBoundary(IReadOnlyList<MapPoint> polygon, MapPoint point)
@@ -346,6 +404,21 @@ public static class PolygonGeometry
         }
 
         return false;
+    }
+
+    private static bool SegmentsCrossThroughInterior(MapPoint a1, MapPoint a2, MapPoint b1, MapPoint b2)
+    {
+        if (!SegmentsProperlyIntersect(a1, a2, b1, b2))
+        {
+            return false;
+        }
+
+        if (PointDistanceToSegment(a1, a2, b1) <= BorderTraceTolerance && PointDistanceToSegment(a1, a2, b2) <= BorderTraceTolerance)
+        {
+            return false;
+        }
+
+        return PointDistanceToSegment(b1, b2, a1) > BorderTraceTolerance || PointDistanceToSegment(b1, b2, a2) > BorderTraceTolerance;
     }
 
     private static bool SegmentsProperlyIntersect(MapPoint a1, MapPoint a2, MapPoint b1, MapPoint b2)
@@ -374,6 +447,26 @@ public static class PolygonGeometry
         var minY = Math.Min(a.Y, b.Y) - Epsilon;
         var maxY = Math.Max(a.Y, b.Y) + Epsilon;
         return p.X >= minX && p.X <= maxX && p.Y >= minY && p.Y <= maxY;
+    }
+
+    private static double PointDistanceToSegment(MapPoint a, MapPoint b, MapPoint point)
+    {
+        var closest = ClosestPointOnSegment(a, b, point);
+        return Math.Sqrt(point.DistanceSquaredTo(closest));
+    }
+
+    private static MapPoint ClosestPointOnSegment(MapPoint a, MapPoint b, MapPoint point)
+    {
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        var lengthSquared = (dx * dx) + (dy * dy);
+        if (lengthSquared < Epsilon * Epsilon)
+        {
+            return a;
+        }
+
+        var t = Math.Clamp((((point.X - a.X) * dx) + ((point.Y - a.Y) * dy)) / lengthSquared, 0d, 1d);
+        return new MapPoint(a.X + (dx * t), a.Y + (dy * t));
     }
 
     private static bool TryCollinearOverlap(

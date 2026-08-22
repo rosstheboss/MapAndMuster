@@ -20,7 +20,22 @@
           Save as Preset
         </button>
       }
-      <button class="button" type="submit" form="campaign-setup-form" [disabled]="saving() || loading()">
+      @if (isEdit()) {
+        <button
+          type="button"
+          class="button-secondary"
+          (click)="discardUnsavedChanges()"
+          [disabled]="saving() || loading() || !hasUnsavedChanges()"
+        >
+          Clear Unsaved Changes
+        </button>
+      }
+      <button
+        class="button"
+        type="submit"
+        form="campaign-setup-form"
+        [disabled]="saving() || loading() || (isEdit() && !hasUnsavedChanges())"
+      >
         {{ isEdit() ? 'Save campaign' : 'Create campaign' }}
       </button>
     </div>
@@ -55,6 +70,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('details')"
             [attr.aria-expanded]="isOpen('details')"
             (click)="toggleSection('details')"
           >
@@ -147,6 +163,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('schedule')"
             [attr.aria-expanded]="isOpen('schedule')"
             (click)="toggleSection('schedule')"
           >
@@ -284,6 +301,7 @@
             <button
               type="button"
               class="section-toggle nested-toggle"
+              [class.has-dirty]="sectionHeaderDirty('round-army')"
               [attr.aria-expanded]="isOpen('round-army')"
               (click)="toggleSection('round-army')"
             >
@@ -343,6 +361,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('visibility')"
             [attr.aria-expanded]="isOpen('visibility')"
             (click)="toggleSection('visibility')"
           >
@@ -379,6 +398,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('specialRules')"
             [attr.aria-expanded]="isOpen('specialRules')"
             (click)="toggleSection('specialRules')"
           >
@@ -417,6 +437,7 @@
                 <button
                   type="button"
                   class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('special-rule-' + index)"
                   [attr.aria-expanded]="isOpen('special-rule-' + index)"
                   (click)="toggleSection('special-rule-' + index)"
                 >
@@ -468,6 +489,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('forceStatuses')"
             [attr.aria-expanded]="isOpen('forceStatuses')"
             (click)="toggleSection('forceStatuses')"
           >
@@ -510,6 +532,7 @@
                 <button
                   type="button"
                   class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('force-status-' + index)"
                   [attr.aria-expanded]="isOpen('force-status-' + index)"
                   (click)="toggleSection('force-status-' + index)"
                 >
@@ -571,6 +594,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('publicObjectives')"
             [attr.aria-expanded]="isOpen('publicObjectives')"
             (click)="toggleSection('publicObjectives')"
           >
@@ -617,9 +641,50 @@
                   formControlName="mostBattlesWonCampaignPoints"
                 />
               </div>
+              <div class="field">
+                <label for="mostStructurePointsCampaignPoints">Most structure campaign points</label>
+                <input
+                  id="mostStructurePointsCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="mostStructurePointsCampaignPoints"
+                />
+              </div>
             </div>
             <p class="muted">
               Most battles won ranks by wins, then draws. Players who remain tied after that each receive the points.
+              Most structure campaign points uses currently owned non-destroyed structures.
+            </p>
+          </div>
+          <div class="nested-card stack">
+            <h3>Running public objectives</h3>
+            <p class="muted">These add campaign points from live map state. Set any of these to 0 to ignore them.</p>
+            <div class="nested-row">
+              <div class="field">
+                <label for="pointsPerTerritoryCampaignPoints">Campaign points per territory</label>
+                <input
+                  id="pointsPerTerritoryCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="pointsPerTerritoryCampaignPoints"
+                />
+              </div>
+              <div class="field">
+                <label for="alliedRelicControlCampaignPoints">Points if an ally or faction-mate holds a relic</label>
+                <input
+                  id="alliedRelicControlCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="alliedRelicControlCampaignPoints"
+                />
+              </div>
+            </div>
+            <p class="muted">
+              Allied relic points are awarded for each revealed relic currently held by another player of the same
+              faction or a current ally. Relics the scoring player holds do not count here.
             </p>
           </div>
           <div class="nested-card stack">
@@ -689,7 +754,9 @@
             <div class="nested-card stack">
               <h3>Supply and battle reports</h3>
               <div class="field">
-                <label for="splitForceSupplyPenaltyPercent">Split-force supply penalty (%)</label>
+                <label for="splitForceSupplyPenaltyPercent">
+                  Split-force supply penalty ({{ splitForcePenaltyIsPercent() ? 'percent' : 'raw value' }})
+                </label>
                 <input
                   id="splitForceSupplyPenaltyPercent"
                   type="number"
@@ -697,9 +764,12 @@
                   max="100"
                   formControlName="splitForceSupplyPenaltyPercent"
                 />
+                <label class="choice-row">
+                  <input type="checkbox" formControlName="splitForceSupplyPenaltyIsPercent" />
+                  Use a percentage of map supply instead of a raw amount
+                </label>
                 <p class="muted">
-                  Subtracted from map and round supply when a player has more than one force. The Hunt in Estalia
-                  default is 25.
+                  Subtracted from map supply when a player has more than one force. The default is a raw value of 1.
                 </p>
               </div>
               <label class="choice-row">
@@ -740,6 +810,7 @@
                 <button
                   type="button"
                   class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('public-objective-' + index)"
                   [attr.aria-expanded]="isOpen('public-objective-' + index)"
                   (click)="toggleSection('public-objective-' + index)"
                 >
@@ -793,6 +864,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('privateObjectives')"
             [attr.aria-expanded]="isOpen('privateObjectives')"
             (click)="toggleSection('privateObjectives')"
           >
@@ -811,6 +883,7 @@
                 <button
                   type="button"
                   class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('private-objective-' + index)"
                   [attr.aria-expanded]="isOpen('private-objective-' + index)"
                   (click)="toggleSection('private-objective-' + index)"
                 >
@@ -948,6 +1021,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('allies')"
             [attr.aria-expanded]="isOpen('allies')"
             (click)="toggleSection('allies')"
           >
@@ -975,7 +1049,7 @@
               </div>
               @if (group.controls.name.value.trim()) {
                 <p class="muted ally-members">
-                  {{ allyMembers(group.controls.name.value) || 'No factions assigned yet.' }}
+                  {{ allyMembers(group.controls.id.value) || 'No factions assigned yet.' }}
                 </p>
               }
             }
@@ -991,6 +1065,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('factions')"
             [attr.aria-expanded]="isOpen('factions')"
             (click)="toggleSection('factions')"
           >
@@ -1029,6 +1104,7 @@
                 <button
                   type="button"
                   class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('faction-item-' + index)"
                   [attr.aria-expanded]="isOpen('faction-item-' + index)"
                   (click)="toggleSection('faction-item-' + index)"
                 >
@@ -1067,11 +1143,11 @@
                   @if (allyGroups.length > 0) {
                     <div class="field">
                       <label [attr.for]="'faction-ally-' + index">Ally group (optional)</label>
-                      <select [id]="'faction-ally-' + index" formControlName="allyGroupName">
+                      <select [id]="'faction-ally-' + index" formControlName="allyGroupId">
                         <option value="">Unaligned</option>
-                        @for (group of allyGroups.controls; track $index) {
+                        @for (group of allyGroups.controls; track group.controls.id.value) {
                           @if (group.controls.name.value.trim()) {
-                            <option [value]="group.controls.name.value">{{ group.controls.name.value }}</option>
+                            <option [value]="group.controls.id.value">{{ group.controls.name.value }}</option>
                           }
                         }
                       </select>
@@ -1081,6 +1157,7 @@
                     <button
                       type="button"
                       class="section-toggle nested-toggle"
+                      [class.has-dirty]="sectionHeaderDirty('faction-sub-' + index)"
                       [attr.aria-expanded]="isOpen('faction-sub-' + index)"
                       (click)="toggleSection('faction-sub-' + index)"
                     >
@@ -1211,8 +1288,7 @@
                         aria-hidden="true"
                       ></div>
                     } @else {
-                      <div class="field">
-                        <label [attr.for]="'faction-flag-image-' + index">Flag image</label>
+                      <div class="field" [class.is-dirty]="hasPendingFlag(faction.controls.id.value)">
                         <input
                           [id]="'faction-flag-image-' + index"
                           type="file"
@@ -1245,6 +1321,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('missions')"
             [attr.aria-expanded]="isOpen('missions')"
             (click)="toggleSection('missions')"
           >
@@ -1263,6 +1340,7 @@
                 <button
                   type="button"
                   class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('mission-item-' + index)"
                   [attr.aria-expanded]="isOpen('mission-item-' + index)"
                   (click)="toggleSection('mission-item-' + index)"
                 >
@@ -1280,7 +1358,7 @@
                     <label [attr.for]="'catalog-mission-url-' + index">Mission URL (optional)</label>
                     <input [id]="'catalog-mission-url-' + index" formControlName="url" maxlength="2048" />
                   </div>
-                  <div class="field">
+                  <div class="field" [class.is-dirty]="hasPendingMissionFile(mission.controls.id.value)">
                     <label [attr.for]="'catalog-mission-file-' + index">Mission file (optional PDF or Word)</label>
                     <input
                       [id]="'catalog-mission-file-' + index"
@@ -1448,6 +1526,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('terrain')"
             [attr.aria-expanded]="isOpen('terrain')"
             (click)="toggleSection('terrain')"
           >
@@ -1485,6 +1564,7 @@
                 <button
                   type="button"
                   class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('terrain-item-' + index)"
                   [attr.aria-expanded]="isOpen('terrain-item-' + index)"
                   (click)="toggleSection('terrain-item-' + index)"
                 >
@@ -1529,6 +1609,7 @@
                     <button
                       type="button"
                       class="section-toggle nested-toggle"
+                      [class.has-dirty]="sectionHeaderDirty('terrain-missions-' + index)"
                       [attr.aria-expanded]="isOpen('terrain-missions-' + index)"
                       (click)="toggleSection('terrain-missions-' + index)"
                     >
@@ -1565,7 +1646,7 @@
                             </button>
                           </div>
                           @if (!isCatalogMission(mission)) {
-                            <div class="field">
+                            <div class="field" [class.is-dirty]="hasPendingMissionFile(mission.controls.id.value)">
                               <label [attr.for]="'terrain-mission-file-' + index + '-' + missionIndex">
                                 Mission file (optional PDF or Word)
                               </label>
@@ -1607,6 +1688,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('structures')"
             [attr.aria-expanded]="isOpen('structures')"
             (click)="toggleSection('structures')"
           >
@@ -1646,6 +1728,7 @@
                 <button
                   type="button"
                   class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('structure-item-' + index)"
                   [attr.aria-expanded]="isOpen('structure-item-' + index)"
                   (click)="toggleSection('structure-item-' + index)"
                 >
@@ -1752,7 +1835,7 @@
                         }
                       </div>
                     } @else {
-                      <div class="field">
+                      <div class="field" [class.is-dirty]="hasPendingStructureImage(structure.controls.id.value)">
                         <label [attr.for]="'structure-image-' + index">Logo image</label>
                         <input
                           [id]="'structure-image-' + index"
@@ -1807,7 +1890,7 @@
                         <p class="muted">Uses the ruined version of the operational built-in icon.</p>
                       </div>
                     } @else {
-                      <div class="field">
+                      <div class="field" [class.is-dirty]="hasPendingPillagedImage(structure.controls.id.value)">
                         <label [attr.for]="'structure-pillaged-image-' + index">Pillaged logo image</label>
                         <input
                           [id]="'structure-pillaged-image-' + index"
@@ -1832,6 +1915,7 @@
                     <button
                       type="button"
                       class="section-toggle nested-toggle"
+                      [class.has-dirty]="sectionHeaderDirty('structure-missions-' + index)"
                       [attr.aria-expanded]="isOpen('structure-missions-' + index)"
                       (click)="toggleSection('structure-missions-' + index)"
                     >
@@ -1868,7 +1952,7 @@
                             </button>
                           </div>
                           @if (!isCatalogMission(mission)) {
-                            <div class="field">
+                            <div class="field" [class.is-dirty]="hasPendingMissionFile(mission.controls.id.value)">
                               <label [attr.for]="'structure-mission-file-' + index + '-' + missionIndex">
                                 Mission file (optional PDF or Word)
                               </label>
@@ -1912,6 +1996,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('itemObjectives')"
             [attr.aria-expanded]="isOpen('itemObjectives')"
             (click)="toggleSection('itemObjectives')"
           >
@@ -1930,6 +2015,7 @@
                 <button
                   type="button"
                   class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('item-objective-' + index)"
                   [attr.aria-expanded]="isOpen('item-objective-' + index)"
                   (click)="toggleSection('item-objective-' + index)"
                 >
@@ -1996,7 +2082,7 @@
                         />
                       </div>
                     } @else {
-                      <div class="field">
+                      <div class="field" [class.is-dirty]="hasPendingItemImage(item.controls.id.value)">
                         <label [attr.for]="'item-objective-image-' + index">Logo image (50×50)</label>
                         <input
                           [id]="'item-objective-image-' + index"
@@ -2218,6 +2304,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('links')"
             [attr.aria-expanded]="isOpen('links')"
             (click)="toggleSection('links')"
           >
@@ -2254,6 +2341,7 @@
           <button
             type="button"
             class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('map')"
             [attr.aria-expanded]="isOpen('map')"
             (click)="toggleSection('map')"
           >
@@ -2261,7 +2349,7 @@
           </button>
         </legend>
         <div [hidden]="!isOpen('map')">
-          <div class="field">
+          <div class="field" [class.is-dirty]="isMapDirty()">
             <label for="map">Campaign map image</label>
             <input id="map" type="file" accept="image/jpeg,image/png,image/webp" (change)="onMapSelected($event)" />
             <p class="muted">A map image is required to create a campaign. JPEG, PNG, or WebP, up to 20 MB.</p>

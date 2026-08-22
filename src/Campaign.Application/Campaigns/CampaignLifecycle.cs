@@ -85,7 +85,8 @@ internal static class CampaignLifecycle
                 intact && (rules?.IsPillageable ?? false),
                 intact && (rules?.IsDestructible ?? false),
                 isWater,
-                territory.TerrainTypeId);
+                territory.TerrainTypeId,
+                territory.SpawnSubfaction);
         }).ToArray();
         var edges = graph.Adjacencies
             .Select(edge => (edge.TerritoryAId, edge.TerritoryBId))
@@ -122,7 +123,9 @@ internal static class CampaignLifecycle
                 StructureCondition = play.StructureCondition.ToString(),
                 OverlayColor = territory.OverlayColor,
                 OwnerFactionId = play.OwnerFactionId,
+                OwnerSubfaction = territory.OwnerSubfaction,
                 SpawnFactionId = territory.SpawnFactionId,
+                SpawnSubfaction = territory.SpawnSubfaction,
             };
         }).ToArray();
         return new Application.Maps.StoredMapGraph

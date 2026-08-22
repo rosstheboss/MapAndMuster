@@ -8,8 +8,14 @@ public static class HuntInEstaliaDefaults
     /// <summary>Default supply points for terrain, structures, pillage, and destroy when omitted.</summary>
     public const int SupplyPoints = 1;
 
-    /// <summary>Percent subtracted from map supply when a player has split forces.</summary>
-    public const int SplitForceSupplyPenaltyPercent = 25;
+    /// <summary>Supply subtracted from map supply when a player has split forces. Used as a raw amount unless percent mode is on.</summary>
+    public const int SplitForceSupplyPenaltyValue = 1;
+
+    /// <summary>Whether the split-force supply penalty is a percent of map supply. The default is a raw amount.</summary>
+    public const bool SplitForceSupplyPenaltyIsPercent = false;
+
+    /// <summary>Legacy catalog percent used when older JSON omits the raw-or-percent flag.</summary>
+    public const int LegacySplitForceSupplyPenaltyPercent = 25;
 
     /// <summary>Each split force keeps at least this many map supply points after the penalty.</summary>
     public const int SplitForceMinimumMapSupply = 1;

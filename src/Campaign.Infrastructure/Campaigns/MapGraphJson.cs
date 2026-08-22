@@ -71,7 +71,9 @@ internal static class MapGraphJson
             StructureTypeId = territory.StructureTypeId,
             OverlayColor = territory.OverlayColor,
             OwnerFactionId = territory.OwnerFactionId,
+            OwnerSubfaction = territory.OwnerSubfaction,
             SpawnFactionId = territory.SpawnFactionId,
+            SpawnSubfaction = territory.SpawnSubfaction,
             StructureCondition = territory.StructureCondition,
         };
     }
@@ -102,7 +104,9 @@ internal static class MapGraphJson
             StructureTypeId = territory.StructureTypeId,
             OverlayColor = territory.OverlayColor,
             OwnerFactionId = territory.OwnerFactionId,
+            OwnerSubfaction = territory.OwnerSubfaction,
             SpawnFactionId = territory.SpawnFactionId,
+            SpawnSubfaction = territory.SpawnSubfaction,
             StructureCondition = territory.StructureCondition,
         };
     }
@@ -158,7 +162,11 @@ internal static class MapGraphJson
 
         public Guid? OwnerFactionId { get; set; }
 
+        public string? OwnerSubfaction { get; set; }
+
         public Guid? SpawnFactionId { get; set; }
+
+        public string? SpawnSubfaction { get; set; }
 
         public string? StructureCondition { get; set; }
     }

@@ -4,13 +4,15 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
+import { vi } from 'vitest';
 
 import { AuthService } from '../../core/auth/auth.service';
 import type { OwnProfile } from '../../core/auth/auth.models';
-import { TERRAIN_TYPES } from '../../core/maps/terrain';
-import { STRUCTURE_TYPES } from '../../core/maps/structures';
 import type { MapPoint } from '../../core/maps/geometry';
+import { OVERLAY_COLOR_MODE_STORAGE_PREFIX } from '../../core/maps/map-editor-preferences';
 import type { MapTerritory } from '../../core/maps/map-graph.models';
+import { STRUCTURE_TYPES } from '../../core/maps/structures';
+import { TERRAIN_TYPES } from '../../core/maps/terrain';
 import { MapEditorPage } from './map-editor.page';
 
 const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -105,6 +107,7 @@ const emptyGraph = {
 
 describe('MapEditorPage', () => {
   beforeEach(async () => {
+    localStorage.removeItem(OVERLAY_COLOR_MODE_STORAGE_PREFIX + campaignId);
     await TestBed.configureTestingModule({
       imports: [MapEditorPage],
       providers: [
@@ -132,12 +135,16 @@ describe('MapEditorPage', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('Map editor');
     expect(compiled.textContent).toContain('Auto Generate Connections');
     expect(compiled.textContent).not.toContain('Connect selected');
+    expect(compiled.textContent).not.toContain('Cancel Drawing');
     expect(compiled.textContent).toContain('Clear Connections');
     expect(compiled.textContent).toContain('Undo');
     expect(compiled.textContent).toContain('Redo');
     expect(compiled.textContent).toContain('Manual Colors');
     expect(compiled.textContent).toContain('Clear Unsaved Changes');
     expect(compiled.textContent).toContain('Save Map');
+    expect(compiled.textContent).toContain('Show Overlay');
+    expect(compiled.textContent).toContain('Show Connections');
+    expect(compiled.textContent).not.toContain('Draw on the overlay, not the image');
     expect(compiled.textContent).toContain('Download map');
     expect(compiled.textContent).toContain('Edit campaign');
     expect(compiled.textContent).not.toContain('Save as Preset');
@@ -187,6 +194,24 @@ describe('MapEditorPage', () => {
       button.textContent.includes('Auto Generate Connections'),
     );
     expect(generate).toBeTruthy();
+    expect(generate?.classList.contains('button-secondary')).toBe(true);
+    expect(generate?.classList.contains('button')).toBe(false);
+    const toolGroup = compiled.querySelector('[aria-label="Map tools"]');
+    expect([...(toolGroup?.querySelectorAll('button') ?? [])].map((button) => button.textContent.trim())).toEqual([
+      'Draw',
+      'Erase',
+      'Select',
+      'Connect',
+    ]);
+    expect(toolGroup?.querySelector('[aria-checked="true"]')?.textContent.trim()).toBe('Draw');
+    expect(toolGroup?.querySelector('.is-active')?.textContent.trim()).toBe('Draw');
+    const colorGroup = compiled.querySelector('[aria-label="Overlay color mode"]');
+    expect([...(colorGroup?.querySelectorAll('button') ?? [])].map((button) => button.textContent.trim())).toEqual([
+      'Random Colors',
+      'Color By Terrain',
+      'Manual Colors',
+    ]);
+    expect(colorGroup?.querySelector('[aria-checked="true"]')?.textContent.trim()).toBe('Manual Colors');
     generate?.click();
     fixture.detectChanges();
     http.verify();
@@ -697,7 +722,48 @@ describe('MapEditorPage', () => {
     http.verify();
   });
 
-  it('rejects a newly drawn border that overhangs into a territory', async () => {
+  it('commits and can save a closed drawing that traces a shared border', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      drawing: { set(points: MapPoint[]): void };
+      closePolygon: () => void;
+      save: () => Promise<boolean>;
+      graph: () => { territories: { id: string }[]; adjacencies: unknown[]; itemObjectivePlacements?: unknown[] };
+      errorMessages: () => string[];
+    };
+    page.drawing.set([
+      { x: 0.4, y: 0.1 },
+      { x: 0.399, y: 0.2 },
+      { x: 0.4, y: 0.4 },
+      { x: 0.7, y: 0.4 },
+      { x: 0.7, y: 0.1 },
+    ]);
+    page.closePolygon();
+    expect(page.errorMessages()).toEqual([]);
+    expect(page.graph().territories).toHaveLength(2);
+
+    const saving = page.save();
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      revision: 3,
+      territories: page.graph().territories,
+      adjacencies: page.graph().adjacencies,
+    });
+    await expect(saving).resolves.toBe(true);
+    expect(page.errorMessages()).toEqual([]);
+    http.verify();
+  });
+
+  it('rejects a closed drawing that covers another territory interior', async () => {
     const fixture = TestBed.createComponent(MapEditorPage);
     const http = TestBed.inject(HttpTestingController);
     http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
@@ -722,8 +788,8 @@ describe('MapEditorPage', () => {
       { x: 0.55, y: 0.1 },
     ]);
     page.closePolygon();
+    expect(page.errorMessages()).toEqual(['Territories cannot overlap. They may share a border.']);
     expect(page.graph().territories).toHaveLength(1);
-    expect(page.errorMessages()).toContain('Territories cannot overlap. They may share a border.');
     http.verify();
   });
 
@@ -816,6 +882,7 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Successfully saved changes.');
     expect(compiled.textContent).toContain('Last saved');
     expect(page.lastSavedAtUtc()).toBeTruthy();
+    expect(compiled.querySelector('.save-status.is-success')).toBeTruthy();
     const savedColor = page.graph().territories[0]?.overlayColor;
 
     page.colorRandom();
@@ -824,7 +891,193 @@ describe('MapEditorPage', () => {
     page.discardUnsavedChanges();
     fixture.detectChanges();
     expect(page.graph().territories[0]?.overlayColor).toBe(savedColor);
+    expect(compiled.querySelector('.save-status')).toBeNull();
     expect(compiled.querySelector<HTMLInputElement>('input[aria-label="Zoom percent"]')?.value).toBe('110');
+    http.verify();
+  });
+
+  it('marks a changed territory field as dirty', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      setName: (value: string) => void;
+      toggleTerritoryList: () => void;
+      isTerritoryFieldDirty: (key: string) => boolean;
+      isTerritoryDirty: (id: string) => boolean;
+    };
+    page.onTerritorySelect({ id: 't1', additive: false });
+    page.toggleTerritoryList();
+    fixture.detectChanges();
+    expect(page.isTerritoryFieldDirty('name')).toBe(false);
+
+    page.setName('Westmarch');
+    fixture.detectChanges();
+    expect(page.isTerritoryFieldDirty('name')).toBe(true);
+    expect(page.isTerritoryDirty('t1')).toBe(true);
+    const compiled = fixture.nativeElement as HTMLElement;
+    const nameField = compiled.querySelector('#territory-name')?.closest('.field');
+    expect(nameField?.classList.contains('is-dirty')).toBe(true);
+    expect(compiled.querySelector('h1')?.classList.contains('has-dirty')).toBe(false);
+    expect(compiled.querySelector('.list-button.is-dirty')).toBeTruthy();
+    http.verify();
+  });
+
+  it('toggles a single active map tool in the grouped tools', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush(emptyGraph);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const select = [...compiled.querySelectorAll<HTMLButtonElement>('[aria-label="Map tools"] button')].find(
+      (button) => button.textContent.trim() === 'Select',
+    );
+    expect(select).toBeTruthy();
+    select?.click();
+    fixture.detectChanges();
+
+    const tools = [...compiled.querySelectorAll('[aria-label="Map tools"] button')];
+    expect(
+      tools.filter((button) => button.classList.contains('is-active')).map((button) => button.textContent.trim()),
+    ).toEqual(['Select']);
+    expect(
+      tools
+        .filter((button) => button.getAttribute('aria-checked') === 'true')
+        .map((button) => button.textContent.trim()),
+    ).toEqual(['Select']);
+    http.verify();
+  });
+
+  it('does not hover-lift territories while Draw is active', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onTerritoryHover: (id: string | null) => void;
+      onToolChange: (tool: string) => void;
+      hoveredTerritoryId: () => string | null;
+    };
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    page.onTerritoryHover('t1');
+    fixture.detectChanges();
+    expect(page.hoveredTerritoryId()).toBeNull();
+    expect(compiled.querySelector('.territory[data-id="t1"]')?.classList.contains('is-half-highlighted')).toBe(false);
+
+    page.onToolChange('select');
+    page.onTerritoryHover('t1');
+    fixture.detectChanges();
+    expect(page.hoveredTerritoryId()).toBe('t1');
+    expect(compiled.querySelector('.territory[data-id="t1"]')?.classList.contains('is-half-highlighted')).toBe(true);
+
+    page.onToolChange('draw');
+    fixture.detectChanges();
+    expect(page.hoveredTerritoryId()).toBeNull();
+    expect(compiled.querySelector('.territory[data-id="t1"]')?.classList.contains('is-half-highlighted')).toBe(false);
+    http.verify();
+  });
+
+  it('does not show hover placeholder copy or swap the editor when hovering an unselected territory', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onToolChange: (tool: string) => void;
+      onTerritoryHover: (id: string | null) => void;
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      onBackground: () => void;
+    };
+    const compiled = fixture.nativeElement as HTMLElement;
+    const editorText = (): string => compiled.querySelector('.territory-editor')?.textContent ?? '';
+    const body = compiled.querySelector('.territory-editor-body');
+    page.onToolChange('select');
+    fixture.detectChanges();
+
+    expect(editorText()).not.toContain('Hover or select a territory to see its details.');
+    expect(compiled.querySelector('#territory-name')).toBeNull();
+    expect(body).toBeTruthy();
+
+    page.onTerritoryHover('t1');
+    fixture.detectChanges();
+    expect(editorText()).not.toContain('Hover or select a territory to see its details.');
+    expect(compiled.querySelector('#territory-name')).toBeNull();
+    expect(compiled.querySelector('.territory-editor-body')).toBe(body);
+
+    page.onTerritorySelect({ id: 't1', additive: false });
+    fixture.detectChanges();
+    expect(compiled.querySelector('#territory-name')).toBeTruthy();
+    expect(compiled.querySelector('.territory-editor-body')).toBeTruthy();
+
+    page.onBackground();
+    fixture.detectChanges();
+    expect(compiled.querySelector('#territory-name')).toBeNull();
+    expect(compiled.querySelector('.territory-editor-body')).toBeTruthy();
+    expect(editorText()).not.toContain('Hover or select a territory to see its details.');
+    http.verify();
+  });
+
+  it('restores the last overlay color mode for the campaign without recoloring', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    const graph = {
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    };
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush(graph);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      colorByTerrain: () => void;
+      colorMode: () => string;
+    };
+    page.colorByTerrain();
+    expect(page.colorMode()).toBe('terrain');
+    fixture.destroy();
+
+    const next = TestBed.createComponent(MapEditorPage);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush(graph);
+    await next.whenStable();
+    next.detectChanges();
+
+    const restored = next.componentInstance as unknown as {
+      colorMode: () => string;
+      hasUnsavedEdits: () => boolean;
+      graph: () => { territories: { overlayColor: string | null }[] };
+    };
+    expect(restored.colorMode()).toBe('terrain');
+    expect(restored.hasUnsavedEdits()).toBe(false);
+    expect(restored.graph().territories[0]?.overlayColor).toBeNull();
+    const colorGroup = (next.nativeElement as HTMLElement).querySelector('[aria-label="Overlay color mode"]');
+    expect(colorGroup?.querySelector('[aria-checked="true"]')?.textContent.trim()).toBe('Color By Terrain');
+    expect(colorGroup?.querySelector('.is-active')?.textContent.trim()).toBe('Color By Terrain');
     http.verify();
   });
 
@@ -854,7 +1107,7 @@ describe('MapEditorPage', () => {
     page.onTerritorySelect({ id: 't1', additive: false });
     page.onTerritorySelect({ id: 't2', additive: true });
     fixture.detectChanges();
-    expect(compiled.querySelector('.side-pane h2')?.textContent).toContain('Selected territories');
+    expect(compiled.querySelector('.territory-editor .section-toggle')?.textContent).toContain('Selected territories');
     expect(compiled.textContent).toContain('Northmarch');
     expect(compiled.textContent).toContain('Southmarch');
     page.onConnectClick();
@@ -863,10 +1116,11 @@ describe('MapEditorPage', () => {
     expect(page.graph().adjacencies).toHaveLength(1);
     expect(page.graph().adjacencies[0]).toMatchObject({ territoryAId: 't1', territoryBId: 't2' });
     expect(page.selectedAdjacencyId()).toBe(page.graph().adjacencies[0]?.id ?? null);
-    expect(compiled.querySelector('.side-pane h2')?.textContent).toContain('Connection');
+    expect(compiled.querySelector('.territory-editor .section-toggle')?.textContent).toContain('Connection');
     expect(compiled.textContent).toContain('Northmarch');
     expect(compiled.textContent).toContain('Southmarch');
 
+    page.onToolChange('select');
     page.onTerritorySelect({ id: 't1', additive: false });
     page.onTerritorySelect({ id: 't2', additive: true });
     page.connectSelectedTerritories();
@@ -923,7 +1177,7 @@ describe('MapEditorPage', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(compiled.querySelector('.side-pane h2')?.textContent).toContain('Connection');
+    expect(compiled.querySelector('.territory-editor .section-toggle')?.textContent).toContain('Connection');
     expect(compiled.textContent).toContain('Northmarch');
     expect(compiled.textContent).toContain('Southmarch');
     expect(page.adjacentTerritoryIds().sort()).toEqual(['t1', 't2']);
@@ -939,7 +1193,7 @@ describe('MapEditorPage', () => {
     fixture.detectChanges();
     expect(page.graph().adjacencies).toHaveLength(0);
     expect(page.selectedAdjacencyId()).toBeNull();
-    expect(compiled.querySelector('.side-pane h2')?.textContent).toContain('Territory');
+    expect(compiled.querySelector('.territory-editor .section-toggle')?.textContent).toContain('Territory');
     http.verify();
   });
 
@@ -978,6 +1232,168 @@ describe('MapEditorPage', () => {
     page.onToolChange('erase');
     page.onAdjacencySelect('ab');
     expect(page.graph().adjacencies).toHaveLength(0);
+    http.verify();
+  });
+
+  it('collapses the territory editor and list and reports a failed save with an X', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      colorRandom: () => void;
+      save: () => Promise<boolean>;
+    };
+    page.onTerritorySelect({ id: 't1', additive: false });
+    fixture.detectChanges();
+    expect(compiled.querySelector('#territory-name')).toBeTruthy();
+
+    const editorToggle = compiled.querySelector<HTMLButtonElement>('.territory-editor .section-toggle');
+    const listToggle = compiled.querySelector<HTMLButtonElement>('.side-pane-toggle');
+    expect(editorToggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(listToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(compiled.querySelector('.territory-list')).toBeNull();
+    listToggle?.click();
+    fixture.detectChanges();
+    expect(listToggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(compiled.querySelector('.territory-list')).toBeTruthy();
+    editorToggle?.click();
+    listToggle?.click();
+    fixture.detectChanges();
+    expect(editorToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(listToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(compiled.querySelector('#territory-name')).toBeNull();
+    expect(compiled.querySelector('.territory-list')).toBeNull();
+    page.colorRandom();
+    const saving = page.save();
+    http
+      .expectOne(`/api/campaigns/${campaignId}/map/graph`)
+      .flush({ title: 'Unable to save the map.' }, { status: 400, statusText: 'Bad Request' });
+    await saving;
+    fixture.detectChanges();
+    expect(compiled.querySelector('.save-status.is-failure')).toBeTruthy();
+    http.verify();
+  });
+
+  it('scrolls the expanded territory list to the topmost selected name', async () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        namedSquare('t1', 1, 'Northmarch', 0.1),
+        namedSquare('t2', 2, 'Southmarch', 0.4),
+        namedSquare('t3', 3, 'Eastmarch', 0.7),
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onToolChange: (tool: string) => void;
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+    };
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('.side-pane-toggle')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('.territory-list')).toBeTruthy();
+
+    page.onToolChange('select');
+    page.onTerritorySelect({ id: 't2', additive: false });
+    fixture.detectChanges();
+    const south = compiled.querySelector<HTMLButtonElement>('[data-territory-id="t2"]');
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(scrollIntoView.mock.instances.at(-1)).toBe(south);
+
+    scrollIntoView.mockClear();
+    page.onTerritorySelect({ id: 't3', additive: true });
+    fixture.detectChanges();
+    const east = compiled.querySelector<HTMLButtonElement>('[data-territory-id="t3"]');
+    expect(scrollIntoView.mock.instances.at(-1)).toBe(east);
+    http.verify();
+  });
+
+  it('copies ownership from spawn and lists required subfactions while disabling random-spawn factions', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      ...campaign,
+      factions: [
+        ...campaign.factions,
+        {
+          id: 'daemons',
+          name: 'Daemons of Chaos',
+          color: '#AD1457',
+          subfactions: ['Khorne', 'Nurgle'],
+          allyGroupName: null,
+          requiresSubfaction: true,
+          hasFlagImage: false,
+        },
+        {
+          id: 'skaven',
+          name: 'Skaven',
+          color: '#78716C',
+          subfactions: [],
+          allyGroupName: null,
+          requiresSubfaction: false,
+          hasFlagImage: false,
+          specialRuleIds: ['underground'],
+        },
+      ],
+      specialRules: [{ id: 'underground', name: 'The Underground Network', text: '', effectKey: 'UndergroundNetwork' }],
+    });
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      setSpawn: (value: string) => void;
+      setOwner: (value: string) => void;
+      ownerLocked: () => boolean;
+      graph: () => {
+        territories: {
+          ownerFactionId: string | null;
+          ownerSubfaction?: string | null;
+          spawnFactionId: string | null;
+        }[];
+      };
+    };
+    page.onTerritorySelect({ id: 't1', additive: false });
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const labels = [...compiled.querySelectorAll('#territory-spawn option')].map((option) =>
+      option.textContent?.trim(),
+    );
+    expect(labels).toContain('Daemons of Chaos - Khorne');
+    expect(labels).toContain('Daemons of Chaos - Nurgle');
+    expect(labels).not.toContain('Daemons of Chaos');
+    expect(compiled.querySelector('#territory-spawn option[value="skaven"]')?.hasAttribute('disabled')).toBe(true);
+
+    page.setSpawn('daemons::Khorne');
+    fixture.detectChanges();
+    expect(page.graph().territories[0]?.ownerFactionId).toBe('daemons');
+    expect(page.graph().territories[0]?.ownerSubfaction).toBe('Khorne');
+    expect(page.graph().territories[0]?.spawnFactionId).toBe('daemons');
+    expect(page.ownerLocked()).toBe(true);
+    page.setOwner('north');
+    expect(page.graph().territories[0]?.ownerFactionId).toBe('daemons');
+    expect(compiled.querySelector('#territory-owner')?.getAttribute('disabled')).toBe('true');
     http.verify();
   });
 });

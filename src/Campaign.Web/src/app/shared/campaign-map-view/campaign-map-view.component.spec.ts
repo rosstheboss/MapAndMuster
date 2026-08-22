@@ -271,7 +271,7 @@ describe('CampaignMapViewComponent', () => {
     expect(view.fitToPanel()).toBe(false);
   });
 
-  it('glows and enlarges only the hovered connection arrow', () => {
+  it('keeps connection arrows black without hover size or outline changes', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
     fixture.componentRef.setInput('territories', [
@@ -304,10 +304,11 @@ describe('CampaignMapViewComponent', () => {
     expect(groups).toHaveLength(2);
     const hovered = groups.find((group) => group.getAttribute('data-id') === 'ab');
     const other = groups.find((group) => group.getAttribute('data-id') === 'ac');
-    expect(hovered?.classList.contains('is-highlighted')).toBe(true);
+    expect(hovered?.classList.contains('is-highlighted')).toBe(false);
     expect(other?.classList.contains('is-highlighted')).toBe(false);
-    expect(hovered?.querySelector('.adjacency-visual')?.getAttribute('transform')).toContain('scale(1.5)');
+    expect(hovered?.querySelector('.adjacency-visual')?.getAttribute('transform')).toBeNull();
     expect(other?.querySelector('.adjacency-visual')?.getAttribute('transform')).toBeNull();
+    expect(hovered?.querySelector('.adjacency-outline')).toBeNull();
     expect(hovered?.querySelectorAll('.adjacency-hit-head').length).toBe(2);
     expect(hovered?.classList.contains('is-interactive')).toBe(false);
   });
@@ -346,6 +347,74 @@ describe('CampaignMapViewComponent', () => {
     const polygon = (fixture.nativeElement as HTMLElement).querySelector('.territory[data-id="t1"]');
     expect(polygon?.classList.contains('is-selected')).toBe(true);
     expect(polygon?.classList.contains('is-half-highlighted')).toBe(false);
+  });
+
+  it('dims unrelated territories and paints selected connection arrows white', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      squareTerritory('t1', 0.1, 0.1),
+      squareTerritory('t2', 0.4, 0.1),
+      squareTerritory('t3', 0.7, 0.1),
+    ]);
+    fixture.componentRef.setInput('adjacencies', [
+      {
+        id: 'ab',
+        territoryAId: 't1',
+        territoryBId: 't2',
+        origin: 'Manual',
+        marker: { x: 0.35, y: 0.2 },
+      },
+      {
+        id: 'bc',
+        territoryAId: 't2',
+        territoryBId: 't3',
+        origin: 'Manual',
+        marker: { x: 0.65, y: 0.2 },
+      },
+    ]);
+    fixture.componentRef.setInput('showAdjacencies', true);
+    fixture.componentRef.setInput('focusSelectedTerritories', true);
+    fixture.componentRef.setInput('selectedTerritoryIds', ['t1']);
+    fixture.componentRef.setInput('adjacentTerritoryIds', ['t2']);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const polygon = (id: string): Element | null => compiled.querySelector(`.territory[data-id="${id}"]`);
+    expect(polygon('t1')?.classList.contains('is-dimmed')).toBe(false);
+    expect(polygon('t2')?.classList.contains('is-dimmed')).toBe(false);
+    expect(polygon('t3')?.classList.contains('is-dimmed')).toBe(true);
+    expect(compiled.querySelector('.adjacency[data-id="ab"] .adjacency-outline')).toBeNull();
+    expect(compiled.querySelector('.adjacency[data-id="ab"]')?.classList.contains('is-from-selection')).toBe(false);
+    expect(compiled.querySelector('.adjacency[data-id="bc"]')?.classList.contains('is-from-selection')).toBe(false);
+  });
+
+  it('hides overlay polygons and connections when Show Overlay is off', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1), squareTerritory('t2', 0.4, 0.1)]);
+    fixture.componentRef.setInput('adjacencies', [
+      {
+        id: 'ab',
+        territoryAId: 't1',
+        territoryBId: 't2',
+        origin: 'Manual',
+        marker: { x: 0.35, y: 0.2 },
+      },
+    ]);
+    fixture.componentRef.setInput('showAdjacencies', true);
+    fixture.componentRef.setInput('layerToggles', true);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelectorAll('.territory')).toHaveLength(2);
+    expect(compiled.querySelectorAll('.adjacency')).toHaveLength(1);
+
+    fixture.componentRef.setInput('showOverlay', false);
+    fixture.detectChanges();
+    expect(compiled.querySelector('.territory')).toBeNull();
+    expect(compiled.querySelector('.adjacency')).toBeNull();
+    expect(compiled.querySelector<HTMLInputElement>('.layer-toggle input')?.checked).toBe(false);
   });
 
   it('shows a green check when a move can be dropped and a red X when it cannot', () => {
@@ -404,6 +473,28 @@ describe('CampaignMapViewComponent', () => {
       .querySelector('.adjacency-hit')
       ?.dispatchEvent(pointer('pointerdown', { button: 0, clientX: 10, clientY: 10 }));
     expect(adjacencySelect).toHaveBeenCalledWith('ab');
+  });
+
+  it('fills spawn territories with 5-pixel diagonal stripes and lifts hovered unselected territories', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      squareTerritory('t1', 0.1, 0.1),
+      { ...squareTerritory('t2', 0.4, 0.1), spawnFactionId: '1' },
+    ]);
+    fixture.componentRef.setInput('hoveredTerritoryId', 't1');
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const spawn = compiled.querySelector('.territory[data-id="t2"]');
+    const hovered = compiled.querySelector('.territory[data-id="t1"]');
+    expect(spawn?.classList.contains('is-spawn')).toBe(true);
+    expect(spawn?.getAttribute('fill')).toContain('url(#spawn-stripe-');
+    expect(compiled.querySelector('pattern')?.getAttribute('patternTransform')).toBe('rotate(45)');
+    expect(hovered?.parentElement?.getAttribute('transform')).toContain('translate(0');
+    expect(spawn?.parentElement?.getAttribute('transform')).toBeNull();
   });
 });
 

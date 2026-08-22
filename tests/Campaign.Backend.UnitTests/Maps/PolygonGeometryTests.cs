@@ -51,12 +51,81 @@ public sealed class PolygonGeometryTests
     }
 
     [Fact]
+    public void ThinInteriorOverlapIsStillRejected()
+    {
+        var left = Square(0.1, 0.1, 0.3);
+        var right = Square(0.39, 0.1, 0.3);
+
+        Assert.True(PolygonGeometry.InteriorsOverlap(left, right));
+    }
+
+    [Fact]
     public void NestedTerritoryCountsAsOverlap()
     {
         var outer = Square(0.1, 0.1, 0.8);
         var inner = Square(0.3, 0.3, 0.2);
 
         Assert.True(PolygonGeometry.InteriorsOverlap(outer, inner));
+    }
+
+    [Fact]
+    public void ExtraVerticesAlongASharedBorderAreAllowed()
+    {
+        var existing = Square(0.1, 0.1, 0.3);
+        MapPoint[] neighbor =
+        [
+            new(0.4, 0.1),
+            new(0.399, 0.2),
+            new(0.4, 0.3),
+            new(0.4, 0.4),
+            new(0.7, 0.4),
+            new(0.7, 0.1),
+        ];
+
+        Assert.False(PolygonGeometry.InteriorsOverlap(existing, neighbor));
+    }
+
+    [Fact]
+    public void NearCollinearZigzagAlongASharedBorderIsNotOverlap()
+    {
+        var existing = Square(0.1, 0.1, 0.3);
+        MapPoint[] neighbor =
+        [
+            new(0.4, 0.1),
+            new(0.401, 0.18),
+            new(0.399, 0.26),
+            new(0.4, 0.4),
+            new(0.7, 0.4),
+            new(0.7, 0.1),
+        ];
+
+        Assert.False(PolygonGeometry.InteriorsOverlap(existing, neighbor));
+    }
+
+    [Fact]
+    public void WrappingCoastlineIsNotOverlapWhenOnlyTheBorderIsShared()
+    {
+        var plains = new MapPoint[]
+        {
+            new(0.4, 0.4),
+            new(0.6, 0.4),
+            new(0.6, 0.6),
+            new(0.4, 0.6),
+        };
+        MapPoint[] coastline =
+        [
+            new(0.35, 0.35),
+            new(0.65, 0.35),
+            new(0.65, 0.65),
+            new(0.35, 0.65),
+            new(0.35, 0.60),
+            new(0.60, 0.60),
+            new(0.60, 0.40),
+            new(0.35, 0.40),
+        ];
+
+        Assert.False(PolygonGeometry.InteriorsOverlap(plains, coastline));
+        Assert.True(PolygonGeometry.ContainsStrict(plains, PolygonGeometry.Centroid(coastline)));
     }
 
     [Fact]

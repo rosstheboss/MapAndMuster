@@ -532,7 +532,7 @@ public static class FactionSpecialRulePolicies
             }
         }
 
-        var spawn = map.SpawnFor(factionId);
+        var spawn = map.SpawnFor(factionId, subfaction);
         return spawn is null ? null : (spawn.Id, false);
     }
 

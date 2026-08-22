@@ -140,7 +140,8 @@ public sealed class CampaignEndpointTests
         Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
         var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
         Assert.NotNull(created);
-        Assert.Equal(25, created.SplitForceSupplyPenaltyPercent);
+        Assert.Equal(1, created.SplitForceSupplyPenaltyPercent);
+        Assert.False(created.SplitForceSupplyPenaltyIsPercent);
         Assert.True(created.AlwaysAskGeneralKill);
         Assert.True(created.AlwaysAskSupplyLineDestroyed);
         Assert.Equal(1, created.GeneralKillCampaignPoints);
@@ -201,7 +202,8 @@ public sealed class CampaignEndpointTests
 
         var preset = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaign-presets/{saved.Id}", JsonOptions);
         Assert.NotNull(preset);
-        Assert.Equal(25, preset.SplitForceSupplyPenaltyPercent);
+        Assert.Equal(1, preset.SplitForceSupplyPenaltyPercent);
+        Assert.False(preset.SplitForceSupplyPenaltyIsPercent);
         Assert.Equal(created.TerrainTypes.Count, preset.TerrainTypes.Count);
 
         using var appliedResponse = await client.PostAsJsonAsync(
@@ -436,7 +438,7 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
-    public async Task MapGraphRejectsOverlapAndPersistsSharedBorders()
+    public async Task MapGraphRejectsOverlappingTerritoriesAndPersistsSharedBorders()
     {
         using var client = _factory.CreateClient();
         var username = UniqueName("graph");

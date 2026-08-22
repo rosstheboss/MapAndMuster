@@ -5,6 +5,9 @@ namespace Campaign.Domain.Campaigns;
 /// </summary>
 public sealed class AllyGroupInput
 {
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
     /// <summary>Gets the ally-group display name.</summary>
     public required string Name { get; init; }
 

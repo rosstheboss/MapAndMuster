@@ -27,7 +27,8 @@ internal static class CatalogJson
         IReadOnlyList<StoredPrivateObjectiveType>? privateObjectiveTypes = null,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? factionSpecialRuleIds = null,
         IReadOnlyList<StoredForceStatus>? forceStatuses = null,
-        int splitForceSupplyPenaltyPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent,
+        int splitForceSupplyPenaltyPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue,
+        bool splitForceSupplyPenaltyIsPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent,
         BattleReportRulesSetup? battleReportRules = null,
         IReadOnlyList<RoundArmyEscalationSetup>? armyEscalations = null,
         IReadOnlyList<StoredMission>? missions = null,
@@ -70,7 +71,11 @@ internal static class CatalogJson
                 MostTerritoriesCampaignPoints = ranking.MostTerritories,
                 LongestTerritoryChainCampaignPoints = ranking.LongestTerritoryChain,
                 MostBattlesWonCampaignPoints = ranking.MostBattlesWon,
+                MostStructurePointsCampaignPoints = ranking.MostStructurePoints,
+                PointsPerTerritoryCampaignPoints = ranking.PointsPerTerritory,
+                AlliedRelicControlCampaignPoints = ranking.AlliedRelicControlPoints,
                 SplitForceSupplyPenaltyPercent = splitForceSupplyPenaltyPercent,
+                SplitForceSupplyPenaltyIsPercent = splitForceSupplyPenaltyIsPercent,
                 AlwaysAskGeneralKill = reportRules.AlwaysAskGeneralKill,
                 AlwaysAskSupplyLineDestroyed = reportRules.AlwaysAskSupplyLineDestroyed,
                 GeneralKillCampaignPoints = reportRules.GeneralKillCampaignPoints,
@@ -94,6 +99,7 @@ internal static class CatalogJson
         IReadOnlyDictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>> SubfactionSpecialRuleIds,
         IReadOnlyList<StoredForceStatus> ForceStatuses,
         int SplitForceSupplyPenaltyPercent,
+        bool SplitForceSupplyPenaltyIsPercent,
         BattleReportRulesSetup BattleReportRules,
         IReadOnlyList<RoundArmyEscalationSetup> ArmyEscalations,
         IReadOnlyList<StoredMission> Missions)
@@ -125,7 +131,10 @@ internal static class CatalogJson
             new GeneralPublicObjectivePoints(
                 Math.Max(0, document.MostTerritoriesCampaignPoints),
                 Math.Max(0, document.LongestTerritoryChainCampaignPoints),
-                Math.Max(0, document.MostBattlesWonCampaignPoints)),
+                Math.Max(0, document.MostBattlesWonCampaignPoints),
+                Math.Max(0, document.MostStructurePointsCampaignPoints),
+                Math.Max(0, document.PointsPerTerritoryCampaignPoints),
+                Math.Max(0, document.AlliedRelicControlCampaignPoints)),
             [.. (document.SpecialRules ?? []).Select(FromDocument)],
             [.. (document.PrivateObjectiveTypes ?? []).Select(FromDocument)],
             factionRules
@@ -147,11 +156,8 @@ internal static class CatalogJson
                         })
                         .ToArray()),
             [.. (document.ForceStatuses ?? []).Select(FromDocument)],
-            document.SplitForceSupplyPenaltyPercent is null
-                || document.SplitForceSupplyPenaltyPercent < 0
-                || document.SplitForceSupplyPenaltyPercent > 100
-                ? HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent
-                : document.SplitForceSupplyPenaltyPercent.Value,
+            ReadSplitForcePenaltyValue(document),
+            ReadSplitForcePenaltyIsPercent(document),
             new BattleReportRulesSetup(
                 document.AlwaysAskGeneralKill ?? HuntInEstaliaDefaults.AlwaysAskGeneralKill,
                 document.AlwaysAskSupplyLineDestroyed ?? HuntInEstaliaDefaults.AlwaysAskSupplyLineDestroyed,
@@ -174,11 +180,31 @@ internal static class CatalogJson
         IReadOnlyDictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>,
         IReadOnlyList<StoredForceStatus>,
         int,
+        bool,
         BattleReportRulesSetup,
         IReadOnlyList<RoundArmyEscalationSetup>,
         IReadOnlyList<StoredMission>) EmptyCatalog()
     {
-        return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent, BattleReportRulesSetup.Default, [], []);
+        return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue, HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent, BattleReportRulesSetup.Default, [], []);
+    }
+
+    private static int ReadSplitForcePenaltyValue(CatalogDocument document)
+    {
+        var value = document.SplitForceSupplyPenaltyPercent;
+        if (value is null || value < 0 || value > 100)
+        {
+            return document.SplitForceSupplyPenaltyIsPercent is null
+                ? HuntInEstaliaDefaults.LegacySplitForceSupplyPenaltyPercent
+                : HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue;
+        }
+
+        return value.Value;
+    }
+
+    private static bool ReadSplitForcePenaltyIsPercent(CatalogDocument document)
+    {
+        return document.SplitForceSupplyPenaltyIsPercent
+            ?? true;
     }
 
     private static IReadOnlyList<StoredMission> MergeMissions(
@@ -620,7 +646,15 @@ internal static class CatalogJson
 
         public int MostBattlesWonCampaignPoints { get; set; }
 
+        public int MostStructurePointsCampaignPoints { get; set; }
+
+        public int PointsPerTerritoryCampaignPoints { get; set; }
+
+        public int AlliedRelicControlCampaignPoints { get; set; }
+
         public int? SplitForceSupplyPenaltyPercent { get; set; }
+
+        public bool? SplitForceSupplyPenaltyIsPercent { get; set; }
 
         public bool? AlwaysAskGeneralKill { get; set; }
 

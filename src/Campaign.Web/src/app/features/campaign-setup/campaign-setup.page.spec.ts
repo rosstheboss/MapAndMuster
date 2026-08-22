@@ -519,7 +519,13 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector('#pointsPerBattleWon')).toBeTruthy();
     expect(compiled.querySelector('#pointsPerBattleDraw')).toBeTruthy();
     expect(compiled.querySelector('#mostTerritoriesCampaignPoints')).toBeTruthy();
-    expect(compiled.querySelector<HTMLInputElement>('#splitForceSupplyPenaltyPercent')?.value).toBe('25');
+    expect(compiled.querySelector('#mostStructurePointsCampaignPoints')).toBeTruthy();
+    expect(compiled.querySelector('#pointsPerTerritoryCampaignPoints')).toBeTruthy();
+    expect(compiled.querySelector('#alliedRelicControlCampaignPoints')).toBeTruthy();
+    expect(compiled.querySelector<HTMLInputElement>('#splitForceSupplyPenaltyPercent')?.value).toBe('1');
+    expect(
+      compiled.querySelector<HTMLInputElement>('input[formControlName="splitForceSupplyPenaltyIsPercent"]')?.checked,
+    ).toBe(false);
     expect(compiled.querySelector('#round-escalation-points-7')).toBeTruthy();
     expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-0')?.value).toBe('500');
     expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-0')?.min).toBe('10');
@@ -540,6 +546,44 @@ describe('CampaignSetupPage', () => {
     clickNamedButton(compiled, 'Add ally group');
     fixture.detectChanges();
     expect(compiled.querySelector('#ally-group-color-0')).toBeTruthy();
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('keeps factions in an ally group after the group is renamed', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      addAllyGroup: () => void;
+      allyMembers: (groupId: string) => string;
+      allyGroups: {
+        at: (index: number) => {
+          controls: { id: { value: string }; name: { setValue: (value: string) => void } };
+        };
+      };
+      factions: {
+        at: (index: number) => {
+          controls: {
+            name: { setValue: (value: string) => void };
+            allyGroupId: { setValue: (value: string) => void; value: string };
+          };
+        };
+      };
+    };
+
+    page.addAllyGroup();
+    const groupId = page.allyGroups.at(0).controls.id.value;
+    page.allyGroups.at(0).controls.name.setValue('Pact');
+    page.factions.at(0).controls.name.setValue('North');
+    page.factions.at(0).controls.allyGroupId.setValue(groupId);
+    fixture.detectChanges();
+
+    page.allyGroups.at(0).controls.name.setValue('Northern League');
+    fixture.detectChanges();
+
+    expect(page.factions.at(0).controls.allyGroupId.value).toBe(groupId);
+    expect(page.allyMembers(groupId)).toContain('North');
     TestBed.inject(HttpTestingController).verify();
   });
 
@@ -793,10 +837,133 @@ describe('CampaignSetupPage edit', () => {
     expect(toolbar?.textContent).toContain('Expand All');
     expect(toolbar?.textContent).toContain('Collapse All');
     expect(toolbar?.querySelector('button.button')?.textContent).toContain('Save campaign');
+    expect(toolbar?.textContent).toContain('Clear Unsaved Changes');
+    const save = [...(toolbar?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent.trim() === 'Save campaign',
+    );
+    const discard = [...(toolbar?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent.trim() === 'Clear Unsaved Changes',
+    );
+    expect(save?.disabled).toBe(true);
+    expect(discard?.disabled).toBe(true);
     expect(toolbar ? getComputedStyle(toolbar).position : '').toBe('sticky');
     expect(compiled.querySelector('app-campaign-map-preview img')?.getAttribute('src')).toContain(
       `/api/campaigns/${campaignId}/map?v=2`,
     );
+    http.verify();
+  });
+
+  it('enables save after an edit and can discard unsaved campaign changes', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      id: campaignId,
+      name: 'Border War',
+      description: 'A contested frontier.',
+      playerSlotCount: 8,
+      occupiedPlayerSlots: 1,
+      isPrivate: false,
+      isPubliclyViewable: true,
+      creatorIsParticipant: true,
+      city: null,
+      region: null,
+      country: null,
+      hasMap: true,
+      canManage: true,
+      isParticipant: true,
+      revision: 2,
+      createdUtc: '2026-08-13T00:00:00+00:00',
+      updatedUtc: '2026-08-13T00:00:00+00:00',
+      factions: [
+        {
+          id: '1',
+          name: 'North',
+          color: '#2563EB',
+          subfactions: [],
+          allyGroupName: null,
+          requiresSubfaction: false,
+          hasFlagImage: false,
+        },
+        {
+          id: '2',
+          name: 'South',
+          color: '#DC2626',
+          subfactions: [],
+          allyGroupName: null,
+          requiresSubfaction: false,
+          hasFlagImage: false,
+        },
+      ],
+      allyGroups: [],
+      links: [],
+      terrainTypes: [],
+      structureTypes: [],
+      timeZoneId: 'UTC',
+      startsAtLocal: '2099-01-05T12:00',
+      startsUtc: '2099-01-05T12:00:00+00:00',
+      endsUtc: '2099-03-02T12:00:00+00:00',
+      roundCount: 8,
+      roundLengthAmount: 1,
+      roundLengthUnit: 'Weeks',
+      phases: [
+        { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+        { kind: 'Action', durationAmount: 3, durationUnit: 'Days' },
+        { kind: 'Battle', durationAmount: 1, durationUnit: 'Days' },
+      ],
+      status: 'Scheduled',
+      currentRound: null,
+      currentPhaseNumber: null,
+      currentPhaseKind: null,
+      currentPhaseStartsUtc: null,
+      currentPhaseEndsUtc: null,
+      factionId: null,
+      subfaction: null,
+      canPlay: false,
+      canChooseFaction: false,
+      canChat: true,
+      mentionableMembers: [],
+      log: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      form: { controls: { name: { setValue(value: string): void; value: string } } };
+      discardUnsavedChanges: () => void;
+      hasUnsavedChanges: () => boolean;
+      collapseAllSections: () => void;
+    };
+    const name = compiled.querySelector<HTMLInputElement>('#name');
+    expect(name?.classList.contains('ng-dirty')).toBe(false);
+
+    page.form.controls.name.setValue('Frontier War');
+    fixture.detectChanges();
+    expect(page.hasUnsavedChanges()).toBe(true);
+    expect(name?.classList.contains('ng-dirty')).toBe(true);
+
+    const save = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Save campaign',
+    );
+    const discard = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Clear Unsaved Changes',
+    );
+    expect(save?.disabled).toBe(false);
+    expect(discard?.disabled).toBe(false);
+
+    page.collapseAllSections();
+    fixture.detectChanges();
+    const detailsToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
+      button.textContent.includes('Campaign details'),
+    );
+    expect(detailsToggle?.classList.contains('has-dirty')).toBe(true);
+
+    page.discardUnsavedChanges();
+    fixture.detectChanges();
+    expect(page.hasUnsavedChanges()).toBe(false);
+    expect(page.form.controls.name.value).toBe('Border War');
+    expect(save?.disabled).toBe(true);
+    expect(detailsToggle?.classList.contains('has-dirty')).toBe(false);
     http.verify();
   });
 

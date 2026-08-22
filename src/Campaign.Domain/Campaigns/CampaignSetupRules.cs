@@ -236,10 +236,14 @@ public static class CampaignSetupRules
     /// <param name="mostTerritoriesCampaignPoints">Points for most territories currently controlled. Zero ignores the objective.</param>
     /// <param name="longestTerritoryChainCampaignPoints">Points for the longest owned territory chain. Zero ignores the objective.</param>
     /// <param name="mostBattlesWonCampaignPoints">Points for most battle wins. Zero ignores the objective.</param>
+    /// <param name="mostStructurePointsCampaignPoints">Points for most structure campaign points. Zero ignores the objective.</param>
+    /// <param name="pointsPerTerritoryCampaignPoints">Points awarded for each currently owned territory. Zero ignores the objective.</param>
+    /// <param name="alliedRelicControlCampaignPoints">Points for each revealed relic held by an ally or faction-mate other than the player. Zero ignores the objective.</param>
     /// <param name="specialRules">Reusable special-rule inputs. Omitted or empty means none.</param>
     /// <param name="privateObjectiveTypes">Private-objective inputs. Omitted or empty means none.</param>
     /// <param name="forceStatuses">Force-status inputs other than Normal. Omitted or empty means none.</param>
-    /// <param name="splitForceSupplyPenaltyPercent">Percent subtracted from map-plus-round supply when a player has split forces.</param>
+    /// <param name="splitForceSupplyPenaltyPercent">Supply subtracted from map supply when a player has split forces.</param>
+    /// <param name="splitForceSupplyPenaltyIsPercent">Whether the split-force penalty is a percent of map supply. The default is a raw amount.</param>
     /// <param name="alwaysAskGeneralKill">Whether every battle report asks if the enemy general was slain.</param>
     /// <param name="alwaysAskSupplyLineDestroyed">Whether every battle report asks if the enemy supply line was destroyed.</param>
     /// <param name="generalKillCampaignPoints">Campaign points awarded for a slain enemy general.</param>
@@ -287,10 +291,14 @@ public static class CampaignSetupRules
         int? mostTerritoriesCampaignPoints = null,
         int? longestTerritoryChainCampaignPoints = null,
         int? mostBattlesWonCampaignPoints = null,
+        int? mostStructurePointsCampaignPoints = null,
+        int? pointsPerTerritoryCampaignPoints = null,
+        int? alliedRelicControlCampaignPoints = null,
         IReadOnlyList<SpecialRuleInput>? specialRules = null,
         IReadOnlyList<PrivateObjectiveTypeInput>? privateObjectiveTypes = null,
         IReadOnlyList<ForceStatusInput>? forceStatuses = null,
         int? splitForceSupplyPenaltyPercent = null,
+        bool? splitForceSupplyPenaltyIsPercent = null,
         bool? alwaysAskGeneralKill = null,
         bool? alwaysAskSupplyLineDestroyed = null,
         int? generalKillCampaignPoints = null,
@@ -340,8 +348,8 @@ public static class CampaignSetupRules
             collected.AddRange(locationErrors);
         }
 
-        var parsedGroups = ParseAllyGroups(allyGroups, collected);
         var usedIds = new HashSet<Guid>();
+        var parsedGroups = ParseAllyGroups(allyGroups, usedIds, collected);
         var missionIndex = new MissionIndex();
         var parsedSpecialRules = ParseSpecialRules(specialRules, usedIds, collected);
         var parsedForceStatuses = ParseForceStatuses(forceStatuses, usedIds, collected);
@@ -383,8 +391,12 @@ public static class CampaignSetupRules
             mostTerritoriesCampaignPoints,
             longestTerritoryChainCampaignPoints,
             mostBattlesWonCampaignPoints,
+            mostStructurePointsCampaignPoints,
+            pointsPerTerritoryCampaignPoints,
+            alliedRelicControlCampaignPoints,
             collected);
         var parsedSchedule = ParseSchedule(schedule, collected);
+        var parsedSplitForce = ParseSplitForcePenalty(splitForceSupplyPenaltyPercent, collected);
 
         if (collected.Count > 0)
         {
@@ -416,7 +428,8 @@ public static class CampaignSetupRules
             parsedSpecialRules,
             parsedPrivate,
             parsedForceStatuses,
-            ParseSplitForcePenalty(splitForceSupplyPenaltyPercent, collected),
+            parsedSplitForce,
+            splitForceSupplyPenaltyIsPercent ?? HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent,
             ParseBattleReportRules(
                 alwaysAskGeneralKill,
                 alwaysAskSupplyLineDestroyed,
@@ -526,7 +539,10 @@ public static class CampaignSetupRules
         return raw;
     }
 
-    private static List<AllyGroupSetup> ParseAllyGroups(IReadOnlyList<AllyGroupInput>? allyGroups, List<DomainError> errors)
+    private static List<AllyGroupSetup> ParseAllyGroups(
+        IReadOnlyList<AllyGroupInput>? allyGroups,
+        HashSet<Guid> usedIds,
+        List<DomainError> errors)
     {
         var parsed = new List<AllyGroupSetup>();
         if (allyGroups is null || allyGroups.Count == 0)
@@ -576,7 +592,10 @@ public static class CampaignSetupRules
                 continue;
             }
 
-            parsed.Add(new AllyGroupSetup(name, color));
+            parsed.Add(new AllyGroupSetup(
+                ResolveId(allyGroups[index].Id, usedIds, $"allyGroups[{index}].id", errors),
+                name,
+                color));
         }
 
         return parsed;
@@ -609,6 +628,7 @@ public static class CampaignSetupRules
         }
 
         var groupNames = allyGroups.Select(group => group.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var groupsById = allyGroups.ToDictionary(static group => group.Id);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usedColors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < factions.Count; index++)
@@ -632,17 +652,7 @@ public static class CampaignSetupRules
                 errors);
 
             var subfactions = ParseSubfactions(faction.Subfactions, index, errors);
-            var allyGroupName = string.IsNullOrWhiteSpace(faction.AllyGroupName)
-                ? null
-                : faction.AllyGroupName.Trim();
-            if (allyGroupName is not null && !groupNames.Contains(allyGroupName))
-            {
-                errors.Add(new DomainError(
-                    "factions.ally_group.unknown",
-                    $"Faction {index + 1} references an ally group that was not created.",
-                    $"factions[{index}].allyGroupName"));
-                allyGroupName = null;
-            }
+            var allyGroupName = ResolveAllyGroupName(faction, allyGroups, groupsById, groupNames, index, errors);
 
             if (name is null || color is null)
             {
@@ -1153,10 +1163,52 @@ public static class CampaignSetupRules
             allowNegative ?? false);
     }
 
+    private static string? ResolveAllyGroupName(
+        FactionInput faction,
+        IReadOnlyList<AllyGroupSetup> allyGroups,
+        Dictionary<Guid, AllyGroupSetup> groupsById,
+        HashSet<string> groupNames,
+        int index,
+        List<DomainError> errors)
+    {
+        if (faction.AllyGroupId is { } groupId && groupId != Guid.Empty)
+        {
+            if (groupsById.TryGetValue(groupId, out var byId))
+            {
+                return byId.Name;
+            }
+
+            errors.Add(new DomainError(
+                "factions.ally_group.unknown",
+                $"Faction {index + 1} references an ally group that was not created.",
+                $"factions[{index}].allyGroupId"));
+            return null;
+        }
+
+        var allyGroupName = string.IsNullOrWhiteSpace(faction.AllyGroupName)
+            ? null
+            : faction.AllyGroupName.Trim();
+        if (allyGroupName is not null && !groupNames.Contains(allyGroupName))
+        {
+            errors.Add(new DomainError(
+                "factions.ally_group.unknown",
+                $"Faction {index + 1} references an ally group that was not created.",
+                $"factions[{index}].allyGroupName"));
+            return null;
+        }
+
+        return allyGroupName is null
+            ? null
+            : allyGroups.First(group => string.Equals(group.Name, allyGroupName, StringComparison.OrdinalIgnoreCase)).Name;
+    }
+
     private static GeneralPublicObjectivePoints ParseRankingObjectives(
         int? mostTerritories,
         int? longestChain,
         int? mostBattlesWon,
+        int? mostStructurePoints,
+        int? pointsPerTerritory,
+        int? alliedRelicControlPoints,
         List<DomainError> errors)
     {
         return new GeneralPublicObjectivePoints(
@@ -1174,6 +1226,21 @@ public static class CampaignSetupRules
                 mostBattlesWon,
                 "mostBattlesWonCampaignPoints",
                 "Most battles won campaign points",
+                errors),
+            ParseCampaignPoints(
+                mostStructurePoints,
+                "mostStructurePointsCampaignPoints",
+                "Most structure points campaign points",
+                errors),
+            ParseCampaignPoints(
+                pointsPerTerritory,
+                "pointsPerTerritoryCampaignPoints",
+                "Points per territory",
+                errors),
+            ParseCampaignPoints(
+                alliedRelicControlPoints,
+                "alliedRelicControlCampaignPoints",
+                "Allied relic control campaign points",
                 errors));
     }
 
@@ -1272,16 +1339,16 @@ public static class CampaignSetupRules
     {
         if (value is null)
         {
-            return HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
+            return HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue;
         }
 
         if (value < 0 || value > 100)
         {
             errors.Add(new DomainError(
                 "splitForceSupplyPenaltyPercent.invalid",
-                "The split-force supply penalty must be between 0 and 100 percent.",
+                "The split-force supply penalty must be between 0 and 100.",
                 "splitForceSupplyPenaltyPercent"));
-            return HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
+            return HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue;
         }
 
         return value.Value;

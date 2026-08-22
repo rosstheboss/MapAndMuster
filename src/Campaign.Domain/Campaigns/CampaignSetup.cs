@@ -30,7 +30,8 @@ public sealed class CampaignSetup
     /// <param name="specialRules">Reusable special rules. Empty means none.</param>
     /// <param name="privateObjectiveTypes">Private campaign objectives. Empty means none.</param>
     /// <param name="forceStatuses">Configured force statuses other than Normal. Empty means none.</param>
-    /// <param name="splitForceSupplyPenaltyPercent">Percent subtracted from map-plus-round supply when a player has split forces.</param>
+    /// <param name="splitForceSupplyPenaltyPercent">Supply subtracted from map supply when a player has split forces. Percent or raw, depending on <paramref name="splitForceSupplyPenaltyIsPercent"/>.</param>
+    /// <param name="splitForceSupplyPenaltyIsPercent">Whether the split-force penalty is a percent of map supply. The default is a raw amount.</param>
     /// <param name="battleReportRules">Always-asked battle-report questions and their campaign points.</param>
     /// <param name="missions">Reusable missions. Empty means only nested terrain and structure missions.</param>
     public CampaignSetup(
@@ -57,6 +58,7 @@ public sealed class CampaignSetup
         IReadOnlyList<PrivateObjectiveTypeSetup>? privateObjectiveTypes = null,
         IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
         int? splitForceSupplyPenaltyPercent = null,
+        bool splitForceSupplyPenaltyIsPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent,
         BattleReportRulesSetup? battleReportRules = null,
         IReadOnlyList<MissionSetup>? missions = null)
     {
@@ -91,7 +93,8 @@ public sealed class CampaignSetup
         PrivateObjectiveTypes = privateObjectiveTypes ?? [];
         ForceStatuses = forceStatuses ?? [];
         SplitForceSupplyPenaltyPercent = splitForceSupplyPenaltyPercent
-            ?? HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
+            ?? HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue;
+        SplitForceSupplyPenaltyIsPercent = splitForceSupplyPenaltyIsPercent;
         BattleReportRules = battleReportRules ?? BattleReportRulesSetup.Default;
         Missions = missions ?? [];
     }
@@ -159,8 +162,11 @@ public sealed class CampaignSetup
     /// <summary>Gets configured force statuses other than Normal. Empty means none.</summary>
     public IReadOnlyList<ForceStatusSetup> ForceStatuses { get; }
 
-    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int SplitForceSupplyPenaltyPercent { get; }
+
+    /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
+    public bool SplitForceSupplyPenaltyIsPercent { get; }
 
     /// <summary>Gets always-asked battle-report questions and their campaign points.</summary>
     public BattleReportRulesSetup BattleReportRules { get; }

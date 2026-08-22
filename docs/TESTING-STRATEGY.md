@@ -62,7 +62,13 @@ Cover components/services for:
 - Order drafting from the map menu or force-panel checkmark, commit only when every required draft is saved, uncommit, and locked state.
 - Countdown display without treating the browser clock as authoritative.
 - Map territory selection, force markers, polygon editing including Close Territory enclose and
-  shared-border versus overhang checks, move drop validity, keyboard alternatives, and metadata forms.
+  shared-border versus overlapping-interior checks, move drop validity, keyboard alternatives,
+  collapsible territory fields and list, overlay and connection visibility toggles, selected-territory
+  dimming, black connection arrows without size or outline changes, spawn ownership copy, required-
+  subfaction spawn labels, disabled no-fixed-spawn factions, save-status check and X, and metadata forms.
+  The map editor does not show hover-placeholder copy above the map, and hovering or selecting a
+  territory does not change that field panel's height. The expanded Territories list stays within the
+  map column height, scrolls vertically, and scrolls the topmost selected territory into view.
   Administrators can save as a preset from the map editor; the save-name lookup includes The Hunt in
   Estalia.
 - Permission-based navigation without relying on it as backend security.

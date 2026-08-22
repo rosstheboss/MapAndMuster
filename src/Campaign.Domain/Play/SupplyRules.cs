@@ -28,7 +28,10 @@ public static class SupplyRules
         var mapAfterPenalty = isSplit
             ? Math.Max(
                 HuntInEstaliaDefaults.SplitForceMinimumMapSupply,
-                mapSupply - SplitPenalty(mapSupply, catalog.SplitForceSupplyPenaltyPercent))
+                mapSupply - SplitPenalty(
+                    mapSupply,
+                    catalog.SplitForceSupplyPenaltyPercent,
+                    catalog.SplitForceSupplyPenaltyIsPercent))
             : mapSupply;
         if (isSplit && mapSupply <= 0)
         {
@@ -279,14 +282,19 @@ public static class SupplyRules
         return best?.Id ?? spawn?.Id ?? force.TerritoryId;
     }
 
-    internal static int SplitPenalty(int baseSupply, int percent)
+    internal static int SplitPenalty(int baseSupply, int value, bool isPercent)
     {
-        if (baseSupply <= 0 || percent <= 0)
+        if (baseSupply <= 0 || value <= 0)
         {
             return 0;
         }
 
-        return (int)Math.Floor(baseSupply * (percent / 100m));
+        if (!isPercent)
+        {
+            return Math.Min(baseSupply, value);
+        }
+
+        return (int)Math.Floor(baseSupply * (value / 100m));
     }
 
     private static RoundArmyEscalationSetup EscalationFor(

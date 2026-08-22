@@ -2,7 +2,9 @@ import type { RoundArmyEscalationRow } from './army-escalation-defaults';
 
 export type HuntRoundEscalation = RoundArmyEscalationRow;
 
-export const HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT = 25;
+export const HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_VALUE = 1;
+
+export const HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_IS_PERCENT = false;
 
 export const HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS = 1;
 

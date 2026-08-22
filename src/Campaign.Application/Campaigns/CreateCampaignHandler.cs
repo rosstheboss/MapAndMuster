@@ -76,10 +76,14 @@ public sealed class CreateCampaignHandler
                 command.MostTerritoriesCampaignPoints,
                 command.LongestTerritoryChainCampaignPoints,
                 command.MostBattlesWonCampaignPoints,
+                command.MostStructurePointsCampaignPoints,
+                command.PointsPerTerritoryCampaignPoints,
+                command.AlliedRelicControlCampaignPoints,
                 command.SpecialRules,
                 command.PrivateObjectiveTypes,
                 command.ForceStatuses,
                 command.SplitForceSupplyPenaltyPercent,
+                command.SplitForceSupplyPenaltyIsPercent,
                 command.AlwaysAskGeneralKill,
                 command.AlwaysAskSupplyLineDestroyed,
                 command.GeneralKillCampaignPoints,
@@ -202,10 +206,14 @@ public sealed class UpdateCampaignHandler
                 command.MostTerritoriesCampaignPoints,
                 command.LongestTerritoryChainCampaignPoints,
                 command.MostBattlesWonCampaignPoints,
+                command.MostStructurePointsCampaignPoints,
+                command.PointsPerTerritoryCampaignPoints,
+                command.AlliedRelicControlCampaignPoints,
                 command.SpecialRules,
                 command.PrivateObjectiveTypes,
                 command.ForceStatuses,
                 command.SplitForceSupplyPenaltyPercent,
+                command.SplitForceSupplyPenaltyIsPercent,
                 command.AlwaysAskGeneralKill,
                 command.AlwaysAskSupplyLineDestroyed,
                 command.GeneralKillCampaignPoints,
@@ -318,7 +326,7 @@ internal static class CampaignPersistenceFactory
         var allyGroups = setup.AllyGroups
             .Select(group => new StoredAllyGroup
             {
-                Id = Guid.NewGuid(),
+                Id = group.Id,
                 Name = group.Name,
                 Color = group.Color,
             })
@@ -395,6 +403,7 @@ internal static class CampaignPersistenceFactory
             BattleScoring = setup.BattleScoring,
             RankingObjectivePoints = setup.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = setup.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = setup.SplitForceSupplyPenaltyIsPercent,
             BattleReportRules = setup.BattleReportRules,
             ArmyEscalations = setup.Schedule.ArmyEscalations,
         };

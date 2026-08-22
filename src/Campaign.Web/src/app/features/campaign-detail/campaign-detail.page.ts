@@ -183,6 +183,7 @@ export class CampaignDetailPage {
   protected readonly drafts = signal<Record<string, OrderDraft>>({});
   protected readonly debugDrafts = signal<Record<string, OrderDraft>>({});
   protected readonly mapAction = signal<MapActionFlow | null>(null);
+  protected readonly mapFocus = signal<{ kind: 'player' | 'faction' | 'ally'; id: string } | null>(null);
   protected readonly battleWinner = signal<Record<string, string>>({});
   protected readonly battleScores = signal<
     Partial<Record<string, { winnerScore: number | null; loserScore: number | null }>>
@@ -276,6 +277,10 @@ export class CampaignDetailPage {
 
     const territory = this.graph().territories.find((item) => item.spawnFactionId === factionId);
     return territory ? territoryLabel(territory) : null;
+  });
+  protected readonly focusedForceIds = computed(() => {
+    const focus = this.mapFocus();
+    return focus ? this.forcesForFocus(focus).map((force) => force.id) : [];
   });
   protected readonly mapForces = computed((): MapForceMarker[] => {
     const play = this.play();
@@ -736,7 +741,9 @@ export class CampaignDetailPage {
   }
 
   protected onTerritorySelect(event: { id: string; additive: boolean; clientX?: number; clientY?: number }): void {
-    if (this.handleMapActionSelect(event)) {
+    const handled = this.handleMapActionSelect(event);
+    this.mapFocus.set(null);
+    if (handled) {
       return;
     }
 
@@ -754,6 +761,88 @@ export class CampaignDetailPage {
   protected onMapBackgroundSelect(): void {
     this.cancelMapAction();
     this.selectedIds.set([]);
+    this.mapFocus.set(null);
+  }
+
+  protected isMapFocused(kind: 'player' | 'faction' | 'ally', id: string): boolean {
+    const focus = this.mapFocus();
+    return focus?.kind === kind && focus.id === id;
+  }
+
+  protected focusOnMap(kind: 'player' | 'faction' | 'ally', id: string): void {
+    if (this.mapAction()) {
+      return;
+    }
+
+    const current = this.mapFocus();
+    if (current?.kind === kind && current.id === id) {
+      this.mapFocus.set(null);
+      this.selectedIds.set([]);
+      return;
+    }
+
+    this.mapFocus.set({ kind, id });
+    this.selectedIds.set(this.territoriesForFocus({ kind, id }));
+  }
+
+  protected allyGroupIdByName(name: string | null | undefined): string | null {
+    if (!name) {
+      return null;
+    }
+
+    return this.campaign()?.allyGroups.find((group) => group.name === name)?.id ?? null;
+  }
+
+  private territoriesForFocus(focus: { kind: 'player' | 'faction' | 'ally'; id: string }): string[] {
+    const factionIds = this.factionIdsForFocus(focus);
+    const forceTerritoryIds = this.forcesForFocus(focus).map((force) => force.territoryId);
+    const ownedIds = this.graph()
+      .territories.filter((territory) => territory.ownerFactionId && factionIds.includes(territory.ownerFactionId))
+      .map((territory) => territory.id);
+    return [...new Set([...ownedIds, ...forceTerritoryIds])];
+  }
+
+  private forcesForFocus(focus: { kind: 'player' | 'faction' | 'ally'; id: string }): PlayForce[] {
+    const forces = this.play()?.forces ?? [];
+    if (focus.kind === 'player') {
+      return forces.filter((force) => force.controllerUserId === focus.id);
+    }
+
+    const factionIds = this.factionIdsForFocus(focus);
+    return forces.filter((force) => factionIds.includes(force.factionId));
+  }
+
+  private factionIdsForFocus(focus: { kind: 'player' | 'faction' | 'ally'; id: string }): string[] {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return [];
+    }
+
+    if (focus.kind === 'faction') {
+      return [focus.id];
+    }
+
+    if (focus.kind === 'ally') {
+      const group = campaign.allyGroups.find((item) => item.id === focus.id);
+      return campaign.factions
+        .filter((faction) => faction.allyGroupId === focus.id || (!!group && faction.allyGroupName === group.name))
+        .map((faction) => faction.id);
+    }
+
+    const participant = campaign.participants?.find((item) => item.userId === focus.id);
+    if (participant?.factionId) {
+      return [participant.factionId];
+    }
+
+    if (participant?.factionName) {
+      const faction = campaign.factions.find((item) => item.name === participant.factionName);
+      return faction ? [faction.id] : [];
+    }
+
+    const standingFactionId = (this.play()?.standings ?? campaign.standings ?? []).find(
+      (row) => row.userId === focus.id,
+    )?.factionId;
+    return standingFactionId ? [standingFactionId] : [];
   }
 
   protected factionName(id: string | null | undefined): string {
@@ -1462,6 +1551,8 @@ export class CampaignDetailPage {
         return 'Longest territory chain';
       case 'MostBattlesWon':
         return 'Most battles won';
+      case 'MostStructurePoints':
+        return 'Most structure points';
       default:
         return kind;
     }
@@ -1474,6 +1565,10 @@ export class CampaignDetailPage {
 
     if (kind === 'LongestTerritoryChain') {
       return `${leader.metric} territories in chain`;
+    }
+
+    if (kind === 'MostStructurePoints') {
+      return `${leader.metric} structure points`;
     }
 
     return `${leader.metric} territories`;
@@ -2146,7 +2241,9 @@ export class CampaignDetailPage {
         structureCondition: normalizeStructureCondition(territory.structureTypeId, territory.structureCondition),
         overlayColor: territory.overlayColor,
         ownerFactionId: territory.ownerFactionId,
+        ownerSubfaction: territory.ownerSubfaction ?? null,
         spawnFactionId: territory.spawnFactionId,
+        spawnSubfaction: territory.spawnSubfaction ?? null,
       })),
       adjacencies: graph.adjacencies.map((edge) => ({
         id: edge.id,

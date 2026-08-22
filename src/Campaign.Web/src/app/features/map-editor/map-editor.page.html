@@ -93,79 +93,55 @@
     } @else if (mapSrc(); as mapUrl) {
       @if (canManage()) {
         <div class="toolbar panel">
-          <div class="tool-group" role="radiogroup" aria-label="Map tools">
-            @for (item of drawTools; track item) {
-              <button
-                type="button"
-                class="button-secondary"
-                role="radio"
-                [attr.aria-checked]="tool() === item"
-                [class.is-active]="tool() === item"
-                (click)="onToolChange(item)"
-              >
-                {{ toolLabel(item) }}
+          <div class="tool-row">
+            <div class="tool-toggle-group" role="radiogroup" aria-label="Map tools">
+              @for (item of mapTools; track item) {
+                <button
+                  type="button"
+                  class="button-secondary"
+                  role="radio"
+                  [attr.aria-checked]="tool() === item"
+                  [class.is-active]="tool() === item"
+                  (click)="onToolChange(item)"
+                >
+                  {{ toolLabel(item) }}
+                </button>
+              }
+            </div>
+            <div class="tool-group">
+              <button type="button" class="button-secondary" (click)="undo()" [disabled]="!canUndo()">Undo</button>
+              <button type="button" class="button-secondary" (click)="redo()" [disabled]="!canRedoHistory()">
+                Redo
               </button>
-            }
-            <button type="button" class="button-secondary" (click)="undo()" [disabled]="!canUndo()">Undo</button>
-            <button type="button" class="button-secondary" (click)="redo()" [disabled]="!canRedoHistory()">Redo</button>
-            <button type="button" class="button-secondary" (click)="closePolygon()" [disabled]="drawing().length < 2">
-              Close Territory
-            </button>
-            <button
-              type="button"
-              class="button-secondary"
-              (click)="cancelDrawing()"
-              [disabled]="drawing().length === 0"
-            >
-              Cancel Drawing
-            </button>
+              <button type="button" class="button-secondary" (click)="closePolygon()" [disabled]="drawing().length < 2">
+                Close Territory
+              </button>
+            </div>
           </div>
-          <div class="tool-group" role="radiogroup" aria-label="Connections">
-            <button
-              type="button"
-              class="button-secondary"
-              role="radio"
-              [attr.aria-checked]="tool() === 'connect'"
-              [class.is-active]="tool() === 'connect'"
-              (click)="onConnectClick()"
-            >
-              Connect
+          <div class="tool-group">
+            <button type="button" class="button-secondary" (click)="generateConnections()">
+              Auto Generate Connections
             </button>
-            <button type="button" class="button" (click)="generateConnections()">Auto Generate Connections</button>
             <button type="button" class="button-secondary" (click)="clearConnections()">Clear Connections</button>
           </div>
-          <div class="tool-group" role="radiogroup" aria-label="Overlay color mode">
-            <button
-              type="button"
-              class="button-secondary"
-              role="radio"
-              [attr.aria-checked]="colorMode() === 'random'"
-              [class.is-active]="colorMode() === 'random'"
-              (click)="colorRandom()"
-            >
-              Random Colors
-            </button>
-            <button
-              type="button"
-              class="button-secondary"
-              role="radio"
-              [attr.aria-checked]="colorMode() === 'terrain'"
-              [class.is-active]="colorMode() === 'terrain'"
-              (click)="colorByTerrain()"
-            >
-              Color By Terrain
-            </button>
-            <button
-              type="button"
-              class="button-secondary"
-              role="radio"
-              [attr.aria-checked]="colorMode() === 'manual'"
-              [class.is-active]="colorMode() === 'manual'"
-              (click)="colorManual()"
-            >
-              Manual Colors
-            </button>
-            <button type="button" class="button-secondary" (click)="colorClear()">Remove Colors</button>
+          <div class="tool-row">
+            <div class="tool-toggle-group" role="radiogroup" aria-label="Overlay color mode">
+              @for (mode of colorModes; track mode) {
+                <button
+                  type="button"
+                  class="button-secondary"
+                  role="radio"
+                  [attr.aria-checked]="colorMode() === mode"
+                  [class.is-active]="colorMode() === mode"
+                  (click)="setColorMode(mode)"
+                >
+                  {{ colorModeLabel(mode) }}
+                </button>
+              }
+            </div>
+            <div class="tool-group">
+              <button type="button" class="button-secondary" (click)="colorClear()">Remove Colors</button>
+            </div>
           </div>
           <div class="tool-group">
             <button type="button" class="button" (click)="save()" [disabled]="saving() || !hasUnsavedEdits()">
@@ -179,357 +155,411 @@
             >
               Clear Unsaved Changes
             </button>
+            @if (saveStatus() === 'success') {
+              <app-icon class="save-status is-success" name="check" label="Map saved" />
+            } @else if (saveStatus() === 'failure') {
+              <app-icon class="save-status is-failure" name="x" label="Map save failed" />
+            }
             @if (lastSavedAtUtc(); as savedAt) {
               <p class="muted last-saved">Last saved {{ savedAt | instantDate: campaign()?.timeZoneId }}</p>
             }
           </div>
         </div>
-        <p class="muted">
-          Draw on the overlay, not the image. Click to place segments; a ring highlights when a line is about to
-          connect. If two endpoints land on the same open border of an existing territory, that border is traced when
-          you release the mouse. Press Close Territory or Enter to close the current drawing, including trying to close
-          along a touched border or the map image edge. Click near the first point to close a drawn loop. Press Escape
-          to cancel, Delete to remove selected territories, Ctrl+Z to undo, and Ctrl+Y or Ctrl+Shift+Z to redo.
-          Ctrl+click selects multiple territories; in Select mode, drag a box to multi-select, or drag selected
-          territories to move them. A moving group is green with a checkmark when it can be dropped, or red with an X
-          when it cannot; dropping while red restores the group to where the drag started. Select two territories and
-          click Connect, or use the Connect tool and click two territories; a pair can have only one connection. In
-          Select, click a connection arrow to edit it; in Erase, click an arrow to delete it. Drawing ignores connection
-          arrows. Hovering an arrow in Select or Erase glows that arrow and its two territories. Hold right-click or
-          middle-click and drag to pan; the mouse wheel always zooms. Left-click does not pan. Drawing stays aligned to
-          the full-size map. Click empty map to clear the selection. Use the territory list to select without a pointer.
-        </p>
       }
 
-      <div class="editor-layout">
-        <div class="map-pane">
-          <app-campaign-map-view
-            [imageUrl]="mapUrl"
-            [territories]="graph().territories"
-            [adjacencies]="graph().adjacencies"
-            [drawingPoints]="drawing()"
-            [snapTarget]="snapTarget()"
-            [selectedTerritoryIds]="selectedIds()"
-            [hoveredTerritoryId]="hoveredTerritoryId()"
-            [hoveredAdjacencyId]="hoveredAdjacencyId()"
-            [selectedAdjacencyId]="selectedAdjacencyId()"
-            [adjacentTerritoryIds]="adjacentTerritoryIds()"
-            [showAdjacencies]="true"
-            [adjacenciesInteractive]="tool() === 'select' || tool() === 'erase'"
-            [interactive]="true"
-            [moveTerritories]="tool() === 'select'"
-            [movePlacement]="movePlacement()"
-            [marqueeSelect]="tool() === 'select'"
-            [factions]="campaign()?.factions ?? []"
-            [structures]="campaign()?.structureTypes ?? []"
-            [structureImageUrl]="structureImageUrl"
-            [flagImageUrl]="flagImageUrl"
-            (mapPoint)="onMapPoint($event)"
-            (mapHover)="onMapHover($event)"
-            (territoryHover)="onTerritoryHover($event)"
-            (adjacencyHover)="onAdjacencyHover($event)"
-            (territorySelect)="onTerritorySelect($event)"
-            (territoryMarquee)="onTerritoryMarquee($event)"
-            (adjacencySelect)="onAdjacencySelect($event)"
-            (backgroundSelect)="onBackground()"
-            (territoryMove)="onTerritoryMove($event)"
-            (territoryMoveEnd)="onTerritoryMoveEnd()"
-          />
-        </div>
-
-        <aside class="side-pane panel stack" aria-live="polite">
-          @if (selectedAdjacency(); as connection) {
-            <h2>Connection</h2>
-            <p>
-              {{ labelForId(connection.territoryAId) }}
-              ·
-              {{ labelForId(connection.territoryBId) }}
-            </p>
-            @if (canManage()) {
-              <form class="stack" (submit)="$event.preventDefault()">
-                <div class="field">
-                  <label for="connection-territory-a">Territory A</label>
-                  <select
-                    id="connection-territory-a"
-                    [ngModel]="connection.territoryAId"
-                    [ngModelOptions]="{ standalone: true }"
-                    (ngModelChange)="setAdjacencyEnd('a', $event)"
-                  >
-                    @for (territory of sortedTerritories(); track territory.id) {
-                      <option [value]="territory.id">{{ labelFor(territory) }}</option>
-                    }
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="connection-territory-b">Territory B</label>
-                  <select
-                    id="connection-territory-b"
-                    [ngModel]="connection.territoryBId"
-                    [ngModelOptions]="{ standalone: true }"
-                    (ngModelChange)="setAdjacencyEnd('b', $event)"
-                  >
-                    @for (territory of sortedTerritories(); track territory.id) {
-                      <option [value]="territory.id">{{ labelFor(territory) }}</option>
-                    }
-                  </select>
-                </div>
-                <button type="button" class="button-secondary" (click)="deleteSelectedAdjacency()">
-                  Delete connection
-                </button>
-              </form>
-            }
-          } @else if (selectedTerritories().length > 1) {
-            <h2>Selected territories</h2>
-            <ul class="plain-list">
-              @for (territory of selectedTerritories(); track territory.id) {
-                <li>{{ labelFor(territory) }}</li>
-              }
-            </ul>
-            @if (canManage()) {
-              <button type="button" class="button-secondary" (click)="deleteSelectedTerritories()">
-                {{ deleteLabel() }}
-              </button>
-            }
-          } @else {
-            <h2>Territory</h2>
-            @if (inspected(); as territory) {
-              <dl class="meta">
-                <div>
-                  <dt>Name</dt>
-                  <dd>{{ labelFor(territory) }}</dd>
-                </div>
-                <div>
-                  <dt>Description</dt>
-                  <dd>{{ territory.description || 'None' }}</dd>
-                </div>
-                <div>
-                  <dt>Terrain</dt>
-                  <dd>
-                    @if (terrainSymbol(territory.terrainTypeId); as symbol) {
-                      <app-map-symbol kind="terrain" [name]="symbol" [label]="terrainName(territory.terrainTypeId)" />
-                      {{ terrainName(territory.terrainTypeId) }}
-                    } @else {
-                      None
-                    }
-                  </dd>
-                </div>
-                <div>
-                  <dt>Structure</dt>
-                  <dd>
-                    @if (territory.structureTypeId) {
-                      @if (structureSymbol(territory.structureTypeId); as symbol) {
-                        <app-map-symbol
-                          kind="structure"
-                          [name]="symbol"
-                          [label]="structureName(territory.structureTypeId)"
-                          [pillaged]="territory.structureCondition === 'Pillaged'"
-                        />
-                      }
-                      {{ structureName(territory.structureTypeId)
-                      }}{{ territory.structureCondition === 'Pillaged' ? ' (pillaged)' : '' }}
-                    } @else {
-                      None
-                    }
-                  </dd>
-                </div>
-                <div>
-                  <dt>Missions</dt>
-                  <dd>
-                    @if (inspectedMissions().length > 0) {
-                      <ul class="plain-list">
-                        @for (mission of inspectedMissions(); track mission.id) {
-                          <li>
-                            @if (mission.url) {
-                              <a [href]="mission.url" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
-                            } @else if (missionFileUrl(mission); as href) {
-                              <a [href]="href" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
-                            } @else {
-                              {{ mission.name }}
-                            }
-                          </li>
-                        }
-                      </ul>
-                    } @else {
-                      None
-                    }
-                  </dd>
-                </div>
-                <div>
-                  <dt>Ownership</dt>
-                  <dd
-                    [class.app-glow]="!!territory.ownerFactionId"
-                    [style.--glow-color]="territory.overlayColor || null"
-                  >
-                    {{ factionName(territory.ownerFactionId) }}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Spawn location faction</dt>
-                  <dd [class.app-glow]="!!territory.spawnFactionId">
-                    {{ territory.spawnFactionId ? factionName(territory.spawnFactionId) : 'None' }}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Adjacent territories</dt>
-                  <dd>{{ adjacentLabels(territory) }}</dd>
-                </div>
-              </dl>
-
-              @if (canManage() && selected(); as selected) {
-                <form class="stack" (submit)="$event.preventDefault()">
-                  <div class="field">
-                    <label for="territory-name">Name (optional, unique)</label>
-                    <input
-                      id="territory-name"
-                      maxlength="60"
-                      [ngModel]="selected.name ?? ''"
-                      [ngModelOptions]="{ standalone: true }"
-                      (ngModelChange)="setName($event)"
-                    />
-                  </div>
-                  <div class="field">
-                    <label for="territory-description">Description (optional)</label>
-                    <textarea
-                      id="territory-description"
-                      maxlength="500"
-                      rows="3"
-                      [ngModel]="selected.description ?? ''"
-                      [ngModelOptions]="{ standalone: true }"
-                      (ngModelChange)="setDescription($event)"
-                    ></textarea>
-                  </div>
-                  <div class="field">
-                    <label for="territory-terrain">Terrain type</label>
-                    <select
-                      id="territory-terrain"
-                      [ngModel]="selected.terrainTypeId"
-                      [ngModelOptions]="{ standalone: true }"
-                      (ngModelChange)="setTerrain($event)"
-                    >
-                      @for (terrain of catalogTerrains(); track terrain.id) {
-                        <option [value]="terrain.id">{{ terrain.name }}</option>
-                      }
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="territory-structure">Structure (optional)</label>
-                    <select
-                      id="territory-structure"
-                      [ngModel]="selected.structureTypeId ?? ''"
-                      [ngModelOptions]="{ standalone: true }"
-                      (ngModelChange)="setStructure($event)"
-                    >
-                      <option value="">None</option>
-                      @for (structure of catalogStructures(); track structure.id) {
-                        <option [value]="structure.id">{{ structure.name }}</option>
-                      }
-                    </select>
-                  </div>
-                  @if (selected.structureTypeId) {
-                    <div class="field">
-                      <label for="territory-structure-condition">Structure condition</label>
-                      <select
-                        id="territory-structure-condition"
-                        [ngModel]="selected.structureCondition"
-                        [ngModelOptions]="{ standalone: true }"
-                        (ngModelChange)="setStructureCondition($event)"
-                      >
-                        <option value="Operational">Operational</option>
-                        <option value="Pillaged">Pillaged</option>
-                      </select>
-                    </div>
+      <div class="editor-layout" [class.is-list-collapsed]="territoryListCollapsed()">
+        <div class="map-column">
+          <div class="territory-editor panel">
+            <button
+              type="button"
+              class="section-toggle"
+              [class.has-dirty]="editorFieldsDirty() && editorFieldsCollapsed()"
+              [attr.aria-expanded]="!editorFieldsCollapsed()"
+              (click)="toggleEditorFields()"
+            >
+              {{ editorHeading() }}
+            </button>
+            @if (!editorFieldsCollapsed()) {
+              <div class="territory-editor-body">
+                @if (selectedAdjacency(); as connection) {
+                  <p>
+                    {{ labelForId(connection.territoryAId) }}
+                    ·
+                    {{ labelForId(connection.territoryBId) }}
+                  </p>
+                  @if (canManage()) {
+                    <form class="territory-editor-fields" (submit)="$event.preventDefault()">
+                      <div class="field" [class.is-dirty]="isAdjacencyFieldDirty('a')">
+                        <label for="connection-territory-a">Territory A</label>
+                        <select
+                          id="connection-territory-a"
+                          [ngModel]="connection.territoryAId"
+                          [ngModelOptions]="{ standalone: true }"
+                          (ngModelChange)="setAdjacencyEnd('a', $event)"
+                        >
+                          @for (territory of sortedTerritories(); track territory.id) {
+                            <option [value]="territory.id">{{ labelFor(territory) }}</option>
+                          }
+                        </select>
+                      </div>
+                      <div class="field" [class.is-dirty]="isAdjacencyFieldDirty('b')">
+                        <label for="connection-territory-b">Territory B</label>
+                        <select
+                          id="connection-territory-b"
+                          [ngModel]="connection.territoryBId"
+                          [ngModelOptions]="{ standalone: true }"
+                          (ngModelChange)="setAdjacencyEnd('b', $event)"
+                        >
+                          @for (territory of sortedTerritories(); track territory.id) {
+                            <option [value]="territory.id">{{ labelFor(territory) }}</option>
+                          }
+                        </select>
+                      </div>
+                      <button type="button" class="button-secondary" (click)="deleteSelectedAdjacency()">
+                        Delete connection
+                      </button>
+                    </form>
                   }
-                  <div class="field">
-                    <label for="territory-owner">Ownership</label>
-                    <select
-                      id="territory-owner"
-                      [ngModel]="selected.ownerFactionId ?? ''"
-                      [ngModelOptions]="{ standalone: true }"
-                      (ngModelChange)="setOwner($event)"
-                    >
-                      <option value="">Neutral</option>
-                      @for (faction of sortedFactions(); track faction.id) {
-                        <option [value]="faction.id">{{ faction.name }}</option>
-                      }
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="territory-spawn">Spawn location faction</label>
-                    <select
-                      id="territory-spawn"
-                      [ngModel]="selected.spawnFactionId ?? ''"
-                      [ngModelOptions]="{ standalone: true }"
-                      (ngModelChange)="setSpawn($event)"
-                    >
-                      <option value="">None</option>
-                      @for (faction of sortedFactions(); track faction.id) {
-                        <option [value]="faction.id" [disabled]="spawnTaken(faction.id)">{{ faction.name }}</option>
-                      }
-                    </select>
-                  </div>
-                  @if (placedItemTypes().length > 0 && selectedIds().length === 1) {
-                    <fieldset class="field">
-                      <legend>Placed item objectives</legend>
-                      @for (type of placedItemTypes(); track type.id) {
-                        <label class="choice-row">
-                          <input
-                            type="checkbox"
-                            [id]="'item-place-' + type.id"
-                            [ngModel]="isItemPlacedHere(type.id)"
-                            [ngModelOptions]="{ standalone: true }"
-                            (ngModelChange)="setItemPlacedHere(type.id, $event)"
-                          />
-                          Place {{ type.name }} here
-                        </label>
-                        <p class="muted">Currently: {{ itemPlacementLabel(type.id) }}</p>
-                      }
-                    </fieldset>
-                  }
-                  <div class="field">
-                    <label for="territory-color">Overlay color</label>
-                    <input
-                      id="territory-color"
-                      type="color"
-                      [ngModel]="selected.overlayColor ?? '#888888'"
-                      [ngModelOptions]="{ standalone: true }"
-                      (ngModelChange)="setOverlayColor($event)"
-                    />
-                  </div>
-                  @if (selectedIds().length > 0) {
+                } @else if (selectedTerritories().length > 1) {
+                  <ul class="plain-list selected-territory-names">
+                    @for (territory of selectedTerritories(); track territory.id) {
+                      <li>{{ labelFor(territory) }}</li>
+                    }
+                  </ul>
+                  @if (canManage()) {
                     <button type="button" class="button-secondary" (click)="deleteSelectedTerritories()">
                       {{ deleteLabel() }}
                     </button>
                   }
-                </form>
-              }
-            } @else {
-              <p class="muted">Hover or select a territory to see its details.</p>
-              @if (connectPendingId()) {
-                <p>Select a second territory to add a connection.</p>
-              }
-            }
-          }
-
-          <h2>Territories</h2>
-          <ul class="plain-list territory-list" role="listbox" aria-label="Territories">
-            @for (territory of sortedTerritories(); track territory.id) {
-              <li>
-                <button
-                  type="button"
-                  class="list-button"
-                  [class.is-active]="selectedIds().includes(territory.id)"
-                  (click)="onTerritorySelect({ id: territory.id, additive: $event.ctrlKey || $event.metaKey })"
-                >
-                  @if (terrainSymbol(territory.terrainTypeId); as symbol) {
-                    <app-map-symbol kind="terrain" [name]="symbol" />
+                } @else if (selected(); as territory) {
+                  @if (!canManage()) {
+                    <dl class="meta territory-editor-fields">
+                      <div>
+                        <dt>Name</dt>
+                        <dd>{{ labelFor(territory) }}</dd>
+                      </div>
+                      <div>
+                        <dt>Description</dt>
+                        <dd>{{ territory.description || 'None' }}</dd>
+                      </div>
+                      <div>
+                        <dt>Terrain</dt>
+                        <dd>
+                          @if (terrainSymbol(territory.terrainTypeId); as symbol) {
+                            <app-map-symbol
+                              kind="terrain"
+                              [name]="symbol"
+                              [label]="terrainName(territory.terrainTypeId)"
+                            />
+                            {{ terrainName(territory.terrainTypeId) }}
+                          } @else {
+                            None
+                          }
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Structure</dt>
+                        <dd>
+                          @if (territory.structureTypeId) {
+                            @if (structureSymbol(territory.structureTypeId); as symbol) {
+                              <app-map-symbol
+                                kind="structure"
+                                [name]="symbol"
+                                [label]="structureName(territory.structureTypeId)"
+                                [pillaged]="territory.structureCondition === 'Pillaged'"
+                              />
+                            }
+                            {{ structureName(territory.structureTypeId)
+                            }}{{ territory.structureCondition === 'Pillaged' ? ' (pillaged)' : '' }}
+                          } @else {
+                            None
+                          }
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Missions</dt>
+                        <dd>
+                          @if (inspectedMissions().length > 0) {
+                            <ul class="plain-list">
+                              @for (mission of inspectedMissions(); track mission.id) {
+                                <li>
+                                  @if (mission.url) {
+                                    <a [href]="mission.url" rel="noopener noreferrer" target="_blank">{{
+                                      mission.name
+                                    }}</a>
+                                  } @else if (missionFileUrl(mission); as href) {
+                                    <a [href]="href" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
+                                  } @else {
+                                    {{ mission.name }}
+                                  }
+                                </li>
+                              }
+                            </ul>
+                          } @else {
+                            None
+                          }
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Ownership</dt>
+                        <dd
+                          [class.app-glow]="!!territory.ownerFactionId"
+                          [style.--glow-color]="territory.overlayColor || null"
+                        >
+                          {{ factionName(territory.ownerFactionId, territory.ownerSubfaction) }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Spawn location faction</dt>
+                        <dd [class.app-glow]="!!territory.spawnFactionId">
+                          {{
+                            territory.spawnFactionId
+                              ? factionName(territory.spawnFactionId, territory.spawnSubfaction)
+                              : 'None'
+                          }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Adjacent territories</dt>
+                        <dd>{{ adjacentLabels(territory) }}</dd>
+                      </div>
+                    </dl>
                   }
-                  {{ labelFor(territory) }}
-                </button>
-              </li>
-            } @empty {
-              <li class="muted">No territories yet.</li>
+                  @if (canManage() && selected(); as selected) {
+                    <form class="territory-editor-fields" (submit)="$event.preventDefault()">
+                      <div class="editor-row editor-row-identity">
+                        <div class="field" [class.is-dirty]="isTerritoryFieldDirty('name')">
+                          <label for="territory-name">Name (optional, unique)</label>
+                          <input
+                            id="territory-name"
+                            maxlength="60"
+                            [ngModel]="selected.name ?? ''"
+                            [ngModelOptions]="{ standalone: true }"
+                            (ngModelChange)="setName($event)"
+                          />
+                        </div>
+                        <div class="field" [class.is-dirty]="isTerritoryFieldDirty('description')">
+                          <label for="territory-description">Description (optional)</label>
+                          <textarea
+                            id="territory-description"
+                            maxlength="500"
+                            rows="2"
+                            [ngModel]="selected.description ?? ''"
+                            [ngModelOptions]="{ standalone: true }"
+                            (ngModelChange)="setDescription($event)"
+                          ></textarea>
+                        </div>
+                      </div>
+                      <div class="editor-row editor-row-catalog">
+                        <div class="field" [class.is-dirty]="isTerritoryFieldDirty('terrainTypeId')">
+                          <label for="territory-terrain">Terrain type</label>
+                          <select
+                            id="territory-terrain"
+                            [ngModel]="selected.terrainTypeId"
+                            [ngModelOptions]="{ standalone: true }"
+                            (ngModelChange)="setTerrain($event)"
+                          >
+                            @for (terrain of catalogTerrains(); track terrain.id) {
+                              <option [value]="terrain.id">{{ terrain.name }}</option>
+                            }
+                          </select>
+                        </div>
+                        <div class="field" [class.is-dirty]="isTerritoryFieldDirty('structureTypeId')">
+                          <label for="territory-structure">Structure (optional)</label>
+                          <select
+                            id="territory-structure"
+                            [ngModel]="selected.structureTypeId ?? ''"
+                            [ngModelOptions]="{ standalone: true }"
+                            (ngModelChange)="setStructure($event)"
+                          >
+                            <option value="">None</option>
+                            @for (structure of catalogStructures(); track structure.id) {
+                              <option [value]="structure.id">{{ structure.name }}</option>
+                            }
+                          </select>
+                        </div>
+                        @if (selected.structureTypeId) {
+                          <div class="field" [class.is-dirty]="isTerritoryFieldDirty('structureCondition')">
+                            <label for="territory-structure-condition">Structure condition</label>
+                            <select
+                              id="territory-structure-condition"
+                              [ngModel]="selected.structureCondition"
+                              [ngModelOptions]="{ standalone: true }"
+                              (ngModelChange)="setStructureCondition($event)"
+                            >
+                              <option value="Operational">Operational</option>
+                              <option value="Pillaged">Pillaged</option>
+                            </select>
+                          </div>
+                        }
+                        <div class="field" [class.is-dirty]="isTerritoryFieldDirty('overlayColor')">
+                          <label for="territory-color">Overlay color</label>
+                          <input
+                            id="territory-color"
+                            type="color"
+                            [ngModel]="selected.overlayColor ?? '#888888'"
+                            [ngModelOptions]="{ standalone: true }"
+                            (ngModelChange)="setOverlayColor($event)"
+                          />
+                        </div>
+                      </div>
+                      <div class="editor-row editor-row-control">
+                        <div
+                          class="field"
+                          [class.is-dirty]="
+                            isTerritoryFieldDirty('ownerFactionId') || isTerritoryFieldDirty('ownerSubfaction')
+                          "
+                        >
+                          <label for="territory-owner">Ownership</label>
+                          <select
+                            id="territory-owner"
+                            [ngModel]="ownerValue(selected)"
+                            [ngModelOptions]="{ standalone: true }"
+                            [attr.disabled]="ownerLocked() ? true : null"
+                            (ngModelChange)="setOwner($event)"
+                          >
+                            <option value="">Neutral</option>
+                            @for (option of factionOptions(); track option.value) {
+                              <option [value]="option.value">{{ option.label }}</option>
+                            }
+                          </select>
+                        </div>
+                        <div
+                          class="field"
+                          [class.is-dirty]="
+                            isTerritoryFieldDirty('spawnFactionId') || isTerritoryFieldDirty('spawnSubfaction')
+                          "
+                        >
+                          <label for="territory-spawn">Spawn location faction</label>
+                          <select
+                            id="territory-spawn"
+                            [ngModel]="spawnValue(selected)"
+                            [ngModelOptions]="{ standalone: true }"
+                            (ngModelChange)="setSpawn($event)"
+                          >
+                            <option value="">None</option>
+                            @for (option of factionOptions(); track option.value) {
+                              <option [value]="option.value" [disabled]="option.spawnDisabled || spawnTaken(option)">
+                                {{ option.label }}
+                              </option>
+                            }
+                          </select>
+                        </div>
+                        @if (selectedIds().length > 0) {
+                          <button
+                            type="button"
+                            class="button-secondary delete-territory"
+                            (click)="deleteSelectedTerritories()"
+                          >
+                            {{ deleteLabel() }}
+                          </button>
+                        }
+                      </div>
+                      @if (placedItemTypes().length > 0 && selectedIds().length === 1) {
+                        <fieldset class="field field-wide">
+                          <legend>Placed item objectives</legend>
+                          @for (type of placedItemTypes(); track type.id) {
+                            <label class="choice-row" [class.is-dirty]="isItemPlacementDirty(type.id)">
+                              <input
+                                type="checkbox"
+                                [id]="'item-place-' + type.id"
+                                [ngModel]="isItemPlacedHere(type.id)"
+                                [ngModelOptions]="{ standalone: true }"
+                                (ngModelChange)="setItemPlacedHere(type.id, $event)"
+                              />
+                              Place {{ type.name }} here
+                            </label>
+                            <p class="muted">Currently: {{ itemPlacementLabel(type.id) }}</p>
+                          }
+                        </fieldset>
+                      }
+                    </form>
+                  }
+                } @else if (connectPendingId()) {
+                  <p>Select a second territory to add a connection.</p>
+                }
+              </div>
             }
-          </ul>
+          </div>
+          <div class="map-pane">
+            <app-campaign-map-view
+              [imageUrl]="mapUrl"
+              [territories]="graph().territories"
+              [adjacencies]="graph().adjacencies"
+              [drawingPoints]="drawing()"
+              [snapTarget]="snapTarget()"
+              [selectedTerritoryIds]="selectedIds()"
+              [hoveredTerritoryId]="tool() === 'draw' ? null : hoveredTerritoryId()"
+              [hoveredAdjacencyId]="hoveredAdjacencyId()"
+              [selectedAdjacencyId]="selectedAdjacencyId()"
+              [adjacentTerritoryIds]="adjacentTerritoryIds()"
+              [showOverlay]="showOverlay()"
+              [showAdjacencies]="showOverlay() && showConnections()"
+              [showConnectionsToggle]="showConnections()"
+              [layerToggles]="true"
+              [focusSelectedTerritories]="true"
+              [adjacenciesInteractive]="tool() === 'select' || tool() === 'erase'"
+              [interactive]="true"
+              [moveTerritories]="tool() === 'select'"
+              [movePlacement]="movePlacement()"
+              [marqueeSelect]="tool() === 'select'"
+              [factions]="campaign()?.factions ?? []"
+              [structures]="campaign()?.structureTypes ?? []"
+              [structureImageUrl]="structureImageUrl"
+              [flagImageUrl]="flagImageUrl"
+              (showOverlayChange)="setShowOverlay($event)"
+              (showConnectionsChange)="setShowConnections($event)"
+              (mapPoint)="onMapPoint($event)"
+              (mapHover)="onMapHover($event)"
+              (territoryHover)="onTerritoryHover($event)"
+              (adjacencyHover)="onAdjacencyHover($event)"
+              (territorySelect)="onTerritorySelect($event)"
+              (territoryMarquee)="onTerritoryMarquee($event)"
+              (adjacencySelect)="onAdjacencySelect($event)"
+              (backgroundSelect)="onBackground()"
+              (territoryMove)="onTerritoryMove($event)"
+              (territoryMoveEnd)="onTerritoryMoveEnd()"
+            />
+          </div>
+        </div>
+
+        <aside class="side-pane panel" [class.is-collapsed]="territoryListCollapsed()" aria-live="polite">
+          <button
+            type="button"
+            class="side-pane-toggle"
+            [class.has-dirty]="territoryListDirty() && territoryListCollapsed()"
+            [attr.aria-expanded]="!territoryListCollapsed()"
+            [attr.aria-label]="territoryListCollapsed() ? 'Expand territories' : 'Collapse territories'"
+            (click)="toggleTerritoryList()"
+          >
+            <app-icon class="side-pane-chevron" name="chevron-down" />
+            @if (!territoryListCollapsed()) {
+              <span>Territories</span>
+            }
+          </button>
+          @if (!territoryListCollapsed()) {
+            <ul #territoryList class="plain-list territory-list" role="listbox" aria-label="Territories">
+              @for (territory of sortedTerritories(); track territory.id) {
+                <li>
+                  <button
+                    type="button"
+                    class="list-button"
+                    [attr.data-territory-id]="territory.id"
+                    [class.is-active]="selectedIds().includes(territory.id)"
+                    [class.is-dirty]="isTerritoryDirty(territory.id)"
+                    (click)="onTerritorySelect({ id: territory.id, additive: isAdditiveClick($event) })"
+                  >
+                    @if (terrainSymbol(territory.terrainTypeId); as symbol) {
+                      <app-map-symbol kind="terrain" [name]="symbol" />
+                    }
+                    {{ labelFor(territory) }}
+                  </button>
+                </li>
+              } @empty {
+                <li class="muted">No territories yet.</li>
+              }
+            </ul>
+          }
         </aside>
       </div>
     }

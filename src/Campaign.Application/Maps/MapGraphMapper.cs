@@ -79,7 +79,9 @@ public static class MapGraphMapper
                 StructureCondition = territory.StructureCondition,
                 OverlayColor = territory.OverlayColor,
                 OwnerFactionId = territory.OwnerFactionId,
+                OwnerSubfaction = territory.OwnerSubfaction,
                 SpawnFactionId = territory.SpawnFactionId,
+                SpawnSubfaction = territory.SpawnSubfaction,
             }),
         ];
     }
@@ -129,7 +131,9 @@ public static class MapGraphMapper
             StructureCondition = territory.StructureCondition.ToString(),
             OverlayColor = territory.OverlayColor,
             OwnerFactionId = territory.OwnerFactionId,
+            OwnerSubfaction = territory.OwnerSubfaction,
             SpawnFactionId = territory.SpawnFactionId,
+            SpawnSubfaction = territory.SpawnSubfaction,
         };
     }
 

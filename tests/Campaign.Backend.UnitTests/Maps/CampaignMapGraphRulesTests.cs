@@ -123,6 +123,62 @@ public sealed class CampaignMapGraphRulesTests
     }
 
     [Fact]
+    public void RejectsOverlappingTerritoriesWithDistinctNames()
+    {
+        var ok = CampaignMapGraphRules.TryCreate(
+            [
+                Territory(Guid.NewGuid(), 1, "Marsh", Square(0.1, 0.1, 0.4), SwampId, null, null, null, null),
+                Territory(Guid.NewGuid(), 2, "Fen", Square(0.3, 0.1, 0.4), SwampId, null, null, null, null),
+            ],
+            [],
+            new HashSet<Guid> { NorthId },
+            TerrainIds,
+            StructureIds,
+            out var graph,
+            out var errors);
+
+        Assert.False(ok);
+        Assert.Null(graph);
+        Assert.Contains(errors, error => error.Code == "territories.overlap");
+    }
+
+    [Fact]
+    public void AcceptsTerritoriesThatOnlyShareATracedBorder()
+    {
+        var ok = CampaignMapGraphRules.TryCreate(
+            [
+                Territory(Guid.NewGuid(), 1, "Bibali", Square(0.1, 0.1, 0.3), PlainsId, null, null, null, null),
+                Territory(
+                    Guid.NewGuid(),
+                    2,
+                    "Cefiro Plains",
+                    [
+                        new MapPointInput { X = 0.4, Y = 0.1 },
+                        new MapPointInput { X = 0.399, Y = 0.2 },
+                        new MapPointInput { X = 0.4, Y = 0.4 },
+                        new MapPointInput { X = 0.7, Y = 0.4 },
+                        new MapPointInput { X = 0.7, Y = 0.1 },
+                    ],
+                    PlainsId,
+                    null,
+                    null,
+                    null,
+                    null),
+            ],
+            [],
+            new HashSet<Guid> { NorthId },
+            TerrainIds,
+            StructureIds,
+            out var graph,
+            out var errors);
+
+        Assert.True(ok);
+        Assert.Empty(errors);
+        Assert.NotNull(graph);
+        Assert.Equal(2, graph.Territories.Count);
+    }
+
+    [Fact]
     public void RejectsPointsPastTheMapEdge()
     {
         var ok = CampaignMapGraphRules.TryCreate(
@@ -213,6 +269,60 @@ public sealed class CampaignMapGraphRulesTests
 
         Assert.False(duplicateSpawn);
         Assert.Contains(spawnErrors, error => error.Code == "territories.spawn.duplicate");
+
+        var spawnCopiesOwner = CampaignMapGraphRules.TryCreate(
+            [
+                Territory(Guid.NewGuid(), 1, null, Square(0.1, 0.1, 0.3), PlainsId, null, null, null, NorthId),
+            ],
+            [],
+            new HashSet<Guid> { NorthId },
+            TerrainIds,
+            StructureIds,
+            out var ownedSpawnGraph,
+            out _);
+
+        Assert.True(spawnCopiesOwner);
+        Assert.NotNull(ownedSpawnGraph);
+        Assert.Equal(NorthId, ownedSpawnGraph.Territories[0].OwnerFactionId);
+        Assert.Equal(NorthId, ownedSpawnGraph.Territories[0].SpawnFactionId);
+
+        var subfactionSpawns = CampaignMapGraphRules.TryCreate(
+            [
+                Territory(
+                    Guid.NewGuid(),
+                    1,
+                    null,
+                    Square(0.1, 0.1, 0.3),
+                    PlainsId,
+                    null,
+                    null,
+                    null,
+                    NorthId,
+                    spawnSubfaction: "Khorne"),
+                Territory(
+                    Guid.NewGuid(),
+                    2,
+                    null,
+                    Square(0.4, 0.1, 0.3),
+                    SeaId,
+                    null,
+                    null,
+                    null,
+                    NorthId,
+                    spawnSubfaction: "Nurgle"),
+            ],
+            [],
+            new HashSet<Guid> { NorthId },
+            TerrainIds,
+            StructureIds,
+            out var subfactionGraph,
+            out var subfactionErrors);
+
+        Assert.True(subfactionSpawns, string.Join("; ", subfactionErrors.Select(error => error.Message)));
+        Assert.NotNull(subfactionGraph);
+        Assert.Equal("Khorne", subfactionGraph.Territories[0].SpawnSubfaction);
+        Assert.Equal("Khorne", subfactionGraph.Territories[0].OwnerSubfaction);
+        Assert.Equal("Nurgle", subfactionGraph.Territories[1].SpawnSubfaction);
     }
 
     private static TerritoryInput Territory(
@@ -225,7 +335,9 @@ public sealed class CampaignMapGraphRulesTests
         string? overlayColor,
         Guid? ownerFactionId,
         Guid? spawnFactionId,
-        string? structureCondition = null)
+        string? structureCondition = null,
+        string? ownerSubfaction = null,
+        string? spawnSubfaction = null)
     {
         return new TerritoryInput
         {
@@ -237,7 +349,9 @@ public sealed class CampaignMapGraphRulesTests
             StructureTypeId = structureTypeId,
             OverlayColor = overlayColor,
             OwnerFactionId = ownerFactionId,
+            OwnerSubfaction = ownerSubfaction,
             SpawnFactionId = spawnFactionId,
+            SpawnSubfaction = spawnSubfaction,
             StructureCondition = structureCondition,
         };
     }

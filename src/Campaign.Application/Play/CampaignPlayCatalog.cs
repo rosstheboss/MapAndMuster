@@ -180,7 +180,8 @@ internal static class CampaignPlayCatalog
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName),
             campaign.PlayState?.BrokenAllyFactionIds.ToHashSet() ?? [],
             SpecialRules(campaign),
-            SubfactionsByPlayer(campaign));
+            SubfactionsByPlayer(campaign),
+            campaign.SplitForceSupplyPenaltyIsPercent);
     }
 
     public static SpecialRuleContext SpecialRules(StoredCampaign campaign)

@@ -46,8 +46,9 @@ in an ADR or the relevant domain document and update tests.
 
 ## Scoring and supply
 
-10. Resolved: territory control does not award campaign points by itself. Most territories
-    currently controlled is a ranking public objective. See `docs/DOMAIN.md`.
+10. Resolved: territory control does not award campaign points by itself unless a running
+    public objective for points per territory is configured above 0. Most territories
+    currently controlled remains a ranking public objective. See `docs/DOMAIN.md`.
 11. Resolved: structure campaign points are a running total of current holdings, recalculated
     from live map state. Destroyed structures do not count; pillaged structures still count.
     Ranking public objectives use friendly ties: every player currently tied for first after

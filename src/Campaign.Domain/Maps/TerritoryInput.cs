@@ -29,11 +29,17 @@ public sealed class TerritoryInput
     /// <summary>Gets the optional overlay color as #RRGGBB.</summary>
     public string? OverlayColor { get; init; }
 
-    /// <summary>Gets the owning faction, or null when the territory is neutral.</summary>
+    /// <summary>Gets the owning faction, or null when the territory is Neutral.</summary>
     public Guid? OwnerFactionId { get; init; }
+
+    /// <summary>Gets the owning required subfaction, when ownership is subfaction-specific.</summary>
+    public string? OwnerSubfaction { get; init; }
 
     /// <summary>Gets the spawn-location faction, when this territory is a spawn.</summary>
     public Guid? SpawnFactionId { get; init; }
+
+    /// <summary>Gets the spawn required subfaction, when spawn is subfaction-specific.</summary>
+    public string? SpawnSubfaction { get; init; }
 
     /// <summary>Gets the structure condition name when a structure is present.</summary>
     public string? StructureCondition { get; init; }

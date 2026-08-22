@@ -1,4 +1,4 @@
-import { interiorsOverlap, isValidTerritoryPolygon, type MapPoint } from './geometry';
+import { isValidTerritoryPolygon, type MapPoint } from './geometry';
 import {
   createId,
   nextDisplayNumber,
@@ -35,8 +35,11 @@ export function serializeMapSvg(graph: MapGraph): string {
         'data-overlay-color',
         territory.overlayColor,
       )}${attr('data-owner-faction-id', territory.ownerFactionId)}${attr(
-        'data-spawn-faction-id',
-        territory.spawnFactionId,
+        'data-owner-subfaction',
+        territory.ownerSubfaction,
+      )}${attr('data-spawn-faction-id', territory.spawnFactionId)}${attr(
+        'data-spawn-subfaction',
+        territory.spawnSubfaction,
       )} points="${points}" fill="${escapeAttr(territory.overlayColor ?? '#000000')}" fill-opacity="${
         territory.overlayColor ? '0.32' : '0'
       }" stroke="#1c1917" stroke-opacity="0.75" stroke-width="0.004" />`;
@@ -125,7 +128,9 @@ function parseNativeOverlay(
       ),
       overlayColor: emptyToNull(polygon.getAttribute('data-overlay-color')),
       ownerFactionId: emptyToNull(polygon.getAttribute('data-owner-faction-id')),
+      ownerSubfaction: emptyToNull(polygon.getAttribute('data-owner-subfaction')),
       spawnFactionId: emptyToNull(polygon.getAttribute('data-spawn-faction-id')),
+      spawnSubfaction: emptyToNull(polygon.getAttribute('data-spawn-subfaction')),
     });
   }
 
@@ -168,10 +173,6 @@ function parseGenericShapes(
     const raw = shapePoints(shape);
     const polygon = normalizePoints(raw, viewBox);
     if (!isValidTerritoryPolygon(polygon)) {
-      continue;
-    }
-
-    if (territories.some((existing) => interiorsOverlap(existing.polygon, polygon))) {
       continue;
     }
 

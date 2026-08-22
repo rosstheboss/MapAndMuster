@@ -5,6 +5,7 @@ export interface MapPoint {
 
 export const GEOMETRY_EPSILON = 1e-6;
 export const MIN_SHARED_BORDER_LENGTH = 0.008;
+export const BORDER_TRACE_TOLERANCE = 0.002;
 export const SNAP_DISTANCE = 0.018;
 export const MIN_DRAW_STEP = 0.008;
 export const MARKER_MAX_PX = 50;
@@ -112,6 +113,7 @@ export function isValidTerritoryPolygon(polygon: readonly MapPoint[]): boolean {
   return polygonArea(unique) >= GEOMETRY_EPSILON && !selfIntersects(unique);
 }
 
+/** Returns true when interiors cover each other. Shared and near-shared traced borders are allowed. */
 export function interiorsOverlap(left: readonly MapPoint[], right: readonly MapPoint[]): boolean {
   if (left.length < 3 || right.length < 3) {
     return false;
@@ -125,7 +127,7 @@ export function interiorsOverlap(left: readonly MapPoint[], right: readonly MapP
     return true;
   }
 
-  return hasInteriorSampleInside(left, right) || hasInteriorSampleInside(right, left);
+  return hasSharedInteriorSample(left, right) || hasSharedInteriorSample(right, left);
 }
 
 export function sharedBorderMidpoint(left: readonly MapPoint[], right: readonly MapPoint[]): MapPoint | null {
@@ -943,7 +945,7 @@ function hasProperEdgeCrossing(left: readonly MapPoint[], right: readonly MapPoi
     for (let j = 0; j < rightCount; j += 1) {
       const b1 = right.at(j);
       const b2 = right.at((j + 1) % rightCount);
-      if (b1 && b2 && segmentsProperlyIntersect(a1, a2, b1, b2)) {
+      if (b1 && b2 && segmentsCrossThroughInterior(a1, a2, b1, b2)) {
         return true;
       }
     }
@@ -956,9 +958,9 @@ function hasVertexDeepInside(vertices: readonly MapPoint[], polygon: readonly Ma
   return vertices.some((vertex) => containsDeepInterior(polygon, vertex));
 }
 
-function hasInteriorSampleInside(source: readonly MapPoint[], other: readonly MapPoint[]): boolean {
+function hasSharedInteriorSample(source: readonly MapPoint[], other: readonly MapPoint[]): boolean {
   const center = centroid(source);
-  if (containsDeepInterior(other, center)) {
+  if (isSharedInteriorPoint(source, other, center)) {
     return true;
   }
 
@@ -970,11 +972,20 @@ function hasInteriorSampleInside(source: readonly MapPoint[], other: readonly Ma
       continue;
     }
 
-    if (containsDeepInterior(other, { x: (vertex.x + center.x) / 2, y: (vertex.y + center.y) / 2 })) {
+    if (isSharedInteriorPoint(source, other, { x: (vertex.x + center.x) / 2, y: (vertex.y + center.y) / 2 })) {
       return true;
     }
 
-    if (next && containsDeepInterior(other, { x: (vertex.x + next.x) / 2, y: (vertex.y + next.y) / 2 })) {
+    if (!next) {
+      continue;
+    }
+
+    const inward = insetToward(
+      { x: (vertex.x + next.x) / 2, y: (vertex.y + next.y) / 2 },
+      center,
+      BORDER_TRACE_TOLERANCE * 2,
+    );
+    if (inward && isSharedInteriorPoint(source, other, inward)) {
       return true;
     }
   }
@@ -982,7 +993,22 @@ function hasInteriorSampleInside(source: readonly MapPoint[], other: readonly Ma
   return false;
 }
 
-function containsDeepInterior(polygon: readonly MapPoint[], point: MapPoint, margin = SNAP_DISTANCE): boolean {
+function insetToward(from: MapPoint, toward: MapPoint, distance: number): MapPoint | null {
+  const dx = toward.x - from.x;
+  const dy = toward.y - from.y;
+  const length = Math.hypot(dx, dy);
+  if (length < GEOMETRY_EPSILON) {
+    return null;
+  }
+
+  return { x: from.x + (dx / length) * distance, y: from.y + (dy / length) * distance };
+}
+
+function isSharedInteriorPoint(source: readonly MapPoint[], other: readonly MapPoint[], sample: MapPoint): boolean {
+  return containsDeepInterior(source, sample) && containsDeepInterior(other, sample);
+}
+
+function containsDeepInterior(polygon: readonly MapPoint[], point: MapPoint, margin = BORDER_TRACE_TOLERANCE): boolean {
   if (!containsStrict(polygon, point)) {
     return false;
   }
@@ -1182,6 +1208,24 @@ function isOnBoundary(polygon: readonly MapPoint[], point: MapPoint): boolean {
   return false;
 }
 
+function segmentsCrossThroughInterior(a1: MapPoint, a2: MapPoint, b1: MapPoint, b2: MapPoint): boolean {
+  if (!segmentsProperlyIntersect(a1, a2, b1, b2)) {
+    return false;
+  }
+
+  if (
+    pointDistanceToSegment(a1, a2, b1) <= BORDER_TRACE_TOLERANCE &&
+    pointDistanceToSegment(a1, a2, b2) <= BORDER_TRACE_TOLERANCE
+  ) {
+    return false;
+  }
+
+  return (
+    pointDistanceToSegment(b1, b2, a1) > BORDER_TRACE_TOLERANCE ||
+    pointDistanceToSegment(b1, b2, a2) > BORDER_TRACE_TOLERANCE
+  );
+}
+
 function segmentsProperlyIntersect(a1: MapPoint, a2: MapPoint, b1: MapPoint, b2: MapPoint): boolean {
   const o1 = orientation(a1, a2, b1);
   const o2 = orientation(a1, a2, b2);
@@ -1273,6 +1317,11 @@ function closestPointOnSegment(a: MapPoint, b: MapPoint, point: MapPoint): MapPo
 
   const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared));
   return { x: a.x + dx * t, y: a.y + dy * t };
+}
+
+function pointDistanceToSegment(a: MapPoint, b: MapPoint, point: MapPoint): number {
+  const closest = closestPointOnSegment(a, b, point);
+  return Math.hypot(point.x - closest.x, point.y - closest.y);
 }
 
 function translationFits(

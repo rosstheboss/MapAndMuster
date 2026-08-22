@@ -19,7 +19,8 @@ public sealed class PlayTerritory
         bool isPillageable = true,
         bool isDestructible = true,
         bool isWaterFeature = false,
-        Guid? terrainTypeId = null)
+        Guid? terrainTypeId = null,
+        string? spawnSubfaction = null)
     {
         Id = id;
         DisplayNumber = displayNumber;
@@ -32,6 +33,7 @@ public sealed class PlayTerritory
         IsDestructible = isDestructible;
         IsWaterFeature = isWaterFeature;
         TerrainTypeId = terrainTypeId;
+        SpawnSubfaction = spawnFactionId is null ? null : spawnSubfaction;
     }
 
     /// <summary>Gets the territory identifier.</summary>
@@ -70,6 +72,9 @@ public sealed class PlayTerritory
     /// <summary>Gets the terrain type, when known.</summary>
     public Guid? TerrainTypeId { get; }
 
+    /// <summary>Gets the spawn required subfaction, when spawn is subfaction-specific.</summary>
+    public string? SpawnSubfaction { get; }
+
     /// <summary>
     /// Returns a copy with updated ownership and structure fields.
     /// </summary>
@@ -94,7 +99,8 @@ public sealed class PlayTerritory
             !clearStructure && (isPillageable ?? IsPillageable),
             !clearStructure && (isDestructible ?? IsDestructible),
             IsWaterFeature,
-            TerrainTypeId);
+            TerrainTypeId,
+            SpawnSubfaction);
     }
 }
 
@@ -173,11 +179,28 @@ public sealed class PlayMap
     }
 
     /// <summary>
-    /// Spawn territory for a faction, if the map has one.
+    /// Spawn territory for a faction, preferring a required-subfaction spawn when one is named.
     /// </summary>
-    public PlayTerritory? SpawnFor(Guid factionId)
+    public PlayTerritory? SpawnFor(Guid factionId, string? subfaction = null)
     {
-        return Territories.FirstOrDefault(territory => territory.SpawnFactionId == factionId);
+        var matches = Territories.Where(territory => territory.SpawnFactionId == factionId).ToArray();
+        if (matches.Length == 0)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(subfaction))
+        {
+            var exact = matches.FirstOrDefault(territory =>
+                string.Equals(territory.SpawnSubfaction, subfaction, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null)
+            {
+                return exact;
+            }
+        }
+
+        return matches.FirstOrDefault(territory => string.IsNullOrEmpty(territory.SpawnSubfaction))
+            ?? matches[0];
     }
 
     /// <summary>

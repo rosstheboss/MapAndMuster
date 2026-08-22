@@ -124,8 +124,20 @@ public sealed class SaveCampaignRequest
     /// <summary>Gets campaign points for most battle wins.</summary>
     public int? MostBattlesWonCampaignPoints { get; init; }
 
-    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    /// <summary>Gets campaign points for most structure campaign points.</summary>
+    public int? MostStructurePointsCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points awarded for each currently owned territory.</summary>
+    public int? PointsPerTerritoryCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for each revealed relic held by an ally or faction-mate other than the player.</summary>
+    public int? AlliedRelicControlCampaignPoints { get; init; }
+
+    /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int? SplitForceSupplyPenaltyPercent { get; init; }
+
+    /// <summary>Gets whether the split-force supply penalty is a percent of map supply. The default is a raw amount.</summary>
+    public bool? SplitForceSupplyPenaltyIsPercent { get; init; }
 
     /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
     public bool? AlwaysAskGeneralKill { get; init; }
@@ -193,6 +205,9 @@ public sealed class FactionRequest
     /// <summary>Gets the optional ally-group name this faction joins.</summary>
     public string? AllyGroupName { get; init; }
 
+    /// <summary>Gets the optional ally-group identifier this faction joins. Wins over a stale name.</summary>
+    public Guid? AllyGroupId { get; init; }
+
     /// <summary>Gets the client-assigned identifier, when present.</summary>
     public Guid? Id { get; init; }
 
@@ -229,6 +244,9 @@ public sealed class SubfactionSpecialRulesRequest
 /// </summary>
 public sealed class AllyGroupRequest
 {
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
     /// <summary>Gets the ally-group name.</summary>
     public required string Name { get; init; }
 
@@ -751,8 +769,20 @@ public sealed class CampaignDetailResponse
     /// <summary>Gets campaign points for most battle wins.</summary>
     public int MostBattlesWonCampaignPoints { get; init; }
 
-    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    /// <summary>Gets campaign points for most structure campaign points.</summary>
+    public int MostStructurePointsCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points awarded for each currently owned territory.</summary>
+    public int PointsPerTerritoryCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for each revealed relic held by an ally or faction-mate other than the player.</summary>
+    public int AlliedRelicControlCampaignPoints { get; init; }
+
+    /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int SplitForceSupplyPenaltyPercent { get; init; }
+
+    /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
+    public bool SplitForceSupplyPenaltyIsPercent { get; init; }
 
     /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
     public bool AlwaysAskGeneralKill { get; init; }
@@ -999,6 +1029,9 @@ public sealed class FactionResponse
 
     /// <summary>Gets the ally-group name this faction joins, if any.</summary>
     public string? AllyGroupName { get; init; }
+
+    /// <summary>Gets the ally-group identifier this faction joins, if any.</summary>
+    public Guid? AllyGroupId { get; init; }
 
     /// <summary>Gets the unique faction color as #RRGGBB.</summary>
     public required string Color { get; init; }
@@ -1755,6 +1788,7 @@ public static class CampaignResponses
                     Name = faction.Name,
                     Subfactions = faction.Subfactions,
                     AllyGroupName = faction.AllyGroupName,
+                    AllyGroupId = faction.AllyGroupId,
                     Color = faction.Color,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     HasFlagImage = faction.HasFlagImage,
@@ -1923,7 +1957,11 @@ public static class CampaignResponses
             MostTerritoriesCampaignPoints = detail.MostTerritoriesCampaignPoints,
             LongestTerritoryChainCampaignPoints = detail.LongestTerritoryChainCampaignPoints,
             MostBattlesWonCampaignPoints = detail.MostBattlesWonCampaignPoints,
+            MostStructurePointsCampaignPoints = detail.MostStructurePointsCampaignPoints,
+            PointsPerTerritoryCampaignPoints = detail.PointsPerTerritoryCampaignPoints,
+            AlliedRelicControlCampaignPoints = detail.AlliedRelicControlCampaignPoints,
             SplitForceSupplyPenaltyPercent = detail.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = detail.SplitForceSupplyPenaltyIsPercent,
             AlwaysAskGeneralKill = detail.AlwaysAskGeneralKill,
             AlwaysAskSupplyLineDestroyed = detail.AlwaysAskSupplyLineDestroyed,
             GeneralKillCampaignPoints = detail.GeneralKillCampaignPoints,
@@ -2066,7 +2104,9 @@ public static class CampaignResponses
                     StructureTypeId = territory.StructureTypeId,
                     OverlayColor = territory.OverlayColor,
                     OwnerFactionId = territory.OwnerFactionId,
+                    OwnerSubfaction = territory.OwnerSubfaction,
                     SpawnFactionId = territory.SpawnFactionId,
+                    SpawnSubfaction = territory.SpawnSubfaction,
                     StructureCondition = territory.StructureCondition,
                 }),
             ],
@@ -2121,7 +2161,9 @@ public static class CampaignResponses
                 StructureTypeId = territory.StructureTypeId,
                 OverlayColor = territory.OverlayColor,
                 OwnerFactionId = territory.OwnerFactionId,
+                OwnerSubfaction = territory.OwnerSubfaction,
                 SpawnFactionId = territory.SpawnFactionId,
+                SpawnSubfaction = territory.SpawnSubfaction,
                 StructureCondition = territory.StructureCondition,
             }),
         ];
@@ -2174,6 +2216,7 @@ public static class CampaignResponses
                 Color = faction.Color,
                 Subfactions = faction.Subfactions,
                 AllyGroupName = faction.AllyGroupName,
+                AllyGroupId = faction.AllyGroupId,
                 RequiresSubfaction = faction.RequiresSubfaction,
                 ClearFlagImage = faction.ClearFlagImage,
                 SpecialRuleIds = faction.SpecialRuleIds,
@@ -2196,7 +2239,7 @@ public static class CampaignResponses
     public static IReadOnlyList<AllyGroupInput>? ToAllyGroupInputs(IReadOnlyList<AllyGroupRequest>? groups)
     {
         return groups?
-            .Select(static group => new AllyGroupInput { Name = group.Name, Color = group.Color })
+            .Select(static group => new AllyGroupInput { Id = group.Id, Name = group.Name, Color = group.Color })
             .ToArray();
     }
 
@@ -2587,8 +2630,14 @@ public sealed class TerritoryRequest
     /// <summary>Gets the owning faction, or null when the territory is neutral.</summary>
     public Guid? OwnerFactionId { get; init; }
 
+    /// <summary>Gets the owning required subfaction, when ownership is subfaction-specific.</summary>
+    public string? OwnerSubfaction { get; init; }
+
     /// <summary>Gets the spawn-location faction, if any.</summary>
     public Guid? SpawnFactionId { get; init; }
+
+    /// <summary>Gets the spawn required subfaction, when spawn is subfaction-specific.</summary>
+    public string? SpawnSubfaction { get; init; }
 }
 
 /// <summary>
@@ -2710,8 +2759,14 @@ public sealed class TerritoryResponse
     /// <summary>Gets the owning faction, or null when the territory is neutral.</summary>
     public Guid? OwnerFactionId { get; init; }
 
+    /// <summary>Gets the owning required subfaction, when ownership is subfaction-specific.</summary>
+    public string? OwnerSubfaction { get; init; }
+
     /// <summary>Gets the spawn-location faction, if any.</summary>
     public Guid? SpawnFactionId { get; init; }
+
+    /// <summary>Gets the spawn required subfaction, when spawn is subfaction-specific.</summary>
+    public string? SpawnSubfaction { get; init; }
 }
 
 /// <summary>

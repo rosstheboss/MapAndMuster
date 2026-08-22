@@ -96,6 +96,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds),
             campaign.ForceStatuses,
             campaign.SplitForceSupplyPenaltyPercent,
+            campaign.SplitForceSupplyPenaltyIsPercent,
             campaign.BattleReportRules,
             campaign.ArmyEscalations,
             campaign.Missions,
@@ -138,7 +139,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
 
     private static StoredCampaign ToStored(CampaignPresetRecord record)
     {
-        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
         var settings = CampaignPresetSettingsJson.Deserialize(record.SettingsJson);
         var created = record.CreatedUtc;
         return new StoredCampaign
@@ -195,6 +196,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
             BattleScoring = BattleScoring,
             RankingObjectivePoints = RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = SplitForceSupplyPenaltyIsPercent,
             BattleReportRules = BattleReportRules,
             ArmyEscalations = ArmyEscalations,
             Missions = Missions,

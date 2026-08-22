@@ -88,7 +88,11 @@ export interface CampaignDetail {
   mostTerritoriesCampaignPoints?: number;
   longestTerritoryChainCampaignPoints?: number;
   mostBattlesWonCampaignPoints?: number;
+  mostStructurePointsCampaignPoints?: number;
+  pointsPerTerritoryCampaignPoints?: number;
+  alliedRelicControlCampaignPoints?: number;
   splitForceSupplyPenaltyPercent?: number;
+  splitForceSupplyPenaltyIsPercent?: boolean;
   alwaysAskGeneralKill?: boolean;
   alwaysAskSupplyLineDestroyed?: boolean;
   generalKillCampaignPoints?: number;
@@ -112,6 +116,7 @@ export interface CampaignFaction {
   color: string;
   subfactions: string[];
   allyGroupName: string | null;
+  allyGroupId?: string | null;
   requiresSubfaction: boolean;
   hasFlagImage: boolean;
   specialRuleIds?: string[];
@@ -368,7 +373,11 @@ export interface SaveCampaignPayload {
   mostTerritoriesCampaignPoints?: number;
   longestTerritoryChainCampaignPoints?: number;
   mostBattlesWonCampaignPoints?: number;
+  mostStructurePointsCampaignPoints?: number;
+  pointsPerTerritoryCampaignPoints?: number;
+  alliedRelicControlCampaignPoints?: number;
   splitForceSupplyPenaltyPercent?: number;
+  splitForceSupplyPenaltyIsPercent?: boolean;
   alwaysAskGeneralKill?: boolean;
   alwaysAskSupplyLineDestroyed?: boolean;
   generalKillCampaignPoints?: number;
@@ -389,6 +398,7 @@ export interface SaveFactionPayload {
   color: string;
   subfactions: string[];
   allyGroupName: string | null;
+  allyGroupId?: string | null;
   requiresSubfaction: boolean;
   clearFlagImage?: boolean;
   specialRuleIds?: string[];
@@ -396,6 +406,7 @@ export interface SaveFactionPayload {
 }
 
 export interface SaveAllyGroupPayload {
+  id?: string;
   name: string;
   color?: string;
 }
@@ -540,7 +551,9 @@ export interface MapTerritoryPayload {
   structureCondition?: string | null;
   overlayColor: string | null;
   ownerFactionId: string | null;
+  ownerSubfaction?: string | null;
   spawnFactionId: string | null;
+  spawnSubfaction?: string | null;
 }
 
 export interface MapPointPayload {

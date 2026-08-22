@@ -205,6 +205,141 @@ public sealed class CampaignPointStandingsRulesTests
         Assert.Empty(row.HeldItemTypeIds);
     }
 
+    [Fact]
+    public void AwardsMostStructurePointsToEveryTiedLeader()
+    {
+        var north = Guid.NewGuid();
+        var south = Guid.NewGuid();
+        var northFaction = Guid.NewGuid();
+        var southFaction = Guid.NewGuid();
+        var town = Guid.NewGuid();
+        var keep = Guid.NewGuid();
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players:
+            [
+                new CampaignPointPlayer(north, northFaction),
+                new CampaignPointPlayer(south, southFaction),
+            ],
+            territories:
+            [
+                new CampaignPointTerritory(Guid.NewGuid(), northFaction, town, StructureCondition.Operational),
+                new CampaignPointTerritory(Guid.NewGuid(), northFaction, keep, StructureCondition.Destroyed),
+                new CampaignPointTerritory(Guid.NewGuid(), southFaction, town, StructureCondition.Operational),
+            ],
+            structurePoints: new Dictionary<Guid, int> { [town] = 3, [keep] = 9 },
+            ranking: new GeneralPublicObjectivePoints(0, 0, 0, mostStructurePoints: 4)));
+
+        Assert.Equal(4, result.Standings.Single(row => row.UserId == north).PublicObjectivePoints);
+        Assert.Equal(4, result.Standings.Single(row => row.UserId == south).PublicObjectivePoints);
+        var board = Assert.Single(result.Leaderboards);
+        Assert.Equal(GeneralPublicObjectiveKinds.MostStructurePoints, board.Kind);
+        Assert.Equal(2, board.Leaders.Count);
+    }
+
+    [Fact]
+    public void AwardsConfiguredPointsForEachOwnedTerritory()
+    {
+        var player = Guid.NewGuid();
+        var faction = Guid.NewGuid();
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players: [new CampaignPointPlayer(player, faction)],
+            territories:
+            [
+                new CampaignPointTerritory(Guid.NewGuid(), faction, null, StructureCondition.Operational),
+                new CampaignPointTerritory(Guid.NewGuid(), faction, null, StructureCondition.Operational),
+                new CampaignPointTerritory(Guid.NewGuid(), null, null, StructureCondition.Operational),
+            ],
+            ranking: new GeneralPublicObjectivePoints(0, 0, 0, pointsPerTerritory: 2)));
+
+        Assert.Equal(4, Assert.Single(result.Standings).PublicObjectivePoints);
+        Assert.Empty(result.Leaderboards);
+    }
+
+    [Fact]
+    public void AwardsAlliedRelicControlPointsForFactionMatesAndCurrentAllies()
+    {
+        var player = Guid.NewGuid();
+        var mate = Guid.NewGuid();
+        var ally = Guid.NewGuid();
+        var enemy = Guid.NewGuid();
+        var faction = Guid.NewGuid();
+        var allyFaction = Guid.NewGuid();
+        var enemyFaction = Guid.NewGuid();
+        var group = Guid.NewGuid();
+        var mateForce = Guid.NewGuid();
+        var allyForce = Guid.NewGuid();
+        var enemyForce = Guid.NewGuid();
+        var playerForce = Guid.NewGuid();
+        var relic = Guid.NewGuid();
+        var crown = Guid.NewGuid();
+        var banner = Guid.NewGuid();
+        var hidden = Guid.NewGuid();
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players:
+            [
+                new CampaignPointPlayer(player, faction),
+                new CampaignPointPlayer(mate, faction),
+                new CampaignPointPlayer(ally, allyFaction),
+                new CampaignPointPlayer(enemy, enemyFaction),
+            ],
+            forces:
+            [
+                new CampaignForce(playerForce, player, faction, Guid.NewGuid(), false),
+                new CampaignForce(mateForce, mate, faction, Guid.NewGuid(), false),
+                new CampaignForce(allyForce, ally, allyFaction, Guid.NewGuid(), false),
+                new CampaignForce(enemyForce, enemy, enemyFaction, Guid.NewGuid(), false),
+            ],
+            items:
+            [
+                new CampaignItemObjective(Guid.NewGuid(), relic, "Relic", null, mateForce, true, Guid.NewGuid(), false),
+                new CampaignItemObjective(Guid.NewGuid(), crown, "Crown", null, allyForce, true, Guid.NewGuid(), false),
+                new CampaignItemObjective(Guid.NewGuid(), banner, "Banner", null, enemyForce, true, Guid.NewGuid(), false),
+                new CampaignItemObjective(Guid.NewGuid(), hidden, "Hidden", null, allyForce, false, Guid.NewGuid(), true),
+                new CampaignItemObjective(Guid.NewGuid(), relic, "Own", null, playerForce, true, Guid.NewGuid(), false),
+            ],
+            ranking: new GeneralPublicObjectivePoints(0, 0, 0, alliedRelicControlPoints: 5),
+            allyGroupByFaction: new Dictionary<Guid, Guid?>
+            {
+                [faction] = group,
+                [allyFaction] = group,
+                [enemyFaction] = null,
+            }));
+
+        Assert.Equal(10, result.Standings.Single(row => row.UserId == player).PublicObjectivePoints);
+        Assert.Equal(10, result.Standings.Single(row => row.UserId == mate).PublicObjectivePoints);
+        Assert.Equal(10, result.Standings.Single(row => row.UserId == ally).PublicObjectivePoints);
+        Assert.Equal(0, result.Standings.Single(row => row.UserId == enemy).PublicObjectivePoints);
+    }
+
+    [Fact]
+    public void IgnoresAlliedRelicsAfterBackstab()
+    {
+        var player = Guid.NewGuid();
+        var ally = Guid.NewGuid();
+        var faction = Guid.NewGuid();
+        var allyFaction = Guid.NewGuid();
+        var group = Guid.NewGuid();
+        var allyForce = Guid.NewGuid();
+        var relic = Guid.NewGuid();
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players:
+            [
+                new CampaignPointPlayer(player, faction),
+                new CampaignPointPlayer(ally, allyFaction),
+            ],
+            forces: [new CampaignForce(allyForce, ally, allyFaction, Guid.NewGuid(), false)],
+            items:
+            [
+                new CampaignItemObjective(Guid.NewGuid(), relic, "Relic", null, allyForce, true, Guid.NewGuid(), false),
+            ],
+            ranking: new GeneralPublicObjectivePoints(0, 0, 0, alliedRelicControlPoints: 5),
+            allyGroupByFaction: new Dictionary<Guid, Guid?> { [faction] = group, [allyFaction] = group },
+            brokenAllyFactionIds: new HashSet<Guid> { faction }));
+
+        Assert.Equal(0, result.Standings.Single(row => row.UserId == player).PublicObjectivePoints);
+        Assert.Equal(0, result.Standings.Single(row => row.UserId == ally).PublicObjectivePoints);
+    }
+
     private static CampaignPointScoringState State(
         IReadOnlyList<CampaignPointPlayer>? players = null,
         IReadOnlyList<CampaignPointTerritory>? territories = null,
@@ -216,14 +351,17 @@ public sealed class CampaignPointStandingsRulesTests
         IReadOnlyDictionary<Guid, int>? publicPoints = null,
         IReadOnlyList<PublicObjectiveAward>? awards = null,
         BattleScoringSetup? battleScoring = null,
-        GeneralPublicObjectivePoints? ranking = null)
+        GeneralPublicObjectivePoints? ranking = null,
+        IReadOnlyDictionary<Guid, int>? structurePoints = null,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null,
+        IReadOnlySet<Guid>? brokenAllyFactionIds = null)
     {
         return new CampaignPointScoringState
         {
             Players = players ?? [],
             Territories = territories ?? [],
             Adjacencies = adjacencies ?? [],
-            StructurePoints = new Dictionary<Guid, int>(),
+            StructurePoints = structurePoints ?? new Dictionary<Guid, int>(),
             ItemPoints = itemPoints ?? new Dictionary<Guid, int>(),
             PublicObjectivePoints = publicPoints ?? new Dictionary<Guid, int>(),
             BattleScoring = battleScoring ?? BattleScoringSetup.Straight(0),
@@ -232,6 +370,8 @@ public sealed class CampaignPointStandingsRulesTests
             Forces = forces ?? [],
             VisibleItems = items ?? [],
             Awards = awards ?? [],
+            AllyGroupByFaction = allyGroupByFaction ?? new Dictionary<Guid, Guid?>(),
+            BrokenAllyFactionIds = brokenAllyFactionIds ?? new HashSet<Guid>(),
         };
     }
 

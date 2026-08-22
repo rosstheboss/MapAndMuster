@@ -40,6 +40,10 @@ import type { FittedSquare, MapPoint } from '../../core/maps/geometry';
 import type { MapAdjacency, MapTerritory } from '../../core/maps/map-graph.models';
 import { IconComponent } from '../icon/icon.component';
 import { MapSymbolComponent } from '../map-symbol/map-symbol.component';
+import { isAdditiveModifier } from '../../core/maps/pointer';
+
+const HOVER_LIFT_SCREEN_PX = 6;
+const SPAWN_STRIPE_SCREEN_PX = 5;
 
 export type MovePlacement = 'valid' | 'invalid' | null;
 
@@ -88,8 +92,14 @@ export class CampaignMapViewComponent {
   readonly hoveredAdjacencyId = input<string | null>(null);
   readonly selectedAdjacencyId = input<string | null>(null);
   readonly adjacentTerritoryIds = input<readonly string[]>([]);
+  readonly showOverlay = input(true);
   readonly showAdjacencies = input(false);
+  readonly layerToggles = input(false);
+  readonly showConnectionsToggle = input(true);
   readonly adjacenciesInteractive = input(false);
+  readonly focusSelectedTerritories = input(false);
+  readonly showOverlayChange = output<boolean>();
+  readonly showConnectionsChange = output<boolean>();
   readonly interactive = input(true);
   readonly moveTerritories = input(false);
   readonly movePlacement = input<MovePlacement>(null);
@@ -104,6 +114,7 @@ export class CampaignMapViewComponent {
   readonly allyGroups = input<readonly CampaignAllyGroup[]>([]);
   readonly brokenAllyFactionIds = input<readonly string[]>([]);
   readonly itemImageUrl = input<(typeId: string) => string | null>(() => null);
+  readonly emphasizedForceIds = input<readonly string[]>([]);
 
   readonly mapPoint = output<MapPoint>();
   readonly mapHover = output<MapPoint>();
@@ -180,6 +191,7 @@ export class CampaignMapViewComponent {
           force,
           fit,
           color: this.factions().find((faction) => faction.id === force.factionId)?.color ?? '#44403c',
+          emphasized: this.emphasizedForceIds().includes(force.id),
         };
       });
       const presentItems = this.items().filter((item) => item.territoryId === territory.id && !item.carried);
@@ -193,6 +205,12 @@ export class CampaignMapViewComponent {
         return { item, fit };
       });
       const fill = this.territoryFill(territory, owner);
+      const spawnFaction = this.factions().find((faction) => faction.id === territory.spawnFactionId) ?? null;
+      const isSpawn = !!territory.spawnFactionId;
+      const stripeColor = fill === 'transparent' ? (spawnFaction?.color ?? '#78716c') : fill;
+      const hovered = territory.id === this.hoveredTerritoryId();
+      const lift = hovered && !selected && !this.marqueeBox() ? -this.screenToMap(HOVER_LIFT_SCREEN_PX) : 0;
+      const glowSource = isSpawn ? stripeColor : fill;
       return {
         territory,
         points: polygonPointsAttribute(territory.polygon),
@@ -218,9 +236,16 @@ export class CampaignMapViewComponent {
           : null,
         selected,
         halfHighlighted: !selected && this.isHalfHighlighted(territory.id),
+        dimmed:
+          this.focusSelectedTerritories() &&
+          this.selectedTerritoryIds().length > 0 &&
+          !selected &&
+          !this.isHalfHighlighted(territory.id),
         moveValid: selected && this.movePlacement() === 'valid',
         moveInvalid: selected && this.movePlacement() === 'invalid',
-        fill,
+        isSpawn,
+        fill: isSpawn ? `url(#${spawnStripePatternId(stripeColor)})` : fill,
+        hoverLift: lift,
         strokeWidth: this.screenToMap(
           selected
             ? STROKE_FULL_HIGHLIGHT_SCREEN_PX
@@ -228,9 +253,30 @@ export class CampaignMapViewComponent {
               ? STROKE_HALF_HIGHLIGHT_SCREEN_PX
               : STROKE_SCREEN_PX,
         ),
-        glowColor: fill === 'transparent' ? 'var(--color-glow)' : fill,
+        glowColor: glowSource === 'transparent' ? 'var(--color-glow)' : glowSource,
       };
     });
+  });
+
+  protected readonly spawnStripePatterns = computed(() => {
+    const stripe = this.screenToMap(SPAWN_STRIPE_SCREEN_PX);
+    const period = Math.max(stripe * 2, Number.EPSILON);
+    const seen = new Map<string, { id: string; color: string }>();
+    for (const territory of this.territories()) {
+      if (!territory.spawnFactionId) {
+        continue;
+      }
+
+      const owner = this.factions().find((faction) => faction.id === territory.ownerFactionId) ?? null;
+      const fill = this.territoryFill(territory, owner);
+      const spawnFaction = this.factions().find((faction) => faction.id === territory.spawnFactionId) ?? null;
+      const color = fill === 'transparent' ? (spawnFaction?.color ?? '#78716c') : fill;
+      if (!seen.has(color)) {
+        seen.set(color, { id: spawnStripePatternId(color), color });
+      }
+    }
+
+    return { stripe, period, patterns: [...seen.values()] };
   });
 
   protected readonly moveDropMarker = computed(() => {
@@ -261,7 +307,7 @@ export class CampaignMapViewComponent {
   });
 
   protected readonly overlayAdjacencies = computed(() => {
-    if (!this.showAdjacencies()) {
+    if (!this.showOverlay() || !this.showAdjacencies()) {
       return [];
     }
 
@@ -275,16 +321,13 @@ export class CampaignMapViewComponent {
 
       const inset = this.screenToMap(ARROW_HEAD_SCREEN_PX + ARROW_OVERHANG_LINE_SCREEN_PX);
       const ends = adjacencyArrowEndpoints(left.polygon, right.polygon, inset);
-      const highlighted = edge.id === this.hoveredAdjacencyId() || edge.id === this.selectedAdjacencyId();
+      const strokeWidth = Math.min(this.screenToMap(STROKE_FULL_HIGHLIGHT_SCREEN_PX), 0.008);
       return [
         {
           edge,
           geometry: adjacencyArrowGeometry(ends.from, ends.to, this.screenToMap(ARROW_HEAD_SCREEN_PX)),
-          cx: (ends.from.x + ends.to.x) / 2,
-          cy: (ends.from.y + ends.to.y) / 2,
-          highlighted,
           hitWidth: Math.min(this.screenToMap(ARROW_HIT_SCREEN_PX), 0.05),
-          strokeWidth: Math.min(this.screenToMap(STROKE_FULL_HIGHLIGHT_SCREEN_PX), 0.008),
+          strokeWidth,
         },
       ];
     });
@@ -305,14 +348,6 @@ export class CampaignMapViewComponent {
   });
 
   protected readonly zoomPercent = computed(() => Math.round(this.currentScale() * 100));
-
-  protected adjacencyVisualTransform(item: { highlighted: boolean; cx: number; cy: number }): string | null {
-    if (!item.highlighted) {
-      return null;
-    }
-
-    return `translate(${item.cx} ${item.cy}) scale(1.5) translate(${-item.cx} ${-item.cy})`;
-  }
 
   protected markerSize(fit: FittedSquare): { width: number; height: number } {
     const image = this.imageSize();
@@ -431,7 +466,7 @@ export class CampaignMapViewComponent {
 
     const territoryId = kind === 'territory' && id ? id : this.territoryIdAt(point);
     if (territoryId) {
-      const additive = event.ctrlKey || event.metaKey;
+      const additive = isAdditiveModifier(event);
       this.territorySelect.emit({
         id: territoryId,
         additive,
@@ -587,6 +622,20 @@ export class CampaignMapViewComponent {
     }
   }
 
+  protected onShowOverlayChange(event: Event): void {
+    const target = event.target;
+    if (target instanceof HTMLInputElement) {
+      this.showOverlayChange.emit(target.checked);
+    }
+  }
+
+  protected onShowConnectionsChange(event: Event): void {
+    const target = event.target;
+    if (target instanceof HTMLInputElement) {
+      this.showConnectionsChange.emit(target.checked);
+    }
+  }
+
   private isSelected(territoryId: string): boolean {
     return this.selectedTerritoryIds().includes(territoryId);
   }
@@ -648,7 +697,7 @@ export class CampaignMapViewComponent {
       clientX: event.clientX,
       clientY: event.clientY,
       point,
-      additive: event.ctrlKey || event.metaKey,
+      additive: isAdditiveModifier(event),
     };
     this.marqueeBox.set(null);
     try {
@@ -860,4 +909,8 @@ function clampAxis(pan: number, viewport: number, scaled: number): number {
   }
 
   return pan < min ? min : pan;
+}
+
+function spawnStripePatternId(color: string): string {
+  return `spawn-stripe-${color.replace(/[^a-zA-Z0-9]/g, '')}`;
 }

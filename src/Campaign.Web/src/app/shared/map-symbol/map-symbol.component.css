@@ -4,6 +4,7 @@
   height: 1.15em;
   flex-shrink: 0;
   vertical-align: -0.15em;
+  color: inherit;
 }
 
 svg {
@@ -16,5 +17,5 @@ svg {
 }
 
 .pillaged {
-  color: #7c2d12;
+  color: inherit;
 }

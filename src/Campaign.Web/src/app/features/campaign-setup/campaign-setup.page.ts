@@ -26,7 +26,8 @@ import { campaignFromPreset, campaignPresetApplyOptions } from '../../core/campa
 import { defaultArmyEscalations } from '../../core/campaigns/army-escalation-defaults';
 import {
   HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
-  HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT,
+  HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_IS_PERCENT,
+  HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_VALUE,
   huntInEstaliaArmyEscalations,
 } from '../../core/campaigns/hunt-in-estalia-defaults';
 import {
@@ -38,6 +39,7 @@ import {
 import { OLD_WORLD_SPECIAL_RULES, type SpecialRulePreset } from '../../core/campaigns/special-rule-presets';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
+import { syncDirtyFromBaseline } from '../../core/forms/sync-form-dirty';
 import {
   DURATION_UNITS,
   PHASE_KINDS,
@@ -75,7 +77,7 @@ import {
 } from '../../core/forms/validators';
 
 type NamedGroup = FormGroup<{ name: FormControl<string> }>;
-type AllyGroupForm = FormGroup<{ name: FormControl<string>; color: FormControl<string> }>;
+type AllyGroupForm = FormGroup<{ id: FormControl<string>; name: FormControl<string>; color: FormControl<string> }>;
 type LinkGroup = FormGroup<{ label: FormControl<string>; url: FormControl<string> }>;
 type MissionQuestionGroup = FormGroup<{
   id: FormControl<string>;
@@ -104,7 +106,7 @@ type FactionGroup = FormGroup<{
   name: FormControl<string>;
   color: FormControl<string>;
   requiresSubfaction: FormControl<boolean>;
-  allyGroupName: FormControl<string>;
+  allyGroupId: FormControl<string>;
   flagSource: FormControl<'color' | 'image'>;
   clearFlagImage: FormControl<boolean>;
   subfactions: FormArray<NamedGroup>;
@@ -282,6 +284,17 @@ export class CampaignSetupPage {
   private readonly storedMissionFiles = signal<ReadonlySet<string>>(new Set());
   private pendingPresetMapId: string | null = null;
   private presetsLoaded = false;
+  private hydrating = false;
+  private loadedDetail: CampaignDetail | null = null;
+  private savedFormValue: unknown = null;
+  private readonly formTick = signal(0);
+  private readonly pendingUploadsTick = signal(0);
+  protected readonly hasUnsavedChanges = computed(() => {
+    this.formTick();
+    this.pendingUploadsTick();
+    this.catalogTick();
+    return this.form.dirty || this.hasPendingUploads();
+  });
 
   protected readonly timeZones = listTimeZones();
   protected readonly durationUnits = DURATION_UNITS;
@@ -361,7 +374,11 @@ export class CampaignSetupPage {
     mostTerritoriesCampaignPoints: [0, [minValue(0), maxValue(999)]],
     longestTerritoryChainCampaignPoints: [0, [minValue(0), maxValue(999)]],
     mostBattlesWonCampaignPoints: [0, [minValue(0), maxValue(999)]],
-    splitForceSupplyPenaltyPercent: [HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT, [minValue(0), maxValue(100)]],
+    mostStructurePointsCampaignPoints: [0, [minValue(0), maxValue(999)]],
+    pointsPerTerritoryCampaignPoints: [0, [minValue(0), maxValue(999)]],
+    alliedRelicControlCampaignPoints: [0, [minValue(0), maxValue(999)]],
+    splitForceSupplyPenaltyPercent: [HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_VALUE, [minValue(0), maxValue(100)]],
+    splitForceSupplyPenaltyIsPercent: [HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_IS_PERCENT],
     alwaysAskGeneralKill: [true],
     alwaysAskSupplyLineDestroyed: [true],
     generalKillCampaignPoints: [1, [minValue(0), maxValue(999)]],
@@ -381,6 +398,12 @@ export class CampaignSetupPage {
   protected readonly useDifferential = toSignal(this.form.controls.useDifferentialBattleScoring.valueChanges, {
     initialValue: this.form.controls.useDifferentialBattleScoring.value,
   });
+  protected readonly splitForcePenaltyIsPercent = toSignal(
+    this.form.controls.splitForceSupplyPenaltyIsPercent.valueChanges,
+    {
+      initialValue: this.form.controls.splitForceSupplyPenaltyIsPercent.value,
+    },
+  );
   protected readonly countries = listCountries();
   protected readonly countryValue = toSignal(this.form.controls.country.valueChanges, {
     initialValue: this.form.controls.country.value,
@@ -398,6 +421,14 @@ export class CampaignSetupPage {
 
     this.form.controls.roundCount.valueChanges.pipe(takeUntilDestroyed()).subscribe((count) => {
       this.syncRoundEscalations(Number(count) || 0);
+    });
+    this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
+      if (this.hydrating) {
+        return;
+      }
+
+      this.syncFormDirty();
+      this.formTick.update((value) => value + 1);
     });
 
     this.destroyRef.onDestroy(() => this.revokeMapObjectUrl());
@@ -521,6 +552,57 @@ export class CampaignSetupPage {
     this.sectionOpen.update((current) => ({ ...current, [id]: current[id] === false }));
   }
 
+  protected discardUnsavedChanges(): void {
+    if (!this.isEdit() || !this.loadedDetail || this.saving() || this.loading()) {
+      return;
+    }
+
+    this.clearPendingUploads();
+    this.hydrateFromDetail(this.loadedDetail);
+    this.captureBaseline();
+    this.successMessage.set(null);
+    this.errorMessages.set([]);
+  }
+
+  protected sectionHeaderDirty(id: string): boolean {
+    const dirty = this.sectionHasDirty(id);
+    if (id === 'map') {
+      return dirty;
+    }
+
+    return !this.isOpen(id) && dirty;
+  }
+
+  protected isMapDirty(): boolean {
+    this.pendingUploadsTick();
+    return this.mapFile !== null || this.pendingPresetMapId !== null;
+  }
+
+  protected hasPendingFlag(factionId: string): boolean {
+    this.pendingUploadsTick();
+    return this.flagImages.has(factionId);
+  }
+
+  protected hasPendingStructureImage(structureId: string): boolean {
+    this.pendingUploadsTick();
+    return this.structureImages.has(structureId);
+  }
+
+  protected hasPendingPillagedImage(structureId: string): boolean {
+    this.pendingUploadsTick();
+    return this.structurePillagedImages.has(structureId);
+  }
+
+  protected hasPendingItemImage(itemId: string): boolean {
+    this.pendingUploadsTick();
+    return this.itemObjectiveImages.has(itemId);
+  }
+
+  protected hasPendingMissionFile(missionId: string): boolean {
+    this.pendingUploadsTick();
+    return this.missionFiles.has(missionId);
+  }
+
   protected expandAllSections(): void {
     this.setAllSections(true);
   }
@@ -529,16 +611,16 @@ export class CampaignSetupPage {
     this.setAllSections(false);
   }
 
-  protected allyMembers(groupName: string): string {
+  protected allyMembers(groupId: string): string {
     return this.factions.controls
-      .filter((faction) => faction.controls.allyGroupName.value === groupName && faction.controls.name.value.trim())
+      .filter((faction) => faction.controls.allyGroupId.value === groupId && faction.controls.name.value.trim())
       .map((faction) => faction.controls.name.value.trim())
       .join(', ');
   }
 
   protected unalignedFactions(): string {
     return this.factions.controls
-      .filter((faction) => !faction.controls.allyGroupName.value.trim() && faction.controls.name.value.trim())
+      .filter((faction) => !faction.controls.allyGroupId.value.trim() && faction.controls.name.value.trim())
       .map((faction) => faction.controls.name.value.trim())
       .join(', ');
   }
@@ -704,6 +786,7 @@ export class CampaignSetupPage {
         this.setStoredMapPreview(detail.id, detail.revision, detail.hasMap);
       } else if (preset.hasMap) {
         this.pendingPresetMapId = presetId;
+        this.bumpPendingUploads();
       }
     } catch (error: unknown) {
       this.revealErrors(readApiErrorMessages(error, 'Unable to apply this campaign preset.'));
@@ -727,7 +810,7 @@ export class CampaignSetupPage {
     this.replaceArray(
       this.factions,
       campaign.factions.map((faction) =>
-        this.createFactionGroup(faction.name, faction.allyGroupName ?? '', faction.subfactions, {
+        this.createFactionGroup(faction.name, this.allyGroupIdFor(campaign, faction), faction.subfactions, {
           id: faction.id,
           color: faction.color,
           requiresSubfaction: faction.requiresSubfaction,
@@ -739,7 +822,7 @@ export class CampaignSetupPage {
     );
     this.replaceArray(
       this.allyGroups,
-      campaign.allyGroups.map((group) => this.createAllyGroup(group.name, group.color)),
+      campaign.allyGroups.map((group) => this.createAllyGroup(group.id, group.name, group.color)),
     );
     this.replaceArray(
       this.terrainTypes,
@@ -781,9 +864,10 @@ export class CampaignSetupPage {
     this.form.controls.mostTerritoriesCampaignPoints.setValue(campaign.mostTerritoriesCampaignPoints ?? 0);
     this.form.controls.longestTerritoryChainCampaignPoints.setValue(campaign.longestTerritoryChainCampaignPoints ?? 0);
     this.form.controls.mostBattlesWonCampaignPoints.setValue(campaign.mostBattlesWonCampaignPoints ?? 0);
-    this.form.controls.splitForceSupplyPenaltyPercent.setValue(
-      campaign.splitForceSupplyPenaltyPercent ?? HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT,
-    );
+    this.form.controls.mostStructurePointsCampaignPoints.setValue(campaign.mostStructurePointsCampaignPoints ?? 0);
+    this.form.controls.pointsPerTerritoryCampaignPoints.setValue(campaign.pointsPerTerritoryCampaignPoints ?? 0);
+    this.form.controls.alliedRelicControlCampaignPoints.setValue(campaign.alliedRelicControlCampaignPoints ?? 0);
+    this.applySplitForcePenalty(campaign);
     this.form.controls.alwaysAskGeneralKill.setValue(campaign.alwaysAskGeneralKill !== false);
     this.form.controls.alwaysAskSupplyLineDestroyed.setValue(campaign.alwaysAskSupplyLineDestroyed !== false);
     this.form.controls.generalKillCampaignPoints.setValue(campaign.generalKillCampaignPoints ?? 1);
@@ -811,7 +895,8 @@ export class CampaignSetupPage {
     this.form.controls.differentialMinimum.setValue(0);
     this.form.controls.differentialMaximum.setValue(10);
     this.form.controls.allowNegativeDifferential.setValue(false);
-    this.form.controls.splitForceSupplyPenaltyPercent.setValue(HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT);
+    this.form.controls.splitForceSupplyPenaltyPercent.setValue(HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_VALUE);
+    this.form.controls.splitForceSupplyPenaltyIsPercent.setValue(HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_IS_PERCENT);
     this.form.controls.alwaysAskGeneralKill.setValue(true);
     this.form.controls.alwaysAskSupplyLineDestroyed.setValue(true);
     this.form.controls.generalKillCampaignPoints.setValue(1);
@@ -834,7 +919,7 @@ export class CampaignSetupPage {
   protected clearAllyGroups(): void {
     this.replaceArray(this.allyGroups, []);
     for (const faction of this.factions.controls) {
-      faction.controls.allyGroupName.setValue('');
+      faction.controls.allyGroupId.setValue('');
     }
   }
 
@@ -867,11 +952,11 @@ export class CampaignSetupPage {
   }
 
   protected removeAllyGroup(index: number): void {
-    const name = this.allyGroups.at(index).controls.name.value;
+    const id = this.allyGroups.at(index).controls.id.value;
     this.allyGroups.removeAt(index);
     for (const faction of this.factions.controls) {
-      if (faction.controls.allyGroupName.value === name) {
-        faction.controls.allyGroupName.setValue('');
+      if (faction.controls.allyGroupId.value === id) {
+        faction.controls.allyGroupId.setValue('');
       }
     }
   }
@@ -919,6 +1004,7 @@ export class CampaignSetupPage {
     this.structurePillagedImages.delete(id);
     this.removeMissionsFiles(this.structureTypes.at(index));
     this.structureTypes.removeAt(index);
+    this.bumpPendingUploads();
   }
 
   protected addItemObjective(): void {
@@ -933,6 +1019,7 @@ export class CampaignSetupPage {
     const id = this.itemObjectiveTypes.at(index).controls.id.value;
     this.itemObjectiveImages.delete(id);
     this.itemObjectiveTypes.removeAt(index);
+    this.bumpPendingUploads();
   }
 
   protected addPublicObjective(): void {
@@ -1183,6 +1270,7 @@ export class CampaignSetupPage {
     const missionId = this.missions.at(index).controls.id.value;
     this.missionFiles.delete(missionId);
     this.missions.removeAt(index);
+    this.bumpPendingUploads();
     for (const owner of [...this.terrainTypes.controls, ...this.structureTypes.controls]) {
       const attached = owner.controls.missions.controls.findIndex((mission) => mission.controls.id.value === missionId);
       if (attached >= 0) {
@@ -1228,6 +1316,7 @@ export class CampaignSetupPage {
     structure.controls.pillagedIconSource.setValue(source);
     if (source === 'symbol') {
       this.structurePillagedImages.delete(structure.controls.id.value);
+      this.bumpPendingUploads();
       structure.controls.clearPillagedImage.setValue(true);
     } else {
       structure.controls.clearPillagedImage.setValue(false);
@@ -1238,6 +1327,7 @@ export class CampaignSetupPage {
     structure.controls.iconSource.setValue(source);
     if (source === 'symbol') {
       this.structureImages.delete(structure.controls.id.value);
+      this.bumpPendingUploads();
       structure.controls.clearImage.setValue(true);
       if (!structure.controls.builtinSymbol.value) {
         structure.controls.builtinSymbol.setValue(this.structureSymbols[0].id);
@@ -1251,6 +1341,7 @@ export class CampaignSetupPage {
     item.controls.iconSource.setValue(source);
     if (source === 'symbol') {
       this.itemObjectiveImages.delete(item.controls.id.value);
+      this.bumpPendingUploads();
       item.controls.clearImage.setValue(true);
       if (!item.controls.builtinSymbol.value) {
         item.controls.builtinSymbol.setValue('Crown');
@@ -1264,6 +1355,7 @@ export class CampaignSetupPage {
     faction.controls.flagSource.setValue(source);
     if (source === 'color') {
       this.flagImages.delete(faction.controls.id.value);
+      this.bumpPendingUploads();
       faction.controls.clearFlagImage.setValue(true);
     } else {
       faction.controls.clearFlagImage.setValue(false);
@@ -1331,6 +1423,7 @@ export class CampaignSetupPage {
 
     this.mapFile = file;
     this.mapFileName.set(file?.name ?? null);
+    this.bumpPendingUploads();
     this.revokeMapObjectUrl();
     if (file) {
       this.mapObjectUrl = URL.createObjectURL(file);
@@ -1359,6 +1452,7 @@ export class CampaignSetupPage {
     const file = input.files?.[0] ?? null;
     if (file) {
       this.structureImages.set(structureId, file);
+      this.bumpPendingUploads();
       const group = this.structureTypes.controls.find((item) => item.controls.id.value === structureId);
       group?.controls.clearImage.setValue(false);
     }
@@ -1369,6 +1463,7 @@ export class CampaignSetupPage {
     const file = input.files?.[0] ?? null;
     if (file) {
       this.itemObjectiveImages.set(itemId, file);
+      this.bumpPendingUploads();
       const group = this.itemObjectiveTypes.controls.find((item) => item.controls.id.value === itemId);
       group?.controls.clearImage.setValue(false);
     }
@@ -1379,6 +1474,7 @@ export class CampaignSetupPage {
     const file = input.files?.[0] ?? null;
     if (file) {
       this.structurePillagedImages.set(structureId, file);
+      this.bumpPendingUploads();
       const group = this.structureTypes.controls.find((item) => item.controls.id.value === structureId);
       group?.controls.clearPillagedImage.setValue(false);
     }
@@ -1389,6 +1485,7 @@ export class CampaignSetupPage {
     const file = input.files?.[0] ?? null;
     if (file) {
       this.flagImages.set(factionId, file);
+      this.bumpPendingUploads();
       const group = this.factions.controls.find((item) => item.controls.id.value === factionId);
       group?.controls.clearFlagImage.setValue(false);
     }
@@ -1416,6 +1513,7 @@ export class CampaignSetupPage {
     const file = input.files?.[0] ?? null;
     if (file) {
       this.missionFiles.set(missionId, file);
+      this.bumpPendingUploads();
       for (const owner of [...this.terrainTypes.controls, ...this.structureTypes.controls]) {
         const mission = owner.controls.missions.controls.find((item) => item.controls.id.value === missionId);
         if (mission) {
@@ -1648,17 +1746,10 @@ export class CampaignSetupPage {
 
   private applyPersistedCampaign(created: { detail: CampaignDetail; isNew: boolean }): void {
     this.campaignId.set(created.detail.id);
-    this.revision = created.detail.revision;
-    this.hasExistingMap.set(created.detail.hasMap);
-    this.mapFile = null;
-    this.mapFileName.set(null);
-    this.setStoredMapPreview(created.detail.id, created.detail.revision, created.detail.hasMap);
-    this.structureImages.clear();
-    this.structurePillagedImages.clear();
-    this.itemObjectiveImages.clear();
-    this.flagImages.clear();
-    this.missionFiles.clear();
-    this.rememberStoredFiles(created.detail);
+    this.loadedDetail = created.detail;
+    this.clearPendingUploads();
+    this.hydrateFromDetail(created.detail);
+    this.captureBaseline();
   }
 
   private async loadCampaign(id: string): Promise<void> {
@@ -1675,9 +1766,22 @@ export class CampaignSetupPage {
         return;
       }
 
+      this.loadedDetail = campaign;
+      this.hydrateFromDetail(campaign);
+      this.captureBaseline();
+    } catch (error: unknown) {
+      this.revealErrors(readApiErrorMessages(error, 'Unable to load this campaign.'));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private hydrateFromDetail(campaign: CampaignDetail): void {
+    this.hydrating = true;
+    try {
       this.revision = campaign.revision;
       this.hasExistingMap.set(campaign.hasMap);
-      this.setStoredMapPreview(id, campaign.revision, campaign.hasMap);
+      this.setStoredMapPreview(campaign.id, campaign.revision, campaign.hasMap);
       this.rememberStoredFiles(campaign);
       this.form.patchValue({
         name: campaign.name,
@@ -1698,7 +1802,7 @@ export class CampaignSetupPage {
       this.replaceArray(
         this.factions,
         campaign.factions.map((faction) =>
-          this.createFactionGroup(faction.name, faction.allyGroupName ?? '', faction.subfactions, {
+          this.createFactionGroup(faction.name, this.allyGroupIdFor(campaign, faction), faction.subfactions, {
             id: faction.id,
             color: faction.color,
             requiresSubfaction: faction.requiresSubfaction,
@@ -1710,7 +1814,7 @@ export class CampaignSetupPage {
       );
       this.replaceArray(
         this.allyGroups,
-        campaign.allyGroups.map((group) => this.createAllyGroup(group.name, group.color)),
+        campaign.allyGroups.map((group) => this.createAllyGroup(group.id, group.name, group.color)),
       );
       this.replaceArray(
         this.links,
@@ -1773,9 +1877,10 @@ export class CampaignSetupPage {
         campaign.longestTerritoryChainCampaignPoints ?? 0,
       );
       this.form.controls.mostBattlesWonCampaignPoints.setValue(campaign.mostBattlesWonCampaignPoints ?? 0);
-      this.form.controls.splitForceSupplyPenaltyPercent.setValue(
-        campaign.splitForceSupplyPenaltyPercent ?? HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_PERCENT,
-      );
+      this.form.controls.mostStructurePointsCampaignPoints.setValue(campaign.mostStructurePointsCampaignPoints ?? 0);
+      this.form.controls.pointsPerTerritoryCampaignPoints.setValue(campaign.pointsPerTerritoryCampaignPoints ?? 0);
+      this.form.controls.alliedRelicControlCampaignPoints.setValue(campaign.alliedRelicControlCampaignPoints ?? 0);
+      this.applySplitForcePenalty(campaign);
       this.form.controls.alwaysAskGeneralKill.setValue(campaign.alwaysAskGeneralKill !== false);
       this.form.controls.alwaysAskSupplyLineDestroyed.setValue(campaign.alwaysAskSupplyLineDestroyed !== false);
       this.form.controls.generalKillCampaignPoints.setValue(campaign.generalKillCampaignPoints ?? 1);
@@ -1798,16 +1903,14 @@ export class CampaignSetupPage {
           this.factions.push(this.createFactionGroup());
         }
       }
-    } catch (error: unknown) {
-      this.revealErrors(readApiErrorMessages(error, 'Unable to load this campaign.'));
     } finally {
-      this.loading.set(false);
+      this.hydrating = false;
     }
   }
 
   private createFactionGroup(
     name = '',
-    allyGroupName = '',
+    allyGroupId = '',
     subfactions: readonly string[] = [''],
     options?: {
       id?: string;
@@ -1824,7 +1927,7 @@ export class CampaignSetupPage {
       name: [name, [required, maxLength(60)]],
       color: [options?.color ?? '#2563EB', required],
       requiresSubfaction: [options?.requiresSubfaction === true],
-      allyGroupName: [allyGroupName],
+      allyGroupId: [allyGroupId],
       flagSource: this.formBuilder.nonNullable.control<'color' | 'image'>(options?.hasFlagImage ? 'image' : 'color'),
       clearFlagImage: [false],
       subfactions: this.formBuilder.array<NamedGroup>(names.map((value) => this.createNamedGroup(value))),
@@ -1841,11 +1944,41 @@ export class CampaignSetupPage {
     });
   }
 
-  private createAllyGroup(name = '', color?: string): AllyGroupForm {
+  private createAllyGroup(id?: string, name = '', color?: string): AllyGroupForm {
     return this.formBuilder.nonNullable.group({
+      id: [id ?? this.newId()],
       name: [name, maxLength(60)],
       color: [color ?? this.nextAllyColor(), required],
     });
+  }
+
+  private allyGroupIdFor(
+    campaign: Pick<CampaignDetail, 'allyGroups'>,
+    faction: { allyGroupId?: string | null; allyGroupName?: string | null },
+  ): string {
+    const id = faction.allyGroupId?.trim();
+    if (id && campaign.allyGroups.some((group) => group.id === id)) {
+      return id;
+    }
+
+    const name = faction.allyGroupName?.trim();
+    if (!name) {
+      return '';
+    }
+
+    return campaign.allyGroups.find((group) => group.name.toLowerCase() === name.toLowerCase())?.id ?? '';
+  }
+
+  private applySplitForcePenalty(campaign: {
+    splitForceSupplyPenaltyPercent?: number;
+    splitForceSupplyPenaltyIsPercent?: boolean;
+  }): void {
+    this.form.controls.splitForceSupplyPenaltyPercent.setValue(
+      campaign.splitForceSupplyPenaltyPercent ?? HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_VALUE,
+    );
+    this.form.controls.splitForceSupplyPenaltyIsPercent.setValue(
+      campaign.splitForceSupplyPenaltyIsPercent ?? HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_IS_PERCENT,
+    );
   }
 
   private nextAllyColor(): string {
@@ -2295,6 +2428,251 @@ export class CampaignSetupPage {
     this.catalogTick.update((value) => value + 1);
   }
 
+  private hasPendingUploads(): boolean {
+    return (
+      this.mapFile !== null ||
+      this.pendingPresetMapId !== null ||
+      this.structureImages.size > 0 ||
+      this.structurePillagedImages.size > 0 ||
+      this.itemObjectiveImages.size > 0 ||
+      this.flagImages.size > 0 ||
+      this.missionFiles.size > 0
+    );
+  }
+
+  private bumpPendingUploads(): void {
+    this.pendingUploadsTick.update((value) => value + 1);
+  }
+
+  private clearPendingUploads(): void {
+    this.mapFile = null;
+    this.mapFileName.set(null);
+    this.pendingPresetMapId = null;
+    this.structureImages.clear();
+    this.structurePillagedImages.clear();
+    this.itemObjectiveImages.clear();
+    this.flagImages.clear();
+    this.missionFiles.clear();
+    this.bumpPendingUploads();
+  }
+
+  private captureBaseline(): void {
+    this.savedFormValue = structuredClone(this.form.getRawValue());
+    this.form.markAsPristine();
+    this.syncFormDirty();
+    this.formTick.update((value) => value + 1);
+  }
+
+  private syncFormDirty(): void {
+    if (this.savedFormValue === null || this.savedFormValue === undefined) {
+      return;
+    }
+
+    syncDirtyFromBaseline(this.form, this.savedFormValue);
+  }
+
+  private anyDirty(controls: readonly { dirty: boolean }[]): boolean {
+    return controls.some((control) => control.dirty);
+  }
+
+  private missionGroupHasPending(group: MissionGroup): boolean {
+    return this.hasPendingMissionFile(group.controls.id.value);
+  }
+
+  private sectionHasDirty(id: string): boolean {
+    this.formTick();
+    this.pendingUploadsTick();
+    this.catalogTick();
+    const indexed = /^(.*)-(\d+)$/.exec(id);
+    if (indexed) {
+      return this.indexedSectionDirty(indexed[1], Number(indexed[2]));
+    }
+
+    switch (id) {
+      case 'details':
+        return this.anyDirty([
+          this.form.controls.name,
+          this.form.controls.description,
+          this.form.controls.playerCount,
+          this.form.controls.city,
+          this.form.controls.region,
+          this.form.controls.country,
+        ]);
+      case 'schedule':
+        return this.anyDirty([
+          this.form.controls.timeZoneId,
+          this.form.controls.startsAtLocal,
+          this.form.controls.roundCount,
+          this.form.controls.roundLengthAmount,
+          this.form.controls.roundLengthUnit,
+          this.phases,
+        ]);
+      case 'round-army':
+        return this.roundEscalations.dirty;
+      case 'visibility':
+        return this.anyDirty([
+          this.form.controls.isPrivate,
+          this.form.controls.isPubliclyViewable,
+          this.form.controls.joinPassword,
+          this.form.controls.creatorRole,
+        ]);
+      case 'specialRules':
+        return this.specialRules.dirty;
+      case 'forceStatuses':
+        return this.forceStatuses.dirty;
+      case 'publicObjectives':
+        return (
+          this.publicObjectiveTypes.dirty ||
+          this.anyDirty([
+            this.form.controls.pointsPerBattleWon,
+            this.form.controls.pointsPerBattleDraw,
+            this.form.controls.useDifferentialBattleScoring,
+            this.form.controls.differentialMultiplier,
+            this.form.controls.differentialMinimum,
+            this.form.controls.differentialMaximum,
+            this.form.controls.allowNegativeDifferential,
+            this.form.controls.mostTerritoriesCampaignPoints,
+            this.form.controls.longestTerritoryChainCampaignPoints,
+            this.form.controls.mostBattlesWonCampaignPoints,
+            this.form.controls.mostStructurePointsCampaignPoints,
+            this.form.controls.pointsPerTerritoryCampaignPoints,
+            this.form.controls.alliedRelicControlCampaignPoints,
+            this.form.controls.alwaysAskGeneralKill,
+            this.form.controls.alwaysAskSupplyLineDestroyed,
+            this.form.controls.generalKillCampaignPoints,
+            this.form.controls.supplyLineDestroyedCampaignPoints,
+          ])
+        );
+      case 'privateObjectives':
+        return this.privateObjectiveTypes.dirty;
+      case 'allies':
+        return this.allyGroups.dirty;
+      case 'factions':
+        return this.factions.dirty || this.flagImages.size > 0;
+      case 'missions':
+        return this.missions.dirty || this.missions.controls.some((mission) => this.missionGroupHasPending(mission));
+      case 'terrain':
+        return (
+          this.terrainTypes.dirty ||
+          this.terrainTypes.controls.some((terrain) =>
+            terrain.controls.missions.controls.some((mission) => this.missionGroupHasPending(mission)),
+          )
+        );
+      case 'structures':
+        return (
+          this.structureTypes.dirty ||
+          this.structureImages.size > 0 ||
+          this.structurePillagedImages.size > 0 ||
+          this.structureTypes.controls.some((structure) =>
+            structure.controls.missions.controls.some((mission) => this.missionGroupHasPending(mission)),
+          )
+        );
+      case 'itemObjectives':
+        return this.itemObjectiveTypes.dirty || this.itemObjectiveImages.size > 0;
+      case 'links':
+        return this.links.dirty;
+      case 'map':
+        return this.isMapDirty();
+      default:
+        return false;
+    }
+  }
+
+  private indexedSectionDirty(prefix: string, index: number): boolean {
+    switch (prefix) {
+      case 'special-rule':
+        return this.arrayControlDirty(this.specialRules, index);
+      case 'force-status':
+        return this.arrayControlDirty(this.forceStatuses, index);
+      case 'public-objective':
+        return this.arrayControlDirty(this.publicObjectiveTypes, index);
+      case 'private-objective':
+        return this.arrayControlDirty(this.privateObjectiveTypes, index);
+      case 'faction-item': {
+        if (!this.hasArrayIndex(this.factions, index)) {
+          return false;
+        }
+
+        const faction = this.factions.at(index);
+        return faction.dirty || this.hasPendingFlag(faction.controls.id.value);
+      }
+      case 'faction-sub':
+        return this.hasArrayIndex(this.factions, index) && this.factions.at(index).controls.subfactions.dirty;
+      case 'mission-item': {
+        if (!this.hasArrayIndex(this.missions, index)) {
+          return false;
+        }
+
+        const mission = this.missions.at(index);
+        return mission.dirty || this.missionGroupHasPending(mission);
+      }
+      case 'terrain-item': {
+        if (!this.hasArrayIndex(this.terrainTypes, index)) {
+          return false;
+        }
+
+        const terrain = this.terrainTypes.at(index);
+        return (
+          terrain.dirty || terrain.controls.missions.controls.some((mission) => this.missionGroupHasPending(mission))
+        );
+      }
+      case 'terrain-missions': {
+        if (!this.hasArrayIndex(this.terrainTypes, index)) {
+          return false;
+        }
+
+        const terrain = this.terrainTypes.at(index);
+        return (
+          terrain.controls.missions.dirty ||
+          terrain.controls.missions.controls.some((mission) => this.missionGroupHasPending(mission))
+        );
+      }
+      case 'structure-item': {
+        if (!this.hasArrayIndex(this.structureTypes, index)) {
+          return false;
+        }
+
+        const structure = this.structureTypes.at(index);
+        const id = structure.controls.id.value;
+        return (
+          structure.dirty ||
+          this.hasPendingStructureImage(id) ||
+          this.hasPendingPillagedImage(id) ||
+          structure.controls.missions.controls.some((mission) => this.missionGroupHasPending(mission))
+        );
+      }
+      case 'structure-missions': {
+        if (!this.hasArrayIndex(this.structureTypes, index)) {
+          return false;
+        }
+
+        const structure = this.structureTypes.at(index);
+        return (
+          structure.controls.missions.dirty ||
+          structure.controls.missions.controls.some((mission) => this.missionGroupHasPending(mission))
+        );
+      }
+      case 'item-objective': {
+        if (!this.hasArrayIndex(this.itemObjectiveTypes, index)) {
+          return false;
+        }
+
+        const item = this.itemObjectiveTypes.at(index);
+        return item.dirty || this.hasPendingItemImage(item.controls.id.value);
+      }
+      default:
+        return false;
+    }
+  }
+
+  private hasArrayIndex(items: { length: number }, index: number): boolean {
+    return index >= 0 && index < items.length;
+  }
+
+  private arrayControlDirty(items: { length: number; at(index: number): { dirty: boolean } }, index: number): boolean {
+    return this.hasArrayIndex(items, index) && items.at(index).dirty;
+  }
+
   private dropAssignedSpecialRule(ruleId: string): void {
     for (const faction of this.factions.controls) {
       faction.controls.specialRuleIds.setValue(faction.controls.specialRuleIds.value.filter((id) => id !== ruleId));
@@ -2369,20 +2747,24 @@ export class CampaignSetupPage {
     const value = this.form.getRawValue();
     const allyGroups = value.allyGroups
       .filter((group) => group.name.trim().length > 0)
-      .map((group) => ({ name: group.name.trim(), color: group.color }));
-    const factions = value.factions.map((faction) => ({
-      id: faction.id,
-      name: faction.name.trim(),
-      color: faction.color,
-      requiresSubfaction: faction.requiresSubfaction,
-      allyGroupName: faction.allyGroupName.trim() || null,
-      subfactions: faction.subfactions.map((item) => item.name.trim()).filter((name) => name.length > 0),
-      clearFlagImage: faction.flagSource === 'color' || faction.clearFlagImage,
-      specialRuleIds: faction.specialRuleIds,
-      subfactionSpecialRules: Object.entries(faction.subfactionSpecialRuleIds)
-        .filter(([name]) => faction.subfactions.some((item) => item.name.trim() === name))
-        .map(([name, specialRuleIds]) => ({ name, specialRuleIds })),
-    }));
+      .map((group) => ({ id: group.id, name: group.name.trim(), color: group.color }));
+    const factions = value.factions.map((faction) => {
+      const group = value.allyGroups.find((item) => item.id === faction.allyGroupId);
+      return {
+        id: faction.id,
+        name: faction.name.trim(),
+        color: faction.color,
+        requiresSubfaction: faction.requiresSubfaction,
+        allyGroupId: faction.allyGroupId.trim().length > 0 ? faction.allyGroupId : null,
+        allyGroupName: group?.name.trim() ? group.name.trim() : null,
+        subfactions: faction.subfactions.map((item) => item.name.trim()).filter((name) => name.length > 0),
+        clearFlagImage: faction.flagSource === 'color' || faction.clearFlagImage,
+        specialRuleIds: faction.specialRuleIds,
+        subfactionSpecialRules: Object.entries(faction.subfactionSpecialRuleIds)
+          .filter(([name]) => faction.subfactions.some((item) => item.name.trim() === name))
+          .map(([name, specialRuleIds]) => ({ name, specialRuleIds })),
+      };
+    });
     const links = value.links
       .filter((link) => link.label.trim().length > 0 || link.url.trim().length > 0)
       .map((link) => ({ label: link.label.trim(), url: link.url.trim() }));
@@ -2522,7 +2904,11 @@ export class CampaignSetupPage {
       mostTerritoriesCampaignPoints: Number(value.mostTerritoriesCampaignPoints) || 0,
       longestTerritoryChainCampaignPoints: Number(value.longestTerritoryChainCampaignPoints) || 0,
       mostBattlesWonCampaignPoints: Number(value.mostBattlesWonCampaignPoints) || 0,
+      mostStructurePointsCampaignPoints: Number(value.mostStructurePointsCampaignPoints) || 0,
+      pointsPerTerritoryCampaignPoints: Number(value.pointsPerTerritoryCampaignPoints) || 0,
+      alliedRelicControlCampaignPoints: Number(value.alliedRelicControlCampaignPoints) || 0,
       splitForceSupplyPenaltyPercent: Number(value.splitForceSupplyPenaltyPercent) || 0,
+      splitForceSupplyPenaltyIsPercent: Boolean(value.splitForceSupplyPenaltyIsPercent),
       alwaysAskGeneralKill: Boolean(value.alwaysAskGeneralKill),
       alwaysAskSupplyLineDestroyed: Boolean(value.alwaysAskSupplyLineDestroyed),
       generalKillCampaignPoints: Number(value.generalKillCampaignPoints) || 0,
@@ -3181,6 +3567,8 @@ export class CampaignSetupPage {
     for (const mission of group.controls.missions.controls) {
       this.missionFiles.delete(mission.controls.id.value);
     }
+
+    this.bumpPendingUploads();
   }
 
   private revealErrors(messages: readonly string[]): void {

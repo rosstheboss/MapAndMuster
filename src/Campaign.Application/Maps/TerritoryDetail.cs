@@ -32,9 +32,15 @@ public sealed class TerritoryDetail
     /// <summary>Gets the optional overlay color as #RRGGBB.</summary>
     public string? OverlayColor { get; init; }
 
-    /// <summary>Gets the owning faction, or null when the territory is neutral.</summary>
+    /// <summary>Gets the owning faction, or null when the territory is Neutral.</summary>
     public Guid? OwnerFactionId { get; init; }
+
+    /// <summary>Gets the owning required subfaction, when ownership is subfaction-specific.</summary>
+    public string? OwnerSubfaction { get; init; }
 
     /// <summary>Gets the spawn-location faction, if any.</summary>
     public Guid? SpawnFactionId { get; init; }
+
+    /// <summary>Gets the spawn required subfaction, when spawn is subfaction-specific.</summary>
+    public string? SpawnSubfaction { get; init; }
 }

@@ -240,6 +240,7 @@ public sealed class ApplyCampaignPresetHandler
             BattleScoring = campaign.BattleScoring,
             RankingObjectivePoints = campaign.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = campaign.SplitForceSupplyPenaltyIsPercent,
             BattleReportRules = campaign.BattleReportRules,
             ArmyEscalations = campaign.ArmyEscalations,
         };

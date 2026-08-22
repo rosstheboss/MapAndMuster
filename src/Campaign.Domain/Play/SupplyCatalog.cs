@@ -19,7 +19,8 @@ public sealed class SupplyCatalog
         IReadOnlyDictionary<Guid, string?> allyGroupByFaction,
         IReadOnlySet<Guid> brokenAllyFactionIds,
         SpecialRuleContext? specialRules = null,
-        IReadOnlyDictionary<Guid, string?>? subfactionByPlayer = null)
+        IReadOnlyDictionary<Guid, string?>? subfactionByPlayer = null,
+        bool splitForceSupplyPenaltyIsPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent)
     {
         ArgumentNullException.ThrowIfNull(terrainSupplyByType);
         ArgumentNullException.ThrowIfNull(structures);
@@ -31,6 +32,7 @@ public sealed class SupplyCatalog
         TerrainSupplyByType = terrainSupplyByType;
         Structures = structures;
         SplitForceSupplyPenaltyPercent = splitForceSupplyPenaltyPercent;
+        SplitForceSupplyPenaltyIsPercent = splitForceSupplyPenaltyIsPercent;
         ArmyEscalations = armyEscalations;
         FactionByPlayer = factionByPlayer;
         AllyGroupByFaction = allyGroupByFaction;
@@ -45,8 +47,11 @@ public sealed class SupplyCatalog
     /// <summary>Gets supply rules for each structure type.</summary>
     public IReadOnlyDictionary<Guid, StructureSupplyRules> Structures { get; }
 
-    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int SplitForceSupplyPenaltyPercent { get; }
+
+    /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
+    public bool SplitForceSupplyPenaltyIsPercent { get; }
 
     /// <summary>Gets per-round army escalation.</summary>
     public IReadOnlyList<RoundArmyEscalationSetup> ArmyEscalations { get; }

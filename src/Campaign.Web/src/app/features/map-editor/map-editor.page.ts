@@ -1,4 +1,13 @@
-import { Component, computed, HostListener, inject, signal, viewChild, type ElementRef } from '@angular/core';
+import {
+  afterRenderEffect,
+  Component,
+  computed,
+  HostListener,
+  inject,
+  signal,
+  viewChild,
+  type ElementRef,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
@@ -8,6 +17,7 @@ import { CampaignService } from '../../core/campaigns/campaign.service';
 import type { CampaignDetail, CampaignMission, MapGraphDetail } from '../../core/campaigns/campaign.models';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
+import { isAdditiveModifier } from '../../core/maps/pointer';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
   adjacencyMarker,
@@ -33,8 +43,21 @@ import {
   translatePolygon,
   type MapPoint,
 } from '../../core/maps/geometry';
+import {
+  readStoredOverlayColorMode,
+  writeStoredOverlayColorMode,
+  type OverlayColorMode,
+} from '../../core/maps/map-editor-preferences';
 import { downloadBlob, mapDownloadFilename, rasterizeMapPng } from '../../core/maps/map-export';
 import { parseMapSvg, serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
+import {
+  mapFactionOptionLabel,
+  mapFactionOptions,
+  mapFactionOptionValue,
+  parseMapFactionOptionValue,
+  spawnIdentity,
+  type MapFactionOption,
+} from '../../core/maps/map-faction-options';
 import {
   cloneGraph,
   createId,
@@ -46,12 +69,13 @@ import {
   type MapTerritory,
 } from '../../core/maps/map-graph.models';
 import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
+import { IconComponent } from '../../shared/icon/icon.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 
 export type MapEditorTool = 'draw' | 'erase' | 'select' | 'connect';
-export type OverlayColorMode = 'random' | 'terrain' | 'manual';
+export type { OverlayColorMode };
 
 @Component({
   selector: 'app-map-editor-page',
@@ -59,6 +83,7 @@ export type OverlayColorMode = 'random' | 'terrain' | 'manual';
     FormsModule,
     RouterLink,
     CampaignMapViewComponent,
+    IconComponent,
     MapSymbolComponent,
     InstantDatePipe,
     SaveCampaignPresetDialogComponent,
@@ -89,6 +114,11 @@ export class MapEditorPage {
   protected readonly connectPendingId = signal<string | null>(null);
   protected readonly colorMode = signal<OverlayColorMode>('manual');
   protected readonly lastSavedAtUtc = signal<string | null>(null);
+  protected readonly saveStatus = signal<'success' | 'failure' | null>(null);
+  protected readonly showOverlay = signal(true);
+  protected readonly showConnections = signal(true);
+  protected readonly editorFieldsCollapsed = signal(false);
+  protected readonly territoryListCollapsed = signal(true);
   protected readonly mapImageRevision = signal(0);
   protected readonly drawingActive = signal(false);
   protected readonly movePlacement = signal<'valid' | 'invalid' | null>(null);
@@ -98,7 +128,8 @@ export class MapEditorPage {
   protected readonly savePresetOpen = signal(false);
   private readonly svgFileInput = viewChild<ElementRef<HTMLInputElement>>('svgFile');
 
-  protected readonly drawTools: MapEditorTool[] = ['draw', 'erase', 'select'];
+  protected readonly mapTools: MapEditorTool[] = ['draw', 'erase', 'select', 'connect'];
+  protected readonly colorModes: OverlayColorMode[] = ['random', 'terrain', 'manual'];
 
   private revision = 0;
   private undoStack: MapGraph[] = [];
@@ -111,6 +142,7 @@ export class MapEditorPage {
   private savedSnapshot = signal('');
   private savedGraph: MapGraph = { territories: [], adjacencies: [] };
   private readonly mapView = viewChild(CampaignMapViewComponent);
+  private readonly territoryList = viewChild<ElementRef<HTMLUListElement>>('territoryList');
   private readonly historyVersion = signal(0);
 
   protected readonly canManage = computed(() => this.campaign()?.canManage === true);
@@ -170,9 +202,18 @@ export class MapEditorPage {
   protected readonly sortedTerritories = computed(() =>
     [...this.graph().territories].sort((left, right) => territoryLabel(left).localeCompare(territoryLabel(right))),
   );
-  protected readonly sortedFactions = computed(() =>
-    [...(this.campaign()?.factions ?? [])].sort((left, right) => left.name.localeCompare(right.name)),
-  );
+  private readonly topSelectedTerritoryId = computed(() => {
+    const selected = new Set(this.selectedIds());
+    if (selected.size === 0) {
+      return null;
+    }
+
+    return this.sortedTerritories().find((territory) => selected.has(territory.id))?.id ?? null;
+  });
+  protected readonly factionOptions = computed(() => {
+    const campaign = this.campaign();
+    return campaign ? mapFactionOptions(campaign) : [];
+  });
   protected readonly catalogTerrains = computed(() =>
     [...(this.campaign()?.terrainTypes ?? [])].sort((left, right) => left.name.localeCompare(right.name)),
   );
@@ -187,9 +228,138 @@ export class MapEditorPage {
   protected readonly hasUnsavedEdits = computed(
     () => this.drawing().length > 0 || JSON.stringify(this.graph()) !== this.savedSnapshot(),
   );
+  protected readonly editorHeading = computed(() => {
+    if (this.selectedAdjacency()) {
+      return 'Connection';
+    }
+
+    if (this.selectedTerritories().length > 1) {
+      return 'Selected territories';
+    }
+
+    return 'Territory';
+  });
+  protected readonly editorFieldsDirty = computed(() => {
+    if (this.selectedAdjacency()) {
+      return this.isAdjacencyFieldDirty('a') || this.isAdjacencyFieldDirty('b');
+    }
+
+    return this.selectedIds().some((id) => this.isTerritoryDirty(id));
+  });
+  protected readonly territoryListDirty = computed(() =>
+    this.graph().territories.some((territory) => this.isTerritoryDirty(territory.id)),
+  );
+
+  protected toggleEditorFields(): void {
+    this.editorFieldsCollapsed.update((collapsed) => !collapsed);
+  }
+
+  protected toggleTerritoryList(): void {
+    this.territoryListCollapsed.update((collapsed) => !collapsed);
+  }
+
+  protected setShowOverlay(visible: boolean): void {
+    this.showOverlay.set(visible);
+  }
+
+  protected setShowConnections(visible: boolean): void {
+    this.showConnections.set(visible);
+  }
+
+  protected isAdditiveClick(event: MouseEvent): boolean {
+    return isAdditiveModifier(event);
+  }
+
+  protected isTerritoryFieldDirty(
+    key:
+      | 'name'
+      | 'description'
+      | 'terrainTypeId'
+      | 'structureTypeId'
+      | 'structureCondition'
+      | 'ownerFactionId'
+      | 'ownerSubfaction'
+      | 'spawnFactionId'
+      | 'spawnSubfaction'
+      | 'overlayColor',
+  ): boolean {
+    const current = this.selected();
+    if (!current) {
+      return false;
+    }
+
+    const saved = this.savedGraph.territories.find((item) => item.id === current.id);
+    if (!saved) {
+      return true;
+    }
+
+    return (current[key] ?? '') !== (saved[key] ?? '');
+  }
+
+  protected isItemPlacementDirty(typeId: string): boolean {
+    const selectedId = this.selected()?.id;
+    if (!selectedId) {
+      return false;
+    }
+
+    const currentId = this.graph().itemObjectivePlacements?.find((item) => item.typeId === typeId)?.territoryId ?? null;
+    const savedId =
+      this.savedGraph.itemObjectivePlacements?.find((item) => item.typeId === typeId)?.territoryId ?? null;
+    return (currentId === selectedId) !== (savedId === selectedId);
+  }
+
+  protected isTerritoryDirty(id: string): boolean {
+    const current = this.graph().territories.find((item) => item.id === id);
+    const saved = this.savedGraph.territories.find((item) => item.id === id);
+    if (!current) {
+      return false;
+    }
+
+    if (!saved) {
+      return true;
+    }
+
+    if (JSON.stringify(current) !== JSON.stringify(saved)) {
+      return true;
+    }
+
+    const currentPlacements = (this.graph().itemObjectivePlacements ?? []).filter((item) => item.territoryId === id);
+    const savedPlacements = (this.savedGraph.itemObjectivePlacements ?? []).filter((item) => item.territoryId === id);
+    return JSON.stringify(currentPlacements) !== JSON.stringify(savedPlacements);
+  }
+
+  protected isAdjacencyFieldDirty(end: 'a' | 'b'): boolean {
+    const current = this.selectedAdjacency();
+    if (!current) {
+      return false;
+    }
+
+    const saved = this.savedGraph.adjacencies.find((item) => item.id === current.id);
+    if (!saved) {
+      return true;
+    }
+
+    return end === 'a' ? current.territoryAId !== saved.territoryAId : current.territoryBId !== saved.territoryBId;
+  }
 
   constructor() {
+    afterRenderEffect(() => {
+      const id = this.topSelectedTerritoryId();
+      if (this.territoryListCollapsed() || !id) {
+        return;
+      }
+
+      const buttons = this.territoryList()?.nativeElement.querySelectorAll<HTMLButtonElement>('[data-territory-id]');
+      const target = [...(buttons ?? [])].find((button) => button.dataset['territoryId'] === id);
+      target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+
     if (this.campaignId) {
+      const stored = readStoredOverlayColorMode(this.campaignId);
+      if (stored) {
+        this.colorMode.set(stored);
+      }
+
       void this.load(this.campaignId);
     } else {
       this.errorMessages.set(['The campaign was not found.']);
@@ -220,6 +390,23 @@ export class MapEditorPage {
     if (tool !== 'draw') {
       this.drawing.set([]);
       this.drawingActive.set(false);
+    }
+    if (tool === 'draw') {
+      this.hoveredTerritoryId.set(null);
+    }
+    if (tool === 'connect' && this.canConnectSelected()) {
+      this.connectSelectedTerritories();
+    }
+  }
+
+  protected colorModeLabel(mode: OverlayColorMode): string {
+    switch (mode) {
+      case 'random':
+        return 'Random Colors';
+      case 'terrain':
+        return 'Color By Terrain';
+      case 'manual':
+        return 'Manual Colors';
     }
   }
 
@@ -421,6 +608,11 @@ export class MapEditorPage {
   }
 
   protected onTerritoryHover(id: string | null): void {
+    if (this.tool() === 'draw') {
+      this.hoveredTerritoryId.set(null);
+      return;
+    }
+
     this.hoveredTerritoryId.set(id);
   }
 
@@ -515,11 +707,6 @@ export class MapEditorPage {
   }
 
   protected onConnectClick(): void {
-    if (this.canConnectSelected()) {
-      this.connectSelectedTerritories();
-      return;
-    }
-
     this.onToolChange('connect');
   }
 
@@ -551,7 +738,7 @@ export class MapEditorPage {
       return;
     }
 
-    this.colorMode.set(mode);
+    this.applyColorMode(mode);
     if (mode === 'manual') {
       return;
     }
@@ -583,7 +770,7 @@ export class MapEditorPage {
       return;
     }
 
-    this.colorMode.set('manual');
+    this.applyColorMode('manual');
     this.pushUndo();
     this.graph.update((graph) => ({
       ...graph,
@@ -623,15 +810,30 @@ export class MapEditorPage {
   }
 
   protected setOwner(value: string): void {
-    this.patchSelected((territory) => ({ ...territory, ownerFactionId: value || null }));
+    if (this.selected()?.spawnFactionId) {
+      return;
+    }
+
+    const parsed = parseMapFactionOptionValue(value);
+    this.patchSelected((territory) => ({
+      ...territory,
+      ownerFactionId: parsed.factionId || null,
+      ownerSubfaction: parsed.factionId ? parsed.subfaction : null,
+    }));
   }
 
   protected setSpawn(value: string): void {
-    this.patchSelected((territory) => ({ ...territory, spawnFactionId: value || null }));
+    const parsed = parseMapFactionOptionValue(value);
+    this.patchSelected((territory) => ({
+      ...territory,
+      spawnFactionId: parsed.factionId || null,
+      spawnSubfaction: parsed.factionId ? parsed.subfaction : null,
+      ...(parsed.factionId ? { ownerFactionId: parsed.factionId, ownerSubfaction: parsed.subfaction } : {}),
+    }));
   }
 
   protected setOverlayColor(value: string): void {
-    this.colorMode.set('manual');
+    this.applyColorMode('manual');
     this.patchSelected((territory) => ({ ...territory, overlayColor: value || null }));
   }
 
@@ -666,12 +868,20 @@ export class MapEditorPage {
     });
   }
 
-  protected factionName(id: string | null | undefined): string {
-    if (!id) {
-      return 'Neutral';
-    }
+  protected factionName(id: string | null | undefined, subfaction?: string | null): string {
+    return mapFactionOptionLabel(this.campaign()?.factions ?? [], id, subfaction);
+  }
 
-    return this.campaign()?.factions.find((faction) => faction.id === id)?.name ?? 'Unknown faction';
+  protected ownerValue(territory: MapTerritory): string {
+    return territory.ownerFactionId ? mapFactionOptionValue(territory.ownerFactionId, territory.ownerSubfaction) : '';
+  }
+
+  protected spawnValue(territory: MapTerritory): string {
+    return territory.spawnFactionId ? mapFactionOptionValue(territory.spawnFactionId, territory.spawnSubfaction) : '';
+  }
+
+  protected ownerLocked(): boolean {
+    return !!this.selected()?.spawnFactionId;
   }
 
   protected adjacentLabels(territory: MapTerritory): string {
@@ -686,10 +896,12 @@ export class MapEditorPage {
     return names.length > 0 ? names.join(', ') : 'None';
   }
 
-  protected spawnTaken(factionId: string): boolean {
+  protected spawnTaken(option: MapFactionOption): boolean {
     const selectedId = this.selectedId();
+    const identity = spawnIdentity(option.factionId, option.subfaction);
     return this.graph().territories.some(
-      (territory) => territory.spawnFactionId === factionId && territory.id !== selectedId,
+      (territory) =>
+        territory.id !== selectedId && spawnIdentity(territory.spawnFactionId, territory.spawnSubfaction) === identity,
     );
   }
 
@@ -834,20 +1046,23 @@ export class MapEditorPage {
       .territories.map((territory) => territory.name?.trim().toLowerCase())
       .filter((name): name is string => !!name);
     if (new Set(names).size !== names.length) {
+      this.saveStatus.set('failure');
       this.revealErrors(['Territory names must be unique for the campaign.']);
       return false;
     }
 
     if (this.graph().territories.some((territory) => !territory.terrainTypeId)) {
+      this.saveStatus.set('failure');
       this.revealErrors(['Every territory needs a terrain type.']);
       return false;
     }
 
     const spawnIds = this.graph()
-      .territories.map((territory) => territory.spawnFactionId)
+      .territories.map((territory) => spawnIdentity(territory.spawnFactionId, territory.spawnSubfaction))
       .filter((id): id is string => !!id);
     if (new Set(spawnIds).size !== spawnIds.length) {
-      this.revealErrors(['Each faction can have only one spawn location.']);
+      this.saveStatus.set('failure');
+      this.revealErrors(['Each faction or required subfaction can have only one spawn location.']);
       return false;
     }
 
@@ -869,7 +1084,9 @@ export class MapEditorPage {
             structureCondition: territory.structureCondition,
             overlayColor: territory.overlayColor,
             ownerFactionId: territory.ownerFactionId,
+            ownerSubfaction: territory.ownerSubfaction ?? null,
             spawnFactionId: territory.spawnFactionId,
+            spawnSubfaction: territory.spawnSubfaction ?? null,
           })),
           adjacencies: this.graph().adjacencies.map((edge) => ({
             id: edge.id,
@@ -889,8 +1106,10 @@ export class MapEditorPage {
       this.campaign.update((current) => (current ? { ...current, revision: saved.revision } : current));
       this.lastSavedAtUtc.set(new Date().toISOString());
       this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
+      this.saveStatus.set('success');
       return true;
     } catch (error: unknown) {
+      this.saveStatus.set('failure');
       this.revealErrors(readApiErrorMessages(error, 'Unable to save the map.'));
       return false;
     } finally {
@@ -1237,7 +1456,7 @@ export class MapEditorPage {
       return false;
     }
 
-    if (this.graph().territories.some((territory) => interiorsOverlap(points, territory.polygon))) {
+    if (this.polygons().some((polygon) => interiorsOverlap(points, polygon))) {
       return false;
     }
 
@@ -1259,7 +1478,9 @@ export class MapEditorPage {
       structureCondition: 'Operational',
       overlayColor: this.overlayColorForNew(defaultTerrain.id),
       ownerFactionId: null,
+      ownerSubfaction: null,
       spawnFactionId: null,
+      spawnSubfaction: null,
     };
     this.graph.update((graph) => ({ ...graph, territories: [...graph.territories, territory] }));
     this.drawing.set([]);
@@ -1282,7 +1503,7 @@ export class MapEditorPage {
       return;
     }
 
-    if (this.graph().territories.some((territory) => interiorsOverlap(points, territory.polygon))) {
+    if (this.polygons().some((polygon) => interiorsOverlap(points, polygon))) {
       this.revealErrors(['Territories cannot overlap. They may share a border.']);
       return;
     }
@@ -1400,6 +1621,14 @@ export class MapEditorPage {
 
     this.successMessage.set(null);
     this.errorMessages.set([]);
+    this.saveStatus.set(null);
+  }
+
+  private applyColorMode(mode: OverlayColorMode): void {
+    this.colorMode.set(mode);
+    if (this.campaignId) {
+      writeStoredOverlayColorMode(this.campaignId, mode);
+    }
   }
 
   private overlayColorForNew(terrainTypeId: string): string | null {
@@ -1432,7 +1661,9 @@ function fromApi(detail: MapGraphDetail): MapGraph {
       structureCondition: normalizeStructureCondition(territory.structureTypeId, territory.structureCondition),
       overlayColor: territory.overlayColor,
       ownerFactionId: territory.ownerFactionId,
+      ownerSubfaction: territory.ownerSubfaction ?? null,
       spawnFactionId: territory.spawnFactionId,
+      spawnSubfaction: territory.spawnSubfaction ?? null,
     })),
     adjacencies: detail.adjacencies.map((edge) => ({
       id: edge.id,

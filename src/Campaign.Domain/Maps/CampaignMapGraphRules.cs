@@ -93,7 +93,7 @@ public static class CampaignMapGraphRules
         var usedIds = new HashSet<Guid>();
         var usedNumbers = new HashSet<int>();
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var spawnByFaction = new Dictionary<Guid, int>();
+        var spawnByKey = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var index = 0; index < territories.Count; index++)
         {
             var input = territories[index];
@@ -163,15 +163,52 @@ public static class CampaignMapGraphRules
             }
 
             var overlayColor = ParseOverlayColor(input.OverlayColor, field, displayNumber, errors);
-            if (input.OwnerFactionId is { } ownerId && !knownFactionIds.Contains(ownerId))
+            var ownerSubfaction = ParseOptionalSubfaction(
+                input.OwnerSubfaction,
+                $"{field}.ownerSubfaction",
+                $"Territory {displayNumber} owner subfaction",
+                errors);
+            var spawnSubfaction = ParseOptionalSubfaction(
+                input.SpawnSubfaction,
+                $"{field}.spawnSubfaction",
+                $"Territory {displayNumber} spawn subfaction",
+                errors);
+            Guid? ownerFactionId = input.OwnerFactionId is { } suppliedOwner && suppliedOwner != Guid.Empty
+                ? suppliedOwner
+                : null;
+            Guid? spawnFactionId = input.SpawnFactionId is { } suppliedSpawn && suppliedSpawn != Guid.Empty
+                ? suppliedSpawn
+                : null;
+
+            if (ownerFactionId is { } ownerId && !knownFactionIds.Contains(ownerId))
             {
                 errors.Add(new DomainError(
                     "territories.owner.invalid",
                     $"Territory {displayNumber} owner is not a faction in this campaign.",
                     $"{field}.ownerFactionId"));
+                ownerFactionId = null;
+                ownerSubfaction = null;
             }
 
-            if (input.SpawnFactionId is { } spawnId)
+            if (ownerSubfaction is not null && ownerFactionId is null)
+            {
+                errors.Add(new DomainError(
+                    "territories.ownerSubfaction.invalid",
+                    $"Territory {displayNumber} owner subfaction requires an owner faction.",
+                    $"{field}.ownerSubfaction"));
+                ownerSubfaction = null;
+            }
+
+            if (spawnSubfaction is not null && spawnFactionId is null)
+            {
+                errors.Add(new DomainError(
+                    "territories.spawnSubfaction.invalid",
+                    $"Territory {displayNumber} spawn subfaction requires a spawn faction.",
+                    $"{field}.spawnSubfaction"));
+                spawnSubfaction = null;
+            }
+
+            if (spawnFactionId is { } spawnId)
             {
                 if (!knownFactionIds.Contains(spawnId))
                 {
@@ -179,17 +216,28 @@ public static class CampaignMapGraphRules
                         "territories.spawn.invalid",
                         $"Territory {displayNumber} spawn faction is not a faction in this campaign.",
                         $"{field}.spawnFactionId"));
-                }
-                else if (spawnByFaction.TryGetValue(spawnId, out var otherNumber))
-                {
-                    errors.Add(new DomainError(
-                        "territories.spawn.duplicate",
-                        $"A faction can have only one spawn territory. Territories {otherNumber} and {displayNumber} both assign the same spawn.",
-                        $"{field}.spawnFactionId"));
+                    spawnFactionId = null;
+                    spawnSubfaction = null;
                 }
                 else
                 {
-                    spawnByFaction[spawnId] = displayNumber;
+                    var spawnKey = SpawnKey(spawnId, spawnSubfaction);
+                    if (spawnByKey.TryGetValue(spawnKey, out var otherNumber))
+                    {
+                        errors.Add(new DomainError(
+                            "territories.spawn.duplicate",
+                            spawnSubfaction is null
+                                ? $"A faction can have only one spawn territory. Territories {otherNumber} and {displayNumber} both assign the same spawn."
+                                : $"A required subfaction can have only one spawn territory. Territories {otherNumber} and {displayNumber} both assign the same spawn.",
+                            $"{field}.spawnFactionId"));
+                    }
+                    else
+                    {
+                        spawnByKey[spawnKey] = displayNumber;
+                    }
+
+                    ownerFactionId = spawnId;
+                    ownerSubfaction = spawnSubfaction;
                 }
             }
 
@@ -207,9 +255,11 @@ public static class CampaignMapGraphRules
                 terrainTypeId.Value,
                 structureTypeId,
                 overlayColor,
-                input.OwnerFactionId,
-                input.SpawnFactionId,
-                ParseStructureCondition(input.StructureCondition, structureTypeId.HasValue, field, displayNumber, errors)));
+                ownerFactionId,
+                spawnFactionId,
+                ParseStructureCondition(input.StructureCondition, structureTypeId.HasValue, field, displayNumber, errors),
+                ownerSubfaction,
+                spawnSubfaction));
         }
 
         for (var i = 0; i < parsed.Count; i++)
@@ -385,6 +435,39 @@ public static class CampaignMapGraphRules
         }
 
         return trimmed;
+    }
+
+    private static string? ParseOptionalSubfaction(string? raw, string field, string label, List<DomainError> errors)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var trimmed = raw.Trim();
+        if (trimmed.Length > NameMaxLength)
+        {
+            errors.Add(new DomainError(
+                "territories.subfaction.invalid",
+                $"{label} is too long (maximum {NameMaxLength} characters).",
+                field));
+            return null;
+        }
+
+        if (ProhibitedLanguage.ContainsProhibitedTerm(trimmed))
+        {
+            errors.Add(ProhibitedLanguage.ErrorFor(field, label));
+            return null;
+        }
+
+        return trimmed;
+    }
+
+    private static string SpawnKey(Guid factionId, string? subfaction)
+    {
+        return string.IsNullOrEmpty(subfaction)
+            ? factionId.ToString("N")
+            : $"{factionId:N}:{subfaction}";
     }
 
     private static string? ParseOptionalDescription(string? raw, string field, List<DomainError> errors)

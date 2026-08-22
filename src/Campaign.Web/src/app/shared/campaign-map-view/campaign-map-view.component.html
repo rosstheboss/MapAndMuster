@@ -17,6 +17,21 @@
     <button type="button" class="button-secondary" (click)="zoomOut()" aria-label="Zoom out">-</button>
     <button type="button" class="button-secondary" (click)="zoomToFit()">Fit</button>
     <button type="button" class="button-secondary" (click)="zoomToActualSize()">100%</button>
+    @if (layerToggles()) {
+      <label class="layer-toggle">
+        <input type="checkbox" [checked]="showOverlay()" (change)="onShowOverlayChange($event)" />
+        Show Overlay
+      </label>
+      <label class="layer-toggle">
+        <input
+          type="checkbox"
+          [checked]="showConnectionsToggle()"
+          [disabled]="!showOverlay()"
+          (change)="onShowConnectionsChange($event)"
+        />
+        Show Connections
+      </label>
+    }
   </div>
   <div
     #viewport
@@ -61,23 +76,46 @@
         (contextmenu)="onContextMenu($event)"
         (pointerleave)="clearHovers()"
       >
-        @for (item of overlayTerritories(); track item.territory.id) {
-          <polygon
-            class="territory"
-            [class.is-selected]="item.selected"
-            [class.is-half-highlighted]="item.halfHighlighted"
-            [class.is-move-valid]="item.moveValid"
-            [class.is-move-invalid]="item.moveInvalid"
-            [attr.points]="item.points"
-            [attr.fill]="item.fill"
-            [attr.stroke-width]="item.strokeWidth"
-            [style.--glow-color]="item.glowColor"
-            [attr.data-kind]="'territory'"
-            [attr.data-id]="item.territory.id"
-            [attr.aria-label]="item.territory.name || item.territory.displayNumber"
-            (pointerenter)="onTerritoryEnter(item.territory.id)"
-            (pointerleave)="onTerritoryLeave(item.territory.id)"
-          />
+        <defs>
+          @for (pattern of spawnStripePatterns().patterns; track pattern.id) {
+            <pattern
+              [attr.id]="pattern.id"
+              patternUnits="userSpaceOnUse"
+              [attr.width]="spawnStripePatterns().period"
+              [attr.height]="spawnStripePatterns().period"
+              patternTransform="rotate(45)"
+            >
+              <rect
+                [attr.width]="spawnStripePatterns().stripe"
+                [attr.height]="spawnStripePatterns().period"
+                [attr.fill]="pattern.color"
+              />
+            </pattern>
+          }
+        </defs>
+        @if (showOverlay()) {
+          @for (item of overlayTerritories(); track item.territory.id) {
+            <g [attr.transform]="item.hoverLift ? 'translate(0 ' + item.hoverLift + ')' : null">
+              <polygon
+                class="territory"
+                [class.is-selected]="item.selected"
+                [class.is-half-highlighted]="item.halfHighlighted"
+                [class.is-dimmed]="item.dimmed"
+                [class.is-move-valid]="item.moveValid"
+                [class.is-move-invalid]="item.moveInvalid"
+                [class.is-spawn]="item.isSpawn"
+                [attr.points]="item.points"
+                [attr.fill]="item.fill"
+                [attr.stroke-width]="item.strokeWidth"
+                [style.--glow-color]="item.glowColor"
+                [attr.data-kind]="'territory'"
+                [attr.data-id]="item.territory.id"
+                [attr.aria-label]="item.territory.name || item.territory.displayNumber"
+                (pointerenter)="onTerritoryEnter(item.territory.id)"
+                (pointerleave)="onTerritoryLeave(item.territory.id)"
+              />
+            </g>
+          }
         }
 
         @if (drawingPath()) {
@@ -106,7 +144,6 @@
         @for (item of overlayAdjacencies(); track item.edge.id) {
           <g
             class="adjacency"
-            [class.is-highlighted]="item.highlighted"
             [class.is-interactive]="adjacenciesInteractive()"
             [attr.data-kind]="'adjacency'"
             [attr.data-id]="item.edge.id"
@@ -135,7 +172,7 @@
               [attr.data-kind]="'adjacency'"
               [attr.data-id]="item.edge.id"
             />
-            <g class="adjacency-visual" [attr.transform]="adjacencyVisualTransform(item)">
+            <g class="adjacency-visual">
               <line
                 class="adjacency-line"
                 [attr.x1]="item.geometry.x1"
@@ -150,115 +187,120 @@
           </g>
         }
       </svg>
-      @for (item of overlayTerritories(); track item.territory.id) {
-        @if (item.flag; as flag) {
-          <div
-            class="faction-flag"
-            [class.has-image]="!!flag.image"
-            [style.left.%]="flag.x * 100"
-            [style.top.%]="flag.y * 100"
-            [style.width.px]="markerSize(flag).width"
-            [style.height.px]="markerSize(flag).height"
-            [style.margin-left.px]="-markerSize(flag).width / 2"
-            [style.margin-top.px]="-markerSize(flag).height / 2"
-            [style.background]="flag.image ? 'transparent' : flag.color"
-          >
-            @if (flag.image; as src) {
-              <img [src]="src" alt="" />
-            }
-          </div>
-        }
-        @if (item.structureFit; as fit) {
-          <div
-            class="structure-pin"
-            [class.is-pillaged]="item.territory.structureCondition === 'Pillaged'"
-            [style.left.%]="fit.x * 100"
-            [style.top.%]="fit.y * 100"
-            [style.width.px]="markerSize(fit).width"
-            [style.height.px]="markerSize(fit).height"
-            [style.margin-left.px]="-markerSize(fit).width / 2"
-            [style.margin-top.px]="-markerSize(fit).height / 2"
-          >
-            @if (item.structureImage; as src) {
-              <img [src]="src" alt="" />
-            } @else if (item.structure?.builtinSymbol) {
-              <app-map-symbol
-                kind="structure"
-                [name]="item.structure.builtinSymbol"
-                [pillaged]="item.territory.structureCondition === 'Pillaged'"
-              />
-            }
-          </div>
-        }
-        @for (pin of item.forces; track pin.force.id) {
-          <div
-            class="force-pin"
-            [class.is-mine]="pin.force.isMine"
-            [class.is-battle]="pin.force.inBattle"
-            [style.left.%]="pin.fit.x * 100"
-            [style.top.%]="pin.fit.y * 100"
-            [style.width.px]="markerSize(pin.fit).width"
-            [style.height.px]="markerSize(pin.fit).height"
-            [style.margin-left.px]="-markerSize(pin.fit).width / 2"
-            [style.margin-top.px]="-markerSize(pin.fit).height / 2"
-            [style.background]="pin.color"
-            role="img"
-            [attr.aria-label]="forceLabel(pin.force)"
-            [title]="forceLabel(pin.force)"
-          >
-            @if (pin.force.heldItems?.length) {
-              <div class="force-held-items">
-                @for (held of pin.force.heldItems; track held.name) {
-                  <span class="held-item" [style.color]="held.color">
-                    @if (held.imageUrl; as src) {
-                      <img [src]="src" alt="" />
-                    } @else {
-                      <app-map-symbol kind="item" [name]="held.builtinSymbol" [label]="held.name" />
-                    }
-                  </span>
-                }
-              </div>
-            }
-          </div>
-        }
-        @for (pin of item.items; track pin.item.id) {
-          <div
-            class="item-pin"
-            [class.is-hidden]="pin.item.hidden"
-            [style.left.%]="pin.fit.x * 100"
-            [style.top.%]="pin.fit.y * 100"
-            [style.width.px]="markerSize(pin.fit).width"
-            [style.height.px]="markerSize(pin.fit).height"
-            [style.margin-left.px]="-markerSize(pin.fit).width / 2"
-            [style.margin-top.px]="-markerSize(pin.fit).height / 2"
-            [style.color]="pin.item.color || '#C45C26'"
-            role="img"
-            [attr.aria-label]="pin.item.name"
-          >
-            @if (pin.item.imageUrl; as src) {
-              <img [src]="src" alt="" />
-            } @else {
-              <app-map-symbol kind="item" [name]="pin.item.builtinSymbol || 'Crown'" [label]="pin.item.name" />
-            }
-          </div>
+      @if (showOverlay()) {
+        @for (item of overlayTerritories(); track item.territory.id) {
+          @if (item.flag; as flag) {
+            <div
+              class="faction-flag"
+              [class.has-image]="!!flag.image"
+              [style.left.%]="flag.x * 100"
+              [style.top.%]="flag.y * 100"
+              [style.width.px]="markerSize(flag).width"
+              [style.height.px]="markerSize(flag).height"
+              [style.margin-left.px]="-markerSize(flag).width / 2"
+              [style.margin-top.px]="-markerSize(flag).height / 2"
+              [style.background]="flag.image ? 'transparent' : flag.color"
+            >
+              @if (flag.image; as src) {
+                <img [src]="src" alt="" />
+              }
+            </div>
+          }
+          @if (item.structureFit; as fit) {
+            <div
+              class="structure-pin"
+              [class.is-pillaged]="item.territory.structureCondition === 'Pillaged'"
+              [style.left.%]="fit.x * 100"
+              [style.top.%]="fit.y * 100"
+              [style.width.px]="markerSize(fit).width"
+              [style.height.px]="markerSize(fit).height"
+              [style.margin-left.px]="-markerSize(fit).width / 2"
+              [style.margin-top.px]="-markerSize(fit).height / 2"
+            >
+              @if (item.structureImage; as src) {
+                <img [src]="src" alt="" />
+              } @else if (item.structure?.builtinSymbol) {
+                <app-map-symbol
+                  kind="structure"
+                  [name]="item.structure.builtinSymbol"
+                  [pillaged]="item.territory.structureCondition === 'Pillaged'"
+                />
+              }
+            </div>
+          }
+          @for (pin of item.forces; track pin.force.id) {
+            <div
+              class="force-pin"
+              [class.is-mine]="pin.force.isMine"
+              [class.is-battle]="pin.force.inBattle"
+              [class.is-emphasized]="pin.emphasized"
+              [style.left.%]="pin.fit.x * 100"
+              [style.top.%]="pin.fit.y * 100"
+              [style.width.px]="markerSize(pin.fit).width"
+              [style.height.px]="markerSize(pin.fit).height"
+              [style.margin-left.px]="-markerSize(pin.fit).width / 2"
+              [style.margin-top.px]="-markerSize(pin.fit).height / 2"
+              [style.background]="pin.color"
+              role="img"
+              [attr.aria-label]="forceLabel(pin.force)"
+              [title]="forceLabel(pin.force)"
+            >
+              @if (pin.force.heldItems?.length) {
+                <div class="force-held-items">
+                  @for (held of pin.force.heldItems; track held.name) {
+                    <span class="held-item" [style.color]="held.color">
+                      @if (held.imageUrl; as src) {
+                        <img [src]="src" alt="" />
+                      } @else {
+                        <app-map-symbol kind="item" [name]="held.builtinSymbol" [label]="held.name" />
+                      }
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+          }
+          @for (pin of item.items; track pin.item.id) {
+            <div
+              class="item-pin"
+              [class.is-hidden]="pin.item.hidden"
+              [style.left.%]="pin.fit.x * 100"
+              [style.top.%]="pin.fit.y * 100"
+              [style.width.px]="markerSize(pin.fit).width"
+              [style.height.px]="markerSize(pin.fit).height"
+              [style.margin-left.px]="-markerSize(pin.fit).width / 2"
+              [style.margin-top.px]="-markerSize(pin.fit).height / 2"
+              [style.color]="pin.item.color || '#C45C26'"
+              role="img"
+              [attr.aria-label]="pin.item.name"
+            >
+              @if (pin.item.imageUrl; as src) {
+                <img [src]="src" alt="" />
+              } @else {
+                <app-map-symbol kind="item" [name]="pin.item.builtinSymbol || 'Crown'" [label]="pin.item.name" />
+              }
+            </div>
+          }
         }
       }
-      @if (moveDropMarker(); as marker) {
-        <div
-          class="move-drop-marker"
-          [class.is-valid]="marker.valid"
-          [class.is-invalid]="!marker.valid"
-          [style.left.%]="marker.x * 100"
-          [style.top.%]="marker.y * 100"
-          [style.width.px]="marker.size"
-          [style.height.px]="marker.size"
-          [style.margin-left.px]="-marker.size / 2"
-          [style.margin-top.px]="-marker.size / 2"
-          role="img"
-          [attr.aria-label]="marker.valid ? 'Drop is allowed' : 'Drop is not allowed'"
-        >
-          <app-icon [name]="marker.valid ? 'check' : 'x'" />
-        </div>
+      @if (showOverlay()) {
+        @if (moveDropMarker(); as marker) {
+          <div
+            class="move-drop-marker"
+            [class.is-valid]="marker.valid"
+            [class.is-invalid]="!marker.valid"
+            [style.left.%]="marker.x * 100"
+            [style.top.%]="marker.y * 100"
+            [style.width.px]="marker.size"
+            [style.height.px]="marker.size"
+            [style.margin-left.px]="-marker.size / 2"
+            [style.margin-top.px]="-marker.size / 2"
+            role="img"
+            [attr.aria-label]="marker.valid ? 'Drop is allowed' : 'Drop is not allowed'"
+          >
+            <app-icon [name]="marker.valid ? 'check' : 'x'" />
+          </div>
+        }
       }
     </div>
     @if (marqueeBox(); as box) {

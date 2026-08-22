@@ -23,6 +23,18 @@
   min-height: var(--touch-min);
 }
 
+.layer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: var(--touch-min);
+  font-weight: 600;
+}
+
+.territory.is-dimmed {
+  opacity: 0.25;
+}
+
 .selection-marquee {
   position: absolute;
   z-index: 4;
@@ -36,7 +48,7 @@
   position: relative;
   overflow: hidden;
   width: 100%;
-  height: min(70vh, 42rem);
+  height: var(--map-viewport-height, min(70vh, 42rem));
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   background: var(--color-nested);
@@ -98,9 +110,10 @@
   fill-opacity: 0.7;
 }
 
-.territory.is-move-invalid {
-  fill: #dc2626;
-  fill-opacity: 0.7;
+.force-pin.is-emphasized {
+  outline: 3px solid var(--color-glow);
+  outline-offset: 2px;
+  z-index: 3;
 }
 
 .structure-pin,
@@ -289,14 +302,4 @@
 
 .adjacency-visual {
   pointer-events: none;
-}
-
-.adjacency.is-highlighted .adjacency-line {
-  stroke: var(--color-glow);
-  filter: drop-shadow(0 0 2px var(--color-glow)) drop-shadow(0 0 4px var(--color-glow));
-}
-
-.adjacency.is-highlighted .adjacency-head {
-  fill: var(--color-glow);
-  filter: drop-shadow(0 0 2px var(--color-glow)) drop-shadow(0 0 4px var(--color-glow));
 }

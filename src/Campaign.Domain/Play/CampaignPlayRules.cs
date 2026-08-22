@@ -3470,7 +3470,8 @@ public static class CampaignPlayRules
                 territory.IsPillageable,
                 territory.IsDestructible,
                 territory.IsWaterFeature,
-                territory.TerrainTypeId);
+                territory.TerrainTypeId,
+                territory.SpawnSubfaction);
         }).ToArray();
         return map.WithTerritories(next);
     }

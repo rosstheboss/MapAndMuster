@@ -52,7 +52,7 @@ public sealed class SupplyRulesTests
         var catalog = new SupplyCatalog(
             new Dictionary<Guid, int> { [Terrain] = 1 },
             new Dictionary<Guid, StructureSupplyRules> { [Keep] = new(1, 1, 1) },
-            HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent,
+            HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue,
             HuntInEstaliaDefaults.ArmyEscalations(8),
             new Dictionary<Guid, Guid> { [Player] = Faction },
             new Dictionary<Guid, string?> { [Faction] = "League", [ally] = "League" },
@@ -63,7 +63,7 @@ public sealed class SupplyRulesTests
     }
 
     [Fact]
-    public void SplitForcesApplyHuntInEstaliaPercentPenalty()
+    public void SplitForcesApplyDefaultRawPenalty()
     {
         var state = EmptyState(forceCount: 2, territoryId: Spawn);
         var map = MapWithKeep();
@@ -72,9 +72,31 @@ public sealed class SupplyRulesTests
         Assert.True(snapshot.IsSplit);
         Assert.Equal(3, snapshot.MapSupplyPoints);
         Assert.Equal(1, snapshot.RoundFreeSupplyPoints);
+        Assert.Equal(1, snapshot.SplitPenaltyPoints);
+        Assert.Equal(3, snapshot.ForceAllowancePoints);
+        Assert.Equal(3, snapshot.CurrentSupplyPoints);
+    }
+
+    [Fact]
+    public void SplitForcesApplyPercentPenaltyWhenConfigured()
+    {
+        var state = EmptyState(forceCount: 2, territoryId: Spawn);
+        var map = MapWithKeep();
+        var catalog = new SupplyCatalog(
+            new Dictionary<Guid, int> { [Terrain] = 1 },
+            new Dictionary<Guid, StructureSupplyRules> { [Keep] = new(1, 1, 1) },
+            25,
+            HuntInEstaliaDefaults.ArmyEscalations(8),
+            new Dictionary<Guid, Guid> { [Player] = Faction },
+            new Dictionary<Guid, string?> { [Faction] = null },
+            new HashSet<Guid>(),
+            splitForceSupplyPenaltyIsPercent: true);
+        var snapshot = SupplyRules.ForPlayer(state, map, catalog, Player, roundNumber: 3);
+
+        Assert.True(snapshot.IsSplit);
+        Assert.Equal(3, snapshot.MapSupplyPoints);
         Assert.Equal(0, snapshot.SplitPenaltyPoints);
         Assert.Equal(4, snapshot.ForceAllowancePoints);
-        Assert.Equal(4, snapshot.CurrentSupplyPoints);
     }
 
     [Fact]
@@ -189,7 +211,7 @@ public sealed class SupplyRulesTests
         return new SupplyCatalog(
             new Dictionary<Guid, int> { [Terrain] = 1 },
             new Dictionary<Guid, StructureSupplyRules> { [Keep] = new(1, 1, 1) },
-            HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent,
+            HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue,
             HuntInEstaliaDefaults.ArmyEscalations(8),
             new Dictionary<Guid, Guid> { [Player] = Faction },
             new Dictionary<Guid, string?> { [Faction] = null },

@@ -56,7 +56,8 @@ http/https URLs), a raster map image, and at least two factions. Each faction ha
 color and may have subfactions. A faction may require players who choose it to pick a
 subfaction; that flag may only be enabled when at least one subfaction is listed. Optional
 ally groups may include two or more factions; every faction cannot belong to a single ally
-group. Each ally group has a unique color used for alliance map highlighting.
+group. Each ally group has a unique color used for alliance map highlighting. Renaming an ally
+group keeps existing faction membership: factions stay in that group and show the new name.
 
 Setup may apply a faction preset. Applying a preset replaces the current faction and subfaction
 list with an alphabetically sorted copy of that catalog entry, including colors and whether a
@@ -78,7 +79,7 @@ item-objective list (empty until named items are added). Applying a campaign pre
 campaign name only when the name field is empty. The Hunt in Estalia also copies the standard
 force-status catalog (Diseased, Shaken, Confident, Exhausted, Well Rested). Normal is not a
 catalog status; it is the absence of a status. Hunt also applies the default split-force supply
-penalty (25 percent), always-ask general-kill and supply-line questions (1 campaign point each),
+penalty (raw value 1), always-ask general-kill and supply-line questions (1 campaign point each),
 and the per-round army size / free supply / free character table.
 
 An administrator may save the current campaign settings as a named preset from Edit campaign or
@@ -226,8 +227,12 @@ draw points (default 1). When differential scoring is off, a win awards configur
 that option is enabled. Public Objectives include manager-awarded named catalog items (award
 and revoke are append-only facts; originals are never overwritten) plus ranking objectives
 that currently award points to every player tied for first: most territories controlled,
-longest unbroken chain of the player's own territories, and most battle wins (draws break
-win-count ties). A named or ranking objective configured at 0 campaign points is ignored.
+longest unbroken chain of the player's own territories, most battle wins (draws break
+win-count ties), and most structure campaign points from currently owned non-destroyed
+structures. Running public objectives add configured campaign points for each currently owned
+territory, and for each revealed relic currently held by another player of the same faction or
+a current (not backstabbed) ally. Relics the scoring player holds stay in Other. A named,
+ranking, or running objective configured at 0 campaign points is ignored.
 The panel also shows a top five for each enabled ranking objective. Private Objectives is the
 total of revealed or completed private-objective points that apply to that player: a
 player-scoped award counts only for that player; a faction award counts for every current
@@ -377,7 +382,8 @@ a player slot) must choose that faction before they can play. A participant who 
 faction may do so until they have one and cannot submit orders for a round until they do. A player
 may change their chosen faction until the campaign starts. After the campaign has started, a chosen
 faction cannot be changed. Each player force starts at that faction's spawn territory
-when the campaign launches or when they join play later; subfactions use the same spawn unless a
+when the campaign launches or when they join play later; required subfactions use that
+subfaction's spawn when one is assigned, otherwise the parent faction spawn, unless a
 named effect key relocates them (`GreatCityOfMagritta` to the Capital City,
 `UndergroundNetwork` to a random empty Town or City).
 
@@ -537,32 +543,54 @@ allowance plus the round bonus, then from the player's temporary pool.
 
 ### Map overlay editor
 
-After campaign creation, the creating manager is taken to the map editor. Draw, connect, color, and
+After campaign creation, the creating manager is taken to the map editor. Draw, Erase, Select, and
+Connect are an exclusive toolbar group; the active tool uses the same filled accent style as Save Map.
+Undo, redo, and Close Territory sit beside that group. There is no Cancel Drawing control; switching
+to Erase, another tool, or pressing Escape clears an in-progress drawing. Draw, connect, color, and
 save controls stay sticky at the top of the viewport while they fit; when the toolbar is taller
 than 40 percent of the viewport it scrolls inside itself. Territories are drawn as
 an overlay on the rectangular raster map; the image itself is not modified. Overlay coordinates are
 normalized to the unit square. Drawing stays inside the image rectangle. Territories may share a
-border but their interiors must not overlap. The drawing cursor highlights when it is about to snap
+border, including when a drawn trace sits slightly along that border. Interiors that actually
+cover each other cannot be saved.
+The drawing cursor highlights when it is about to snap
 to an existing vertex. Managers may undo, redo, or erase segments, assign an optional unique name and
 description (otherwise the display number 1, 2, 3… is used), select a required terrain type,
 select at most one optional structure and whether that structure starts Operational or Pillaged,
 assign optional ownership (otherwise Neutral), assign an optional spawn faction (at most one
-spawn per faction), place catalog item objectives that use Placed launch placement, and apply a
-transparent overlay color.
+spawn per faction, or per required subfaction when that faction requires a subfaction choice),
+place catalog item objectives that use Placed launch placement, and apply a
+transparent overlay color. Setting a spawn always sets ownership to the same faction or required
+subfaction. The spawn list disables factions whose special rules include `UndergroundNetwork`
+because those forces have no fixed spawn. Factions that require a subfaction are listed as
+"Faction Name - Subfaction Name" rather than the parent name; map flags and colors use a
+subfaction logo when one exists and otherwise the parent faction's logo and color. The collapsible
+Territory editor above the map keeps a fixed field area, tall enough for its three field rows
+without a scrollbar, while it is open so hover, selection, deselection, zoom, and drag on the map
+do not shift the map up or down the page. Fields are name
+and description on the first row, terrain, structure, structure condition, and overlay color on the
+second, and ownership, spawn, and delete on the third. Hovering a territory does not open those
+fields; a selection does. The Territories side panel is a narrow sliver with an expand control until opened, then
+grows horizontally to list territories. When expanded, that list scrolls and stops at the bottom of
+the map. Selecting a territory that is outside the visible list range scrolls to it; a
+multi-selection scrolls to the topmost selected name. Closing the list expands the map horizontally;
+map height stays the same. The editor map is taller than the campaign-page map.
 
-Auto Generate Connections suggests adjacency arrows from shared borders. User-created (manual) arrows
+Auto Generate Connections suggests adjacency arrows from shared borders. It uses the same secondary
+button style as Clear Connections and the other toolbar actions. User-created (manual) arrows
 are kept on regenerate, and those pairs are skipped. Generated arrows may be replaced. Managers may
 add or delete arrows, including generated ones, and may clear all arrows. A pair of territories has
 at most one connection, and every connection is between exactly two territories. Select two
 territories and click Connect, or use the Connect tool and click two territories. Connection arrows
-are selectable only in Select, where clicking an arrow shows both territories in the side panel so
-the pair can be changed or deleted, and in Erase, where clicking an arrow deletes it. Drawing and
+are selectable only in Select, where clicking an arrow shows both territories in the collapsible
+editor bar above the map so the pair can be changed or deleted, and in Erase, where clicking an arrow
+deletes it. Drawing and
 Connect ignore arrows so they do not intercept the pointer or affect overlay drawing. Arrow markers
 are editor aids and are not part of the published map image. Each connection arrow stretches across
 the shortest gap between its territories so adjacent arrows do not cross. The arrow head and up to
 10 pixels of the shaft overhang each territory so the heads stay visible and selectable in Select
-and Erase. Hovering an arrow in those tools glows that arrow, grows it by half of its resting size,
-and glows both connected territories without washing the rest of the map.
+and Erase. Visible connection arrows are black and keep their resting size and outline. Hovering an
+arrow in those tools glows both connected territories without washing the rest of the map.
 
 Campaign setup owns the terrain-type and structure catalogs. The initial terrain types,
 alphabetically, are Beach, Cave, Desert, Forest, Highlands, Jungle, Lake, Mountain, Plains, Riverlands, Sea,
@@ -597,15 +625,16 @@ instead of uploading a duplicate file. New uploads and reused missions may be mi
 
 Hovering or selecting a territory, while editing or viewing, shows Name, Description, structures,
 ownership (or Neutral), spawn-location faction, adjacent territories, terrain, and missions.
-In Select mode, a mouse click on a territory keeps that territory selected. Ctrl+click (or Command+click)
+In Select mode, a mouse click on a territory keeps that territory selected. Ctrl+click, Shift+click, or Command+click
 adds or removes territories from the selection. Dragging on empty map draws a selection box that
 selects every territory it intersects; the box is 50% transparent gray with a black 2px dashed
-border and disappears when the button is released. A click on the map with no territory clears the
-selection. When two or more territories are selected, the side panel lists all of them and the map
+border and disappears when the button is released. Hold Control, Shift, or Command while dragging the box
+to add to the current selection. A click on the map with no territory clears the
+selection. When two or more territories are selected, the editor bar above the map lists all of them and the map
 highlights each as selected. Selected territories can be deleted with Delete or the Delete territory
 control, including when several are selected. Dragging a selection moves those territories together
-and keeps them on the map. Shared borders are allowed; a newly drawn or moved border must not
-overhang into another territory's interior. While a group is being dragged, it is highlighted green
+and keeps them on the map. Shared borders are allowed; dropping a moved group still cannot overhang
+into another territory's interior. While a group is being dragged, it is highlighted green
 at about 70% fill with a centered checkmark of at most 50×50 pixels when it can be dropped, or red
 at about 70% fill with a centered X of at most 50×50 pixels when it cannot. Dropping while red
 restores the group to the position it had when the drag started.
@@ -618,9 +647,16 @@ border thickness. Hovered territories, possible action destinations, and territo
 the current selection use a half highlight: 50% fill and 1.5 times the usual border thickness.
 When a territory qualifies for both, the full highlight wins. When several territories are selected,
 those territories stay fully highlighted and every other connected territory uses the half highlight.
+Hovering an unselected territory, while not drag-selecting, lifts that polygon a few pixels so the
+hovered territory is easier to distinguish. In the map editor, that hover lift and hover highlight
+do not apply in Draw mode. Spawn territories fill with 5-pixel-wide diagonal stripes
+of the overlay or spawn-faction color, using the same highlight opacities as a solid fill.
 When a territory
 has an overlay color, that color is the glow, strongest around the territory border. Overlay color
-mode is Random Colors, Color By Terrain, or Manual Colors. Switching to Random Colors or Color By
+mode is Random Colors, Color By Terrain, or Manual Colors, shown as an exclusive toolbar group; the
+active mode uses the same filled accent style as the active map tool. The last chosen mode for a
+campaign is restored when the map editor is opened again, without recoloring existing territories
+until Random Colors or Color By Terrain is chosen again. Switching to Random Colors or Color By
 Terrain recolors every territory. A new territory, or a terrain change while Color By Terrain is on,
 uses that mode's color. Remove Colors switches to Manual Colors and clears every overlay color.
 
@@ -638,13 +674,40 @@ a pointer; other map controls, including zoom, pan, tool choice, and the territo
 accessible. A click on empty map, including the letterboxed panel around a fitted image, clears the
 territory selection. Only the hovered or selected arrow glows. Saving the map graph does not change
 zoom, pan, or fit. Save Map is disabled until there are unsaved overlay edits. After a successful
-save, the green banner "Successfully saved changes." is followed by the last-saved time. Clear
-Unsaved Changes is disabled until there are unsaved overlay edits; it discards those edits and
-restores the last saved graph without resetting zoom or pan.
+save, the green banner "Successfully saved changes." is followed by the last-saved time, and a green
+checkmark sits to the right of Clear Unsaved Changes, before that timestamp. A failed save shows a
+red X in that same place. Clear Unsaved Changes is disabled until there are unsaved overlay edits; it
+discards those edits, restores the last saved graph without resetting zoom or pan, and clears the
+checkmark or X. Overlay fields that differ from the last saved graph show a small orange (#C87606)
+triangle in the top-right corner, including placed-item
+checkboxes. Dirty territories are also marked that way in the territory list. The Map editor title
+is not marked dirty. Territory names and terrain symbols in the editor list use the same light text
+color as other dark-background fields in dark mode.
+
+The instruction paragraph under the toolbar is omitted. Editable territory fields sit in a
+collapsible horizontal bar above the map and zoom controls. The territory list stays in the side
+panel as a collapsible toolbar; when expanded it scrolls, and its max height matches the map, zoom
+controls, and territory-edit section combined so the list never extends below the map. Selecting a
+territory that is outside the visible list range scrolls that row into view; a multi-selection
+scrolls to the topmost selected name. Zoom controls include Show Overlay (on by default) and
+Show Connections (on by default). Turning off Show Overlay hides the territory overlay, markers, and
+connections. Show Connections has no effect while Show Overlay is off. When one or more territories
+are selected, other territories that are not selected, hovered, or connected to the selection drop
+to 25% opacity. Connection arrows that touch a selected territory are white with a thin black border.
+
+Edit campaign Save campaign is disabled until the form or pending uploads differ from the last saved
+campaign. Clear Unsaved Changes is disabled until then and restores the last loaded campaign, including
+clearing pending map, flag, structure, item, and mission files. Dirty fields show a small orange
+triangle in the top-right corner. Collapsed section and subsection headers that contain at least one
+dirty field use an orange underline instead. The Campaign map title is underlined whenever a new map
+file or preset map is pending. Pending uploaded files and edited link fields are marked dirty as well.
 
 Edit campaign shows a static 200×113 map preview of the current image. It is not
 zoomable or selectable. The campaign page shows the interactive map at full width, with territory
-details under the map. The campaign page and map editor can download a PNG of the latest saved map
+details under the map. Clicking a player, faction, or ally group on the campaign page, while the
+player is not issuing an order, highlights that party’s territories and emphasizes their forces on
+the map. Clicking the same party again clears that focus. A profile link still opens the user
+profile. The campaign page and map editor can download a PNG of the latest saved map
 image with the unselected territory overlay rasterized on top. Adjacency arrows are omitted. If the
 map editor has unsaved edits, downloading asks whether to save first; declining downloads the last
 saved overlay. The same prompt applies to Download SVG data, which downloads the overlay polygons
@@ -658,8 +721,8 @@ lines, endpoints, or territories lie between those points on that border, a line
 border is inserted when the pointer is released. Releasing the pointer does not close the shape.
 Close Territory or Enter closes a valid drawn loop, or tries to enclose a single empty region by
 walking touched territory borders or the map image edge. Clicking near the first point also closes a
-drawn loop. Extra vertices along a shared border are allowed. A newly drawn border must not overhang
-into another territory's interior.
+drawn loop. Extra vertices along a shared border are allowed. Traces that sit along a shared
+border are allowed; a drawing that covers another territory's interior cannot be closed or saved.
 
 Factions, terrain types, and structures can be expanded or collapsed inside their setup sections.
 Each ally group lists its member factions in a paragraph. When any ally group exists, unaligned
@@ -741,7 +804,9 @@ is a possible kick. The player is not removed unless a manager kicks them.
 - Split forces each receive the same territory/structure map supply after the split-force
   penalty, with a minimum of 1 map supply each. The round's free supply points are granted in
   full to every one of that player's forces. Temporary points are not duplicated. The Hunt in
-  Estalia split penalty default is 25 percent and is the application default.
+  Estalia split penalty default is a raw value of 1 and is the application default. The penalty
+  may instead be a percentage of map supply (0–100). Catalogs stored before this toggle keep
+  the legacy 25 percent when the flag is absent.
 - Current supply shown on the Participants list is one force's allowance (map after split
   penalty, plus round free supply) plus remaining temporary supply. A battle to resolve shows
   each force's army-point cap for that game (round maximum, raised 25 percent per extra allied

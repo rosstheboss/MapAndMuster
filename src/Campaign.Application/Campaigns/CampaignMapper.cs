@@ -109,13 +109,14 @@ public static class CampaignMapper
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
-            Factions = [.. campaign.Factions.Select(static faction => new FactionDetail
+            Factions = [.. campaign.Factions.Select(faction => new FactionDetail
             {
                 Id = faction.Id,
                 Name = faction.Name,
                 Color = faction.Color,
                 Subfactions = faction.Subfactions,
                 AllyGroupName = faction.AllyGroupName,
+                AllyGroupId = AllyGroupIdFor(campaign, faction.AllyGroupName),
                 RequiresSubfaction = faction.RequiresSubfaction,
                 HasFlagImage = !string.IsNullOrWhiteSpace(faction.FlagImageStorageKey),
                 SpecialRuleIds = faction.SpecialRuleIds,
@@ -190,7 +191,11 @@ public static class CampaignMapper
             MostTerritoriesCampaignPoints = campaign.RankingObjectivePoints.MostTerritories,
             LongestTerritoryChainCampaignPoints = campaign.RankingObjectivePoints.LongestTerritoryChain,
             MostBattlesWonCampaignPoints = campaign.RankingObjectivePoints.MostBattlesWon,
+            MostStructurePointsCampaignPoints = campaign.RankingObjectivePoints.MostStructurePoints,
+            PointsPerTerritoryCampaignPoints = campaign.RankingObjectivePoints.PointsPerTerritory,
+            AlliedRelicControlCampaignPoints = campaign.RankingObjectivePoints.AlliedRelicControlPoints,
             SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = campaign.SplitForceSupplyPenaltyIsPercent,
             AlwaysAskGeneralKill = campaign.BattleReportRules.AlwaysAskGeneralKill,
             AlwaysAskSupplyLineDestroyed = campaign.BattleReportRules.AlwaysAskSupplyLineDestroyed,
             GeneralKillCampaignPoints = campaign.BattleReportRules.GeneralKillCampaignPoints,
@@ -495,12 +500,18 @@ public static class CampaignMapper
         }
 
         var faction = campaign.Factions.FirstOrDefault(item => item.Id == id);
-        if (faction?.AllyGroupName is not { } name)
+        return AllyGroupIdFor(campaign, faction?.AllyGroupName);
+    }
+
+    private static Guid? AllyGroupIdFor(StoredCampaign campaign, string? allyGroupName)
+    {
+        if (allyGroupName is not { } name)
         {
             return null;
         }
 
-        return campaign.AllyGroups.FirstOrDefault(group => group.Name == name)?.Id;
+        return campaign.AllyGroups.FirstOrDefault(group =>
+            string.Equals(group.Name, name, StringComparison.OrdinalIgnoreCase))?.Id;
     }
 
     private static string? FormatCurrentPhaseLabel(StoredCampaign campaign, CampaignProgress progress)

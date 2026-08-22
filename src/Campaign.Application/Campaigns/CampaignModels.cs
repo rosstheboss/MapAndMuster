@@ -194,9 +194,22 @@ public sealed class CampaignDetail
     /// <summary>Gets campaign points for most battle wins. Zero ignores the objective.</summary>
     public int MostBattlesWonCampaignPoints { get; init; }
 
-    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    /// <summary>Gets campaign points for most structure campaign points. Zero ignores the objective.</summary>
+    public int MostStructurePointsCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points awarded for each currently owned territory. Zero ignores the objective.</summary>
+    public int PointsPerTerritoryCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for each revealed relic held by an ally or faction-mate other than the player.</summary>
+    public int AlliedRelicControlCampaignPoints { get; init; }
+
+    /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int SplitForceSupplyPenaltyPercent { get; init; } =
-        Campaign.Domain.Campaigns.HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
+        Campaign.Domain.Campaigns.HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue;
+
+    /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
+    public bool SplitForceSupplyPenaltyIsPercent { get; init; } =
+        Campaign.Domain.Campaigns.HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent;
 
     /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
     public bool AlwaysAskGeneralKill { get; init; } = true;
@@ -429,6 +442,9 @@ public sealed class FactionDetail
     /// <summary>Gets the ally-group name this faction joins, if any.</summary>
     public string? AllyGroupName { get; init; }
 
+    /// <summary>Gets the ally-group identifier this faction joins, if any.</summary>
+    public Guid? AllyGroupId { get; init; }
+
     /// <summary>Gets whether a player who chooses this faction must pick a subfaction.</summary>
     public required bool RequiresSubfaction { get; init; }
 
@@ -608,9 +624,13 @@ public sealed class StoredCampaign
     public Campaign.Domain.Campaigns.GeneralPublicObjectivePoints RankingObjectivePoints { get; init; } =
         Campaign.Domain.Campaigns.GeneralPublicObjectivePoints.None;
 
-    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int SplitForceSupplyPenaltyPercent { get; init; } =
-        Campaign.Domain.Campaigns.HuntInEstaliaDefaults.SplitForceSupplyPenaltyPercent;
+        Campaign.Domain.Campaigns.HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue;
+
+    /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
+    public bool SplitForceSupplyPenaltyIsPercent { get; init; } =
+        Campaign.Domain.Campaigns.HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent;
 
     /// <summary>Gets always-asked battle-report questions and their campaign points.</summary>
     public Campaign.Domain.Campaigns.BattleReportRulesSetup BattleReportRules { get; init; } =

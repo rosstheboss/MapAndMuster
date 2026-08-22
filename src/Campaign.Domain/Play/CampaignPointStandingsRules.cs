@@ -6,8 +6,10 @@ namespace Campaign.Domain.Play;
 /// Calculates current campaign-point standings from configured values and live map, battle, and award state.
 /// Structure points are the current holdings. Battle points are cumulative from resolved results.
 /// Ranking public objectives award their configured points to every player currently tied for first.
-/// Named public objectives with 0 campaign points are ignored. Hidden item-objective points are included
-/// only when those items are supplied in <see cref="CampaignPointScoringState.VisibleItems"/>.
+/// Running public objectives add points per owned territory and per revealed relic held by an ally
+/// or faction-mate other than the scoring player. Named public objectives with 0 campaign points are ignored.
+/// Hidden item-objective points are included only when those items are supplied in
+/// <see cref="CampaignPointScoringState.VisibleItems"/>.
 /// </summary>
 public static class CampaignPointStandingsRules
 {
@@ -156,6 +158,7 @@ public static class CampaignPointStandingsRules
 
         var territoryCountByPlayer = new Dictionary<Guid, int>();
         var chainByPlayer = new Dictionary<Guid, int>();
+        var structurePointsByPlayer = new Dictionary<Guid, int>();
         foreach (var player in state.Players)
         {
             var owned = player.FactionId is { } factionId
@@ -163,18 +166,20 @@ public static class CampaignPointStandingsRules
                 : [];
             territoryCountByPlayer[player.UserId] = owned.Count;
             chainByPlayer[player.UserId] = TerritoryChainRules.LongestOwnedChain(owned, state.Adjacencies);
+            structurePointsByPlayer[player.UserId] = player.FactionId is { } ownedFaction
+                ? captureByFaction.GetValueOrDefault(ownedFaction)
+                : 0;
         }
 
         var mostTerritoryLeaders = FirstPlace(state.Players, territoryCountByPlayer, _ => 0);
         var longestChainLeaders = FirstPlace(state.Players, chainByPlayer, _ => 0);
         var mostBattleLeaders = FirstPlace(state.Players, winsByPlayer, playerId => drawsByPlayer.GetValueOrDefault(playerId));
+        var mostStructureLeaders = FirstPlace(state.Players, structurePointsByPlayer, _ => 0);
 
         var standings = new List<CampaignPointStanding>(state.Players.Count);
         foreach (var player in state.Players)
         {
-            var capture = player.FactionId is { } factionId
-                ? captureByFaction.GetValueOrDefault(factionId)
-                : 0;
+            var capture = structurePointsByPlayer.GetValueOrDefault(player.UserId);
             var publicTotal = 0;
             foreach (var (playerId, objectiveId) in activeAwards)
             {
@@ -209,6 +214,23 @@ public static class CampaignPointStandingsRules
                 && winsByPlayer.GetValueOrDefault(player.UserId) > 0)
             {
                 publicTotal += ranking.MostBattlesWon;
+            }
+
+            if (ranking.MostStructurePoints > 0
+                && mostStructureLeaders.Contains(player.UserId)
+                && structurePointsByPlayer.GetValueOrDefault(player.UserId) > 0)
+            {
+                publicTotal += ranking.MostStructurePoints;
+            }
+
+            if (ranking.PointsPerTerritory > 0)
+            {
+                publicTotal += ranking.PointsPerTerritory * territoryCountByPlayer.GetValueOrDefault(player.UserId);
+            }
+
+            if (ranking.AlliedRelicControlPoints > 0)
+            {
+                publicTotal += ranking.AlliedRelicControlPoints * AlliedRelicCount(player, state, forcesById);
             }
 
             var privateTotal = PrivateObjectiveRules.PointsForPlayer(
@@ -254,8 +276,59 @@ public static class CampaignPointStandingsRules
                     state.Players,
                     winsByPlayer,
                     playerId => drawsByPlayer.GetValueOrDefault(playerId)),
+                .. Leaderboard(
+                    GeneralPublicObjectiveKinds.MostStructurePoints,
+                    ranking.MostStructurePoints,
+                    state.Players,
+                    structurePointsByPlayer,
+                    _ => 0),
             ],
         };
+    }
+
+    private static int AlliedRelicCount(
+        CampaignPointPlayer player,
+        CampaignPointScoringState state,
+        Dictionary<Guid, CampaignForce> forcesById)
+    {
+        if (player.FactionId is not { } factionId)
+        {
+            return 0;
+        }
+
+        var selfGroup = state.AllyGroupByFaction.GetValueOrDefault(factionId);
+        var broken = state.BrokenAllyFactionIds;
+        var count = 0;
+        foreach (var item in state.VisibleItems)
+        {
+            if (item.IsDestroyed
+                || !item.IsRevealed
+                || item.PossessorForceId is not { } forceId
+                || !forcesById.TryGetValue(forceId, out var possessor)
+                || possessor.ControllerUserId == player.UserId)
+            {
+                continue;
+            }
+
+            if (possessor.FactionId == factionId)
+            {
+                count++;
+                continue;
+            }
+
+            if (broken.Contains(factionId) || broken.Contains(possessor.FactionId))
+            {
+                continue;
+            }
+
+            var otherGroup = state.AllyGroupByFaction.GetValueOrDefault(possessor.FactionId);
+            if (selfGroup is { } group && otherGroup == group)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static HashSet<Guid> FirstPlace(
@@ -363,6 +436,9 @@ public static class GeneralPublicObjectiveKinds
 
     /// <summary>Most finalized battle wins, with draws as the tie-break.</summary>
     public const string MostBattlesWon = "MostBattlesWon";
+
+    /// <summary>Most campaign points from currently owned non-destroyed structures.</summary>
+    public const string MostStructurePoints = "MostStructurePoints";
 }
 
 /// <summary>
@@ -454,6 +530,9 @@ public sealed class CampaignPointScoringState
     /// <summary>Gets ally-group identifiers by faction.</summary>
     public IReadOnlyDictionary<Guid, Guid?> AllyGroupByFaction { get; init; } =
         new Dictionary<Guid, Guid?>();
+
+    /// <summary>Gets factions that left their ally group through Backstab.</summary>
+    public IReadOnlySet<Guid> BrokenAllyFactionIds { get; init; } = new HashSet<Guid>();
 
     /// <summary>Gets whether the campaign is completed, so remaining private objectives count.</summary>
     public bool CampaignCompleted { get; init; }

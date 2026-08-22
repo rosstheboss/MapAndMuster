@@ -80,6 +80,7 @@ internal static class CampaignPointStandingsMapper
             PrivateObjectives = play.PrivateObjectives,
             PrivateObjectivePoints = campaign.PrivateObjectiveTypes.ToDictionary(static type => type.Id, static type => type.CampaignPoints),
             AllyGroupByFaction = CampaignPlayCatalog.AllyGroupByFaction(campaign),
+            BrokenAllyFactionIds = play.BrokenAllyFactionIds.ToHashSet(),
             CampaignCompleted = CampaignLifecycle.Progress(campaign, utcNow).Status == Campaign.Domain.Campaigns.CampaignStatus.Completed,
             ExtraBattleReportPoints = CampaignPlayCatalog.ExtraBattleReportPoints(campaign),
         });

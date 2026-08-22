@@ -20,6 +20,9 @@ public sealed class FactionInput
     /// <summary>Gets the optional ally-group name this faction joins.</summary>
     public string? AllyGroupName { get; init; }
 
+    /// <summary>Gets the optional ally-group identifier this faction joins. Wins over a stale name.</summary>
+    public Guid? AllyGroupId { get; init; }
+
     /// <summary>Gets whether a player who chooses this faction must pick a subfaction.</summary>
     public bool RequiresSubfaction { get; init; }
 

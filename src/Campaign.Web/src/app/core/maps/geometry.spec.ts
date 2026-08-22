@@ -39,12 +39,49 @@ describe('map geometry', () => {
     expect(interiorsOverlap(square(0.1, 0.1, 0.4), square(0.3, 0.1, 0.4))).toBe(true);
   });
 
+  it('rejects a thin interior overlap that is more than a traced border', () => {
+    expect(interiorsOverlap(square(0.1, 0.1, 0.3), square(0.39, 0.1, 0.3))).toBe(true);
+  });
+
   it('allows extra vertices along a shared border even when they sit slightly inside', () => {
     const existing = square(0.1, 0.1, 0.3);
     const neighbor = [
       { x: 0.4, y: 0.1 },
       { x: 0.399, y: 0.2 },
       { x: 0.4, y: 0.3 },
+      { x: 0.4, y: 0.4 },
+      { x: 0.7, y: 0.4 },
+      { x: 0.7, y: 0.1 },
+    ];
+    expect(interiorsOverlap(existing, neighbor)).toBe(false);
+  });
+
+  it('allows a wrapping coastline whose centroid falls inside a neighbor', () => {
+    const plains = [
+      { x: 0.4, y: 0.4 },
+      { x: 0.6, y: 0.4 },
+      { x: 0.6, y: 0.6 },
+      { x: 0.4, y: 0.6 },
+    ];
+    const coastline = [
+      { x: 0.35, y: 0.35 },
+      { x: 0.65, y: 0.35 },
+      { x: 0.65, y: 0.65 },
+      { x: 0.35, y: 0.65 },
+      { x: 0.35, y: 0.6 },
+      { x: 0.6, y: 0.6 },
+      { x: 0.6, y: 0.4 },
+      { x: 0.35, y: 0.4 },
+    ];
+    expect(interiorsOverlap(plains, coastline)).toBe(false);
+  });
+
+  it('allows a near-collinear zigzag along a shared border', () => {
+    const existing = square(0.1, 0.1, 0.3);
+    const neighbor = [
+      { x: 0.4, y: 0.1 },
+      { x: 0.401, y: 0.18 },
+      { x: 0.399, y: 0.26 },
       { x: 0.4, y: 0.4 },
       { x: 0.7, y: 0.4 },
       { x: 0.7, y: 0.1 },
@@ -270,8 +307,8 @@ describe('map geometry', () => {
   it('snaps a move back onto a touching border instead of overlapping interiors', () => {
     const moving = [square(0.1, 0.1, 0.3)];
     const neighbor = [square(0.4, 0.1, 0.3)];
-    const nearShared = resolveTerritoryTranslation(moving, neighbor, 0.01, 0);
-    expect(nearShared?.x).toBeCloseTo(0.01, 5);
+    const nearShared = resolveTerritoryTranslation(moving, neighbor, 0.001, 0);
+    expect(nearShared?.x).toBeCloseTo(0.001, 5);
     expect(interiorsOverlap(translatePolygon(moving[0] ?? [], nearShared?.x ?? 1, 0), neighbor[0] ?? [])).toBe(false);
     const blocked = resolveTerritoryTranslation(moving, neighbor, 0.2, 0);
     expect(blocked?.x ?? 1).toBeLessThan(0.05);

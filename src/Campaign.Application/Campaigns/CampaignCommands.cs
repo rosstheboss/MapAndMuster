@@ -94,6 +94,15 @@ public sealed class CreateCampaignCommand
     /// <summary>Gets campaign points for most battle wins.</summary>
     public int? MostBattlesWonCampaignPoints { get; init; }
 
+    /// <summary>Gets campaign points for most structure campaign points.</summary>
+    public int? MostStructurePointsCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points awarded for each currently owned territory.</summary>
+    public int? PointsPerTerritoryCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for each revealed relic held by an ally or faction-mate other than the player.</summary>
+    public int? AlliedRelicControlCampaignPoints { get; init; }
+
     /// <summary>Gets reusable special rules. Omitted or empty means none.</summary>
     public IReadOnlyList<SpecialRuleInput>? SpecialRules { get; init; }
 
@@ -103,8 +112,11 @@ public sealed class CreateCampaignCommand
     /// <summary>Gets private campaign objectives. Omitted or empty means none.</summary>
     public IReadOnlyList<PrivateObjectiveTypeInput>? PrivateObjectiveTypes { get; init; }
 
-    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int? SplitForceSupplyPenaltyPercent { get; init; }
+
+    /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
+    public bool? SplitForceSupplyPenaltyIsPercent { get; init; }
 
     /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
     public bool? AlwaysAskGeneralKill { get; init; }
@@ -220,6 +232,15 @@ public sealed class UpdateCampaignCommand
     /// <summary>Gets campaign points for most battle wins.</summary>
     public int? MostBattlesWonCampaignPoints { get; init; }
 
+    /// <summary>Gets campaign points for most structure campaign points.</summary>
+    public int? MostStructurePointsCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points awarded for each currently owned territory.</summary>
+    public int? PointsPerTerritoryCampaignPoints { get; init; }
+
+    /// <summary>Gets campaign points for each revealed relic held by an ally or faction-mate other than the player.</summary>
+    public int? AlliedRelicControlCampaignPoints { get; init; }
+
     /// <summary>Gets reusable special rules. Omitted or empty means none.</summary>
     public IReadOnlyList<SpecialRuleInput>? SpecialRules { get; init; }
 
@@ -229,8 +250,11 @@ public sealed class UpdateCampaignCommand
     /// <summary>Gets private campaign objectives. Omitted or empty means none.</summary>
     public IReadOnlyList<PrivateObjectiveTypeInput>? PrivateObjectiveTypes { get; init; }
 
-    /// <summary>Gets the percent subtracted from map-plus-round supply when a player has split forces.</summary>
+    /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int? SplitForceSupplyPenaltyPercent { get; init; }
+
+    /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
+    public bool? SplitForceSupplyPenaltyIsPercent { get; init; }
 
     /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
     public bool? AlwaysAskGeneralKill { get; init; }

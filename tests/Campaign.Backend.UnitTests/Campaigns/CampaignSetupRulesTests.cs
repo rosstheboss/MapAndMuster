@@ -78,6 +78,8 @@ public sealed class CampaignSetupRulesTests
         Assert.True(fortification.IsDestructible);
         Assert.NotEqual(setup.Factions[0].Color, setup.Factions[1].Color);
         Assert.False(setup.Factions[0].RequiresSubfaction);
+        Assert.Equal(1, setup.SplitForceSupplyPenaltyPercent);
+        Assert.False(setup.SplitForceSupplyPenaltyIsPercent);
     }
 
     [Fact]
@@ -295,6 +297,40 @@ public sealed class CampaignSetupRulesTests
         Assert.Null(setup.Factions[2].AllyGroupName);
         Assert.Equal("https://example.test/rules", setup.Links[0].Url);
         Assert.False(string.IsNullOrWhiteSpace(setup.AllyGroups[0].Color));
+    }
+
+    [Fact]
+    public void KeepsFactionMembershipWhenAnAllyGroupIsRenamed()
+    {
+        var groupId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Three Sides",
+            "A contested border.",
+            6,
+            false,
+            null,
+            false,
+            true,
+            0,
+            [
+                new FactionInput { Name = "North", AllyGroupId = groupId, AllyGroupName = "Pact" },
+                new FactionInput { Name = "East", AllyGroupId = groupId, AllyGroupName = "Pact" },
+                new FactionInput { Name = "South" },
+            ],
+            [new AllyGroupInput { Id = groupId, Name = "Northern League" }],
+            null,
+            WeekSchedule(),
+            out var setup,
+            out _,
+            out var errors);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        Assert.Equal(groupId, setup.AllyGroups[0].Id);
+        Assert.Equal("Northern League", setup.AllyGroups[0].Name);
+        Assert.Equal("Northern League", setup.Factions[0].AllyGroupName);
+        Assert.Equal("Northern League", setup.Factions[1].AllyGroupName);
+        Assert.Null(setup.Factions[2].AllyGroupName);
     }
 
     [Fact]
@@ -1186,7 +1222,10 @@ public sealed class CampaignSetupRulesTests
             pointsPerBattleWon: 1,
             mostTerritoriesCampaignPoints: 6,
             longestTerritoryChainCampaignPoints: 8,
-            mostBattlesWonCampaignPoints: 9);
+            mostBattlesWonCampaignPoints: 9,
+            mostStructurePointsCampaignPoints: 4,
+            pointsPerTerritoryCampaignPoints: 2,
+            alliedRelicControlCampaignPoints: 3);
 
         Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
         Assert.NotNull(setup);
@@ -1200,6 +1239,36 @@ public sealed class CampaignSetupRulesTests
         Assert.Equal(6, setup.RankingObjectivePoints.MostTerritories);
         Assert.Equal(8, setup.RankingObjectivePoints.LongestTerritoryChain);
         Assert.Equal(9, setup.RankingObjectivePoints.MostBattlesWon);
+        Assert.Equal(4, setup.RankingObjectivePoints.MostStructurePoints);
+        Assert.Equal(2, setup.RankingObjectivePoints.PointsPerTerritory);
+        Assert.Equal(3, setup.RankingObjectivePoints.AlliedRelicControlPoints);
+    }
+
+    [Fact]
+    public void RejectsASplitForcePenaltyOutsideZeroToOneHundred()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var errors,
+            splitForceSupplyPenaltyPercent: 101);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Field == "splitForceSupplyPenaltyPercent");
     }
 
     [Fact]

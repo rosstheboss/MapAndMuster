@@ -14,7 +14,9 @@ export interface MapTerritory {
   structureCondition: StructureCondition;
   overlayColor: string | null;
   ownerFactionId: string | null;
+  ownerSubfaction?: string | null;
   spawnFactionId: string | null;
+  spawnSubfaction?: string | null;
 }
 
 export interface MapAdjacency {

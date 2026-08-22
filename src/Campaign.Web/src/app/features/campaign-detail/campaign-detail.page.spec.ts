@@ -864,6 +864,95 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
+  it('highlights a faction’s territories and forces when that faction is clicked', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    const territories = [
+      {
+        id: 't1',
+        displayNumber: 1,
+        name: 'Coast',
+        description: null,
+        polygon: [
+          { x: 0.1, y: 0.1 },
+          { x: 0.4, y: 0.1 },
+          { x: 0.4, y: 0.4 },
+          { x: 0.1, y: 0.4 },
+        ],
+        terrainTypeId: 'plains',
+        structureTypeId: null,
+        structureCondition: 'Operational',
+        overlayColor: null,
+        ownerFactionId: '1',
+        spawnFactionId: '1',
+      },
+      {
+        id: 't2',
+        displayNumber: 2,
+        name: 'Ridge',
+        description: null,
+        polygon: [
+          { x: 0.5, y: 0.1 },
+          { x: 0.8, y: 0.1 },
+          { x: 0.8, y: 0.4 },
+          { x: 0.5, y: 0.4 },
+        ],
+        terrainTypeId: 'plains',
+        structureTypeId: null,
+        structureCondition: 'Operational',
+        overlayColor: null,
+        ownerFactionId: '2',
+        spawnFactionId: '2',
+      },
+    ];
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+      currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories,
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(playState());
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      focusOnMap: (kind: 'player' | 'faction' | 'ally', id: string) => void;
+      selectedIds: () => string[];
+      focusedForceIds: () => string[];
+      mapAction: () => unknown;
+    };
+    expect(page.mapAction()).toBeNull();
+    page.focusOnMap('faction', '1');
+    fixture.detectChanges();
+    expect(page.selectedIds()).toEqual(['t1']);
+    expect(page.focusedForceIds()).toEqual(['force-1']);
+
+    page.focusOnMap('player', 'user-1');
+    fixture.detectChanges();
+    expect(page.selectedIds()).toEqual(['t1']);
+    expect(page.focusedForceIds()).toEqual(['force-1']);
+
+    page.focusOnMap('player', 'user-1');
+    fixture.detectChanges();
+    expect(page.selectedIds()).toEqual([]);
+    expect(page.focusedForceIds()).toEqual([]);
+    http.verify();
+  });
+
   it('reveals hidden item objectives from debug mode', async () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
@@ -1033,7 +1122,7 @@ describe('CampaignDetailPage', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     const names = (): (string | undefined)[] =>
       [...compiled.querySelectorAll('.standings-table tbody tr')].map((row) =>
-        row.querySelector('.profile-link')?.textContent.trim(),
+        row.querySelector('.map-focus-button')?.textContent.trim(),
       );
     expect(names()).toEqual(['northplayer', 'Ada']);
 

@@ -116,11 +116,20 @@
             @for (participant of campaign.participants ?? []; track participant.userId) {
               <li class="stack">
                 <div>
+                  <button
+                    type="button"
+                    class="map-focus-button"
+                    [class.is-map-focused]="isMapFocused('player', participant.userId)"
+                    [disabled]="!!mapAction()"
+                    (click)="focusOnMap('player', participant.userId)"
+                  >
+                    {{ participant.displayName }}
+                  </button>
                   <a
                     class="profile-link"
                     [routerLink]="['/users', participant.username]"
                     [queryParams]="profileFrom()"
-                    >{{ participant.displayName }}</a
+                    >{{ participant.username }}</a
                   >
                   @if (participant.factionName; as faction) {
                     <span>
@@ -350,6 +359,7 @@
                 [structureImageUrl]="structureImageUrl"
                 [flagImageUrl]="flagImageUrl"
                 [forces]="mapForces()"
+                [emphasizedForceIds]="focusedForceIds()"
                 [items]="mapItems()"
                 [colorMode]="highlightMode()"
                 [allyGroups]="campaign.allyGroups"
@@ -1507,7 +1517,15 @@
         <ul class="plain-list">
           @for (faction of campaign.factions; track faction.id) {
             <li>
-              <strong>{{ faction.name }}</strong>
+              <button
+                type="button"
+                class="map-focus-button"
+                [class.is-map-focused]="isMapFocused('faction', faction.id)"
+                [disabled]="!!mapAction()"
+                (click)="focusOnMap('faction', faction.id)"
+              >
+                <strong>{{ faction.name }}</strong>
+              </button>
               <span class="faction-swatch" [style.background]="faction.color" aria-hidden="true"></span>
               @if (faction.requiresSubfaction) {
                 <span class="muted"> · Subfaction required</span>
@@ -1566,7 +1584,17 @@
         @if (isOpen('allies')) {
           <ul class="plain-list">
             @for (group of campaign.allyGroups; track group.id) {
-              <li>{{ group.name }}</li>
+              <li>
+                <button
+                  type="button"
+                  class="map-focus-button"
+                  [class.is-map-focused]="isMapFocused('ally', group.id)"
+                  [disabled]="!!mapAction()"
+                  (click)="focusOnMap('ally', group.id)"
+                >
+                  {{ group.name }}
+                </button>
+              </li>
             }
           </ul>
         }
@@ -1652,8 +1680,17 @@
                 @for (row of sortedStandings(); track row.userId) {
                   <tr>
                     <td>
+                      <button
+                        type="button"
+                        class="map-focus-button"
+                        [class.is-map-focused]="isMapFocused('player', row.userId)"
+                        [disabled]="!!mapAction()"
+                        (click)="focusOnMap('player', row.userId)"
+                      >
+                        {{ row.displayName }}
+                      </button>
                       <a class="profile-link" [routerLink]="['/users', row.username]" [queryParams]="profileFrom()">{{
-                        row.displayName
+                        row.username
                       }}</a>
                       @for (item of row.heldItems ?? []; track item.typeId) {
                         <span class="standing-item" [style.color]="item.color || '#C45C26'" [title]="item.name">
@@ -1666,17 +1703,43 @@
                       }
                     </td>
                     <td>
-                      @if (row.factionId && row.hasFlagImage && flagImageUrl(row.factionId); as src) {
-                        <img class="standing-faction-logo" [src]="src" [alt]="row.factionName || 'Faction'" />
-                      } @else if (row.factionColor) {
-                        <span
-                          class="faction-swatch standing-faction-logo"
-                          [style.background]="row.factionColor"
-                          [attr.aria-label]="row.factionName || 'Faction'"
-                        ></span>
+                      @if (row.factionId) {
+                        <button
+                          type="button"
+                          class="map-focus-button"
+                          [class.is-map-focused]="isMapFocused('faction', row.factionId)"
+                          [disabled]="!!mapAction()"
+                          (click)="focusOnMap('faction', row.factionId)"
+                        >
+                          @if (row.hasFlagImage && flagImageUrl(row.factionId); as src) {
+                            <img class="standing-faction-logo" [src]="src" [alt]="row.factionName || 'Faction'" />
+                          } @else if (row.factionColor) {
+                            <span
+                              class="faction-swatch standing-faction-logo"
+                              [style.background]="row.factionColor"
+                              [attr.aria-label]="row.factionName || 'Faction'"
+                            ></span>
+                          } @else {
+                            {{ row.factionName }}
+                          }
+                        </button>
                       }
                     </td>
-                    <td>{{ row.allyGroupName || '—' }}</td>
+                    <td>
+                      @if (allyGroupIdByName(row.allyGroupName); as allyId) {
+                        <button
+                          type="button"
+                          class="map-focus-button"
+                          [class.is-map-focused]="isMapFocused('ally', allyId)"
+                          [disabled]="!!mapAction()"
+                          (click)="focusOnMap('ally', allyId)"
+                        >
+                          {{ row.allyGroupName }}
+                        </button>
+                      } @else {
+                        {{ row.allyGroupName || '—' }}
+                      }
+                    </td>
                     <td>{{ row.territoryAndStructurePoints }}</td>
                     <td>{{ row.battlesWonPoints }}</td>
                     <td>{{ row.publicObjectivePoints }}</td>

@@ -8,15 +8,20 @@ public sealed class AllyGroupSetup
     /// <summary>
     /// Initializes a validated ally group.
     /// </summary>
+    /// <param name="id">The ally-group identifier.</param>
     /// <param name="name">The group name.</param>
     /// <param name="color">The unique #RRGGBB overlay color.</param>
-    public AllyGroupSetup(string name, string color)
+    public AllyGroupSetup(Guid id, string name, string color)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(color);
+        Id = id;
         Name = name;
         Color = color;
     }
+
+    /// <summary>Gets the ally-group identifier.</summary>
+    public Guid Id { get; }
 
     /// <summary>Gets the ally-group name.</summary>
     public string Name { get; }
