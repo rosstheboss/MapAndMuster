@@ -898,10 +898,8 @@ export class MapEditorPage {
 
   protected spawnTaken(option: MapFactionOption): boolean {
     const selectedId = this.selectedId();
-    const identity = spawnIdentity(option.factionId, option.subfaction);
     return this.graph().territories.some(
-      (territory) =>
-        territory.id !== selectedId && spawnIdentity(territory.spawnFactionId, territory.spawnSubfaction) === identity,
+      (territory) => territory.id !== selectedId && this.spawnValue(territory) === option.value,
     );
   }
 
@@ -1590,7 +1588,12 @@ export class MapEditorPage {
     this.downloading.set(true);
     this.errorMessages.set([]);
     try {
-      const blob = await rasterizeMapPng(imageUrl, graph.territories);
+      const blob = await rasterizeMapPng(imageUrl, graph.territories, {
+        factions: campaign.factions,
+        structures: campaign.structureTypes,
+        structureImageUrl: this.structureImageUrl,
+        flagImageUrl: this.flagImageUrl,
+      });
       downloadBlob(blob, mapDownloadFilename(campaign.name));
     } catch (error: unknown) {
       this.revealErrors(readApiErrorMessages(error, 'Unable to download the map.'));

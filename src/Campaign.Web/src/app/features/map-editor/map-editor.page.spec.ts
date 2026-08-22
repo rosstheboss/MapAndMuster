@@ -1371,6 +1371,7 @@ describe('MapEditorPage', () => {
           ownerFactionId: string | null;
           ownerSubfaction?: string | null;
           spawnFactionId: string | null;
+          spawnSubfaction?: string | null;
         }[];
       };
     };
@@ -1390,10 +1391,78 @@ describe('MapEditorPage', () => {
     expect(page.graph().territories[0]?.ownerFactionId).toBe('daemons');
     expect(page.graph().territories[0]?.ownerSubfaction).toBe('Khorne');
     expect(page.graph().territories[0]?.spawnFactionId).toBe('daemons');
+    expect(page.graph().territories[0]?.spawnSubfaction).toBe('Khorne');
+    expect(compiled.querySelector('#territory-spawn option[value="daemons::Khorne"]')).toBeTruthy();
     expect(page.ownerLocked()).toBe(true);
     page.setOwner('north');
     expect(page.graph().territories[0]?.ownerFactionId).toBe('daemons');
     expect(compiled.querySelector('#territory-owner')?.getAttribute('disabled')).toBe('true');
+    http.verify();
+  });
+
+  it('allows one spawn per required daemon subfaction without treating sibling gods as taken', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      ...campaign,
+      factions: [
+        ...campaign.factions,
+        {
+          id: 'daemons',
+          name: 'Daemons of Chaos',
+          color: '#AD1457',
+          subfactions: ['Khorne', 'Nurgle', 'Slaanesh', 'Tzeentch'],
+          allyGroupName: null,
+          requiresSubfaction: true,
+          hasFlagImage: false,
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Khornehold', 0.1), namedSquare('t2', 2, 'Nurglefen', 0.4)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      setSpawn: (value: string) => void;
+      save: () => Promise<boolean>;
+      errorMessages: () => string[];
+      graph: () => {
+        territories: { spawnFactionId: string | null; spawnSubfaction?: string | null }[];
+        adjacencies: unknown[];
+      };
+    };
+    page.onTerritorySelect({ id: 't1', additive: false });
+    page.setSpawn('daemons::Khorne');
+    page.onTerritorySelect({ id: 't2', additive: false });
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('#territory-spawn option[value="daemons::Khorne"]')?.hasAttribute('disabled')).toBe(
+      true,
+    );
+    expect(compiled.querySelector('#territory-spawn option[value="daemons::Nurgle"]')?.hasAttribute('disabled')).toBe(
+      false,
+    );
+
+    page.setSpawn('daemons::Nurgle');
+    expect(page.graph().territories.map((territory) => territory.spawnSubfaction)).toEqual(['Khorne', 'Nurgle']);
+
+    const saving = page.save();
+    const put = http.expectOne(`/api/campaigns/${campaignId}/map/graph`);
+    expect(
+      put.request.body.territories.map((territory: { spawnSubfaction: string | null }) => territory.spawnSubfaction),
+    ).toEqual(['Khorne', 'Nurgle']);
+    put.flush({
+      ...emptyGraph,
+      revision: 3,
+      territories: page.graph().territories,
+      adjacencies: page.graph().adjacencies,
+    });
+    await expect(saving).resolves.toBe(true);
+    expect(page.errorMessages()).toEqual([]);
     http.verify();
   });
 });

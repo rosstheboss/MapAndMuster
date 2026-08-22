@@ -22,4 +22,20 @@ public sealed class PlayMapSpawnTests
         Assert.Equal(NurgleLand, map.SpawnFor(Daemons, "Nurgle")?.Id);
         Assert.Equal(KhorneLand, map.SpawnFor(Daemons)?.Id);
     }
+
+    [Fact]
+    public void CanEnterTreatsRequiredSubfactionSpawnsAsSeparateFactions()
+    {
+        var khorne = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), Daemons, KhorneLand, false, subfaction: "Khorne");
+        var map = new PlayMap(
+            [
+                new PlayTerritory(KhorneLand, 1, Daemons, Daemons, null, null, StructureCondition.Operational, spawnSubfaction: "Khorne"),
+                new PlayTerritory(NurgleLand, 2, Daemons, Daemons, null, null, StructureCondition.Operational, spawnSubfaction: "Nurgle"),
+            ],
+            [(KhorneLand, NurgleLand)]);
+
+        Assert.True(FactionSpecialRulePolicies.CanEnter(map, khorne, KhorneLand));
+        Assert.False(FactionSpecialRulePolicies.CanEnter(map, khorne, NurgleLand));
+        Assert.True(FactionSpecialRulePolicies.IsEnemySpawn(map.Territory(NurgleLand)!, khorne));
+    }
 }

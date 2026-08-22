@@ -36,6 +36,33 @@ public static class MapGraphMapper
     }
 
     /// <summary>
+    /// Maps a stored overlay graph onto a member-visible detail without re-validating it.
+    /// Invalid graphs still need to load in the map editor so a manager can fix them.
+    /// </summary>
+    /// <param name="campaignId">The campaign identifier.</param>
+    /// <param name="revision">The campaign revision.</param>
+    /// <param name="canManage">Whether the viewer can edit the graph.</param>
+    /// <param name="stored">The stored graph, which may currently fail save validation.</param>
+    /// <returns>The detail.</returns>
+    public static CampaignMapGraphDetail ToDetail(
+        Guid campaignId,
+        int revision,
+        bool canManage,
+        StoredMapGraph stored)
+    {
+        ArgumentNullException.ThrowIfNull(stored);
+        return new CampaignMapGraphDetail
+        {
+            CampaignId = campaignId,
+            Revision = revision,
+            CanManage = canManage,
+            Territories = stored.Territories,
+            Adjacencies = stored.Adjacencies,
+            ItemObjectivePlacements = stored.ItemObjectivePlacements,
+        };
+    }
+
+    /// <summary>
     /// Maps a validated graph onto the persistence model.
     /// </summary>
     /// <param name="graph">The validated graph.</param>

@@ -46,6 +46,7 @@ public sealed class GetCampaignMapGraphHandler
         }
 
         var stored = campaign.MapGraph ?? MapGraphMapper.Empty();
+        var canManage = membership?.IsGameMaster == true || isAdministrator;
         var factionIds = campaign.Factions.Select(static faction => faction.Id).ToHashSet();
         var terrainIds = campaign.TerrainTypes.Select(static type => type.Id).ToHashSet();
         var structureIds = campaign.StructureTypes.Select(static type => type.Id).ToHashSet();
@@ -58,15 +59,10 @@ public sealed class GetCampaignMapGraphHandler
                 out var graph,
                 out _))
         {
-            graph = new CampaignMapGraph([], []);
+            return OperationResults.Success(MapGraphMapper.ToDetail(campaign.Id, campaign.Revision, canManage, stored));
         }
 
         return OperationResults.Success(
-            MapGraphMapper.ToDetail(
-                campaign.Id,
-                campaign.Revision,
-                membership?.IsGameMaster == true || isAdministrator,
-                graph,
-                stored.ItemObjectivePlacements));
+            MapGraphMapper.ToDetail(campaign.Id, campaign.Revision, canManage, graph, stored.ItemObjectivePlacements));
     }
 }

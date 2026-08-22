@@ -6,6 +6,7 @@ import {
   mapFactionOptions,
   mapFactionOptionValue,
   parseMapFactionOptionValue,
+  spawnIdentity,
 } from './map-faction-options';
 
 const daemons: CampaignFaction = {
@@ -68,5 +69,12 @@ describe('map faction options', () => {
     });
     expect(mapFactionOptionLabel([daemons], 'daemons', 'Khorne')).toBe('Daemons of Chaos - Khorne');
     expect(mapFactionOptionLabel([daemons], null, null)).toBe('Neutral');
+  });
+
+  it('treats required subfactions as distinct spawn identities', () => {
+    expect(spawnIdentity('daemons', 'Khorne')).toBe('daemons::Khorne');
+    expect(spawnIdentity('daemons', 'Nurgle')).toBe('daemons::Nurgle');
+    expect(spawnIdentity('daemons', 'Khorne')).not.toBe(spawnIdentity('daemons', 'Nurgle'));
+    expect(new Set(['daemons::Khorne', 'daemons::Nurgle', 'daemons::Slaanesh', 'daemons::Tzeentch']).size).toBe(4);
   });
 });

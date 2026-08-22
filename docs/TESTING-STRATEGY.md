@@ -70,7 +70,9 @@ Cover components/services for:
   territory does not change that field panel's height. The expanded Territories list stays within the
   map column height, scrolls vertically, and scrolls the topmost selected territory into view.
   Administrators can save as a preset from the map editor; the save-name lookup includes The Hunt in
-  Estalia.
+  Estalia. Map PNG downloads rasterize unselected overlay fills, spawn hatching, structure pins, and
+  faction flags or logos, and omit adjacency arrows. Downloaded flags are twice the on-map marker
+  size and structures are three times that size.
 - Permission-based navigation without relying on it as backend security.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
 - Campaign log display, member chat including typable recipient autocomplete and public/private/game-log filters, live log refresh, chat send errors without the save success

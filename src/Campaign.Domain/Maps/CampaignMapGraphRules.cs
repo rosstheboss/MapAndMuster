@@ -93,7 +93,7 @@ public static class CampaignMapGraphRules
         var usedIds = new HashSet<Guid>();
         var usedNumbers = new HashSet<int>();
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var spawnByKey = new Dictionary<string, int>(StringComparer.Ordinal);
+        var spawnByKey = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < territories.Count; index++)
         {
             var input = territories[index];

@@ -1800,7 +1800,12 @@ export class CampaignDetailPage {
     this.downloading.set(true);
     this.error.set(null);
     try {
-      const blob = await rasterizeMapPng(imageUrl, this.graph().territories);
+      const blob = await rasterizeMapPng(imageUrl, this.graph().territories, {
+        factions: campaign.factions,
+        structures: campaign.structureTypes,
+        structureImageUrl: this.structureImageUrl,
+        flagImageUrl: this.flagImageUrl,
+      });
       downloadBlob(blob, mapDownloadFilename(campaign.name));
     } catch {
       this.error.set('Unable to download the map.');

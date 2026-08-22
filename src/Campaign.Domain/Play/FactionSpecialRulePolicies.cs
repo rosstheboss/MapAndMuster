@@ -83,11 +83,35 @@ public static class FactionSpecialRulePolicies
         return [.. ids];
     }
 
+    /// <summary>
+    /// Returns whether the territory is another faction's or required subfaction's spawn.
+    /// </summary>
+    /// <param name="territory">The destination territory.</param>
+    /// <param name="force">The moving force.</param>
+    /// <returns><see langword="true"/> when the force may not enter this spawn.</returns>
+    public static bool IsEnemySpawn(PlayTerritory territory, CampaignForce force)
+    {
+        ArgumentNullException.ThrowIfNull(territory);
+        ArgumentNullException.ThrowIfNull(force);
+        if (territory.SpawnFactionId is not { } spawnFaction)
+        {
+            return false;
+        }
+
+        if (spawnFaction != force.FactionId)
+        {
+            return true;
+        }
+
+        return !string.IsNullOrEmpty(territory.SpawnSubfaction)
+            && !string.Equals(territory.SpawnSubfaction, force.Subfaction, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Returns whether the force may enter the territory (not an enemy spawn).</summary>
     public static bool CanEnter(PlayMap map, CampaignForce force, Guid territoryId)
     {
         var territory = map.Territory(territoryId);
-        return territory is not null && (territory.SpawnFactionId is null || territory.SpawnFactionId == force.FactionId);
+        return territory is not null && !IsEnemySpawn(territory, force);
     }
 
     /// <summary>

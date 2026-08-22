@@ -708,7 +708,10 @@ details under the map. Clicking a player, faction, or ally group on the campaign
 player is not issuing an order, highlights that party’s territories and emphasizes their forces on
 the map. Clicking the same party again clears that focus. A profile link still opens the user
 profile. The campaign page and map editor can download a PNG of the latest saved map
-image with the unselected territory overlay rasterized on top. Adjacency arrows are omitted. If the
+image with the unselected territory overlay rasterized on top. Spawn hatching, structure pins, and
+faction flags or uploaded logos are included. Download flags are twice the on-map marker size and
+structures are three times that size so they remain readable on the PNG. Adjacency arrows are
+omitted. If the
 map editor has unsaved edits, downloading asks whether to save first; declining downloads the last
 saved overlay. The same prompt applies to Download SVG data, which downloads the overlay polygons
 and adjacencies as an SVG file. Upload SVG, in the map editor, creates territories from polygon,

@@ -11,6 +11,9 @@ public sealed class MapGraphHandlerTests
     private static readonly Guid UserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid OtherUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid PlainsId = Guid.Parse("cccccc01-cccc-cccc-cccc-cccccccccccc");
+    private static readonly Guid NorthFactionId = Guid.Parse("aaaa1111-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static readonly Guid SouthFactionId = Guid.Parse("bbbb2222-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private static readonly Guid DaemonsFactionId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa10");
     private static readonly DateTimeOffset Now = new(2026, 8, 14, 15, 0, 0, TimeSpan.Zero);
 
     [Fact]
@@ -140,6 +143,78 @@ public sealed class MapGraphHandlerTests
     }
 
     [Fact]
+    public async Task SaveAcceptsDistinctRequiredSubfactionSpawns()
+    {
+        var khorneId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
+        var nurgleId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2");
+        var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId, extraFactions: [DaemonsFaction()]) };
+        var handler = new SaveCampaignMapGraphHandler(store, new FakeClock());
+
+        var saved = await handler.HandleAsync(
+            new SaveCampaignMapGraphCommand
+            {
+                UserId = UserId,
+                CampaignId = store.Existing.Id,
+                ExpectedRevision = 1,
+                Territories =
+                [
+                    Territory(khorneId, 1, Square(0.1, 0.1, 0.3), "Khornehold", DaemonsFactionId, "Khorne"),
+                    Territory(nurgleId, 2, Square(0.4, 0.1, 0.3), "Nurglefen", DaemonsFactionId, "Nurgle"),
+                ],
+                Adjacencies = [],
+            },
+            CancellationToken.None);
+
+        Assert.True(saved.IsSuccess, string.Join("; ", saved.Errors.Select(error => error.Message)));
+        Assert.Equal("Khorne", saved.Value!.Territories.Single(territory => territory.Id == khorneId).SpawnSubfaction);
+        Assert.Equal("Nurgle", saved.Value.Territories.Single(territory => territory.Id == nurgleId).SpawnSubfaction);
+    }
+
+    [Fact]
+    public async Task GetReturnsRequiredSubfactionSpawnsAndDoesNotDropDuplicateParentSpawns()
+    {
+        var khorneId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
+        var nurgleId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2");
+        var leftId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3");
+        var rightId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4");
+        var gods = StoredCampaignFor(
+            UserId,
+            extraFactions: [DaemonsFaction()],
+            mapGraph: new StoredMapGraph
+            {
+                Territories =
+                [
+                    StoredTerritory(khorneId, 1, 0.1, DaemonsFactionId, "Khorne"),
+                    StoredTerritory(nurgleId, 2, 0.4, DaemonsFactionId, "Nurgle"),
+                ],
+                Adjacencies = [],
+            });
+        var loadedGods = await new GetCampaignMapGraphHandler(new FakeCampaignStore { Existing = gods })
+            .HandleAsync(gods.Id, UserId, CancellationToken.None);
+        Assert.True(loadedGods.IsSuccess);
+        Assert.Equal(2, loadedGods.Value!.Territories.Count);
+        Assert.Contains(loadedGods.Value.Territories, territory => territory.SpawnSubfaction == "Khorne");
+        Assert.Contains(loadedGods.Value.Territories, territory => territory.SpawnSubfaction == "Nurgle");
+
+        var unlabeled = StoredCampaignFor(
+            UserId,
+            extraFactions: [DaemonsFaction()],
+            mapGraph: new StoredMapGraph
+            {
+                Territories =
+                [
+                    StoredTerritory(leftId, 1, 0.1, DaemonsFactionId),
+                    StoredTerritory(rightId, 2, 0.4, DaemonsFactionId),
+                ],
+                Adjacencies = [],
+            });
+        var loadedUnlabeled = await new GetCampaignMapGraphHandler(new FakeCampaignStore { Existing = unlabeled })
+            .HandleAsync(unlabeled.Id, UserId, CancellationToken.None);
+        Assert.True(loadedUnlabeled.IsSuccess);
+        Assert.Equal(2, loadedUnlabeled.Value!.Territories.Count);
+    }
+
+    [Fact]
     public async Task SaveRejectsParticipantsWhoAreNotManagers()
     {
         var campaign = StoredCampaignFor(UserId);
@@ -198,7 +273,13 @@ public sealed class MapGraphHandlerTests
         Assert.Equal(ErrorCodes.CampaignForbidden, result.ErrorCode);
     }
 
-    private static TerritoryInput Territory(Guid id, int number, IReadOnlyList<MapPointInput> polygon, string? name = null)
+    private static TerritoryInput Territory(
+        Guid id,
+        int number,
+        IReadOnlyList<MapPointInput> polygon,
+        string? name = null,
+        Guid? spawnFactionId = null,
+        string? spawnSubfaction = null)
     {
         return new TerritoryInput
         {
@@ -207,6 +288,47 @@ public sealed class MapGraphHandlerTests
             Name = name,
             Polygon = polygon,
             TerrainTypeId = PlainsId,
+            SpawnFactionId = spawnFactionId,
+            SpawnSubfaction = spawnSubfaction,
+        };
+    }
+
+    private static TerritoryDetail StoredTerritory(
+        Guid id,
+        int number,
+        double x,
+        Guid spawnFactionId,
+        string? spawnSubfaction = null)
+    {
+        return new TerritoryDetail
+        {
+            Id = id,
+            DisplayNumber = number,
+            Name = null,
+            Polygon =
+            [
+                new MapPointDetail { X = x, Y = 0.1 },
+                new MapPointDetail { X = x + 0.3, Y = 0.1 },
+                new MapPointDetail { X = x + 0.3, Y = 0.4 },
+                new MapPointDetail { X = x, Y = 0.4 },
+            ],
+            TerrainTypeId = PlainsId,
+            OwnerFactionId = spawnFactionId,
+            OwnerSubfaction = spawnSubfaction,
+            SpawnFactionId = spawnFactionId,
+            SpawnSubfaction = spawnSubfaction,
+        };
+    }
+
+    private static StoredFaction DaemonsFaction()
+    {
+        return new StoredFaction
+        {
+            Id = DaemonsFactionId,
+            Name = "Daemons of Chaos",
+            Color = "#AD1457",
+            Subfactions = ["Khorne", "Nurgle", "Slaanesh", "Tzeentch"],
+            RequiresSubfaction = true,
         };
     }
 
@@ -221,7 +343,10 @@ public sealed class MapGraphHandlerTests
         ];
     }
 
-    private static StoredCampaign StoredCampaignFor(Guid userId)
+    private static StoredCampaign StoredCampaignFor(
+        Guid userId,
+        StoredMapGraph? mapGraph = null,
+        IReadOnlyList<StoredFaction>? extraFactions = null)
     {
         return new StoredCampaign
         {
@@ -238,8 +363,9 @@ public sealed class MapGraphHandlerTests
             Memberships = [new StoredCampaignMembership { UserId = userId, IsGameMaster = true, IsPlayer = true }],
             Factions =
             [
-                new StoredFaction { Id = Guid.NewGuid(), Name = "North", Color = "#2563EB", Subfactions = [], RequiresSubfaction = false },
-                new StoredFaction { Id = Guid.NewGuid(), Name = "South", Color = "#DC2626", Subfactions = [], RequiresSubfaction = false },
+                new StoredFaction { Id = NorthFactionId, Name = "North", Color = "#2563EB", Subfactions = [], RequiresSubfaction = false },
+                new StoredFaction { Id = SouthFactionId, Name = "South", Color = "#DC2626", Subfactions = [], RequiresSubfaction = false },
+                .. extraFactions ?? [],
             ],
             AllyGroups = [],
             Links = [],
@@ -250,6 +376,7 @@ public sealed class MapGraphHandlerTests
             RoundLengthAmount = 1,
             RoundLengthUnit = "Weeks",
             Phases = [new StoredRoundPhase { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" }],
+            MapGraph = mapGraph,
             TerrainTypes =
             [
                 new StoredTerrainType

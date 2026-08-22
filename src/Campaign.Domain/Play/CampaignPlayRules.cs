@@ -401,7 +401,7 @@ public static class CampaignPlayRules
             && targetTerritoryId is { } destinationId)
         {
             var destination = map.Territory(destinationId);
-            if (destination?.SpawnFactionId is { } spawnFaction && spawnFaction != force.FactionId)
+            if (destination is not null && FactionSpecialRulePolicies.IsEnemySpawn(destination, force))
             {
                 error = new DomainError("order.spawn.forbidden", "A force cannot enter another faction's spawn.", "targetTerritoryId");
                 return false;
@@ -1256,7 +1256,7 @@ public static class CampaignPlayRules
                 continue;
             }
 
-            if (neighbor.SpawnFactionId is { } spawnFaction && spawnFaction != force.FactionId)
+            if (FactionSpecialRulePolicies.IsEnemySpawn(neighbor, force))
             {
                 continue;
             }
@@ -1349,7 +1349,7 @@ public static class CampaignPlayRules
                 continue;
             }
 
-            if (neighbor.SpawnFactionId is { } spawnFaction && spawnFaction != force.FactionId)
+            if (FactionSpecialRulePolicies.IsEnemySpawn(neighbor, force))
             {
                 continue;
             }
