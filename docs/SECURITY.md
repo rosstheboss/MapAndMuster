@@ -39,7 +39,9 @@ separate response models for public, participant, and staff views.
 ## Authorization
 
 - System Administrator is global; Player and Game Master memberships are campaign-scoped.
-  Saving a campaign as a named preset is administrator-only. Applying a saved preset to a
+  Saving a campaign as a named preset is administrator-only. Downloading or uploading a portable
+  campaign-preset package is administrator-only. Preset-package upload is rate-limited and capped at
+  64 MB; other uploads keep the 24 MB host limit. Applying a saved preset to a
   campaign requires campaign-manager or administrator permission.
 - Use named permission policies. Do not assume a GM is neutral or is not also a player.
 - Every command revalidates membership, effective actor, entity ownership, campaign state,

@@ -25,7 +25,7 @@ uploads
 *.slnx
 docs
 tests
-src/Campaign.Web
+src/MapAndMuster.Web
 eng
 agent-transcripts
 **/*.md

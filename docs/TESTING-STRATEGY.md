@@ -27,6 +27,8 @@ Required early suites:
 - Battle-submission equivalence, single submission, disagreement, and GM resolution.
 - Campaign-preset save copies map image and overlay; apply remaps overlay catalog identifiers by name.
   Saving the same name after trimming whitespace overwrites the previous preset.
+  Administrator preset-package download/upload copies catalog, overlay JSON, map image, and catalog
+  files; non-administrators are rejected.
 
 ## Backend integration tests
 
@@ -52,6 +54,8 @@ Cover:
   faction assignment, and administrator impersonation of seeded test accounts.
 - Administrator save-as-preset copies the map file and overlay graph; applying onto another campaign
   remaps overlay terrain identifiers onto that campaign's catalog.
+- Administrator download/upload of a `.mapandmuster-preset` ZIP round-trips map image and overlay
+  graph; non-administrators receive 403.
 
 ## Angular tests
 
@@ -70,7 +74,8 @@ Cover components/services for:
   territory does not change that field panel's height. The expanded Territories list stays within the
   map column height, scrolls vertically, and scrolls the topmost selected territory into view.
   Administrators can save as a preset from the map editor; the save-name lookup includes The Hunt in
-  Estalia. Map PNG downloads rasterize unselected overlay fills, spawn hatching, structure pins, and
+  Estalia. Edit campaign exposes administrator Download Preset and Upload Preset for a portable
+  package of catalog, overlay, and map image. Map PNG downloads rasterize unselected overlay fills, spawn hatching, structure pins, and
   faction flags or logos, and omit adjacency arrows. Downloaded flags are twice the on-map marker
   size and structures are three times that size.
 - Permission-based navigation without relying on it as backend security.

@@ -7,10 +7,10 @@ New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
 Push-Location $root
 try {
     dotnet tool restore
-    dotnet restore Campaign.sln
+    dotnet restore MapAndMuster.sln
     dotnet ef migrations bundle `
-        --project (Join-Path $root 'src/Campaign.Infrastructure/Campaign.Infrastructure.csproj') `
-        --startup-project (Join-Path $root 'src/Campaign.Api/Campaign.Api.csproj') `
+        --project (Join-Path $root 'src/MapAndMuster.Infrastructure/MapAndMuster.Infrastructure.csproj') `
+        --startup-project (Join-Path $root 'src/MapAndMuster.Api/MapAndMuster.Api.csproj') `
         --configuration Release `
         --output (Join-Path $artifacts 'efbundle') `
         --force

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-dotnet restore Campaign.sln
-dotnet format Campaign.sln --verify-no-changes --no-restore
-dotnet build Campaign.sln --configuration Release --no-restore
-dotnet test Campaign.sln --configuration Release --no-build
-npm --prefix src/Campaign.Web ci
-npm --prefix src/Campaign.Web run verify
-npm --prefix tests/Campaign.Web.E2E ci
-npm --prefix tests/Campaign.Web.E2E test
+dotnet restore MapAndMuster.sln
+dotnet format MapAndMuster.sln --verify-no-changes --no-restore
+dotnet build MapAndMuster.sln --configuration Release --no-restore
+dotnet test MapAndMuster.sln --configuration Release --no-build
+npm --prefix src/MapAndMuster.Web ci
+npm --prefix src/MapAndMuster.Web run verify
+npm --prefix tests/MapAndMuster.Web.E2E ci
+npm --prefix tests/MapAndMuster.Web.E2E test
 

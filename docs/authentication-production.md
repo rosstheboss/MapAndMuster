@@ -31,9 +31,9 @@ browser to `PublicWeb:Origin`.
 Replace placeholders. Prefer the public site origin so cookies stay first-party:
 
 ```text
-https://<ROOT_DOMAIN>/api/auth/external/google/callback
-https://<ROOT_DOMAIN>/api/auth/external/facebook/callback
-https://<ROOT_DOMAIN>/api/auth/external/discord/callback
+https://mapandmuster.com/api/auth/external/google/callback
+https://mapandmuster.com/api/auth/external/facebook/callback
+https://mapandmuster.com/api/auth/external/discord/callback
 ```
 
 Local development (Angular proxy):
@@ -62,7 +62,7 @@ A matching email does not auto-link to an existing local account.
 ### Google
 
 1. Create an OAuth client of type **Web application** in a Google Cloud project.
-2. Add authorized JavaScript origins for `http://localhost:4200` and `https://<ROOT_DOMAIN>`.
+2. Add authorized JavaScript origins for `http://localhost:4200` and `https://mapandmuster.com`.
 3. Add the exact redirect URIs above.
 4. Copy the client id and secret into server-side configuration.
 

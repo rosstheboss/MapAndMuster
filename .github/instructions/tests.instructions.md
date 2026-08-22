@@ -1,5 +1,5 @@
 ---
-applyTo: 'tests/**/*,src/Campaign.Web/**/*.spec.ts'
+applyTo: 'tests/**/*,src/MapAndMuster.Web/**/*.spec.ts'
 ---
 
 # Test Instructions

@@ -23,23 +23,23 @@ jobs:
           global-json-file: global.json
       - uses: actions/setup-node@v6
         with:
-          node-version-file: src/Campaign.Web/.nvmrc
+          node-version-file: src/MapAndMuster.Web/.nvmrc
           cache: npm
           cache-dependency-path: |
-            src/Campaign.Web/package-lock.json
-            tests/Campaign.Web.E2E/package-lock.json
+            src/MapAndMuster.Web/package-lock.json
+            tests/MapAndMuster.Web.E2E/package-lock.json
       - name: Restore with high and critical NuGet audit
         run: >-
-          dotnet restore Campaign.sln
+          dotnet restore MapAndMuster.sln
           /p:NuGetAudit=true
           /p:NuGetAuditMode=all
           /p:NuGetAuditLevel=high
           /p:WarningsAsErrors=NU1903;NU1904
       - name: List known vulnerable .NET packages
-        run: dotnet list Campaign.sln package --vulnerable --include-transitive
+        run: dotnet list MapAndMuster.sln package --vulnerable --include-transitive
       - name: npm audit (web)
         run: npm ci && npm audit --audit-level=high
-        working-directory: src/Campaign.Web
+        working-directory: src/MapAndMuster.Web
       - name: npm audit (e2e)
         run: npm ci && npm audit --audit-level=high
-        working-directory: tests/Campaign.Web.E2E
+        working-directory: tests/MapAndMuster.Web.E2E

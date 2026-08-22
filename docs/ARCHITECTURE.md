@@ -7,7 +7,7 @@ Do not introduce microservices or full event sourcing without an architecture de
 
 ## Project responsibilities
 
-### Campaign.Domain
+### MapAndMuster.Domain
 
 Pure domain model and rules: campaigns, memberships, rounds, phases, action windows, orders,
 forces, territories, structures, alliances, battles, submissions, retreats, missions, supply,
@@ -16,7 +16,7 @@ statuses, objectives, relics, scoring, notifications requested by domain events,
 It may depend only on the .NET base class libraries. It must not reference EF Core, ASP.NET
 Core, Identity, email, storage, or logging implementations.
 
-### Campaign.Application
+### MapAndMuster.Application
 
 Use cases, commands/queries, permission checks, transaction boundaries, validation that spans
 aggregates, domain-event handling, DTO mapping, and ports such as clock, email outbox,
@@ -24,14 +24,14 @@ identity, file storage, and persistence abstractions.
 
 It depends only on Domain.
 
-### Campaign.Infrastructure
+### MapAndMuster.Infrastructure
 
 EF Core/PostgreSQL, Identity stores, external-login adapters, email sender, transactional
 outbox worker, uploaded-asset storage, implementation clock, and other adapters.
 
 It depends on Application and Domain.
 
-### Campaign.Api
+### MapAndMuster.Api
 
 HTTP endpoints, request validation, authentication, permission policies, OpenAPI, middleware,
 rate limiting, health checks, dependency injection, process startup, and hosted background work
@@ -39,7 +39,7 @@ rate limiting, health checks, dependency injection, process startup, and hosted 
 
 It depends on Application and Infrastructure. Endpoints do not contain domain logic.
 
-### Campaign.Web
+### MapAndMuster.Web
 
 Angular views and client-side interaction. Components collect intent and display server-provided
 state. The backend remains authoritative for permissions, deadlines, secrets, calculations, and
@@ -86,6 +86,13 @@ Modules may initially share a database and process. Keep public module interacti
   administrators may apply one. Applying a preset remaps overlay catalog identifiers onto the
   destination campaign by catalog name. Preset map and catalog files count as references so campaign
   file cleanup does not delete them while a preset still uses them.
+- Administrators may download a campaign or named preset as a `.mapandmuster-preset` ZIP (manifest,
+  catalog, settings, overlay JSON, a visual overlay SVG, map image, and referenced catalog files) and
+  upload that ZIP into the named-preset library on another host. Import re-processes files and remaps
+  storage keys. Overlay SVG in the package is a visual export only; import applies overlay JSON, never
+  active SVG. The import endpoint accepts packages up to 64 MB. User map uploads stay at 20 MB; a stored
+  PNG can exceed that after re-encoding, and import re-processes that stored map up to the package cap.
+  Other requests keep the 24 MB Kestrel/form limit.
 - Structure logos, faction flags, and mission documents are stored outside web root; file keys are not
   returned to clients. Replacing or deleting a campaign map, flag, logo, or mission file deletes the
   previous stored file when nothing else references it. Only user-uploaded files are deleted; built-in
@@ -127,6 +134,8 @@ roll back campaign state and remains visible for retry/operations.
   private campaigns also require the join password unless a manager or administrator adds the
   player. Active and completed campaigns that are not publicly viewable are omitted from All
   Campaigns except for members and administrators. Administrators may test as seeded Test 1–Test
-  30 accounts; those accounts cannot password-login or use public site chat.
+  30 accounts; those accounts cannot password-login or use public site chat. The privileged
+  administrator and test accounts are created at API startup by `IdentityMaintenance`, not by EF
+  migrations.
 - Permission policies are derived from system role plus campaign membership roles.
 - Staff acting for another party records actual and effective actor identities.

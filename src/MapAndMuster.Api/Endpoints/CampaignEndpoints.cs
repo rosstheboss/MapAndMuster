@@ -1,0 +1,2330 @@
+using System.Security.Claims;
+using MapAndMuster.Api.Contracts;
+using MapAndMuster.Application.Campaigns;
+using MapAndMuster.Application.Common;
+using MapAndMuster.Application.Maps;
+using MapAndMuster.Application.Play;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
+
+namespace MapAndMuster.Api.Endpoints;
+
+/// <summary>
+/// Maps campaign HTTP endpoints.
+/// </summary>
+public static class CampaignEndpoints
+{
+    /// <summary>
+    /// Maps campaign routes.
+    /// </summary>
+    /// <param name="app">The application.</param>
+    public static void MapCampaignEndpoints(this WebApplication app)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+
+        var group = app.MapGroup("/api/campaigns").WithTags("Campaigns").RequireAuthorization();
+
+        group.MapGet("", ListAsync)
+            .WithName("ListCampaigns")
+            .Produces<IReadOnlyList<CampaignListItemResponse>>();
+
+        group.MapGet("/all", ListAllAsync)
+            .WithName("ListAllCampaigns")
+            .Produces<IReadOnlyList<CampaignListItemResponse>>();
+
+        group.MapPost("", CreateAsync)
+            .WithName("CreateCampaign")
+            .Produces<CampaignDetailResponse>(StatusCodes.Status201Created)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
+
+        group.MapGet("/{campaignId:guid}", GetAsync)
+            .WithName("GetCampaign")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/chat", PostChatAsync)
+            .WithName("PostCampaignChat")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapGet("/{campaignId:guid}/log-export", ExportLogAsync)
+            .WithName("ExportCampaignLog")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/join", JoinAsync)
+            .WithName("JoinCampaign")
+            .Produces<CampaignListItemResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapGet("/{campaignId:guid}/members/search", SearchMembersAsync)
+            .WithName("SearchCampaignUsers")
+            .Produces<IReadOnlyList<UserSearchHitResponse>>()
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/members", AddMemberAsync)
+            .WithName("AddCampaignMember")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/members/kick", KickMemberAsync)
+            .WithName("KickCampaignMember")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/leave", LeaveAsync)
+            .WithName("LeaveCampaign")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/duplicate", DuplicateAsync)
+            .WithName("DuplicateCampaign")
+            .Produces<CampaignDetailResponse>(StatusCodes.Status201Created)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/presets", SavePresetAsync)
+            .WithName("SaveCampaignPreset")
+            .Produces<CampaignPresetListItemResponse>(StatusCodes.Status201Created)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/preset-package", ExportCampaignPresetPackageAsync)
+            .WithName("ExportCampaignPresetPackage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/apply-preset", ApplyPresetAsync)
+            .WithName("ApplyCampaignPreset")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        var presets = app.MapGroup("/api/campaign-presets").WithTags("CampaignPresets").RequireAuthorization();
+        presets.MapGet("", ListPresetsAsync)
+            .WithName("ListCampaignPresets")
+            .Produces<IReadOnlyList<CampaignPresetListItemResponse>>();
+        presets.MapGet("/{presetId:guid}", GetPresetAsync)
+            .WithName("GetCampaignPreset")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+        presets.MapGet("/{presetId:guid}/package", ExportNamedPresetPackageAsync)
+            .WithName("ExportNamedCampaignPresetPackage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+        presets.MapPost("/package", ImportPresetPackageAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .WithMetadata(new RequestSizeLimitAttribute(ImportCampaignPresetHandler.MaxPackageBytes))
+            .WithMetadata(
+                new RequestFormLimitsAttribute
+                {
+                    MultipartBodyLengthLimit = ImportCampaignPresetHandler.MaxPackageBytes,
+                })
+            .WithName("ImportCampaignPresetPackage")
+            .Produces<CampaignPresetListItemResponse>(StatusCodes.Status201Created)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status413PayloadTooLarge);
+
+        group.MapPut("/{campaignId:guid}", UpdateAsync)
+            .WithName("UpdateCampaign")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapDelete("/{campaignId:guid}", DeleteAsync)
+            .WithName("DeleteCampaign")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/map", GetMapAsync)
+            .WithName("GetCampaignMap")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/map", UploadMapAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignMap")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/map/graph", GetMapGraphAsync)
+            .WithName("GetCampaignMapGraph")
+            .Produces<MapGraphResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPut("/{campaignId:guid}/map/graph", SaveMapGraphAsync)
+            .WithName("SaveCampaignMapGraph")
+            .Produces<MapGraphResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapGet("/{campaignId:guid}/structures/{structureTypeId:guid}/image", GetStructureImageAsync)
+            .WithName("GetCampaignStructureImage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/structures/{structureTypeId:guid}/image", UploadStructureImageAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignStructureImage")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/item-objectives/{itemObjectiveTypeId:guid}/image", GetItemObjectiveImageAsync)
+            .WithName("GetCampaignItemObjectiveImage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/item-objectives/{itemObjectiveTypeId:guid}/image", UploadItemObjectiveImageAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignItemObjectiveImage")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/structures/{structureTypeId:guid}/pillaged-image", GetPillagedStructureImageAsync)
+            .WithName("GetCampaignPillagedStructureImage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/structures/{structureTypeId:guid}/pillaged-image", UploadPillagedStructureImageAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignPillagedStructureImage")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/factions/{factionId:guid}/flag", GetFactionFlagAsync)
+            .WithName("GetCampaignFactionFlag")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/factions/{factionId:guid}/flag", UploadFactionFlagAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignFactionFlag")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/missions/{missionId:guid}/file", GetMissionFileAsync)
+            .WithName("GetCampaignMissionFile")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/missions/{missionId:guid}/file", UploadMissionFileAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignMissionFile")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/play", GetPlayAsync)
+            .WithName("GetCampaignPlay")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/play/faction", ChooseFactionAsync)
+            .WithName("ChooseCampaignFaction")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/faction/assign", AssignFactionAsync)
+            .WithName("AssignCampaignFaction")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/draft", SaveDraftAsync)
+            .WithName("SaveCampaignOrderDraft")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/commit", CommitAsync)
+            .WithName("CommitCampaignOrders")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/uncommit", UncommitAsync)
+            .WithName("UncommitCampaignOrders")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/battle-result", SubmitBattleResultAsync)
+            .WithName("SubmitCampaignBattleResult")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/parse-army-list", ParseArmyListAsync)
+            .WithName("ParseCampaignArmyList")
+            .Produces<ParseArmyListResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status401Unauthorized)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/play/accept-result", AcceptBattleResultAsync)
+            .WithName("AcceptCampaignBattleResult")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/retreat", SubmitRetreatAsync)
+            .WithName("SubmitCampaignRetreat")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/surrender", SubmitSurrenderAsync)
+            .WithName("SubmitCampaignSurrender")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/gm-resolve-battle", ResolveBattleAsync)
+            .WithName("ResolveCampaignBattle")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/extend-schedule", ExtendScheduleAsync)
+            .WithName("ExtendCampaignSchedule")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/inject-ringer", InjectRingerAsync)
+            .WithName("InjectRingerBattle")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/debug/enter", EnterDebugAsync)
+            .WithName("EnterCampaignDebug")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/debug/exit", ExitDebugAsync)
+            .WithName("ExitCampaignDebug")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/debug/correct-order", DebugCorrectOrderAsync)
+            .WithName("DebugCorrectCampaignOrder")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/debug/reveal-hidden-objectives", RevealHiddenItemObjectivesAsync)
+            .WithName("RevealHiddenItemObjectives")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/public-objectives/awards", SetPublicObjectiveAwardAsync)
+            .WithName("SetPublicObjectiveAward")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/private-objectives/grant", GrantPrivateObjectiveAsync)
+            .WithName("GrantPrivateObjective")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/private-objectives/claim", ClaimPrivateObjectiveAsync)
+            .WithName("ClaimPrivateObjective")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/private-objectives/moderate", ModeratePrivateObjectiveAsync)
+            .WithName("ModeratePrivateObjective")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/item-objectives/choices", ResolveItemObjectiveChoiceAsync)
+            .WithName("ResolveItemObjectiveChoice")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+    }
+
+    private static async Task<IResult> ListAsync(
+        ClaimsPrincipal principal,
+        ListCampaignsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(userId.Value, cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(result.Value.Select(CampaignResponses.FromListItem).ToArray());
+    }
+
+    private static async Task<IResult> ListAllAsync(
+        ClaimsPrincipal principal,
+        ListDiscoverableCampaignsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(userId.Value, principal.IsAdministrator(), cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(result.Value.Select(CampaignResponses.FromListItem).ToArray());
+    }
+
+    private static async Task<IResult> CreateAsync(
+        ClaimsPrincipal principal,
+        [FromBody] SaveCampaignRequest request,
+        CreateCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new CreateCampaignCommand
+                {
+                    UserId = userId.Value,
+                    Name = request.Name,
+                    Description = request.Description,
+                    PlayerCount = request.PlayerCount,
+                    IsPrivate = request.IsPrivate,
+                    IsPubliclyViewable = request.IsPubliclyViewable,
+                    JoinPassword = request.JoinPassword,
+                    CreatorIsParticipant = request.CreatorIsParticipant,
+                    City = request.City,
+                    Region = request.Region,
+                    Country = request.Country,
+                    Factions = CampaignResponses.ToFactionInputs(request.Factions),
+                    AllyGroups = CampaignResponses.ToAllyGroupInputs(request.AllyGroups),
+                    Links = CampaignResponses.ToLinkInputs(request.Links),
+                    Schedule = CampaignResponses.ToScheduleInput(request),
+                    TerrainTypes = CampaignResponses.ToTerrainTypeInputs(request.TerrainTypes),
+                    StructureTypes = CampaignResponses.ToStructureTypeInputs(request.StructureTypes),
+                    ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
+                    PublicObjectiveTypes = CampaignResponses.ToPublicObjectiveTypeInputs(request.PublicObjectiveTypes),
+                    SpecialRules = CampaignResponses.ToSpecialRuleInputs(request.SpecialRules),
+                    Missions = CampaignResponses.ToMissionInputs(request.Missions),
+                    ForceStatuses = CampaignResponses.ToForceStatusInputs(request.ForceStatuses),
+                    PrivateObjectiveTypes = CampaignResponses.ToPrivateObjectiveTypeInputs(request.PrivateObjectiveTypes),
+                    PointsPerBattleWon = request.PointsPerBattleWon,
+                    PointsPerBattleDraw = request.PointsPerBattleDraw,
+                    UseDifferentialBattleScoring = request.UseDifferentialBattleScoring,
+                    DifferentialMultiplier = request.DifferentialMultiplier,
+                    DifferentialMinimum = request.DifferentialMinimum,
+                    DifferentialMaximum = request.DifferentialMaximum,
+                    AllowNegativeDifferential = request.AllowNegativeDifferential,
+                    MostTerritoriesCampaignPoints = request.MostTerritoriesCampaignPoints,
+                    LongestTerritoryChainCampaignPoints = request.LongestTerritoryChainCampaignPoints,
+                    MostBattlesWonCampaignPoints = request.MostBattlesWonCampaignPoints,
+                    MostStructurePointsCampaignPoints = request.MostStructurePointsCampaignPoints,
+                    PointsPerTerritoryCampaignPoints = request.PointsPerTerritoryCampaignPoints,
+                    AlliedRelicControlCampaignPoints = request.AlliedRelicControlCampaignPoints,
+                    SplitForceSupplyPenaltyPercent = request.SplitForceSupplyPenaltyPercent,
+                    SplitForceSupplyPenaltyIsPercent = request.SplitForceSupplyPenaltyIsPercent,
+                    AlwaysAskGeneralKill = request.AlwaysAskGeneralKill,
+                    AlwaysAskSupplyLineDestroyed = request.AlwaysAskSupplyLineDestroyed,
+                    GeneralKillCampaignPoints = request.GeneralKillCampaignPoints,
+                    SupplyLineDestroyedCampaignPoints = request.SupplyLineDestroyedCampaignPoints,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Created($"/api/campaigns/{result.Value.Id}", CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        GetCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> PostChatAsync(
+        Guid campaignId,
+        PostCampaignChatRequest request,
+        ClaimsPrincipal principal,
+        PostCampaignChatHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new PostCampaignChatCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    ChannelKind = request.ChannelKind,
+                    TargetId = request.TargetId,
+                    Message = request.Message,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> ExportLogAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        ExportCampaignLogHandler handler,
+        CancellationToken cancellationToken,
+        bool includePublicChat = true,
+        bool includeGameLog = true,
+        string format = "txt")
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!CampaignLogExport.TryParseFormat(format, out var exportFormat))
+        {
+            return IdentityHttp.Problem(ErrorCodes.ValidationFailed, "Choose a text (.txt) or CSV (.csv) file.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ExportCampaignLogCommand
+                {
+                    CampaignId = campaignId,
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    IncludePublicChat = includePublicChat,
+                    IncludeGameLog = includeGameLog,
+                    Format = exportFormat,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(
+            result.Value.Content,
+            result.Value.ContentType,
+            result.Value.DownloadName);
+    }
+
+    private static async Task<IResult> JoinAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        [FromBody] JoinCampaignRequest? request,
+        JoinCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new JoinCampaignCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    JoinPassword = request?.JoinPassword,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromListItem(result.Value));
+    }
+
+    private static async Task<IResult> LeaveAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        LeaveCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new LeaveCampaignCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> SearchMembersAsync(
+        Guid campaignId,
+        [FromQuery] string? q,
+        ClaimsPrincipal principal,
+        SearchCampaignUsersHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SearchCampaignUsersCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    Query = q ?? string.Empty,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(result.Value.Select(static hit => new UserSearchHitResponse
+        {
+            UserId = hit.UserId,
+            Username = hit.Username,
+            DisplayName = hit.DisplayName,
+        }).ToArray());
+    }
+
+    private static async Task<IResult> AddMemberAsync(
+        Guid campaignId,
+        [FromBody] AddCampaignMemberRequest request,
+        ClaimsPrincipal principal,
+        AddCampaignMemberHandler handler,
+        GetCampaignHandler get,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new AddCampaignMemberCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    TargetUserId = request.UserId,
+                    ExpectedRevision = request.Revision,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return await CampaignDetailResultAsync(campaignId, userId.Value, principal, get, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> KickMemberAsync(
+        Guid campaignId,
+        [FromBody] KickCampaignMemberRequest request,
+        ClaimsPrincipal principal,
+        KickCampaignMemberHandler handler,
+        GetCampaignHandler get,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new KickCampaignMemberCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    TargetUserId = request.UserId,
+                    ExpectedRevision = request.Revision,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return await CampaignDetailResultAsync(campaignId, userId.Value, principal, get, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> CampaignDetailResultAsync(
+        Guid campaignId,
+        Guid userId,
+        ClaimsPrincipal principal,
+        GetCampaignHandler get,
+        CancellationToken cancellationToken)
+    {
+        var detail = await get.HandleAsync(campaignId, userId, cancellationToken, principal.IsAdministrator())
+            .ConfigureAwait(false);
+        if (!detail.IsSuccess || detail.Value is null)
+        {
+            return IdentityHttp.Problem(detail);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(detail.Value));
+    }
+
+    private static async Task<IResult> UpdateAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        [FromBody] SaveCampaignRequest request,
+        UpdateCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (request.Revision is null)
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        var result = await handler.HandleAsync(
+                new UpdateCampaignCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision.Value,
+                    Name = request.Name,
+                    Description = request.Description,
+                    PlayerCount = request.PlayerCount,
+                    IsPrivate = request.IsPrivate,
+                    IsPubliclyViewable = request.IsPubliclyViewable,
+                    JoinPassword = request.JoinPassword,
+                    CreatorIsParticipant = request.CreatorIsParticipant,
+                    City = request.City,
+                    Region = request.Region,
+                    Country = request.Country,
+                    Factions = CampaignResponses.ToFactionInputs(request.Factions),
+                    AllyGroups = CampaignResponses.ToAllyGroupInputs(request.AllyGroups),
+                    Links = CampaignResponses.ToLinkInputs(request.Links),
+                    Schedule = CampaignResponses.ToScheduleInput(request),
+                    TerrainTypes = CampaignResponses.ToTerrainTypeInputs(request.TerrainTypes),
+                    StructureTypes = CampaignResponses.ToStructureTypeInputs(request.StructureTypes),
+                    ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
+                    PublicObjectiveTypes = CampaignResponses.ToPublicObjectiveTypeInputs(request.PublicObjectiveTypes),
+                    SpecialRules = CampaignResponses.ToSpecialRuleInputs(request.SpecialRules),
+                    Missions = CampaignResponses.ToMissionInputs(request.Missions),
+                    ForceStatuses = CampaignResponses.ToForceStatusInputs(request.ForceStatuses),
+                    PrivateObjectiveTypes = CampaignResponses.ToPrivateObjectiveTypeInputs(request.PrivateObjectiveTypes),
+                    PointsPerBattleWon = request.PointsPerBattleWon,
+                    PointsPerBattleDraw = request.PointsPerBattleDraw,
+                    UseDifferentialBattleScoring = request.UseDifferentialBattleScoring,
+                    DifferentialMultiplier = request.DifferentialMultiplier,
+                    DifferentialMinimum = request.DifferentialMinimum,
+                    DifferentialMaximum = request.DifferentialMaximum,
+                    AllowNegativeDifferential = request.AllowNegativeDifferential,
+                    MostTerritoriesCampaignPoints = request.MostTerritoriesCampaignPoints,
+                    LongestTerritoryChainCampaignPoints = request.LongestTerritoryChainCampaignPoints,
+                    MostBattlesWonCampaignPoints = request.MostBattlesWonCampaignPoints,
+                    MostStructurePointsCampaignPoints = request.MostStructurePointsCampaignPoints,
+                    PointsPerTerritoryCampaignPoints = request.PointsPerTerritoryCampaignPoints,
+                    AlliedRelicControlCampaignPoints = request.AlliedRelicControlCampaignPoints,
+                    SplitForceSupplyPenaltyPercent = request.SplitForceSupplyPenaltyPercent,
+                    SplitForceSupplyPenaltyIsPercent = request.SplitForceSupplyPenaltyIsPercent,
+                    AlwaysAskGeneralKill = request.AlwaysAskGeneralKill,
+                    AlwaysAskSupplyLineDestroyed = request.AlwaysAskSupplyLineDestroyed,
+                    GeneralKillCampaignPoints = request.GeneralKillCampaignPoints,
+                    SupplyLineDestroyedCampaignPoints = request.SupplyLineDestroyedCampaignPoints,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> DeleteAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        DeleteCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(campaignId, userId.Value, cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> DuplicateAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        DuplicateCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new DuplicateCampaignCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Created($"/api/campaigns/{result.Value.Id}", CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> ListPresetsAsync(
+        ListCampaignPresetsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(result.Value.Select(CampaignResponses.FromPresetListItem).ToArray());
+    }
+
+    private static async Task<IResult> GetPresetAsync(
+        Guid presetId,
+        ClaimsPrincipal principal,
+        GetCampaignPresetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(presetId, userId.Value, cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> SavePresetAsync(
+        Guid campaignId,
+        SaveCampaignPresetRequest request,
+        ClaimsPrincipal principal,
+        SaveCampaignPresetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SaveCampaignPresetCommand
+                {
+                    CampaignId = campaignId,
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    Name = request.Name,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Created($"/api/campaign-presets/{result.Value.Id}", CampaignResponses.FromPresetListItem(result.Value));
+    }
+
+    private static async Task<IResult> ExportCampaignPresetPackageAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        ExportCampaignPresetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await ExportPresetPackageAsync(
+                new ExportCampaignPresetCommand
+                {
+                    CampaignId = campaignId,
+                    UserId = principal.GetUserId() ?? Guid.Empty,
+                    IsAdministrator = principal.IsAdministrator(),
+                },
+                principal,
+                handler,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> ExportNamedPresetPackageAsync(
+        Guid presetId,
+        ClaimsPrincipal principal,
+        ExportCampaignPresetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await ExportPresetPackageAsync(
+                new ExportCampaignPresetCommand
+                {
+                    PresetId = presetId,
+                    UserId = principal.GetUserId() ?? Guid.Empty,
+                    IsAdministrator = principal.IsAdministrator(),
+                },
+                principal,
+                handler,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> ExportPresetPackageAsync(
+        ExportCampaignPresetCommand command,
+        ClaimsPrincipal principal,
+        ExportCampaignPresetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (principal.GetUserId() is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(
+            result.Value.Content,
+            CampaignPresetPackageFile.ContentType,
+            result.Value.DownloadName);
+    }
+
+    private static async Task<IResult> ImportPresetPackageAsync(
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        ImportCampaignPresetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        AllowPresetPackageBody(request);
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.CampaignPresetPackageInvalid, "Upload a Map & Muster campaign preset file.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("package") ?? form.Files.GetFile("file");
+        if (file is null || file.Length == 0)
+        {
+            return IdentityHttp.Problem(ErrorCodes.CampaignPresetPackageInvalid, "Upload a Map & Muster campaign preset file.");
+        }
+
+        if (file.Length > ImportCampaignPresetHandler.MaxPackageBytes)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadTooLarge, "The campaign preset file is too large.");
+        }
+
+        await using var buffer = new MemoryStream();
+        await file.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(
+                new ImportCampaignPresetCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    Content = buffer.ToArray(),
+                    FileName = file.FileName,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Created($"/api/campaign-presets/{result.Value.Id}", CampaignResponses.FromPresetListItem(result.Value));
+    }
+
+    private static void AllowPresetPackageBody(HttpRequest request)
+    {
+        var limit = (long)ImportCampaignPresetHandler.MaxPackageBytes;
+        var maxRequest = request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
+        if (maxRequest is { IsReadOnly: false })
+        {
+            maxRequest.MaxRequestBodySize = limit;
+        }
+
+        request.HttpContext.Features.Set<IFormFeature>(new FormFeature(request, new FormOptions { MultipartBodyLengthLimit = limit }));
+    }
+
+    private static async Task<IResult> ApplyPresetAsync(
+        Guid campaignId,
+        ApplyCampaignPresetRequest request,
+        ClaimsPrincipal principal,
+        ApplyCampaignPresetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ApplyCampaignPresetCommand
+                {
+                    CampaignId = campaignId,
+                    PresetId = request.PresetId,
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    Revision = request.Revision,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetMapAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        GetCampaignMapHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(result.Value.Content, result.Value.ContentType);
+    }
+
+    private static async Task<IResult> UploadMapAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadCampaignMapHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Upload a JPEG, PNG, or WebP image.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("map");
+        if (file is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Choose a campaign map to upload.");
+        }
+
+        if (!int.TryParse(form["revision"].ToString(), out var revision))
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await handler.HandleAsync(
+                new UploadCampaignMapCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    ExpectedRevision = revision,
+                    Content = stream,
+                    ContentType = file.ContentType,
+                    Length = file.Length,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetMapGraphAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        GetCampaignMapGraphHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromMapGraph(result.Value));
+    }
+
+    private static async Task<IResult> SaveMapGraphAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        [FromBody] SaveMapGraphRequest request,
+        SaveCampaignMapGraphHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SaveCampaignMapGraphCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    Territories = CampaignResponses.ToTerritoryInputs(request.Territories),
+                    Adjacencies = CampaignResponses.ToAdjacencyInputs(request.Adjacencies),
+                    ItemObjectivePlacements =
+                    [
+                        .. (request.ItemObjectivePlacements ?? []).Select(static item => new ItemObjectivePlacementInput
+                        {
+                            TypeId = item.TypeId,
+                            TerritoryId = item.TerritoryId,
+                        }),
+                    ],
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromMapGraph(result.Value));
+    }
+
+    private static Task<IResult> GetStructureImageAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        GetStructureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return GetStructureImageCoreAsync(campaignId, structureTypeId, principal, handler, pillaged: false, cancellationToken);
+    }
+
+    private static Task<IResult> UploadStructureImageAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadStructureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return UploadStructureImageCoreAsync(campaignId, structureTypeId, principal, request, handler, pillaged: false, cancellationToken);
+    }
+
+    private static Task<IResult> GetPillagedStructureImageAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        GetStructureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return GetStructureImageCoreAsync(campaignId, structureTypeId, principal, handler, pillaged: true, cancellationToken);
+    }
+
+    private static Task<IResult> UploadPillagedStructureImageAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadStructureImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return UploadStructureImageCoreAsync(campaignId, structureTypeId, principal, request, handler, pillaged: true, cancellationToken);
+    }
+
+    private static async Task<IResult> GetStructureImageCoreAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        GetStructureImageHandler handler,
+        bool pillaged,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                structureTypeId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator(),
+                pillaged)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(result.Value.Content, result.Value.ContentType);
+    }
+
+    private static async Task<IResult> UploadStructureImageCoreAsync(
+        Guid campaignId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadStructureImageHandler handler,
+        bool pillaged,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Upload a JPEG, PNG, or WebP image.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("image") ?? form.Files.GetFile("file");
+        if (file is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Choose a structure image to upload.");
+        }
+
+        if (!int.TryParse(form["revision"].ToString(), out var revision))
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await handler.HandleAsync(
+                new UploadStructureImageCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    StructureTypeId = structureTypeId,
+                    ExpectedRevision = revision,
+                    Content = stream,
+                    ContentType = file.ContentType,
+                    Length = file.Length,
+                    Pillaged = pillaged,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetItemObjectiveImageAsync(
+        Guid campaignId,
+        Guid itemObjectiveTypeId,
+        ClaimsPrincipal principal,
+        GetItemObjectiveImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                itemObjectiveTypeId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(result.Value.Content, result.Value.ContentType);
+    }
+
+    private static async Task<IResult> UploadItemObjectiveImageAsync(
+        Guid campaignId,
+        Guid itemObjectiveTypeId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadItemObjectiveImageHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Upload a JPEG, PNG, or WebP image.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("image") ?? form.Files.GetFile("file");
+        if (file is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Choose an item objective image to upload.");
+        }
+
+        if (!int.TryParse(form["revision"].ToString(), out var revision))
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await handler.HandleAsync(
+                new UploadItemObjectiveImageCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    ItemObjectiveTypeId = itemObjectiveTypeId,
+                    ExpectedRevision = revision,
+                    Content = stream,
+                    ContentType = file.ContentType,
+                    Length = file.Length,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetFactionFlagAsync(
+        Guid campaignId,
+        Guid factionId,
+        ClaimsPrincipal principal,
+        GetFactionFlagHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                factionId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(result.Value.Content, result.Value.ContentType);
+    }
+
+    private static async Task<IResult> UploadFactionFlagAsync(
+        Guid campaignId,
+        Guid factionId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadFactionFlagHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Upload a JPEG, PNG, or WebP image.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("image") ?? form.Files.GetFile("file");
+        if (file is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Choose a faction flag image to upload.");
+        }
+
+        if (!int.TryParse(form["revision"].ToString(), out var revision))
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await handler.HandleAsync(
+                new UploadFactionFlagCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    FactionId = factionId,
+                    ExpectedRevision = revision,
+                    Content = stream,
+                    ContentType = file.ContentType,
+                    Length = file.Length,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetMissionFileAsync(
+        Guid campaignId,
+        Guid missionId,
+        ClaimsPrincipal principal,
+        GetMissionFileHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                missionId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(
+            result.Value.Content,
+            result.Value.ContentType,
+            result.Value.DownloadName);
+    }
+
+    private static async Task<IResult> UploadMissionFileAsync(
+        Guid campaignId,
+        Guid missionId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadMissionFileHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Upload a PDF or Word document.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("file") ?? form.Files.GetFile("document");
+        if (file is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Choose a mission document to upload.");
+        }
+
+        if (!int.TryParse(form["revision"].ToString(), out var revision))
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await handler.HandleAsync(
+                new UploadMissionFileCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    MissionId = missionId,
+                    ExpectedRevision = revision,
+                    Content = stream,
+                    ContentType = file.ContentType,
+                    FileName = file.FileName,
+                    Length = file.Length,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetPlayAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        GetCampaignPlayHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler
+            .HandleAsync(campaignId, userId.Value, principal.IsAdministrator(), cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(PlayResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> ChooseFactionAsync(
+        Guid campaignId,
+        ChooseFactionRequest request,
+        ClaimsPrincipal principal,
+        ChooseFactionHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ChooseFactionCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    FactionId = request.FactionId,
+                    Subfaction = request.Subfaction,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> AssignFactionAsync(
+        Guid campaignId,
+        AssignPlayerFactionRequest request,
+        ClaimsPrincipal principal,
+        AssignPlayerFactionHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new AssignPlayerFactionCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    TargetUserId = request.UserId,
+                    ExpectedRevision = request.Revision,
+                    FactionId = request.FactionId,
+                    Subfaction = request.Subfaction,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> SaveDraftAsync(
+        Guid campaignId,
+        SaveOrderDraftRequest request,
+        ClaimsPrincipal principal,
+        SaveOrderDraftHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SaveOrderDraftCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    ForceId = request.ForceId,
+                    Kind = request.Kind,
+                    TargetTerritoryId = request.TargetTerritoryId,
+                    StructureTypeId = request.StructureTypeId,
+                    ViaTerritoryId = request.ViaTerritoryId,
+                    DestroyImmediately = request.DestroyImmediately,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> CommitAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        CommitOrdersHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> UncommitAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        UncommitOrdersHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> SubmitBattleResultAsync(
+        Guid campaignId,
+        SubmitBattleResultRequest request,
+        ClaimsPrincipal principal,
+        SubmitBattleResultHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SubmitBattleResultCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                    WinnerForceId = request.WinnerForceId,
+                    IsDraw = request.IsDraw,
+                    WinnerScore = request.WinnerScore,
+                    LoserScore = request.LoserScore,
+                    Reports = PlayResponses.ToReportInputs(request.Reports),
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ParseArmyListAsync(
+        Guid campaignId,
+        ParseArmyListRequest request,
+        ClaimsPrincipal principal,
+        ParseArmyListHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ParseArmyListCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    GameSystem = request.GameSystem,
+                    Builder = request.Builder,
+                    Text = request.Text,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(PlayResponses.FromParse(result.Value));
+    }
+
+    private static async Task<IResult> AcceptBattleResultAsync(
+        Guid campaignId,
+        BattleActionRequest request,
+        ClaimsPrincipal principal,
+        AcceptBattleResultHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new BattleActionCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> SubmitRetreatAsync(
+        Guid campaignId,
+        SubmitRetreatRequest request,
+        ClaimsPrincipal principal,
+        SubmitRetreatHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SubmitRetreatCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                    TargetTerritoryId = request.TargetTerritoryId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> SubmitSurrenderAsync(
+        Guid campaignId,
+        SubmitRetreatRequest request,
+        ClaimsPrincipal principal,
+        SubmitSurrenderHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SubmitRetreatCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                    TargetTerritoryId = request.TargetTerritoryId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ResolveBattleAsync(
+        Guid campaignId,
+        SubmitBattleResultRequest request,
+        ClaimsPrincipal principal,
+        ResolveBattleHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SubmitBattleResultCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                    WinnerForceId = request.WinnerForceId,
+                    IsDraw = request.IsDraw,
+                    WinnerScore = request.WinnerScore,
+                    LoserScore = request.LoserScore,
+                    Reports = PlayResponses.ToReportInputs(request.Reports),
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ExtendScheduleAsync(
+        Guid campaignId,
+        ExtendCampaignScheduleRequest request,
+        ClaimsPrincipal principal,
+        ExtendCampaignScheduleHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ExtendCampaignScheduleCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    RoundCount = request.RoundCount,
+                    Extensions =
+                    [
+                        .. (request.Extensions ?? []).Select(static item => new PhaseExtensionInput
+                        {
+                            WindowId = item.WindowId,
+                            DurationAmount = item.DurationAmount,
+                            DurationUnit = item.DurationUnit,
+                        }),
+                    ],
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> InjectRingerAsync(
+        Guid campaignId,
+        InjectRingerBattleRequest request,
+        ClaimsPrincipal principal,
+        InjectRingerBattleHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new InjectRingerBattleCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    TargetForceId = request.TargetForceId,
+                    RingerFactionId = request.RingerFactionId,
+                    MissionId = request.MissionId,
+                    PlayerIsDefender = request.PlayerIsDefender,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> EnterDebugAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        EnterCampaignDebugHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> ExitDebugAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        ExitCampaignDebugHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> DebugCorrectOrderAsync(
+        Guid campaignId,
+        SaveOrderDraftRequest request,
+        ClaimsPrincipal principal,
+        DebugCorrectOrderHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SaveOrderDraftCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    ForceId = request.ForceId,
+                    Kind = request.Kind,
+                    TargetTerritoryId = request.TargetTerritoryId,
+                    StructureTypeId = request.StructureTypeId,
+                    ViaTerritoryId = request.ViaTerritoryId,
+                    DestroyImmediately = request.DestroyImmediately,
+                    ReResolvePrevious = request.ReResolvePrevious,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> RevealHiddenItemObjectivesAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        RevealHiddenItemObjectivesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return await PlayCommandAsync(campaignId, request, principal, handler.HandleAsync, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> SetPublicObjectiveAwardAsync(
+        Guid campaignId,
+        SetPublicObjectiveAwardRequest request,
+        ClaimsPrincipal principal,
+        SetPublicObjectiveAwardHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SetPublicObjectiveAwardCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    ObjectiveId = request.ObjectiveId,
+                    PlayerUserId = request.PlayerUserId,
+                    Awarded = request.Awarded,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> GrantPrivateObjectiveAsync(
+        Guid campaignId,
+        GrantPrivateObjectiveRequest request,
+        ClaimsPrincipal principal,
+        GrantPrivateObjectiveHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new GrantPrivateObjectiveCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    HolderKind = request.HolderKind,
+                    HolderId = request.HolderId,
+                    TypeId = request.TypeId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ClaimPrivateObjectiveAsync(
+        Guid campaignId,
+        ClaimPrivateObjectiveRequest request,
+        ClaimsPrincipal principal,
+        ClaimPrivateObjectiveHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ClaimPrivateObjectiveCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    AssignmentId = request.AssignmentId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ModeratePrivateObjectiveAsync(
+        Guid campaignId,
+        ModeratePrivateObjectiveRequest request,
+        ClaimsPrincipal principal,
+        ModeratePrivateObjectiveHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ModeratePrivateObjectiveCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    AssignmentId = request.AssignmentId,
+                    Approved = request.Approved,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ResolveItemObjectiveChoiceAsync(
+        Guid campaignId,
+        ResolveItemObjectiveChoiceRequest request,
+        ClaimsPrincipal principal,
+        ResolveItemObjectiveChoiceHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ResolveItemObjectiveChoiceCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    ItemId = request.ItemId,
+                    ChoiceId = request.ChoiceId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> PlayCommandAsync(
+        Guid campaignId,
+        PlayRevisionRequest request,
+        ClaimsPrincipal principal,
+        Func<PlayCommand, CancellationToken, Task<MapAndMuster.Application.Common.OperationResult<MapAndMuster.Application.Play.CampaignPlayDetail>>> handle,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handle(
+                new PlayCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static IResult PlayResult(MapAndMuster.Application.Common.OperationResult<MapAndMuster.Application.Play.CampaignPlayDetail> result)
+    {
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(PlayResponses.FromDetail(result.Value));
+    }
+}

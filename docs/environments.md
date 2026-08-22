@@ -15,6 +15,9 @@ hierarchical keys use a double underscore, for example `ConnectionStrings__Campa
 `Production` and `Staging` share the same required-settings validation. Staging must not reuse the
 production connection string, email API key, or OAuth clients.
 
+`PublicWeb__Origin` for Staging must include a `staging` DNS label (`https://staging.mapandmuster.com`).
+Production must not use that label. See `docs/staging.md`.
+
 ## Backend variables
 
 | Variable | Purpose |
@@ -35,6 +38,7 @@ production connection string, email API key, or OAuth clients.
 | `Email__SmtpPassword` | Optional SMTP password |
 | `Email__EnableSsl` | SMTP SSL/STARTTLS |
 | `Email__Resend__ApiKey` | Resend API key |
+| `Identity__BootstrapAdminPassword` | Password used only to create `rosstheboss` when that account is missing. Never overwrites an existing password |
 | `Authentication__Google__ClientId` | Google OAuth client id |
 | `Authentication__Google__ClientSecret` | Google OAuth client secret |
 | `Authentication__Facebook__AppId` | Facebook app id |
@@ -50,7 +54,7 @@ Development uses the Angular proxy: browser calls `/api` on `http://localhost:42
 to `http://localhost:5219`.
 
 Production should keep that same-origin `/api` shape behind Cloudflare or another reverse proxy.
-`src/Campaign.Web/public/config.json` may set `apiBaseUrl` to an absolute `http(s)` origin when the
+`src/MapAndMuster.Web/public/config.json` may set `apiBaseUrl` to an absolute `http(s)` origin when the
 same build is pointed at a different API. Cookie authentication still expects the browser and API
 to share an origin unless CORS is added later.
 
@@ -59,8 +63,9 @@ to share an origin unless CORS is added later.
 ## Local workflow
 
 1. `docker compose up -d`
-2. Copy `.env.example` to `.env` or set user secrets on `Campaign.Api`
+2. Copy `.env.example` to `.env` or set user secrets on `MapAndMuster.Api`
 3. Run the API **http** profile on `http://localhost:5219`
-4. `npm --prefix src/Campaign.Web start`
+4. `npm --prefix src/MapAndMuster.Web start`
 
-See `docs/SETUP.md` and `docs/secrets.md`.
+See `docs/SETUP.md` and `docs/secrets.md`. Cloud bring-up is `docs/deployment.md` and
+`docs/human-deployment-checklist.md`.

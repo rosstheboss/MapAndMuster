@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Campaign Map">
-  <rect width="32" height="32" rx="6" fill="#1e3a5f"/>
-  <path
-    fill="#f6f4f0"
-    d="M6 26V13l3-3h2v2h2V8h6v4h2v-2h2l3 3v13H6zm4-11h2v2h-2v-2zm10 0h2v2h-2v-2zM13 20h6v6h-6v-6z"
-  />
-</svg>

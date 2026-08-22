@@ -1,0 +1,79 @@
+<Solution>
+  <Folder Name="/.cursor/" />
+  <Folder Name="/.cursor/rules/">
+    <File Path=".cursor/rules/project.mdc" />
+  </Folder>
+  <Folder Name="/.github/">
+    <File Path="copilot-instructions.md" />
+  </Folder>
+  <Folder Name="/.github/instructions/">
+    <File Path=".github/instructions/backend.instructions.md" />
+    <File Path=".github/instructions/frontend.instructions.md" />
+    <File Path=".github/instructions/tests.instructions.md" />
+  </Folder>
+  <Folder Name="/.github/workflows/">
+    <File Path=".github/workflows/ci.yml" />
+    <File Path=".github/workflows/nightly.yml" />
+    <File Path=".github/workflows/smoke-test.yml" />
+  </Folder>
+  <Folder Name="/.vscode/">
+    <File Path=".vscode/extensions.json" />
+    <File Path=".vscode/settings.json" />
+  </Folder>
+  <Folder Name="/config/">
+    <File Path="config/eslint.config.js" />
+    <File Path="config/package-scripts.json" />
+    <File Path="config/stylelint.config.mjs" />
+  </Folder>
+  <Folder Name="/DOCS/">
+    <File Path="docs/AI-WORKFLOW.md" />
+    <File Path="docs/ARCHITECTURE.md" />
+    <File Path="docs/CAMPAIGN-RULES-MATRIX.md" />
+    <File Path="docs/CODING-STANDARDS.md" />
+    <File Path="docs/DECISIONS-NEEDED.md" />
+    <File Path="docs/DOMAIN.md" />
+    <File Path="docs/PRODUCT.md" />
+    <File Path="docs/SECURITY.md" />
+    <File Path="docs/SETUP.md" />
+    <File Path="docs/TESTING-STRATEGY.md" />
+  </Folder>
+  <Folder Name="/DOCS/adr/">
+    <File Path="docs/adr/0001-modular-monolith.md" />
+  </Folder>
+  <Folder Name="/eng/">
+    <File Path="eng/verify.ps1" />
+    <File Path="eng/verify.sh" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".env.example" />
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+    <File Path=".markdownlint-cli2.jsonc" />
+    <File Path=".nvmrc" />
+    <File Path=".prettierignore" />
+    <File Path=".prettierrc.json" />
+    <File Path="AGENTS.md" />
+    <File Path="CLAUDE.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="docker-compose.yml" />
+    <File Path="global.json" />
+    <File Path="LICENSE" />
+    <File Path="NOTICE.md" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/tests/">
+    <File Path="tests/AGENTS.md" />
+  </Folder>
+  <Project Path="src/MapAndMuster.Domain/MapAndMuster.Domain.csproj" />
+  <Project Path="src/MapAndMuster.Application/MapAndMuster.Application.csproj" />
+  <Project Path="src/MapAndMuster.Infrastructure/MapAndMuster.Infrastructure.csproj" />
+  <Project Path="src/MapAndMuster.Api/MapAndMuster.Api.csproj" />
+  <Project Path="src/MapAndMuster.Web/MapAndMuster.Web.esproj">
+    <Build />
+    <Deploy />
+  </Project>
+  <Project Path="tests/MapAndMuster.Backend.UnitTests/MapAndMuster.Backend.UnitTests.csproj" />
+  <Project Path="tests/MapAndMuster.Api.IntegrationTests/MapAndMuster.Api.IntegrationTests.csproj" />
+</Solution>

@@ -44,7 +44,8 @@ The application seeds Test 1 through Test 30 outside the automated Testing envir
 accounts cannot sign in with a password. An administrator may test as one of them from Test
 users and return to the administrator session afterward. Test accounts receive in-app notices
 only (never email), cannot change their profile, and cannot use public site chat. Campaign chat
-is allowed. Their public display name is always `Test {n}`.
+is allowed. Their public display name is always `Test {n}`. On API start, if the privileged
+administrator account is missing, it is created from `Identity:BootstrapAdminPassword`.
 
 ## Campaign setup
 
@@ -90,6 +91,14 @@ Applying a saved preset onto another campaign remaps overlay catalog identifiers
 campaign's terrain, structures, factions, and item objectives. Saved presets appear in the campaign
 preset list for later apply. A saved preset with the same collapsed name as a built-in catalog
 preset replaces that catalog entry in the apply list.
+
+Administrators may also download the current Edit campaign setup as a portable
+`.mapandmuster-preset` ZIP (catalog, settings, overlay JSON, a visual overlay SVG, the original map
+image, and referenced catalog files) and upload that file into another host's named-preset library.
+Upload stores the package as a named preset; apply it with Add preset. Import uses overlay JSON only;
+the bundled SVG is not executed or used as the overlay schema. Portable packages may be up to 64 MB.
+User-uploaded maps stay at 20 MB; the stored PNG after re-encoding can be larger, and import accepts that
+stored map up to the 64 MB package cap. Other uploads stay on the 24 MB host limit.
 
 Optional item objectives may be none, one, or many (at most 50), each with a unique name.
 Defaults are hidden until found, randomly placed, and not allowed on a spawn territory. A

@@ -1,5 +1,5 @@
 ---
-applyTo: 'src/Campaign.Web/**/*.{ts,html,css,json}'
+applyTo: 'src/MapAndMuster.Web/**/*.{ts,html,css,json}'
 ---
 
 # Frontend Instructions

@@ -1,0 +1,85 @@
+# Production Render Blueprint. Applying this file creates billable resources.
+# Do not apply it until you have approved GitHub, Render, Cloudflare, Resend, and domain billing.
+# Enter the Resend API key in the Dashboard (sync: false). Do not commit secrets.
+#
+# There is no Worker service. Email outbox processing runs inside mapandmuster-api.
+# See docs/adr/0003-production-hosting-stack.md and docs/deployment.md.
+#
+# Migrations are intentionally not a pre-deploy command. Production defaults
+# Database:ApplyMigrationsOnStartup to false. Apply an EF bundle after you
+# approve the target database (eng/build-migrations.* and eng/run-migrations.*).
+#
+# region is immutable after first create. ohio is the closest Render region to
+# America/Indiana/Indianapolis. Change it before the first Blueprint apply if needed.
+
+databases:
+  - name: mapandmuster-db
+    postgresMajorVersion: '17'
+    region: ohio
+    databaseName: mapandmuster
+    # plan defaults to Render's cheapest paid Postgres size. Confirm it in the dashboard.
+
+services:
+  - type: web
+    name: mapandmuster-api
+    runtime: docker
+    region: ohio
+    dockerfilePath: ./src/MapAndMuster.Api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    disk:
+      name: mapandmuster-uploads
+      mountPath: /app/app-data
+      sizeGB: 1
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: Database__ApplyMigrationsOnStartup
+        value: 'false'
+      - key: ForwardedHeaders__Enabled
+        value: 'true'
+      - key: Storage__RootPath
+        value: /app/app-data
+      - key: Email__Provider
+        value: Resend
+      - key: ConnectionStrings__Campaign
+        fromDatabase:
+          name: mapandmuster-db
+          property: connectionString
+      - key: PublicWeb__Origin
+        value: https://mapandmuster.com
+      - key: Email__FromAddress
+        value: noreply@mapandmuster.com
+      - key: Email__FromName
+        value: "Map & Muster"
+      - key: Email__Resend__ApiKey
+        sync: false
+      - key: Identity__BootstrapAdminPassword
+        sync: false
+      # Optional OAuth keys are omitted here. Add them in the Render Dashboard after
+      # you create Google / Discord / Facebook apps. Empty values keep email-only sign-in.
+
+  - type: web
+    name: mapandmuster-web
+    runtime: static
+    autoDeployTrigger: checksPass
+    buildCommand: npm --prefix src/MapAndMuster.Web ci && npm --prefix src/MapAndMuster.Web run build
+    staticPublishPath: src/MapAndMuster.Web/dist/mapandmuster-web/browser
+    envVars:
+      - key: NODE_VERSION
+        value: 24.19.0
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

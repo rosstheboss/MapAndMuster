@@ -1,0 +1,30 @@
+name: Smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      frontend_url:
+        description: Public site origin, for example https://<ROOT_DOMAIN>
+        required: true
+        type: string
+      api_url:
+        description: API origin if different from the site. Leave blank for same-origin /health.
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run production smoke checks
+        env:
+          FRONTEND_URL: ${{ inputs.frontend_url }}
+          API_URL: ${{ inputs.api_url }}
+        run: |
+          chmod +x scripts/smoke-test.sh
+          ./scripts/smoke-test.sh

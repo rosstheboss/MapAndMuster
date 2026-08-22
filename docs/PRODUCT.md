@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The product is a generic web application for running simultaneous-order map campaigns. It
+The product is **Map & Muster**, a generic web application for running simultaneous-order map campaigns. It
 maintains authoritative map and campaign state, privately accepts player decisions, reveals
 and resolves actions, records tabletop battle results, calculates campaign resources and
 points, and gives authorized staff auditable correction tools.
@@ -39,7 +39,8 @@ Player and Game Master in the same campaign.
   roles when the engagement calls for them), dual result submissions (including early reports during
   Action windows), agreement or dispute, no-result forced retreats, staff confirmation, retreats,
   scoring, and optional GM ringer battles against idle forces.
-- Administrators can save campaign settings and map data as named reusable presets.
+- Administrators can save campaign settings and map data as named reusable presets, and can download
+  or upload a portable preset package (catalog, overlay, and map image) between hosts.
 - Campaign-point, supply-line, temporary-supply, status, objective, and relic tracking.
 - Configurable force statuses with enable/clear triggers and display-only tabletop effects.
 - Public faction rules and private player/faction/alliance objectives.

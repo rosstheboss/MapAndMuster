@@ -1,0 +1,2404 @@
+<section class="page">
+  <div class="setup-toolbar">
+    <div class="page-header">
+      <h1>{{ isEdit() ? 'Edit campaign' : 'Create campaign' }}</h1>
+    </div>
+    <div class="setup-toolbar-actions">
+      <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+      @if (isEdit() && campaignId(); as id) {
+        <a class="button-secondary" [routerLink]="['/campaigns', id, 'map']">Edit map</a>
+      }
+      <button type="button" class="button-secondary" (click)="expandAllSections()">Expand All</button>
+      <button type="button" class="button-secondary" (click)="collapseAllSections()">Collapse All</button>
+      @if (isAdministrator()) {
+        <button
+          type="button"
+          class="button-secondary"
+          (click)="openSavePresetDialog()"
+          [disabled]="saving() || loading()"
+        >
+          Save as Preset
+        </button>
+        @if (isEdit()) {
+          <button type="button" class="button-secondary" (click)="downloadPreset()" [disabled]="saving() || loading()">
+            Download Preset
+          </button>
+        }
+        <button type="button" class="button-secondary" (click)="openPresetUpload()" [disabled]="saving() || loading()">
+          Upload Preset
+        </button>
+        <input
+          #presetUpload
+          class="sr-only"
+          type="file"
+          tabindex="-1"
+          accept=".mapandmuster-preset,.zip,application/zip"
+          (change)="uploadPreset($event)"
+        />
+      }
+      @if (isEdit()) {
+        <button
+          type="button"
+          class="button-secondary"
+          (click)="discardUnsavedChanges()"
+          [disabled]="saving() || loading() || !hasUnsavedChanges()"
+        >
+          Clear Unsaved Changes
+        </button>
+      }
+      <button
+        class="button"
+        type="submit"
+        form="campaign-setup-form"
+        [disabled]="saving() || loading() || (isEdit() && !hasUnsavedChanges())"
+      >
+        {{ isEdit() ? 'Save campaign' : 'Create campaign' }}
+      </button>
+      @if (saveStatus() === 'success') {
+        <app-icon class="save-status is-success" name="check" label="Campaign saved" />
+      } @else if (saveStatus() === 'failure') {
+        <app-icon class="save-status is-failure" name="x" label="Campaign save failed" />
+      }
+      @if (lastSavedAtUtc(); as savedAt) {
+        <p class="muted last-saved">Last saved {{ savedAt | instantDate: form.controls.timeZoneId.value }}</p>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <p>Loading campaign…</p>
+  } @else {
+    <form id="campaign-setup-form" class="panel stack" [formGroup]="form" (ngSubmit)="save()" novalidate>
+      @if (errorMessages().length > 0 || successMessage()) {
+        <div
+          #formAlert
+          class="form-banner"
+          [class.error]="!successMessage()"
+          [class.error-banner]="!successMessage()"
+          [class.success-banner]="!!successMessage()"
+          [attr.role]="successMessage() ? 'status' : 'alert'"
+          tabindex="-1"
+        >
+          @if (successMessage(); as message) {
+            <p>{{ message }}</p>
+          } @else {
+            @for (message of errorMessages(); track $index) {
+              <p>{{ message }}</p>
+            }
+          }
+        </div>
+      }
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('details')"
+            [attr.aria-expanded]="isOpen('details')"
+            (click)="toggleSection('details')"
+          >
+            Campaign details
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('details')">
+          <div class="field" [class.invalid]="isInvalid('name')">
+            <label for="name">Campaign name <span class="required-marker" aria-hidden="true">*</span></label>
+            <input id="name" formControlName="name" maxlength="80" aria-required="true" />
+          </div>
+
+          <p class="muted">
+            Applying a campaign preset fills factions, terrain, structures, and item objectives with a copy you can then
+            edit. The preset itself is not changed. The campaign name is filled only when it is empty.
+          </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="campaignPreset">Campaign preset</label>
+              <select id="campaignPreset" [formControl]="campaignPresetId" (focus)="ensureSavedPresets()">
+                <option value="">Select a preset</option>
+                @for (preset of allCampaignPresets(); track preset.id) {
+                  <option [value]="preset.id">{{ preset.name }}</option>
+                }
+              </select>
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="applySelectedCampaignPreset()"
+              [disabled]="!selectedCampaignPresetId()"
+            >
+              Add preset
+            </button>
+          </div>
+
+          <div class="field" [class.invalid]="isInvalid('description')">
+            <label for="description">Description (optional)</label>
+            <textarea id="description" formControlName="description" maxlength="500" rows="4"></textarea>
+            <p class="muted">{{ descriptionLength() }} / 500 characters</p>
+          </div>
+
+          <div class="field" [class.invalid]="isInvalid('playerCount')">
+            <label for="playerCount"
+              >Max Number of Players <span class="required-marker" aria-hidden="true">*</span></label
+            >
+            <input
+              id="playerCount"
+              type="number"
+              min="2"
+              max="100"
+              formControlName="playerCount"
+              aria-required="true"
+            />
+            <p class="muted">Between 2 and 100. A participating manager occupies one slot.</p>
+          </div>
+
+          <p class="muted">
+            Location is optional. A city requires a state or province, and a state or province requires a country.
+          </p>
+          <div class="field" [class.invalid]="isInvalid('country')">
+            <label for="country">Country (optional)</label>
+            <app-filterable-combobox inputId="country" formControlName="country" [options]="countries" />
+          </div>
+          <div class="field" [class.invalid]="isInvalid('region')">
+            <label for="region">State or province (optional)</label>
+            <app-filterable-combobox inputId="region" formControlName="region" [options]="regionOptions()" />
+          </div>
+          <div class="field" [class.invalid]="isInvalid('city')">
+            <label for="city">City (optional)</label>
+            <input id="city" formControlName="city" maxlength="100" />
+          </div>
+
+          <fieldset class="field">
+            <legend>Your role</legend>
+            <div class="choice-row">
+              <label>
+                <input type="radio" formControlName="creatorRole" value="manager" />
+                Manager only
+              </label>
+              <label>
+                <input type="radio" formControlName="creatorRole" value="both" />
+                Manager and participant
+              </label>
+            </div>
+          </fieldset>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('schedule')"
+            [attr.aria-expanded]="isOpen('schedule')"
+            (click)="toggleSection('schedule')"
+          >
+            Schedule <span class="required-marker" aria-hidden="true">*</span>
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('schedule')">
+          <p class="muted">
+            Setup uses the campaign time zone. Players and managers later see start, end, and phase times in their own
+            time zone. Action and battle lengths must add up to the round length.
+          </p>
+          <div class="nested-row">
+            <div class="field grow" [class.invalid]="isInvalid('startsAtLocal')">
+              <label for="startsAtLocal"
+                >Start date and time <span class="required-marker" aria-hidden="true">*</span></label
+              >
+              <input id="startsAtLocal" type="datetime-local" formControlName="startsAtLocal" aria-required="true" />
+            </div>
+            <div class="field grow" [class.invalid]="isInvalid('timeZoneId')">
+              <label for="timeZoneId"
+                >Campaign time zone <span class="required-marker" aria-hidden="true">*</span></label
+              >
+              <app-filterable-combobox inputId="timeZoneId" formControlName="timeZoneId" [options]="timeZones" />
+            </div>
+          </div>
+          <div class="nested-row">
+            <div class="field grow" [class.invalid]="isInvalid('roundCount')">
+              <label for="roundCount">Number of rounds <span class="required-marker" aria-hidden="true">*</span></label>
+              <input id="roundCount" type="number" min="3" max="52" formControlName="roundCount" aria-required="true" />
+            </div>
+            <div class="field grow" [class.invalid]="isInvalid('roundLengthAmount')">
+              <label for="roundLengthAmount"
+                >Round length <span class="required-marker" aria-hidden="true">*</span></label
+              >
+              <input
+                id="roundLengthAmount"
+                type="number"
+                min="1"
+                [max]="maxAmountFor(form.controls.roundLengthUnit.value)"
+                formControlName="roundLengthAmount"
+                aria-required="true"
+              />
+            </div>
+            <div class="field grow">
+              <label for="roundLengthUnit">Round length unit</label>
+              <select id="roundLengthUnit" formControlName="roundLengthUnit">
+                @for (unit of durationUnits; track unit) {
+                  <option [value]="unit">{{ unit }}</option>
+                }
+              </select>
+            </div>
+          </div>
+          <p class="muted">This round has {{ actionCount() }} action{{ actionCount() === 1 ? '' : 's' }}.</p>
+          <div formArrayName="phases" class="stack">
+            @for (phase of phaseGroups(); track phase; let index = $index) {
+              <div class="nested-card nested-row" [formGroup]="phase">
+                <div class="field">
+                  <label [attr.for]="'phase-kind-' + index">Step {{ index + 1 }}</label>
+                  <select [id]="'phase-kind-' + index" formControlName="kind">
+                    @for (kind of phaseKinds; track kind) {
+                      <option [value]="kind">{{ kind }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="field">
+                  <label [attr.for]="'phase-amount-' + index">Length</label>
+                  <input
+                    [id]="'phase-amount-' + index"
+                    type="number"
+                    min="1"
+                    [max]="maxAmountFor(phase.controls.durationUnit.value)"
+                    formControlName="durationAmount"
+                  />
+                </div>
+                <div class="field">
+                  <label [attr.for]="'phase-unit-' + index">Unit</label>
+                  <select [id]="'phase-unit-' + index" formControlName="durationUnit">
+                    @for (unit of durationUnits; track unit) {
+                      <option [value]="unit">{{ unit }}</option>
+                    }
+                  </select>
+                </div>
+                <label class="choice-row">
+                  <input [id]="'phase-end-early-' + index" type="checkbox" formControlName="endPhaseEarlyIfAble" />
+                  End phase early if able to resolve
+                </label>
+                <div class="choice-row">
+                  <button
+                    type="button"
+                    class="button-secondary"
+                    (click)="movePhase(index, -1)"
+                    [disabled]="index === 0"
+                  >
+                    Move up
+                  </button>
+                  <button
+                    type="button"
+                    class="button-secondary"
+                    (click)="movePhase(index, 1)"
+                    [disabled]="index === phases.length - 1"
+                  >
+                    Move down
+                  </button>
+                  <button
+                    type="button"
+                    class="button-secondary"
+                    (click)="removePhase(index)"
+                    [disabled]="phases.length <= 2"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+          <div class="choice-row">
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="addPhase('Action')"
+              [disabled]="phases.length >= 16"
+            >
+              Add action
+            </button>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="addPhase('Battle')"
+              [disabled]="phases.length >= 16"
+            >
+              Add battle phase
+            </button>
+          </div>
+          <div class="nested-card stack">
+            <button
+              type="button"
+              class="section-toggle nested-toggle"
+              [class.has-dirty]="sectionHeaderDirty('round-army')"
+              [attr.aria-expanded]="isOpen('round-army')"
+              (click)="toggleSection('round-army')"
+            >
+              Round army size and free supply
+            </button>
+            <div [hidden]="!isOpen('round-army')">
+              <p class="muted">
+                Each round can raise the army points cap and grant free supply points plus free characters whose base
+                cost does not count against supply. Changing the number of rounds keeps values you already entered for
+                overlapping rounds.
+              </p>
+              <div formArrayName="roundEscalations" class="stack">
+                @for (row of roundEscalations.controls; track row; let index = $index) {
+                  <div class="nested-row" [formGroupName]="index">
+                    <div class="field">
+                      <label [attr.for]="'round-escalation-points-' + index"
+                        >Round {{ row.controls.roundNumber.value }} max army points</label
+                      >
+                      <input
+                        [id]="'round-escalation-points-' + index"
+                        type="number"
+                        min="10"
+                        max="100000"
+                        formControlName="maxArmyPoints"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'round-escalation-supply-' + index">Free supply points</label>
+                      <input
+                        [id]="'round-escalation-supply-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="freeSupplyPoints"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'round-escalation-characters-' + index">Free characters</label>
+                      <input
+                        [id]="'round-escalation-characters-' + index"
+                        type="number"
+                        min="0"
+                        max="99"
+                        formControlName="freeCharacterCount"
+                      />
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('visibility')"
+            [attr.aria-expanded]="isOpen('visibility')"
+            (click)="toggleSection('visibility')"
+          >
+            Visibility
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('visibility')">
+          <label class="choice-row">
+            <input type="checkbox" formControlName="isPubliclyViewable" />
+            Publicly viewable
+          </label>
+          <p class="muted">
+            When off, only players, managers, and administrators can open this campaign after it starts. Upcoming
+            campaigns still appear on All Campaigns so people can join.
+          </p>
+          <label class="choice-row">
+            <input type="checkbox" formControlName="isPrivate" />
+            Private campaign (requires a password to join)
+          </label>
+          @if (isPrivate()) {
+            <div class="field" [class.invalid]="isInvalid('joinPassword')">
+              <label for="joinPassword">
+                Join password{{ isEdit() ? ' (leave blank to keep the current password)' : '' }}
+              </label>
+              <input id="joinPassword" type="password" formControlName="joinPassword" autocomplete="new-password" />
+              <p class="muted">At least 8 characters. This is not shown again after you save.</p>
+            </div>
+          }
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('specialRules')"
+            [attr.aria-expanded]="isOpen('specialRules')"
+            (click)="toggleSection('specialRules')"
+          >
+            Faction special rules (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('specialRules')">
+          <p class="muted">
+            Named campaign rules that factions and item objectives can share. Choosing a pre-configured rule fills the
+            description from the catalog. For a custom rule, write the description yourself. Descriptions are
+            display-only and do not change resolution. Search a pre-configured rule or type a custom name. Up to 80
+            rules.
+          </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="specialRulePreset">Pre-configured faction special rule</label>
+              <app-filterable-combobox
+                inputId="specialRulePreset"
+                [formControl]="specialRulePresetPick"
+                [options]="availableSpecialRulePresetNames()"
+                placeholder="Search or type a name"
+              />
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="addPickedSpecialRule()"
+              [disabled]="specialRules.length >= 80"
+            >
+              Add
+            </button>
+          </div>
+          <div formArrayName="specialRules" class="stack">
+            @for (rule of specialRules.controls; track rule; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('special-rule-' + index)"
+                  [attr.aria-expanded]="isOpen('special-rule-' + index)"
+                  (click)="toggleSection('special-rule-' + index)"
+                >
+                  {{ itemLabel(rule.controls.name.value, 'Faction special rule ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('special-rule-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'special-rule-name-' + index">Rule {{ index + 1 }} name</label>
+                      <app-filterable-combobox
+                        [inputId]="'special-rule-name-' + index"
+                        formControlName="name"
+                        [options]="specialRuleNameOptions(index)"
+                        placeholder="Search or type a name"
+                      />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removeSpecialRule(index)">Remove</button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'special-rule-description-' + index">Description</label>
+                    <textarea
+                      [id]="'special-rule-description-' + index"
+                      formControlName="text"
+                      maxlength="2000"
+                      rows="5"
+                    ></textarea>
+                    <p class="muted">
+                      Pre-configured rules fill this from the catalog. Edit it if you need to. For a custom rule, write
+                      the description yourself.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addSpecialRule()"
+            [disabled]="specialRules.length >= 80"
+          >
+            Add custom faction special rule
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('forceStatuses')"
+            [attr.aria-expanded]="isOpen('forceStatuses')"
+            (click)="toggleSection('forceStatuses')"
+          >
+            Force statuses (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('forceStatuses')">
+          <p class="muted">
+            A force has at most one status at a time. Normal is the absence of a status and is not configured. Enable
+            and clear conditions decide when a status is applied or removed. Effects are display-only for the tabletop
+            sheet. Up to 20 statuses.
+          </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="forceStatusPreset">Standard force status</label>
+              <app-filterable-combobox
+                inputId="forceStatusPreset"
+                [formControl]="forceStatusPresetPick"
+                [options]="availableForceStatusPresetNames()"
+                placeholder="Search a status name"
+              />
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="addPickedForceStatus()"
+              [disabled]="forceStatuses.length >= 20"
+            >
+              Add
+            </button>
+          </div>
+          <div class="nested-row">
+            <button type="button" class="button-secondary" (click)="applyStandardForceStatuses()">
+              Add standard force statuses
+            </button>
+          </div>
+          <div formArrayName="forceStatuses" class="stack">
+            @for (status of forceStatuses.controls; track status; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('force-status-' + index)"
+                  [attr.aria-expanded]="isOpen('force-status-' + index)"
+                  (click)="toggleSection('force-status-' + index)"
+                >
+                  {{ itemLabel(status.controls.name.value, 'Force status ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('force-status-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'force-status-name-' + index">Status {{ index + 1 }} name</label>
+                      <input [id]="'force-status-name-' + index" type="text" formControlName="name" maxlength="60" />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removeForceStatus(index)">Remove</button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'force-status-effects-' + index">Effects</label>
+                    <textarea
+                      [id]="'force-status-effects-' + index"
+                      formControlName="effects"
+                      maxlength="2000"
+                      rows="4"
+                    ></textarea>
+                    <p class="muted">Shown on the campaign page. The app does not resolve tabletop modifiers.</p>
+                  </div>
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'force-status-enable-' + index">Enable when</label>
+                      <select [id]="'force-status-enable-' + index" formControlName="enableTrigger">
+                        @for (option of forceStatusEnableOptions; track option.id) {
+                          <option [value]="option.id">{{ option.label }}</option>
+                        }
+                      </select>
+                    </div>
+                    <div class="field grow">
+                      <label [attr.for]="'force-status-clear-' + index">Clear when</label>
+                      <select [id]="'force-status-clear-' + index" formControlName="clearTrigger">
+                        @for (option of forceStatusClearOptions; track option.id) {
+                          <option [value]="option.id">{{ option.label }}</option>
+                        }
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addForceStatus()"
+            [disabled]="forceStatuses.length >= 20"
+          >
+            Add custom force status
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('publicObjectives')"
+            [attr.aria-expanded]="isOpen('publicObjectives')"
+            (click)="toggleSection('publicObjectives')"
+          >
+            Public objectives (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('publicObjectives')">
+          <p class="muted">
+            Named public objectives that a manager can award during play. Set campaign points to 0 to ignore an
+            objective. Ranking objectives below are calculated automatically. Ties are friendly: every player currently
+            tied for first receives the points.
+          </p>
+          <div class="nested-card stack">
+            <h3>Ranking public objectives</h3>
+            <p class="muted">Set any of these to 0 to omit them from scoring and the campaign-page leaderboards.</p>
+            <div class="nested-row">
+              <div class="field">
+                <label for="mostTerritoriesCampaignPoints">Most territories controlled</label>
+                <input
+                  id="mostTerritoriesCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="mostTerritoriesCampaignPoints"
+                />
+              </div>
+              <div class="field">
+                <label for="longestTerritoryChainCampaignPoints">Longest unbroken territory chain</label>
+                <input
+                  id="longestTerritoryChainCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="longestTerritoryChainCampaignPoints"
+                />
+              </div>
+              <div class="field">
+                <label for="mostBattlesWonCampaignPoints">Most battles won</label>
+                <input
+                  id="mostBattlesWonCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="mostBattlesWonCampaignPoints"
+                />
+              </div>
+              <div class="field">
+                <label for="mostStructurePointsCampaignPoints">Most structure campaign points</label>
+                <input
+                  id="mostStructurePointsCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="mostStructurePointsCampaignPoints"
+                />
+              </div>
+            </div>
+            <p class="muted">
+              Most battles won ranks by wins, then draws. Players who remain tied after that each receive the points.
+              Most structure campaign points uses currently owned non-destroyed structures.
+            </p>
+          </div>
+          <div class="nested-card stack">
+            <h3>Running public objectives</h3>
+            <p class="muted">These add campaign points from live map state. Set any of these to 0 to ignore them.</p>
+            <div class="nested-row">
+              <div class="field">
+                <label for="pointsPerTerritoryCampaignPoints">Campaign points per territory</label>
+                <input
+                  id="pointsPerTerritoryCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="pointsPerTerritoryCampaignPoints"
+                />
+              </div>
+              <div class="field">
+                <label for="alliedRelicControlCampaignPoints">Points if an ally or faction-mate holds a relic</label>
+                <input
+                  id="alliedRelicControlCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="alliedRelicControlCampaignPoints"
+                />
+              </div>
+            </div>
+            <p class="muted">
+              Allied relic points are awarded for each revealed relic currently held by another player of the same
+              faction or a current ally. Relics the scoring player holds do not count here.
+            </p>
+          </div>
+          <div class="nested-card stack">
+            <h3>Battle campaign points</h3>
+            <label class="choice-row">
+              <input type="checkbox" formControlName="useDifferentialBattleScoring" />
+              Award campaign points from the score difference
+            </label>
+            <div class="nested-row">
+              <div class="field">
+                <label for="pointsPerBattleWon">Campaign points per battle won</label>
+                <input id="pointsPerBattleWon" type="number" min="0" max="999" formControlName="pointsPerBattleWon" />
+              </div>
+              <div class="field">
+                <label for="pointsPerBattleDraw">Campaign points per battle draw</label>
+                <input id="pointsPerBattleDraw" type="number" min="0" max="999" formControlName="pointsPerBattleDraw" />
+              </div>
+            </div>
+            <p class="muted">
+              Win points apply when differential scoring is off. Draw points are awarded to each participant of a draw
+              in either mode. Wins and draws are still recorded for ranking.
+            </p>
+            @if (useDifferential()) {
+              <div class="nested-row">
+                <div class="field">
+                  <label for="differentialMultiplier">Differential multiplier</label>
+                  <input
+                    id="differentialMultiplier"
+                    type="number"
+                    min="0.01"
+                    max="999"
+                    step="0.01"
+                    formControlName="differentialMultiplier"
+                  />
+                </div>
+                <div class="field">
+                  <label for="differentialMinimum">Minimum campaign points</label>
+                  <input
+                    id="differentialMinimum"
+                    type="number"
+                    min="-999"
+                    max="999"
+                    formControlName="differentialMinimum"
+                  />
+                </div>
+                <div class="field">
+                  <label for="differentialMaximum">Maximum campaign points</label>
+                  <input
+                    id="differentialMaximum"
+                    type="number"
+                    min="-999"
+                    max="999"
+                    formControlName="differentialMaximum"
+                  />
+                </div>
+              </div>
+              <label class="choice-row">
+                <input type="checkbox" formControlName="allowNegativeDifferential" />
+                Award negative campaign points to the loser
+              </label>
+              <p class="muted">
+                Winner campaign points are the clamped score difference times the multiplier. The default range is 0 to
+                10. Enter already-converted battle points or raw victory points; this app does not apply a proprietary
+                conversion chart.
+              </p>
+            }
+            <div class="nested-card stack">
+              <h3>Supply and battle reports</h3>
+              <div class="field">
+                <label for="splitForceSupplyPenaltyPercent">
+                  Split-force supply penalty ({{ splitForcePenaltyIsPercent() ? 'percent' : 'raw value' }})
+                </label>
+                <input
+                  id="splitForceSupplyPenaltyPercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  formControlName="splitForceSupplyPenaltyPercent"
+                />
+                <label class="choice-row">
+                  <input type="checkbox" formControlName="splitForceSupplyPenaltyIsPercent" />
+                  Use a percentage of map supply instead of a raw amount
+                </label>
+                <p class="muted">
+                  Subtracted from map supply when a player has more than one force. The default is a raw value of 1.
+                </p>
+              </div>
+              <label class="choice-row">
+                <input type="checkbox" formControlName="alwaysAskGeneralKill" />
+                Always ask whether the enemy general was slain
+              </label>
+              <div class="field">
+                <label for="generalKillCampaignPoints">Campaign points for slaying the enemy general</label>
+                <input
+                  id="generalKillCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="generalKillCampaignPoints"
+                />
+              </div>
+              <label class="choice-row">
+                <input type="checkbox" formControlName="alwaysAskSupplyLineDestroyed" />
+                Always ask whether the enemy supply line was destroyed
+              </label>
+              <div class="field">
+                <label for="supplyLineDestroyedCampaignPoints"
+                  >Campaign points for destroying the enemy supply line</label
+                >
+                <input
+                  id="supplyLineDestroyedCampaignPoints"
+                  type="number"
+                  min="0"
+                  max="999"
+                  formControlName="supplyLineDestroyedCampaignPoints"
+                />
+              </div>
+            </div>
+          </div>
+          <div formArrayName="publicObjectiveTypes" class="stack">
+            @for (item of publicObjectiveTypes.controls; track item; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('public-objective-' + index)"
+                  [attr.aria-expanded]="isOpen('public-objective-' + index)"
+                  (click)="toggleSection('public-objective-' + index)"
+                >
+                  {{ itemLabel(item.controls.name.value, 'Public objective ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('public-objective-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'public-objective-name-' + index">Objective {{ index + 1 }} name</label>
+                      <input [id]="'public-objective-name-' + index" formControlName="name" maxlength="60" />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'public-objective-points-' + index">Campaign points</label>
+                      <input
+                        [id]="'public-objective-points-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="campaignPoints"
+                      />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removePublicObjective(index)">
+                      Remove
+                    </button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'public-objective-description-' + index">Description (optional)</label>
+                    <input
+                      [id]="'public-objective-description-' + index"
+                      formControlName="description"
+                      maxlength="240"
+                    />
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addPublicObjective()"
+            [disabled]="publicObjectiveTypes.length >= 50"
+          >
+            Add public objective
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('privateObjectives')"
+            [attr.aria-expanded]="isOpen('privateObjectives')"
+            (click)="toggleSection('privateObjectives')"
+          >
+            Private objectives (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('privateObjectives')">
+          <p class="muted">
+            Catalog of private objectives for players, factions, and ally groups. Manual objectives stay secret until a
+            manager approves a claim or the campaign closes. Automatic objectives score from map facts and become public
+            when completed. At start each player, faction, and ally group receives one available objective.
+          </p>
+          <div formArrayName="privateObjectiveTypes" class="stack">
+            @for (item of privateObjectiveTypes.controls; track item; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('private-objective-' + index)"
+                  [attr.aria-expanded]="isOpen('private-objective-' + index)"
+                  (click)="toggleSection('private-objective-' + index)"
+                >
+                  {{ itemLabel(item.controls.name.value, 'Private objective ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('private-objective-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'private-objective-name-' + index">Objective {{ index + 1 }} name</label>
+                      <input [id]="'private-objective-name-' + index" formControlName="name" maxlength="60" />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'private-objective-points-' + index">Campaign points</label>
+                      <input
+                        [id]="'private-objective-points-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="campaignPoints"
+                      />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removePrivateObjective(index)">
+                      Remove
+                    </button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'private-objective-description-' + index">Secret description</label>
+                    <textarea
+                      [id]="'private-objective-description-' + index"
+                      formControlName="description"
+                      maxlength="2000"
+                      rows="3"
+                    ></textarea>
+                  </div>
+                  <fieldset class="field">
+                    <legend>May be assigned to</legend>
+                    <label class="choice-row">
+                      <input type="checkbox" formControlName="allowPlayer" />
+                      Players
+                    </label>
+                    <label class="choice-row">
+                      <input type="checkbox" formControlName="allowFaction" />
+                      Factions
+                    </label>
+                    <label class="choice-row">
+                      <input type="checkbox" formControlName="allowAllyGroup" />
+                      Ally groups
+                    </label>
+                  </fieldset>
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'private-objective-scoring-' + index">Scoring</label>
+                      <select [id]="'private-objective-scoring-' + index" formControlName="scoringKind">
+                        <option value="Manual">Manual (claim and manager approval)</option>
+                        <option value="Automatic">Automatic (map facts)</option>
+                      </select>
+                    </div>
+                    @if (item.controls.scoringKind.value === 'Automatic') {
+                      <div class="field grow">
+                        <label [attr.for]="'private-objective-automatic-' + index">Automatic criterion</label>
+                        <select [id]="'private-objective-automatic-' + index" formControlName="automaticKind">
+                          <option value="ControlTerritoryCount">Control a number of territories</option>
+                          <option value="ControlNamedTerritories">Control named territories</option>
+                          <option value="ControlStructureType">Control a structure type</option>
+                          <option value="PillageStructureType">Pillage a structure type</option>
+                          <option value="DestroyStructureType">Destroy a structure type</option>
+                        </select>
+                      </div>
+                    }
+                  </div>
+                  @if (item.controls.scoringKind.value === 'Automatic') {
+                    <div class="nested-row">
+                      <div class="field">
+                        <label [attr.for]="'private-objective-count-' + index">Required count</label>
+                        <input
+                          [id]="'private-objective-count-' + index"
+                          type="number"
+                          min="1"
+                          max="999"
+                          formControlName="requiredCount"
+                        />
+                      </div>
+                      @if (
+                        item.controls.automaticKind.value === 'ControlStructureType' ||
+                        item.controls.automaticKind.value === 'PillageStructureType' ||
+                        item.controls.automaticKind.value === 'DestroyStructureType'
+                      ) {
+                        <div class="field grow">
+                          <label [attr.for]="'private-objective-structure-' + index">Structure type</label>
+                          <select [id]="'private-objective-structure-' + index" formControlName="structureTypeId">
+                            <option value="">Select a structure type</option>
+                            @for (structure of structureTypes.controls; track structure.controls.id.value) {
+                              @if (structure.controls.name.value.trim()) {
+                                <option [value]="structure.controls.id.value">
+                                  {{ structure.controls.name.value }}
+                                </option>
+                              }
+                            }
+                          </select>
+                        </div>
+                      }
+                    </div>
+                    @if (item.controls.automaticKind.value === 'ControlNamedTerritories') {
+                      <div class="field">
+                        <label [attr.for]="'private-objective-territories-' + index">Territory identifiers</label>
+                        <textarea
+                          [id]="'private-objective-territories-' + index"
+                          formControlName="territoryIds"
+                          rows="2"
+                        ></textarea>
+                        <p class="muted">
+                          Comma-separated territory identifiers from the saved map. Required count is how many of those
+                          territories the holder must control.
+                        </p>
+                      </div>
+                    }
+                  }
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addPrivateObjective()"
+            [disabled]="privateObjectiveTypes.length >= 50"
+          >
+            Add private objective
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('allies')"
+            [attr.aria-expanded]="isOpen('allies')"
+            (click)="toggleSection('allies')"
+          >
+            Ally groups (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('allies')">
+          <p class="muted">Two or more factions can join a group. All factions cannot belong to a single group.</p>
+          <div class="choice-row">
+            <button type="button" class="button-secondary" (click)="addAllyGroup()">Add ally group</button>
+            <button type="button" class="button-secondary" (click)="clearAllyGroups()">Clear allies</button>
+          </div>
+          <div formArrayName="allyGroups" class="stack">
+            @for (group of allyGroups.controls; track group; let index = $index) {
+              <div class="nested-row" [formGroupName]="index">
+                <div class="field grow">
+                  <label [attr.for]="'ally-group-' + index">Ally group {{ index + 1 }} name</label>
+                  <input [id]="'ally-group-' + index" formControlName="name" maxlength="60" />
+                </div>
+                <div class="field color-field">
+                  <label [attr.for]="'ally-group-color-' + index">Color</label>
+                  <input [id]="'ally-group-color-' + index" type="color" formControlName="color" />
+                </div>
+                <button type="button" class="button-secondary" (click)="removeAllyGroup(index)">Remove</button>
+              </div>
+              @if (group.controls.name.value.trim()) {
+                <p class="muted ally-members">
+                  {{ allyMembers(group.controls.id.value) || 'No factions assigned yet.' }}
+                </p>
+              }
+            }
+          </div>
+          @if (allyGroups.length > 0 && unalignedFactions(); as unaligned) {
+            <p class="muted ally-members">Unaligned: {{ unaligned }}</p>
+          }
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('factions')"
+            [attr.aria-expanded]="isOpen('factions')"
+            (click)="toggleSection('factions')"
+          >
+            Factions <span class="required-marker" aria-hidden="true">*</span>
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('factions')">
+          <p class="muted">
+            At least two factions are required. Subfactions are optional unless a faction requires players to pick one.
+            Adding a preset replaces the current faction and subfaction list with a copy you can then edit. The preset
+            itself is not changed. Each faction has a unique color.
+          </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="factionPreset">Faction preset</label>
+              <select id="factionPreset" [formControl]="presetId">
+                <option value="">Select a preset</option>
+                @for (preset of factionPresets; track preset.id) {
+                  <option [value]="preset.id">{{ preset.name }}</option>
+                }
+              </select>
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="applySelectedPreset()"
+              [disabled]="!selectedPresetId()"
+            >
+              Add preset
+            </button>
+            <button type="button" class="button-secondary" (click)="clearFactions()">Clear factions</button>
+          </div>
+          <div formArrayName="factions" class="stack">
+            @for (faction of factions.controls; track faction; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('faction-item-' + index)"
+                  [attr.aria-expanded]="isOpen('faction-item-' + index)"
+                  (click)="toggleSection('faction-item-' + index)"
+                >
+                  {{ itemLabel(faction.controls.name.value, 'Faction ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('faction-item-' + index)">
+                  <div class="nested-row">
+                    <div
+                      class="field grow"
+                      [class.invalid]="isGroupInvalid(faction, 'name', 'factions[' + index + '].name')"
+                    >
+                      <label [attr.for]="'faction-name-' + index">
+                        Faction {{ index + 1 }} name <span class="required-marker" aria-hidden="true">*</span>
+                      </label>
+                      <input
+                        [id]="'faction-name-' + index"
+                        formControlName="name"
+                        maxlength="60"
+                        aria-required="true"
+                      />
+                    </div>
+                    <div class="field color-field">
+                      <label [attr.for]="'faction-color-' + index">Color</label>
+                      <input [id]="'faction-color-' + index" type="color" formControlName="color" />
+                    </div>
+                    @if (factions.length > 2) {
+                      <button type="button" class="button-secondary" (click)="removeFaction(index)">
+                        Remove faction
+                      </button>
+                    }
+                  </div>
+                  <label class="checkbox-row">
+                    <input type="checkbox" formControlName="requiresSubfaction" />
+                    Players who choose this faction must pick a subfaction
+                  </label>
+                  @if (allyGroups.length > 0) {
+                    <div class="field">
+                      <label [attr.for]="'faction-ally-' + index">Ally group (optional)</label>
+                      <select [id]="'faction-ally-' + index" formControlName="allyGroupId">
+                        <option value="">Unaligned</option>
+                        @for (group of allyGroups.controls; track group.controls.id.value) {
+                          @if (group.controls.name.value.trim()) {
+                            <option [value]="group.controls.id.value">{{ group.controls.name.value }}</option>
+                          }
+                        }
+                      </select>
+                    </div>
+                  }
+                  <div class="field" formArrayName="subfactions">
+                    <button
+                      type="button"
+                      class="section-toggle nested-toggle"
+                      [class.has-dirty]="sectionHeaderDirty('faction-sub-' + index)"
+                      [attr.aria-expanded]="isOpen('faction-sub-' + index)"
+                      (click)="toggleSection('faction-sub-' + index)"
+                    >
+                      Subfactions {{ faction.controls.requiresSubfaction.value ? '(required)' : '(optional)' }}
+                    </button>
+                    <div [hidden]="!isOpen('faction-sub-' + index)">
+                      @for (subfaction of subfactionsOf(faction).controls; track subfaction; let subIndex = $index) {
+                        <div class="nested-row" [formGroupName]="subIndex">
+                          <label class="sr-only" [attr.for]="'subfaction-' + index + '-' + subIndex">
+                            Faction {{ index + 1 }} subfaction {{ subIndex + 1 }}
+                          </label>
+                          <input
+                            class="grow"
+                            [id]="'subfaction-' + index + '-' + subIndex"
+                            formControlName="name"
+                            maxlength="60"
+                          />
+                          <button type="button" class="button-secondary" (click)="removeSubfaction(faction, subIndex)">
+                            Remove
+                          </button>
+                        </div>
+                      }
+                      <button type="button" class="button-secondary" (click)="addSubfaction(faction)">
+                        Add subfaction
+                      </button>
+                    </div>
+                  </div>
+                  <fieldset class="field">
+                    <legend>Faction special rules</legend>
+                    <p class="muted">
+                      Search the campaign list or a pre-configured rule. Multiple factions can share the same rule.
+                    </p>
+                    @for (rule of assignedSpecialRules(faction.controls.specialRuleIds); track rule.id) {
+                      <div class="nested-row">
+                        <p class="grow">{{ rule.name }}</p>
+                        <button
+                          type="button"
+                          class="button-secondary"
+                          (click)="removeAssignedSpecialRule(faction.controls.specialRuleIds, rule.id)"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    }
+                    <div class="nested-row">
+                      <div class="field grow">
+                        <label [attr.for]="'faction-special-rule-' + index">Add faction special rule</label>
+                        <app-filterable-combobox
+                          [inputId]="'faction-special-rule-' + index"
+                          [formControl]="pickControl(faction.controls.id.value)"
+                          [options]="assignableSpecialRuleNames(faction.controls.specialRuleIds)"
+                          placeholder="Search or type a name"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        class="button-secondary"
+                        (click)="assignSpecialRuleByName(faction.controls.specialRuleIds, faction.controls.id.value)"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </fieldset>
+                  @for (subfaction of namedSubfactions(faction); track subfaction) {
+                    <fieldset class="field">
+                      <legend>{{ subfaction }} special rules</legend>
+                      @for (rule of assignedSubfactionSpecialRules(faction, subfaction); track rule.id) {
+                        <div class="nested-row">
+                          <p class="grow">{{ rule.name }}</p>
+                          <button
+                            type="button"
+                            class="button-secondary"
+                            (click)="removeSubfactionSpecialRule(faction, subfaction, rule.id)"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      }
+                      <div class="nested-row">
+                        <div class="field grow">
+                          <label [attr.for]="'subfaction-special-rule-' + index + '-' + subfaction">
+                            Add {{ subfaction }} special rule
+                          </label>
+                          <app-filterable-combobox
+                            [inputId]="'subfaction-special-rule-' + index + '-' + subfaction"
+                            [formControl]="pickControl(faction.controls.id.value + ':' + subfaction)"
+                            [options]="assignableSubfactionSpecialRuleNames(faction, subfaction)"
+                            placeholder="Search or type a name"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          class="button-secondary"
+                          (click)="assignSubfactionSpecialRuleByName(faction, subfaction)"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </fieldset>
+                  }
+                  <fieldset class="field">
+                    <legend>Flag</legend>
+                    <div class="choice-row">
+                      <label>
+                        <input
+                          type="radio"
+                          [attr.name]="'faction-flag-' + index"
+                          [checked]="faction.controls.flagSource.value === 'color'"
+                          (change)="setFlagSource(faction, 'color')"
+                        />
+                        Color flag
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          [attr.name]="'faction-flag-' + index"
+                          [checked]="faction.controls.flagSource.value === 'image'"
+                          (change)="setFlagSource(faction, 'image')"
+                        />
+                        Uploaded image
+                      </label>
+                    </div>
+                    @if (faction.controls.flagSource.value === 'color') {
+                      <p class="muted">Default flag uses this faction’s color. Uploaded flags are not recolored.</p>
+                      <div
+                        class="faction-flag-preview"
+                        [style.background]="faction.controls.color.value"
+                        aria-hidden="true"
+                      ></div>
+                    } @else {
+                      <div class="field" [class.is-dirty]="hasPendingFlag(faction.controls.id.value)">
+                        <input
+                          [id]="'faction-flag-image-' + index"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          (change)="onFlagImageSelected(faction.controls.id.value, $event)"
+                        />
+                        <p class="muted">
+                          Maximum size {{ flagImageMaxPx }}px × {{ flagImageMaxPx }}px. Larger images are shrunk to that
+                          size. Uploaded flags are not recolored.
+                        </p>
+                        @if (flagImageName(faction.controls.id.value); as fileName) {
+                          <p class="muted">Selected: {{ fileName }}</p>
+                        } @else if (factionFlagUrl(faction.controls.id.value); as src) {
+                          <p class="muted">A flag is already stored.</p>
+                          <img class="structure-logo-preview" [src]="src" alt="" />
+                        }
+                      </div>
+                    }
+                  </fieldset>
+                </div>
+              </div>
+            }
+          </div>
+          <button type="button" class="button-secondary" (click)="addFaction()">Add faction</button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('missions')"
+            [attr.aria-expanded]="isOpen('missions')"
+            (click)="toggleSection('missions')"
+          >
+            Missions (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('missions')">
+          <p class="muted">
+            Reusable missions live here: name, optional link or PDF/Word file, result questions, and attacker/defender
+            settings. Terrain and structure lists then pick a catalog mission or a one-off name. Unassigned catalog
+            missions are kept. Up to 80 missions.
+          </p>
+          <div formArrayName="missions" class="stack">
+            @for (mission of missions.controls; track mission; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('mission-item-' + index)"
+                  [attr.aria-expanded]="isOpen('mission-item-' + index)"
+                  (click)="toggleSection('mission-item-' + index)"
+                >
+                  {{ itemLabel(mission.controls.name.value, 'Mission ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('mission-item-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'catalog-mission-name-' + index">Mission {{ index + 1 }} name</label>
+                      <input [id]="'catalog-mission-name-' + index" formControlName="name" maxlength="60" />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removeCatalogMission(index)">Remove</button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'catalog-mission-url-' + index">Mission URL (optional)</label>
+                    <input [id]="'catalog-mission-url-' + index" formControlName="url" maxlength="2048" />
+                  </div>
+                  <div class="field" [class.is-dirty]="hasPendingMissionFile(mission.controls.id.value)">
+                    <label [attr.for]="'catalog-mission-file-' + index">Mission file (optional PDF or Word)</label>
+                    <input
+                      [id]="'catalog-mission-file-' + index"
+                      type="file"
+                      accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      (change)="onMissionFileSelected(mission.controls.id.value, $event)"
+                    />
+                    @if (missionFileName(mission.controls.id.value); as fileName) {
+                      <p class="muted">Selected: {{ fileName }}</p>
+                    } @else if (hasStoredMissionFile(mission.controls.id.value)) {
+                      <p class="muted">A document is already stored.</p>
+                    }
+                  </div>
+                  <div class="field" formArrayName="resultQuestions">
+                    <h4>Result questions</h4>
+                    <p class="muted">
+                      Extra questions asked when this mission is reported. True/false questions award the configured
+                      points when the answer is yes. Battle-point questions take a reported amount.
+                    </p>
+                    @for (question of questionsOf(mission).controls; track question; let questionIndex = $index) {
+                      <div class="nested-card stack" [formGroupName]="questionIndex">
+                        <div class="field">
+                          <label [attr.for]="'catalog-question-prompt-' + index + '-' + questionIndex">Question</label>
+                          <input
+                            [id]="'catalog-question-prompt-' + index + '-' + questionIndex"
+                            formControlName="prompt"
+                            maxlength="240"
+                          />
+                        </div>
+                        <div class="nested-row">
+                          <div class="field">
+                            <label [attr.for]="'catalog-question-kind-' + index + '-' + questionIndex">Kind</label>
+                            <select
+                              [id]="'catalog-question-kind-' + index + '-' + questionIndex"
+                              formControlName="kind"
+                            >
+                              <option value="Boolean">True / false</option>
+                              <option value="BattlePoints">Battle points amount</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label [attr.for]="'catalog-question-bp-' + index + '-' + questionIndex"
+                              >Battle points</label
+                            >
+                            <input
+                              [id]="'catalog-question-bp-' + index + '-' + questionIndex"
+                              type="number"
+                              min="0"
+                              max="999"
+                              formControlName="battlePoints"
+                            />
+                          </div>
+                          <div class="field">
+                            <label [attr.for]="'catalog-question-cp-' + index + '-' + questionIndex"
+                              >Campaign points</label
+                            >
+                            <input
+                              [id]="'catalog-question-cp-' + index + '-' + questionIndex"
+                              type="number"
+                              min="0"
+                              max="999"
+                              formControlName="campaignPoints"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            class="button-secondary"
+                            (click)="removeMissionQuestion(mission, questionIndex)"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    }
+                    <button type="button" class="button-secondary" (click)="addMissionQuestion(mission)">
+                      Add result question
+                    </button>
+                  </div>
+                  <label class="choice-row">
+                    <input [id]="'catalog-mission-ad-' + index" type="checkbox" formControlName="isAttackerDefender" />
+                    Attacker/defender mission
+                  </label>
+                  @if (mission.controls.isAttackerDefender.value) {
+                    <label class="choice-row">
+                      <input
+                        [id]="'catalog-mission-ap-adv-' + index"
+                        type="checkbox"
+                        formControlName="hasArmyPointsAdvantage"
+                      />
+                      Army points advantage
+                    </label>
+                    @if (mission.controls.hasArmyPointsAdvantage.value) {
+                      <div class="nested-row">
+                        <div class="field">
+                          <label [attr.for]="'catalog-mission-ap-side-' + index">Side</label>
+                          <select [id]="'catalog-mission-ap-side-' + index" formControlName="armyPointsAdvantageSide">
+                            <option value="Attacker">Attacker</option>
+                            <option value="Defender">Defender</option>
+                          </select>
+                        </div>
+                        <div class="field grow">
+                          <label [attr.for]="'catalog-mission-ap-amount-' + index">Amount</label>
+                          <input
+                            [id]="'catalog-mission-ap-amount-' + index"
+                            type="number"
+                            formControlName="armyPointsAdvantageAmount"
+                          />
+                          <p class="muted">Signed number or percent. After apply, army points are never below 500.</p>
+                        </div>
+                        <label class="choice-row">
+                          <input type="checkbox" formControlName="armyPointsAdvantageIsPercent" />
+                          Percent
+                        </label>
+                      </div>
+                    }
+                    <label class="choice-row">
+                      <input
+                        [id]="'catalog-mission-sp-adv-' + index"
+                        type="checkbox"
+                        formControlName="hasSupplyPointsAdvantage"
+                      />
+                      Supply points advantage
+                    </label>
+                    @if (mission.controls.hasSupplyPointsAdvantage.value) {
+                      <div class="nested-row">
+                        <div class="field">
+                          <label [attr.for]="'catalog-mission-sp-side-' + index">Side</label>
+                          <select [id]="'catalog-mission-sp-side-' + index" formControlName="supplyPointsAdvantageSide">
+                            <option value="Attacker">Attacker</option>
+                            <option value="Defender">Defender</option>
+                          </select>
+                        </div>
+                        <div class="field grow">
+                          <label [attr.for]="'catalog-mission-sp-amount-' + index">Supply points</label>
+                          <input
+                            [id]="'catalog-mission-sp-amount-' + index"
+                            type="number"
+                            formControlName="supplyPointsAdvantageAmount"
+                          />
+                          <p class="muted">
+                            Signed raw supply points, not a percent. After apply, supply is never below 1.
+                          </p>
+                        </div>
+                      </div>
+                    }
+                  }
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            id="add-catalog-mission"
+            type="button"
+            class="button-secondary"
+            (click)="addCatalogMission()"
+            [disabled]="missions.length >= 80"
+          >
+            Add mission
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('terrain')"
+            [attr.aria-expanded]="isOpen('terrain')"
+            (click)="toggleSection('terrain')"
+          >
+            Terrain types <span class="required-marker" aria-hidden="true">*</span>
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('terrain')">
+          <p class="muted">
+            At least one terrain type is required. Each type needs a unique color and at least one mission. Pick a
+            catalog mission or type a one-off name with an optional file. Adding a preset replaces the current terrain
+            list with a copy you can then edit. The preset itself is not changed.
+          </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="terrainPreset">Terrain preset</label>
+              <select id="terrainPreset" [formControl]="terrainPresetId">
+                <option value="">Select a preset</option>
+                @for (preset of terrainPresets; track preset.id) {
+                  <option [value]="preset.id">{{ preset.name }}</option>
+                }
+              </select>
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="applySelectedTerrainPreset()"
+              [disabled]="!selectedTerrainPresetId()"
+            >
+              Add preset
+            </button>
+          </div>
+          <div formArrayName="terrainTypes" class="stack">
+            @for (terrain of terrainTypes.controls; track terrain; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('terrain-item-' + index)"
+                  [attr.aria-expanded]="isOpen('terrain-item-' + index)"
+                  (click)="toggleSection('terrain-item-' + index)"
+                >
+                  {{ itemLabel(terrain.controls.name.value, 'Terrain ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('terrain-item-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'terrain-name-' + index">
+                        Terrain {{ index + 1 }} name <span class="required-marker" aria-hidden="true">*</span>
+                      </label>
+                      <input
+                        [id]="'terrain-name-' + index"
+                        formControlName="name"
+                        maxlength="60"
+                        aria-required="true"
+                      />
+                    </div>
+                    <div class="field color-field">
+                      <label [attr.for]="'terrain-color-' + index">Color</label>
+                      <input [id]="'terrain-color-' + index" type="color" formControlName="color" />
+                    </div>
+                    @if (terrainTypes.length > 1) {
+                      <button type="button" class="button-secondary" (click)="removeTerrainType(index)">Remove</button>
+                    }
+                  </div>
+                  <label class="choice-row">
+                    <input type="checkbox" formControlName="isWaterFeature" />
+                    Water feature (reminder for faction special rules)
+                  </label>
+                  <div class="field">
+                    <label [attr.for]="'terrain-supply-' + index">Supply points</label>
+                    <input
+                      [id]="'terrain-supply-' + index"
+                      type="number"
+                      min="0"
+                      max="999"
+                      formControlName="supplyPoints"
+                    />
+                  </div>
+                  <div class="field" formArrayName="missions">
+                    <button
+                      type="button"
+                      class="section-toggle nested-toggle"
+                      [class.has-dirty]="sectionHeaderDirty('terrain-missions-' + index)"
+                      [attr.aria-expanded]="isOpen('terrain-missions-' + index)"
+                      (click)="toggleSection('terrain-missions-' + index)"
+                    >
+                      Missions
+                    </button>
+                    <div [hidden]="!isOpen('terrain-missions-' + index)">
+                      <p class="muted">
+                        Choose a catalog mission or type a one-off name. Optional file upload is for one-off missions.
+                      </p>
+                      @for (mission of missionsOf(terrain).controls; track mission; let missionIndex = $index) {
+                        <div
+                          class="nested-card stack"
+                          [formGroupName]="missionIndex"
+                          (focusout)="onAttachedMissionName(terrain, missionIndex, mission.controls.name.value)"
+                        >
+                          <div class="nested-row">
+                            <div class="field grow">
+                              <label [attr.for]="'terrain-mission-name-' + index + '-' + missionIndex"
+                                >Mission name</label
+                              >
+                              <app-filterable-combobox
+                                [inputId]="'terrain-mission-name-' + index + '-' + missionIndex"
+                                formControlName="name"
+                                [options]="catalogMissionNames()"
+                                placeholder="Search a catalog mission or type a name"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              class="button-secondary"
+                              (click)="removeMission(terrain, missionIndex)"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          @if (!isCatalogMission(mission)) {
+                            <div class="field" [class.is-dirty]="hasPendingMissionFile(mission.controls.id.value)">
+                              <label [attr.for]="'terrain-mission-file-' + index + '-' + missionIndex">
+                                Mission file (optional PDF or Word)
+                              </label>
+                              <input
+                                [id]="'terrain-mission-file-' + index + '-' + missionIndex"
+                                type="file"
+                                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                (change)="onMissionFileSelected(mission.controls.id.value, $event)"
+                              />
+                              @if (missionFileName(mission.controls.id.value); as fileName) {
+                                <p class="muted">Selected: {{ fileName }}</p>
+                              } @else if (hasStoredMissionFile(mission.controls.id.value)) {
+                                <p class="muted">A document is already stored.</p>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                      <button type="button" class="button-secondary" (click)="addMission(terrain)">Add mission</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addTerrainType()"
+            [disabled]="terrainTypes.length >= 50"
+          >
+            Add terrain type
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('structures')"
+            [attr.aria-expanded]="isOpen('structures')"
+            (click)="toggleSection('structures')"
+          >
+            Structures (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('structures')">
+          <p class="muted">
+            Choose a built-in icon or upload a logo image for each structure. Each structure also has a pillaged icon
+            used when that structure is pillaged on the map. Buildable structures may be created with the Build action.
+            Pillageable structures may be pillaged; destructible structures may be destroyed by a second Pillage.
+            Territory missions come from the structure when it has any, otherwise from the terrain type. Adding a preset
+            replaces the current structure list with a copy you can then edit. The preset itself is not changed.
+          </p>
+          <div class="nested-row">
+            <div class="field grow">
+              <label for="structurePreset">Structure preset</label>
+              <select id="structurePreset" [formControl]="structurePresetId">
+                <option value="">Select a preset</option>
+                @for (preset of structurePresets; track preset.id) {
+                  <option [value]="preset.id">{{ preset.name }}</option>
+                }
+              </select>
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="applySelectedStructurePreset()"
+              [disabled]="!selectedStructurePresetId()"
+            >
+              Add preset
+            </button>
+          </div>
+          <div formArrayName="structureTypes" class="stack">
+            @for (structure of structureTypes.controls; track structure; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('structure-item-' + index)"
+                  [attr.aria-expanded]="isOpen('structure-item-' + index)"
+                  (click)="toggleSection('structure-item-' + index)"
+                >
+                  {{ itemLabel(structure.controls.name.value, 'Structure ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('structure-item-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'structure-name-' + index">Structure {{ index + 1 }} name</label>
+                      <input [id]="'structure-name-' + index" formControlName="name" maxlength="60" />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removeStructureType(index)">Remove</button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'structure-points-' + index">Campaign points</label>
+                    <input
+                      [id]="'structure-points-' + index"
+                      type="number"
+                      min="0"
+                      max="999"
+                      formControlName="campaignPoints"
+                    />
+                  </div>
+                  <div class="nested-row">
+                    <div class="field">
+                      <label [attr.for]="'structure-supply-' + index">Supply points</label>
+                      <input
+                        [id]="'structure-supply-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="supplyPoints"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'structure-pillage-supply-' + index">Pillage supply points</label>
+                      <input
+                        [id]="'structure-pillage-supply-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="pillageSupplyPoints"
+                      />
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'structure-destroy-supply-' + index">Destroy supply points</label>
+                      <input
+                        [id]="'structure-destroy-supply-' + index"
+                        type="number"
+                        min="0"
+                        max="999"
+                        formControlName="destroySupplyPoints"
+                      />
+                    </div>
+                  </div>
+                  <div class="choice-row">
+                    <label>
+                      <input type="checkbox" formControlName="isBuildable" />
+                      Buildable
+                    </label>
+                    <label>
+                      <input type="checkbox" formControlName="isPillageable" />
+                      Pillageable
+                    </label>
+                    <label>
+                      <input type="checkbox" formControlName="isDestructible" />
+                      Destructible
+                    </label>
+                  </div>
+                  <fieldset class="field">
+                    <legend>Icon</legend>
+                    <div class="choice-row">
+                      <label>
+                        <input
+                          type="radio"
+                          [attr.name]="'structure-icon-' + index"
+                          [checked]="structure.controls.iconSource.value === 'symbol'"
+                          (change)="setIconSource(structure, 'symbol')"
+                        />
+                        Built-in icon
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          [attr.name]="'structure-icon-' + index"
+                          [checked]="structure.controls.iconSource.value === 'image'"
+                          (change)="setIconSource(structure, 'image')"
+                        />
+                        Uploaded image
+                      </label>
+                    </div>
+                    @if (structure.controls.iconSource.value === 'symbol') {
+                      <div class="nested-row">
+                        <div class="field grow">
+                          <label [attr.for]="'structure-symbol-' + index">Built-in icon</label>
+                          <select [id]="'structure-symbol-' + index" formControlName="builtinSymbol">
+                            @for (symbol of structureSymbols; track symbol.id) {
+                              <option [value]="symbol.id">{{ symbol.label }}</option>
+                            }
+                          </select>
+                        </div>
+                        @if (structure.controls.builtinSymbol.value) {
+                          <app-map-symbol kind="structure" [name]="structure.controls.builtinSymbol.value" />
+                        }
+                      </div>
+                    } @else {
+                      <div class="field" [class.is-dirty]="hasPendingStructureImage(structure.controls.id.value)">
+                        <label [attr.for]="'structure-image-' + index">Logo image</label>
+                        <input
+                          [id]="'structure-image-' + index"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          (change)="onStructureImageSelected(structure.controls.id.value, $event)"
+                        />
+                        <p class="muted">
+                          Maximum size {{ structureImageMaxPx }}px × {{ structureImageMaxPx }}px. Larger images are
+                          shrunk to that size.
+                        </p>
+                        @if (structureImageName(structure.controls.id.value); as fileName) {
+                          <p class="muted">Selected: {{ fileName }}</p>
+                        } @else if (structureImageUrl(structure.controls.id.value); as src) {
+                          <p class="muted">A logo is already stored.</p>
+                          <img class="structure-logo-preview" [src]="src" alt="" />
+                        }
+                      </div>
+                    }
+                  </fieldset>
+                  <fieldset class="field">
+                    <legend>Pillaged icon</legend>
+                    <div class="choice-row">
+                      <label>
+                        <input
+                          type="radio"
+                          [attr.name]="'structure-pillaged-icon-' + index"
+                          [checked]="structure.controls.pillagedIconSource.value === 'symbol'"
+                          (change)="setPillagedIconSource(structure, 'symbol')"
+                        />
+                        Built-in pillaged icon
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          [attr.name]="'structure-pillaged-icon-' + index"
+                          [checked]="structure.controls.pillagedIconSource.value === 'image'"
+                          (change)="setPillagedIconSource(structure, 'image')"
+                        />
+                        Uploaded image
+                      </label>
+                    </div>
+                    @if (structure.controls.pillagedIconSource.value === 'symbol') {
+                      <div class="nested-row">
+                        @if (structure.controls.builtinSymbol.value) {
+                          <app-map-symbol
+                            kind="structure"
+                            [name]="structure.controls.builtinSymbol.value"
+                            [pillaged]="true"
+                          />
+                        }
+                        <p class="muted">Uses the ruined version of the operational built-in icon.</p>
+                      </div>
+                    } @else {
+                      <div class="field" [class.is-dirty]="hasPendingPillagedImage(structure.controls.id.value)">
+                        <label [attr.for]="'structure-pillaged-image-' + index">Pillaged logo image</label>
+                        <input
+                          [id]="'structure-pillaged-image-' + index"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          (change)="onStructurePillagedImageSelected(structure.controls.id.value, $event)"
+                        />
+                        <p class="muted">
+                          Maximum size {{ structureImageMaxPx }}px × {{ structureImageMaxPx }}px. Larger images are
+                          shrunk to that size.
+                        </p>
+                        @if (structurePillagedImageName(structure.controls.id.value); as fileName) {
+                          <p class="muted">Selected: {{ fileName }}</p>
+                        } @else if (structurePillagedImageUrl(structure.controls.id.value); as src) {
+                          <p class="muted">A pillaged logo is already stored.</p>
+                          <img class="structure-logo-preview" [src]="src" alt="" />
+                        }
+                      </div>
+                    }
+                  </fieldset>
+                  <div class="field" formArrayName="missions">
+                    <button
+                      type="button"
+                      class="section-toggle nested-toggle"
+                      [class.has-dirty]="sectionHeaderDirty('structure-missions-' + index)"
+                      [attr.aria-expanded]="isOpen('structure-missions-' + index)"
+                      (click)="toggleSection('structure-missions-' + index)"
+                    >
+                      Missions (optional)
+                    </button>
+                    <div [hidden]="!isOpen('structure-missions-' + index)">
+                      <p class="muted">
+                        Choose a catalog mission or type a one-off name. Optional file upload is for one-off missions.
+                      </p>
+                      @for (mission of missionsOf(structure).controls; track mission; let missionIndex = $index) {
+                        <div
+                          class="nested-card stack"
+                          [formGroupName]="missionIndex"
+                          (focusout)="onAttachedMissionName(structure, missionIndex, mission.controls.name.value)"
+                        >
+                          <div class="nested-row">
+                            <div class="field grow">
+                              <label [attr.for]="'structure-mission-name-' + index + '-' + missionIndex"
+                                >Mission name</label
+                              >
+                              <app-filterable-combobox
+                                [inputId]="'structure-mission-name-' + index + '-' + missionIndex"
+                                formControlName="name"
+                                [options]="catalogMissionNames()"
+                                placeholder="Search a catalog mission or type a name"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              class="button-secondary"
+                              (click)="removeMission(structure, missionIndex)"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          @if (!isCatalogMission(mission)) {
+                            <div class="field" [class.is-dirty]="hasPendingMissionFile(mission.controls.id.value)">
+                              <label [attr.for]="'structure-mission-file-' + index + '-' + missionIndex">
+                                Mission file (optional PDF or Word)
+                              </label>
+                              <input
+                                [id]="'structure-mission-file-' + index + '-' + missionIndex"
+                                type="file"
+                                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                (change)="onMissionFileSelected(mission.controls.id.value, $event)"
+                              />
+                              @if (missionFileName(mission.controls.id.value); as fileName) {
+                                <p class="muted">Selected: {{ fileName }}</p>
+                              } @else if (hasStoredMissionFile(mission.controls.id.value)) {
+                                <p class="muted">A document is already stored.</p>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                      <button type="button" class="button-secondary" (click)="addMission(structure)">
+                        Add mission
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addStructureType()"
+            [disabled]="structureTypes.length >= 50"
+          >
+            Add structure
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('itemObjectives')"
+            [attr.aria-expanded]="isOpen('itemObjectives')"
+            (click)="toggleSection('itemObjectives')"
+          >
+            Item objectives (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('itemObjectives')">
+          <p class="muted">
+            Item objectives are hidden and randomly placed by default. Hidden items stay off player views until found or
+            until a manager in debug mode reveals them. A force that Moves drops a carried item in the territory it
+            left. Place Placed items on the map after you save this campaign.
+          </p>
+          <div formArrayName="itemObjectiveTypes" class="stack">
+            @for (item of itemObjectiveTypes.controls; track item; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [class.has-dirty]="sectionHeaderDirty('item-objective-' + index)"
+                  [attr.aria-expanded]="isOpen('item-objective-' + index)"
+                  (click)="toggleSection('item-objective-' + index)"
+                >
+                  {{ itemLabel(item.controls.name.value, 'Item objective ' + (index + 1)) }}
+                </button>
+                <div [hidden]="!isOpen('item-objective-' + index)">
+                  <div class="nested-row">
+                    <div class="field grow">
+                      <label [attr.for]="'item-objective-name-' + index">Item {{ index + 1 }} name</label>
+                      <input [id]="'item-objective-name-' + index" formControlName="name" maxlength="60" />
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removeItemObjective(index)">Remove</button>
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'item-objective-points-' + index">Campaign points</label>
+                    <input
+                      [id]="'item-objective-points-' + index"
+                      type="number"
+                      min="0"
+                      max="999"
+                      formControlName="campaignPoints"
+                    />
+                  </div>
+                  <fieldset class="field">
+                    <legend>Logo</legend>
+                    <div class="choice-row">
+                      <label>
+                        <input
+                          type="radio"
+                          [attr.name]="'item-icon-' + index"
+                          [checked]="item.controls.iconSource.value === 'symbol'"
+                          (change)="setItemIconSource(item, 'symbol')"
+                        />
+                        Built-in icon
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          [attr.name]="'item-icon-' + index"
+                          [checked]="item.controls.iconSource.value === 'image'"
+                          (change)="setItemIconSource(item, 'image')"
+                        />
+                        Uploaded image
+                      </label>
+                    </div>
+                    @if (item.controls.iconSource.value === 'symbol') {
+                      <div class="nested-row">
+                        <div class="field grow">
+                          <label [attr.for]="'item-objective-symbol-' + index">Built-in icon</label>
+                          <select [id]="'item-objective-symbol-' + index" formControlName="builtinSymbol">
+                            @for (symbol of itemObjectiveSymbols; track symbol.id) {
+                              <option [value]="symbol.id">{{ symbol.label }}</option>
+                            }
+                          </select>
+                        </div>
+                        <div class="field color-field">
+                          <label [attr.for]="'item-objective-color-' + index">Color</label>
+                          <input [id]="'item-objective-color-' + index" type="color" formControlName="color" />
+                        </div>
+                        <app-map-symbol
+                          kind="item"
+                          [name]="item.controls.builtinSymbol.value"
+                          [style.color]="item.controls.color.value"
+                        />
+                      </div>
+                    } @else {
+                      <div class="field" [class.is-dirty]="hasPendingItemImage(item.controls.id.value)">
+                        <label [attr.for]="'item-objective-image-' + index">Logo image (50×50)</label>
+                        <input
+                          [id]="'item-objective-image-' + index"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          (change)="onItemObjectiveImageSelected(item.controls.id.value, $event)"
+                        />
+                        @if (pendingItemObjectiveImageName(item.controls.id.value); as pending) {
+                          <p class="muted">Selected: {{ pending }}</p>
+                        } @else if (itemObjectiveImageUrl(item.controls.id.value); as src) {
+                          <img class="structure-logo-preview" [src]="src" alt="" />
+                        }
+                      </div>
+                    }
+                  </fieldset>
+                  <div class="field">
+                    <label [attr.for]="'item-objective-placement-' + index">Placement</label>
+                    <select [id]="'item-objective-placement-' + index" formControlName="placement">
+                      <option value="Random">Random</option>
+                      <option value="Placed">Placed on the map</option>
+                    </select>
+                  </div>
+                  <label class="choice-row">
+                    <input type="checkbox" formControlName="isHiddenUntilFound" />
+                    Hidden until found
+                  </label>
+                  <label class="choice-row">
+                    <input type="checkbox" formControlName="allowOnSpawn" />
+                    Allowed on a spawn location
+                  </label>
+                  <div class="field">
+                    <label [attr.for]="'item-objective-flavor-' + index">Flavor or lore text</label>
+                    <textarea
+                      [id]="'item-objective-flavor-' + index"
+                      formControlName="flavorText"
+                      maxlength="2000"
+                      rows="3"
+                    ></textarea>
+                  </div>
+                  <fieldset class="field">
+                    <legend>Faction special rules</legend>
+                    @for (rule of assignedSpecialRules(item.controls.specialRuleIds); track rule.id) {
+                      <div class="nested-row">
+                        <p class="grow">{{ rule.name }}</p>
+                        <button
+                          type="button"
+                          class="button-secondary"
+                          (click)="removeAssignedSpecialRule(item.controls.specialRuleIds, rule.id)"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    }
+                    <div class="nested-row">
+                      <div class="field grow">
+                        <label [attr.for]="'item-special-rule-' + index">Add faction special rule</label>
+                        <app-filterable-combobox
+                          [inputId]="'item-special-rule-' + index"
+                          [formControl]="pickControl(item.controls.id.value)"
+                          [options]="assignableSpecialRuleNames(item.controls.specialRuleIds)"
+                          placeholder="Search or type a name"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        class="button-secondary"
+                        (click)="assignSpecialRuleByName(item.controls.specialRuleIds, item.controls.id.value)"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </fieldset>
+                  <div class="field" formArrayName="choices">
+                    <p class="muted">
+                      Optional holder choices. One result is used as-is; several results pick one at random. Destroying
+                      an item removes it from the map and awards no points.
+                    </p>
+                    @for (choice of item.controls.choices.controls; track choice; let choiceIndex = $index) {
+                      <div class="nested-card stack" [formGroupName]="choiceIndex">
+                        <div class="nested-row">
+                          <div class="field grow">
+                            <label [attr.for]="'item-choice-name-' + index + '-' + choiceIndex">Choice name</label>
+                            <input
+                              [id]="'item-choice-name-' + index + '-' + choiceIndex"
+                              formControlName="name"
+                              maxlength="60"
+                            />
+                          </div>
+                          <button type="button" class="button-secondary" (click)="removeItemChoice(item, choiceIndex)">
+                            Remove
+                          </button>
+                        </div>
+                        <div formArrayName="results" class="stack">
+                          @for (result of choice.controls.results.controls; track result; let resultIndex = $index) {
+                            <div class="nested-card stack" [formGroupName]="resultIndex">
+                              <div class="nested-row">
+                                <div class="field grow">
+                                  <label
+                                    [attr.for]="'item-result-flavor-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    >Result flavor</label
+                                  >
+                                  <textarea
+                                    [id]="'item-result-flavor-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    formControlName="flavorText"
+                                    maxlength="2000"
+                                    rows="2"
+                                  ></textarea>
+                                </div>
+                                <button
+                                  type="button"
+                                  class="button-secondary"
+                                  (click)="removeItemChoiceResult(choice, resultIndex)"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                              <div class="nested-row">
+                                <div class="field grow">
+                                  <label
+                                    [attr.for]="'item-result-state-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    >New state key (optional)</label
+                                  >
+                                  <input
+                                    [id]="'item-result-state-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    formControlName="newStateKey"
+                                    maxlength="60"
+                                  />
+                                </div>
+                                <label class="choice-row">
+                                  <input type="checkbox" formControlName="destroyItem" />
+                                  Destroy this item
+                                </label>
+                              </div>
+                              <div class="nested-row">
+                                <div class="field grow">
+                                  <label
+                                    [attr.for]="'item-result-replace-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    >Replacement item (optional)</label
+                                  >
+                                  <select
+                                    [id]="'item-result-replace-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    formControlName="replacementItemTypeId"
+                                  >
+                                    <option value="">None</option>
+                                    @for (other of itemObjectiveTypes.controls; track other.controls.id.value) {
+                                      @if (
+                                        other.controls.id.value !== item.controls.id.value &&
+                                        other.controls.name.value.trim()
+                                      ) {
+                                        <option [value]="other.controls.id.value">
+                                          {{ other.controls.name.value }}
+                                        </option>
+                                      }
+                                    }
+                                  </select>
+                                </div>
+                                <div class="field grow">
+                                  <label
+                                    [attr.for]="'item-result-private-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    >Granted private objective (optional)</label
+                                  >
+                                  <select
+                                    [id]="'item-result-private-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                    formControlName="grantedPrivateObjectiveTypeId"
+                                  >
+                                    <option value="">None</option>
+                                    @for (
+                                      objective of privateObjectiveTypes.controls;
+                                      track objective.controls.id.value
+                                    ) {
+                                      @if (objective.controls.name.value.trim()) {
+                                        <option [value]="objective.controls.id.value">
+                                          {{ objective.controls.name.value }}
+                                        </option>
+                                      }
+                                    }
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                          }
+                          <button
+                            type="button"
+                            class="button-secondary"
+                            (click)="addItemChoiceResult(choice)"
+                            [disabled]="choice.controls.results.length >= 12"
+                          >
+                            Add result
+                          </button>
+                        </div>
+                      </div>
+                    }
+                    <button
+                      type="button"
+                      class="button-secondary"
+                      (click)="addItemChoice(item)"
+                      [disabled]="item.controls.choices.length >= 10"
+                    >
+                      Add choice
+                    </button>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+          <button
+            type="button"
+            class="button-secondary"
+            (click)="addItemObjective()"
+            [disabled]="itemObjectiveTypes.length >= 50"
+          >
+            Add item objective
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('links')"
+            [attr.aria-expanded]="isOpen('links')"
+            (click)="toggleSection('links')"
+          >
+            External links (optional)
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('links')">
+          <p class="muted">Up to 20 labeled http or https links.</p>
+          <div formArrayName="links" class="stack">
+            @for (link of links.controls; track link; let index = $index) {
+              <div class="nested-card stack" [formGroupName]="index">
+                <div class="nested-row">
+                  <div class="field grow">
+                    <label [attr.for]="'link-label-' + index">Link {{ index + 1 }} label</label>
+                    <input [id]="'link-label-' + index" formControlName="label" maxlength="80" />
+                  </div>
+                  <button type="button" class="button-secondary" (click)="removeLink(index)">Remove</button>
+                </div>
+                <div class="field">
+                  <label [attr.for]="'link-url-' + index">Link {{ index + 1 }} URL</label>
+                  <input [id]="'link-url-' + index" formControlName="url" maxlength="2048" />
+                </div>
+              </div>
+            }
+          </div>
+          <button type="button" class="button-secondary" (click)="addLink()" [disabled]="links.length >= 20">
+            Add link
+          </button>
+        </div>
+      </fieldset>
+
+      <fieldset class="field setup-section">
+        <legend>
+          <button
+            type="button"
+            class="section-toggle"
+            [class.has-dirty]="sectionHeaderDirty('map')"
+            [attr.aria-expanded]="isOpen('map')"
+            (click)="toggleSection('map')"
+          >
+            Campaign map <span class="required-marker" aria-hidden="true">*</span>
+          </button>
+        </legend>
+        <div [hidden]="!isOpen('map')">
+          <div class="field" [class.is-dirty]="isMapDirty()">
+            <label for="map">Campaign map image</label>
+            <input id="map" type="file" accept="image/jpeg,image/png,image/webp" (change)="onMapSelected($event)" />
+            <p class="muted">A map image is required to create a campaign. JPEG, PNG, or WebP, up to 20 MB.</p>
+            @if (mapPreviewUrl(); as src) {
+              <app-campaign-map-preview [imageUrl]="src" />
+            }
+            @if (mapFileName()) {
+              <p class="muted">Selected: {{ mapFileName() }}</p>
+            } @else if (hasExistingMap()) {
+              <p class="muted">A map is already stored. Upload a new file to replace it.</p>
+            }
+          </div>
+        </div>
+      </fieldset>
+    </form>
+  }
+
+  @if (isAdministrator()) {
+    <app-save-campaign-preset-dialog
+      [open]="savePresetOpen()"
+      [saving]="saving()"
+      (closed)="closeSavePresetDialog()"
+      (confirmed)="confirmSavePreset($event)"
+    />
+  }
+</section>

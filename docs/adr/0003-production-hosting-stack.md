@@ -19,7 +19,7 @@ Prepare the repository for:
 - Resend for transactional email
 - Optional Google, Facebook, and Discord login already decided in ADR 0002
 
-Keep background work in `Campaign.Api` hosted services (email outbox). Do not add a Worker
+Keep background work in `MapAndMuster.Api` hosted services (email outbox). Do not add a Worker
 project, object-storage provider, or extra runtime until a later ADR.
 
 ## Consequences
@@ -28,3 +28,5 @@ project, object-storage provider, or extra runtime until a later ADR.
 - Production email is selected through `Email:Provider=Resend`; local Mailpit SMTP remains.
 - Operators must reverse-proxy `/api` onto the Angular origin for cookie authentication.
 - Object storage remains local disk (`Storage:RootPath`) until a later decision.
+- `render.yaml` describes the production API, static site, and Postgres 17. Applying it is a
+  human billing action (`docs/human-deployment-checklist.md`).

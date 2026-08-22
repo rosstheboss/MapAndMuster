@@ -1,0 +1,97 @@
+namespace MapAndMuster.Application.Common;
+
+/// <summary>
+/// Stable machine-readable error codes returned by identity use cases.
+/// </summary>
+public static class ErrorCodes
+{
+    /// <summary>The supplied credentials were rejected.</summary>
+    public const string InvalidCredentials = "auth.invalid_credentials";
+
+    /// <summary>The account is locked after too many failed sign-in attempts.</summary>
+    public const string LockedOut = "auth.locked_out";
+
+    /// <summary>The account email address has not been confirmed.</summary>
+    public const string EmailNotConfirmed = "auth.email_not_confirmed";
+
+    /// <summary>The caller is not authenticated.</summary>
+    public const string Unauthorized = "auth.unauthorized";
+
+    /// <summary>The requested profile does not exist.</summary>
+    public const string ProfileNotFound = "profile.not_found";
+
+    /// <summary>The email address is already registered.</summary>
+    public const string EmailTaken = "email.taken";
+
+    /// <summary>The username is already registered.</summary>
+    public const string UsernameTaken = "username.taken";
+
+    /// <summary>The email address is not valid.</summary>
+    public const string EmailInvalid = "email.invalid";
+
+    /// <summary>The password does not meet complexity requirements.</summary>
+    public const string PasswordInvalid = "password.invalid";
+
+    /// <summary>The current password was not accepted.</summary>
+    public const string CurrentPasswordInvalid = "password.current_invalid";
+
+    /// <summary>Two or more fields failed validation.</summary>
+    public const string ValidationFailed = "validation.failed";
+
+    /// <summary>The profile was modified by another request.</summary>
+    public const string ConcurrencyConflict = "concurrency.conflict";
+
+    /// <summary>The uploaded file type is not allowed.</summary>
+    public const string UploadInvalidType = "upload.invalid_type";
+
+    /// <summary>The uploaded file is too large.</summary>
+    public const string UploadTooLarge = "upload.too_large";
+
+    /// <summary>The uploaded image could not be processed.</summary>
+    public const string UploadInvalidImage = "upload.invalid_image";
+
+    /// <summary>An external login must be linked to an existing verified account.</summary>
+    public const string ExternalLinkRequired = "auth.external_link_required";
+
+    /// <summary>External login completion is required before the session is established.</summary>
+    public const string ExternalProfileIncomplete = "auth.external_profile_incomplete";
+
+    /// <summary>The requested external provider is not configured.</summary>
+    public const string ExternalProviderUnavailable = "auth.external_provider_unavailable";
+
+    /// <summary>The time-zone identifier is not a known IANA zone.</summary>
+    public const string TimeZoneInvalid = "timeZone.invalid";
+
+    /// <summary>The requested campaign does not exist or is not visible to the caller.</summary>
+    public const string CampaignNotFound = "campaign.not_found";
+
+    /// <summary>The caller is a member but lacks permission for the campaign command.</summary>
+    public const string CampaignForbidden = "campaign.forbidden";
+
+    /// <summary>The campaign is not accepting staff-added players.</summary>
+    public const string CampaignJoinClosed = "campaign.join.closed";
+
+    /// <summary>Every player slot is already occupied.</summary>
+    public const string CampaignJoinFull = "campaign.join.full";
+
+    /// <summary>The private-campaign join password was missing or incorrect.</summary>
+    public const string CampaignJoinPasswordInvalid = "campaign.join.password.invalid";
+
+    /// <summary>The caller is already a member of the campaign.</summary>
+    public const string CampaignAlreadyMember = "campaign.join.already_member";
+
+    /// <summary>The target user is not a kickable player in the campaign.</summary>
+    public const string CampaignMemberNotFound = "campaign.member.not_found";
+
+    /// <summary>The requested test account does not exist.</summary>
+    public const string TestAccountNotFound = "auth.test_account.not_found";
+
+    /// <summary>The caller cannot impersonate or stop impersonation.</summary>
+    public const string ImpersonationForbidden = "auth.impersonation.forbidden";
+
+    /// <summary>The campaign has launched and the requested setup field is locked.</summary>
+    public const string CampaignLocked = "campaign.locked";
+
+    /// <summary>A campaign preset package is missing, too large, or not a valid application schema.</summary>
+    public const string CampaignPresetPackageInvalid = "campaign.preset.package.invalid";
+}

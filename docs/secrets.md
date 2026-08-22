@@ -9,6 +9,7 @@ appear in Git, Dockerfiles, images, logs, health responses, or Angular source.
 - SMTP passwords
 - Resend API keys
 - OAuth client secrets and app secrets
+- `Identity:BootstrapAdminPassword`
 - Cookie/signing keys if they are ever rotated out of the framework defaults
 - Email confirmation and password-reset tokens
 - Player email addresses in fixtures or logs
@@ -19,7 +20,7 @@ appear in Git, Dockerfiles, images, logs, health responses, or Angular source.
 
 Preferred options:
 
-1. `dotnet user-secrets` on `src/Campaign.Api` (user secrets id `campaign-api-development`)
+1. `dotnet user-secrets` on `src/MapAndMuster.Api` (user secrets id `mapandmuster-api-development`)
 2. A gitignored `.env` copied from `.env.example`
 
 `docker-compose.yml` uses the well-known local password `campaign`. That value is for the developer
@@ -27,11 +28,13 @@ workstation only.
 
 ## Production and staging
 
-Enter secrets in the host (Render environment groups or equivalent). Staging must use a different
+Enter secrets in the host (Render Dashboard environment variables, including Blueprint
+`sync: false` prompts). Do not put them in `render.yaml`. Staging must use a different
 PostgreSQL database, Resend key, From address, and OAuth clients than production.
 
 Startup validation in Production and Staging names missing keys such as
-`ConnectionStrings:Campaign` and `Email:Resend:ApiKey`. It never prints the values.
+`ConnectionStrings:Campaign`, `Email:Resend:ApiKey`, and `Identity:BootstrapAdminPassword`.
+It never prints the values.
 
 ## Logging
 

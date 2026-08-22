@@ -1,4 +1,4 @@
-# Campaign Map Application - AI Development Template
+# Map & Muster
 
 This repository is a generic, MIT-licensed map-campaign application built with .NET 10/C# 14,
 Angular 22, and PostgreSQL.
@@ -9,21 +9,21 @@ provider-specific files are intentionally thin adapters.
 ## Solution
 
 ```text
-Campaign.sln
+MapAndMuster.sln
 src/
-  Campaign.Domain/
-  Campaign.Application/
-  Campaign.Infrastructure/
-  Campaign.Api/
-  Campaign.Web/
+  MapAndMuster.Domain/
+  MapAndMuster.Application/
+  MapAndMuster.Infrastructure/
+  MapAndMuster.Api/
+  MapAndMuster.Web/
 tests/
-  Campaign.Backend.UnitTests/
-  Campaign.Api.IntegrationTests/
-  Campaign.Web.E2E/
+  MapAndMuster.Backend.UnitTests/
+  MapAndMuster.Api.IntegrationTests/
+  MapAndMuster.Web.E2E/
 docs/
 ```
 
-Only `Campaign.Api` and `Campaign.Web` are deployed applications. The other production
+Only `MapAndMuster.Api` and `MapAndMuster.Web` are deployed applications. The other production
 projects are class libraries that enforce architectural boundaries.
 
 See `docs/SETUP.md` for prerequisites, local services, and verification. Review

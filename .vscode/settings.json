@@ -24,6 +24,6 @@
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "eslint.workingDirectories": ["src/Campaign.Web"],
-  "dotnet.defaultSolution": "Campaign.sln"
+  "eslint.workingDirectories": ["src/MapAndMuster.Web"],
+  "dotnet.defaultSolution": "MapAndMuster.sln"
 }
