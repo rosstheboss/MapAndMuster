@@ -34,7 +34,8 @@ It depends on Application and Domain.
 ### Campaign.Api
 
 HTTP endpoints, request validation, authentication, permission policies, OpenAPI, middleware,
-rate limiting, health checks, dependency injection, and process startup.
+rate limiting, health checks, dependency injection, process startup, and hosted background work
+(email outbox). There is no separate Worker process; see `docs/adr/0003-production-hosting-stack.md`.
 
 It depends on Application and Infrastructure. Endpoints do not contain domain logic.
 
@@ -111,11 +112,12 @@ Modules may initially share a database and process. Keep public module interacti
 
 ## Background work
 
-Database deadlines are authoritative. A worker may prompt transition processing, but every
-transition command must be safe to repeat and must re-check database state.
+Database deadlines are authoritative. A hosted service or later worker may prompt transition
+processing, but every transition command must be safe to repeat and must re-check database state.
 
-Email uses an outbox written in the same transaction as the event that requested it. Delivery
-failure does not roll back campaign state and remains visible for retry/operations.
+Email uses an outbox written in the same transaction as the event that requested it. The API
+process delivers that outbox through SMTP (local Mailpit) or Resend. Delivery failure does not
+roll back campaign state and remains visible for retry/operations.
 
 ## Authentication and authorization
 

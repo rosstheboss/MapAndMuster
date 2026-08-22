@@ -6,8 +6,10 @@ using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
 
+ProductionConfiguration.Validate(builder.Configuration, builder.Environment);
+
 builder.Services.AddOpenApi();
-builder.Services.AddHealthChecks();
+builder.Services.AddCampaignHealthChecks(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddCampaignInfrastructure(builder.Configuration);
 builder.Services.AddCampaignExternalAuthentication(builder.Configuration);
@@ -16,6 +18,11 @@ builder.Services.AddHttpClient("external-avatar", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
 });
+
+if (ForwardedHeadersHosting.ShouldEnable(builder.Configuration, builder.Environment))
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(ForwardedHeadersHosting.Configure);
+}
 
 builder.Services.Configure<FormOptions>(options =>
 {
@@ -80,6 +87,13 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+if (ForwardedHeadersHosting.ShouldEnable(app.Configuration, app.Environment))
+{
+    app.UseForwardedHeaders();
+}
+
+app.UseCampaignCorrelationId();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -99,7 +113,7 @@ if (!app.Environment.IsEnvironment("Testing"))
 
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapHealthChecks("/health");
+app.MapCampaignHealthChecks();
 app.MapAuthEndpoints();
 app.MapProfileEndpoints();
 app.MapExternalAuthEndpoints();

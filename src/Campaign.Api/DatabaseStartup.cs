@@ -10,7 +10,12 @@ namespace Campaign.Api;
 public static class DatabaseStartup
 {
     /// <summary>
-    /// Applies migrations. Skips when the connection string is the unconfigured placeholder.
+    /// Configuration key that controls whether the API applies migrations during process startup.
+    /// </summary>
+    public const string ApplyMigrationsKey = "Database:ApplyMigrationsOnStartup";
+
+    /// <summary>
+    /// Applies migrations when enabled, then runs identity maintenance. Skips when the connection string is empty.
     /// </summary>
     /// <param name="app">The application.</param>
     /// <returns>A task that completes when migrations have been considered.</returns>
@@ -25,8 +30,13 @@ public static class DatabaseStartup
         }
 
         using var scope = app.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<CampaignDbContext>();
-        await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+        var applyMigrations = app.Configuration.GetValue(ApplyMigrationsKey, true);
+        if (applyMigrations)
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<CampaignDbContext>();
+            await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+        }
+
         var identity = scope.ServiceProvider.GetRequiredService<IdentityMaintenance>();
         await identity.EnsureAsync(CancellationToken.None).ConfigureAwait(false);
     }

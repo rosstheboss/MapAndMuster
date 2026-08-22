@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Campaign.Infrastructure;
 
@@ -38,15 +39,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.Configure<PublicWebOptions>(configuration.GetSection(PublicWebOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("Campaign");
-        var smtpHost = configuration[$"{EmailOptions.SectionName}:SmtpHost"];
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             connectionString = "Host=127.0.0.1;Database=campaign_unconfigured;Username=campaign;Password=campaign";
         }
-        else if (!string.IsNullOrWhiteSpace(smtpHost))
-        {
-            services.AddHostedService<OutboxEmailProcessor>();
-        }
+
+        RegisterEmailDelivery(services, configuration);
 
         services.AddDbContext<CampaignDbContext>(options => options.UseNpgsql(connectionString));
         services
@@ -86,5 +84,33 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<ICampaignDocumentProcessor, CampaignDocumentProcessor>();
 
         return services;
+    }
+
+    private static void RegisterEmailDelivery(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddHttpClient(ResendEmailSender.HttpClientName, client =>
+        {
+            client.BaseAddress = new Uri("https://api.resend.com/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+        services.AddTransient<IEmailSender>(CreateEmailSender);
+
+        var emailOptions = configuration.GetSection(EmailOptions.SectionName).Get<EmailOptions>() ?? new EmailOptions();
+        if (!string.IsNullOrWhiteSpace(configuration.GetConnectionString("Campaign")) && emailOptions.IsDeliveryConfigured)
+        {
+            services.AddHostedService<OutboxEmailProcessor>();
+        }
+    }
+
+    private static IEmailSender CreateEmailSender(IServiceProvider services)
+    {
+        var options = services.GetRequiredService<IOptions<EmailOptions>>().Value;
+        if (options.UsesResend)
+        {
+            var factory = services.GetRequiredService<IHttpClientFactory>();
+            return new ResendEmailSender(factory.CreateClient(ResendEmailSender.HttpClientName), options);
+        }
+
+        return new SmtpEmailSender(options);
     }
 }

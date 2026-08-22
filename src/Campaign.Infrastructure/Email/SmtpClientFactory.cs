@@ -4,7 +4,7 @@ using System.Net.Mail;
 namespace Campaign.Infrastructure.Email;
 
 /// <summary>
-/// Creates SMTP clients from configured email options. Production providers remain an operations decision.
+/// Creates SMTP clients from configured email options.
 /// </summary>
 
 public static class SmtpClientFactory

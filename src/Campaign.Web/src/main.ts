@@ -1,7 +1,9 @@
 import { bootstrapApplication } from '@angular/platform-browser';
-import { appConfig } from './app/app.config';
 import { App } from './app/app';
+import { createAppConfig } from './app/app.config';
+import { loadPublicRuntimeConfig } from './app/core/config/public-runtime-config';
 
-bootstrapApplication(App, appConfig).catch((err: unknown) => {
+const runtimeConfig = await loadPublicRuntimeConfig();
+bootstrapApplication(App, createAppConfig(runtimeConfig)).catch((err: unknown) => {
   console.error(err);
 });

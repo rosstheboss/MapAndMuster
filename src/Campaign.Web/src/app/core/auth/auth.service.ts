@@ -2,6 +2,8 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
+import { apiUrl, PUBLIC_RUNTIME_CONFIG } from '../config/public-runtime-config';
+
 import type {
   ErrorResponse,
   ExternalProvider,
@@ -16,6 +18,7 @@ import type {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly runtimeConfig = inject(PUBLIC_RUNTIME_CONFIG);
 
   readonly currentUser = signal<OwnProfile | null>(null);
   readonly sessionChecked = signal(false);
@@ -189,7 +192,9 @@ export class AuthService {
   }
 
   startExternalLogin(provider: string): void {
-    window.location.assign(`/api/auth/external/${encodeURIComponent(provider)}/challenge`);
+    window.location.assign(
+      apiUrl(`/api/auth/external/${encodeURIComponent(provider)}/challenge`, this.runtimeConfig.apiBaseUrl),
+    );
   }
 
   async getPendingExternalProfile(): Promise<PendingExternalProfile> {

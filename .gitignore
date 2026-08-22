@@ -17,4 +17,6 @@ appsettings.Development.local.json
 *.suo
 uploads/
 app-data/
+artifacts/
+
 

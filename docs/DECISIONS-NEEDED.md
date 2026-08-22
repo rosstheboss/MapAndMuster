@@ -82,6 +82,8 @@ in an ADR or the relevant domain document and update tests.
 
 ## Operations
 
-18. Select production hosting, object storage, email provider, and background-job mechanism.
+18. Partially resolved: first production hosting is Render, DNS is Cloudflare, transactional email
+    is Resend, and background work stays in the API process. Object storage is still local disk.
+    See `docs/adr/0003-production-hosting-stack.md`.
 19. Decide registration anti-abuse policy and campaign invitation/join-code workflow.
 20. Select a UI component library, if any, after an initial custom-CSS prototype.

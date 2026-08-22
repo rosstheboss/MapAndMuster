@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Mail;
 using System.Text.Json;
 using Campaign.Application.Ports;
 using Campaign.Infrastructure.Persistence;
@@ -25,7 +23,7 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
     /// Initializes the processor.
     /// </summary>
     /// <param name="scopeFactory">The scope factory.</param>
-    /// <param name="emailOptions">SMTP options.</param>
+    /// <param name="emailOptions">Email options.</param>
     /// <param name="webOptions">Public web origin options.</param>
     /// <param name="logger">The logger.</param>
     public OutboxEmailProcessor(
@@ -47,7 +45,7 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (string.IsNullOrWhiteSpace(_emailOptions.Value.SmtpHost))
+        if (!_emailOptions.Value.IsDeliveryConfigured)
         {
             return;
         }
@@ -78,6 +76,7 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CampaignDbContext>();
         var clock = scope.ServiceProvider.GetRequiredService<IClock>();
+        var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
 
         var pending = await dbContext.OutboxMessages
             .Where(message => message.ProcessedUtc == null)
@@ -92,9 +91,8 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
             {
                 var payload = JsonSerializer.Deserialize<OutboxEmailPayload>(message.Payload)
                     ?? throw new InvalidOperationException("The outbox payload was empty.");
-                using var client = CreateClient();
-                using var mail = CreateMail(message.Type, payload);
-                await client.SendMailAsync(mail, cancellationToken).ConfigureAwait(false);
+                var mail = OutboxEmailComposer.Compose(message.Type, payload, _webOptions.Value);
+                await emailSender.SendAsync(mail, cancellationToken).ConfigureAwait(false);
                 message.ProcessedUtc = clock.UtcNow;
                 message.LastError = null;
             }
@@ -111,43 +109,6 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
         {
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-    }
-
-    private SmtpClient CreateClient()
-    {
-        return SmtpClientFactory.Create(_emailOptions.Value);
-    }
-
-    private MailMessage CreateMail(string type, OutboxEmailPayload payload)
-    {
-        var origin = _webOptions.Value.Origin.TrimEnd('/');
-        string subject;
-        string body;
-        if (type == EmailOutbox.UserNoticeType)
-        {
-            subject = payload.Subject ?? "Campaign notice";
-            var path = payload.Path ?? "/";
-            var link = path.StartsWith('/') ? $"{origin}{path}" : $"{origin}/{path}";
-            body = $"{payload.Body ?? string.Empty} Open: {link}";
-        }
-        else
-        {
-            var encodedToken = WebUtility.UrlEncode(payload.Token);
-            if (type == EmailOutbox.ConfirmEmailType)
-            {
-                subject = "Confirm your campaign account";
-                var link = $"{origin}/confirm-email?userId={payload.UserId}&token={encodedToken}";
-                body = $"Confirm your email by opening this link: {link}";
-            }
-            else
-            {
-                subject = "Reset your campaign password";
-                var link = $"{origin}/reset-password?userId={payload.UserId}&token={encodedToken}";
-                body = $"Reset your password by opening this link: {link}";
-            }
-        }
-
-        return new MailMessage(_emailOptions.Value.FromAddress, payload.Email, subject, body);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "The email outbox processor failed a batch.")]

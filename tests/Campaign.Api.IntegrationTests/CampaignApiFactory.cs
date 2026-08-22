@@ -41,6 +41,7 @@ public sealed class CampaignApiFactory : WebApplicationFactory<Program>, IAsyncL
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:Campaign", _postgres.GetConnectionString());
         builder.UseSetting("Email:SmtpHost", string.Empty);
+        builder.UseSetting("Email:Provider", "Smtp");
         builder.UseSetting("Storage:RootPath", _storagePath);
         builder.UseSetting("PublicWeb:Origin", "http://localhost");
     }

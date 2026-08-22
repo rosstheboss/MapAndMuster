@@ -2,7 +2,9 @@ import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { vi } from 'vitest';
 
+import { PUBLIC_RUNTIME_CONFIG } from '../config/public-runtime-config';
 import { AuthService, readApiError, readApiErrorMessages } from './auth.service';
 
 describe('AuthService', () => {
@@ -44,6 +46,29 @@ describe('AuthService', () => {
     await loginPromise;
     expect(service.currentUser()?.username).toBe('ada');
     http.verify();
+  });
+
+  it('starts external login on the configured API origin', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: PUBLIC_RUNTIME_CONFIG, useValue: { apiBaseUrl: 'https://api.example.test' } },
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    });
+    const assign = vi.fn();
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, assign },
+    });
+
+    TestBed.inject(AuthService).startExternalLogin('Google');
+
+    expect(assign).toHaveBeenCalledWith('https://api.example.test/api/auth/external/Google/challenge');
+    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
   });
 
   it('reads API error messages', () => {

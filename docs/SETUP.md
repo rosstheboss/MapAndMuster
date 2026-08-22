@@ -46,11 +46,11 @@ Start PostgreSQL and the development email catcher with:
 docker compose up -d
 ```
 
-Copy `.env.example` to a gitignored `.env` file, or store the same values in ASP.NET user secrets for `Campaign.Api`. Do not commit production credentials.
+Copy `.env.example` to a gitignored `.env` file, or store the same values in ASP.NET user secrets for `Campaign.Api`. Do not commit production credentials. Environment and secret conventions are in `docs/environments.md` and `docs/secrets.md`.
 
-Restore the local `dotnet-ef` tool with `dotnet tool restore` from the repository root when adding or inspecting EF Core migrations.
+Restore the local `dotnet-ef` tool with `dotnet tool restore` from the repository root when adding or inspecting EF Core migrations. Production schema deployment uses `eng/build-migrations.*` and `eng/run-migrations.*`; see `docs/deployment.md`.
 
-The Angular dev server proxies `/api` to `http://localhost:5219`. Start PostgreSQL and Mailpit, then run `Campaign.Api` with the **http** launch profile (`http://localhost:5219`) so migrations apply. In Development the API does not redirect HTTP to HTTPS; that redirect would send the browser to `https://localhost:7247` and fail CORS from `http://localhost:4200`. Then run `npm --prefix src/Campaign.Web start`. Confirmation and password-reset emails appear in Mailpit at `http://localhost:8025`.
+The Angular dev server proxies `/api` to `http://localhost:5219`. Start PostgreSQL and Mailpit, then run `Campaign.Api` with the **http** launch profile (`http://localhost:5219`) so migrations apply. In Development the API does not redirect HTTP to HTTPS; that redirect would send the browser to `https://localhost:7247` and fail CORS from `http://localhost:4200`. Then run `npm --prefix src/Campaign.Web start`. Confirmation and password-reset emails appear in Mailpit at `http://localhost:8025`. The API health endpoints are `GET /health/live`, `GET /health/ready`, and `GET /health`.
 
 To send those messages to a real inbox while testing, override SMTP in user secrets (do not commit credentials). Restart `Campaign.Api` after changing them. Sign up with the address that should receive the mail, or call resend-confirmation for an existing unconfirmed account. Example Gmail app-password settings:
 
@@ -63,9 +63,9 @@ dotnet user-secrets set "Email:SmtpUsername" "you@gmail.com" --project src/Campa
 dotnet user-secrets set "Email:SmtpPassword" "your-app-password" --project src/Campaign.Api
 ```
 
-Leave `Email:SmtpUsername` empty to keep using Mailpit. A production email provider is still an open operations decision.
+Leave `Email:SmtpUsername` empty to keep using Mailpit. Production uses Resend (`Email:Provider=Resend` and `Email:Resend:ApiKey`); see `docs/adr/0003-production-hosting-stack.md`.
 
-Google, Facebook, and Discord sign-in are optional. Leave those settings empty for email-only development. To enable a provider, set the client id/secret (Facebook uses AppId/AppSecret) in user secrets and register these callback URLs with the provider:
+Google, Facebook, and Discord sign-in are optional. Leave those settings empty for email-only development. To enable a provider, set the client id/secret (Facebook uses AppId/AppSecret) in user secrets and register these callback URLs with the provider. Production callback registration is in `docs/authentication-production.md`.
 
 - `http://localhost:4200/api/auth/external/google/callback`
 - `http://localhost:4200/api/auth/external/facebook/callback`
