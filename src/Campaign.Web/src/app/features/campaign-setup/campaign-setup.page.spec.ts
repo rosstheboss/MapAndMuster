@@ -10,6 +10,7 @@ import { FACTION_PRESETS, WARHAMMER_OLD_WORLD_PRESET_ID } from '../../core/campa
 import { HUNT_IN_ESTALIA_CAMPAIGN_PRESET_ID } from '../../core/campaigns/campaign-presets';
 import { STANDARD_STRUCTURES_PRESET_ID } from '../../core/campaigns/structure-presets';
 import { STANDARD_TERRAIN_PRESET_ID, TERRAIN_PRESETS } from '../../core/campaigns/terrain-presets';
+import type { CampaignDetail } from '../../core/campaigns/campaign.models';
 import { CampaignSetupPage } from './campaign-setup.page';
 
 function factionNames(compiled: HTMLElement): string[] {
@@ -1246,7 +1247,7 @@ describe('CampaignSetupPage edit', () => {
   });
 });
 
-function scheduledEditCampaign(campaignId: string) {
+function scheduledEditCampaign(campaignId: string): CampaignDetail {
   return {
     id: campaignId,
     name: 'Border War',

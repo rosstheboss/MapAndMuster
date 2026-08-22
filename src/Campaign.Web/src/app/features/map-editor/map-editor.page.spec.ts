@@ -1378,9 +1378,7 @@ describe('MapEditorPage', () => {
     page.onTerritorySelect({ id: 't1', additive: false });
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
-    const labels = [...compiled.querySelectorAll('#territory-spawn option')].map((option) =>
-      option.textContent?.trim(),
-    );
+    const labels = [...compiled.querySelectorAll('#territory-spawn option')].map((option) => option.textContent.trim());
     expect(labels).toContain('Daemons of Chaos - Khorne');
     expect(labels).toContain('Daemons of Chaos - Nurgle');
     expect(labels).not.toContain('Daemons of Chaos');
@@ -1452,9 +1450,8 @@ describe('MapEditorPage', () => {
 
     const saving = page.save();
     const put = http.expectOne(`/api/campaigns/${campaignId}/map/graph`);
-    expect(
-      put.request.body.territories.map((territory: { spawnSubfaction: string | null }) => territory.spawnSubfaction),
-    ).toEqual(['Khorne', 'Nurgle']);
+    const body = put.request.body as { territories: { spawnSubfaction: string | null }[] };
+    expect(body.territories.map((territory) => territory.spawnSubfaction)).toEqual(['Khorne', 'Nurgle']);
     put.flush({
       ...emptyGraph,
       revision: 3,
