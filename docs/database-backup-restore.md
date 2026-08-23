@@ -70,6 +70,9 @@ After restore:
 2. Sign in, open a campaign list, and confirm row counts you expect.
 3. Only then consider the backup valid.
 
+Restore uses `--no-owner --no-acl` so Render's `mapandmuster_user` grants are not applied
+on a local or staging database that does not have that role. Tables and data still restore.
+
 Never run `pg-restore` against production to "test" a dump.
 
 ## How to decide the backup is good

@@ -40,6 +40,6 @@ docker run --rm \
   -e BACKUP_FILE="${backup_file}" \
   -v "${backup_dir}:/backup" \
   postgres:17 \
-  sh -c 'pg_restore --clean --if-exists --no-owner --dbname="$PGDATABASE_URI" "/backup/$BACKUP_FILE"'
+  sh -c 'pg_restore --clean --if-exists --no-owner --no-acl --dbname="$PGDATABASE_URI" "/backup/$BACKUP_FILE"'
 
 echo "Restore finished. Validate the target application before considering the backup good."

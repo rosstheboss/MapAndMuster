@@ -30,7 +30,7 @@ docker run --rm `
     -e "BACKUP_FILE=$($backupItem.Name)" `
     -v "$($backupItem.DirectoryName):/backup" `
     postgres:17 `
-    sh -c 'pg_restore --clean --if-exists --no-owner --dbname="$PGDATABASE_URI" "/backup/$BACKUP_FILE"'
+    sh -c 'pg_restore --clean --if-exists --no-owner --no-acl --dbname="$PGDATABASE_URI" "/backup/$BACKUP_FILE"'
 
 if ($LASTEXITCODE -ne 0) {
     throw "pg_restore failed with exit code $LASTEXITCODE."
