@@ -24,7 +24,9 @@ export class AllCampaignsPage {
   private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly loading = signal(true);
+  protected readonly chatLoading = signal(true);
   protected readonly error = signal<string | null>(null);
+  protected readonly chatLoadError = signal<string | null>(null);
   protected readonly campaigns = signal<CampaignListItem[]>([]);
   protected readonly chat = signal<SiteChatBoard | null>(null);
   protected readonly chatSending = signal(false);
@@ -38,7 +40,8 @@ export class AllCampaignsPage {
     const prefs = this.siteChatPrefs.read(this.auth.currentUser()?.preferredChatLanguage);
     this.composeLanguage.set(prefs.composeLanguage);
     this.visibleLanguages.set([...prefs.visibleLanguages]);
-    void this.load();
+    void this.loadCampaigns();
+    void this.loadChat();
   }
 
   protected viewerUserId(): string | null {
@@ -50,7 +53,7 @@ export class AllCampaignsPage {
   }
 
   protected reload(): void {
-    void this.load();
+    void this.loadCampaigns();
   }
 
   protected onChatExpanded(open: boolean): void {
@@ -95,18 +98,28 @@ export class AllCampaignsPage {
     });
   }
 
-  private async load(): Promise<void> {
+  private async loadCampaigns(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const [campaigns, chat] = await Promise.all([this.campaignsApi.listAll(), this.siteChatApi.getBoard()]);
-      this.campaigns.set(campaigns);
-      this.chat.set(chat);
-      this.startChatPolling();
+      this.campaigns.set(await this.campaignsApi.listAll());
     } catch (error: unknown) {
       this.error.set(readApiError(error, 'Unable to load campaigns.'));
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  private async loadChat(): Promise<void> {
+    this.chatLoading.set(true);
+    this.chatLoadError.set(null);
+    try {
+      this.chat.set(await this.siteChatApi.getBoard());
+      this.startChatPolling();
+    } catch (error: unknown) {
+      this.chatLoadError.set(readApiError(error, 'Unable to load public chat.'));
+    } finally {
+      this.chatLoading.set(false);
     }
   }
 

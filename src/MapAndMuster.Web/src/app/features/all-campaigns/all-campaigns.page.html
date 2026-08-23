@@ -7,7 +7,11 @@
     <p class="error error-banner" role="alert">{{ error() }}</p>
   }
 
-  @if (chat(); as board) {
+  @if (chatLoading()) {
+    <p>Loading public chat...</p>
+  } @else if (chatLoadError()) {
+    <p class="error error-banner" role="alert">{{ chatLoadError() }}</p>
+  } @else if (chat(); as board) {
     <app-site-chat
       [messages]="board.messages"
       [members]="board.mentionableUsers"

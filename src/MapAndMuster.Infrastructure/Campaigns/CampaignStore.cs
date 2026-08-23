@@ -50,13 +50,11 @@ public sealed class CampaignStore : ICampaignStore
     /// <inheritdoc />
     public async Task<IReadOnlyList<StoredCampaign>> ListForUserAsync(Guid userId, CancellationToken cancellationToken)
     {
-        var records = await QueryCampaigns()
-            .AsNoTracking()
-            .Where(campaign => campaign.Memberships.Any(membership => membership.UserId == userId))
-            .OrderByDescending(campaign => campaign.UpdatedUtc)
-            .ToListAsync(cancellationToken)
+        return await LoadListAsync(
+                _dbContext.Campaigns.Where(campaign =>
+                    campaign.Memberships.Any(membership => membership.UserId == userId)),
+                cancellationToken)
             .ConfigureAwait(false);
-        return [.. records.Select(ToStored)];
     }
 
     /// <inheritdoc />
@@ -66,7 +64,7 @@ public sealed class CampaignStore : ICampaignStore
         DateTimeOffset utcNow,
         CancellationToken cancellationToken)
     {
-        var query = QueryCampaigns().AsNoTracking();
+        var query = _dbContext.Campaigns.AsQueryable();
         if (!isAdministrator)
         {
             query = query.Where(campaign =>
@@ -75,11 +73,7 @@ public sealed class CampaignStore : ICampaignStore
                 || campaign.Memberships.Any(membership => membership.UserId == userId));
         }
 
-        var records = await query
-            .OrderByDescending(campaign => campaign.UpdatedUtc)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return [.. records.Select(ToStored)];
+        return await LoadListAsync(query, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -395,6 +389,7 @@ public sealed class CampaignStore : ICampaignStore
     private IQueryable<CampaignRecord> QueryCampaigns()
     {
         return _dbContext.Campaigns
+            .AsSplitQuery()
             .Include(campaign => campaign.Memberships)
             .Include(campaign => campaign.AllyGroups)
             .Include(campaign => campaign.Factions)
@@ -403,6 +398,102 @@ public sealed class CampaignStore : ICampaignStore
                 .ThenInclude(faction => faction.AllyGroup)
             .Include(campaign => campaign.Links)
             .Include(campaign => campaign.Phases);
+    }
+
+    private async Task<IReadOnlyList<StoredCampaign>> LoadListAsync(
+        IQueryable<CampaignRecord> query,
+        CancellationToken cancellationToken)
+    {
+        var rows = await query
+            .AsNoTracking()
+            .OrderByDescending(campaign => campaign.UpdatedUtc)
+            .Select(campaign => new
+            {
+                campaign.Id,
+                campaign.Name,
+                campaign.Description,
+                campaign.PlayerSlotCount,
+                campaign.IsPrivate,
+                campaign.IsPubliclyViewable,
+                campaign.JoinPasswordHash,
+                campaign.CreatorIsParticipant,
+                campaign.City,
+                campaign.Region,
+                campaign.Country,
+                campaign.MapStorageKey,
+                campaign.PlayStateJson,
+                campaign.Revision,
+                campaign.CreatedUtc,
+                campaign.UpdatedUtc,
+                campaign.CreatedByUserId,
+                campaign.TimeZoneId,
+                campaign.StartsUtc,
+                campaign.EndsUtc,
+                campaign.RoundCount,
+                campaign.RoundLengthAmount,
+                campaign.RoundLengthUnit,
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (rows.Count == 0)
+        {
+            return [];
+        }
+
+        var records = rows.ConvertAll(row => new CampaignRecord
+        {
+            Id = row.Id,
+            Name = row.Name,
+            Description = row.Description,
+            PlayerSlotCount = row.PlayerSlotCount,
+            IsPrivate = row.IsPrivate,
+            IsPubliclyViewable = row.IsPubliclyViewable,
+            JoinPasswordHash = row.JoinPasswordHash,
+            CreatorIsParticipant = row.CreatorIsParticipant,
+            City = row.City,
+            Region = row.Region,
+            Country = row.Country,
+            MapStorageKey = row.MapStorageKey,
+            PlayStateJson = row.PlayStateJson,
+            Revision = row.Revision,
+            CreatedUtc = row.CreatedUtc,
+            UpdatedUtc = row.UpdatedUtc,
+            CreatedByUserId = row.CreatedByUserId,
+            TimeZoneId = row.TimeZoneId,
+            StartsUtc = row.StartsUtc,
+            EndsUtc = row.EndsUtc,
+            RoundCount = row.RoundCount,
+            RoundLengthAmount = row.RoundLengthAmount,
+            RoundLengthUnit = row.RoundLengthUnit,
+        });
+
+        var ids = records.ConvertAll(record => record.Id);
+        var memberships = await _dbContext.Set<CampaignMembershipRecord>()
+            .AsNoTracking()
+            .Where(membership => ids.Contains(membership.CampaignId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var phases = await _dbContext.Set<CampaignRoundPhaseRecord>()
+            .AsNoTracking()
+            .Where(phase => ids.Contains(phase.CampaignId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var membershipsByCampaign = memberships.ToLookup(membership => membership.CampaignId);
+        var phasesByCampaign = phases.ToLookup(phase => phase.CampaignId);
+        foreach (var record in records)
+        {
+            foreach (var membership in membershipsByCampaign[record.Id])
+            {
+                record.Memberships.Add(membership);
+            }
+
+            foreach (var phase in phasesByCampaign[record.Id].OrderBy(item => item.SortOrder))
+            {
+                record.Phases.Add(phase);
+            }
+        }
+
+        return [.. records.Select(ToStored)];
     }
 
     private static CampaignRecord ToRecord(StoredCampaign campaign)

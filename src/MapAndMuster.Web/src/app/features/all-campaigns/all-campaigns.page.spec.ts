@@ -90,4 +90,31 @@ describe('AllCampaignsPage', () => {
     expect(compiled.textContent).toContain('Site chat');
     http.verify();
   });
+
+  it('shows public chat before campaigns finish loading', async () => {
+    const fixture = TestBed.createComponent(AllCampaignsPage);
+    const http = TestBed.inject(HttpTestingController);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.textContent).toContain('Loading public chat...');
+    expect(compiled.textContent).toContain('Loading campaigns…');
+
+    http.expectOne('/api/site-chat').flush(emptySiteChatBoard());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(compiled.textContent).toContain('Site chat');
+    expect(compiled.textContent).not.toContain('Loading public chat...');
+    expect(compiled.textContent).toContain('Loading campaigns…');
+    expect(compiled.querySelector('app-campaign-list')).toBeNull();
+
+    http.expectOne('/api/campaigns/all').flush([]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(compiled.textContent).toContain('No campaigns are available to join or view right now.');
+    expect(compiled.textContent).not.toContain('Loading campaigns…');
+    http.verify();
+  });
 });
