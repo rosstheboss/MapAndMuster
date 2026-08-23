@@ -735,7 +735,8 @@ lines, endpoints, or territories lie between those points on that border, a line
 border is inserted when the pointer is released. Releasing the pointer does not close the shape.
 Close Territory or Enter closes a valid drawn loop, or tries to enclose a single empty region by
 walking touched territory borders or the map image edge. Clicking near the first point also closes a
-drawn loop. Extra vertices along a shared border are allowed. Traces that sit along a shared
+drawn loop. Extra vertices along a shared border are allowed, including when a neighboring edge
+only meets that extra vertex (a T-junction). Traces that sit along a shared
 border are allowed; a drawing that covers another territory's interior cannot be closed or saved.
 
 Factions, terrain types, and structures can be expanded or collapsed inside their setup sections.

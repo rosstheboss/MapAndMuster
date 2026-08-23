@@ -1,3 +1,4 @@
+using System.Globalization;
 using MapAndMuster.Domain.Maps;
 
 namespace MapAndMuster.Backend.UnitTests.Maps;
@@ -153,6 +154,51 @@ public sealed class PolygonGeometryTests
         };
 
         Assert.False(PolygonGeometry.IsValidTerritoryPolygon(polygon));
+    }
+
+    [Fact]
+    public void ExtraVertexOnASharedBorderIsAJunctionNotOverlap()
+    {
+        var existing = Square(0.1, 0.1, 0.3);
+        MapPoint[] neighbor =
+        [
+            new(0.4, 0.1),
+            new(0.4, 0.25),
+            new(0.4, 0.4),
+            new(0.55, 0.4),
+            new(0.52, 0.25),
+            new(0.55, 0.1),
+        ];
+
+        Assert.False(PolygonGeometry.InteriorsOverlap(existing, neighbor));
+    }
+
+    [Fact]
+    public void SvgSharedBorderWithExtraVerticesIsNotOverlap()
+    {
+        var plains = ParseSvgPoints(
+            "0.189575,0.129264 0.20514,0.146279 0.233826,0.15436 0.250611,0.156718 0.269149,0.16001 0.269149,0.16001 0.268053,0.156169 0.26753,0.154337 0.265729,0.152668 0.259623,0.151211 0.255699,0.145353 0.252706,0.140885 0.248637,0.128537 0.246399,0.121129 0.246399,0.121129 0.234192,0.118435 0.234192,0.118435 0.224833,0.123374 0.201233,0.118884");
+        var sahigun = ParseSvgPoints(
+            "0.259588,0.158312 0.25505,0.157506 0.250611,0.156718 0.243611,0.155735 0.233826,0.15436 0.233826,0.15436 0.22595,0.152141 0.219055,0.150199 0.219055,0.150199 0.218769,0.186923 0.231307,0.187346 0.251815,0.186807");
+        var river = ParseSvgPoints(
+            "0.259588,0.158312 0.269149,0.16001 0.269149,0.16001 0.284611,0.16435 0.284611,0.16435 0.295326,0.160459 0.322571,0.169836 0.314433,0.185101 0.286357,0.194979 0.251815,0.186807");
+
+        Assert.False(PolygonGeometry.InteriorsOverlap(plains, sahigun));
+        Assert.False(PolygonGeometry.InteriorsOverlap(plains, river));
+    }
+
+    private static MapPoint[] ParseSvgPoints(string points)
+    {
+        var numbers = points.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries)
+            .Select(static part => double.Parse(part, CultureInfo.InvariantCulture))
+            .ToArray();
+        var parsed = new List<MapPoint>(numbers.Length / 2);
+        for (var index = 0; index + 1 < numbers.Length; index += 2)
+        {
+            parsed.Add(new MapPoint(numbers[index], numbers[index + 1]));
+        }
+
+        return [.. parsed];
     }
 
     private static MapPoint[] Square(double x, double y, double size)

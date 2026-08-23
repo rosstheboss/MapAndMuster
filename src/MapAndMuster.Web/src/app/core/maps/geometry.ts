@@ -1213,6 +1213,21 @@ function segmentsCrossThroughInterior(a1: MapPoint, a2: MapPoint, b1: MapPoint, 
     return false;
   }
 
+  const hit = segmentIntersection(a1, a2, b1, b2);
+  if (!hit) {
+    return false;
+  }
+
+  const toleranceSquared = BORDER_TRACE_TOLERANCE * BORDER_TRACE_TOLERANCE;
+  if (
+    distanceSquared(hit.point, a1) <= toleranceSquared ||
+    distanceSquared(hit.point, a2) <= toleranceSquared ||
+    distanceSquared(hit.point, b1) <= toleranceSquared ||
+    distanceSquared(hit.point, b2) <= toleranceSquared
+  ) {
+    return false;
+  }
+
   if (
     pointDistanceToSegment(a1, a2, b1) <= BORDER_TRACE_TOLERANCE &&
     pointDistanceToSegment(a1, a2, b2) <= BORDER_TRACE_TOLERANCE

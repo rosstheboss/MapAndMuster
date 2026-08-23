@@ -86,10 +86,10 @@ public static class PolygonGeometry
     }
 
     /// <summary>
-    /// Gets whether two polygons' interiors overlap. Shared vertices, collinear shared borders, and
-    /// traces that sit along a border are allowed. A wrapping coastline whose vertex-average falls
-    /// inside a neighbor is not treated as overlap unless a vertex or crossing actually enters that
-    /// neighbor's interior.
+    /// Gets whether two polygons' interiors overlap. Shared vertices, collinear shared borders,
+    /// extra vertices along a border, and edges that only meet a neighbor at a T-junction are
+    /// allowed. A wrapping coastline whose vertex-average falls inside a neighbor is not treated as
+    /// overlap unless a vertex or crossing actually enters that neighbor's interior.
     /// </summary>
     /// <param name="left">The first polygon.</param>
     /// <param name="right">The second polygon.</param>
@@ -413,12 +413,44 @@ public static class PolygonGeometry
             return false;
         }
 
+        if (!TrySegmentIntersection(a1, a2, b1, b2, out var hit))
+        {
+            return false;
+        }
+
+        var toleranceSquared = BorderTraceTolerance * BorderTraceTolerance;
+        if (hit.DistanceSquaredTo(a1) <= toleranceSquared
+            || hit.DistanceSquaredTo(a2) <= toleranceSquared
+            || hit.DistanceSquaredTo(b1) <= toleranceSquared
+            || hit.DistanceSquaredTo(b2) <= toleranceSquared)
+        {
+            return false;
+        }
+
         if (PointDistanceToSegment(a1, a2, b1) <= BorderTraceTolerance && PointDistanceToSegment(a1, a2, b2) <= BorderTraceTolerance)
         {
             return false;
         }
 
         return PointDistanceToSegment(b1, b2, a1) > BorderTraceTolerance || PointDistanceToSegment(b1, b2, a2) > BorderTraceTolerance;
+    }
+
+    private static bool TrySegmentIntersection(MapPoint a1, MapPoint a2, MapPoint b1, MapPoint b2, out MapPoint intersection)
+    {
+        var dxA = a2.X - a1.X;
+        var dyA = a2.Y - a1.Y;
+        var dxB = b2.X - b1.X;
+        var dyB = b2.Y - b1.Y;
+        var denominator = (dxA * dyB) - (dyA * dxB);
+        if (Math.Abs(denominator) <= Epsilon)
+        {
+            intersection = default;
+            return false;
+        }
+
+        var t = (((b1.X - a1.X) * dyB) - ((b1.Y - a1.Y) * dxB)) / denominator;
+        intersection = new MapPoint(a1.X + (dxA * t), a1.Y + (dyA * t));
+        return true;
     }
 
     private static bool SegmentsProperlyIntersect(MapPoint a1, MapPoint a2, MapPoint b1, MapPoint b2)

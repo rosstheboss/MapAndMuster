@@ -56,6 +56,29 @@ describe('map geometry', () => {
     expect(interiorsOverlap(existing, neighbor)).toBe(false);
   });
 
+  it('allows a closing edge that meets an extra vertex on a shared border', () => {
+    const existing = square(0.1, 0.1, 0.3);
+    const neighbor = [
+      { x: 0.4, y: 0.1 },
+      { x: 0.4, y: 0.25 },
+      { x: 0.4, y: 0.4 },
+      { x: 0.55, y: 0.4 },
+      { x: 0.52, y: 0.25 },
+      { x: 0.55, y: 0.1 },
+    ];
+    expect(interiorsOverlap(existing, neighbor)).toBe(false);
+  });
+
+  it('allows exported overlay polygons that only meet at a shared-border vertex', () => {
+    const plains = parsePoints(
+      '0.189575,0.129264 0.20514,0.146279 0.233826,0.15436 0.250611,0.156718 0.269149,0.16001 0.268053,0.156169 0.26753,0.154337 0.265729,0.152668 0.259623,0.151211 0.255699,0.145353 0.252706,0.140885 0.248637,0.128537 0.246399,0.121129 0.234192,0.118435 0.224833,0.123374 0.201233,0.118884',
+    );
+    const sahigun = parsePoints(
+      '0.259588,0.158312 0.25505,0.157506 0.250611,0.156718 0.243611,0.155735 0.233826,0.15436 0.22595,0.152141 0.219055,0.150199 0.218769,0.186923 0.231307,0.187346 0.251815,0.186807',
+    );
+    expect(interiorsOverlap(plains, sahigun)).toBe(false);
+  });
+
   it('allows a wrapping coastline whose centroid falls inside a neighbor', () => {
     const plains = [
       { x: 0.4, y: 0.4 },
@@ -384,6 +407,23 @@ function square(x: number, y: number, size: number): MapPoint[] {
     { x: x + size, y: y + size },
     { x, y: y + size },
   ];
+}
+
+function parsePoints(value: string): MapPoint[] {
+  const numbers = value
+    .trim()
+    .split(/[\s,]+/)
+    .map((part) => Number.parseFloat(part));
+  const points: MapPoint[] = [];
+  for (let index = 0; index + 1 < numbers.length; index += 2) {
+    const x = numbers[index];
+    const y = numbers[index + 1];
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      points.push({ x, y });
+    }
+  }
+
+  return points;
 }
 
 function territory(id: string, displayNumber: number, polygon: MapPoint[]): MapTerritory {
