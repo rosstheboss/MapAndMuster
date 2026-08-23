@@ -725,8 +725,10 @@ map editor has unsaved edits, downloading asks whether to save first; declining 
 saved overlay. The same prompt applies to Download SVG data, which downloads the overlay polygons
 and adjacencies as an SVG file. Upload SVG, in the map editor, creates territories from polygon,
 polyline, rect, or path data in an SVG file. Exported overlay files restore names, terrain,
-structures, ownership, spawns, and adjacencies. Generic SVG files become new untitled territories
-using the campaign's first terrain type.
+structures, ownership, spawns, and adjacencies. Catalog identifiers are remapped onto the target
+campaign by exact identifier, then by catalog name; unmatched terrain uses the campaign's first
+terrain type, and unmatched structures, owners, and spawns are omitted. Generic SVG files become
+new untitled territories using the campaign's first terrain type.
 
 If two endpoints of a new drawing land on the same border of an existing territory, and no other
 lines, endpoints, or territories lie between those points on that border, a line matching that

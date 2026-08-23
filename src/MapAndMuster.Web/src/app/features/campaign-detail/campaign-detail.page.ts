@@ -53,7 +53,7 @@ import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.s
 import { formatLocation } from '../../core/location/location';
 import { adjacentTerritoryIds } from '../../core/maps/adjacency';
 import { downloadBlob, mapDownloadFilename, rasterizeMapPng } from '../../core/maps/map-export';
-import { serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
+import { mapSvgCatalogFrom, serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
 import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
 import { normalizeStructureCondition, territoryLabel } from '../../core/maps/map-graph.models';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
@@ -1820,7 +1820,7 @@ export class CampaignDetailPage {
       return;
     }
 
-    const blob = new Blob([serializeMapSvg(this.graph())], { type: 'image/svg+xml' });
+    const blob = new Blob([serializeMapSvg(this.graph(), mapSvgCatalogFrom(campaign))], { type: 'image/svg+xml' });
     downloadBlob(blob, svgDownloadFilename(campaign.name));
   }
 

@@ -8,6 +8,37 @@ import {
   type MapTerritory,
 } from './map-graph.models';
 
+export interface MapSvgCatalogItem {
+  id: string;
+  name: string;
+}
+
+export interface MapSvgFactionCatalogItem extends MapSvgCatalogItem {
+  subfactions?: readonly string[];
+}
+
+export interface MapSvgCatalog {
+  terrainTypes: readonly MapSvgCatalogItem[];
+  structureTypes: readonly MapSvgCatalogItem[];
+  factions: readonly MapSvgFactionCatalogItem[];
+}
+
+export function mapSvgCatalogFrom(campaign: {
+  terrainTypes: readonly MapSvgCatalogItem[];
+  structureTypes: readonly MapSvgCatalogItem[];
+  factions: readonly MapSvgFactionCatalogItem[];
+}): MapSvgCatalog {
+  return {
+    terrainTypes: campaign.terrainTypes.map((item) => ({ id: item.id, name: item.name })),
+    structureTypes: campaign.structureTypes.map((item) => ({ id: item.id, name: item.name })),
+    factions: campaign.factions.map((item) => ({
+      id: item.id,
+      name: item.name,
+      subfactions: item.subfactions,
+    })),
+  };
+}
+
 export function svgDownloadFilename(campaignName: string): string {
   const slug =
     campaignName
@@ -18,7 +49,7 @@ export function svgDownloadFilename(campaignName: string): string {
   return `${slug}-overlay.svg`;
 }
 
-export function serializeMapSvg(graph: MapGraph): string {
+export function serializeMapSvg(graph: MapGraph, catalog?: MapSvgCatalog): string {
   const territories = graph.territories
     .map((territory) => {
       const points = territory.polygon.map((point) => `${formatCoord(point.x)},${formatCoord(point.y)}`).join(' ');
@@ -28,16 +59,22 @@ export function serializeMapSvg(graph: MapGraph): string {
       )}${attr('data-name', territory.name)}${attr('data-description', territory.description)}${attr(
         'data-terrain-type-id',
         territory.terrainTypeId,
-      )}${attr('data-structure-type-id', territory.structureTypeId)}${attr(
+      )}${attr('data-terrain-type-name', lookupName(catalog?.terrainTypes, territory.terrainTypeId))}${attr(
+        'data-structure-type-id',
+        territory.structureTypeId,
+      )}${attr('data-structure-type-name', lookupName(catalog?.structureTypes, territory.structureTypeId))}${attr(
         'data-structure-condition',
         territory.structureTypeId ? territory.structureCondition : null,
       )}${attr(
         'data-overlay-color',
         territory.overlayColor,
       )}${attr('data-owner-faction-id', territory.ownerFactionId)}${attr(
-        'data-owner-subfaction',
-        territory.ownerSubfaction,
-      )}${attr('data-spawn-faction-id', territory.spawnFactionId)}${attr(
+        'data-owner-faction-name',
+        lookupName(catalog?.factions, territory.ownerFactionId),
+      )}${attr('data-owner-subfaction', territory.ownerSubfaction)}${attr(
+        'data-spawn-faction-id',
+        territory.spawnFactionId,
+      )}${attr('data-spawn-faction-name', lookupName(catalog?.factions, territory.spawnFactionId))}${attr(
         'data-spawn-subfaction',
         territory.spawnSubfaction,
       )} points="${points}" fill="${escapeAttr(territory.overlayColor ?? '#000000')}" fill-opacity="${
@@ -77,23 +114,31 @@ ${adjacencies}
 
 export function parseMapSvg(
   svgText: string,
-  options: { defaultTerrainTypeId: string },
-): { graph: MapGraph; errors: string[] } {
+  options: { defaultTerrainTypeId: string; catalog?: MapSvgCatalog },
+): { graph: MapGraph; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const document = new DOMParser().parseFromString(svgText, 'image/svg+xml');
   if (document.querySelector('parsererror')) {
-    return { graph: { territories: [], adjacencies: [] }, errors: ['The SVG file could not be parsed.'] };
+    return {
+      graph: { territories: [], adjacencies: [] },
+      errors: ['The SVG file could not be parsed.'],
+      warnings: [],
+    };
   }
 
   const svg = document.querySelector('svg');
   if (!svg) {
-    return { graph: { territories: [], adjacencies: [] }, errors: ['The file does not contain SVG overlay data.'] };
+    return {
+      graph: { territories: [], adjacencies: [] },
+      errors: ['The file does not contain SVG overlay data.'],
+      warnings: [],
+    };
   }
 
   const viewBox = readViewBox(svg);
   const nativePolygons = [...svg.querySelectorAll('polygon[data-territory-id]')];
   if (nativePolygons.length > 0) {
-    return parseNativeOverlay(svg, viewBox, errors);
+    return parseNativeOverlay(svg, viewBox, errors, options);
   }
 
   return parseGenericShapes(svg, viewBox, options.defaultTerrainTypeId, errors);
@@ -103,7 +148,14 @@ function parseNativeOverlay(
   svg: SVGSVGElement,
   viewBox: ViewBox,
   errors: string[],
-): { graph: MapGraph; errors: string[] } {
+  options: { defaultTerrainTypeId: string; catalog?: MapSvgCatalog },
+): { graph: MapGraph; errors: string[]; warnings: string[] } {
+  const unmatched = {
+    terrains: new Set<string>(),
+    structures: new Set<string>(),
+    factions: new Set<string>(),
+    missingNames: false,
+  };
   const territories: MapTerritory[] = [];
   for (const polygon of svg.querySelectorAll('polygon[data-territory-id]')) {
     const id = polygon.getAttribute('data-territory-id')?.trim();
@@ -113,6 +165,27 @@ function parseNativeOverlay(
       continue;
     }
 
+    const structureTypeId = remapOptionalId(
+      polygon.getAttribute('data-structure-type-id'),
+      polygon.getAttribute('data-structure-type-name'),
+      options.catalog?.structureTypes,
+      unmatched.structures,
+      unmatched,
+    );
+    const ownerFactionId = remapOptionalId(
+      polygon.getAttribute('data-owner-faction-id'),
+      polygon.getAttribute('data-owner-faction-name'),
+      options.catalog?.factions,
+      unmatched.factions,
+      unmatched,
+    );
+    const spawnFactionId = remapOptionalId(
+      polygon.getAttribute('data-spawn-faction-id'),
+      polygon.getAttribute('data-spawn-faction-name'),
+      options.catalog?.factions,
+      unmatched.factions,
+      unmatched,
+    );
     territories.push({
       id,
       displayNumber:
@@ -120,17 +193,32 @@ function parseNativeOverlay(
       name: emptyToNull(polygon.getAttribute('data-name')),
       description: emptyToNull(polygon.getAttribute('data-description')),
       polygon: points,
-      terrainTypeId: polygon.getAttribute('data-terrain-type-id') ?? '',
-      structureTypeId: emptyToNull(polygon.getAttribute('data-structure-type-id')),
+      terrainTypeId: remapRequiredId(
+        polygon.getAttribute('data-terrain-type-id'),
+        polygon.getAttribute('data-terrain-type-name'),
+        options.catalog?.terrainTypes,
+        options.defaultTerrainTypeId,
+        unmatched.terrains,
+        unmatched,
+      ),
+      structureTypeId,
       structureCondition: normalizeStructureCondition(
-        emptyToNull(polygon.getAttribute('data-structure-type-id')),
+        structureTypeId,
         polygon.getAttribute('data-structure-condition'),
       ),
       overlayColor: emptyToNull(polygon.getAttribute('data-overlay-color')),
-      ownerFactionId: emptyToNull(polygon.getAttribute('data-owner-faction-id')),
-      ownerSubfaction: emptyToNull(polygon.getAttribute('data-owner-subfaction')),
-      spawnFactionId: emptyToNull(polygon.getAttribute('data-spawn-faction-id')),
-      spawnSubfaction: emptyToNull(polygon.getAttribute('data-spawn-subfaction')),
+      ownerFactionId,
+      ownerSubfaction: remapSubfaction(
+        ownerFactionId,
+        emptyToNull(polygon.getAttribute('data-owner-subfaction')),
+        options.catalog?.factions,
+      ),
+      spawnFactionId,
+      spawnSubfaction: remapSubfaction(
+        spawnFactionId,
+        emptyToNull(polygon.getAttribute('data-spawn-subfaction')),
+        options.catalog?.factions,
+      ),
     });
   }
 
@@ -158,7 +246,7 @@ function parseNativeOverlay(
     errors.push('The SVG file did not contain any valid territories.');
   }
 
-  return { graph: { territories, adjacencies }, errors };
+  return { graph: { territories, adjacencies }, errors, warnings: catalogWarnings(unmatched, options) };
 }
 
 function parseGenericShapes(
@@ -166,7 +254,7 @@ function parseGenericShapes(
   viewBox: ViewBox,
   defaultTerrainTypeId: string,
   errors: string[],
-): { graph: MapGraph; errors: string[] } {
+): { graph: MapGraph; errors: string[]; warnings: string[] } {
   const territories: MapTerritory[] = [];
   const shapes = [...svg.querySelectorAll('polygon, polyline, rect, path')];
   for (const shape of shapes) {
@@ -195,7 +283,7 @@ function parseGenericShapes(
     errors.push('The SVG file did not contain any valid territory shapes.');
   }
 
-  return { graph: { territories, adjacencies: [] }, errors };
+  return { graph: { territories, adjacencies: [] }, errors, warnings: [] };
 }
 
 function shapePoints(shape: Element): MapPoint[] {
@@ -374,6 +462,149 @@ function normalizePoints(points: readonly MapPoint[], viewBox: ViewBox): MapPoin
     x: (point.x - viewBox.x) / viewBox.width,
     y: (point.y - viewBox.y) / viewBox.height,
   }));
+}
+
+function lookupName(items: readonly MapSvgCatalogItem[] | undefined, id: string | null | undefined): string | null {
+  if (!items || !id) {
+    return null;
+  }
+
+  return items.find((item) => item.id === id)?.name ?? null;
+}
+
+interface UnmatchedCatalog {
+  missingNames: boolean;
+}
+
+function remapRequiredId(
+  sourceId: string | null,
+  sourceName: string | null,
+  catalog: readonly MapSvgCatalogItem[] | undefined,
+  fallbackId: string,
+  unmatchedNames: Set<string>,
+  unmatched: UnmatchedCatalog,
+): string {
+  const resolved = resolveCatalogId(sourceId, sourceName, catalog, unmatched);
+  if (resolved) {
+    return resolved;
+  }
+
+  recordUnmatched(sourceName, unmatchedNames);
+  return fallbackId;
+}
+
+function remapOptionalId(
+  sourceId: string | null,
+  sourceName: string | null,
+  catalog: readonly MapSvgCatalogItem[] | undefined,
+  unmatchedNames: Set<string>,
+  unmatched: UnmatchedCatalog,
+): string | null {
+  const hasValue = Boolean(emptyToNull(sourceId) ?? emptyToNull(sourceName));
+  const resolved = resolveCatalogId(sourceId, sourceName, catalog, unmatched);
+  if (resolved) {
+    return resolved;
+  }
+
+  if (hasValue) {
+    recordUnmatched(sourceName, unmatchedNames);
+  }
+
+  return null;
+}
+
+function resolveCatalogId(
+  sourceId: string | null,
+  sourceName: string | null,
+  catalog: readonly MapSvgCatalogItem[] | undefined,
+  unmatched: UnmatchedCatalog,
+): string | null {
+  const id = emptyToNull(sourceId);
+  const name = emptyToNull(sourceName);
+  if (!catalog) {
+    return id;
+  }
+
+  if (id && catalog.some((item) => item.id === id)) {
+    return id;
+  }
+
+  if (name) {
+    const match = catalog.find((item) => item.name.trim().toLowerCase() === name.toLowerCase());
+    return match?.id ?? null;
+  }
+
+  if (id) {
+    unmatched.missingNames = true;
+  }
+
+  return null;
+}
+
+function remapSubfaction(
+  factionId: string | null,
+  subfaction: string | null,
+  factions: readonly MapSvgFactionCatalogItem[] | undefined,
+): string | null {
+  if (!factionId || !subfaction) {
+    return factionId ? subfaction : null;
+  }
+
+  const faction = factions?.find((item) => item.id === factionId);
+  const match = faction?.subfactions?.find((item) => item.trim().toLowerCase() === subfaction.toLowerCase());
+  return match ?? subfaction;
+}
+
+function recordUnmatched(sourceName: string | null, unmatchedNames: Set<string>): void {
+  const name = emptyToNull(sourceName);
+  if (name) {
+    unmatchedNames.add(name);
+  }
+}
+
+function catalogWarnings(
+  unmatched: {
+    terrains: Set<string>;
+    structures: Set<string>;
+    factions: Set<string>;
+    missingNames: boolean;
+  },
+  options: { defaultTerrainTypeId: string; catalog?: MapSvgCatalog },
+): string[] {
+  const warnings: string[] = [];
+  if (unmatched.missingNames) {
+    warnings.push(
+      'This SVG was exported without catalog names, so some terrain, structures, owners, or spawns could not be matched to this campaign. Download SVG data again from the source campaign, then re-upload.',
+    );
+  }
+
+  if (unmatched.terrains.size > 0) {
+    const fallback =
+      lookupName(options.catalog?.terrainTypes, options.defaultTerrainTypeId) ?? 'the first terrain type';
+    warnings.push(
+      unmatched.terrains.size === 1
+        ? `Terrain type '${[...unmatched.terrains][0]}' is not in this campaign; those territories used ${fallback}.`
+        : `Some terrain types were not in this campaign; those territories used ${fallback}.`,
+    );
+  }
+
+  if (unmatched.structures.size > 0) {
+    warnings.push(
+      unmatched.structures.size === 1
+        ? `Structure type '${[...unmatched.structures][0]}' is not in this campaign and was omitted.`
+        : 'Some structure types were not in this campaign and were omitted.',
+    );
+  }
+
+  if (unmatched.factions.size > 0) {
+    warnings.push(
+      unmatched.factions.size === 1
+        ? `Faction '${[...unmatched.factions][0]}' is not in this campaign; ownership and spawns for it were omitted.`
+        : 'Some factions were not in this campaign; ownership and spawns for them were omitted.',
+    );
+  }
+
+  return warnings;
 }
 
 function attr(name: string, value: string | null | undefined): string {

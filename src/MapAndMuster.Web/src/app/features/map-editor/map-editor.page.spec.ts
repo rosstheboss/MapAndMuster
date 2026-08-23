@@ -11,6 +11,7 @@ import type { OwnProfile } from '../../core/auth/auth.models';
 import type { MapPoint } from '../../core/maps/geometry';
 import { OVERLAY_COLOR_MODE_STORAGE_PREFIX } from '../../core/maps/map-editor-preferences';
 import type { MapTerritory } from '../../core/maps/map-graph.models';
+import { serializeMapSvg } from '../../core/maps/map-svg';
 import { STRUCTURE_TYPES } from '../../core/maps/structures';
 import { TERRAIN_TYPES } from '../../core/maps/terrain';
 import { MapEditorPage } from './map-editor.page';
@@ -1460,6 +1461,56 @@ describe('MapEditorPage', () => {
     });
     await expect(saving).resolves.toBe(true);
     expect(page.errorMessages()).toEqual([]);
+    http.verify();
+  });
+
+  it('remaps uploaded SVG catalog fields onto this campaign by name', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush(emptyGraph);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const svg = serializeMapSvg(
+      {
+        territories: [
+          {
+            ...namedSquare('t1', 1, 'Coast', 0.1),
+            terrainTypeId: 'source-plains',
+            structureTypeId: 'source-town',
+            ownerFactionId: 'source-north',
+            spawnFactionId: 'source-north',
+          },
+        ],
+        adjacencies: [],
+      },
+      {
+        terrainTypes: [{ id: 'source-plains', name: 'Plains' }],
+        structureTypes: [{ id: 'source-town', name: 'Town' }],
+        factions: [{ id: 'source-north', name: 'North' }],
+      },
+    );
+    const page = fixture.componentInstance as unknown as {
+      onSvgFile: (event: Event) => Promise<void>;
+      graph: () => { territories: MapTerritory[] };
+      successMessage: () => string | null;
+    };
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [new File([svg], 'overlay.svg', { type: 'image/svg+xml' })],
+    });
+    await page.onSvgFile({ target: input } as unknown as Event);
+    fixture.detectChanges();
+
+    expect(page.graph().territories).toHaveLength(1);
+    const imported = page.graph().territories[0];
+    expect(imported.terrainTypeId).toBe('plains');
+    expect(imported.structureTypeId).toBe('town');
+    expect(imported.ownerFactionId).toBe('north');
+    expect(imported.spawnFactionId).toBe('north');
+    expect(page.successMessage()).toBe('Imported 1 territories from the SVG file.');
     http.verify();
   });
 });

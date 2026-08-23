@@ -75,9 +75,10 @@ Cover components/services for:
   map column height, scrolls vertically, and scrolls the topmost selected territory into view.
   Administrators can save as a preset from the map editor; the save-name lookup includes The Hunt in
   Estalia. Edit campaign exposes administrator Download Preset and Upload Preset for a portable
-  package of catalog, overlay, and map image. Map PNG downloads rasterize unselected overlay fills, spawn hatching, structure pins, and
+  package of catalog, overlay, and map image.   Map PNG downloads rasterize unselected overlay fills, spawn hatching, structure pins, and
   faction flags or logos, and omit adjacency arrows. Downloaded flags are twice the on-map marker
-  size and structures are three times that size.
+  size and structures are three times that size. Uploaded overlay SVG remaps terrain, structures,
+  owners, and spawns onto the current campaign catalog by name when identifiers differ.
 - Permission-based navigation without relying on it as backend security.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
 - Campaign log display, member chat including typable recipient autocomplete and public/private/game-log filters, live log refresh, chat send errors without the save success

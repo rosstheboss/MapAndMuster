@@ -49,7 +49,7 @@ import {
   type OverlayColorMode,
 } from '../../core/maps/map-editor-preferences';
 import { downloadBlob, mapDownloadFilename, rasterizeMapPng } from '../../core/maps/map-export';
-import { parseMapSvg, serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
+import { mapSvgCatalogFrom, parseMapSvg, serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
 import {
   mapFactionOptionLabel,
   mapFactionOptions,
@@ -1222,7 +1222,10 @@ export class MapEditorPage {
 
     try {
       const text = await input.files[0].text();
-      const parsed = parseMapSvg(text, { defaultTerrainTypeId });
+      const parsed = parseMapSvg(text, {
+        defaultTerrainTypeId,
+        catalog: mapSvgCatalogFrom(campaign),
+      });
       if (parsed.graph.territories.length === 0) {
         this.revealErrors(
           parsed.errors.length > 0 ? parsed.errors : ['The SVG file did not contain any valid territories.'],
@@ -1240,9 +1243,10 @@ export class MapEditorPage {
         })),
       });
       this.selectedIds.set([]);
+      const notes = [...parsed.warnings, ...parsed.errors];
       this.successMessage.set(
-        parsed.errors.length > 0
-          ? `Imported ${parsed.graph.territories.length} territories. ${parsed.errors[0]}`
+        notes.length > 0
+          ? `Imported ${parsed.graph.territories.length} territories. ${notes[0]}`
           : `Imported ${parsed.graph.territories.length} territories from the SVG file.`,
       );
       this.errorMessages.set(parsed.errors.length > 0 ? parsed.errors : []);
@@ -1574,7 +1578,7 @@ export class MapEditorPage {
       return;
     }
 
-    const blob = new Blob([serializeMapSvg(graph)], { type: 'image/svg+xml' });
+    const blob = new Blob([serializeMapSvg(graph, mapSvgCatalogFrom(campaign))], { type: 'image/svg+xml' });
     downloadBlob(blob, svgDownloadFilename(campaign.name));
   }
 
