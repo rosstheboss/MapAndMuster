@@ -35,6 +35,10 @@ export const routes: Routes = [
       import('./features/complete-external/complete-external.page').then((module) => module.CompleteExternalPage),
   },
   {
+    path: 'privacy',
+    loadComponent: () => import('./features/privacy/privacy.page').then((module) => module.PrivacyPage),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./features/home/home.page').then((module) => module.HomePage),

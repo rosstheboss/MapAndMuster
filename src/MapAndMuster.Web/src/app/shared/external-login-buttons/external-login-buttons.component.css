@@ -1,0 +1,52 @@
+.provider-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.provider-button {
+  min-height: var(--touch-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  border-radius: 0.5rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.provider-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.provider-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+.provider-button.google {
+  background: #fff;
+  color: #1f1f1f;
+  border: 1px solid #747775;
+}
+
+.provider-button.discord {
+  background: #5865f2;
+  color: #fff;
+  border: 0;
+}
+
+.provider-button.facebook {
+  background: #1877f2;
+  color: #fff;
+  border: 0;
+}
+
+.provider-button.other {
+  background: var(--color-button-secondary);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}

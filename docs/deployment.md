@@ -323,6 +323,10 @@ https://mapandmuster.com/api/auth/external/discord/callback
 Add the corresponding Client ID/Secret or App ID/Secret on `mapandmuster-api`. Do not put them
 in Angular or `config.json`.
 
+Public privacy policy URL for provider consoles: `https://mapandmuster.com/privacy`. Publish
+the Google consent screen to **In production** so users do not see Google's unsafe-app
+warning. Details: `docs/authentication-production.md`.
+
 ## Smoke testing
 
 Does not log in and does not use real OAuth credentials.

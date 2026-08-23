@@ -1,0 +1,55 @@
+@if (providers().length > 0) {
+  <div class="provider-list">
+    @for (provider of providers(); track provider.name) {
+      <button
+        type="button"
+        class="provider-button"
+        [class.google]="kind(provider.name) === 'google'"
+        [class.discord]="kind(provider.name) === 'discord'"
+        [class.facebook]="kind(provider.name) === 'facebook'"
+        [class.other]="kind(provider.name) === 'other'"
+        (click)="selected.emit(provider.name)"
+      >
+        @switch (kind(provider.name)) {
+          @case ('google') {
+            <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+              <path
+                fill="#EA4335"
+                d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+              />
+              <path
+                fill="#4285F4"
+                d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+              />
+              <path
+                fill="#34A853"
+                d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+              />
+            </svg>
+          }
+          @case ('discord') {
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path
+                fill="currentColor"
+                d="M19.27 5.33A16.4 16.4 0 0 0 15.16 4c-.2.36-.43.85-.59 1.23a15.1 15.1 0 0 0-5.14 0A10 10 0 0 0 8.84 4a16.5 16.5 0 0 0-4.12 1.34C2.11 9.06 1.4 12.68 1.75 16.24A16.6 16.6 0 0 0 6.8 18.7c.36-.5.68-1.03.96-1.58-.53-.2-1.04-.45-1.52-.74.13-.1.25-.2.37-.3 2.9 1.35 6.05 1.35 8.92 0 .12.1.24.2.37.3-.48.29-.99.54-1.52.74.28.55.6 1.08.96 1.58a16.5 16.5 0 0 0 5.06-2.46c.5-4.1-.73-7.68-2.11-10.9ZM8.7 14.37c-.87 0-1.58-.8-1.58-1.78s.7-1.78 1.58-1.78 1.6.8 1.58 1.78-.7 1.78-1.58 1.78Zm6.6 0c-.87 0-1.58-.8-1.58-1.78s.7-1.78 1.58-1.78 1.6.8 1.58 1.78-.7 1.78-1.58 1.78Z"
+              />
+            </svg>
+          }
+          @case ('facebook') {
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path
+                fill="currentColor"
+                d="M22 12.07C22 6.48 17.52 2 11.93 2S1.86 6.48 1.86 12.07c0 5.02 3.66 9.18 8.44 9.93v-7.02H7.9v-2.91h2.4V9.84c0-2.38 1.42-3.69 3.6-3.69 1.04 0 2.13.18 2.13.18v2.35h-1.2c-1.18 0-1.55.73-1.55 1.48v1.78h2.64l-.42 2.91h-2.22V22c4.78-.75 8.44-4.91 8.44-9.93Z"
+              />
+            </svg>
+          }
+        }
+        {{ label(provider) }}
+      </button>
+    }
+  </div>
+}

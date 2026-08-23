@@ -6,10 +6,11 @@ import type { ExternalProvider } from '../../core/auth/auth.models';
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { emailAddress, required } from '../../core/forms/validators';
+import { ExternalLoginButtonsComponent } from '../../shared/external-login-buttons/external-login-buttons.component';
 
 @Component({
   selector: 'app-login-page',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, ExternalLoginButtonsComponent],
   templateUrl: './login.page.html',
   styleUrl: './login.page.css',
 })

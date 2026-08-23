@@ -120,6 +120,18 @@
   outline: none;
 }
 
+.app-footer {
+  width: min(100%, 90rem);
+  margin: 0 auto;
+  padding: 0 1rem 1.25rem;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.app-footer a {
+  color: inherit;
+}
+
 .nav-dropdown {
   position: relative;
 }

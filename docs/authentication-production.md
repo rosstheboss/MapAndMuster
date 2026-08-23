@@ -57,6 +57,8 @@ cookie authentication across two origins is not configured in this phase.
 
 A matching email does not auto-link to an existing local account.
 
+Public privacy URL for OAuth consoles: `https://mapandmuster.com/privacy`.
+
 ## Provider console steps (human)
 
 ### Google
@@ -64,20 +66,39 @@ A matching email does not auto-link to an existing local account.
 1. Create an OAuth client of type **Web application** in a Google Cloud project.
 2. Add authorized JavaScript origins for `http://localhost:4200` and `https://mapandmuster.com`.
 3. Add the exact redirect URIs above.
-4. Copy the client id and secret into server-side configuration.
+4. Copy the client id and secret into `Authentication__Google__ClientId` and
+   `Authentication__Google__ClientSecret` on the API service.
+5. Open **Google Auth Platform → Branding** (or **APIs & Services → OAuth consent screen**).
+   Set the app name, support email, developer contact, authorized domain `mapandmuster.com`,
+   and privacy policy `https://mapandmuster.com/privacy`.
+6. Publish the consent screen to **In production**. Leave the app in **Testing** and Google
+   shows **Go to [app] (unsafe)** to every non-test user. That interstitial is Google's
+   unpublished-app warning, not a Chrome Safe Browsing or HTTPS failure. `openid`, `email`,
+   and `profile` are non-sensitive scopes and usually do not need a full verification review
+   once the screen is published.
 
 ### Discord
 
-1. Create an application in the Discord developer portal.
-2. Add the exact redirect URI.
-3. Copy the client id and secret into server-side configuration.
+1. Open [discord.com/developers/applications](https://discord.com/developers/applications)
+   and create an application.
+2. Open **OAuth2**. Add redirect `https://mapandmuster.com/api/auth/external/discord/callback`
+   (and the localhost URI if you will test locally).
+3. Copy **Client ID** and **Client Secret** into `Authentication__Discord__ClientId` and
+   `Authentication__Discord__ClientSecret` on the API service. Saving those env vars
+   redeploys the API; the Discord button appears after that.
+4. Discord does not need a branded verification step for `identify` and `email`.
 
 ### Facebook
 
-1. Create a Meta app and add **Facebook Login**.
-2. Add the exact redirect URI and the production domain.
-3. Copy the app id and secret into server-side configuration.
-4. Complete any required app-mode or review steps before public use.
+1. Open [developers.facebook.com](https://developers.facebook.com) and create an app.
+2. Add the **Facebook Login** product. Under Facebook Login settings, add Valid OAuth
+   Redirect URI `https://mapandmuster.com/api/auth/external/facebook/callback`.
+3. In app settings, set the privacy policy URL to `https://mapandmuster.com/privacy` and
+   add the production domain.
+4. Copy **App ID** and **App Secret** into `Authentication__Facebook__AppId` and
+   `Authentication__Facebook__AppSecret` on the API service.
+5. Switch the Meta app to **Live**. `email` is a standard permission; complete any extra
+   review Meta shows before public use.
 
 ## Forwarded headers
 

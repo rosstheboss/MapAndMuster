@@ -105,13 +105,7 @@
   @if (providers().length > 0) {
     <div class="panel stack">
       <h2>Or sign up with</h2>
-      <div class="actions">
-        @for (provider of providers(); track provider.name) {
-          <button class="button-secondary" type="button" (click)="startExternal(provider.name)">
-            {{ provider.displayName }}
-          </button>
-        }
-      </div>
+      <app-external-login-buttons [providers]="providers()" (selected)="startExternal($event)" />
     </div>
   }
 
