@@ -235,7 +235,17 @@ from `/api` until CORS and cookie `SameSite` work is explicitly added.
 ```javascript
 export default {
   async fetch(request, env) {
+    if (!env.API_ORIGIN || !env.WEB_ORIGIN) {
+      return new Response('Worker missing API_ORIGIN or WEB_ORIGIN', { status: 500 });
+    }
+
     const url = new URL(request.url);
+    if (url.hostname === 'www.mapandmuster.com') {
+      url.hostname = 'mapandmuster.com';
+      url.protocol = 'https:';
+      return Response.redirect(url.toString(), 301);
+    }
+
     const api = new URL(env.API_ORIGIN);
     const web = new URL(env.WEB_ORIGIN);
     const path = url.pathname;
@@ -246,18 +256,43 @@ export default {
     const origin = useApi ? api : web;
     url.protocol = 'https:';
     url.hostname = origin.hostname;
+    url.port = origin.port;
+
     const headers = new Headers(request.headers);
+    headers.delete('Host');
+    headers.delete('cf-connecting-ip');
+    headers.delete('cf-ipcountry');
+    headers.delete('cf-ray');
+    headers.delete('cf-visitor');
+    headers.delete('cdn-loop');
     headers.set('X-Forwarded-Host', request.headers.get('Host') ?? '');
     headers.set('X-Forwarded-Proto', 'https');
-    return fetch(url, { method: request.method, headers, body: request.body, redirect: 'manual' });
+
+    const init = {
+      method: request.method,
+      headers,
+      redirect: 'manual',
+    };
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      init.body = request.body;
+    }
+
+    return fetch(url, init);
   },
 };
 ```
 
-Set Worker secrets/vars `API_ORIGIN=https://<API_RENDER_HOST>` and
-`WEB_ORIGIN=https://<WEB_RENDER_HOST>` (include `https://`, no trailing path).
+Set Worker **Settings → Variables** (plain text, no quotes, then **Deploy** again):
 
-4. Route `https://mapandmuster.com/*` to that Worker.
+- `API_ORIGIN=https://mapandmuster-api.onrender.com`
+- `WEB_ORIGIN=https://mapandmuster-web.onrender.com`
+
+Do not set either variable to `https://mapandmuster.com` (that loops the Worker into itself).
+
+Attach **both** hostnames on the Worker **Domains** tab: `mapandmuster.com` and `www.mapandmuster.com`.
+The Worker 301s `www` to the apex so cookies and OAuth stay on `https://mapandmuster.com`.
+
+4. On the Worker **Domains** tab, add `mapandmuster.com` and `www.mapandmuster.com`.
 5. Optional: CNAME `api` → `<API_RENDER_HOST>` for direct health checks.
 6. `PublicWeb__Origin` on the API must be `https://mapandmuster.com` (no trailing slash).
 
