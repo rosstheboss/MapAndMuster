@@ -97,6 +97,11 @@
       <label for="avatar">Profile picture (optional)</label>
       <input id="avatar" type="file" accept="image/jpeg,image/png,image/webp" (change)="onAvatarSelected($event)" />
     </div>
+    <p class="muted">
+      By creating an account you agree to the <a routerLink="/terms">Terms of Service</a> and
+      <a routerLink="/privacy">Privacy</a> policy.
+    </p>
+
     <div class="actions">
       <button class="button" type="submit" [disabled]="submitting()">Create account</button>
     </div>

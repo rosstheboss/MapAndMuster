@@ -57,7 +57,10 @@ cookie authentication across two origins is not configured in this phase.
 
 A matching email does not auto-link to an existing local account.
 
-Public privacy URL for OAuth consoles: `https://mapandmuster.com/privacy`.
+Public URLs for OAuth consoles:
+
+- Privacy: `https://mapandmuster.com/privacy`
+- Terms of Service: `https://mapandmuster.com/terms`
 
 ## Provider console steps (human)
 
@@ -70,7 +73,8 @@ Public privacy URL for OAuth consoles: `https://mapandmuster.com/privacy`.
    `Authentication__Google__ClientSecret` on the API service.
 5. Open **Google Auth Platform → Branding** (or **APIs & Services → OAuth consent screen**).
    Set the app name, support email, developer contact, authorized domain `mapandmuster.com`,
-   and privacy policy `https://mapandmuster.com/privacy`.
+   privacy policy `https://mapandmuster.com/privacy`, and terms of service
+   `https://mapandmuster.com/terms` (optional for Google, recommended).
 6. Publish the consent screen to **In production**. Leave the app in **Testing** and Google
    shows **Go to [app] (unsafe)** to every non-test user. That interstitial is Google's
    unpublished-app warning, not a Chrome Safe Browsing or HTTPS failure. `openid`, `email`,
@@ -86,15 +90,17 @@ Public privacy URL for OAuth consoles: `https://mapandmuster.com/privacy`.
 3. Copy **Client ID** and **Client Secret** into `Authentication__Discord__ClientId` and
    `Authentication__Discord__ClientSecret` on the API service. Saving those env vars
    redeploys the API; the Discord button appears after that.
-4. Discord does not need a branded verification step for `identify` and `email`.
+4. On the application, set Privacy Policy URL `https://mapandmuster.com/privacy` and Terms of
+   Service URL `https://mapandmuster.com/terms`. Discord lists both as verification
+   qualifications; `identify` and `email` do not otherwise need branded verification.
 
 ### Facebook
 
 1. Open [developers.facebook.com](https://developers.facebook.com) and create an app.
 2. Add the **Facebook Login** product. Under Facebook Login settings, add Valid OAuth
    Redirect URI `https://mapandmuster.com/api/auth/external/facebook/callback`.
-3. In app settings, set the privacy policy URL to `https://mapandmuster.com/privacy` and
-   add the production domain.
+3. In app settings, set the privacy policy URL to `https://mapandmuster.com/privacy`, the
+   terms of service URL to `https://mapandmuster.com/terms`, and add the production domain.
 4. Copy **App ID** and **App Secret** into `Authentication__Facebook__AppId` and
    `Authentication__Facebook__AppSecret` on the API service.
 5. Switch the Meta app to **Live**. `email` is a standard permission; complete any extra

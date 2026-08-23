@@ -42,6 +42,8 @@ describe('App', () => {
     expect(nav?.textContent).toContain('All Campaigns');
     expect(nav?.textContent).toContain('Profile');
     expect(nav?.textContent).toContain('Sign in');
-    expect(compiled.querySelector('.app-footer a')?.textContent).toContain('Privacy');
+    const footerLinks = [...compiled.querySelectorAll('.app-footer a')].map((node) => node.textContent.trim());
+    expect(footerLinks).toContain('Privacy');
+    expect(footerLinks).toContain('Terms');
   });
 });

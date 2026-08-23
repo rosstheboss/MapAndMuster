@@ -31,6 +31,8 @@ describe('RegisterPage', () => {
     expect(compiled.querySelector('#confirmPassword')).toBeTruthy();
     expect(compiled.querySelector('#suffix')).toBeTruthy();
     expect(compiled.querySelector('.required-marker')).toBeTruthy();
+    expect(compiled.querySelector('a[href="/terms"]')?.textContent).toContain('Terms of Service');
+    expect(compiled.querySelector('a[href="/privacy"]')?.textContent).toContain('Privacy');
 
     const form = fixture.componentInstance as unknown as { submit: () => Promise<void> };
     await form.submit();

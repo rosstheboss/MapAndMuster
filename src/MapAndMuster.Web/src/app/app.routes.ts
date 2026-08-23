@@ -39,6 +39,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/privacy/privacy.page').then((module) => module.PrivacyPage),
   },
   {
+    path: 'terms',
+    loadComponent: () => import('./features/terms/terms.page').then((module) => module.TermsPage),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./features/home/home.page').then((module) => module.HomePage),

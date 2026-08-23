@@ -104,7 +104,8 @@ Render resource names are `mapandmuster-api`, `mapandmuster-web`, and `mapandmus
 - [ ] Add `Authentication__Google__ClientId` on `mapandmuster-api`
 - [ ] Add `Authentication__Google__ClientSecret` on `mapandmuster-api`
 - [ ] Publish the OAuth consent screen (**In production**), authorized domain
-      `mapandmuster.com`, privacy policy `https://mapandmuster.com/privacy`
+      `mapandmuster.com`, privacy policy `https://mapandmuster.com/privacy`,
+      terms of service `https://mapandmuster.com/terms` (optional for Google)
       → Google Auth Platform → **Branding** / **Audience**. This removes Google's
       **Go to [app] (unsafe)** interstitial. Testing mode always shows that warning.
 - [ ] Test production Google login
@@ -114,6 +115,8 @@ Render resource names are `mapandmuster-api`, `mapandmuster-web`, and `mapandmus
 - [ ] Create an application
       → [discord.com/developers/applications](https://discord.com/developers/applications)
 - [ ] OAuth2 redirect: `https://mapandmuster.com/api/auth/external/discord/callback`
+- [ ] Privacy policy `https://mapandmuster.com/privacy` and terms of service
+      `https://mapandmuster.com/terms` (required for Discord verification qualifications)
 - [ ] Add `Authentication__Discord__ClientId` on `mapandmuster-api`
 - [ ] Add `Authentication__Discord__ClientSecret` on `mapandmuster-api`
 - [ ] Test production Discord login
@@ -123,7 +126,8 @@ Render resource names are `mapandmuster-api`, `mapandmuster-web`, and `mapandmus
 - [ ] Create a Meta app and add **Facebook Login**
       → [developers.facebook.com](https://developers.facebook.com)
 - [ ] Valid OAuth redirect URI: `https://mapandmuster.com/api/auth/external/facebook/callback`
-- [ ] Privacy policy URL `https://mapandmuster.com/privacy`; switch the app to **Live**
+- [ ] Privacy policy URL `https://mapandmuster.com/privacy` and terms of service
+      `https://mapandmuster.com/terms`; switch the app to **Live**
 - [ ] Add `Authentication__Facebook__AppId` on `mapandmuster-api`
 - [ ] Add `Authentication__Facebook__AppSecret` on `mapandmuster-api`
 - [ ] Complete any extra review Meta requires before public use
