@@ -11,7 +11,7 @@ function Get-QuotedNpgsqlValue([string] $value)
 
 function ConvertTo-NpgsqlConnectionString([string] $value)
 {
-    $value = $value.Trim().Trim([char]0xFEFF).Trim('"').Trim("'").TrimStart('<').TrimEnd('>')
+    $value = $value.Trim().Trim([char]0xFEFF).Trim('`').Trim('"').Trim("'").TrimStart('<').TrimEnd('>')
     if ([string]::IsNullOrWhiteSpace($value))
     {
         throw 'The connection string is empty after trimming. Pass the Render External Database URL in single quotes.'
@@ -40,7 +40,7 @@ function ConvertTo-NpgsqlConnectionString([string] $value)
     $separator = $userInfo.IndexOf(':')
     $user = if ($separator -lt 0) { $userInfo } else { $userInfo.Substring(0, $separator) }
     $password = if ($separator -lt 0) { '' } else { $userInfo.Substring($separator + 1) }
-    $database = [Uri]::UnescapeDataString($uri.AbsolutePath.Trim('/'))
+    $database = [Uri]::UnescapeDataString($uri.AbsolutePath.Trim('/')).Trim('`')
     $port = if ($uri.IsDefaultPort -or $uri.Port -le 0) { 5432 } else { $uri.Port }
 
     return @(

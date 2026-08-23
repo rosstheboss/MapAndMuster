@@ -54,6 +54,27 @@ public sealed class PostgresConnectionStringTests
     }
 
     [Fact]
+    public void TrailingMarkdownBacktickIsStrippedFromTheDatabaseName()
+    {
+        const string uri = "postgresql://my_user:secret@dpg-example-a/mapandmuster`";
+
+        var builder = new NpgsqlConnectionStringBuilder(PostgresConnectionString.Normalize(uri));
+
+        Assert.Equal("mapandmuster", builder.Database);
+    }
+
+    [Fact]
+    public void WrappedMarkdownBackticksAreStrippedFromAUri()
+    {
+        const string wrapped = "`postgresql://my_user:secret@dpg-example-a/mapandmuster`";
+
+        var builder = new NpgsqlConnectionStringBuilder(PostgresConnectionString.Normalize(wrapped));
+
+        Assert.Equal("dpg-example-a", builder.Host);
+        Assert.Equal("mapandmuster", builder.Database);
+    }
+
+    [Fact]
     public void InvalidUriThrowsWithoutTheSecret()
     {
         const string secret = "super-secret-password";

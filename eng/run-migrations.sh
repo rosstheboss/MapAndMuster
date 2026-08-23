@@ -24,7 +24,7 @@ normalize_connection() {
 import sys
 from urllib.parse import urlparse
 
-value = sys.argv[1].strip().strip('"').strip("'").lstrip("<").rstrip(">")
+value = sys.argv[1].strip().strip("`").strip('"').strip("'").lstrip("<").rstrip(">")
 if value.startswith("\ufeff"):
     value = value.lstrip("\ufeff")
 if not value.lower().startswith(("postgres://", "postgresql://")):
@@ -45,7 +45,7 @@ def quote(text: str) -> str:
 
 user = parsed.username or ""
 password = parsed.password or ""
-database = (parsed.path or "").lstrip("/")
+database = (parsed.path or "").lstrip("/").strip("`")
 port = parsed.port or 5432
 print(
     ";".join(

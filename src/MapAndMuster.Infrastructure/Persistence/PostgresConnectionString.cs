@@ -17,7 +17,7 @@ public static class PostgresConnectionString
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
-        var trimmed = connectionString.Trim().Trim('\uFEFF').Trim('"').Trim('\'').TrimStart('<').TrimEnd('>');
+        var trimmed = connectionString.Trim().Trim('\uFEFF').Trim('`').Trim('"').Trim('\'').TrimStart('<').TrimEnd('>');
         if (trimmed.Length == 0)
         {
             throw new InvalidOperationException("The PostgreSQL connection string is empty after trimming.");
@@ -38,7 +38,7 @@ public static class PostgresConnectionString
         var separator = userInfo.IndexOf(':');
         var user = separator < 0 ? userInfo : userInfo[..separator];
         var password = separator < 0 ? string.Empty : userInfo[(separator + 1)..];
-        var database = Uri.UnescapeDataString(uri.AbsolutePath.Trim('/'));
+        var database = Uri.UnescapeDataString(uri.AbsolutePath.Trim('/')).Trim('`');
         var port = uri.IsDefaultPort || uri.Port <= 0 ? 5432 : uri.Port;
         var sslMode = ReadSslMode(uri.Query);
 

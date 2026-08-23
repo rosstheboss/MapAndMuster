@@ -17,7 +17,9 @@ public static class DatabaseStartup
     /// <summary>
     /// Applies migrations when enabled, then runs identity maintenance. Identity seeding still runs when
     /// migrations are disabled, so Production can apply an EF bundle separately and still create the
-    /// privileged administrator and Test 1–Test 30 on the next API start. Skips when the connection string is empty.
+    /// privileged administrator and Test 1–Test 30 on the next API start. When startup migrations are
+    /// disabled, pending migrations fail the process with an explicit message instead of querying missing
+    /// Identity tables. Skips when the connection string is empty.
     /// </summary>
     /// <param name="app">The application.</param>
     /// <returns>A task that completes when migrations have been considered.</returns>
@@ -32,11 +34,21 @@ public static class DatabaseStartup
         }
 
         using var scope = app.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<CampaignDbContext>();
         var applyMigrations = app.Configuration.GetValue(ApplyMigrationsKey, true);
         if (applyMigrations)
         {
-            var dbContext = scope.ServiceProvider.GetRequiredService<CampaignDbContext>();
             await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            var pending = await dbContext.Database.GetPendingMigrationsAsync().ConfigureAwait(false);
+            var pendingCount = pending.Count();
+            if (pendingCount > 0)
+            {
+                throw new InvalidOperationException(
+                    $"The campaign database is missing {pendingCount} EF Core migration(s). Apply eng/run-migrations.* before starting the API.");
+            }
         }
 
         var identity = scope.ServiceProvider.GetRequiredService<IdentityMaintenance>();

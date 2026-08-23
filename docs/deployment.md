@@ -137,8 +137,8 @@ for administrator impersonation. Those test accounts cannot password-login.
 ./eng/run-migrations.sh '<RENDER_DATABASE_URL>'
 ```
 
-Use **single quotes**. Do not leave angle brackets around the pasted URL. PowerShell double quotes
-expand `$` in Render passwords and will corrupt the string.
+Use **single quotes**. Do not leave angle brackets around the pasted URL. Do not copy markdown
+backticks. PowerShell double quotes expand `$` in Render passwords and will corrupt the string.
 
 The run scripts refuse an empty connection string and convert `postgres://` / `postgresql://` URLs
 to Npgsql keyword form (`Host=...;SSL Mode=Require`) before calling the bundle. Prefer additive
@@ -202,6 +202,8 @@ After Cloudflare is configured, probe `https://mapandmuster.com/health`. Directl
 
 `autoDeployTrigger: checksPass` on both services. Confirm in each service's **Settings →
 Build & Deploy** that deploys wait for GitHub checks. Do not enable deploy-on-every-push.
+Render will not start until CI on that commit is green, which can take several minutes. A
+manual deploy is optional and skips that wait; it is not required after a normal `master` push.
 
 The smoke workflow does not deploy. Run it from **Actions → Smoke test → Run workflow**
 after a release.
