@@ -66,7 +66,7 @@ ForwardedHeaders__Enabled=true
 Apply migrations with the **staging** external URI:
 
 ```powershell
-./eng/run-migrations.ps1 -ConnectionString "<STAGING_RENDER_DATABASE_URL>"
+./eng/run-migrations.ps1 -ConnectionString '<STAGING_RENDER_DATABASE_URL>'
 ```
 
 Cloudflare: a second Worker route for `staging.mapandmuster.com`, or the same Worker with

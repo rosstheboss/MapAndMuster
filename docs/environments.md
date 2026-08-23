@@ -24,7 +24,7 @@ Production must not use that label. See `docs/staging.md`.
 |---|---|
 | `ASPNETCORE_ENVIRONMENT` | Host environment name |
 | `PORT` | Listen port in containers (Render). Defaults to `8080` |
-| `ConnectionStrings__Campaign` | PostgreSQL connection string |
+| `ConnectionStrings__Campaign` | PostgreSQL connection string. Render injects a `postgres://` URI; the API converts it to Npgsql keyword form. Local and CI use `Host=...;Database=...`. |
 | `PublicWeb__Origin` | Public Angular origin used in email links and OAuth return URLs |
 | `Storage__RootPath` | Uploaded-file root, outside web root |
 | `Database__ApplyMigrationsOnStartup` | When `true`, the API applies EF migrations on start |

@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $artifacts = Join-Path $root 'artifacts'
 New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
+$bundle = Join-Path $artifacts 'efbundle.exe'
 
 Push-Location $root
 try {
@@ -12,7 +13,7 @@ try {
         --project (Join-Path $root 'src/MapAndMuster.Infrastructure/MapAndMuster.Infrastructure.csproj') `
         --startup-project (Join-Path $root 'src/MapAndMuster.Api/MapAndMuster.Api.csproj') `
         --configuration Release `
-        --output (Join-Path $artifacts 'efbundle') `
+        --output $bundle `
         --force
 }
 finally {

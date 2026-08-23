@@ -44,6 +44,10 @@ public static class InfrastructureServiceCollectionExtensions
         {
             connectionString = "Host=127.0.0.1;Database=campaign_unconfigured;Username=campaign;Password=campaign";
         }
+        else
+        {
+            connectionString = PostgresConnectionString.Normalize(connectionString);
+        }
 
         RegisterEmailDelivery(services, configuration);
 

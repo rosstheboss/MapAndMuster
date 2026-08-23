@@ -106,7 +106,8 @@ Auto-deploy is `checksPass`: Render deploys `master` only after GitHub checks pa
 `Email__FromName` defaults to `Map & Muster`.
 
 `ConnectionStrings__Campaign` is bound from `mapandmuster-db` (internal `postgres://` URI).
-Do not paste the production URL into staging.
+The API converts that URI to Npgsql keyword form on startup. Do not paste the production URL
+into staging.
 
 Optional Google / Discord / Facebook keys are **not** in the Blueprint. Add them later
 on `mapandmuster-api` in **Environment**. Empty values keep email-and-password sign-in. Keys
@@ -114,7 +115,7 @@ are listed in `docs/environments.md`.
 
 ## Render PostgreSQL
 
-Created as `mapandmuster-db`, database name `campaign`, major version 17.
+Created as `mapandmuster-db`, database name `mapandmuster`, major version 17.
 
 - Internal URL: used by `mapandmuster-api` automatically.
 - External URL: Dashboard → the database → **Connections**. Use this for
@@ -128,20 +129,20 @@ for administrator impersonation. Those test accounts cannot password-login.
 
 ```powershell
 ./eng/build-migrations.ps1
-./eng/run-migrations.ps1 -ConnectionString "<RENDER_DATABASE_URL>"
+./eng/run-migrations.ps1 -ConnectionString '<RENDER_DATABASE_URL>'
 ```
 
 ```bash
 ./eng/build-migrations.sh
-ConnectionStrings__Campaign="<RENDER_DATABASE_URL>" ./eng/run-migrations.sh
+./eng/run-migrations.sh '<RENDER_DATABASE_URL>'
 ```
 
-The run scripts refuse an empty connection string. Prefer additive schema changes; see
-expand/contract below.
+Use **single quotes**. Do not leave angle brackets around the pasted URL. PowerShell double quotes
+expand `$` in Render passwords and will corrupt the string.
 
-If Npgsql rejects the URI, convert the Render URL to keyword form
-(`Host=...;Port=5432;Database=campaign;Username=...;Password=...;SSL Mode=Require`) and
-pass that to the bundle. Do not commit it.
+The run scripts refuse an empty connection string and convert `postgres://` / `postgresql://` URLs
+to Npgsql keyword form (`Host=...;SSL Mode=Require`) before calling the bundle. Prefer additive
+schema changes; see expand/contract below. Do not commit the URL.
 
 ## API service
 

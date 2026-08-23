@@ -48,7 +48,10 @@ public sealed class IdentitySeedApiFactory : WebApplicationFactory<Program>, IAs
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        builder.UseSetting("ConnectionStrings:Campaign", _postgres.GetConnectionString());
+        var port = _postgres.GetMappedPublicPort(5432);
+        builder.UseSetting(
+            "ConnectionStrings:Campaign",
+            $"postgresql://mapandmuster:mapandmuster@{_postgres.Hostname}:{port}/mapandmuster_identity_seed");
         builder.UseSetting("Email:SmtpHost", string.Empty);
         builder.UseSetting("Email:Provider", "Smtp");
         builder.UseSetting("Storage:RootPath", _storagePath);

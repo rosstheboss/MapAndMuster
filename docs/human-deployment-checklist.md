@@ -69,7 +69,7 @@ Render resource names are `mapandmuster-api`, `mapandmuster-web`, and `mapandmus
 - [ ] Build the EF bundle on a machine with the .NET SDK
       → `./eng/build-migrations.ps1` or `./eng/build-migrations.sh`
 - [ ] Approve and apply the first production migration
-      → `./eng/run-migrations.ps1 -ConnectionString "<RENDER_DATABASE_URL>"`
+      → `./eng/run-migrations.ps1 -ConnectionString '<RENDER_DATABASE_URL>'` (single quotes; no angle brackets around the pasted URL)
       → Keep `Database__ApplyMigrationsOnStartup=false` (already set in the Blueprint)
 - [ ] Set `Identity__BootstrapAdminPassword` on `mapandmuster-api` (Blueprint `sync: false`)
       → Password manager; 12+ characters with upper, lower, digit, and special
