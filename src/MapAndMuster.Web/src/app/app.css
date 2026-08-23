@@ -23,24 +23,27 @@
 
 .app-banner {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
+  padding: 0.4rem 0.75rem;
   background: var(--color-banner);
   color: #fff;
 }
 
 .app-brand {
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
   color: inherit;
-  font-weight: 700;
   text-decoration: none;
-  font-size: 1.15rem;
-  min-height: var(--touch-min);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
+  line-height: 0;
+}
+
+.app-banner-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
 }
 
 .app-menubar {
@@ -52,6 +55,8 @@
   background: var(--color-menubar);
   color: #fff;
   border-bottom: 1px solid var(--color-menubar-border);
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
 }
 
 .nav-link,
@@ -83,9 +88,12 @@
 }
 
 .nav-user {
-  margin-left: auto;
   padding: 0 0.5rem;
   opacity: 0.9;
+}
+
+.app-menubar app-theme-toggle {
+  margin-left: auto;
 }
 
 .nav-error {
@@ -123,12 +131,32 @@
 .app-footer {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.75rem 1.25rem;
   width: min(100%, 90rem);
   margin: 0 auto;
-  padding: 0 1rem 1.25rem;
+  padding: 1rem 1rem 1.25rem;
   color: var(--color-muted);
   font-size: 0.9rem;
+}
+
+.app-footer-brand {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.app-footer-logo {
+  display: block;
+  width: 2.75rem;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 0.65rem;
+}
+
+.app-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
 }
 
 .app-footer a {

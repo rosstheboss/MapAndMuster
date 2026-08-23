@@ -2,10 +2,15 @@
   <a class="skip-link" href="#main-content">Skip to content</a>
   <header class="app-banner">
     <a routerLink="/" class="app-brand">
-      <app-icon name="castle" />
-      Map &amp; Muster
+      <img
+        class="app-banner-image"
+        src="/brand/banner.png"
+        width="1024"
+        height="341"
+        alt="Map &amp; Muster"
+        fetchpriority="high"
+      />
     </a>
-    <app-theme-toggle />
   </header>
   <nav class="app-menubar" aria-label="Main">
     <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }" class="nav-link">
@@ -44,6 +49,7 @@
         Sign in
       </a>
     }
+    <app-theme-toggle />
   </nav>
   @if (navError()) {
     <p class="nav-error" role="alert">{{ navError() }}</p>
@@ -65,8 +71,13 @@
     <router-outlet />
   </main>
   <footer class="app-footer">
-    <a routerLink="/privacy">Privacy</a>
-    <a routerLink="/terms">Terms</a>
+    <a routerLink="/" class="app-footer-brand">
+      <img class="app-footer-logo" src="/brand/micrologo.jpg" width="1024" height="1024" alt="Map &amp; Muster" />
+    </a>
+    <nav class="app-footer-links" aria-label="Legal">
+      <a routerLink="/privacy">Privacy</a>
+      <a routerLink="/terms">Terms</a>
+    </nav>
   </footer>
 </div>
 <app-form-submit-overlay />

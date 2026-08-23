@@ -1,3 +1,8 @@
+/* stylelint-disable import-notation -- Angular resolves these package paths without url(). */
+@import '@fontsource-variable/cinzel';
+@import '@fontsource-variable/source-serif-4';
+/* stylelint-enable import-notation */
+
 :root,
 [data-theme='light'] {
   --color-bg: #f6f4f0;
@@ -10,15 +15,17 @@
   --color-danger: #9b1c1c;
   --color-border: #d6d3d1;
   --color-glow: #f59e0b;
-  --color-banner: #1e3a5f;
-  --color-menubar: #16324f;
-  --color-menubar-border: #0f243a;
+  --color-banner: #13191c;
+  --color-menubar: #052033;
+  --color-menubar-border: #04101c;
   --color-error-bg: #fef2f2;
   --color-success-bg: #ecfdf5;
   --color-dirty: #c87606;
   --color-dirty-bg: #fef3c7;
   --color-button-secondary: #e7e5e4;
   --touch-min: 44px;
+  --font-display: 'Cinzel Variable', 'Palatino', 'Palatino Linotype', 'Book Antiqua', serif;
+  --font-body: 'Source Serif 4 Variable', 'Palatino', 'Palatino Linotype', 'Book Antiqua', serif;
 }
 
 [data-theme='dark'] {
@@ -32,9 +39,9 @@
   --color-danger: #fca5a5;
   --color-border: #57534e;
   --color-glow: #fbbf24;
-  --color-banner: #0f172a;
-  --color-menubar: #111827;
-  --color-menubar-border: #020617;
+  --color-banner: #13191c;
+  --color-menubar: #052033;
+  --color-menubar-border: #04101c;
   --color-error-bg: #450a0a;
   --color-success-bg: #064e3b;
   --color-dirty: #c87606;
@@ -50,10 +57,21 @@
 
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-body);
   background: var(--color-bg);
   color: var(--color-text);
-  line-height: 1.5;
+  line-height: 1.55;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 a {

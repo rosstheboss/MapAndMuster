@@ -23,7 +23,13 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('.app-brand')?.textContent).toContain('Map & Muster');
+    const banner = compiled.querySelector('.app-banner-image');
+    expect(banner?.getAttribute('src')).toBe('/brand/banner.png');
+    expect(banner?.getAttribute('alt')).toBe('Map & Muster');
+    expect(compiled.querySelector('.app-brand')?.getAttribute('href')).toBe('/');
+    const footerLogo = compiled.querySelector('.app-footer-logo');
+    expect(footerLogo?.getAttribute('src')).toBe('/brand/micrologo.jpg');
+    expect(footerLogo?.getAttribute('alt')).toBe('Map & Muster');
     expect(compiled.querySelector('.skip-link')?.textContent).toContain('Skip to content');
     const themeToggle = compiled.querySelector('app-theme-toggle button');
     expect(themeToggle?.getAttribute('aria-label')).toBe('Switch to dark mode');
@@ -42,7 +48,8 @@ describe('App', () => {
     expect(nav?.textContent).toContain('All Campaigns');
     expect(nav?.textContent).toContain('Profile');
     expect(nav?.textContent).toContain('Sign in');
-    const footerLinks = [...compiled.querySelectorAll('.app-footer a')].map((node) => node.textContent.trim());
+    expect(nav?.querySelector('app-theme-toggle')).toBeTruthy();
+    const footerLinks = [...compiled.querySelectorAll('.app-footer-links a')].map((node) => node.textContent.trim());
     expect(footerLinks).toContain('Privacy');
     expect(footerLinks).toContain('Terms');
   });

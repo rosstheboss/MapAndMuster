@@ -9,6 +9,8 @@ test('unauthenticated visitors are sent to sign in', async ({ page }) => {
   });
 
   await page.goto('/');
+  await expect(page.getByRole('banner').getByRole('img', { name: 'Map & Muster' })).toBeVisible();
+  await expect(page.getByRole('contentinfo').getByRole('img', { name: 'Map & Muster' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Your Campaigns' })).toBeVisible();
