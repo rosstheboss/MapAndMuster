@@ -156,6 +156,66 @@ public sealed class GetCampaignHandler
 }
 
 /// <summary>
+/// Reads the campaign log and chat the caller is allowed to see.
+/// </summary>
+public sealed class GetCampaignLogHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IUserAccountStore _accounts;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    /// <param name="campaigns">The campaign store.</param>
+    /// <param name="accounts">The user account store.</param>
+    public GetCampaignLogHandler(ICampaignStore campaigns, IUserAccountStore accounts)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _accounts = accounts;
+    }
+
+    /// <summary>
+    /// Returns the campaign log for a viewer. Non-viewers receive not-found.
+    /// </summary>
+    /// <param name="campaignId">The campaign identifier.</param>
+    /// <param name="userId">The authenticated user identifier.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <returns>The campaign log.</returns>
+    public async Task<OperationResult<CampaignLogDetail>> HandleAsync(
+        Guid campaignId,
+        Guid userId,
+        CancellationToken cancellationToken,
+        bool isAdministrator = false)
+    {
+        var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
+        {
+            return OperationResults.Failure<CampaignLogDetail>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+        }
+
+        var names = await CampaignPlayMapper.UsernamesAsync(campaign, _accounts, cancellationToken).ConfigureAwait(false);
+        var participants = await CampaignPlayMapper.ParticipantsAsync(campaign, _accounts, cancellationToken)
+            .ConfigureAwait(false);
+        var members = CampaignPlayMapper.ToChatMembers(participants);
+        var inspect = CampaignChatContext.CanInspectPrivateChat(isAdministrator, userId, campaign.PlayState);
+        var membership = CampaignMapper.MembershipFor(campaign, userId);
+        return OperationResults.Success(new CampaignLogDetail
+        {
+            Id = campaign.Id,
+            Revision = campaign.Revision,
+            CanChat = membership is not null,
+            CanInspectPrivateChat = inspect,
+            MentionableMembers = members,
+            ChatChannels = CampaignChatContext.Channels(campaign, userId, members),
+            Log = CampaignPlayMapper.ToLogEntries(campaign, names, userId, inspect),
+        });
+    }
+}
+
+/// <summary>
 /// Deletes a campaign the caller manages.
 /// </summary>
 public sealed class DeleteCampaignHandler

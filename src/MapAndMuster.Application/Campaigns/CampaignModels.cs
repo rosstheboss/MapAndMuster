@@ -315,6 +315,33 @@ public sealed class CampaignDetail
 }
 
 /// <summary>
+/// Campaign log and chat snapshot, loaded separately from campaign metadata.
+/// </summary>
+public sealed class CampaignLogDetail
+{
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the optimistic concurrency revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets whether the viewer may post in the campaign log.</summary>
+    public required bool CanChat { get; init; }
+
+    /// <summary>Gets whether the viewer is an administrator currently in debug mode on this campaign.</summary>
+    public bool CanInspectPrivateChat { get; init; }
+
+    /// <summary>Gets current members who may be tagged in chat.</summary>
+    public required IReadOnlyList<CampaignLogMemberDetail> MentionableMembers { get; init; }
+
+    /// <summary>Gets compose targets: public, members, factions, and ally groups.</summary>
+    public IReadOnlyList<ChatChannelDetail> ChatChannels { get; init; } = [];
+
+    /// <summary>Gets the campaign log, including chat the viewer is allowed to see. Unrevealed orders are omitted.</summary>
+    public required IReadOnlyList<PlayLogEntryDetail> Log { get; init; }
+}
+
+/// <summary>
 /// A member attached to a campaign, shown on the Participants panel.
 /// </summary>
 public sealed class CampaignParticipantDetail

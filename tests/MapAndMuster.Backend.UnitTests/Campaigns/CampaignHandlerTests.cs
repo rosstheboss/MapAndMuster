@@ -77,6 +77,36 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task GetLogReturnsNotFoundForNonMembers()
+    {
+        var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
+        var handler = new GetCampaignLogHandler(store, new FakeAccounts());
+
+        var result = await handler.HandleAsync(store.Existing.Id, OtherUserId, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignNotFound, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetLogReturnsChatForPublicViewersWithoutCompose()
+    {
+        var campaign = StoredCampaignFor(UserId);
+        campaign = WithPublicView(campaign, isPubliclyViewable: true);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new GetCampaignLogHandler(store, new FakeAccounts());
+
+        var result = await handler.HandleAsync(store.Existing.Id, OtherUserId, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Equal(store.Existing.Id, result.Value.Id);
+        Assert.False(result.Value.CanChat);
+        Assert.Contains(result.Value.MentionableMembers, member => member.Username == "northplayer");
+        Assert.Contains(result.Value.ChatChannels, channel => channel.Kind == "Public");
+    }
+
+    [Fact]
     public async Task GetReturnsPubliclyViewableCampaignsToNonMembers()
     {
         var campaign = StoredCampaignFor(UserId);

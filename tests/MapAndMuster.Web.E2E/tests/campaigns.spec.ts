@@ -401,6 +401,20 @@ test('players can read and chat in the campaign log', async ({ page }) => {
       body: JSON.stringify({ ...profile, timeZoneId: 'America/New_York' }),
     });
   });
+  await page.route(`**/api/campaigns/${campaignId}/log`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: campaignId,
+        revision: campaign.revision,
+        canChat: campaign.canChat,
+        mentionableMembers: campaign.mentionableMembers,
+        chatChannels: [{ kind: 'Public', label: 'Everyone' }],
+        log: campaign.log,
+      }),
+    });
+  });
   await page.route(`**/api/campaigns/${campaignId}/play`, async (route) => {
     await route.fulfill({
       status: 200,

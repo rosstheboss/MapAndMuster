@@ -89,8 +89,28 @@
 .territory {
   fill-opacity: 0.32;
   stroke: rgb(28 25 23 / 75%);
+  pointer-events: none;
+}
+
+.territory-visual {
+  pointer-events: none;
+}
+
+.territory-visual.is-hover-motion {
+  transition: transform 200ms ease-in-out;
+}
+
+.territory-hit {
+  fill: transparent;
+  stroke: none;
   cursor: pointer;
   pointer-events: fill;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .territory-visual.is-hover-motion {
+    transition: none;
+  }
 }
 
 .territory.is-half-highlighted {

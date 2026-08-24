@@ -45,6 +45,11 @@ import { isAdditiveModifier } from '../../core/maps/pointer';
 const HOVER_LIFT_SCREEN_PX = 6;
 const SPAWN_STRIPE_SCREEN_PX = 5;
 
+/** Wait before applying or clearing a territory hover so border jitter does not flicker. */
+export const TERRITORY_HOVER_INTENT_MS = 200;
+/** Ease-in-out duration for lifting a hovered territory and returning it. */
+export const TERRITORY_HOVER_MOTION_MS = 200;
+
 export type MovePlacement = 'valid' | 'invalid' | null;
 
 export interface MapForceMarker {
@@ -143,8 +148,19 @@ export class CampaignMapViewComponent {
   private hasFittedImage = false;
   private marqueeOrigin: { clientX: number; clientY: number; point: MapPoint; additive: boolean } | null = null;
   private panOrigin = { x: 0, y: 0, panX: 0, panY: 0 };
+  private hoverIntentTimer: ReturnType<typeof setTimeout> | null = null;
+  private hoverIntentId: string | null | undefined = undefined;
+  private readonly hoverMotionIds = signal<ReadonlySet<string>>(new Set());
+  private readonly hoverMotionTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private resizeObserver: ResizeObserver | null = null;
   private observedDestroy = false;
+
+  constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.clearHoverIntentTimer();
+      this.clearHoverMotion();
+    });
+  }
 
   protected readonly overlayTerritories = computed(() => {
     const image = this.imageSize();
@@ -209,7 +225,8 @@ export class CampaignMapViewComponent {
       const isSpawn = !!territory.spawnFactionId;
       const stripeColor = fill === 'transparent' ? (spawnFaction?.color ?? '#78716c') : fill;
       const hovered = territory.id === this.hoveredTerritoryId();
-      const lift = hovered && !selected && !this.marqueeBox() ? -this.screenToMap(HOVER_LIFT_SCREEN_PX) : 0;
+      const lifted = hovered && !selected && !this.marqueeBox();
+      const hoverLift = -this.screenToMap(HOVER_LIFT_SCREEN_PX);
       const glowSource = isSpawn ? stripeColor : fill;
       return {
         territory,
@@ -245,7 +262,8 @@ export class CampaignMapViewComponent {
         moveInvalid: selected && this.movePlacement() === 'invalid',
         isSpawn,
         fill: isSpawn ? `url(#${spawnStripePatternId(stripeColor)})` : fill,
-        hoverLift: lift,
+        lifted,
+        hoverLift,
         strokeWidth: this.screenToMap(
           selected
             ? STROKE_FULL_HIGHLIGHT_SCREEN_PX
@@ -392,6 +410,7 @@ export class CampaignMapViewComponent {
 
   protected onWheel(event: WheelEvent): void {
     event.preventDefault();
+    this.clearHoverMotion();
     const factor = event.deltaY < 0 ? 1 : -1;
     this.nudgeZoom(factor, event.clientX, event.clientY);
   }
@@ -511,12 +530,24 @@ export class CampaignMapViewComponent {
   }
 
   protected onTerritoryEnter(id: string): void {
-    this.territoryHover.emit(id);
+    if (this.hoveredTerritoryId() === id) {
+      this.clearHoverIntentTimer();
+      this.hoverIntentId = undefined;
+      return;
+    }
+
+    this.scheduleTerritoryHover(id);
   }
 
   protected onTerritoryLeave(id: string): void {
+    if (this.hoverIntentId === id) {
+      this.clearHoverIntentTimer();
+      this.hoverIntentId = undefined;
+      return;
+    }
+
     if (this.hoveredTerritoryId() === id) {
-      this.territoryHover.emit(null);
+      this.scheduleTerritoryHover(null);
     }
   }
 
@@ -533,9 +564,83 @@ export class CampaignMapViewComponent {
   }
 
   protected clearHovers(): void {
+    this.clearHoverIntentTimer();
+    this.hoverIntentId = undefined;
     if (!this.panning()) {
-      this.territoryHover.emit(null);
+      this.emitTerritoryHover(null);
       this.adjacencyHover.emit(null);
+    }
+  }
+
+  private scheduleTerritoryHover(id: string | null): void {
+    if (this.hoverIntentId === id) {
+      return;
+    }
+
+    this.clearHoverIntentTimer();
+    this.hoverIntentId = id;
+    this.hoverIntentTimer = setTimeout(() => {
+      this.hoverIntentTimer = null;
+      this.hoverIntentId = undefined;
+      this.emitTerritoryHover(id);
+    }, TERRITORY_HOVER_INTENT_MS);
+  }
+
+  private emitTerritoryHover(id: string | null): void {
+    const previous = this.hoveredTerritoryId();
+    if (previous && previous !== id) {
+      this.playHoverMotion(previous);
+    }
+
+    if (id) {
+      this.playHoverMotion(id);
+    }
+
+    this.territoryHover.emit(id);
+  }
+
+  protected isHoverMotion(id: string): boolean {
+    return this.hoverMotionIds().has(id);
+  }
+
+  private playHoverMotion(id: string): void {
+    const existing = this.hoverMotionTimers.get(id);
+    if (existing !== undefined) {
+      clearTimeout(existing);
+    }
+
+    if (!this.hoverMotionIds().has(id)) {
+      const next = new Set(this.hoverMotionIds());
+      next.add(id);
+      this.hoverMotionIds.set(next);
+    }
+
+    this.hoverMotionTimers.set(
+      id,
+      setTimeout(() => {
+        this.hoverMotionTimers.delete(id);
+        const next = new Set(this.hoverMotionIds());
+        next.delete(id);
+        this.hoverMotionIds.set(next);
+      }, TERRITORY_HOVER_MOTION_MS),
+    );
+  }
+
+  private clearHoverMotion(): void {
+    for (const timer of this.hoverMotionTimers.values()) {
+      clearTimeout(timer);
+    }
+
+    this.hoverMotionTimers.clear();
+    if (this.hoverMotionIds().size > 0) {
+      this.hoverMotionIds.set(new Set());
+    }
+  }
+
+  private clearHoverIntentTimer(): void {
+    if (this.hoverIntentTimer !== null) {
+      clearTimeout(this.hoverIntentTimer);
+      this.hoverIntentTimer = null;
     }
   }
 
@@ -548,12 +653,14 @@ export class CampaignMapViewComponent {
   }
 
   protected zoomToActualSize(): void {
+    this.clearHoverMotion();
     this.fitToPanel.set(false);
     this.zoom.set(1);
     this.centerImage();
   }
 
   protected zoomToFit(): void {
+    this.clearHoverMotion();
     this.fitToPanel.set(true);
     this.centerImage();
   }
@@ -561,6 +668,7 @@ export class CampaignMapViewComponent {
   protected onZoomInput(event: Event): void {
     const value = Number((event.target as HTMLInputElement).value);
     if (Number.isFinite(value)) {
+      this.clearHoverMotion();
       this.fitToPanel.set(false);
       this.zoom.set(clampZoom(value / 100));
       if (this.zoom() === 1) {
@@ -826,6 +934,7 @@ export class CampaignMapViewComponent {
   }
 
   private nudgeZoom(direction: 1 | -1, clientX?: number, clientY?: number): void {
+    this.clearHoverMotion();
     const next = steppedZoom(this.currentScale(), direction);
     const viewport = this.viewport()?.nativeElement.getBoundingClientRect();
     if (!viewport) {

@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { CampaignMapViewComponent } from './campaign-map-view.component';
+import { CampaignMapViewComponent, TERRITORY_HOVER_INTENT_MS } from './campaign-map-view.component';
 
 const png =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -493,8 +493,121 @@ describe('CampaignMapViewComponent', () => {
     expect(spawn?.classList.contains('is-spawn')).toBe(true);
     expect(spawn?.getAttribute('fill')).toContain('url(#spawn-stripe-');
     expect(compiled.querySelector('pattern')?.getAttribute('patternTransform')).toBe('rotate(45)');
-    expect(hovered?.parentElement?.getAttribute('transform')).toContain('translate(0');
-    expect(spawn?.parentElement?.getAttribute('transform')).toBeNull();
+    const hoveredVisual = hovered?.closest('.territory-visual');
+    const spawnVisual = spawn?.closest('.territory-visual');
+    expect(hoveredVisual?.classList.contains('is-lifted')).toBe(true);
+    expect(spawnVisual?.classList.contains('is-lifted')).toBe(false);
+    const hoveredLift = Number(/translate\(0 ([-\d.]+)\)/.exec(hoveredVisual?.getAttribute('transform') ?? '')?.[1]);
+    const spawnLift = Number(/translate\(0 ([-\d.]+)\)/.exec(spawnVisual?.getAttribute('transform') ?? '')?.[1]);
+    expect(hoveredLift).toBeLessThan(0);
+    expect(hoveredLift).toBeGreaterThan(-0.05);
+    expect(spawnLift).toBe(0);
+    expect(compiled.querySelector('.territory-hit[data-id="t1"]')?.closest('.territory-visual')).toBeNull();
+  });
+
+  it('animates only the territory whose hover lift is changing', () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(CampaignMapViewComponent);
+      fixture.componentRef.setInput('imageUrl', png);
+      fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1), squareTerritory('t2', 0.4, 0.1)]);
+      fixture.componentInstance.territoryHover.subscribe((id) => {
+        fixture.componentRef.setInput('hoveredTerritoryId', id);
+      });
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      const visuals = (): HTMLElement[] => [...compiled.querySelectorAll<HTMLElement>('.territory-visual')];
+      expect(visuals().every((visual) => !visual.classList.contains('is-hover-motion'))).toBe(true);
+      expect(visuals().every((visual) => visual.style.transitionDuration === '')).toBe(true);
+
+      compiled
+        .querySelector('.territory-hit[data-id="t1"]')!
+        .dispatchEvent(pointer('pointerenter', { bubbles: false }));
+      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS);
+      fixture.detectChanges();
+
+      const moving = compiled.querySelector('.territory[data-id="t1"]')?.closest('.territory-visual');
+      const idle = compiled.querySelector('.territory[data-id="t2"]')?.closest('.territory-visual');
+      expect(moving?.classList.contains('is-hover-motion')).toBe(true);
+      expect(idle?.classList.contains('is-hover-motion')).toBe(false);
+
+      compiled
+        .querySelector('.map-viewport')!
+        .dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true }));
+      fixture.detectChanges();
+      expect(visuals().every((visual) => !visual.classList.contains('is-hover-motion'))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('waits before starting a territory hover so brief pointer jitter does not flicker', () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(CampaignMapViewComponent);
+      fixture.componentRef.setInput('imageUrl', png);
+      fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1)]);
+      const hover = vi.fn();
+      fixture.componentInstance.territoryHover.subscribe(hover);
+      fixture.detectChanges();
+
+      const hit = (fixture.nativeElement as HTMLElement).querySelector('.territory-hit[data-id="t1"]')!;
+      hit.dispatchEvent(pointer('pointerenter', { bubbles: false }));
+      expect(hover).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS - 1);
+      expect(hover).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(hover).toHaveBeenCalledWith('t1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels a pending territory hover when the pointer leaves before the delay', () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(CampaignMapViewComponent);
+      fixture.componentRef.setInput('imageUrl', png);
+      fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1)]);
+      const hover = vi.fn();
+      fixture.componentInstance.territoryHover.subscribe(hover);
+      fixture.detectChanges();
+
+      const hit = (fixture.nativeElement as HTMLElement).querySelector('.territory-hit[data-id="t1"]')!;
+      hit.dispatchEvent(pointer('pointerenter', { bubbles: false }));
+      hit.dispatchEvent(pointer('pointerleave', { bubbles: false }));
+      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS);
+      expect(hover).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('waits before clearing a territory hover and cancels that wait if the pointer returns', () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(CampaignMapViewComponent);
+      fixture.componentRef.setInput('imageUrl', png);
+      fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1)]);
+      fixture.componentRef.setInput('hoveredTerritoryId', 't1');
+      const hover = vi.fn();
+      fixture.componentInstance.territoryHover.subscribe(hover);
+      fixture.detectChanges();
+
+      const hit = (fixture.nativeElement as HTMLElement).querySelector('.territory-hit[data-id="t1"]')!;
+      hit.dispatchEvent(pointer('pointerleave', { bubbles: false }));
+      expect(hover).not.toHaveBeenCalled();
+      hit.dispatchEvent(pointer('pointerenter', { bubbles: false }));
+      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS);
+      expect(hover).not.toHaveBeenCalled();
+
+      hit.dispatchEvent(pointer('pointerleave', { bubbles: false }));
+      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS);
+      expect(hover).toHaveBeenCalledWith(null);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

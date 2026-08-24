@@ -47,6 +47,7 @@ import {
   maxAmountForUnit,
 } from '../../core/campaigns/campaign-schedule';
 import {
+  compareNames,
   FACTION_COLOR_PALETTE,
   FACTION_PRESETS,
   factionsFromPreset,
@@ -624,6 +625,7 @@ export class CampaignSetupPage {
     return this.factions.controls
       .filter((faction) => faction.controls.allyGroupId.value === groupId && faction.controls.name.value.trim())
       .map((faction) => faction.controls.name.value.trim())
+      .sort(compareNames)
       .join(', ');
   }
 
@@ -631,6 +633,7 @@ export class CampaignSetupPage {
     return this.factions.controls
       .filter((faction) => !faction.controls.allyGroupId.value.trim() && faction.controls.name.value.trim())
       .map((faction) => faction.controls.name.value.trim())
+      .sort(compareNames)
       .join(', ');
   }
 

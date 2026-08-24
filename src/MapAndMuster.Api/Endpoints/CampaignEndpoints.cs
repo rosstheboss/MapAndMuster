@@ -42,6 +42,11 @@ public static class CampaignEndpoints
             .Produces<CampaignDetailResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/{campaignId:guid}/log", GetLogAsync)
+            .WithName("GetCampaignLog")
+            .Produces<CampaignLogResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
         group.MapPost("/{campaignId:guid}/chat", PostChatAsync)
             .WithName("PostCampaignChat")
             .Produces<CampaignDetailResponse>()
@@ -572,6 +577,32 @@ public static class CampaignEndpoints
         }
 
         return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> GetLogAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        GetCampaignLogHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromLog(result.Value));
     }
 
     private static async Task<IResult> PostChatAsync(

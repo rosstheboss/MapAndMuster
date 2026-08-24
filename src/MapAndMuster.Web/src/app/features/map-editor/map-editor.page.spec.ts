@@ -1131,6 +1131,113 @@ describe('MapEditorPage', () => {
     http.verify();
   });
 
+  it('shows and deletes a connection when two connected territories are selected', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1), namedSquare('t2', 2, 'Southmarch', 0.4)],
+      adjacencies: [
+        {
+          id: 'ab',
+          territoryAId: 't1',
+          territoryBId: 't2',
+          origin: 'Manual',
+          marker: { x: 0.4, y: 0.2 },
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onToolChange: (tool: string) => void;
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      graph: () => { adjacencies: { id: string }[] };
+    };
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    page.onToolChange('select');
+    page.onTerritorySelect({ id: 't1', additive: false });
+    page.onTerritorySelect({ id: 't2', additive: true });
+    fixture.detectChanges();
+
+    expect(compiled.textContent).toContain('These territories are connected.');
+    const deleteConnection = [...compiled.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Delete connection',
+    );
+    expect(deleteConnection).toBeTruthy();
+    deleteConnection?.click();
+    fixture.detectChanges();
+
+    expect(page.graph().adjacencies).toHaveLength(0);
+    expect(compiled.textContent).not.toContain('These territories are connected.');
+    expect(compiled.textContent).toContain('Northmarch');
+    expect(compiled.textContent).toContain('Southmarch');
+    http.verify();
+  });
+
+  it('lists a selected territory connections and can remove one', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        namedSquare('t1', 1, 'Northmarch', 0.1),
+        namedSquare('t2', 2, 'Southmarch', 0.4),
+        namedSquare('t3', 3, 'Eastmarch', 0.7),
+      ],
+      adjacencies: [
+        {
+          id: 'ab',
+          territoryAId: 't1',
+          territoryBId: 't2',
+          origin: 'Manual',
+          marker: { x: 0.4, y: 0.2 },
+        },
+        {
+          id: 'ac',
+          territoryAId: 't1',
+          territoryBId: 't3',
+          origin: 'Manual',
+          marker: { x: 0.5, y: 0.2 },
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onToolChange: (tool: string) => void;
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      graph: () => { adjacencies: { id: string }[] };
+      selectedIds: () => string[];
+    };
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    page.onToolChange('select');
+    page.onTerritorySelect({ id: 't1', additive: false });
+    fixture.detectChanges();
+
+    const connections = compiled.querySelector('.connection-list');
+    expect(connections?.textContent).toContain('Eastmarch');
+    expect(connections?.textContent).toContain('Southmarch');
+
+    compiled.querySelector<HTMLButtonElement>('[aria-label="Remove connection to Southmarch"]')?.click();
+    fixture.detectChanges();
+
+    expect(page.graph().adjacencies.map((edge) => edge.id)).toEqual(['ac']);
+    expect(compiled.querySelector('.connection-list')?.textContent).toContain('Eastmarch');
+    expect(compiled.querySelector('.connection-list')?.textContent).not.toContain('Southmarch');
+
+    compiled.querySelector<HTMLButtonElement>('[aria-label="Select Eastmarch"]')?.click();
+    fixture.detectChanges();
+    expect(page.selectedIds()).toEqual(['t3']);
+    http.verify();
+  });
+
   it('shows both connected territories and can reassign or delete the connection', async () => {
     const fixture = TestBed.createComponent(MapEditorPage);
     const http = TestBed.inject(HttpTestingController);

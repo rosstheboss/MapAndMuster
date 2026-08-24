@@ -95,19 +95,31 @@
         </defs>
         @if (showOverlay()) {
           @for (item of overlayTerritories(); track item.territory.id) {
-            <g [attr.transform]="item.hoverLift ? 'translate(0 ' + item.hoverLift + ')' : null">
+            <g class="territory-layer">
+              <g
+                class="territory-visual"
+                [class.is-lifted]="item.lifted"
+                [class.is-hover-motion]="isHoverMotion(item.territory.id)"
+                [attr.transform]="'translate(0 ' + (item.lifted ? item.hoverLift : 0) + ')'"
+              >
+                <polygon
+                  class="territory"
+                  [class.is-selected]="item.selected"
+                  [class.is-half-highlighted]="item.halfHighlighted"
+                  [class.is-dimmed]="item.dimmed"
+                  [class.is-move-valid]="item.moveValid"
+                  [class.is-move-invalid]="item.moveInvalid"
+                  [class.is-spawn]="item.isSpawn"
+                  [attr.points]="item.points"
+                  [attr.fill]="item.fill"
+                  [attr.stroke-width]="item.strokeWidth"
+                  [style.--glow-color]="item.glowColor"
+                  [attr.data-id]="item.territory.id"
+                />
+              </g>
               <polygon
-                class="territory"
-                [class.is-selected]="item.selected"
-                [class.is-half-highlighted]="item.halfHighlighted"
-                [class.is-dimmed]="item.dimmed"
-                [class.is-move-valid]="item.moveValid"
-                [class.is-move-invalid]="item.moveInvalid"
-                [class.is-spawn]="item.isSpawn"
+                class="territory-hit"
                 [attr.points]="item.points"
-                [attr.fill]="item.fill"
-                [attr.stroke-width]="item.strokeWidth"
-                [style.--glow-color]="item.glowColor"
                 [attr.data-kind]="'territory'"
                 [attr.data-id]="item.territory.id"
                 [attr.aria-label]="item.territory.name || item.territory.displayNumber"

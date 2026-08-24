@@ -8,6 +8,7 @@ namespace MapAndMuster.Domain.Play;
 /// Ranking public objectives award their configured points to every player currently tied for first.
 /// Running public objectives add points per owned territory and per revealed relic held by an ally
 /// or faction-mate other than the scoring player. Named public objectives with 0 campaign points are ignored.
+/// Leaderboards cover ranking objectives and points per territory; allied relic control is omitted.
 /// Hidden item-objective points are included only when those items are supplied in
 /// <see cref="CampaignPointScoringState.VisibleItems"/>.
 /// </summary>
@@ -282,6 +283,12 @@ public static class CampaignPointStandingsRules
                     state.Players,
                     structurePointsByPlayer,
                     _ => 0),
+                .. Leaderboard(
+                    GeneralPublicObjectiveKinds.PointsPerTerritory,
+                    ranking.PointsPerTerritory,
+                    state.Players,
+                    territoryCountByPlayer,
+                    _ => 0),
             ],
         };
     }
@@ -439,6 +446,9 @@ public static class GeneralPublicObjectiveKinds
 
     /// <summary>Most campaign points from currently owned non-destroyed structures.</summary>
     public const string MostStructurePoints = "MostStructurePoints";
+
+    /// <summary>Configured campaign points for each currently owned territory.</summary>
+    public const string PointsPerTerritory = "PointsPerTerritory";
 }
 
 /// <summary>
@@ -449,7 +459,10 @@ public sealed class CampaignPointStandingsResult
     /// <summary>Gets one standing per player, unsorted.</summary>
     public required IReadOnlyList<CampaignPointStanding> Standings { get; init; }
 
-    /// <summary>Gets enabled ranking objectives with a current top five.</summary>
+    /// <summary>
+    /// Gets enabled ranking objectives and points-per-territory with a current top five.
+    /// Allied relic control is scored but never listed here.
+    /// </summary>
     public required IReadOnlyList<PublicObjectiveLeaderboard> Leaderboards { get; init; }
 }
 

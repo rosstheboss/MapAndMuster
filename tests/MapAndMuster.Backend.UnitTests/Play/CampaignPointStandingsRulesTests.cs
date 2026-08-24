@@ -252,7 +252,10 @@ public sealed class CampaignPointStandingsRulesTests
             ranking: new GeneralPublicObjectivePoints(0, 0, 0, pointsPerTerritory: 2)));
 
         Assert.Equal(4, Assert.Single(result.Standings).PublicObjectivePoints);
-        Assert.Empty(result.Leaderboards);
+        var board = Assert.Single(result.Leaderboards);
+        Assert.Equal(GeneralPublicObjectiveKinds.PointsPerTerritory, board.Kind);
+        Assert.Equal(2, board.AwardPoints);
+        Assert.Equal(2, Assert.Single(board.Leaders).Metric);
     }
 
     [Fact]
@@ -309,6 +312,7 @@ public sealed class CampaignPointStandingsRulesTests
         Assert.Equal(10, result.Standings.Single(row => row.UserId == mate).PublicObjectivePoints);
         Assert.Equal(10, result.Standings.Single(row => row.UserId == ally).PublicObjectivePoints);
         Assert.Equal(0, result.Standings.Single(row => row.UserId == enemy).PublicObjectivePoints);
+        Assert.Empty(result.Leaderboards);
     }
 
     [Fact]

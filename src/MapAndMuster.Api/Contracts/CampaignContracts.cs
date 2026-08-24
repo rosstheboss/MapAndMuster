@@ -888,6 +888,33 @@ public sealed class CampaignDetailResponse
 }
 
 /// <summary>
+/// Campaign log and chat snapshot, loaded separately from campaign metadata.
+/// </summary>
+public sealed class CampaignLogResponse
+{
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the optimistic concurrency revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets whether the viewer may post in the campaign log.</summary>
+    public required bool CanChat { get; init; }
+
+    /// <summary>Gets whether the viewer is an administrator currently in debug mode on this campaign.</summary>
+    public bool CanInspectPrivateChat { get; init; }
+
+    /// <summary>Gets current members who may be tagged in chat.</summary>
+    public required IReadOnlyList<CampaignLogMemberResponse> MentionableMembers { get; init; }
+
+    /// <summary>Gets compose targets: public, members, factions, and ally groups.</summary>
+    public IReadOnlyList<ChatChannelResponse> ChatChannels { get; init; } = [];
+
+    /// <summary>Gets the campaign log, including chat the viewer is allowed to see.</summary>
+    public required IReadOnlyList<PlayLogEntryResponse> Log { get; init; }
+}
+
+/// <summary>
 /// A member attached to a campaign, shown on the Participants panel.
 /// </summary>
 public sealed class CampaignParticipantResponse
@@ -2050,6 +2077,45 @@ public static class CampaignResponses
                     FreeCharacterCount = participant.FreeCharacterCount,
                 }),
             ],
+            MentionableMembers =
+            [
+                .. detail.MentionableMembers.Select(static member => new CampaignLogMemberResponse
+                {
+                    UserId = member.UserId,
+                    Username = member.Username,
+                    DisplayName = member.DisplayName,
+                }),
+            ],
+            ChatChannels =
+            [
+                .. detail.ChatChannels.Select(static channel => new ChatChannelResponse
+                {
+                    Kind = channel.Kind,
+                    TargetId = channel.TargetId,
+                    Label = channel.Label,
+                }),
+            ],
+            Log =
+            [
+                .. detail.Log.Select(PlayResponses.FromLogEntry),
+            ],
+        };
+    }
+
+    /// <summary>
+    /// Maps a campaign log snapshot. Private chats are already omitted for unauthorized viewers.
+    /// </summary>
+    /// <param name="detail">The log detail.</param>
+    /// <returns>The HTTP response.</returns>
+    public static CampaignLogResponse FromLog(CampaignLogDetail detail)
+    {
+        ArgumentNullException.ThrowIfNull(detail);
+        return new CampaignLogResponse
+        {
+            Id = detail.Id,
+            Revision = detail.Revision,
+            CanChat = detail.CanChat,
+            CanInspectPrivateChat = detail.CanInspectPrivateChat,
             MentionableMembers =
             [
                 .. detail.MentionableMembers.Select(static member => new CampaignLogMemberResponse

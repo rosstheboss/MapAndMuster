@@ -226,6 +226,14 @@
                       <li>{{ labelFor(territory) }}</li>
                     }
                   </ul>
+                  @if (selectedPairConnection(); as connection) {
+                    <p>These territories are connected.</p>
+                    @if (canManage()) {
+                      <button type="button" class="button-secondary" (click)="removeConnection(connection.id)">
+                        Delete connection
+                      </button>
+                    }
+                  }
                   @if (canManage()) {
                     <button type="button" class="button-secondary" (click)="deleteSelectedTerritories()">
                       {{ deleteLabel() }}
@@ -455,6 +463,35 @@
                           </button>
                         }
                       </div>
+                      <fieldset class="field field-wide">
+                        <legend>Connections</legend>
+                        @if (selectedConnections().length === 0) {
+                          <p class="muted">None</p>
+                        } @else {
+                          <ul class="connection-list">
+                            @for (connection of selectedConnections(); track connection.id) {
+                              <li>
+                                <button
+                                  type="button"
+                                  class="list-button"
+                                  [attr.aria-label]="'Select ' + connection.label"
+                                  (click)="onTerritorySelect({ id: connection.otherId, additive: false })"
+                                >
+                                  {{ connection.label }}
+                                </button>
+                                <button
+                                  type="button"
+                                  class="button-secondary"
+                                  [attr.aria-label]="'Remove connection to ' + connection.label"
+                                  (click)="removeConnection(connection.id)"
+                                >
+                                  Remove
+                                </button>
+                              </li>
+                            }
+                          </ul>
+                        }
+                      </fieldset>
                       @if (placedItemTypes().length > 0 && selectedIds().length === 1) {
                         <fieldset class="field field-wide">
                           <legend>Placed item objectives</legend>

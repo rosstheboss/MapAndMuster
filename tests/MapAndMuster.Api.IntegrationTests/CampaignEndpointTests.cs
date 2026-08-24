@@ -838,6 +838,36 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task MembersCanLoadCampaignLogSeparatelyFromCampaignDetail()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("host");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Split Load War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var posted = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/chat",
+            new PostCampaignChatRequest { Revision = created.Revision, Message = "Log only." });
+        Assert.Equal(HttpStatusCode.OK, posted.StatusCode);
+
+        var log = await owner.GetFromJsonAsync<CampaignLogResponse>($"/api/campaigns/{created.Id}/log", JsonOptions);
+        Assert.NotNull(log);
+        Assert.Equal(created.Id, log.Id);
+        Assert.True(log.CanChat);
+        var chat = Assert.Single(log.Log);
+        Assert.Equal("Log only.", chat.Summary);
+        Assert.Contains(log.MentionableMembers, member => member.Username == ownerName);
+
+        using var stranger = _factory.CreateClient();
+        var strangerName = UniqueName("watch");
+        await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
+        using var forbidden = await stranger.GetAsync($"/api/campaigns/{created.Id}/log");
+        Assert.Equal(HttpStatusCode.NotFound, forbidden.StatusCode);
+    }
+
+    [Fact]
     public async Task PrivateChatIsOmittedFromUnauthorizedCampaignPayloads()
     {
         using var owner = _factory.CreateClient();

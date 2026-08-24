@@ -199,6 +199,31 @@ export class MapEditorPage {
       !findConnection(this.graph().adjacencies, ids[0], ids[1])
     );
   });
+  protected readonly selectedPairConnection = computed(() => {
+    const ids = this.selectedIds();
+    if (ids.length !== 2 || ids[0] === ids[1]) {
+      return null;
+    }
+
+    return findConnection(this.graph().adjacencies, ids[0], ids[1]) ?? null;
+  });
+  protected readonly selectedConnections = computed(() => {
+    const ids = this.selectedIds();
+    if (ids.length !== 1) {
+      return [];
+    }
+
+    const id = ids[0];
+    const territories = this.graph().territories;
+    return this.graph()
+      .adjacencies.filter((edge) => edge.territoryAId === id || edge.territoryBId === id)
+      .map((edge) => {
+        const otherId = edge.territoryAId === id ? edge.territoryBId : edge.territoryAId;
+        const other = territories.find((territory) => territory.id === otherId);
+        return { id: edge.id, otherId, label: other ? territoryLabel(other) : otherId };
+      })
+      .sort((left, right) => left.label.localeCompare(right.label));
+  });
   protected readonly sortedTerritories = computed(() =>
     [...this.graph().territories].sort((left, right) => territoryLabel(left).localeCompare(territoryLabel(right))),
   );
@@ -593,6 +618,14 @@ export class MapEditorPage {
     if (id) {
       this.deleteAdjacency(id);
     }
+  }
+
+  protected removeConnection(id: string): void {
+    if (!this.canManage()) {
+      return;
+    }
+
+    this.deleteAdjacency(id);
   }
 
   protected setAdjacencyEnd(end: 'a' | 'b', territoryId: string): void {

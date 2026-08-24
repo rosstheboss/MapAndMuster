@@ -135,6 +135,24 @@ describe('CampaignService', () => {
     http.verify();
   });
 
+  it('loads a campaign log separately from campaign detail', async () => {
+    const service = TestBed.inject(CampaignService);
+    const http = TestBed.inject(HttpTestingController);
+    const pending = service.getLog('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    const request = http.expectOne('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/log');
+    expect(request.request.method).toBe('GET');
+    request.flush({
+      id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      revision: 1,
+      canChat: true,
+      mentionableMembers: [],
+      chatChannels: [],
+      log: [],
+    });
+    expect((await pending).canChat).toBe(true);
+    http.verify();
+  });
+
   it('downloads a campaign log export', async () => {
     const service = TestBed.inject(CampaignService);
     const http = TestBed.inject(HttpTestingController);

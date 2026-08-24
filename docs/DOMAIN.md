@@ -223,8 +223,9 @@ still change their own faction until the campaign starts; after launch only staf
 changes it. A kicked player's forces, drafts, and unresolved battles are removed, and carried
 items drop on the territory they occupied.
 
-Near the bottom of the campaign page, a Campaign points panel lists every player occupying a
-slot. Default order is highest total to lowest, then display name. Columns are display name
+Once a campaign is in progress or completed, near the bottom of the campaign page a Campaign points
+panel lists every player occupying a slot. Upcoming campaigns omit this panel. Default order is
+highest total to lowest, then display name. Columns are display name
 (with currently held visible item-objective logos), faction logo, alliance group, Structures
 captured, Battles Won, Public Objectives, Private Objectives, Other, and Total. The five point
 columns sum to Total. The table sorts by any of those columns. Structure points are the current
@@ -242,7 +243,9 @@ structures. Running public objectives add configured campaign points for each cu
 territory, and for each revealed relic currently held by another player of the same faction or
 a current (not backstabbed) ally. Relics the scoring player holds stay in Other. A named,
 ranking, or running objective configured at 0 campaign points is ignored.
-The panel also shows a top five for each enabled ranking objective. Private Objectives is the
+The panel also shows a top five for each enabled ranking objective and for points per territory
+when that running objective is configured above 0. Allied relic control is scored in Public
+Objectives but is not shown as a top five. Private Objectives is the
 total of revealed or completed private-objective points that apply to that player: a
 player-scoped award counts only for that player; a faction award counts for every current
 player of that faction; an ally-group award counts for every current player whose faction is
@@ -590,7 +593,10 @@ button style as Clear Connections and the other toolbar actions. User-created (m
 are kept on regenerate, and those pairs are skipped. Generated arrows may be replaced. Managers may
 add or delete arrows, including generated ones, and may clear all arrows. A pair of territories has
 at most one connection, and every connection is between exactly two territories. Select two
-territories and click Connect, or use the Connect tool and click two territories. Connection arrows
+territories and click Connect, or use the Connect tool and click two territories. Selecting two
+territories that already share a connection shows that connection in the editor bar so a manager can
+delete it. Selecting one territory lists its connections there; a manager may remove a connection
+from that list. Connection arrows
 are selectable only in Select, where clicking an arrow shows both territories in the collapsible
 editor bar above the map so the pair can be changed or deleted, and in Erase, where clicking an arrow
 deletes it. Drawing and
@@ -657,7 +663,11 @@ the current selection use a half highlight: 50% fill and 1.5 times the usual bor
 When a territory qualifies for both, the full highlight wins. When several territories are selected,
 those territories stay fully highlighted and every other connected territory uses the half highlight.
 Hovering an unselected territory, while not drag-selecting, lifts that polygon a few pixels so the
-hovered territory is easier to distinguish. In the map editor, that hover lift and hover highlight
+hovered territory is easier to distinguish. The lift eases in and out over 200ms on the hovered
+territory only. Hover only starts or stops after the pointer stays on or off the territory for a
+short moment, and the painted shape moves independently of the pointer hit area, so borders do not
+flicker. Zooming does not animate every territory. In the map editor, that hover lift and hover
+highlight
 do not apply in Draw mode. Spawn territories fill with 5-pixel-wide diagonal stripes
 of the overlay or spawn-faction color, using the same highlight opacities as a solid fill.
 When a territory
@@ -713,10 +723,20 @@ file or preset map is pending. Pending uploaded files and edited link fields are
 
 Edit campaign shows a static 200×113 map preview of the current image. It is not
 zoomable or selectable. The campaign page shows the interactive map at full width, with territory
-details under the map. Clicking a player, faction, or ally group on the campaign page, while the
-player is not issuing an order, highlights that party’s territories and emphasizes their forces on
-the map. Clicking the same party again clears that focus. A profile link still opens the user
-profile. The campaign page and map editor can download a PNG of the latest saved map
+details under the map. The campaign page Factions section lists each faction name as a map-focus
+control. When that faction has a fixed spawn territory, the territory name follows in parentheses as
+a map link. Required-subfaction spawns that differ from the parent spawn are included in the same
+parentheses, alphabetically, as `Subfaction: Territory`. Factions with no specific spawn omit that
+parenthetical. The campaign page Ally groups section lists groups alphabetically. Each group name is a map-focus
+control, followed by the current player count in parentheses, then its member factions in
+alphabetical order. Catalog subfactions for a faction appear in parentheses after that faction,
+also alphabetical: `Alpha League (1) - Midland (East)`. Players currently in the group appear as
+nested bullets in display-name order, each with their chosen faction and subfaction when they have
+one: `Bob (Midland, East)`. Players who have not chosen a faction, non-player members, and
+backstabbed factions are omitted from the count and the nested list. Clicking a player, faction, or
+ally group on the campaign page, while the player is not issuing an order, highlights that party’s
+territories and emphasizes their forces on the map. Clicking the same party again clears that focus.
+A profile link still opens the user profile. The campaign page and map editor can download a PNG of the latest saved map
 image with the unselected territory overlay rasterized on top. Spawn hatching, structure pins, and
 faction flags or uploaded logos are included. Download flags are twice the on-map marker size and
 structures are three times that size so they remain readable on the PNG. Adjacency arrows are
@@ -740,8 +760,8 @@ only meets that extra vertex (a T-junction). Traces that sit along a shared
 border are allowed; a drawing that covers another territory's interior cannot be closed or saved.
 
 Factions, terrain types, and structures can be expanded or collapsed inside their setup sections.
-Each ally group lists its member factions in a paragraph. When any ally group exists, unaligned
-factions are listed after the groups.
+Each ally group lists its member factions in alphabetical order in a paragraph. When any ally group
+exists, unaligned factions are listed after the groups, also alphabetically.
 
 Each faction uses a color flag by default or an uploaded 50×50 flag image. Uploaded flags are not
 recolored.
@@ -911,7 +931,10 @@ last-write-wins.
 ## Play log
 
 The campaign page shows a collapsible, scrollable log at full page width near the top
-for upcoming, in-progress, and completed campaigns. Each entry is formatted as
+for upcoming, in-progress, and completed campaigns. The log loads independently of the rest of
+the campaign page, the same way All Campaigns loads public site chat separately from the campaign
+list: chat can appear while campaign metadata is still loading, and the reverse. Each entry is
+formatted as
 `(local-timestamp) originator: text`. Campaign-generated facts use the originator name
 `Campaign` and always belong to the public channel. Member chat uses the author's display name
 snapshotted when the message was posted. Chat originators and `@` mentions of current members

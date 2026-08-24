@@ -27,7 +27,7 @@ import type {
   ParseArmyListResult,
   UserSearchHit,
 } from './campaign.models';
-import { filenameFromContentDisposition, type CampaignLogExportRequest } from './campaign-log';
+import { filenameFromContentDisposition, type CampaignLogExportRequest, type CampaignLogSync } from './campaign-log';
 
 @Injectable({ providedIn: 'root' })
 export class CampaignService {
@@ -89,6 +89,14 @@ export class CampaignService {
   async get(campaignId: string): Promise<CampaignDetail> {
     return firstValueFrom(
       this.http.get<CampaignDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}`, { withCredentials: true }),
+    );
+  }
+
+  async getLog(campaignId: string): Promise<CampaignLogSync> {
+    return firstValueFrom(
+      this.http.get<CampaignLogSync>(`/api/campaigns/${encodeURIComponent(campaignId)}/log`, {
+        withCredentials: true,
+      }),
     );
   }
 

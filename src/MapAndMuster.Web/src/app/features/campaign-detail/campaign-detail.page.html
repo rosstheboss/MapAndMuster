@@ -1,7 +1,5 @@
 <section class="page">
-  @if (loading()) {
-    <p>Loading campaign…</p>
-  } @else if (campaign(); as campaign) {
+  @if (campaign(); as campaign) {
     <div class="setup-toolbar">
       <div class="page-header">
         <h1>{{ campaign.name }}</h1>
@@ -25,14 +23,53 @@
         }
       </div>
     </div>
+  } @else {
+    <div class="setup-toolbar">
+      <div class="page-header">
+        <h1>Campaign</h1>
+      </div>
+      <div class="setup-toolbar-actions">
+        <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+      </div>
+    </div>
+  }
 
-    @if (error()) {
-      <p class="error error-banner" role="alert">{{ error() }}</p>
-    }
-    @if (successMessage()) {
-      <p class="success-banner" role="status">{{ successMessage() }}</p>
-    }
+  @if (error()) {
+    <p class="error error-banner" role="alert">{{ error() }}</p>
+  }
+  @if (successMessage()) {
+    <p class="success-banner" role="status">{{ successMessage() }}</p>
+  }
 
+  @if (chatLoading()) {
+    <p>Loading campaign chat...</p>
+  } @else if (chatLoadError()) {
+    <p class="error error-banner" role="alert">{{ chatLoadError() }}</p>
+  } @else if (logBoard(); as board) {
+    <app-campaign-log
+      [entries]="board.log"
+      [members]="board.mentionableMembers"
+      [channels]="board.chatChannels ?? []"
+      [canChat]="board.canChat"
+      [canExport]="canStaffMembers()"
+      [exporting]="downloadingLog()"
+      [timeZoneId]="timeZoneId()"
+      [sending]="chatBusy()"
+      [sendError]="chatError()"
+      [expanded]="isOpen('log')"
+      [initialChannelKey]="chatChannelKey()"
+      [initialScrollTop]="restoreChatScroll()"
+      (expandedChange)="setSection('log', $event)"
+      (channelChange)="onChatChannelChange($event)"
+      (scrollChange)="onChatScrollChange($event)"
+      (send)="postChat($event)"
+      (downloadLog)="downloadLog($event)"
+    />
+  }
+
+  @if (loading()) {
+    <p>Loading campaign…</p>
+  } @else if (campaign(); as campaign) {
     <div class="panel status-panel stack">
       @if (currentPhaseHeading(campaign); as heading) {
         <p>{{ heading }}</p>
@@ -48,26 +85,6 @@
         </p>
       }
     </div>
-
-    <app-campaign-log
-      [entries]="campaign.log"
-      [members]="campaign.mentionableMembers"
-      [channels]="campaign.chatChannels ?? []"
-      [canChat]="campaign.canChat"
-      [canExport]="canStaffMembers()"
-      [exporting]="downloadingLog()"
-      [timeZoneId]="timeZoneId()"
-      [sending]="chatBusy()"
-      [sendError]="chatError()"
-      [expanded]="isOpen('log')"
-      [initialChannelKey]="chatChannelKey()"
-      [initialScrollTop]="restoreChatScroll()"
-      (expandedChange)="setSection('log', $event)"
-      (channelChange)="onChatChannelChange($event)"
-      (scrollChange)="onChatScrollChange($event)"
-      (send)="postChat($event)"
-      (downloadLog)="downloadLog($event)"
-    />
 
     <div class="panel stack">
       <h2>
@@ -251,8 +268,20 @@
               </select>
             </div>
           }
-          @if (showSpawnLocation() && spawnLocationName(); as spawn) {
-            <p>Spawn location is at {{ spawn }}</p>
+          @if (showSpawnLocation() && spawnLocation(); as spawn) {
+            <p>
+              Spawn location is at
+              <button
+                type="button"
+                class="territory-link"
+                [class.is-selected]="selectedIds().includes(spawn.id)"
+                [disabled]="!!mapAction()"
+                [attr.aria-label]="'Show ' + spawn.label + ' on the map'"
+                (click)="selectTerritoryOnMap(spawn.id)"
+              >
+                {{ spawn.label }}
+              </button>
+            </p>
           }
           <button type="submit" class="button">Save faction</button>
         }
@@ -276,8 +305,20 @@
               · {{ campaign.subfaction }}
             }
           </p>
-          @if (showSpawnLocation() && spawnLocationName(); as spawn) {
-            <p>Spawn location is at {{ spawn }}</p>
+          @if (showSpawnLocation() && spawnLocation(); as spawn) {
+            <p>
+              Spawn location is at
+              <button
+                type="button"
+                class="territory-link"
+                [class.is-selected]="selectedIds().includes(spawn.id)"
+                [disabled]="!!mapAction()"
+                [attr.aria-label]="'Show ' + spawn.label + ' on the map'"
+                (click)="selectTerritoryOnMap(spawn.id)"
+              >
+                {{ spawn.label }}
+              </button>
+            </p>
           }
         }
       </div>
@@ -308,7 +349,7 @@
       }
     }
 
-    <div class="panel stack">
+    <div class="panel stack map-section" #mapSection>
       <div class="map-heading">
         <h2>
           <button
@@ -365,6 +406,7 @@
                 [allyGroups]="campaign.allyGroups"
                 [brokenAllyFactionIds]="campaign.brokenAllyFactionIds ?? play()?.brokenAllyFactionIds ?? []"
                 [itemImageUrl]="itemObjectiveImageUrl"
+                [focusSelectedTerritories]="true"
                 (territoryHover)="hoveredTerritoryId.set($event)"
                 (territorySelect)="onTerritorySelect($event)"
                 (backgroundSelect)="onMapBackgroundSelect()"
@@ -400,7 +442,18 @@
                 <p>{{ prompt }}</p>
               }
               @if (hoveredTerritory(); as territory) {
-                <h3>{{ labelFor(territory) }}</h3>
+                <h3>
+                  <button
+                    type="button"
+                    class="territory-link"
+                    [class.is-selected]="selectedIds().includes(territory.id)"
+                    [disabled]="!!mapAction()"
+                    [attr.aria-label]="'Show ' + labelFor(territory) + ' on the map'"
+                    (click)="selectTerritoryOnMap(territory.id)"
+                  >
+                    {{ labelFor(territory) }}
+                  </button>
+                </h3>
                 <p>{{ territory.description || 'No description.' }}</p>
                 <p>
                   Terrain:
@@ -470,7 +523,30 @@
                     None
                   }
                 </p>
-                <p>Adjacent territories: {{ adjacentLabels(territory) }}</p>
+                <p>
+                  Adjacent territories:
+                  @if (adjacentTerritories(territory); as neighbors) {
+                    @if (neighbors.length === 0) {
+                      None
+                    } @else {
+                      @for (neighbor of neighbors; track neighbor.id) {
+                        <button
+                          type="button"
+                          class="territory-link"
+                          [class.is-selected]="selectedIds().includes(neighbor.id)"
+                          [disabled]="!!mapAction()"
+                          [attr.aria-label]="'Show ' + neighbor.label + ' on the map'"
+                          (click)="selectTerritoryOnMap(neighbor.id)"
+                        >
+                          {{ neighbor.label }}
+                        </button>
+                        @if (!$last) {
+                          <span>, </span>
+                        }
+                      }
+                    }
+                  }
+                </p>
               } @else {
                 <p class="muted">Hover a territory to see its details.</p>
               }
@@ -505,7 +581,23 @@
                   @if (!item.isRevealed) {
                     (hidden)
                   }
-                  — {{ itemLocation(item) }}
+                  —
+                  @if (item.possessorForceId) {
+                    {{ itemLocation(item) }}
+                  } @else if (item.territoryId) {
+                    <button
+                      type="button"
+                      class="territory-link"
+                      [class.is-selected]="selectedIds().includes(item.territoryId)"
+                      [disabled]="!!mapAction()"
+                      [attr.aria-label]="'Show ' + territoryName(item.territoryId) + ' on the map'"
+                      (click)="selectTerritoryOnMap(item.territoryId)"
+                    >
+                      {{ territoryName(item.territoryId) }}
+                    </button>
+                  } @else {
+                    {{ itemLocation(item) }}
+                  }
                   @if (item.flavorText) {
                     <p>{{ item.flavorText }}</p>
                   }
@@ -664,7 +756,19 @@
               </button>
               @for (force of myForces(); track force.id) {
                 <fieldset class="stack">
-                  <legend>{{ forceLabel(force) }} · {{ territoryName(force.territoryId) }}</legend>
+                  <legend>
+                    {{ forceLabel(force) }} ·
+                    <button
+                      type="button"
+                      class="territory-link"
+                      [class.is-selected]="selectedIds().includes(force.territoryId)"
+                      [disabled]="!!mapAction()"
+                      [attr.aria-label]="'Show ' + territoryName(force.territoryId) + ' on the map'"
+                      (click)="selectTerritoryOnMap(force.territoryId)"
+                    >
+                      {{ territoryName(force.territoryId) }}
+                    </button>
+                  </legend>
                   @if (force.statusEffects) {
                     <p class="muted">{{ force.statusEffects }}</p>
                   }
@@ -766,8 +870,17 @@
                       <p class="muted">
                         @if (structureAt(force.territoryId); as structure) {
                           Pillage the {{ structure.condition }} {{ structure.name }} in
-                          {{ territoryName(force.territoryId) }}. Operational structures become pillaged; pillaged
-                          destructible structures are removed from the map.
+                          <button
+                            type="button"
+                            class="territory-link"
+                            [class.is-selected]="selectedIds().includes(force.territoryId)"
+                            [disabled]="!!mapAction()"
+                            [attr.aria-label]="'Show ' + territoryName(force.territoryId) + ' on the map'"
+                            (click)="selectTerritoryOnMap(force.territoryId)"
+                          >
+                            {{ territoryName(force.territoryId) }}</button
+                          >. Operational structures become pillaged; pillaged destructible structures are removed from
+                          the map.
                         } @else {
                           Pillage requires an intact enemy or unowned pillageable structure in this territory.
                         }
@@ -785,7 +898,19 @@
                       }
                     }
                     @if (draftFor(force.id).kind === 'Repair') {
-                      <p class="muted">Repair the pillaged structure in {{ territoryName(force.territoryId) }}.</p>
+                      <p class="muted">
+                        Repair the pillaged structure in
+                        <button
+                          type="button"
+                          class="territory-link"
+                          [class.is-selected]="selectedIds().includes(force.territoryId)"
+                          [disabled]="!!mapAction()"
+                          [attr.aria-label]="'Show ' + territoryName(force.territoryId) + ' on the map'"
+                          (click)="selectTerritoryOnMap(force.territoryId)"
+                        >
+                          {{ territoryName(force.territoryId) }}</button
+                        >.
+                      </p>
                     }
                     @if (draftFor(force.id).kind === 'Backstab') {
                       <p class="muted">
@@ -795,9 +920,23 @@
                     }
                     @if (savedDraft(force.id); as saved) {
                       <p class="muted">
-                        Draft: {{ saved.kind
-                        }}{{ saved.targetTerritoryId ? ' to ' + territoryName(saved.targetTerritoryId) : '' }}. This is
-                        the action that commits when time runs out.
+                        Draft: {{ saved.kind }}
+                        @if (saved.targetTerritoryId) {
+                          to
+                          <button
+                            type="button"
+                            class="territory-link"
+                            [class.is-selected]="selectedIds().includes(saved.targetTerritoryId)"
+                            [disabled]="!!mapAction()"
+                            [attr.aria-label]="'Show ' + territoryName(saved.targetTerritoryId) + ' on the map'"
+                            (click)="selectTerritoryOnMap(saved.targetTerritoryId)"
+                          >
+                            {{ territoryName(saved.targetTerritoryId) }}</button
+                          >.
+                        } @else {
+                          .
+                        }
+                        This is the action that commits when time runs out.
                       </p>
                     } @else {
                       <p class="muted">No draft saved yet. If time runs out, this force Holds.</p>
@@ -844,7 +983,19 @@
           }
           @for (battle of play.battles; track battle.id) {
             <article class="stack">
-              <h3>{{ territoryName(battle.territoryId) }} · {{ battle.status }}</h3>
+              <h3>
+                <button
+                  type="button"
+                  class="territory-link"
+                  [class.is-selected]="selectedIds().includes(battle.territoryId)"
+                  [disabled]="!!mapAction()"
+                  [attr.aria-label]="'Show ' + territoryName(battle.territoryId) + ' on the map'"
+                  (click)="selectTerritoryOnMap(battle.territoryId)"
+                >
+                  {{ territoryName(battle.territoryId) }}
+                </button>
+                · {{ battle.status }}
+              </h3>
               @if (battle.mission; as mission) {
                 <p>
                   Mission:
@@ -1227,7 +1378,19 @@
           </button>
           @for (force of play.forces; track force.id) {
             <fieldset class="stack">
-              <legend>{{ forceLabel(force) }} · {{ territoryName(force.territoryId) }}</legend>
+              <legend>
+                {{ forceLabel(force) }} ·
+                <button
+                  type="button"
+                  class="territory-link"
+                  [class.is-selected]="selectedIds().includes(force.territoryId)"
+                  [disabled]="!!mapAction()"
+                  [attr.aria-label]="'Show ' + territoryName(force.territoryId) + ' on the map'"
+                  (click)="selectTerritoryOnMap(force.territoryId)"
+                >
+                  {{ territoryName(force.territoryId) }}
+                </button>
+              </legend>
               <div class="field">
                 <label [attr.for]="'debug-kind-' + force.id">Action</label>
                 <select
@@ -1291,7 +1454,19 @@
             @for (battle of play.battles; track battle.id) {
               @if (battle.status === 'Disputed' || battle.status === 'AwaitingResults' || battle.status === 'Pending') {
                 <article class="stack">
-                  <h4>{{ territoryName(battle.territoryId) }} · {{ battle.status }}</h4>
+                  <h4>
+                    <button
+                      type="button"
+                      class="territory-link"
+                      [class.is-selected]="selectedIds().includes(battle.territoryId)"
+                      [disabled]="!!mapAction()"
+                      [attr.aria-label]="'Show ' + territoryName(battle.territoryId) + ' on the map'"
+                      (click)="selectTerritoryOnMap(battle.territoryId)"
+                    >
+                      {{ territoryName(battle.territoryId) }}
+                    </button>
+                    · {{ battle.status }}
+                  </h4>
                   <button type="button" class="button" (click)="resolveBattle(battle)">Override result</button>
                 </article>
               }
@@ -1476,29 +1651,15 @@
         <p>Start: {{ campaign.startsUtc | instantDate: timeZoneId() }}</p>
         <p>End: {{ campaign.endsUtc | instantDate: timeZoneId() }}</p>
         <p>Rounds: {{ campaign.roundCount }} · each {{ roundLengthText(campaign) }}</p>
-        <p class="muted">Schedule time zone: {{ campaign.timeZoneId }}</p>
-        <p class="muted">Created {{ campaign.createdUtc | instantDate: timeZoneId() }}</p>
-        <p class="muted">Last edited {{ campaign.updatedUtc | instantDate: timeZoneId() }}</p>
-      }
-    </div>
-
-    <div class="panel stack">
-      <h2>
-        <button
-          type="button"
-          class="section-toggle"
-          [attr.aria-expanded]="isOpen('round')"
-          (click)="toggleSection('round')"
-        >
-          Round structure
-        </button>
-      </h2>
-      @if (isOpen('round')) {
+        <h3>Round structure</h3>
         <ol class="plain-list">
           @for (phase of campaign.phases; track $index; let index = $index) {
             <li>{{ phaseText(campaign, index) }}</li>
           }
         </ol>
+        <p class="muted">Schedule time zone: {{ campaign.timeZoneId }}</p>
+        <p class="muted">Created {{ campaign.createdUtc | instantDate: timeZoneId() }}</p>
+        <p class="muted">Last edited {{ campaign.updatedUtc | instantDate: timeZoneId() }}</p>
       }
     </div>
 
@@ -1526,6 +1687,19 @@
               >
                 <strong>{{ faction.name }}</strong>
               </button>
+              @for (place of spawnPlacesFor(faction); track place.territoryId + ':' + place.subfactionLabel) {
+                <span class="muted">{{ place.prefix }}{{ place.subfactionLabel }}</span>
+                <button
+                  type="button"
+                  class="territory-link"
+                  [class.is-selected]="selectedIds().includes(place.territoryId)"
+                  [disabled]="!!mapAction()"
+                  [attr.aria-label]="'Show ' + place.label + ' on the map'"
+                  [textContent]="place.label"
+                  (click)="selectTerritoryOnMap(place.territoryId)"
+                ></button>
+                <span class="muted">{{ place.suffix }}</span>
+              }
               <span class="faction-swatch" [style.background]="faction.color" aria-hidden="true"></span>
               @if (faction.requiresSubfaction) {
                 <span class="muted"> · Subfaction required</span>
@@ -1583,17 +1757,39 @@
         </h2>
         @if (isOpen('allies')) {
           <ul class="plain-list">
-            @for (group of campaign.allyGroups; track group.id) {
+            @for (entry of listedAllyGroups(); track entry.group.id) {
               <li>
                 <button
                   type="button"
                   class="map-focus-button"
-                  [class.is-map-focused]="isMapFocused('ally', group.id)"
+                  [class.is-map-focused]="isMapFocused('ally', entry.group.id)"
                   [disabled]="!!mapAction()"
-                  (click)="focusOnMap('ally', group.id)"
+                  (click)="focusOnMap('ally', entry.group.id)"
                 >
-                  {{ group.name }}
+                  {{ entry.group.name }}
                 </button>
+                <span> ({{ entry.players.length }})</span>
+                @if (entry.membersLabel) {
+                  <span> - {{ entry.membersLabel }}</span>
+                }
+                @if (entry.players.length > 0) {
+                  <ul class="plain-list ally-group-players">
+                    @for (player of entry.players; track player.userId) {
+                      <li>
+                        <button
+                          type="button"
+                          class="map-focus-button"
+                          [class.is-map-focused]="isMapFocused('player', player.userId)"
+                          [disabled]="!!mapAction()"
+                          (click)="focusOnMap('player', player.userId)"
+                        >
+                          {{ player.displayName }}
+                        </button>
+                        <span> ({{ player.factionLabel }})</span>
+                      </li>
+                    }
+                  </ul>
+                }
               </li>
             }
           </ul>
@@ -1625,185 +1821,187 @@
       </div>
     }
 
-    <div class="panel stack">
-      <h2>
-        <button
-          type="button"
-          class="section-toggle"
-          [attr.aria-expanded]="isOpen('standings')"
-          (click)="toggleSection('standings')"
-        >
-          Campaign points
-        </button>
-      </h2>
-      @if (isOpen('standings')) {
-        @if (sortedStandings().length === 0) {
-          <p class="muted">No players are attached to this campaign yet.</p>
-        } @else {
-          <div class="standings-wrap">
-            <table class="standings-table">
-              <caption class="sr-only">
-                Campaign point standings
-              </caption>
-              <thead>
-                <tr>
-                  <th [attr.aria-sort]="sortDirection('displayName')">
-                    <button type="button" (click)="sortBy('displayName')">Display name</button>
-                  </th>
-                  <th [attr.aria-sort]="sortDirection('faction')">
-                    <button type="button" (click)="sortBy('faction')">Faction</button>
-                  </th>
-                  <th [attr.aria-sort]="sortDirection('allyGroup')">
-                    <button type="button" (click)="sortBy('allyGroup')">Alliance group</button>
-                  </th>
-                  <th [attr.aria-sort]="sortDirection('territory')">
-                    <button type="button" (click)="sortBy('territory')">Structures captured</button>
-                  </th>
-                  <th [attr.aria-sort]="sortDirection('battles')">
-                    <button type="button" (click)="sortBy('battles')">Battles Won</button>
-                  </th>
-                  <th [attr.aria-sort]="sortDirection('public')">
-                    <button type="button" (click)="sortBy('public')">Public Objectives</button>
-                  </th>
-                  <th [attr.aria-sort]="sortDirection('private')">
-                    <button type="button" (click)="sortBy('private')">Private Objectives</button>
-                  </th>
-                  <th [attr.aria-sort]="sortDirection('other')">
-                    <button type="button" (click)="sortBy('other')">Other</button>
-                  </th>
-                  <th [attr.aria-sort]="sortDirection('total')">
-                    <button type="button" (click)="sortBy('total')">Total</button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (row of sortedStandings(); track row.userId) {
+    @if (showCampaignPoints()) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('standings')"
+            (click)="toggleSection('standings')"
+          >
+            Campaign points
+          </button>
+        </h2>
+        @if (isOpen('standings')) {
+          @if (sortedStandings().length === 0) {
+            <p class="muted">No players are attached to this campaign yet.</p>
+          } @else {
+            <div class="standings-wrap">
+              <table class="standings-table">
+                <caption class="sr-only">
+                  Campaign point standings
+                </caption>
+                <thead>
                   <tr>
-                    <td>
-                      <button
-                        type="button"
-                        class="map-focus-button"
-                        [class.is-map-focused]="isMapFocused('player', row.userId)"
-                        [disabled]="!!mapAction()"
-                        (click)="focusOnMap('player', row.userId)"
-                      >
-                        {{ row.displayName }}
-                      </button>
-                      <a class="profile-link" [routerLink]="['/users', row.username]" [queryParams]="profileFrom()">{{
-                        row.username
-                      }}</a>
-                      @for (item of row.heldItems ?? []; track item.typeId) {
-                        <span class="standing-item" [style.color]="item.color || '#C45C26'" [title]="item.name">
-                          @if (standingItemImageUrl(item); as src) {
-                            <img [src]="src" alt="" />
-                          } @else {
-                            <app-map-symbol kind="item" [name]="item.builtinSymbol || 'Crown'" [label]="item.name" />
+                    <th [attr.aria-sort]="sortDirection('displayName')">
+                      <button type="button" (click)="sortBy('displayName')">Display name</button>
+                    </th>
+                    <th [attr.aria-sort]="sortDirection('faction')">
+                      <button type="button" (click)="sortBy('faction')">Faction</button>
+                    </th>
+                    <th [attr.aria-sort]="sortDirection('allyGroup')">
+                      <button type="button" (click)="sortBy('allyGroup')">Alliance group</button>
+                    </th>
+                    <th [attr.aria-sort]="sortDirection('territory')">
+                      <button type="button" (click)="sortBy('territory')">Structures captured</button>
+                    </th>
+                    <th [attr.aria-sort]="sortDirection('battles')">
+                      <button type="button" (click)="sortBy('battles')">Battles Won</button>
+                    </th>
+                    <th [attr.aria-sort]="sortDirection('public')">
+                      <button type="button" (click)="sortBy('public')">Public Objectives</button>
+                    </th>
+                    <th [attr.aria-sort]="sortDirection('private')">
+                      <button type="button" (click)="sortBy('private')">Private Objectives</button>
+                    </th>
+                    <th [attr.aria-sort]="sortDirection('other')">
+                      <button type="button" (click)="sortBy('other')">Other</button>
+                    </th>
+                    <th [attr.aria-sort]="sortDirection('total')">
+                      <button type="button" (click)="sortBy('total')">Total</button>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of sortedStandings(); track row.userId) {
+                    <tr>
+                      <td>
+                        <button
+                          type="button"
+                          class="map-focus-button"
+                          [class.is-map-focused]="isMapFocused('player', row.userId)"
+                          [disabled]="!!mapAction()"
+                          (click)="focusOnMap('player', row.userId)"
+                        >
+                          {{ row.displayName }}
+                        </button>
+                        <a class="profile-link" [routerLink]="['/users', row.username]" [queryParams]="profileFrom()">{{
+                          row.username
+                        }}</a>
+                        @for (item of row.heldItems ?? []; track item.typeId) {
+                          <span class="standing-item" [style.color]="item.color || '#C45C26'" [title]="item.name">
+                            @if (standingItemImageUrl(item); as src) {
+                              <img [src]="src" alt="" />
+                            } @else {
+                              <app-map-symbol kind="item" [name]="item.builtinSymbol || 'Crown'" [label]="item.name" />
+                            }
+                          </span>
+                        }
+                      </td>
+                      <td>
+                        @if (row.factionId) {
+                          <button
+                            type="button"
+                            class="map-focus-button"
+                            [class.is-map-focused]="isMapFocused('faction', row.factionId)"
+                            [disabled]="!!mapAction()"
+                            (click)="focusOnMap('faction', row.factionId)"
+                          >
+                            @if (row.hasFlagImage && flagImageUrl(row.factionId); as src) {
+                              <img class="standing-faction-logo" [src]="src" [alt]="row.factionName || 'Faction'" />
+                            } @else if (row.factionColor) {
+                              <span
+                                class="faction-swatch standing-faction-logo"
+                                [style.background]="row.factionColor"
+                                [attr.aria-label]="row.factionName || 'Faction'"
+                              ></span>
+                            } @else {
+                              {{ row.factionName }}
+                            }
+                          </button>
+                        }
+                      </td>
+                      <td>
+                        @if (allyGroupIdByName(row.allyGroupName); as allyId) {
+                          <button
+                            type="button"
+                            class="map-focus-button"
+                            [class.is-map-focused]="isMapFocused('ally', allyId)"
+                            [disabled]="!!mapAction()"
+                            (click)="focusOnMap('ally', allyId)"
+                          >
+                            {{ row.allyGroupName }}
+                          </button>
+                        } @else {
+                          {{ row.allyGroupName || '—' }}
+                        }
+                      </td>
+                      <td>{{ row.territoryAndStructurePoints }}</td>
+                      <td>{{ row.battlesWonPoints }}</td>
+                      <td>{{ row.publicObjectivePoints }}</td>
+                      <td>{{ row.privateObjectivePoints ?? 0 }}</td>
+                      <td>{{ row.otherPoints }}</td>
+                      <td>{{ row.total }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+          @if (leaderboards().length > 0) {
+            <div class="leaderboards">
+              @for (board of leaderboards(); track board.kind) {
+                <section class="leaderboard">
+                  <h3>{{ leaderboardTitle(board.kind) }} ({{ board.awardPoints }} CP)</h3>
+                  <ol>
+                    @for (leader of board.leaders; track leader.userId) {
+                      <li>
+                        <span class="leader-rank">{{ leader.rank }}.</span>
+                        <a
+                          class="profile-link"
+                          [routerLink]="['/users', leader.username]"
+                          [queryParams]="profileFrom()"
+                          >{{ leader.displayName }}</a
+                        >
+                        <span class="muted">
+                          {{ leaderboardMetric(board.kind, leader) }}
+                          @if (leader.awardsPoints) {
+                            · leading
                           }
                         </span>
-                      }
-                    </td>
-                    <td>
-                      @if (row.factionId) {
-                        <button
-                          type="button"
-                          class="map-focus-button"
-                          [class.is-map-focused]="isMapFocused('faction', row.factionId)"
-                          [disabled]="!!mapAction()"
-                          (click)="focusOnMap('faction', row.factionId)"
-                        >
-                          @if (row.hasFlagImage && flagImageUrl(row.factionId); as src) {
-                            <img class="standing-faction-logo" [src]="src" [alt]="row.factionName || 'Faction'" />
-                          } @else if (row.factionColor) {
-                            <span
-                              class="faction-swatch standing-faction-logo"
-                              [style.background]="row.factionColor"
-                              [attr.aria-label]="row.factionName || 'Faction'"
-                            ></span>
-                          } @else {
-                            {{ row.factionName }}
-                          }
-                        </button>
-                      }
-                    </td>
-                    <td>
-                      @if (allyGroupIdByName(row.allyGroupName); as allyId) {
-                        <button
-                          type="button"
-                          class="map-focus-button"
-                          [class.is-map-focused]="isMapFocused('ally', allyId)"
-                          [disabled]="!!mapAction()"
-                          (click)="focusOnMap('ally', allyId)"
-                        >
-                          {{ row.allyGroupName }}
-                        </button>
-                      } @else {
-                        {{ row.allyGroupName || '—' }}
-                      }
-                    </td>
-                    <td>{{ row.territoryAndStructurePoints }}</td>
-                    <td>{{ row.battlesWonPoints }}</td>
-                    <td>{{ row.publicObjectivePoints }}</td>
-                    <td>{{ row.privateObjectivePoints ?? 0 }}</td>
-                    <td>{{ row.otherPoints }}</td>
-                    <td>{{ row.total }}</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
-        @if (leaderboards().length > 0) {
-          <div class="leaderboards">
-            @for (board of leaderboards(); track board.kind) {
-              <section class="leaderboard">
-                <h3>{{ leaderboardTitle(board.kind) }} ({{ board.awardPoints }} CP)</h3>
-                <ol>
-                  @for (leader of board.leaders; track leader.userId) {
-                    <li>
-                      <span class="leader-rank">{{ leader.rank }}.</span>
-                      <a
-                        class="profile-link"
-                        [routerLink]="['/users', leader.username]"
-                        [queryParams]="profileFrom()"
-                        >{{ leader.displayName }}</a
-                      >
-                      <span class="muted">
-                        {{ leaderboardMetric(board.kind, leader) }}
-                        @if (leader.awardsPoints) {
-                          · leading
-                        }
-                      </span>
-                    </li>
+                      </li>
+                    }
+                  </ol>
+                </section>
+              }
+            </div>
+          }
+          @if (campaign.canManage && awardableObjectives().length > 0) {
+            <div class="award-row">
+              <label>
+                Player
+                <select [ngModel]="awardPlayerUserId()" (ngModelChange)="awardPlayerUserId.set($event)">
+                  @for (row of sortedStandings(); track row.userId) {
+                    <option [value]="row.userId">{{ row.displayName }}</option>
                   }
-                </ol>
-              </section>
-            }
-          </div>
+                </select>
+              </label>
+              <label>
+                Public objective
+                <select [ngModel]="awardObjectiveId()" (ngModelChange)="awardObjectiveId.set($event)">
+                  @for (objective of awardableObjectives(); track objective.id) {
+                    <option [value]="objective.id">{{ objective.name }} ({{ objective.campaignPoints }})</option>
+                  }
+                </select>
+              </label>
+              <button type="button" class="button" (click)="setPublicObjectiveAward(true)">Award</button>
+              <button type="button" class="button-secondary" (click)="setPublicObjectiveAward(false)">Revoke</button>
+            </div>
+          }
         }
-        @if (campaign.canManage && awardableObjectives().length > 0) {
-          <div class="award-row">
-            <label>
-              Player
-              <select [ngModel]="awardPlayerUserId()" (ngModelChange)="awardPlayerUserId.set($event)">
-                @for (row of sortedStandings(); track row.userId) {
-                  <option [value]="row.userId">{{ row.displayName }}</option>
-                }
-              </select>
-            </label>
-            <label>
-              Public objective
-              <select [ngModel]="awardObjectiveId()" (ngModelChange)="awardObjectiveId.set($event)">
-                @for (objective of awardableObjectives(); track objective.id) {
-                  <option [value]="objective.id">{{ objective.name }} ({{ objective.campaignPoints }})</option>
-                }
-              </select>
-            </label>
-            <button type="button" class="button" (click)="setPublicObjectiveAward(true)">Award</button>
-            <button type="button" class="button-secondary" (click)="setPublicObjectiveAward(false)">Revoke</button>
-          </div>
-        }
-      }
-    </div>
+      </div>
+    }
 
     @if (campaign.canManage) {
       <div class="panel stack">
@@ -1863,18 +2061,6 @@
           </div>
         </div>
       </div>
-    }
-  } @else {
-    <div class="setup-toolbar">
-      <div class="page-header">
-        <h1>Campaign</h1>
-      </div>
-      <div class="setup-toolbar-actions">
-        <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
-      </div>
-    </div>
-    @if (error()) {
-      <p class="error error-banner" role="alert">{{ error() }}</p>
     }
   }
 </section>
