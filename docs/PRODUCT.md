@@ -26,7 +26,8 @@ Player and Game Master in the same campaign.
 
 - Account registration with unique username, name (including optional suffix), location, display
   time zone, optional avatar, email verification, password reset, signed-in password change, and
-  optional Google/Facebook/Discord sign-in.
+  optional Google/Facebook/Discord sign-in. The profile stores a date-and-time display format
+  (Month Day, Year, Time Timezone with seconds by default).
 - Campaign creation, membership, factions, alliances, forces, rounds, deadlines, and roles.
 - Raster-map upload with polygon territories, adjacency, terrain, structures, spawn locations,
   ownership, force/relic markers, and viewer-selected map highlight colors.

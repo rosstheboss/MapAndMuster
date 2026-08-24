@@ -90,6 +90,11 @@ public sealed class ApplicationUser : IdentityUser<Guid>
     /// </summary>
     public string PreferredChatLanguage { get; set; } = "English";
 
+    /// <summary>
+    /// Gets or sets how UTC timestamps are formatted for this user.
+    /// </summary>
+    public DateTimeDisplayFormat DateTimeDisplayFormat { get; set; } = DateTimeDisplayFormats.Default;
+
     /// <summary>Gets or sets whether this account is a seeded administrator test user.</summary>
     public bool IsTestAccount { get; set; }
 

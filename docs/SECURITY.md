@@ -31,7 +31,8 @@ separate response models for public, participant, and staff views.
   the player must sign in to the existing verified account.
 - Other users receive only username, location, avatar, the chosen display name, and campaigns
   they may already view (publicly viewable campaigns plus private campaigns they share). Email,
-  created/updated timestamps, time-zone preference, the legal name (unless the owner opted
+  legal name when the owner displays username only, time zone, date-and-time format, and timestamps are omitted.
+  created/updated timestamps, time-zone preference, date-and-time display format, the legal name (unless the owner opted
   to show full name), join passwords, and hidden private campaigns are omitted from public
   profile responses.
 - Never log passwords, tokens, reset links, cookies, private objectives, or hidden locations.

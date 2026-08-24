@@ -3,6 +3,7 @@ import type { ElementRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
+import { AuthService } from '../../core/auth/auth.service';
 import { CHAT_LANGUAGES, type ChatLanguage } from '../../core/chat/chat-languages';
 import type { SiteChatMember, SiteChatMessage, SiteChatSend } from '../../core/chat/site-chat.models';
 import {
@@ -20,6 +21,7 @@ import {
 })
 export class SiteChatComponent {
   private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
   readonly messages = input<readonly SiteChatMessage[]>([]);
   readonly members = input<readonly SiteChatMember[]>([]);
   readonly blockedUsers = input<readonly SiteChatMember[]>([]);
@@ -145,7 +147,7 @@ export class SiteChatComponent {
   }
 
   protected formatTimestamp(value: string): string {
-    return formatLogTimestamp(value, this.timeZoneId());
+    return formatLogTimestamp(value, this.timeZoneId(), this.auth.currentUser()?.dateTimeDisplayFormat);
   }
 
   protected parts(summary: string): { text: string; mention: boolean; username?: string | null }[] {

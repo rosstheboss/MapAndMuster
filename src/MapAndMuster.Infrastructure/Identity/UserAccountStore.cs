@@ -188,6 +188,7 @@ public sealed class UserAccountStore : IUserAccountStore
         user.InAppNotificationsEnabled = request.InAppNotificationsEnabled;
         user.EmailNotificationsEnabled = request.EmailNotificationsEnabled;
         user.PreferredChatLanguage = request.PreferredChatLanguage;
+        user.DateTimeDisplayFormat = request.DateTimeDisplayFormat;
         user.UpdatedUtc = _clock.UtcNow;
         user.ProfileRevision++;
 
@@ -413,6 +414,7 @@ public sealed class UserAccountStore : IUserAccountStore
             InAppNotificationsEnabled = true,
             EmailNotificationsEnabled = true,
             PreferredChatLanguage = "English",
+            DateTimeDisplayFormat = DateTimeDisplayFormats.Default,
             CreatedUtc = now,
             UpdatedUtc = now,
             ProfileRevision = 1,
@@ -451,6 +453,7 @@ public sealed class UserAccountStore : IUserAccountStore
             PreferredChatLanguage = string.IsNullOrWhiteSpace(user.PreferredChatLanguage)
                 ? "English"
                 : user.PreferredChatLanguage,
+            DateTimeDisplayFormat = user.DateTimeDisplayFormat,
             IsTestAccount = user.IsTestAccount,
             TestAccountNumber = user.TestAccountNumber,
         };

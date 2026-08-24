@@ -3,7 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MapAndMuster.Api.Contracts;
+using MapAndMuster.Domain.Identity;
 using MapAndMuster.Infrastructure.Email;
 using MapAndMuster.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +18,7 @@ public sealed class IdentityEndpointTests
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() },
     };
 
     private readonly MapAndMusterApiFactory _factory;
@@ -129,6 +132,7 @@ public sealed class IdentityEndpointTests
         Assert.NotNull(own);
         Assert.Equal("America/Halifax", own.TimeZoneId);
         Assert.Equal("English", own.PreferredChatLanguage);
+        Assert.Equal(DateTimeDisplayFormat.MonthDayYear12h, own.DateTimeDisplayFormat);
 
         using var stranger = _factory.CreateClient();
         using var publicResponse = await stranger.GetAsync($"/api/profiles/{username}");
@@ -147,6 +151,7 @@ public sealed class IdentityEndpointTests
         Assert.False(root.TryGetProperty("timeZoneId", out _));
         Assert.False(root.TryGetProperty("profileRevision", out _));
         Assert.False(root.TryGetProperty("preferredChatLanguage", out _));
+        Assert.False(root.TryGetProperty("dateTimeDisplayFormat", out _));
         Assert.DoesNotContain(email, json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Lovelace", json, StringComparison.Ordinal);
     }
@@ -201,6 +206,34 @@ public sealed class IdentityEndpointTests
         var profile = await update.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonOptions);
         Assert.NotNull(profile);
         Assert.Equal("Spanish", profile.PreferredChatLanguage);
+    }
+
+    [Fact]
+    public async Task DateTimeDisplayFormatCanBeUpdated()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("dformat");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var update = await client.PutAsJsonAsync(
+            "/api/profiles/me",
+            new
+            {
+                username,
+                firstName = "Ada",
+                lastName = "Lovelace",
+                city = "Halifax",
+                region = "Nova Scotia",
+                country = "Canada",
+                timeZoneId = "America/Halifax",
+                displayNameMode = "Username",
+                dateTimeDisplayFormat = "IsoSortable24h",
+                profileRevision = 1,
+            });
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        var profile = await update.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonOptions);
+        Assert.NotNull(profile);
+        Assert.Equal(DateTimeDisplayFormat.IsoSortable24h, profile.DateTimeDisplayFormat);
     }
 
     [Fact]

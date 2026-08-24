@@ -78,6 +78,11 @@ public sealed class UpdateProfileCommand
     public string PreferredChatLanguage { get; init; } = "English";
 
     /// <summary>
+    /// Gets how UTC timestamps are formatted for this user.
+    /// </summary>
+    public string DateTimeDisplayFormat { get; init; } = "MonthDayYear12h";
+
+    /// <summary>
     /// Gets the profile revision last observed by the client.
     /// </summary>
     public required int ProfileRevision { get; init; }

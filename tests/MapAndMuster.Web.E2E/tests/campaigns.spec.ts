@@ -519,7 +519,7 @@ test('players can read and chat in the campaign log', async ({ page }) => {
   await page.goto(`/campaigns/${campaignId}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Border War' })).toBeVisible();
   await expect(page.getByText('Campaign log')).toBeVisible();
-  await expect(page.getByText('(2026-08-15 08:45:23 PM EDT)')).toBeVisible();
+  await expect(page.getByText('(August 15, 2026, 8:45:23 PM EDT)')).toBeVisible();
   await expect(page.getByText('Campaign:')).toBeVisible();
   await expect(page.getByText('North held in Coast.')).toBeVisible();
   await expect(page.getByText('Phase ends in')).toBeVisible();

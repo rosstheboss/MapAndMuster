@@ -20,6 +20,14 @@ import {
 } from '../../core/forms/validators';
 import { NAME_SUFFIXES, PROFILE_FIELD_LABELS } from '../../core/identity/identity-fields';
 import { CHAT_LANGUAGES } from '../../core/chat/chat-languages';
+import {
+  DATE_TIME_DISPLAY_FORMATS,
+  DATE_TIME_FORMAT_SAMPLE,
+  DEFAULT_DATE_TIME_DISPLAY_FORMAT,
+  formatInstant,
+  parseDateTimeDisplayFormat,
+  type DateTimeDisplayFormat,
+} from '../../core/time/date-time-display';
 import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
@@ -52,6 +60,7 @@ export class ProfilePage {
   protected readonly timeZones = listTimeZones();
   protected readonly suffixes = NAME_SUFFIXES;
   protected readonly chatLanguages = CHAT_LANGUAGES;
+  protected readonly dateTimeDisplayFormats = DATE_TIME_DISPLAY_FORMATS;
   protected profileRevision = 0;
   protected readonly form = this.formBuilder.nonNullable.group({
     username: ['', [required, minLength(3), maxLength(32), reservedUsername]],
@@ -67,6 +76,7 @@ export class ProfilePage {
     inAppNotificationsEnabled: true,
     emailNotificationsEnabled: true,
     preferredChatLanguage: 'English',
+    dateTimeDisplayFormat: DEFAULT_DATE_TIME_DISPLAY_FORMAT,
     currentPassword: [''],
     newPassword: ['', passwordComplexity],
     confirmPassword: [''],
@@ -77,6 +87,9 @@ export class ProfilePage {
   protected readonly timeZoneValue = toSignal(this.form.controls.timeZoneId.valueChanges, {
     initialValue: this.form.controls.timeZoneId.value,
   });
+  protected readonly dateTimeFormatValue = toSignal(this.form.controls.dateTimeDisplayFormat.valueChanges, {
+    initialValue: this.form.controls.dateTimeDisplayFormat.value,
+  });
   protected readonly regionOptions = computed(() => regionsForCountry(this.countryValue()));
 
   constructor() {
@@ -85,6 +98,10 @@ export class ProfilePage {
 
   protected isInvalid(name: string): boolean {
     return isControlInvalid(this.form, name, this.serverFields());
+  }
+
+  protected dateTimeFormatExample(format: DateTimeDisplayFormat): string {
+    return formatInstant(DATE_TIME_FORMAT_SAMPLE, this.timeZoneValue() || 'UTC', format);
   }
 
   private async loadProfile(): Promise<void> {
@@ -104,6 +121,7 @@ export class ProfilePage {
         inAppNotificationsEnabled: profile.inAppNotificationsEnabled,
         emailNotificationsEnabled: profile.emailNotificationsEnabled,
         preferredChatLanguage: profile.preferredChatLanguage || 'English',
+        dateTimeDisplayFormat: parseDateTimeDisplayFormat(profile.dateTimeDisplayFormat),
       });
       this.profileRevision = profile.profileRevision;
       this.createdUtc.set(profile.createdUtc);
@@ -163,6 +181,7 @@ export class ProfilePage {
             inAppNotificationsEnabled: value.inAppNotificationsEnabled,
             emailNotificationsEnabled: value.emailNotificationsEnabled,
             preferredChatLanguage: value.preferredChatLanguage,
+            dateTimeDisplayFormat: value.dateTimeDisplayFormat,
           },
           this.profileRevision,
         );

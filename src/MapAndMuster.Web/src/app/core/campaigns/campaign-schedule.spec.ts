@@ -20,7 +20,9 @@ describe('campaign-schedule helpers', () => {
   });
 
   it('formats a phase-end timestamp with a short time zone name', () => {
-    expect(formatPhaseEndTimestamp('2026-08-15T22:30:00.000Z', 'America/New_York')).toBe('(2026-08-15 6:30:00 PM EDT)');
+    expect(formatPhaseEndTimestamp('2026-08-15T22:30:00.000Z', 'America/New_York')).toBe(
+      '(August 15, 2026, 6:30:00 PM EDT)',
+    );
   });
 
   it('formats a remaining phase countdown from a server end instant', () => {

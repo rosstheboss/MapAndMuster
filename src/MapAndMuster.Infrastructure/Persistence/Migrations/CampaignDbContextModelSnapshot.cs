@@ -83,6 +83,13 @@ namespace MapAndMuster.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DateTimeDisplayFormat")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("MonthDayYear12h");
+
                     b.Property<string>("DisplayNameMode")
                         .IsRequired()
                         .HasMaxLength(32)

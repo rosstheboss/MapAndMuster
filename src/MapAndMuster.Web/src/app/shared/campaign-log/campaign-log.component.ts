@@ -3,6 +3,7 @@ import type { ElementRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
+import { AuthService } from '../../core/auth/auth.service';
 import type { CampaignChatSend, ChatChannel, PlayLogEntry } from '../../core/campaigns/campaign.models';
 import {
   campaignLogComposerSize,
@@ -27,6 +28,7 @@ import {
 })
 export class CampaignLogComponent {
   private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
   readonly entries = input<readonly PlayLogEntry[]>([]);
   readonly members = input<readonly CampaignLogMember[]>([]);
   readonly channels = input<readonly ChatChannel[]>([]);
@@ -212,7 +214,7 @@ export class CampaignLogComponent {
   }
 
   protected formatTimestamp(value: string): string {
-    return formatLogTimestamp(value, this.timeZoneId());
+    return formatLogTimestamp(value, this.timeZoneId(), this.auth.currentUser()?.dateTimeDisplayFormat);
   }
 
   protected parts(summary: string): { text: string; mention: boolean; username?: string | null }[] {

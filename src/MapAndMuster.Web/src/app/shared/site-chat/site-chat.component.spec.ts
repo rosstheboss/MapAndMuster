@@ -1,14 +1,19 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
+import { AuthService } from '../../core/auth/auth.service';
 import { SiteChatComponent } from './site-chat.component';
 
 describe('SiteChatComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [SiteChatComponent],
-      providers: [provideZonelessChangeDetection(), provideRouter([])],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        { provide: AuthService, useValue: { currentUser: signal(null) } },
+      ],
     }).compileComponents();
   });
 

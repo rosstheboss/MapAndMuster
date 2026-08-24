@@ -1,14 +1,19 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
+import { AuthService } from '../../core/auth/auth.service';
 import { CampaignLogComponent } from './campaign-log.component';
 
 describe('CampaignLogComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [CampaignLogComponent],
-      providers: [provideZonelessChangeDetection(), provideRouter([])],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        { provide: AuthService, useValue: { currentUser: signal(null) } },
+      ],
     }).compileComponents();
   });
 
@@ -34,7 +39,7 @@ describe('CampaignLogComponent', () => {
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('(2026-08-15 08:45:23 PM EDT)');
+    expect(compiled.textContent).toContain('(August 15, 2026, 8:45:23 PM EDT)');
     expect(compiled.textContent).toContain('northplayer:');
     expect(compiled.querySelector('a[href^="/users/northplayer"]')?.textContent.trim()).toBe('northplayer:');
     expect(compiled.textContent).toContain('Hey, everybody! This is a message to all of you.');

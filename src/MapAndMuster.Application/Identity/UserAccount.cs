@@ -108,6 +108,11 @@ public sealed class UserAccount
     /// </summary>
     public string PreferredChatLanguage { get; init; } = nameof(ChatLanguage.English);
 
+    /// <summary>
+    /// Gets how UTC timestamps are formatted for this user.
+    /// </summary>
+    public DateTimeDisplayFormat DateTimeDisplayFormat { get; init; } = DateTimeDisplayFormats.Default;
+
     /// <summary>Gets whether this is a seeded administrator test account.</summary>
     public bool IsTestAccount { get; init; }
 

@@ -264,6 +264,9 @@ public sealed class UpdateStoredProfileRequest
     /// <summary>Gets the default site-chat compose language.</summary>
     public string PreferredChatLanguage { get; init; } = "English";
 
+    /// <summary>Gets how UTC timestamps are formatted for this user.</summary>
+    public DateTimeDisplayFormat DateTimeDisplayFormat { get; init; } = DateTimeDisplayFormats.Default;
+
     /// <summary>Gets the expected profile revision.</summary>
     public required int ExpectedRevision { get; init; }
 }

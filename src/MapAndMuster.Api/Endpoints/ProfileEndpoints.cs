@@ -114,6 +114,7 @@ public static class ProfileEndpoints
                     InAppNotificationsEnabled = request.InAppNotificationsEnabled,
                     EmailNotificationsEnabled = request.EmailNotificationsEnabled,
                     PreferredChatLanguage = request.PreferredChatLanguage,
+                    DateTimeDisplayFormat = request.DateTimeDisplayFormat,
                     ProfileRevision = request.ProfileRevision,
                 },
                 cancellationToken)

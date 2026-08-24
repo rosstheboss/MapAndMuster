@@ -63,6 +63,11 @@ public sealed class UpdateProfileHandler
             errors = [.. errors, languageError];
         }
 
+        if (!DateTimeDisplayFormats.TryParse(command.DateTimeDisplayFormat, out var formatError, out var dateTimeDisplayFormat))
+        {
+            errors = [.. errors, formatError];
+        }
+
         if (errors.Count > 0)
         {
             return OperationResults.Failure<UserAccount>(errors);
@@ -80,6 +85,7 @@ public sealed class UpdateProfileHandler
                     InAppNotificationsEnabled = command.InAppNotificationsEnabled,
                     EmailNotificationsEnabled = command.EmailNotificationsEnabled,
                     PreferredChatLanguage = language.ToString(),
+                    DateTimeDisplayFormat = dateTimeDisplayFormat,
                     ExpectedRevision = command.ProfileRevision,
                 },
                 cancellationToken)

@@ -25,11 +25,14 @@ name suffix (Jr., Sr., or Roman numerals I-X), city/region/country, IANA time-zo
 preference, optional avatar, and a display-name preference. First and last names are at least
 two characters and use the same prohibited-language rule as usernames. Local passwords must
 be at least 12 characters and include uppercase, lowercase, a number, and a special character.
-Created and last-edited instants are stored in UTC. The owner chooses a time zone for display;
-when none has been stored yet, those times are shown in UTC.
+Created and last-edited instants are stored in UTC. The owner chooses a time zone for display
+and a date-and-time format (Month Day, Year, Time Timezone with seconds by default, for example
+January 5, 2027, 12:34:52 PM EST). When no time zone has been stored yet, those times are shown in UTC.
+Campaign pages still convert instants in the campaign time zone; the profile format only changes how
+the converted local time is written.
 
 Other users may see username, location, avatar, and either the username or the full name
-according to that preference. Email, created/updated timestamps, time-zone preference, and the
+according to that preference. Email, created/updated timestamps, time-zone preference, date-and-time display format, and the
 legal name when the owner chose username display are omitted from public queries. Created and
 last-edited times are visible only to the owning user. Light or dark appearance is a client
 preference stored in a cookie so it remains after sign-out; light mode is the default.
@@ -1021,7 +1024,7 @@ orders, relics, private chat text, or site-chat bodies; they tell the recipient 
 open the campaign or All Campaigns. Seeded test accounts never receive email. The home page lists
 items that need attention, then site news. When none remain, it shows "No new notifications."
 Profile editing and the public profile live on their own pages. The profile includes a default
-site-chat compose language.
+site-chat compose language and a date-and-time display format.
 
 ## News
 

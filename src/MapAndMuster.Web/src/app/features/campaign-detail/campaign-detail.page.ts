@@ -1968,7 +1968,7 @@ export class CampaignDetailPage {
   }
 
   protected phaseEndTimestamp(endsUtc: string): string {
-    return formatPhaseEndTimestamp(endsUtc, this.timeZoneId());
+    return formatPhaseEndTimestamp(endsUtc, this.timeZoneId(), this.auth.currentUser()?.dateTimeDisplayFormat);
   }
 
   protected onPhaseExpired(): void {

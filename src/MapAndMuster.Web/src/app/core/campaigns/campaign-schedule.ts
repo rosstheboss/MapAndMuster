@@ -1,3 +1,5 @@
+import { formatInstant } from '../time/date-time-display';
+
 export const DURATION_UNITS = ['Minutes', 'Hours', 'Days', 'Weeks', 'Months'] as const;
 
 export const PHASE_KINDS = ['Action', 'Battle'] as const;
@@ -23,34 +25,9 @@ export function formatPhaseLabel(kind: string, actionNumber: number): string {
   return `Action ${actionNumber}`;
 }
 
-export function formatPhaseEndTimestamp(endsUtc: string, timeZone?: string | null): string {
-  const date = new Date(endsUtc);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  const zone = timeZone?.trim() ? timeZone.trim() : 'UTC';
-  try {
-    return `(${formatPhaseEndParts(date, zone)})`;
-  } catch {
-    return `(${formatPhaseEndParts(date, 'UTC')})`;
-  }
-}
-
-function formatPhaseEndParts(date: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-    timeZoneName: 'short',
-  }).formatToParts(date);
-  const value = (type: Intl.DateTimeFormatPartTypes): string => parts.find((part) => part.type === type)?.value ?? '';
-  return `${value('year')}-${value('month')}-${value('day')} ${value('hour')}:${value('minute')}:${value('second')} ${value('dayPeriod')} ${value('timeZoneName')}`;
+export function formatPhaseEndTimestamp(endsUtc: string, timeZone?: string | null, format?: string | null): string {
+  const formatted = formatInstant(endsUtc, timeZone, format);
+  return formatted ? `(${formatted})` : '';
 }
 
 export function formatCountdown(endsUtc: string, nowMs: number): string {

@@ -1,3 +1,4 @@
+import { formatInstant } from '../time/date-time-display';
 import type { ChatChannel, PlayLogEntry } from './campaign.models';
 
 export const CAMPAIGN_LOG_POLL_MS = 3_000;
@@ -73,18 +74,9 @@ export interface LogMessagePart {
   username?: string | null;
 }
 
-export function formatLogTimestamp(value: string, timeZone?: string | null): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  const zone = timeZone?.trim() ? timeZone.trim() : 'UTC';
-  try {
-    return formatParts(date, zone);
-  } catch {
-    return formatParts(date, 'UTC');
-  }
+export function formatLogTimestamp(value: string, timeZone?: string | null, format?: string | null): string {
+  const formatted = formatInstant(value, timeZone, format);
+  return formatted ? `(${formatted})` : '';
 }
 
 export function splitLogMessage(text: string, members: readonly CampaignLogMember[]): LogMessagePart[] {
@@ -301,20 +293,4 @@ export function filenameFromContentDisposition(header: string | null, fallback: 
   const plain = /filename=([^;]+)/i.exec(header);
   const value = plain?.[1]?.trim();
   return value && value.length > 0 ? value : fallback;
-}
-
-function formatParts(date: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-    timeZoneName: 'short',
-  }).formatToParts(date);
-  const read = (type: Intl.DateTimeFormatPartTypes): string => parts.find((part) => part.type === type)?.value ?? '';
-  return `(${read('year')}-${read('month')}-${read('day')} ${read('hour')}:${read('minute')}:${read('second')} ${read('dayPeriod')} ${read('timeZoneName')})`;
 }

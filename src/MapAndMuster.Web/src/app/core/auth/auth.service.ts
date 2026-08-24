@@ -134,6 +134,7 @@ export class AuthService {
           inAppNotificationsEnabled: value.inAppNotificationsEnabled ?? true,
           emailNotificationsEnabled: value.emailNotificationsEnabled ?? true,
           preferredChatLanguage: value.preferredChatLanguage ?? 'English',
+          dateTimeDisplayFormat: value.dateTimeDisplayFormat ?? 'MonthDayYear12h',
           profileRevision,
         },
         { withCredentials: true },

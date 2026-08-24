@@ -32,6 +32,7 @@ export interface OwnProfile {
   inAppNotificationsEnabled: boolean;
   emailNotificationsEnabled: boolean;
   preferredChatLanguage: string;
+  dateTimeDisplayFormat?: string;
   isTestAccount?: boolean;
   testAccountNumber?: number | null;
   isImpersonating?: boolean;
@@ -98,6 +99,7 @@ export interface ProfileFormValue {
   inAppNotificationsEnabled?: boolean;
   emailNotificationsEnabled?: boolean;
   preferredChatLanguage?: string;
+  dateTimeDisplayFormat?: string;
 }
 
 export interface ChangePasswordPayload {

@@ -86,6 +86,17 @@
         <app-filterable-combobox inputId="timeZoneId" formControlName="timeZoneId" [options]="timeZones" />
         <p class="muted">Times below use this zone. Values stay stored in UTC.</p>
       </div>
+      <div class="field" [class.invalid]="isInvalid('dateTimeDisplayFormat')">
+        <label for="dateTimeDisplayFormat">Date and time format</label>
+        <select id="dateTimeDisplayFormat" formControlName="dateTimeDisplayFormat">
+          @for (format of dateTimeDisplayFormats; track format) {
+            <option [value]="format">{{ dateTimeFormatExample(format) }}</option>
+          }
+        </select>
+        <p class="muted">
+          Campaign pages still use the campaign time zone. This only changes how dates and times look.
+        </p>
+      </div>
       <div class="field" [class.invalid]="isInvalid('preferredChatLanguage')">
         <label for="preferredChatLanguage">Default chat language</label>
         <select id="preferredChatLanguage" formControlName="preferredChatLanguage">
@@ -162,8 +173,8 @@
         </div>
       </fieldset>
 
-      <p class="muted">Created {{ createdUtc() | instantDate: timeZoneValue() }}</p>
-      <p class="muted">Last edited {{ updatedUtc() | instantDate: timeZoneValue() }}</p>
+      <p class="muted">Created {{ createdUtc() | instantDate: timeZoneValue() : dateTimeFormatValue() }}</p>
+      <p class="muted">Last edited {{ updatedUtc() | instantDate: timeZoneValue() : dateTimeFormatValue() }}</p>
       <div class="actions">
         <button class="button" type="submit" [disabled]="saving()">Save changes</button>
       </div>

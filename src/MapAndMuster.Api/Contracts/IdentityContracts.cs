@@ -250,6 +250,10 @@ public sealed class OwnProfileResponse
     /// <summary>Gets the default site-chat compose language.</summary>
     public string PreferredChatLanguage { get; init; } = "English";
 
+    /// <summary>Gets how UTC timestamps are formatted for this user.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public DateTimeDisplayFormat DateTimeDisplayFormat { get; init; } = DateTimeDisplayFormat.MonthDayYear12h;
+
     /// <summary>Gets whether this is a seeded administrator test account.</summary>
     public bool IsTestAccount { get; init; }
 
@@ -356,6 +360,9 @@ public sealed class UpdateProfileRequest
 
     /// <summary>Gets the default site-chat compose language.</summary>
     public string PreferredChatLanguage { get; init; } = "English";
+
+    /// <summary>Gets how UTC timestamps are formatted for this user.</summary>
+    public string DateTimeDisplayFormat { get; init; } = "MonthDayYear12h";
 }
 
 /// <summary>
@@ -399,6 +406,7 @@ public static class ProfileResponses
             InAppNotificationsEnabled = account.InAppNotificationsEnabled,
             EmailNotificationsEnabled = account.EmailNotificationsEnabled,
             PreferredChatLanguage = account.PreferredChatLanguage,
+            DateTimeDisplayFormat = account.DateTimeDisplayFormat,
             IsTestAccount = account.IsTestAccount,
             TestAccountNumber = account.TestAccountNumber,
             IsImpersonating = isImpersonating,

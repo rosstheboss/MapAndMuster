@@ -15,7 +15,9 @@ import type { ChatChannel } from './campaign.models';
 
 describe('campaign log formatting', () => {
   it('formats a timestamp in the viewer time zone', () => {
-    expect(formatLogTimestamp('2026-08-15T20:45:23-04:00', 'America/New_York')).toBe('(2026-08-15 08:45:23 PM EDT)');
+    expect(formatLogTimestamp('2026-08-15T20:45:23-04:00', 'America/New_York')).toBe(
+      '(August 15, 2026, 8:45:23 PM EDT)',
+    );
   });
 
   it('highlights member mentions and treats escaped at-signs as text', () => {
