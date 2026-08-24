@@ -178,11 +178,6 @@
   gap: 0.45rem;
 }
 
-.connection-list .list-button {
-  width: auto;
-  flex: 1 1 auto;
-}
-
 .section-toggle {
   display: flex;
   align-items: center;
@@ -328,6 +323,11 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.connection-list .list-button {
+  width: auto;
+  flex: 1 1 auto;
 }
 
 .dialog-backdrop {

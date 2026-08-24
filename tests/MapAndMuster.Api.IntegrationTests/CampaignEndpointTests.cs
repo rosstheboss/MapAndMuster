@@ -863,8 +863,10 @@ public sealed class CampaignEndpointTests
         using var stranger = _factory.CreateClient();
         var strangerName = UniqueName("watch");
         await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
-        using var forbidden = await stranger.GetAsync($"/api/campaigns/{created.Id}/log");
-        Assert.Equal(HttpStatusCode.NotFound, forbidden.StatusCode);
+        var viewerLog = await stranger.GetFromJsonAsync<CampaignLogResponse>($"/api/campaigns/{created.Id}/log", JsonOptions);
+        Assert.NotNull(viewerLog);
+        Assert.False(viewerLog.CanChat);
+        Assert.Equal("Log only.", Assert.Single(viewerLog.Log).Summary);
     }
 
     [Fact]
@@ -1023,6 +1025,9 @@ public sealed class CampaignEndpointTests
 
         using var get = await stranger.GetAsync($"/api/campaigns/{created.Id}");
         Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
+
+        using var log = await stranger.GetAsync($"/api/campaigns/{created.Id}/log");
+        Assert.Equal(HttpStatusCode.NotFound, log.StatusCode);
     }
 
     [Fact]

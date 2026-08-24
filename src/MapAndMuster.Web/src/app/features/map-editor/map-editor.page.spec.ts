@@ -1165,10 +1165,12 @@ describe('MapEditorPage', () => {
 
     expect(compiled.textContent).toContain('These territories are connected.');
     const deleteConnection = [...compiled.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent?.trim() === 'Delete connection',
+      (button) => button.textContent.trim() === 'Delete connection',
     );
     expect(deleteConnection).toBeTruthy();
-    deleteConnection?.click();
+    if (deleteConnection) {
+      deleteConnection.click();
+    }
     fixture.detectChanges();
 
     expect(page.graph().adjacencies).toHaveLength(0);

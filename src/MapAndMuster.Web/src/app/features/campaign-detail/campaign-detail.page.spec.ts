@@ -138,11 +138,7 @@ function flushPlayUnavailable(http: HttpTestingController): void {
     );
 }
 
-function flushLog(
-  http: HttpTestingController,
-  log: unknown[] = campaign.log ?? [],
-  revision = campaign.revision,
-): void {
+function flushLog(http: HttpTestingController, log: unknown[] = campaign.log, revision = campaign.revision): void {
   http.expectOne(`/api/campaigns/${campaign.id}/log`).flush({
     id: campaign.id,
     revision,
@@ -1838,7 +1834,7 @@ describe('CampaignDetailPage', () => {
 });
 
 function visibleText(element: Element): string {
-  return (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+  return element.textContent.replace(/\s+/g, ' ').trim();
 }
 
 function squareTerritory(id: string, name: string, x: number): MapTerritory {
