@@ -51,6 +51,7 @@ function ConvertTo-NpgsqlConnectionString([string] $value)
         "Password=$(Get-QuotedNpgsqlValue $password)"
         'SSL Mode=Require'
         'Trust Server Certificate=true'
+        'GSS Encryption Mode=Disable'
     ) -join ';'
 }
 

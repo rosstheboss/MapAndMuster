@@ -57,6 +57,7 @@ print(
             f"Password={quote(password)}",
             "SSL Mode=Require",
             "Trust Server Certificate=true",
+            "GSS Encryption Mode=Disable",
         ]
     ),
     end="",

@@ -60,6 +60,11 @@ public static class PostgresConnectionString
             parts.Add($"SSL Mode={sslMode ?? "Require"}");
         }
 
+        // Render (and local Docker) authenticate with password + TLS, not Kerberos.
+        // Npgsql 10 prefers GSS encryption, which probes libgssapi_krb5.so.2 and fails loudly
+        // in the official aspnet images that no longer ship that library.
+        parts.Add("GSS Encryption Mode=Disable");
+
         return string.Join(';', parts);
     }
 

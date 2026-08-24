@@ -20,6 +20,7 @@ public sealed class PostgresConnectionStringTests
         Assert.Equal("my_user", builder.Username);
         Assert.Equal("p@ss;word", builder.Password);
         Assert.Equal(SslMode.Require, builder.SslMode);
+        Assert.Equal(GssEncryptionMode.Disable, builder.GssEncryptionMode);
     }
 
     [Fact]
@@ -51,6 +52,7 @@ public sealed class PostgresConnectionStringTests
         var builder = new NpgsqlConnectionStringBuilder(PostgresConnectionString.Normalize(uri));
 
         Assert.Equal(SslMode.Disable, builder.SslMode);
+        Assert.Equal(GssEncryptionMode.Disable, builder.GssEncryptionMode);
     }
 
     [Fact]

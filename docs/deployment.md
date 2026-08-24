@@ -141,8 +141,10 @@ Use **single quotes**. Do not leave angle brackets around the pasted URL. Do not
 backticks. PowerShell double quotes expand `$` in Render passwords and will corrupt the string.
 
 The run scripts refuse an empty connection string and convert `postgres://` / `postgresql://` URLs
-to Npgsql keyword form (`Host=...;SSL Mode=Require`) before calling the bundle. Prefer additive
-schema changes; see expand/contract below. Do not commit the URL.
+to Npgsql keyword form (`Host=...;SSL Mode=Require;GSS Encryption Mode=Disable`) before calling the
+bundle. Prefer additive schema changes; see expand/contract below. Do not commit the URL. Render
+Postgres uses password authentication and TLS, not Kerberos; disabling GSS avoids a missing
+`libgssapi_krb5.so.2` error in the official ASP.NET container images.
 
 ## API service
 
