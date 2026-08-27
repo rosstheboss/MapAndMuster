@@ -680,6 +680,10 @@ export class CampaignMapViewComponent {
   }
 
   protected onViewportKeydown(event: KeyboardEvent): void {
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+
     if (event.key === ' ' || event.code === 'Space') {
       event.preventDefault();
       this.spaceHeld.set(true);
@@ -698,7 +702,13 @@ export class CampaignMapViewComponent {
       return;
     }
 
-    if (event.key === '0') {
+    if (event.key === 'f' || event.key === 'F') {
+      event.preventDefault();
+      this.zoomToFit();
+      return;
+    }
+
+    if (event.key === '1' || event.key === '0') {
       event.preventDefault();
       this.zoomToActualSize();
       return;

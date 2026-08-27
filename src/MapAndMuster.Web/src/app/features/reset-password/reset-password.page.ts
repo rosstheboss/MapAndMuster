@@ -12,10 +12,11 @@ import {
   required,
   scrollAlertIntoView,
 } from '../../core/forms/validators';
+import { PasswordInputComponent } from '../../shared/password-input/password-input.component';
 
 @Component({
   selector: 'app-reset-password-page',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, PasswordInputComponent],
   templateUrl: './reset-password.page.html',
   styleUrl: './reset-password.page.css',
 })

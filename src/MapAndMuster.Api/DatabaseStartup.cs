@@ -1,3 +1,4 @@
+using MapAndMuster.Infrastructure.Campaigns;
 using MapAndMuster.Infrastructure.Identity;
 using MapAndMuster.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -17,8 +18,9 @@ public static class DatabaseStartup
     /// <summary>
     /// Applies migrations when enabled, then runs identity maintenance. Identity seeding still runs when
     /// migrations are disabled, so Production can apply an EF bundle separately and still create the
-    /// privileged administrator and Test 1–Test 30 on the next API start. When startup migrations are
-    /// disabled, pending migrations fail the process with an explicit message instead of querying missing
+    /// privileged administrator and Test 1–Test 45 on the next API start. In Development, missing Estalia
+    /// test-campaign copies are also seeded when a mapped source campaign exists. When startup migrations
+    /// are disabled, pending migrations fail the process with an explicit message instead of querying missing
     /// Identity tables. Skips when the connection string is empty.
     /// </summary>
     /// <param name="app">The application.</param>
@@ -53,5 +55,7 @@ public static class DatabaseStartup
 
         var identity = scope.ServiceProvider.GetRequiredService<IdentityMaintenance>();
         await identity.EnsureAsync(CancellationToken.None).ConfigureAwait(false);
+        var testCampaigns = scope.ServiceProvider.GetRequiredService<LocalTestCampaignSeeder>();
+        await testCampaigns.EnsureAsync(CancellationToken.None).ConfigureAwait(false);
     }
 }

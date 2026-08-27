@@ -1,0 +1,6 @@
+# Default reviewer for every path. More specific entries below still apply.
+* @rosstheboss
+
+/.github/ @rosstheboss
+/src/MapAndMuster.Infrastructure/Identity/ @rosstheboss
+/src/MapAndMuster.Infrastructure/Security/ @rosstheboss

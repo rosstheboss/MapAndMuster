@@ -28,6 +28,7 @@ public static class ProductionConfiguration
         Require(configuration, "Email:Provider", missing);
         Require(configuration, "Email:FromAddress", missing);
         Require(configuration, IdentityBootstrapOptions.BootstrapAdminPasswordKey, missing);
+        Require(configuration, IdentityBootstrapOptions.BootstrapAdminEmailKey, missing);
 
         var origin = configuration["PublicWeb:Origin"];
         if (!string.IsNullOrWhiteSpace(origin))

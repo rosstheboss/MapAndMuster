@@ -28,6 +28,7 @@ Production must not use that label. See `docs/staging.md`.
 | `PublicWeb__Origin` | Public Angular origin used in email links and OAuth return URLs |
 | `Storage__RootPath` | Uploaded-file root, outside web root |
 | `Database__ApplyMigrationsOnStartup` | When `true`, the API applies EF migrations on start |
+| `LocalTestData__SeedEstaliaCampaigns` | Development only. When `true` (the Development default), API start duplicates a mapped Estalia campaign into `[Test] Estalia` copies at several phases |
 | `ForwardedHeaders__Enabled` | Consume `X-Forwarded-*` from the platform proxy |
 | `Email__Provider` | `Smtp` or `Resend` |
 | `Email__FromAddress` | From address |
@@ -39,6 +40,7 @@ Production must not use that label. See `docs/staging.md`.
 | `Email__EnableSsl` | SMTP SSL/STARTTLS |
 | `Email__Resend__ApiKey` | Resend API key |
 | `Identity__BootstrapAdminPassword` | Password used only to create `rosstheboss` when that account is missing. Never overwrites an existing password |
+| `Identity__BootstrapAdminEmail` | Email used only to create `rosstheboss` when that account is missing. Production and Staging require it. Keep personal mailboxes out of Git |
 | `Authentication__Google__ClientId` | Google OAuth client id |
 | `Authentication__Google__ClientSecret` | Google OAuth client secret |
 | `Authentication__Facebook__AppId` | Facebook app id |

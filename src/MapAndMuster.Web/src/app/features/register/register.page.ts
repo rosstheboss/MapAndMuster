@@ -23,10 +23,17 @@ import { NAME_SUFFIXES, REGISTER_FIELD_LABELS } from '../../core/identity/identi
 import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
 import { ExternalLoginButtonsComponent } from '../../shared/external-login-buttons/external-login-buttons.component';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
+import { PasswordInputComponent } from '../../shared/password-input/password-input.component';
 
 @Component({
   selector: 'app-register-page',
-  imports: [ReactiveFormsModule, RouterLink, FilterableComboboxComponent, ExternalLoginButtonsComponent],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    FilterableComboboxComponent,
+    ExternalLoginButtonsComponent,
+    PasswordInputComponent,
+  ],
   templateUrl: './register.page.html',
   styleUrl: './register.page.css',
 })

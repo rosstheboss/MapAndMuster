@@ -59,6 +59,9 @@ public sealed class IdentitySeedApiFactory : WebApplicationFactory<Program>, IAs
         builder.UseSetting("Database:ApplyMigrationsOnStartup", "true");
         builder.UseSetting("Identity:SeedTestAccounts", "true");
         builder.UseSetting(IdentityBootstrapOptions.BootstrapAdminPasswordKey, BootstrapAdminPassword);
+        builder.UseSetting(
+            IdentityBootstrapOptions.BootstrapAdminEmailKey,
+            IdentityMaintenance.DevelopmentBootstrapAdminEmail);
     }
 }
 
@@ -88,15 +91,15 @@ public sealed class IdentitySeedingTests
         using var client = _factory.CreateClient();
         using var login = await client.PostAsJsonAsync(
             "/api/auth/login",
-            new { email = IdentityMaintenance.PrivilegedEmail, password = IdentitySeedApiFactory.BootstrapAdminPassword });
+            new { email = IdentityMaintenance.DevelopmentBootstrapAdminEmail, password = IdentitySeedApiFactory.BootstrapAdminPassword });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
 
         var profile = await login.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonOptions);
         Assert.NotNull(profile);
         Assert.Equal(IdentityMaintenance.PrivilegedUsername, profile.Username);
-        Assert.Equal("Ross", profile.FirstName);
-        Assert.Equal("Gustafson", profile.LastName);
-        Assert.Equal("Noblesville", profile.City);
+        Assert.Equal("Admin", profile.FirstName);
+        Assert.Equal("Operator", profile.LastName);
+        Assert.Equal("Testville", profile.City);
         Assert.True(profile.IsAdministrator);
         Assert.False(profile.IsTestAccount);
 
@@ -107,7 +110,7 @@ public sealed class IdentitySeedingTests
         Assert.Equal(TestAccountCatalog.Count, testUsers.Length);
         Assert.Equal("test1", testUsers[0].Username);
         Assert.Equal("Test 1", testUsers[0].DisplayName);
-        Assert.Equal("test30", testUsers[^1].Username);
+        Assert.Equal(TestAccountCatalog.Username(TestAccountCatalog.Count), testUsers[^1].Username);
 
         using var testLogin = await client.PostAsJsonAsync(
             "/api/auth/login",
@@ -125,7 +128,7 @@ public sealed class IdentitySeedingTests
         using var scope = _factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var identity = scope.ServiceProvider.GetRequiredService<IdentityMaintenance>();
-        var admin = await users.FindByEmailAsync(IdentityMaintenance.PrivilegedEmail);
+        var admin = await users.FindByEmailAsync(IdentityMaintenance.DevelopmentBootstrapAdminEmail);
         Assert.NotNull(admin);
 
         const string changedPassword = "Changed-Admin-2!";
@@ -138,12 +141,12 @@ public sealed class IdentitySeedingTests
         using var verifyClient = _factory.CreateClient();
         using var oldPassword = await verifyClient.PostAsJsonAsync(
             "/api/auth/login",
-            new { email = IdentityMaintenance.PrivilegedEmail, password = IdentitySeedApiFactory.BootstrapAdminPassword });
+            new { email = IdentityMaintenance.DevelopmentBootstrapAdminEmail, password = IdentitySeedApiFactory.BootstrapAdminPassword });
         Assert.Equal(HttpStatusCode.Unauthorized, oldPassword.StatusCode);
 
         using var newPassword = await verifyClient.PostAsJsonAsync(
             "/api/auth/login",
-            new { email = IdentityMaintenance.PrivilegedEmail, password = changedPassword });
+            new { email = IdentityMaintenance.DevelopmentBootstrapAdminEmail, password = changedPassword });
         Assert.Equal(HttpStatusCode.OK, newPassword.StatusCode);
     }
 }
@@ -164,7 +167,7 @@ public sealed class IdentityTestingIsolationTests
         using var scope = _factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-        Assert.Null(await users.FindByEmailAsync(IdentityMaintenance.PrivilegedEmail));
+        Assert.Null(await users.FindByEmailAsync(IdentityMaintenance.DevelopmentBootstrapAdminEmail));
         Assert.Null(await users.FindByNameAsync(IdentityMaintenance.PrivilegedUsername));
         Assert.Null(await users.FindByNameAsync(TestAccountCatalog.Username(1)));
         Assert.Null(await users.FindByNameAsync(TestAccountCatalog.Username(30)));

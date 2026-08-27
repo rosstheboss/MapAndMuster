@@ -2,6 +2,14 @@
   display: block;
 }
 
+.discord-invite {
+  margin: 0 0 1rem;
+}
+
+.discord-invite a {
+  font-weight: 600;
+}
+
 .button,
 .button-secondary {
   display: inline-flex;

@@ -15,8 +15,12 @@
     </label>
     <button type="button" class="button-secondary" (click)="zoomIn()" aria-label="Zoom in">+</button>
     <button type="button" class="button-secondary" (click)="zoomOut()" aria-label="Zoom out">-</button>
-    <button type="button" class="button-secondary" (click)="zoomToFit()">Fit</button>
-    <button type="button" class="button-secondary" (click)="zoomToActualSize()">100%</button>
+    <button type="button" class="button-secondary" (click)="zoomToFit()" title="Fit (F)" aria-keyshortcuts="F">
+      Fit
+    </button>
+    <button type="button" class="button-secondary" (click)="zoomToActualSize()" title="100% (1)" aria-keyshortcuts="1">
+      100%
+    </button>
     @if (layerToggles()) {
       <label class="layer-toggle">
         <input type="checkbox" [checked]="showOverlay()" (change)="onShowOverlayChange($event)" />
@@ -41,8 +45,8 @@
     [attr.aria-label]="
       'Campaign map at ' +
       zoomPercent() +
-      ' percent of image size. Plus and minus zoom by 10 percent. Zero sets 100 percent. ' +
-      'Fit scales the image to the view. Hold right-click or middle-click and drag to pan. ' +
+      ' percent of image size. Plus and minus zoom by 10 percent. F fits the image to the view. ' +
+      '1 or 0 sets 100 percent. Hold right-click or middle-click and drag to pan. ' +
       'Arrow keys and space-drag also pan when the image is larger than the panel. Left-click does not pan. ' +
       'Zoom up to 800 percent to trace fine coasts. Drawing requires a pointer.'
     "

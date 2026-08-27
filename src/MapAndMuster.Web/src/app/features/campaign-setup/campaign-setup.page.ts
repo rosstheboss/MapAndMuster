@@ -66,6 +66,7 @@ import { listCountries, listTimeZones, regionsForCountry } from '../../core/loca
 import { CampaignMapPreviewComponent } from '../../shared/campaign-map-preview/campaign-map-preview.component';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
+import { PasswordInputComponent } from '../../shared/password-input/password-input.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 import { downloadBlob } from '../../core/maps/map-export';
 import { STRUCTURE_TYPES } from '../../core/maps/structures';
@@ -246,6 +247,7 @@ const TOP_LEVEL_SECTION_IDS = [
     InstantDatePipe,
     MapSymbolComponent,
     CampaignMapPreviewComponent,
+    PasswordInputComponent,
   ],
   templateUrl: './campaign-setup.page.html',
   styleUrl: './campaign-setup.page.css',

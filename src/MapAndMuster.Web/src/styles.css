@@ -133,6 +133,11 @@ summary:focus-visible,
   font: inherit;
 }
 
+/* stylelint-disable-next-line no-descending-specificity -- extra padding for the show/hide control */
+app-password-input input {
+  padding-right: calc(var(--touch-min) + 0.25rem);
+}
+
 .field textarea {
   min-height: 6rem;
   resize: vertical;
@@ -277,6 +282,7 @@ summary:focus-visible,
 .field:has(> select.ng-dirty),
 .field:has(> textarea.ng-dirty),
 .field:has(> app-filterable-combobox.ng-dirty),
+.field:has(> app-password-input input.ng-dirty),
 .choice-row.is-dirty,
 .choice-row:has(> input.ng-dirty),
 .checkbox-row:has(> input.ng-dirty),
@@ -289,6 +295,7 @@ summary:focus-visible,
 .field:has(> select.ng-dirty)::after,
 .field:has(> textarea.ng-dirty)::after,
 .field:has(> app-filterable-combobox.ng-dirty)::after,
+.field:has(> app-password-input input.ng-dirty)::after,
 .choice-row.is-dirty::after,
 .choice-row:has(> input.ng-dirty)::after,
 .checkbox-row:has(> input.ng-dirty)::after,

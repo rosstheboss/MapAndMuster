@@ -9,27 +9,29 @@ using Microsoft.Extensions.Options;
 namespace MapAndMuster.Infrastructure.Identity;
 
 /// <summary>
-/// Creates the privileged administrator when missing, promotes that account, and seeds Test 1–Test 30
+/// Creates the privileged administrator when missing, promotes that account, and seeds Test 1–Test 45
 /// outside the default Testing environment.
 /// </summary>
 public sealed partial class IdentityMaintenance
 {
-    /// <summary>Email that always receives the Administrator role when the account exists.</summary>
-    public const string PrivilegedEmail = "ross.gustafson@gmail.com";
-
     /// <summary>Username that always receives the Administrator role when the account exists.</summary>
     public const string PrivilegedUsername = "rosstheboss";
+
+    /// <summary>
+    /// Non-deliverable mailbox used when creating the privileged administrator in Development or Testing
+    /// if <see cref="IdentityBootstrapOptions.BootstrapAdminEmail"/> is empty.
+    /// </summary>
+    public const string DevelopmentBootstrapAdminEmail = "admin@users.invalid";
 
     /// <summary>ASP.NET Identity role name for system administrators.</summary>
     public const string AdministratorRole = "Administrator";
 
-    private const string PrivilegedFirstName = "Ross";
-    private const string PrivilegedMiddleInitial = "A";
-    private const string PrivilegedLastName = "Gustafson";
-    private const string PrivilegedCity = "Noblesville";
-    private const string PrivilegedRegion = "Indiana";
-    private const string PrivilegedCountry = "United States";
-    private const string PrivilegedTimeZoneId = "America/Indiana/Indianapolis";
+    private const string PrivilegedFirstName = "Admin";
+    private const string PrivilegedLastName = "Operator";
+    private const string PrivilegedCity = "Testville";
+    private const string PrivilegedRegion = "Testshire";
+    private const string PrivilegedCountry = "Testland";
+    private const string PrivilegedTimeZoneId = "UTC";
 
     private readonly UserManager<ApplicationUser> _users;
     private readonly RoleManager<IdentityRole<Guid>> _roles;
@@ -98,7 +100,8 @@ public sealed partial class IdentityMaintenance
     private async Task EnsurePrivilegedAdministratorAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var byEmail = await _users.FindByEmailAsync(PrivilegedEmail).ConfigureAwait(false);
+        var privilegedEmail = ResolveBootstrapAdminEmail();
+        var byEmail = await _users.FindByEmailAsync(privilegedEmail).ConfigureAwait(false);
         var byName = await _users.FindByNameAsync(PrivilegedUsername).ConfigureAwait(false);
         if (byEmail is not null)
         {
@@ -135,7 +138,7 @@ public sealed partial class IdentityMaintenance
         }
 
         if (!Username.TryCreate(PrivilegedUsername, out var username, out _)
-            || !PersonName.TryCreate(PrivilegedFirstName, PrivilegedMiddleInitial, PrivilegedLastName, null, out var name, out _)
+            || !PersonName.TryCreate(PrivilegedFirstName, null, PrivilegedLastName, null, out var name, out _)
             || !GeographicLocation.TryCreate(PrivilegedCity, PrivilegedRegion, PrivilegedCountry, out var location, out _))
         {
             throw new InvalidOperationException("Privileged administrator profile constants are invalid.");
@@ -145,7 +148,7 @@ public sealed partial class IdentityMaintenance
         var user = new ApplicationUser
         {
             Id = Guid.NewGuid(),
-            Email = PrivilegedEmail,
+            Email = privilegedEmail,
             UserName = username.Value,
             FirstName = name.FirstName,
             MiddleInitial = name.MiddleInitial?.ToString(),
@@ -248,10 +251,33 @@ public sealed partial class IdentityMaintenance
         return _environment.IsProduction() || _environment.IsEnvironment("Staging");
     }
 
-    private static bool IsPrivileged(ApplicationUser user)
+    private bool IsPrivileged(ApplicationUser user)
     {
-        return string.Equals(user.Email, PrivilegedEmail, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(user.UserName, PrivilegedUsername, StringComparison.OrdinalIgnoreCase);
+        if (string.Equals(user.UserName, PrivilegedUsername, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var email = _bootstrap.Value.BootstrapAdminEmail;
+        return !string.IsNullOrWhiteSpace(email)
+            && string.Equals(user.Email, email.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string ResolveBootstrapAdminEmail()
+    {
+        var configured = _bootstrap.Value.BootstrapAdminEmail;
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured.Trim();
+        }
+
+        if (IsProductionLike())
+        {
+            throw new InvalidOperationException(
+                $"Missing required production configuration keys: {IdentityBootstrapOptions.BootstrapAdminEmailKey}.");
+        }
+
+        return DevelopmentBootstrapAdminEmail;
     }
 
     private static void ThrowIfFailed(IdentityResult result, string action)

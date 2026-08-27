@@ -271,6 +271,24 @@ describe('CampaignMapViewComponent', () => {
     expect(view.fitToPanel()).toBe(false);
   });
 
+  it('fits on F and zooms to actual size on 1', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.detectChanges();
+    const view = fixture.componentInstance as unknown as {
+      onViewportKeydown: (event: KeyboardEvent) => void;
+      zoom: { set(value: number): void; (): number };
+      fitToPanel: { set(value: boolean): void; (): boolean };
+    };
+    view.fitToPanel.set(false);
+    view.zoom.set(2);
+    view.onViewportKeydown(new KeyboardEvent('keydown', { key: 'f' }));
+    expect(view.fitToPanel()).toBe(true);
+    view.onViewportKeydown(new KeyboardEvent('keydown', { key: '1' }));
+    expect(view.fitToPanel()).toBe(false);
+    expect(view.zoom()).toBe(1);
+  });
+
   it('keeps connection arrows black without hover size or outline changes', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);

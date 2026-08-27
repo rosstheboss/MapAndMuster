@@ -134,7 +134,7 @@ roll back campaign state and remains visible for retry/operations.
   private campaigns also require the join password unless a manager or administrator adds the
   player. Active and completed campaigns that are not publicly viewable are omitted from All
   Campaigns except for members and administrators. Administrators may test as seeded Test 1–Test
-  30 accounts; those accounts cannot password-login or use public site chat. The privileged
+  45 accounts; those accounts cannot password-login or use public site chat. The privileged
   administrator and test accounts are created at API startup by `IdentityMaintenance`, not by EF
   migrations.
 - Permission policies are derived from system role plus campaign membership roles.

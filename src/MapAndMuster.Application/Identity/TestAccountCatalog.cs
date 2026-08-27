@@ -3,12 +3,13 @@ using System.Diagnostics.CodeAnalysis;
 namespace MapAndMuster.Application.Identity;
 
 /// <summary>
-/// Seeded Test 1 through Test 30 accounts. They have no email delivery, cannot password-login, and cannot use site chat.
+/// Seeded Test 1 through Test 45 accounts. They have no email delivery, cannot password-login, and cannot use site chat.
+/// Forty-five accounts covers every Old World faction plus each named subfaction, with spare bots.
 /// </summary>
 public static class TestAccountCatalog
 {
     /// <summary>How many test accounts are seeded outside the Testing environment.</summary>
-    public const int Count = 30;
+    public const int Count = 45;
 
     /// <summary>Username prefix plus the account number, for example test1.</summary>
     public static string Username(int number)

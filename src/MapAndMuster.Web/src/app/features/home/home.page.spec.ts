@@ -56,6 +56,9 @@ describe('HomePage', () => {
     expect(compiled.textContent).not.toContain('View public profile');
     expect(compiled.textContent).toContain('No new notifications.');
     expect(compiled.textContent).toContain('No news has been published yet.');
+    const discord = compiled.querySelector<HTMLAnchorElement>('.discord-invite a');
+    expect(discord?.getAttribute('href')).toBe('https://discord.gg/ATVt97DMnx');
+    expect(discord?.textContent).toContain('Join the Discord server');
     const headings = [...compiled.querySelectorAll('h2')].map((node) => node.textContent.trim());
     expect(headings).toEqual(['Notifications', 'News']);
     http.verify();

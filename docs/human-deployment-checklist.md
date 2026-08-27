@@ -74,7 +74,9 @@ Render resource names are `mapandmuster-api`, `mapandmuster-web`, and `mapandmus
 - [ ] Set `Identity__BootstrapAdminPassword` on `mapandmuster-api` (Blueprint `sync: false`)
       → Password manager; 12+ characters with upper, lower, digit, and special
       → Used only to create `rosstheboss` if that account is missing; change the password in-app after first login
-- [ ] After the API is up, sign in as `ross.gustafson@gmail.com` / `rosstheboss` and confirm Test 1–Test 30 appear under Test users
+- [ ] Set `Identity__BootstrapAdminEmail` on `mapandmuster-api` (Blueprint `sync: false`)
+      → The operator mailbox for a new `rosstheboss` account. Do not commit this address.
+- [ ] After the API is up, sign in as `rosstheboss` with the bootstrap email and password, and confirm Test 1–Test 45 appear under Test users
 
 ## Email
 

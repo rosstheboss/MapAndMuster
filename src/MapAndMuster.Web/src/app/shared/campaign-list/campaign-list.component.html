@@ -96,13 +96,15 @@
       <p id="join-desc">This campaign requires a password to join.</p>
       <div class="field">
         <label for="join-password">Join password</label>
-        <input
-          id="join-password"
-          type="password"
-          autocomplete="current-password"
-          [value]="joinPassword()"
-          (input)="onJoinPasswordInput($event)"
-        />
+        <app-password-input>
+          <input
+            id="join-password"
+            type="password"
+            autocomplete="current-password"
+            [value]="joinPassword()"
+            (input)="onJoinPasswordInput($event)"
+          />
+        </app-password-input>
       </div>
       <div class="choice-row">
         <button type="button" class="button" (click)="confirmJoin()">Join</button>

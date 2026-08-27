@@ -95,6 +95,10 @@ test('home shows the signed-in player and logout', async ({ page }) => {
 
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Join the Discord server' })).toHaveAttribute(
+    'href',
+    'https://discord.gg/ATVt97DMnx',
+  );
   await expect(page.getByText('No new notifications.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'News' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Your Campaigns' })).toBeVisible();

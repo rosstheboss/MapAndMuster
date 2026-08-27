@@ -49,7 +49,7 @@ Player and Game Master in the same campaign.
 - Manager add/kick of players, delinquency kick recommendations from the third missed-order offence, and staff assignment of another player's faction.
 - In-app and email notifications.
 - Public site-wide chat on All Campaigns, with language flags, block lists, and administrator announcements.
-- Seeded administrator test accounts (Test 1–Test 30) that skip email and public site chat.
+- Seeded administrator test accounts (Test 1–Test 45) that skip email and public site chat.
 
 ## Product boundaries
 

@@ -58,6 +58,8 @@ services:
         sync: false
       - key: Identity__BootstrapAdminPassword
         sync: false
+      - key: Identity__BootstrapAdminEmail
+        sync: false
       # Optional OAuth keys are omitted here. Add them in the Render Dashboard after
       # you create Google / Discord / Facebook apps. Empty values keep email-only sign-in.
 

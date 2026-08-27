@@ -16,6 +16,7 @@ export class HomePage {
   protected readonly auth = inject(AuthService);
   private readonly board = inject(HomeBoardService);
   private readonly router = inject(Router);
+  protected readonly discordInviteUrl = 'https://discord.gg/ATVt97DMnx';
 
   protected readonly notifications = signal<HomeAttentionItem[]>([]);
   protected readonly news = signal<NewsPage | null>(null);

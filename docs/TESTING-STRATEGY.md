@@ -80,6 +80,7 @@ Cover components/services for:
   size and structures are three times that size. Uploaded overlay SVG remaps terrain, structures,
   owners, and spawns onto the current campaign catalog by name when identifiers differ.
 - Permission-based navigation without relying on it as backend security.
+- Password fields include a show/hide toggle that restores `type=password`.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
 - Campaign log display, member chat including typable recipient autocomplete and public/private/game-log filters, live log refresh, chat send errors without the save success
   banner, `@` mention autocomplete limited to current members, clickable originator and mention names, and manager or administrator download of public chat and/or game-log facts as text or CSV.

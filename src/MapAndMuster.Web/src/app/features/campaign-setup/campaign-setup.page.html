@@ -412,7 +412,9 @@
               <label for="joinPassword">
                 Join password{{ isEdit() ? ' (leave blank to keep the current password)' : '' }}
               </label>
-              <input id="joinPassword" type="password" formControlName="joinPassword" autocomplete="new-password" />
+              <app-password-input>
+                <input id="joinPassword" type="password" formControlName="joinPassword" autocomplete="new-password" />
+              </app-password-input>
               <p class="muted">At least 8 characters. This is not shown again after you save.</p>
             </div>
           }

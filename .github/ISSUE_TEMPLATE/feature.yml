@@ -1,0 +1,202 @@
+name: Feature Request
+description: Suggest a new feature or improvement for Map & Muster.
+title: "[Feature]: "
+labels:
+  - enhancement
+  - triage
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement to Map & Muster!
+
+        Good feature requests explain the problem or use case first. The proposed
+        implementation is useful, but there may be multiple ways to solve the same problem.
+
+        Please search existing issues before submitting a new request.
+
+  - type: checkboxes
+    id: existing-request
+    attributes:
+      label: Existing Request Check
+      options:
+        - label: I searched the existing issues and did not find this feature already requested.
+          required: true
+
+  - type: dropdown
+    id: request-type
+    attributes:
+      label: Type of Request
+      options:
+        - New feature
+        - Improvement to an existing feature
+        - User interface / usability improvement
+        - Accessibility improvement
+        - Performance improvement
+        - Game Master / administration improvement
+        - Integration
+        - Documentation / help improvement
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area of the Application
+      description: Which area would this feature primarily affect?
+      options:
+        - Account / registration / authentication
+        - User profiles
+        - Campaign creation / configuration
+        - Campaign discovery / joining
+        - Player / faction management
+        - Campaign map / territories
+        - Forces / armies
+        - Orders / simultaneous actions
+        - Turn timing / deadlines
+        - Turn resolution
+        - Battles / battle results
+        - Missions / scenarios
+        - Objectives / relics
+        - Supply / structures / campaign resources
+        - Chat / social features
+        - Notifications / email
+        - Game Master tools
+        - Administrator tools
+        - Permissions / privacy
+        - Imports / exports / file handling
+        - User interface / layout
+        - Accessibility
+        - API / integrations
+        - Performance
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Need
+      description: >
+        What problem would this feature solve? Describe the situation from the user's
+        perspective rather than only describing the implementation.
+      placeholder: |
+        Example:
+        As a Game Master running a large campaign, I have difficulty seeing which
+        players have not yet submitted their orders without opening each player
+        individually.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe how you think Map & Muster could solve this problem.
+      placeholder: |
+        Example:
+        Add a turn-status panel showing each participant as Not Started, Draft,
+        or Committed without revealing the contents of their orders.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Example Use Case
+      description: Walk through a realistic example of how someone would use this feature.
+      placeholder: |
+        1. A GM opens the campaign dashboard.
+        2. The GM selects the current turn.
+        3. The dashboard shows...
+        4. The GM can then...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: primary-user
+    attributes:
+      label: Who Would Primarily Use This?
+      options:
+        - Player
+        - Game Master / Campaign Manager
+        - System Administrator
+        - Campaign viewer / spectator
+        - Everyone
+        - Developer / self-hosting administrator
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: importance
+    attributes:
+      label: How Important Is This to Your Use Case?
+      description: This helps provide context but does not determine development priority.
+      options:
+        - Nice to have
+        - Useful improvement
+        - Important for running my campaign
+        - Prevents or significantly limits my use of the application
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or Workarounds
+      description: >
+        Are you currently solving this another way? Have you considered any alternative
+        approaches?
+      placeholder: |
+        Example:
+        We currently track this manually in a spreadsheet, but...
+    validations:
+      required: false
+
+  - type: textarea
+    id: ui
+    attributes:
+      label: UI Ideas, Mockups, or Examples
+      description: |
+        If the feature affects the interface, describe how you imagine it working.
+
+        You may also drag and drop screenshots, sketches, or mockups here.
+      placeholder: |
+        Describe the interface or attach a mockup.
+    validations:
+      required: false
+
+  - type: textarea
+    id: other-apps
+    attributes:
+      label: Similar Features in Other Applications
+      description: >
+        If another application or game handles this well, tell us what you like about
+        its approach. Please describe the behavior rather than copying proprietary content.
+      placeholder: |
+        Example:
+        Application X handles this by...
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add anything else that would help evaluate the request.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: expectations
+    attributes:
+      label: Submission Acknowledgement
+      options:
+        - label: >
+            I understand that submitting a feature request does not guarantee that the
+            feature will be implemented or establish a delivery date.
+          required: true

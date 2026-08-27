@@ -14,6 +14,8 @@ export type AppIconName =
   | 'shield'
   | 'sun'
   | 'sword'
+  | 'eye'
+  | 'eye-off'
   | 'x';
 
 @Component({

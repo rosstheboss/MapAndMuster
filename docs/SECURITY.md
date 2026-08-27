@@ -1,5 +1,8 @@
 # Security, Privacy, and Audit Requirements
 
+Privately report repository and application vulnerabilities as described in `SECURITY.md` at
+the repository root. Do not open public GitHub issues for security reports.
+
 ## Data classification
 
 - **Public:** revealed map state, standings (with hidden item-objective sources omitted), public objectives, revealed or completed private-objective names and points, unclaimed private-objective counts, configured public faction special-rule names and descriptions,

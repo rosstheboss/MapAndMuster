@@ -43,12 +43,13 @@ those rules are implemented. Display names in chat, mentions, the Participants p
 member lists link to that public profile. Profiles opened that way include a Back control that
 returns to the previous in-app screen.
 
-The application seeds Test 1 through Test 30 outside the automated Testing environment. Those
+The application seeds Test 1 through Test 45 outside the automated Testing environment. Those
 accounts cannot sign in with a password. An administrator may test as one of them from Test
 users and return to the administrator session afterward. Test accounts receive in-app notices
 only (never email), cannot change their profile, and cannot use public site chat. Campaign chat
 is allowed. Their public display name is always `Test {n}`. On API start, if the privileged
-administrator account is missing, it is created from `Identity:BootstrapAdminPassword`.
+administrator account is missing, it is created from `Identity:BootstrapAdminPassword` and
+`Identity:BootstrapAdminEmail`.
 
 ## Campaign setup
 
@@ -366,7 +367,7 @@ window opens is taken from that next window.
 
 Administrator permissions include GM and player capabilities. Campaign GMs include player
 capabilities and may simultaneously have a Player membership. Multiple GMs may exist.
-Administrators may also test as seeded Test 1–Test 30 accounts; the original administrator
+Administrators may also test as seeded Test 1–Test 45 accounts; the original administrator
 identity is kept on the session until they return.
 
 When staff act for another party, record:
@@ -686,7 +687,7 @@ The map overlay starts fitted to the panel. Map panels are full width in their p
 controls sit across the top of the map in this order: zoom percent field, +, -, Fit, and 100%.
 Zoom is 10% to 800% of the map image's actual pixel size, in 10% steps. 100% shows the
 image at its native size and centers it. Fit scales the image to the view and recenters it.
-Drawing coordinates stay normalized to the full-size image. Snap distance, minimum draw spacing, and
+The F key fits the map; 1 (and 0) set 100 percent. Drawing coordinates stay normalized to the full-size image. Snap distance, minimum draw spacing, and
 overlay stroke widths are measured in screen pixels so zooming in lets a manager trace fine coasts and
 province borders. When the zoomed image is larger than the panel, it can be panned
 but not dragged past the image bounds. Hold a right-click (context-click) or middle-click and drag to

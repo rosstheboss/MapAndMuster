@@ -69,13 +69,27 @@ Leave `Email:SmtpUsername` empty to keep using Mailpit. Production uses Resend (
 
 Do not put Identity users or password hashes in EF migrations. `IdentityMaintenance` runs on every API start after optional `MigrateAsync`, including Production when `Database:ApplyMigrationsOnStartup` is false.
 
-- Privileged administrator: username `rosstheboss`, email `ross.gustafson@gmail.com`. If that account is missing, the API creates it from `Identity:BootstrapAdminPassword` (`Identity__BootstrapAdminPassword`) and assigns the Administrator role. An existing account is promoted if needed and its password is never overwritten. Production and Staging require the bootstrap password so a blank database can create the account; after the first login, change the password in-app. Development may leave the value empty when the account already exists.
-- Test 1–Test 30 (`test1`…`test30`) are created outside the Testing environment. They cannot password-login or use public site chat. Sign in as the administrator and use **Test users** to impersonate them.
+- Privileged administrator: username `rosstheboss`. The email comes from
+  `Identity:BootstrapAdminEmail` (`Identity__BootstrapAdminEmail`). Production and Staging require
+  it. Development may leave it empty and then uses `admin@users.invalid`. If that account is missing,
+  the API creates it from `Identity:BootstrapAdminPassword` (`Identity__BootstrapAdminPassword`) and
+  assigns the Administrator role. An existing account is promoted if needed and its password is never
+  overwritten. Production and Staging require the bootstrap password so a blank database can create
+  the account; after the first login, change the password in-app. Development may leave the password
+  empty when the account already exists.
+- Test 1–Test 45 (`test1`…`test45`) are created outside the Testing environment. They cannot password-login or use public site chat. Sign in as the administrator and use **Test users** to impersonate them.
+- In Development, API startup duplicates a mapped campaign you manage (preferring a name that contains Estalia) into `[Test] Estalia` copies at not-started, Action 1, Action 2, and Battle, with 10-minute action windows, a 40-minute battle phase, and a test player for every faction and subfaction. Disable with `LocalTestData:SeedEstaliaCampaigns=false`.
 
 Set a bootstrap password for a blank local database:
 
 ```bash
 dotnet user-secrets set "Identity:BootstrapAdminPassword" "your-local-bootstrap-password" --project src/MapAndMuster.Api
+```
+
+Optional: set a local bootstrap email. If omitted, Development uses `admin@users.invalid`.
+
+```bash
+dotnet user-secrets set "Identity:BootstrapAdminEmail" "admin@users.invalid" --project src/MapAndMuster.Api
 ```
 
 Google, Facebook, and Discord sign-in are optional. Leave those settings empty for email-only development. To enable a provider, set the client id/secret (Facebook uses AppId/AppSecret) in user secrets and register these callback URLs with the provider. Production callback registration is in `docs/authentication-production.md`.

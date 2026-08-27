@@ -24,6 +24,7 @@ Public origin               https://mapandmuster.com (no www)
 <RENDER_DATABASE_URL>      External postgres:// URI from the Render database
 <RESEND_API_KEY>           Resend API key
 <IDENTITY_BOOTSTRAP_ADMIN_PASSWORD>  Password used only if rosstheboss does not exist yet
+<IDENTITY_BOOTSTRAP_ADMIN_EMAIL>     Operator mailbox used only if rosstheboss does not exist yet
 <EMAIL_FROM_ADDRESS>       noreply@mapandmuster.com (must be verified in Resend)
 <GOOGLE_CLIENT_ID>
 <GOOGLE_CLIENT_SECRET>
@@ -102,6 +103,7 @@ Auto-deploy is `checksPass`: Render deploys `master` only after GitHub checks pa
 | `Email__FromAddress` | `noreply@mapandmuster.com` | Address on a domain you will verify in Resend |
 | `Email__Resend__ApiKey` | `<RESEND_API_KEY>` | Resend dashboard → API Keys |
 | `Identity__BootstrapAdminPassword` | A unique password that meets the site policy (12+ characters, upper, lower, digit, special) | Password manager. Used only if `rosstheboss` does not exist yet |
+| `Identity__BootstrapAdminEmail` | Operator mailbox for a new `rosstheboss` account | Host secret store. Do not commit a personal address |
 
 `Email__FromName` defaults to `Map & Muster`.
 
@@ -124,7 +126,8 @@ Created as `mapandmuster-db`, database name `mapandmuster`, major version 17.
 
 Approve the first production migration **before** inviting players. Production does not
 migrate on API startup. The next API start still runs identity maintenance: it creates
-`rosstheboss` when missing (using `Identity__BootstrapAdminPassword`) and seeds Test 1–Test 30
+`rosstheboss` when missing (using `Identity__BootstrapAdminPassword` and
+`Identity__BootstrapAdminEmail`) and seeds Test 1–Test 45
 for administrator impersonation. Those test accounts cannot password-login.
 
 ```powershell

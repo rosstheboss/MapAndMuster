@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security Vulnerability
+    url: https://github.com/rosstheboss/MapAndMuster/security/policy
+    about: >
+      Do not publicly report security vulnerabilities, exposed secrets,
+      authentication bypasses, or ways to access another user's private or
+      unrevealed campaign information. Review the project's security policy
+      before reporting a security issue.

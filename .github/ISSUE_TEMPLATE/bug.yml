@@ -1,0 +1,246 @@
+name: Bug Report
+description: Report something in Map & Muster that is not working as expected.
+title: "[Bug]: "
+labels:
+  - bug
+  - triage
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Map & Muster!
+
+        Please provide enough information for us to reproduce the problem.
+
+        **Before submitting:**
+        - Search existing issues to make sure this has not already been reported.
+        - Do not include passwords, authentication tokens, cookies, private messages,
+          unrevealed orders, private objectives, relic locations, or other sensitive
+          campaign information.
+        - Security vulnerabilities should not be reported through this public form.
+
+  - type: checkboxes
+    id: existing-issue
+    attributes:
+      label: Existing Issue Check
+      description: Please check the existing issues before submitting a new bug.
+      options:
+        - label: I searched the existing issues and did not find this bug already reported.
+          required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where did this happen?
+      description: Select the environment where you encountered the problem.
+      options:
+        - Production website (mapandmuster.com)
+        - Local development environment
+        - Self-hosted deployment
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Application Version or Build
+      description: >
+        Enter the version, build number, commit SHA, or approximate date you encountered
+        the problem if known. Leave blank if you do not know.
+      placeholder: "Example: v1.0.0, commit abc1234, or August 27, 2026"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area of the Application
+      description: Which part of Map & Muster appears to be affected?
+      options:
+        - Account / registration / authentication
+        - User profile
+        - Campaign creation / configuration
+        - Campaign joining / player management
+        - Campaign map / territories
+        - Forces / armies
+        - Orders / actions / turn submission
+        - Turn resolution / deadlines
+        - Battles / battle results
+        - Objectives / relics / hidden information
+        - Supply / structures / campaign resources
+        - Chat / messaging
+        - Notifications / email
+        - Game Master tools
+        - Administrator tools
+        - Permissions / authorization
+        - File or image upload
+        - User interface / layout
+        - Accessibility
+        - API / server
+        - Performance
+        - Deployment / site availability
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What Happened?
+      description: Clearly describe the problem you experienced.
+      placeholder: |
+        Describe what went wrong.
+
+        Example:
+        After committing my movement orders, the order still appeared editable
+        after every required player had committed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect Map & Muster to do instead?
+      placeholder: |
+        Describe what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: >
+        Give us the smallest reliable sequence of steps that causes the problem.
+      placeholder: |
+        1. Sign in as...
+        2. Open campaign...
+        3. Navigate to...
+        4. Select...
+        5. Click...
+        6. Observe...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How Often Does This Happen?
+      options:
+        - Every time
+        - Most of the time
+        - Sometimes
+        - Happened once
+        - Unable to reproduce
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      description: Select the browser where you encountered the problem.
+      options:
+        - Google Chrome
+        - Microsoft Edge
+        - Mozilla Firefox
+        - Apple Safari
+        - Mobile Chrome
+        - Mobile Safari
+        - Other
+        - Not applicable
+    validations:
+      required: true
+
+  - type: input
+    id: browser-version
+    attributes:
+      label: Browser Version
+      description: Enter the browser version if known.
+      placeholder: "Example: Chrome 151"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating System / Device
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Android
+        - iPhone / iPad
+        - ChromeOS
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: screen-size
+    attributes:
+      label: Device or Screen Size
+      description: >
+        This is especially useful for layout, responsive-design, map, and mobile issues.
+      placeholder: "Example: Windows desktop 2560x1440, iPhone 17, Pixel 10"
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or Video
+      description: |
+        Add screenshots, screen recordings, or other visual evidence if useful.
+
+        You can drag and drop images or files into this field.
+
+        **Before uploading, make sure they do not expose another player's private
+        information, unrevealed orders, private objectives, tokens, passwords, or
+        other sensitive information.**
+      placeholder: Drag screenshots or recordings here.
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Errors or Logs
+      description: |
+        Paste relevant browser console errors, server errors, or log output if available.
+
+        Remove passwords, tokens, cookies, email addresses, private campaign data,
+        unrevealed information, and other sensitive information before posting.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: >
+        Include anything else that may help reproduce or understand the problem.
+      placeholder: |
+        Examples:
+        - Does it affect only one campaign?
+        - Does it affect multiple users?
+        - Did refreshing the page change anything?
+        - Did it begin after a particular action?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: sensitive-data
+    attributes:
+      label: Sensitive Information
+      options:
+        - label: >
+            I have checked this report and attachments and have not included passwords,
+            authentication tokens, cookies, private messages, or private/unrevealed
+            campaign information.
+          required: true

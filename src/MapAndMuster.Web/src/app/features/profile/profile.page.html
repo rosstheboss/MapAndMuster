@@ -156,20 +156,26 @@
         </p>
         <div class="field" [class.invalid]="isInvalid('currentPassword')">
           <label for="currentPassword">Current password</label>
-          <input
-            id="currentPassword"
-            type="password"
-            autocomplete="current-password"
-            formControlName="currentPassword"
-          />
+          <app-password-input>
+            <input
+              id="currentPassword"
+              type="password"
+              autocomplete="current-password"
+              formControlName="currentPassword"
+            />
+          </app-password-input>
         </div>
         <div class="field" [class.invalid]="isInvalid('newPassword')">
           <label for="newPassword">New password</label>
-          <input id="newPassword" type="password" autocomplete="new-password" formControlName="newPassword" />
+          <app-password-input>
+            <input id="newPassword" type="password" autocomplete="new-password" formControlName="newPassword" />
+          </app-password-input>
         </div>
         <div class="field" [class.invalid]="isInvalid('confirmPassword')">
           <label for="confirmPassword">Confirm new password</label>
-          <input id="confirmPassword" type="password" autocomplete="new-password" formControlName="confirmPassword" />
+          <app-password-input>
+            <input id="confirmPassword" type="password" autocomplete="new-password" formControlName="confirmPassword" />
+          </app-password-input>
         </div>
       </fieldset>
 

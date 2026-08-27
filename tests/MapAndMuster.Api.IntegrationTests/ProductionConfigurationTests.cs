@@ -38,6 +38,7 @@ public sealed class ProductionConfigurationTests
         Assert.Contains("ConnectionStrings:Campaign", exception.Message, StringComparison.Ordinal);
         Assert.Contains("Email:Resend:ApiKey", exception.Message, StringComparison.Ordinal);
         Assert.Contains("Identity:BootstrapAdminPassword", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Identity:BootstrapAdminEmail", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("noreply@mapandmuster.com", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("https://mapandmuster.com", exception.Message, StringComparison.Ordinal);
     }
@@ -82,6 +83,7 @@ public sealed class ProductionConfigurationTests
 
         Assert.Contains("ConnectionStrings:Campaign", exception.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("Bootstrap-Admin-1!", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("admin@example.test", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -148,6 +150,7 @@ public sealed class ProductionConfigurationTests
             ["Email:FromAddress"] = "noreply@mapandmuster.com",
             ["Email:Resend:ApiKey"] = "re_not_a_real_secret",
             ["Identity:BootstrapAdminPassword"] = "Bootstrap-Admin-1!",
+            ["Identity:BootstrapAdminEmail"] = "admin@example.test",
         };
     }
 

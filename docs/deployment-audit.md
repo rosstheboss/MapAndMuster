@@ -69,9 +69,10 @@ Tracked, non-production values:
 
 - `docker-compose.yml` and `.env.example` use local database password `campaign`
 - Design-time EF factory uses the same local connection string
-- `IdentityMaintenance` promotes a hardcoded operator email/username (not a password or API key)
-  and creates that administrator from `Identity:BootstrapAdminPassword` when the account is missing.
-  Test 1–Test 30 are also created at API startup. Password hashes are not stored in EF migrations.
+- `IdentityMaintenance` promotes the hardcoded username `rosstheboss` (and a configured
+  `Identity:BootstrapAdminEmail` when set). It creates that administrator from
+  `Identity:BootstrapAdminPassword` and `Identity:BootstrapAdminEmail` when the account is missing.
+  Test 1–Test 45 are also created at API startup. Password hashes are not stored in EF migrations.
 
 No production connection strings, OAuth secrets, or email API keys are committed.
 `.env` and `.env.*` are gitignored except `.env.example`.

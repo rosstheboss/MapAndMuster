@@ -31,11 +31,19 @@ import {
 import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
+import { PasswordInputComponent } from '../../shared/password-input/password-input.component';
 import { ThemeToggleComponent } from '../../shared/theme-toggle/theme-toggle.component';
 
 @Component({
   selector: 'app-profile-page',
-  imports: [ReactiveFormsModule, RouterLink, FilterableComboboxComponent, InstantDatePipe, ThemeToggleComponent],
+  imports: [
+    ReactiveFormsModule,
+    RouterLink,
+    FilterableComboboxComponent,
+    InstantDatePipe,
+    ThemeToggleComponent,
+    PasswordInputComponent,
+  ],
   templateUrl: './profile.page.html',
   styleUrl: './profile.page.css',
 })

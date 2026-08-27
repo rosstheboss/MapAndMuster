@@ -10,6 +10,7 @@ appear in Git, Dockerfiles, images, logs, health responses, or Angular source.
 - Resend API keys
 - OAuth client secrets and app secrets
 - `Identity:BootstrapAdminPassword`
+- `Identity:BootstrapAdminEmail` when it is a personal mailbox
 - Cookie/signing keys if they are ever rotated out of the framework defaults
 - Email confirmation and password-reset tokens
 - Player email addresses in fixtures or logs
@@ -33,7 +34,8 @@ Enter secrets in the host (Render Dashboard environment variables, including Blu
 PostgreSQL database, Resend key, From address, and OAuth clients than production.
 
 Startup validation in Production and Staging names missing keys such as
-`ConnectionStrings:Campaign`, `Email:Resend:ApiKey`, and `Identity:BootstrapAdminPassword`.
+`ConnectionStrings:Campaign`, `Email:Resend:ApiKey`, `Identity:BootstrapAdminPassword`, and
+`Identity:BootstrapAdminEmail`.
 It never prints the values.
 
 ## Logging

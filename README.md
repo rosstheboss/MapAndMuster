@@ -40,3 +40,10 @@ See `docs/SETUP.md` for prerequisites, local services, and verification. Review
 - `docs/TESTING-STRATEGY.md`: required test levels and scenarios.
 - `docs/SECURITY.md`: secrecy, authorization, upload, and audit requirements.
 - `docs/DECISIONS-NEEDED.md`: unresolved product rules.
+
+## Contributing and security
+
+- `CONTRIBUTING.md`: how to propose changes. The maintainer merges pull requests.
+- `SECURITY.md`: privately report vulnerabilities. Do not file public security issues.
+- `CODE_OF_CONDUCT.md`: expected behavior in issues and pull requests.
+- `LICENSE`: MIT.

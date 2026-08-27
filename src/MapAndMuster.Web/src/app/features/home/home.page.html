@@ -1,5 +1,8 @@
 <section class="page">
   <h1>Home</h1>
+  <p class="discord-invite">
+    <a [href]="discordInviteUrl" target="_blank" rel="noopener noreferrer">Join the Discord server</a>
+  </p>
   @if (auth.currentUser(); as user) {
     <section class="panel stack" aria-labelledby="notice-heading">
       <h2 id="notice-heading">Notifications</h2>
