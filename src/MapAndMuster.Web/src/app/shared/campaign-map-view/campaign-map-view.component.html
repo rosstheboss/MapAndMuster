@@ -21,6 +21,16 @@
     <button type="button" class="button-secondary" (click)="zoomToActualSize()" title="100% (1)" aria-keyshortcuts="1">
       100%
     </button>
+    <button
+      type="button"
+      class="button-secondary"
+      (click)="toggleFullscreen()"
+      [attr.aria-pressed]="fullscreen()"
+      title="Full screen (M)"
+      aria-keyshortcuts="M"
+    >
+      {{ fullscreen() ? 'Exit full screen' : 'Full screen' }}
+    </button>
     @if (layerToggles()) {
       <label class="layer-toggle">
         <input type="checkbox" [checked]="showOverlay()" (change)="onShowOverlayChange($event)" />
@@ -48,8 +58,10 @@
       ' percent of image size. Plus and minus zoom by 10 percent. F fits the image to the view. ' +
       '1 or 0 sets 100 percent. Hold right-click or middle-click and drag to pan. ' +
       'Arrow keys and space-drag also pan when the image is larger than the panel. Left-click does not pan. ' +
+      'Pinch with two fingers to zoom, and drag with two fingers to pan. M toggles full screen. ' +
       'Zoom up to 800 percent to trace fine coasts. Drawing requires a pointer.'
     "
+    [attr.aria-busy]="!imageReady()"
     [class.is-panning]="panning()"
     (wheel)="onWheel($event)"
     (pointerdown)="onViewportPointerDown($event)"
@@ -60,8 +72,14 @@
     (keydown)="onViewportKeydown($event)"
     (keyup)="onViewportKeyup($event)"
   >
+    @if (!imageReady()) {
+      <div class="map-loading" role="status">
+        Loading map<span class="map-loading-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
+      </div>
+    }
     <div
       class="map-canvas"
+      [class.is-pending]="!imageReady()"
       [style.width.px]="imageSize().width"
       [style.height.px]="imageSize().height"
       [style.transform]="canvasTransform()"

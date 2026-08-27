@@ -61,7 +61,9 @@ http/https URLs), a raster map image, and at least two factions. Each faction ha
 color and may have subfactions. A faction may require players who choose it to pick a
 subfaction; that flag may only be enabled when at least one subfaction is listed. Optional
 ally groups may include two or more factions; every faction cannot belong to a single ally
-group. Each ally group has a unique color used for alliance map highlighting. Renaming an ally
+group. Each ally group has a unique color used for alliance map highlighting. On Edit campaign, each
+ally group includes a faction dropdown that assigns named factions to that group and updates the
+ally-group field on each faction in the Factions section. Renaming an ally
 group keeps existing faction membership: factions stay in that group and show the new name.
 
 Setup may apply a faction preset. Applying a preset replaces the current faction and subfaction
@@ -222,7 +224,8 @@ The campaign page lists attached members in a Participants panel: each player's 
 Manager, Player, and/or Admin when those apply. A manager or administrator may search accounts
 (including test users) by username or display name, add a player to a public or private campaign
 without the join password, kick a non-manager player (which notifies them in-app and by email
-unless they are a test account), and assign another player's faction and subfaction. Players may
+unless they are a test account), and assign another player's faction and subfaction from one dropdown that lists subfactions as
+`Faction Name - Subfaction Name`. Players may
 still change their own faction until the campaign starts; after launch only staff assignment
 changes it. A kicked player's forces, drafts, and unresolved battles are removed, and carried
 items drop on the territory they occupied.
@@ -393,7 +396,10 @@ rejoin into one surviving force and therefore one later action. Only users/force
 order participate in the early-close calculation.
 
 Players pick a faction, and a required subfaction when the faction demands one, before they
-receive a starting force. On the campaign page, every player (including a manager who occupies
+receive a starting force. On the campaign page, faction assignment (a player's own choice or a
+manager assigning another player) uses one dropdown. Named subfactions appear as
+`Faction Name - Subfaction Name`. Factions that do not require a subfaction still include the parent
+name as a choice. Every player (including a manager who occupies
 a player slot) must choose that faction before they can play. A participant who has not chosen a
 faction may do so until they have one and cannot submit orders for a round until they do. A player
 may change their chosen faction until the campaign starts. After the campaign has started, a chosen
@@ -684,15 +690,19 @@ Terrain recolors every territory. A new territory, or a terrain change while Col
 uses that mode's color. Remove Colors switches to Manual Colors and clears every overlay color.
 
 The map overlay starts fitted to the panel. Map panels are full width in their parent. Zoom
-controls sit across the top of the map in this order: zoom percent field, +, -, Fit, and 100%.
-Zoom is 10% to 800% of the map image's actual pixel size, in 10% steps. 100% shows the
+controls sit across the top of the map in this order: zoom percent field, +, -, Fit, 100%, and Full
+screen. Zoom is 10% to 800% of the map image's actual pixel size, in 10% steps. 100% shows the
 image at its native size and centers it. Fit scales the image to the view and recenters it.
-The F key fits the map; 1 (and 0) set 100 percent. Drawing coordinates stay normalized to the full-size image. Snap distance, minimum draw spacing, and
+The F key fits the map; 1 (and 0) set 100 percent. M toggles full-screen map mode on the campaign
+page and map editor while the map is shown; Escape exits full screen. The first time a map view
+opens, the panel shows a loading ellipsis and hides overlay markers until that image has loaded so
+they do not cluster in the corner. Hover, selection, and later map updates do not show it again. Drawing coordinates stay normalized to the full-size image. Snap distance, minimum draw spacing, and
 overlay stroke widths are measured in screen pixels so zooming in lets a manager trace fine coasts and
 province borders. When the zoomed image is larger than the panel, it can be panned
 but not dragged past the image bounds. Hold a right-click (context-click) or middle-click and drag to
 pan without drawing, erasing, or selecting; the mouse wheel still zooms the same way it does with any
-tool. Left-click drag does not pan. Arrow keys and space-drag also pan. Drawing territories requires
+tool. Left-click drag does not pan. On a touch screen, pinch with two fingers to zoom and drag with
+two fingers to pan. Arrow keys and space-drag also pan. Drawing territories requires
 a pointer; other map controls, including zoom, pan, tool choice, and the territory list, are keyboard
 accessible. A click on empty map, including the letterboxed panel around a fitted image, clears the
 territory selection. Only the hovered or selected arrow glows. Saving the map graph does not change
@@ -739,7 +749,8 @@ nested bullets in display-name order, each with their chosen faction and subfact
 one: `Bob (Midland, East)`. Players who have not chosen a faction, non-player members, and
 backstabbed factions are omitted from the count and the nested list. Clicking a player, faction, or
 ally group on the campaign page, while the player is not issuing an order, highlights that party’s
-territories and emphasizes their forces on the map. Clicking the same party again clears that focus.
+territories and emphasizes their forces on the map. Force markers stay inside their territory,
+or as close as possible without sitting on a neighboring territory. Clicking the same party again clears that focus.
 A profile link still opens the user profile. The campaign page and map editor can download a PNG of the latest saved map
 image with the unselected territory overlay rasterized on top. Spawn hatching, structure pins, and
 faction flags or uploaded logos are included. Download flags are twice the on-map marker size and
@@ -764,7 +775,8 @@ only meets that extra vertex (a T-junction). Traces that sit along a shared
 border are allowed; a drawing that covers another territory's interior cannot be closed or saved.
 
 Factions, terrain types, and structures can be expanded or collapsed inside their setup sections.
-Each ally group lists its member factions in alphabetical order in a paragraph. When any ally group
+Each ally group lists its member factions in alphabetical order in a paragraph. Setup also lets a
+manager pick those members from a dropdown beside the ally group. When any ally group
 exists, unaligned factions are listed after the groups, also alphabetically.
 
 Each faction uses a color flag by default or an uploaded 50×50 flag image. Uploaded flags are not

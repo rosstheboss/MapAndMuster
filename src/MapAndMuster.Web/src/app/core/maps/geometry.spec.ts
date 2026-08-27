@@ -6,11 +6,14 @@ import {
   generateAdjacencies,
 } from './adjacency';
 import {
+  centroid,
   clampTranslation,
+  containsStrict,
   encloseAlongImageEdge,
   encloseAlongTouchedBorders,
   findSnapTarget,
   fitSquareInPolygon,
+  interiorAnchor,
   interiorsOverlap,
   isValidTerritoryPolygon,
   normalizedFromPixels,
@@ -290,6 +293,27 @@ describe('map geometry', () => {
       Math.abs(marker.y - occupied.y) < (marker.height + occupied.height) / 2;
     expect(overlapsOccupied(overlapping)).toBe(true);
     expect(overlapsOccupied(fitted)).toBe(false);
+  });
+
+  it('keeps a marker inside a C-shaped territory whose vertex centroid is in the hole', () => {
+    const channel = [
+      { x: 0.1, y: 0.1 },
+      { x: 0.5, y: 0.1 },
+      { x: 0.5, y: 0.2 },
+      { x: 0.2, y: 0.2 },
+      { x: 0.2, y: 0.4 },
+      { x: 0.5, y: 0.4 },
+      { x: 0.5, y: 0.5 },
+      { x: 0.1, y: 0.5 },
+    ];
+    const hole = { x: 0.35, y: 0.3 };
+    const outsideCenter = centroid(channel);
+    expect(containsStrict(channel, outsideCenter)).toBe(false);
+    expect(containsStrict(channel, hole)).toBe(false);
+    const anchor = interiorAnchor(channel);
+    expect(containsStrict(channel, anchor)).toBe(true);
+    const fitted = fitSquareInPolygon(channel, hole, 0.04, 0.04);
+    expect(containsStrict(channel, { x: fitted.x, y: fitted.y })).toBe(true);
   });
 
   it('encloses a drawn line along the map image edge', () => {

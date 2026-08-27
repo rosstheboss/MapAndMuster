@@ -106,6 +106,109 @@ describe('CampaignMapViewComponent', () => {
     expect(pin?.getAttribute('aria-label')).toBe('North force in Coast');
   });
 
+  it('shows a loading status until the map image finishes loading', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.map-loading')?.textContent).toContain('Loading map');
+    expect(compiled.querySelector('.map-canvas')?.classList.contains('is-pending')).toBe(true);
+
+    const view = fixture.componentInstance as unknown as {
+      imageReady: { set(value: boolean): void };
+    };
+    view.imageReady.set(true);
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('.map-loading')).toBeNull();
+    expect(compiled.querySelector('.map-canvas')?.classList.contains('is-pending')).toBe(false);
+  });
+
+  it('keeps the loading overlay off after the first load when the map is hovered or selected', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.detectChanges();
+
+    const view = fixture.componentInstance as unknown as {
+      imageReady: { set(value: boolean): void };
+    };
+    view.imageReady.set(true);
+    fixture.detectChanges();
+
+    fixture.componentRef.setInput('hoveredTerritoryId', 't1');
+    fixture.componentRef.setInput('selectedTerritoryIds', ['t1']);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.map-loading')).toBeNull();
+    expect(compiled.querySelector('.map-canvas')?.classList.contains('is-pending')).toBe(false);
+  });
+
+  it('pinches to zoom and pans with two pointers', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const viewport = compiled.querySelector('.map-viewport');
+    expect(viewport).toBeTruthy();
+    if (!viewport) {
+      return;
+    }
+
+    vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 400,
+      height: 300,
+      right: 400,
+      bottom: 300,
+      x: 0,
+      y: 0,
+      toJSON: () => undefined,
+    });
+
+    viewport.dispatchEvent(pointer('pointerdown', { pointerId: 1, button: 0, clientX: 100, clientY: 100 }));
+    viewport.dispatchEvent(pointer('pointerdown', { pointerId: 2, button: 0, clientX: 200, clientY: 100 }));
+    viewport.dispatchEvent(pointer('pointermove', { pointerId: 1, buttons: 1, clientX: 80, clientY: 140 }));
+    viewport.dispatchEvent(pointer('pointermove', { pointerId: 2, buttons: 1, clientX: 260, clientY: 140 }));
+    fixture.detectChanges();
+
+    const view = fixture.componentInstance as unknown as {
+      zoom: () => number;
+      panX: () => number;
+      panY: () => number;
+    };
+    expect(view.zoom()).toBeGreaterThan(1);
+    expect(compiled.querySelector('.map-viewport')?.classList.contains('is-panning')).toBe(true);
+    expect(view.panY()).not.toBe(-200);
+  });
+
+  it('toggles full screen on M and exits on Escape', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const view = fixture.componentInstance as unknown as {
+      onDocumentKeydown: (event: KeyboardEvent) => void;
+      fullscreen: () => boolean;
+    };
+    expect(compiled.textContent).toContain('Full screen');
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'm' }));
+    fixture.detectChanges();
+    expect(view.fullscreen()).toBe(true);
+    expect(compiled.classList.contains('is-fullscreen')).toBe(true);
+    expect(compiled.textContent).toContain('Exit full screen');
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+    expect(view.fullscreen()).toBe(false);
+  });
+
   it('renders an item objective marker in a territory', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);

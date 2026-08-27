@@ -2,6 +2,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  HostListener,
   inject,
   input,
   output,
@@ -22,6 +23,7 @@ import {
   containsStrict,
   DRAWING_STROKE_SCREEN_PX,
   fitSquareInPolygon,
+  interiorAnchor,
   MARKER_MAX_PX,
   MAX_ZOOM,
   MIN_ZOOM,
@@ -85,6 +87,9 @@ export interface MapItemMarker {
   imports: [IconComponent, MapSymbolComponent],
   templateUrl: './campaign-map-view.component.html',
   styleUrl: './campaign-map-view.component.css',
+  host: {
+    '[class.is-fullscreen]': 'fullscreen()',
+  },
 })
 export class CampaignMapViewComponent {
   readonly imageUrl = input.required<string>();
@@ -142,23 +147,31 @@ export class CampaignMapViewComponent {
   private readonly viewportSize = signal({ width: 1, height: 1 });
   private readonly spaceHeld = signal(false);
   protected readonly panning = signal(false);
+  protected readonly fullscreen = signal(false);
+  protected readonly imageReady = signal(false);
   protected readonly marqueeBox = signal<{ left: number; top: number; width: number; height: number } | null>(null);
   private movingTerritory = false;
   private moveOrigin: MapPoint | null = null;
   private hasFittedImage = false;
   private marqueeOrigin: { clientX: number; clientY: number; point: MapPoint; additive: boolean } | null = null;
   private panOrigin = { x: 0, y: 0, panX: 0, panY: 0 };
+  private readonly pointers = new Map<number, { x: number; y: number }>();
+  private pinch: { distance: number; zoom: number; imageX: number; imageY: number } | null = null;
+  private pinchCooldown = false;
   private hoverIntentTimer: ReturnType<typeof setTimeout> | null = null;
   private hoverIntentId: string | null | undefined = undefined;
   private readonly hoverMotionIds = signal<ReadonlySet<string>>(new Set());
   private readonly hoverMotionTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private resizeObserver: ResizeObserver | null = null;
   private observedDestroy = false;
+  private destroyed = false;
 
   constructor() {
     this.destroyRef.onDestroy(() => {
+      this.destroyed = true;
       this.clearHoverIntentTimer();
       this.clearHoverMotion();
+      this.releaseFullscreen();
     });
   }
 
@@ -168,7 +181,7 @@ export class CampaignMapViewComponent {
     const maxWidth = MARKER_MAX_PX / (image.width * scale);
     const maxHeight = MARKER_MAX_PX / (image.height * scale);
     return this.territories().map((territory) => {
-      const center = centroid(territory.polygon);
+      const center = interiorAnchor(territory.polygon);
       const structure = this.structures().find((item) => item.id === territory.structureTypeId) ?? null;
       const destroyed = territory.structureCondition === 'Destroyed';
       const pillaged = territory.structureCondition === 'Pillaged';
@@ -401,6 +414,7 @@ export class CampaignMapViewComponent {
   protected onImageLoad(event: Event): void {
     const image = event.target as HTMLImageElement;
     this.imageSize.set({ width: image.naturalWidth || 1, height: image.naturalHeight || 1 });
+    this.imageReady.set(true);
     this.observeViewport();
     if (!this.hasFittedImage) {
       this.hasFittedImage = true;
@@ -416,6 +430,15 @@ export class CampaignMapViewComponent {
   }
 
   protected onPointerMove(event: PointerEvent): void {
+    this.updatePointer(event);
+    if (this.applyPinch()) {
+      return;
+    }
+
+    if (this.pinchCooldown) {
+      return;
+    }
+
     if (this.applyPan(event)) {
       return;
     }
@@ -439,6 +462,19 @@ export class CampaignMapViewComponent {
   }
 
   protected onViewportPointerDown(event: PointerEvent): void {
+    this.rememberPointer(event);
+    if (this.pointers.size >= 2) {
+      this.beginPinch();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (this.pinchCooldown) {
+      event.preventDefault();
+      return;
+    }
+
     if (this.shouldAlwaysPan(event)) {
       this.beginPan(event);
       return;
@@ -455,6 +491,19 @@ export class CampaignMapViewComponent {
   }
 
   protected onPointerDown(event: PointerEvent): void {
+    this.rememberPointer(event);
+    if (this.pointers.size >= 2) {
+      this.beginPinch();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (this.pinchCooldown) {
+      event.preventDefault();
+      return;
+    }
+
     if (this.shouldAlwaysPan(event)) {
       this.beginPan(event);
       event.stopPropagation();
@@ -512,6 +561,12 @@ export class CampaignMapViewComponent {
   }
 
   protected onPointerUp(event?: PointerEvent): void {
+    this.forgetPointer(event);
+    if (this.pinchCooldown) {
+      this.panning.set(false);
+      return;
+    }
+
     if (this.marqueeOrigin) {
       this.finishMarquee(event);
     }
@@ -740,6 +795,28 @@ export class CampaignMapViewComponent {
     }
   }
 
+  @HostListener('document:keydown', ['$event'])
+  protected onDocumentKeydown(event: KeyboardEvent): void {
+    if (event.ctrlKey || event.metaKey || event.altKey || this.isTypingTarget(event.target)) {
+      return;
+    }
+
+    if (event.key === 'Escape' && this.fullscreen()) {
+      event.preventDefault();
+      this.setFullscreen(false);
+      return;
+    }
+
+    if (event.key === 'm' || event.key === 'M') {
+      event.preventDefault();
+      this.toggleFullscreen();
+    }
+  }
+
+  protected toggleFullscreen(): void {
+    this.setFullscreen(!this.fullscreen());
+  }
+
   protected onShowOverlayChange(event: Event): void {
     const target = event.target;
     if (target instanceof HTMLInputElement) {
@@ -884,6 +961,152 @@ export class CampaignMapViewComponent {
     return event.button === 1 || event.button === 2 || this.spaceHeld();
   }
 
+  private isTypingTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+  }
+
+  private setFullscreen(on: boolean): void {
+    this.fullscreen.set(on);
+    document.body.style.overflow = on ? 'hidden' : '';
+    requestAnimationFrame(() => {
+      if (this.destroyed) {
+        return;
+      }
+
+      this.observeViewport();
+      if (this.fitToPanel()) {
+        this.zoomToFit();
+      } else {
+        this.clampPan();
+      }
+    });
+  }
+
+  private releaseFullscreen(): void {
+    if (!this.fullscreen()) {
+      return;
+    }
+
+    this.fullscreen.set(false);
+    document.body.style.overflow = '';
+  }
+
+  private rememberPointer(event: PointerEvent): void {
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    try {
+      (event.currentTarget as HTMLElement | SVGElement).setPointerCapture(event.pointerId);
+    } catch {
+      // Some test hosts do not support pointer capture; pinch still follows move events.
+    }
+  }
+
+  private updatePointer(event: PointerEvent): void {
+    if (!this.pointers.has(event.pointerId)) {
+      return;
+    }
+
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  }
+
+  private forgetPointer(event?: PointerEvent): void {
+    if (event) {
+      this.pointers.delete(event.pointerId);
+    } else {
+      this.pointers.clear();
+    }
+
+    if (this.pointers.size < 2) {
+      this.pinch = null;
+      if (this.panning() && !this.spaceHeld()) {
+        this.panning.set(false);
+      }
+    }
+
+    if (this.pointers.size === 0) {
+      this.pinchCooldown = false;
+    }
+  }
+
+  private beginPinch(): void {
+    this.cancelTransientMapGestures();
+    this.pinchCooldown = true;
+    this.panning.set(true);
+    const points = [...this.pointers.values()];
+    const first = points[0];
+    const second = points[1];
+    if (!first || !second) {
+      return;
+    }
+
+    const viewport = this.viewport()?.nativeElement.getBoundingClientRect();
+    if (!viewport) {
+      return;
+    }
+
+    const startScale = this.currentScale();
+    this.fitToPanel.set(false);
+    this.zoom.set(startScale);
+    const midX = (first.x + second.x) / 2 - viewport.left;
+    const midY = (first.y + second.y) / 2 - viewport.top;
+    this.pinch = {
+      distance: Math.max(Math.hypot(first.x - second.x, first.y - second.y), 1),
+      zoom: startScale,
+      imageX: (midX - this.panX()) / startScale,
+      imageY: (midY - this.panY()) / startScale,
+    };
+  }
+
+  private applyPinch(): boolean {
+    if (this.pointers.size < 2) {
+      return false;
+    }
+
+    if (!this.pinch) {
+      this.beginPinch();
+    }
+
+    const pinch = this.pinch;
+    const points = [...this.pointers.values()];
+    const first = points[0];
+    const second = points[1];
+    if (!pinch || !first || !second) {
+      return true;
+    }
+
+    const viewport = this.viewport()?.nativeElement.getBoundingClientRect();
+    if (!viewport) {
+      return true;
+    }
+
+    const distance = Math.max(Math.hypot(first.x - second.x, first.y - second.y), 1);
+    const nextZoom = clampZoom((pinch.zoom * distance) / pinch.distance);
+    this.zoom.set(nextZoom);
+    const nextScale = this.currentScale();
+    const midX = (first.x + second.x) / 2 - viewport.left;
+    const midY = (first.y + second.y) / 2 - viewport.top;
+    this.panX.set(midX - pinch.imageX * nextScale);
+    this.panY.set(midY - pinch.imageY * nextScale);
+    this.clampPan();
+    return true;
+  }
+
+  private cancelTransientMapGestures(): void {
+    if (this.movingTerritory) {
+      this.movingTerritory = false;
+      this.moveOrigin = null;
+      this.territoryMoveEnd.emit();
+    }
+
+    this.marqueeOrigin = null;
+    this.marqueeBox.set(null);
+    this.panning.set(false);
+  }
+
   private beginPan(event: PointerEvent): void {
     this.panning.set(true);
     this.panOrigin = { x: event.clientX, y: event.clientY, panX: this.panX(), panY: this.panY() };
@@ -907,6 +1130,10 @@ export class CampaignMapViewComponent {
   }
 
   private observeViewport(): void {
+    if (this.destroyed) {
+      return;
+    }
+
     const element = this.viewport()?.nativeElement;
     if (!element) {
       return;

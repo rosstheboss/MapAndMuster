@@ -738,6 +738,9 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('You can change your faction until the campaign starts');
     expect(compiled.textContent).toContain('North');
     expect(compiled.querySelector('#faction')).toBeTruthy();
+    expect([...compiled.querySelectorAll('#faction option')].map((option) => option.textContent?.trim())).toContain(
+      'North - Riders',
+    );
 
     for (const request of http.match(() => true)) {
       if (request.request.url.endsWith('/map/graph')) {
@@ -763,6 +766,48 @@ describe('CampaignDetailPage', () => {
       }
     }
     await fixture.whenStable();
+    http.verify();
+  });
+
+  it('lists subfactions as Faction - Subfaction when staff assign a player faction', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      participants: [
+        ...campaign.participants,
+        {
+          userId: 'user-2',
+          username: 'southplayer',
+          displayName: 'Ada',
+          isPlayer: true,
+          isGameMaster: false,
+          isAdministrator: false,
+          factionName: null,
+          subfaction: null,
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const options = [...compiled.querySelectorAll('#staff-faction-user-2 option')].map((option) =>
+      option.textContent?.trim(),
+    );
+    expect(options).toContain('North');
+    expect(options).toContain('North - Riders');
+    expect(options).toContain('South');
+    expect(compiled.querySelector('#staff-subfaction-user-2')).toBeNull();
     http.verify();
   });
 

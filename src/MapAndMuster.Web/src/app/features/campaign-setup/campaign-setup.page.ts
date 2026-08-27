@@ -639,6 +639,32 @@ export class CampaignSetupPage {
       .join(', ');
   }
 
+  protected allyGroupFactionChoices(groupId: string): { id: string; name: string }[] {
+    return this.factions.controls
+      .filter((faction) => faction.controls.name.value.trim() && faction.controls.allyGroupId.value !== groupId)
+      .map((faction) => ({
+        id: faction.controls.id.value,
+        name: faction.controls.name.value.trim(),
+      }))
+      .sort((left, right) => compareNames(left.name, right.name));
+  }
+
+  protected onAllyGroupFactionPicked(groupId: string, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const factionId = select.value;
+    select.value = '';
+    if (!factionId) {
+      return;
+    }
+
+    const faction = this.factions.controls.find((item) => item.controls.id.value === factionId);
+    if (!faction) {
+      return;
+    }
+
+    faction.controls.allyGroupId.setValue(groupId);
+  }
+
   protected itemLabel(name: string, fallback: string): string {
     const trimmed = name.trim();
     return trimmed.length > 0 ? trimmed : fallback;
@@ -2627,7 +2653,7 @@ export class CampaignSetupPage {
       case 'privateObjectives':
         return this.privateObjectiveTypes.dirty;
       case 'allies':
-        return this.allyGroups.dirty;
+        return this.allyGroups.dirty || this.factions.controls.some((faction) => faction.controls.allyGroupId.dirty);
       case 'factions':
         return this.factions.dirty || this.flagImages.size > 0;
       case 'missions':

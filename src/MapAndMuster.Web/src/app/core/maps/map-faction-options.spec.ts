@@ -6,6 +6,7 @@ import {
   mapFactionOptions,
   mapFactionOptionValue,
   parseMapFactionOptionValue,
+  playerFactionOptions,
   spawnIdentity,
 } from './map-faction-options';
 
@@ -51,6 +52,19 @@ describe('map faction options', () => {
       'North',
     ]);
     expect(options.some((option) => option.label === 'Daemons of Chaos')).toBe(false);
+  });
+
+  it('lists optional subfactions as extra player-assignment choices', () => {
+    const options = playerFactionOptions([daemons, north, skaven]);
+    expect(options.map((option) => option.label)).toEqual([
+      'Daemons of Chaos - Khorne',
+      'Daemons of Chaos - Nurgle',
+      'Daemons of Chaos - Slaanesh',
+      'Daemons of Chaos - Tzeentch',
+      'North',
+      'North - Riders',
+      'Skaven',
+    ]);
   });
 
   it('disables spawn for factions whose special rules include UndergroundNetwork', () => {

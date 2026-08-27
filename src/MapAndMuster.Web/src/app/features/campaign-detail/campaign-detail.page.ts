@@ -64,6 +64,11 @@ import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.s
 import { formatLocation } from '../../core/location/location';
 import { adjacentTerritoryIds } from '../../core/maps/adjacency';
 import { downloadBlob, mapDownloadFilename, rasterizeMapPng } from '../../core/maps/map-export';
+import {
+  mapFactionOptionValue,
+  parseMapFactionOptionValue,
+  playerFactionOptions,
+} from '../../core/maps/map-faction-options';
 import { mapSvgCatalogFrom, serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
 import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
 import { normalizeStructureCondition, territoryLabel } from '../../core/maps/map-graph.models';
@@ -196,11 +201,9 @@ export class CampaignDetailPage {
   private readonly campaignId = this.route.snapshot.paramMap.get('id');
   protected readonly durationUnits = DURATION_UNITS;
   protected readonly factionChoice = signal('');
-  protected readonly subfactionChoice = signal('');
   protected readonly memberQuery = signal('');
   protected readonly memberHits = signal<UserSearchHit[]>([]);
   protected readonly staffFactionId = signal<Partial<Record<string, string>>>({});
-  protected readonly staffSubfaction = signal<Partial<Record<string, string>>>({});
   protected readonly kickUserId = signal<string | null>(null);
   protected readonly roundCount = signal(3);
   protected readonly extensionAmount = signal(1);
@@ -265,9 +268,7 @@ export class CampaignDetailPage {
 
     return adjacentTerritoryIds(this.graph().adjacencies, this.selectedIds());
   });
-  protected readonly selectedFaction = computed(
-    () => this.campaign()?.factions.find((faction) => faction.id === this.factionChoice()) ?? null,
-  );
+  protected readonly factionAssignmentOptions = computed(() => playerFactionOptions(this.campaign()?.factions ?? []));
   protected readonly chosenFaction = computed(() => {
     const campaign = this.campaign();
     if (!campaign?.factionId) {
@@ -302,13 +303,21 @@ export class CampaignDetailPage {
     return status === 'Scheduled' || status === 'InProgress';
   });
   protected readonly spawnLocation = computed(() => {
-    const factionId = this.factionChoice() || this.campaign()?.factionId;
+    const campaign = this.campaign();
+    const parsed = parseMapFactionOptionValue(this.factionChoice());
+    const factionId = parsed.factionId || campaign?.factionId;
+    const subfaction = parsed.factionId ? parsed.subfaction : (campaign?.subfaction ?? null);
     if (!factionId) {
       return null;
     }
 
-    const territory = this.graph().territories.find((item) => item.spawnFactionId === factionId);
-    return territory ? { id: territory.id, label: territoryLabel(territory) } : null;
+    const assigned = this.graph().territories.filter((item) => item.spawnFactionId === factionId);
+    const wanted = subfaction?.trim().toLowerCase() ?? '';
+    const match = wanted
+      ? (assigned.find((item) => namedSpawnSubfaction(item)?.toLowerCase() === wanted) ??
+        assigned.find((item) => namedSpawnSubfaction(item) === null))
+      : (assigned.find((item) => namedSpawnSubfaction(item) === null) ?? assigned[0]);
+    return match ? { id: match.id, label: territoryLabel(match) } : null;
   });
   protected readonly focusedForceIds = computed(() => {
     const focus = this.mapFocus();
@@ -543,31 +552,26 @@ export class CampaignDetailPage {
   }
 
   protected staffFactionValue(participant: CampaignParticipant): string {
-    return this.staffFactionId()[participant.userId] ?? participant.factionId ?? '';
+    const pending = this.staffFactionId()[participant.userId];
+    if (pending !== undefined) {
+      return pending;
+    }
+
+    if (!participant.factionId) {
+      return '';
+    }
+
+    return mapFactionOptionValue(participant.factionId, participant.subfaction);
   }
 
-  protected staffSubfactionValue(participant: CampaignParticipant): string {
-    return this.staffSubfaction()[participant.userId] ?? participant.subfaction ?? '';
-  }
-
-  protected onStaffFaction(participant: CampaignParticipant, factionId: string): void {
-    this.staffFactionId.update((current) => ({ ...current, [participant.userId]: factionId }));
-    this.staffSubfaction.update((current) => ({ ...current, [participant.userId]: '' }));
-  }
-
-  protected onStaffSubfaction(participant: CampaignParticipant, subfaction: string): void {
-    this.staffSubfaction.update((current) => ({ ...current, [participant.userId]: subfaction }));
-  }
-
-  protected staffFaction(participant: CampaignParticipant): CampaignFaction | null {
-    const id = this.staffFactionValue(participant);
-    return this.campaign()?.factions.find((faction) => faction.id === id) ?? null;
+  protected onStaffFaction(participant: CampaignParticipant, value: string): void {
+    this.staffFactionId.update((current) => ({ ...current, [participant.userId]: value }));
   }
 
   protected async assignFaction(participant: CampaignParticipant): Promise<void> {
     const campaign = this.campaign();
-    const factionId = this.staffFactionValue(participant);
-    if (!campaign || !factionId) {
+    const parsed = parseMapFactionOptionValue(this.staffFactionValue(participant));
+    if (!campaign || !parsed.factionId) {
       return;
     }
 
@@ -578,8 +582,8 @@ export class CampaignDetailPage {
         this.campaignsApi.assignFaction(campaign.id, {
           revision: this.play()?.revision ?? campaign.revision,
           userId: participant.userId,
-          factionId,
-          subfaction: this.staffSubfactionValue(participant) || null,
+          factionId: parsed.factionId,
+          subfaction: parsed.subfaction,
         }),
       );
       await this.load(campaign.id);
@@ -766,8 +770,8 @@ export class CampaignDetailPage {
 
   protected async chooseFaction(): Promise<void> {
     const campaign = this.campaign();
-    const factionId = this.factionChoice();
-    if (!campaign || !factionId) {
+    const parsed = parseMapFactionOptionValue(this.factionChoice());
+    if (!campaign || !parsed.factionId) {
       return;
     }
 
@@ -777,16 +781,16 @@ export class CampaignDetailPage {
       await this.overlay.run(() =>
         this.campaignsApi.chooseFaction(campaign.id, {
           revision: campaign.revision,
-          factionId,
-          subfaction: this.subfactionChoice() || null,
+          factionId: parsed.factionId,
+          subfaction: parsed.subfaction,
         }),
       );
       this.campaign.update((current) =>
         current
           ? {
               ...current,
-              factionId,
-              subfaction: this.subfactionChoice() || null,
+              factionId: parsed.factionId,
+              subfaction: parsed.subfaction,
             }
           : current,
       );
@@ -2383,8 +2387,7 @@ export class CampaignDetailPage {
         playRequest,
       ]);
       this.campaign.set(campaign);
-      this.factionChoice.set(campaign.factionId ?? '');
-      this.subfactionChoice.set(campaign.subfaction ?? '');
+      this.factionChoice.set(campaign.factionId ? mapFactionOptionValue(campaign.factionId, campaign.subfaction) : '');
       this.mapRevision.set(campaign.revision);
       this.startPolling();
       this.applyGraph(graph);

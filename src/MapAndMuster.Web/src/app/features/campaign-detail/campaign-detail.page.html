@@ -179,27 +179,11 @@
                         [name]="'staff-faction-' + participant.userId"
                       >
                         <option value="">Select a faction</option>
-                        @for (faction of campaign.factions; track faction.id) {
-                          <option [value]="faction.id">{{ faction.name }}</option>
+                        @for (option of factionAssignmentOptions(); track option.value) {
+                          <option [value]="option.value">{{ option.label }}</option>
                         }
                       </select>
                     </div>
-                    @if (staffFaction(participant)?.requiresSubfaction) {
-                      <div class="field grow">
-                        <label [attr.for]="'staff-subfaction-' + participant.userId">Subfaction</label>
-                        <select
-                          [id]="'staff-subfaction-' + participant.userId"
-                          [ngModel]="staffSubfactionValue(participant)"
-                          (ngModelChange)="onStaffSubfaction(participant, $event)"
-                          [name]="'staff-subfaction-' + participant.userId"
-                        >
-                          <option value="">Select a subfaction</option>
-                          @for (subfaction of staffFaction(participant)?.subfactions ?? []; track subfaction) {
-                            <option [value]="subfaction">{{ subfaction }}</option>
-                          }
-                        </select>
-                      </div>
-                    }
                     <button type="button" class="button-secondary" (click)="assignFaction(participant)">Assign</button>
                     @if (kickUserId() === participant.userId) {
                       <button type="button" class="button-danger" (click)="kickMember(participant)">
@@ -247,27 +231,11 @@
             <label for="faction">Faction</label>
             <select id="faction" [ngModel]="factionChoice()" (ngModelChange)="factionChoice.set($event)" name="faction">
               <option value="">Select a faction</option>
-              @for (faction of campaign.factions; track faction.id) {
-                <option [value]="faction.id">{{ faction.name }}</option>
+              @for (option of factionAssignmentOptions(); track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
               }
             </select>
           </div>
-          @if (selectedFaction()?.requiresSubfaction) {
-            <div class="field">
-              <label for="subfaction">Subfaction</label>
-              <select
-                id="subfaction"
-                [ngModel]="subfactionChoice()"
-                (ngModelChange)="subfactionChoice.set($event)"
-                name="subfaction"
-              >
-                <option value="">Select a subfaction</option>
-                @for (name of selectedFaction()?.subfactions ?? []; track name) {
-                  <option [value]="name">{{ name }}</option>
-                }
-              </select>
-            </div>
-          }
           @if (showSpawnLocation() && spawnLocation(); as spawn) {
             <p>
               Spawn location is at

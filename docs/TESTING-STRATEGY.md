@@ -70,6 +70,8 @@ Cover components/services for:
   collapsible territory fields and list, overlay and connection visibility toggles, selected-territory
   dimming, black connection arrows without size or outline changes, spawn ownership copy, required-
   subfaction spawn labels, disabled no-fixed-spawn factions, save-status check and X, and metadata forms.
+  Map pinch-zoom and two-finger pan, full-screen toggle (M), map-image loading ellipsis, and force
+  markers staying inside their territory are covered in map-view tests.
   The map editor does not show hover-placeholder copy above the map, and hovering or selecting a
   territory does not change that field panel's height. The expanded Territories list stays within the
   map column height, scrolls vertically, and scrolls the topmost selected territory into view.

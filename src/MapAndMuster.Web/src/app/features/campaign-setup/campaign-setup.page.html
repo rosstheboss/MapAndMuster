@@ -1060,7 +1060,10 @@
           </button>
         </legend>
         <div [hidden]="!isOpen('allies')">
-          <p class="muted">Two or more factions can join a group. All factions cannot belong to a single group.</p>
+          <p class="muted">
+            Two or more factions can join a group. All factions cannot belong to a single group. Select factions for a
+            group here; that also updates the ally-group field on each faction below.
+          </p>
           <div class="choice-row">
             <button type="button" class="button-secondary" (click)="addAllyGroup()">Add ally group</button>
             <button type="button" class="button-secondary" (click)="clearAllyGroups()">Clear allies</button>
@@ -1075,6 +1078,18 @@
                 <div class="field color-field">
                   <label [attr.for]="'ally-group-color-' + index">Color</label>
                   <input [id]="'ally-group-color-' + index" type="color" formControlName="color" />
+                </div>
+                <div class="field grow">
+                  <label [attr.for]="'ally-group-factions-' + index">Factions in this group</label>
+                  <select
+                    [id]="'ally-group-factions-' + index"
+                    (change)="onAllyGroupFactionPicked(group.controls.id.value, $event)"
+                  >
+                    <option value="">Select a faction</option>
+                    @for (faction of allyGroupFactionChoices(group.controls.id.value); track faction.id) {
+                      <option [value]="faction.id">{{ faction.name }}</option>
+                    }
+                  </select>
                 </div>
                 <button type="button" class="button-secondary" (click)="removeAllyGroup(index)">Remove</button>
               </div>

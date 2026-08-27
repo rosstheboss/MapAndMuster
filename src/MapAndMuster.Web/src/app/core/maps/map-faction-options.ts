@@ -87,6 +87,39 @@ export function mapFactionOptions(campaign: {
   return options;
 }
 
+export function playerFactionOptions(factions: readonly CampaignFaction[]): MapFactionOption[] {
+  const sorted = [...factions].sort((left, right) => left.name.localeCompare(right.name));
+  const options: MapFactionOption[] = [];
+
+  for (const faction of sorted) {
+    const names = [...faction.subfactions]
+      .map((name) => name.trim())
+      .filter((name) => name.length > 0)
+      .sort((left, right) => left.localeCompare(right));
+    if (!faction.requiresSubfaction) {
+      options.push({
+        value: faction.id,
+        factionId: faction.id,
+        subfaction: null,
+        label: faction.name,
+        spawnDisabled: false,
+      });
+    }
+
+    for (const name of names) {
+      options.push({
+        value: mapFactionOptionValue(faction.id, name),
+        factionId: faction.id,
+        subfaction: name,
+        label: `${faction.name} - ${name}`,
+        spawnDisabled: false,
+      });
+    }
+  }
+
+  return options;
+}
+
 export function spawnIdentity(
   factionId: string | null | undefined,
   subfaction: string | null | undefined,

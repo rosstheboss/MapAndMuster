@@ -1,5 +1,5 @@
 import type { CampaignFaction, CampaignStructureType } from '../campaigns/campaign.models';
-import { centroid, fitSquareInPolygon, MARKER_MAX_PX, OVERLAY_FILL_OPACITY, STROKE_SCREEN_PX } from './geometry';
+import { fitSquareInPolygon, interiorAnchor, MARKER_MAX_PX, OVERLAY_FILL_OPACITY, STROKE_SCREEN_PX } from './geometry';
 import type { FittedSquare, MapPoint } from './geometry';
 import type { MapTerritory } from './map-graph.models';
 
@@ -107,7 +107,7 @@ export async function drawMapDecorations(
       continue;
     }
 
-    const center = centroid(territory.polygon);
+    const center = interiorAnchor(territory.polygon);
     const structure = decorations.structures.find((item) => item.id === territory.structureTypeId) ?? null;
     const destroyed = territory.structureCondition === 'Destroyed';
     const pillaged = territory.structureCondition === 'Pillaged';

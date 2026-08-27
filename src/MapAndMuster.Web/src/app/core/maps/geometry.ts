@@ -82,6 +82,108 @@ export function centroid(polygon: readonly MapPoint[]): MapPoint {
   return { x: x / polygon.length, y: y / polygon.length };
 }
 
+/** A point inside the polygon, used so markers do not sit in a hole or on a neighbor. */
+export function interiorAnchor(polygon: readonly MapPoint[]): MapPoint {
+  if (polygon.length === 0) {
+    return { x: 0.5, y: 0.5 };
+  }
+
+  const areaCenter = areaCentroid(polygon);
+  if (containsStrict(polygon, areaCenter)) {
+    return areaCenter;
+  }
+
+  const vertexCenter = centroid(polygon);
+  if (containsStrict(polygon, vertexCenter)) {
+    return vertexCenter;
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of polygon) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+
+  let best = vertexCenter;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  const consider = (candidate: MapPoint): void => {
+    if (!containsStrict(polygon, candidate)) {
+      return;
+    }
+
+    const score = distanceToBoundary(polygon, candidate);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  };
+
+  const steps = 20;
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+  for (let i = 1; i < steps; i += 1) {
+    for (let j = 1; j < steps; j += 1) {
+      consider({
+        x: minX + (spanX * i) / steps,
+        y: minY + (spanY * j) / steps,
+      });
+    }
+  }
+
+  const count = polygon.length;
+  for (let i = 0; i < count; i += 1) {
+    const a = polygon.at(i);
+    const b = polygon.at((i + 1) % count);
+    if (!a || !b) {
+      continue;
+    }
+
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = Math.hypot(dx, dy);
+    if (length < GEOMETRY_EPSILON) {
+      continue;
+    }
+
+    const inset = Math.min(0.008, length / 4);
+    consider({ x: mid.x - (dy / length) * inset, y: mid.y + (dx / length) * inset });
+    consider({ x: mid.x + (dy / length) * inset, y: mid.y - (dx / length) * inset });
+  }
+
+  return bestScore > Number.NEGATIVE_INFINITY ? best : vertexCenter;
+}
+
+function areaCentroid(polygon: readonly MapPoint[]): MapPoint {
+  let x = 0;
+  let y = 0;
+  let twiceArea = 0;
+  const count = polygon.length;
+  for (let i = 0; i < count; i += 1) {
+    const a = polygon.at(i);
+    const b = polygon.at((i + 1) % count);
+    if (!a || !b) {
+      continue;
+    }
+
+    const cross = a.x * b.y - b.x * a.y;
+    twiceArea += cross;
+    x += (a.x + b.x) * cross;
+    y += (a.y + b.y) * cross;
+  }
+
+  if (Math.abs(twiceArea) < GEOMETRY_EPSILON) {
+    return centroid(polygon);
+  }
+
+  return { x: x / (3 * twiceArea), y: y / (3 * twiceArea) };
+}
+
 export function polygonArea(polygon: readonly MapPoint[]): number {
   let area = 0;
   const count = polygon.length;
@@ -639,13 +741,32 @@ export function fitSquareInPolygon(
 ): FittedSquare {
   const minWidth = Math.max(maxWidth * 0.2, 0.004);
   const minHeight = Math.max(maxHeight * 0.2, 0.004);
+  const searchFrom = containsInclusive(polygon, preferred) ? preferred : interiorAnchor(polygon);
   const avoided = avoid ?? [];
-  let best: FittedSquare = {
-    x: preferred.x,
-    y: preferred.y,
-    width: minWidth,
-    height: minHeight,
-  };
+  const fitted =
+    searchFittedSquare(polygon, searchFrom, maxWidth, maxHeight, minWidth, minHeight, avoided) ??
+    (avoided.length > 0 ? searchFittedSquare(polygon, searchFrom, maxWidth, maxHeight, minWidth, minHeight, []) : null);
+
+  return (
+    fitted ?? {
+      x: searchFrom.x,
+      y: searchFrom.y,
+      width: minWidth,
+      height: minHeight,
+    }
+  );
+}
+
+function searchFittedSquare(
+  polygon: readonly MapPoint[],
+  origin: MapPoint,
+  maxWidth: number,
+  maxHeight: number,
+  minWidth: number,
+  minHeight: number,
+  avoided: readonly FittedSquare[],
+): FittedSquare | null {
+  let best: FittedSquare | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
   const sizes = [1, 0.85, 0.7, 0.55, 0.4, 0.28, 0.2];
   for (const factor of sizes) {
@@ -653,8 +774,8 @@ export function fitSquareInPolygon(
     const height = Math.max(minHeight, maxHeight * factor);
     for (const offset of markerOffsets()) {
       const candidate: FittedSquare = {
-        x: preferred.x + offset.x * width,
-        y: preferred.y + offset.y * height,
+        x: origin.x + offset.x * width,
+        y: origin.y + offset.y * height,
         width,
         height,
       };
@@ -662,14 +783,14 @@ export function fitSquareInPolygon(
         continue;
       }
 
-      const score = factor * 10 - Math.hypot(candidate.x - preferred.x, candidate.y - preferred.y);
+      const score = factor * 10 - Math.hypot(candidate.x - origin.x, candidate.y - origin.y);
       if (score > bestScore) {
         best = candidate;
         bestScore = score;
       }
     }
 
-    if (bestScore > Number.NEGATIVE_INFINITY && factor >= 0.85) {
+    if (best && factor >= 0.85) {
       return best;
     }
   }
@@ -700,6 +821,14 @@ function markerOffsets(): MapPoint[] {
     { x: -0.8, y: 0.35 },
     { x: 0.8, y: -0.35 },
     { x: -0.8, y: -0.35 },
+    { x: 0.35, y: 0.8 },
+    { x: -0.35, y: 0.8 },
+    { x: 0.35, y: -0.8 },
+    { x: -0.35, y: -0.8 },
+    { x: 1.1, y: 0 },
+    { x: -1.1, y: 0 },
+    { x: 0, y: 1.1 },
+    { x: 0, y: -1.1 },
   ];
 }
 

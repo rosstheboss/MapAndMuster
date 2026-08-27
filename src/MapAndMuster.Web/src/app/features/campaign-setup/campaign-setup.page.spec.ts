@@ -604,6 +604,51 @@ describe('CampaignSetupPage', () => {
     TestBed.inject(HttpTestingController).verify();
   });
 
+  it('assigns a faction to an ally group from the group dropdown and updates the faction field', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      addAllyGroup: () => void;
+      allyMembers: (groupId: string) => string;
+      onAllyGroupFactionPicked: (groupId: string, event: Event) => void;
+      allyGroups: {
+        at: (index: number) => {
+          controls: { id: { value: string }; name: { setValue: (value: string) => void } };
+        };
+      };
+      factions: {
+        at: (index: number) => {
+          controls: {
+            id: { value: string };
+            name: { setValue: (value: string) => void };
+            allyGroupId: { value: string };
+          };
+        };
+      };
+    };
+
+    page.addAllyGroup();
+    const groupId = page.allyGroups.at(0).controls.id.value;
+    page.allyGroups.at(0).controls.name.setValue('Pact');
+    page.factions.at(0).controls.name.setValue('North');
+    page.factions.at(1).controls.name.setValue('South');
+    fixture.detectChanges();
+
+    const select = { value: page.factions.at(0).controls.id.value };
+    page.onAllyGroupFactionPicked(groupId, { target: select } as unknown as Event);
+    fixture.detectChanges();
+
+    expect(page.factions.at(0).controls.allyGroupId.value).toBe(groupId);
+    expect(page.allyMembers(groupId)).toContain('North');
+    expect(select.value).toBe('');
+    const compiled = fixture.nativeElement as HTMLElement;
+    const factionSelect = compiled.querySelector<HTMLSelectElement>('#faction-ally-0');
+    expect(factionSelect?.value).toBe(groupId);
+    TestBed.inject(HttpTestingController).verify();
+  });
+
   it('rejects campaign maps larger than 20 MB before upload', async () => {
     const fixture = TestBed.createComponent(CampaignSetupPage);
     await fixture.whenStable();
