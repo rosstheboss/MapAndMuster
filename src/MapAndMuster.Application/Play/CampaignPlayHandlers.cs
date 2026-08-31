@@ -917,6 +917,7 @@ public sealed class ChooseFactionHandler
             TimeZoneId = existing.TimeZoneId,
             StartsUtc = existing.StartsUtc,
             EndsUtc = existing.EndsUtc,
+            ClosedUtc = existing.ClosedUtc,
             RoundCount = existing.RoundCount,
             RoundLengthAmount = existing.RoundLengthAmount,
             RoundLengthUnit = existing.RoundLengthUnit,

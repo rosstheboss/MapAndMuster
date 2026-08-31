@@ -46,6 +46,7 @@ describe('SaveCampaignPresetDialogComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
+    expect(compiled.querySelector('[role="dialog"]')?.getAttribute('aria-modal')).toBe('true');
     const options = [...compiled.querySelectorAll('[role="option"]')].map((item) => item.textContent.trim());
     expect(options).toEqual(['The Hunt in Estalia']);
     http.verify();

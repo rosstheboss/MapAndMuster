@@ -74,6 +74,9 @@ public sealed class CampaignRecord
     /// <summary>Gets or sets the campaign end instant, in UTC.</summary>
     public DateTimeOffset EndsUtc { get; set; }
 
+    /// <summary>Gets or sets when a manager closed the campaign, in UTC.</summary>
+    public DateTimeOffset? ClosedUtc { get; set; }
+
     /// <summary>Gets or sets the number of rounds.</summary>
     public int RoundCount { get; set; }
 

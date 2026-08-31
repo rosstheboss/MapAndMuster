@@ -14,6 +14,11 @@ internal static class CampaignLifecycle
     public static CampaignProgress Progress(StoredCampaign campaign, DateTimeOffset utcNow)
     {
         ArgumentNullException.ThrowIfNull(campaign);
+        if (campaign.ClosedUtc is not null)
+        {
+            return new CampaignProgress(CampaignStatus.Completed, null, null, null, null, null);
+        }
+
         if (campaign.PlayState is { Windows.Count: > 0 } play)
         {
             return play.Evaluate(campaign.StartsUtc, campaign.EndsUtc, utcNow);

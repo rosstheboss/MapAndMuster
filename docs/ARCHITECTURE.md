@@ -68,6 +68,8 @@ Modules may initially share a database and process. Keep public module interacti
 - Store timestamps as UTC instants.
 - Store current state in normal relational tables and immutable history in audit/revision tables.
 - Public site chat and site-chat blocks live in their own tables, never on campaign play-log JSON.
+- Campaign-log last-read marks live in `CampaignLogReadMarks`, keyed by campaign and user. They are
+  not stored on memberships and do not bump campaign revision.
 - GeoJSON or normalized polygon points may be stored as JSONB; PostGIS is not initially
   required.
 - Never overwrite original orders or battle submissions when staff correct outcomes.

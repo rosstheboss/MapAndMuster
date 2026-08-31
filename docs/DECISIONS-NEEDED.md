@@ -86,4 +86,31 @@ in an ADR or the relevant domain document and update tests.
     is Resend, and background work stays in the API process. Object storage is still local disk.
     See `docs/adr/0003-production-hosting-stack.md`.
 19. Decide registration anti-abuse policy and campaign invitation/join-code workflow.
-20. Select a UI component library, if any, after an initial custom-CSS prototype.
+20. Resolved: keep custom dialogs and confirm buttons; do not add a CSS framework, component
+    library, or client state library. Angular signals remain the UI state approach. See
+    `docs/UI-AUDIT-2026-08.md` step 2 (`UI-C3`, `UI-C4`, `UI-M4`), implemented 2026-08-30.
+
+## Interface
+
+21. Resolved: any signed-in player may create a campaign. "Your campaigns" empty state should
+    include a Join campaign shortcut to All campaigns. Remaining setup choices on a joined
+    campaign (such as selecting a faction) show on the campaign card and as persisted backend
+    notifications on Home. See `docs/UI-AUDIT-2026-08.md` (`UI-M6`, `UI-M7`). Campaign list
+    items now expose `canChooseFaction`, `isCommitted`, and `currentPhaseKind`. Home already
+    derives "Choose your faction" from membership. Card and Home dashboard UI still follow in
+    the entry-points step; do not fake remaining setup only in the client.
+22. Resolved: the map is not editable after a campaign starts. See `UI-H6`.
+23. Resolved: during a running campaign, Actions, Chat, and Standings are expanded by default;
+    afterwards persist that player's last open/closed set per campaign. Page order is Actions,
+    then Chat log, then Map. Unread mentions and private messages show unread indicators on the
+    chat log, with last-read state persisted on the server so they follow the player across
+    devices. See `UI-H2`. `GET /api/campaigns/{id}/log` now returns `lastReadUtc`,
+    `unreadMentionCount`, and `unreadPrivateCount`. `POST /api/campaigns/{id}/log/read`
+    records last-read from the server clock and does not bump campaign revision. Per-player
+    open/closed campaign-page sections still need an API contract in the campaign-page step.
+24. Resolved: managers and administrators end a campaign rather than deleting it. The campaign
+    stays stored in its final state (closed / Completed), remaining orders are not resolved,
+    members can still open logs and duplicate it, and all current members are notified in-app
+    and by email. End campaign is available on the campaign page and Edit campaign. Staff may
+    promote a player to campaign manager or add a user as manager-only or as manager and
+    player. See `docs/DOMAIN.md`.

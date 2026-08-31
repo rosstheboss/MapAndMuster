@@ -199,6 +199,9 @@ public enum PlayLogKind
 
     /// <summary>A ringer battle was voided because nobody reported.</summary>
     RingerBattleVoided = 34,
+
+    /// <summary>A manager or administrator closed the campaign while preserving its final state.</summary>
+    CampaignClosed = 35,
 }
 
 /// <summary>

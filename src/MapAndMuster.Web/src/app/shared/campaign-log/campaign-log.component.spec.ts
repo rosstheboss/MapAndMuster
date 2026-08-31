@@ -130,6 +130,14 @@ describe('CampaignLogComponent', () => {
     page.onDraftInput('Hi @nor');
     fixture.detectChanges();
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('@northplayer');
+    const compiled = fixture.nativeElement as HTMLElement;
+    const combobox = compiled.querySelector('.mention-combobox');
+    expect(combobox?.getAttribute('role')).toBe('combobox');
+    expect(combobox?.getAttribute('aria-labelledby')).toBe('chat-message-label');
+    expect(combobox?.getAttribute('aria-expanded')).toBe('true');
+    expect(combobox?.getAttribute('aria-controls')).toBe('chat-suggest');
+    expect(compiled.querySelector('textarea')?.getAttribute('aria-activedescendant')).toBe('chat-suggest-option-0');
+    expect(compiled.querySelector('#chat-suggest-option-0')?.getAttribute('role')).toBe('option');
     page.complete({ userId: '1', username: 'northplayer', displayName: 'northplayer' });
     expect(page.draft()).toBe('Hi @northplayer ');
   });
@@ -184,6 +192,7 @@ describe('CampaignLogComponent', () => {
     download!.click();
     fixture.detectChanges();
     expect(compiled.textContent).toContain('Download campaign log');
+    expect(compiled.querySelector('[role="dialog"]')?.getAttribute('aria-modal')).toBe('true');
     expect(compiled.textContent).toContain('Text (.txt)');
     expect(compiled.textContent).toContain('CSV (.csv)');
 

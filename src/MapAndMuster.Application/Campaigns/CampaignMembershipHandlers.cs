@@ -55,7 +55,7 @@ public sealed class JoinCampaignHandler
                 "You are already a member of this campaign.");
         }
 
-        var progress = CampaignMapper.ToSchedule(campaign).Evaluate(utcNow);
+        var progress = CampaignLifecycle.Progress(campaign, utcNow);
         if (progress.Status != CampaignStatus.Scheduled)
         {
             return OperationResults.Failure<CampaignListItem>(

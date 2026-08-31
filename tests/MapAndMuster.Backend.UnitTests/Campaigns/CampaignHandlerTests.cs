@@ -8,6 +8,7 @@ using MapAndMuster.Application.Ports;
 using MapAndMuster.Domain.Campaigns;
 using MapAndMuster.Domain.Identity;
 using MapAndMuster.Domain.Notifications;
+using MapAndMuster.Domain.Play;
 
 namespace MapAndMuster.Backend.UnitTests.Campaigns;
 
@@ -80,7 +81,7 @@ public sealed class CampaignHandlerTests
     public async Task GetLogReturnsNotFoundForNonMembers()
     {
         var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
-        var handler = new GetCampaignLogHandler(store, new FakeAccounts());
+        var handler = new GetCampaignLogHandler(store, new FakeAccounts(), new FakeCampaignLogReadStore());
 
         var result = await handler.HandleAsync(store.Existing.Id, OtherUserId, CancellationToken.None);
 
@@ -94,7 +95,7 @@ public sealed class CampaignHandlerTests
         var campaign = StoredCampaignFor(UserId);
         campaign = WithPublicView(campaign, isPubliclyViewable: true);
         var store = new FakeCampaignStore { Existing = campaign };
-        var handler = new GetCampaignLogHandler(store, new FakeAccounts());
+        var handler = new GetCampaignLogHandler(store, new FakeAccounts(), new FakeCampaignLogReadStore());
 
         var result = await handler.HandleAsync(store.Existing.Id, OtherUserId, CancellationToken.None);
 
@@ -102,8 +103,25 @@ public sealed class CampaignHandlerTests
         Assert.NotNull(result.Value);
         Assert.Equal(store.Existing.Id, result.Value.Id);
         Assert.False(result.Value.CanChat);
+        Assert.Null(result.Value.LastReadUtc);
+        Assert.Equal(0, result.Value.UnreadMentionCount);
+        Assert.Equal(0, result.Value.UnreadPrivateCount);
         Assert.Contains(result.Value.MentionableMembers, member => member.Username == "northplayer");
         Assert.Contains(result.Value.ChatChannels, channel => channel.Kind == "Public");
+    }
+
+    [Fact]
+    public async Task PublicViewersCanMarkTheCampaignLogRead()
+    {
+        var campaign = WithPublicView(StoredCampaignFor(UserId), isPubliclyViewable: true);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var reads = new FakeCampaignLogReadStore();
+        var handler = new MarkCampaignLogReadHandler(store, reads, new FakeClock());
+
+        var result = await handler.HandleAsync(store.Existing.Id, OtherUserId, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(Now, reads.Marks[(campaign.Id, OtherUserId)]);
     }
 
     [Fact]
@@ -521,6 +539,76 @@ public sealed class CampaignHandlerTests
                 CancellationToken.None);
         Assert.False(alreadyResult.IsSuccess);
         Assert.Equal(ErrorCodes.CampaignAlreadyMember, alreadyResult.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ManagerPromotesAPlayerAndAddsAManagerOnlyMember()
+    {
+        var campaign = WithMemberships(
+            StoredCampaignFor(UserId),
+            [
+                new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
+                new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new AddCampaignMemberHandler(store, new FakeAccounts(), new FakeClock());
+
+        var promoted = await handler.HandleAsync(
+            new AddCampaignMemberCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                TargetUserId = OtherUserId,
+                IsGameMaster = true,
+                IsPlayer = true,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+        Assert.True(promoted.IsSuccess);
+        var other = Assert.Single(store.Updated!.Memberships, member => member.UserId == OtherUserId);
+        Assert.True(other.IsGameMaster);
+        Assert.True(other.IsPlayer);
+
+        store.Existing = store.Updated;
+        var added = await handler.HandleAsync(
+            new AddCampaignMemberCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                TargetUserId = ThirdUserId,
+                IsGameMaster = true,
+                IsPlayer = false,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+        Assert.True(added.IsSuccess);
+        var managerOnly = Assert.Single(store.Updated!.Memberships, member => member.UserId == ThirdUserId);
+        Assert.True(managerOnly.IsGameMaster);
+        Assert.False(managerOnly.IsPlayer);
+        Assert.Equal(2, CampaignMapper.OccupiedPlayerSlots(store.Updated));
+    }
+
+    [Fact]
+    public async Task AddMemberRejectsInvalidRoleFlags()
+    {
+        var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
+        var result = await new AddCampaignMemberHandler(store, new FakeAccounts(), new FakeClock())
+            .HandleAsync(
+                new AddCampaignMemberCommand
+                {
+                    UserId = UserId,
+                    IsAdministrator = false,
+                    CampaignId = store.Existing.Id,
+                    TargetUserId = OtherUserId,
+                    IsGameMaster = false,
+                    IsPlayer = false,
+                    ExpectedRevision = 1,
+                },
+                CancellationToken.None);
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.ValidationFailed, result.ErrorCode);
     }
 
     [Fact]
@@ -1049,31 +1137,102 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
-    public async Task DeleteRemovesCampaignForManagersOnly()
+    public async Task EndClosesCampaignForManagersAndAdministratorsWithoutDeleting()
     {
-        var campaign = StoredCampaignFor(UserId);
-        campaign = WithMemberships(campaign,
-        [
-            new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
-            new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
-        ]);
+        var campaign = WithMemberships(
+            StoredCampaignFor(UserId),
+            [
+                new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
+                new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
+            ]);
         var store = new FakeCampaignStore { Existing = campaign };
-        var maps = new FakeMapStorage();
-        var handler = new DeleteCampaignHandler(store, maps);
+        var notices = new FakeNoticeStore();
+        var handler = new EndCampaignHandler(
+            store,
+            new FakeClock(),
+            new CampaignNotificationPublisher(notices, new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()));
 
-        var forbidden = await handler.HandleAsync(campaign.Id, OtherUserId, CancellationToken.None);
+        var forbidden = await handler.HandleAsync(
+            new EndCampaignCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
         Assert.False(forbidden.IsSuccess);
         Assert.Equal(ErrorCodes.CampaignForbidden, forbidden.ErrorCode);
         Assert.False(store.Deleted);
+        Assert.Null(store.Updated);
 
-        var deleted = await handler.HandleAsync(campaign.Id, UserId, CancellationToken.None);
-        Assert.True(deleted.IsSuccess);
-        Assert.True(store.Deleted);
-        Assert.Contains("maps/old.png", maps.DeletedKeys);
-        Assert.Contains("flags/north.png", maps.DeletedKeys);
-        Assert.Contains("structures/town.png", maps.DeletedKeys);
-        Assert.DoesNotContain("Town", maps.DeletedKeys);
-        Assert.DoesNotContain("Castle", maps.DeletedKeys);
+        var ended = await handler.HandleAsync(
+            new EndCampaignCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+        Assert.True(ended.IsSuccess);
+        Assert.False(store.Deleted);
+        Assert.Equal(Now, store.Updated!.ClosedUtc);
+        Assert.Equal("Completed", CampaignMapper.ToListItem(store.Updated, UserId, Now).Status);
+        Assert.Equal(2, notices.Added.Count);
+        Assert.All(notices.Added, notice => Assert.Equal(NotificationKind.CampaignEnded, notice.Kind));
+        Assert.Contains(notices.Added, notice => notice.UserId == OtherUserId);
+        Assert.Contains(notices.Added, notice => notice.UserId == UserId);
+    }
+
+    [Fact]
+    public async Task AdministratorCanEndACampaignTheyDoNotManage()
+    {
+        var campaign = StoredCampaignFor(OtherUserId);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new EndCampaignHandler(
+            store,
+            new FakeClock(),
+            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()));
+
+        var ended = await handler.HandleAsync(
+            new EndCampaignCommand
+            {
+                UserId = UserId,
+                IsAdministrator = true,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+
+        Assert.True(ended.IsSuccess);
+        Assert.False(store.Deleted);
+        Assert.Equal(Now, store.Updated!.ClosedUtc);
+    }
+
+    [Fact]
+    public async Task EndIsIdempotentWhenTheCampaignIsAlreadyClosed()
+    {
+        var campaign = WithCopied(StoredCampaignFor(UserId), closedUtc: Now);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new EndCampaignHandler(
+            store,
+            new FakeClock(),
+            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()));
+
+        var ended = await handler.HandleAsync(
+            new EndCampaignCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+
+        Assert.True(ended.IsSuccess);
+        Assert.Null(store.Updated);
+        Assert.False(store.Deleted);
     }
 
     [Fact]
@@ -1142,51 +1301,29 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
-    public async Task DeleteKeepsSharedAssetsStillUsedByADuplicate()
+    public async Task EndKeepsSharedAssetsAndTheCampaignRecord()
     {
         var source = StoredCampaignFor(UserId);
-        var duplicate = new StoredCampaign
-        {
-            Id = Guid.Parse("99999999-9999-9999-9999-999999999999"),
-            Name = source.Name,
-            Description = source.Description,
-            PlayerSlotCount = source.PlayerSlotCount,
-            IsPrivate = source.IsPrivate,
-            IsPubliclyViewable = source.IsPubliclyViewable,
-            JoinPasswordHash = source.JoinPasswordHash,
-            CreatorIsParticipant = source.CreatorIsParticipant,
-            City = source.City,
-            Region = source.Region,
-            Country = source.Country,
-            MapStorageKey = source.MapStorageKey,
-            Revision = 1,
-            CreatedUtc = source.CreatedUtc,
-            UpdatedUtc = source.UpdatedUtc,
-            CreatedByUserId = OtherUserId,
-            Memberships = [new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = true, IsPlayer = true }],
-            Factions = source.Factions,
-            AllyGroups = source.AllyGroups,
-            Links = source.Links,
-            TimeZoneId = source.TimeZoneId,
-            StartsUtc = source.StartsUtc,
-            EndsUtc = source.EndsUtc,
-            RoundCount = source.RoundCount,
-            RoundLengthAmount = source.RoundLengthAmount,
-            RoundLengthUnit = source.RoundLengthUnit,
-            Phases = source.Phases,
-            MapGraph = source.MapGraph,
-            TerrainTypes = source.TerrainTypes,
-            StructureTypes = source.StructureTypes,
-        };
         var store = new FakeCampaignStore { Existing = source };
-        store.ForUser.Add(duplicate);
-        var maps = new FakeMapStorage();
-        var handler = new DeleteCampaignHandler(store, maps);
+        var handler = new EndCampaignHandler(
+            store,
+            new FakeClock(),
+            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()));
 
-        var deleted = await handler.HandleAsync(source.Id, UserId, CancellationToken.None);
+        var ended = await handler.HandleAsync(
+            new EndCampaignCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = source.Id,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
 
-        Assert.True(deleted.IsSuccess);
-        Assert.Empty(maps.DeletedKeys);
+        Assert.True(ended.IsSuccess);
+        Assert.False(store.Deleted);
+        Assert.NotNull(store.Updated);
+        Assert.Equal("maps/old.png", store.Updated.MapStorageKey);
     }
 
     [Fact]
@@ -1235,6 +1372,53 @@ public sealed class CampaignHandlerTests
         Assert.DoesNotContain("maps/old.png", assets.DeletedKeys);
         Assert.DoesNotContain("Town", assets.DeletedKeys);
         Assert.DoesNotContain("Castle", assets.DeletedKeys);
+    }
+
+    [Fact]
+    public async Task UpdatePersistsTintFlagImageOnAnExistingFlag()
+    {
+        var campaign = StoredCampaignFor(UserId);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new UpdateCampaignHandler(store, new FakeClock(), new FakeSecretHasher(), new FakeAssetStorage());
+
+        var result = await handler.HandleAsync(
+            new UpdateCampaignCommand
+            {
+                UserId = UserId,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+                Name = campaign.Name,
+                Description = campaign.Description,
+                PlayerCount = campaign.PlayerSlotCount,
+                IsPrivate = false,
+                IsPubliclyViewable = true,
+                CreatorIsParticipant = true,
+                Factions =
+                [
+                    new FactionInput
+                    {
+                        Id = NorthFactionId,
+                        Name = "North",
+                        Color = "#2563EB",
+                        TintFlagImage = true,
+                    },
+                    new FactionInput
+                    {
+                        Id = SouthFactionId,
+                        Name = "South",
+                        Color = "#DC2626",
+                    },
+                ],
+                Schedule = ValidSchedule(),
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(store.Updated);
+        var north = Assert.Single(store.Updated.Factions, faction => faction.Id == NorthFactionId);
+        Assert.True(north.TintFlagImage);
+        Assert.Equal("flags/north.png", north.FlagImageStorageKey);
+        Assert.False(store.Updated.Factions.Single(faction => faction.Id == SouthFactionId).TintFlagImage);
     }
 
     [Fact]
@@ -1486,6 +1670,123 @@ public sealed class CampaignHandlerTests
         Assert.Equal("Border War", item.Name);
         Assert.True(item.CanManage);
         Assert.True(item.IsParticipant);
+        Assert.True(item.CanChooseFaction);
+        Assert.False(item.IsCommitted);
+        Assert.Null(item.CurrentPhaseKind);
+    }
+
+    [Fact]
+    public async Task ListExposesCommittedOrdersDuringAnOpenActionWindow()
+    {
+        var windowId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+        var play = new CampaignPlayState(
+            [
+                new PhaseWindow(
+                    windowId,
+                    1,
+                    1,
+                    RoundPhaseKind.Action,
+                    3,
+                    DurationUnit.Days,
+                    Now.AddHours(-2),
+                    Now.AddDays(1),
+                    PhaseWindowStatus.Open),
+            ],
+            [new CampaignForce(Guid.NewGuid(), UserId, NorthFactionId, Guid.NewGuid(), false)],
+            [],
+            [],
+            [new PlayerCommitment(windowId, UserId, Now)],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []);
+        var campaign = WithCopied(
+            StoredCampaignFor(UserId),
+            startsUtc: Now.AddHours(-1),
+            memberships:
+            [
+                new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                },
+            ],
+            playState: play);
+        var store = new FakeCampaignStore();
+        store.ForUser.Add(campaign);
+        var handler = new ListCampaignsHandler(store, new FakeClock());
+
+        var result = await handler.HandleAsync(UserId, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var item = Assert.Single(result.Value!);
+        Assert.False(item.CanChooseFaction);
+        Assert.True(item.IsCommitted);
+        Assert.Equal("Action", item.CurrentPhaseKind);
+        Assert.True(item.CanPlay);
+    }
+
+    [Fact]
+    public async Task GetLogCountsUnreadMentionsUntilTheViewerMarksRead()
+    {
+        var campaign = WithCopied(
+            StoredCampaignFor(UserId),
+            memberships:
+            [
+                new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
+                new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
+            ]);
+        var members = new CampaignChatMember[]
+        {
+            new(UserId, "northplayer", "northplayer"),
+            new(OtherUserId, "southplayer", "southplayer"),
+        };
+        Assert.True(CampaignChatRules.TryPost(
+            CampaignPlayState.Empty,
+            UserId,
+            "Hi @southplayer",
+            members,
+            Now,
+            out var withMention,
+            out _));
+        campaign = WithCopied(campaign, playState: withMention);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var reads = new FakeCampaignLogReadStore();
+        var handler = new GetCampaignLogHandler(store, new FakeAccounts(), reads);
+
+        var unread = await handler.HandleAsync(campaign.Id, OtherUserId, CancellationToken.None);
+
+        Assert.True(unread.IsSuccess);
+        Assert.Null(unread.Value!.LastReadUtc);
+        Assert.Equal(1, unread.Value.UnreadMentionCount);
+        Assert.Equal(0, unread.Value.UnreadPrivateCount);
+
+        var mark = new MarkCampaignLogReadHandler(store, reads, new FakeClock());
+        var marked = await mark.HandleAsync(campaign.Id, OtherUserId, CancellationToken.None);
+        Assert.True(marked.IsSuccess);
+
+        var read = await handler.HandleAsync(campaign.Id, OtherUserId, CancellationToken.None);
+        Assert.True(read.IsSuccess);
+        Assert.Equal(Now, read.Value!.LastReadUtc);
+        Assert.Equal(0, read.Value.UnreadMentionCount);
+        Assert.Equal(0, read.Value.UnreadPrivateCount);
+    }
+
+    [Fact]
+    public async Task MarkLogReadReturnsNotFoundForNonViewers()
+    {
+        var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
+        var handler = new MarkCampaignLogReadHandler(store, new FakeCampaignLogReadStore(), new FakeClock());
+
+        var result = await handler.HandleAsync(store.Existing.Id, OtherUserId, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignNotFound, result.ErrorCode);
     }
 
     [Fact]
@@ -1657,6 +1958,7 @@ public sealed class CampaignHandlerTests
         string? joinPasswordHash = null,
         DateTimeOffset? startsUtc = null,
         DateTimeOffset? endsUtc = null,
+        DateTimeOffset? closedUtc = null,
         StoredMapGraph? mapGraph = null,
         IReadOnlyList<StoredTerrainType>? terrainTypes = null,
         IReadOnlyList<StoredItemObjectiveType>? itemObjectiveTypes = null,
@@ -1687,6 +1989,7 @@ public sealed class CampaignHandlerTests
             TimeZoneId = campaign.TimeZoneId,
             StartsUtc = startsUtc ?? campaign.StartsUtc,
             EndsUtc = endsUtc ?? campaign.EndsUtc,
+            ClosedUtc = closedUtc ?? campaign.ClosedUtc,
             RoundCount = campaign.RoundCount,
             RoundLengthAmount = campaign.RoundLengthAmount,
             RoundLengthUnit = campaign.RoundLengthUnit,
@@ -1893,6 +2196,26 @@ public sealed class CampaignHandlerTests
         public bool Verify(string hash, string secret)
         {
             return hash == $"hash:{secret}";
+        }
+    }
+
+    private sealed class FakeCampaignLogReadStore : ICampaignLogReadStore
+    {
+        public Dictionary<(Guid CampaignId, Guid UserId), DateTimeOffset> Marks { get; } = [];
+
+        public Task<DateTimeOffset?> GetLastReadUtcAsync(Guid campaignId, Guid userId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Marks.TryGetValue((campaignId, userId), out var value) ? value : (DateTimeOffset?)null);
+        }
+
+        public Task MarkReadAsync(Guid campaignId, Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken)
+        {
+            if (!Marks.TryGetValue((campaignId, userId), out var existing) || existing < utcNow)
+            {
+                Marks[(campaignId, userId)] = utcNow;
+            }
+
+            return Task.CompletedTask;
         }
     }
 

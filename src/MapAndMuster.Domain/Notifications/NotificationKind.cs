@@ -14,7 +14,7 @@ public enum NotificationKind
     /// <summary>The campaign launched and the first phase opened.</summary>
     CampaignStarted = 2,
 
-    /// <summary>The campaign reached its end instant.</summary>
+    /// <summary>The campaign reached its end instant or a manager closed it.</summary>
     CampaignEnded = 3,
 
     /// <summary>A new phase opened after the previous window resolved.</summary>

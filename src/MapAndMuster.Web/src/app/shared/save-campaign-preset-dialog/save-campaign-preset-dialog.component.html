@@ -1,28 +1,21 @@
-@if (open()) {
-  <div class="dialog-backdrop">
-    <div
-      class="dialog panel stack"
-      role="dialog"
-      aria-labelledby="save-preset-title"
-      aria-describedby="save-preset-desc"
-    >
-      <h2 id="save-preset-title">Save as preset</h2>
-      <p id="save-preset-desc">
-        Name this campaign preset. Matching an existing name overwrites that preset, including its map and overlay.
-      </p>
-      <div class="field">
-        <label for="savePresetName">Preset name</label>
-        <app-filterable-combobox
-          inputId="savePresetName"
-          [formControl]="presetNameControl"
-          [options]="presetNames()"
-          placeholder="Type a name"
-        />
-      </div>
-      <div class="choice-row">
-        <button type="button" class="button" (click)="confirm()" [disabled]="saving()">OK</button>
-        <button type="button" class="button-secondary" (click)="close()" [disabled]="saving()">Cancel</button>
-      </div>
-    </div>
+<app-dialog [open]="open()" labelledBy="save-preset-title" describedBy="save-preset-desc" (cancelled)="close()">
+  <h2 id="save-preset-title">Save as preset</h2>
+  <p id="save-preset-desc">
+    Name this campaign preset. Matching an existing name overwrites that preset, including its map and overlay.
+  </p>
+  <div class="field">
+    <label for="savePresetName">Preset name</label>
+    <app-filterable-combobox
+      inputId="savePresetName"
+      [formControl]="presetNameControl"
+      [options]="presetNames()"
+      placeholder="Type a name"
+    />
   </div>
-}
+  <div class="choice-row">
+    <button type="button" class="button" (click)="confirm()" [disabled]="saving()">OK</button>
+    <button type="button" class="button-secondary" data-dialog-safe (click)="close()" [disabled]="saving()">
+      Cancel
+    </button>
+  </div>
+</app-dialog>

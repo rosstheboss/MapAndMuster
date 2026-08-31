@@ -7,6 +7,8 @@ import { CampaignService } from '../../core/campaigns/campaign.service';
 import { statusLabel } from '../../core/campaigns/campaign-schedule';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { formatLocation } from '../../core/location/location';
+import { ConfirmButtonComponent } from '../confirm-button/confirm-button.component';
+import { AppDialogComponent } from '../dialog/dialog.component';
 import { PasswordInputComponent } from '../password-input/password-input.component';
 import { PhaseCountdownComponent } from '../phase-countdown/phase-countdown.component';
 import { InstantDatePipe } from '../time/instant-date.pipe';
@@ -14,7 +16,14 @@ import { groupCampaigns } from './campaign-list.grouping';
 
 @Component({
   selector: 'app-campaign-list',
-  imports: [RouterLink, InstantDatePipe, PhaseCountdownComponent, PasswordInputComponent],
+  imports: [
+    RouterLink,
+    InstantDatePipe,
+    PhaseCountdownComponent,
+    PasswordInputComponent,
+    ConfirmButtonComponent,
+    AppDialogComponent,
+  ],
   templateUrl: './campaign-list.component.html',
   styleUrl: './campaign-list.component.css',
 })

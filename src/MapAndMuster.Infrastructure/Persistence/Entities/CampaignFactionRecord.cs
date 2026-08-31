@@ -23,6 +23,9 @@ public sealed class CampaignFactionRecord
     /// <summary>Gets or sets the stored custom flag image key.</summary>
     public string? FlagImageStorageKey { get; set; }
 
+    /// <summary>Gets or sets whether an uploaded logo should be tinted with the faction color.</summary>
+    public bool TintFlagImage { get; set; }
+
     /// <summary>Gets or sets the optional ally-group identifier.</summary>
     public Guid? AllyGroupId { get; set; }
 

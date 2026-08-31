@@ -33,7 +33,7 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
-    public async Task CreateListGetUpdateAndDeleteCampaign()
+    public async Task CreateListGetUpdateAndEndCampaign()
     {
         using var client = _factory.CreateClient();
         var username = UniqueName("gm");
@@ -72,7 +72,11 @@ public sealed class CampaignEndpointTests
 
         var list = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
         Assert.NotNull(list);
-        Assert.Contains(list, item => item.Id == created.Id && item.Name == "Border War");
+        var listed = Assert.Single(list, item => item.Id == created.Id);
+        Assert.Equal("Border War", listed.Name);
+        Assert.True(listed.CanChooseFaction);
+        Assert.False(listed.IsCommitted);
+        Assert.Null(listed.CurrentPhaseKind);
 
         var detail = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
         Assert.NotNull(detail);
@@ -91,15 +95,86 @@ public sealed class CampaignEndpointTests
         Assert.False(updated.IsParticipant);
         Assert.Equal(8, updated.RoundCount);
 
-        using var deleted = await client.DeleteAsync($"/api/campaigns/{created.Id}");
-        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        using var ended = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/end",
+            new EndCampaignRequest { Revision = updated.Revision });
+        Assert.Equal(HttpStatusCode.NoContent, ended.StatusCode);
 
-        using var missing = await client.GetAsync($"/api/campaigns/{created.Id}");
-        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        var closed = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(closed);
+        Assert.Equal("Completed", closed.Status);
+        Assert.Equal("Renamed War", closed.Name);
+        Assert.True(closed.CanManage);
 
-        var afterDelete = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
-        Assert.NotNull(afterDelete);
-        Assert.DoesNotContain(afterDelete, item => item.Id == created.Id);
+        var afterEnd = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
+        Assert.NotNull(afterEnd);
+        var closedList = Assert.Single(afterEnd, item => item.Id == created.Id);
+        Assert.Equal("Completed", closedList.Status);
+    }
+
+    [Fact]
+    public async Task UpdateRoundTripsFactionLogoTint()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("gm");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Tinted Flags"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        Assert.False(created.Factions[0].TintFlagImage);
+
+        var north = created.Factions[0];
+        var south = created.Factions[1];
+        using var updatedResponse = await client.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}",
+            new SaveCampaignRequest
+            {
+                Name = created.Name,
+                Description = "A contested frontier.",
+                PlayerCount = created.PlayerSlotCount,
+                IsPrivate = false,
+                IsPubliclyViewable = true,
+                CreatorIsParticipant = true,
+                Factions =
+                [
+                    new FactionRequest
+                    {
+                        Id = north.Id,
+                        Name = north.Name,
+                        Color = north.Color,
+                        Subfactions = north.Subfactions,
+                        TintFlagImage = true,
+                    },
+                    new FactionRequest
+                    {
+                        Id = south.Id,
+                        Name = south.Name,
+                        Color = south.Color,
+                    },
+                ],
+                Revision = created.Revision,
+                TimeZoneId = "UTC",
+                StartsAtLocal = created.StartsAtLocal,
+                RoundCount = created.RoundCount,
+                RoundLengthAmount = created.RoundLengthAmount,
+                RoundLengthUnit = created.RoundLengthUnit,
+                Phases =
+                [
+                    new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                    new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                    new RoundPhaseRequest { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+                ],
+            });
+        Assert.Equal(HttpStatusCode.OK, updatedResponse.StatusCode);
+        var updated = await updatedResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(updated);
+        Assert.True(updated.Factions.Single(faction => faction.Id == north.Id).TintFlagImage);
+        Assert.False(updated.Factions.Single(faction => faction.Id == south.Id).TintFlagImage);
+
+        var reloaded = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(reloaded);
+        Assert.True(reloaded.Factions.Single(faction => faction.Id == north.Id).TintFlagImage);
     }
 
     [Fact]
@@ -512,7 +587,12 @@ public sealed class CampaignEndpointTests
         Assert.Equal(HttpStatusCode.NotFound, update.StatusCode);
 
         using var delete = await stranger.DeleteAsync($"/api/campaigns/{created.Id}");
-        Assert.Equal(HttpStatusCode.NotFound, delete.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, delete.StatusCode);
+
+        using var end = await stranger.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/end",
+            new EndCampaignRequest { Revision = created.Revision });
+        Assert.Equal(HttpStatusCode.Forbidden, end.StatusCode);
     }
 
     [Fact]
@@ -782,6 +862,72 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task ManagerCanPromoteAPlayerAndAddAManagerOnlyUser()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("gm");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Staff War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var player = _factory.CreateClient();
+        var playerName = UniqueName("player");
+        await RegisterConfirmAndLoginAsync(player, $"{playerName}@example.test", playerName);
+        var playerProfile = await player.GetFromJsonAsync<OwnProfileResponse>("/api/auth/me", JsonOptions);
+        Assert.NotNull(playerProfile);
+
+        using var added = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/members",
+            new AddCampaignMemberRequest { Revision = created.Revision, UserId = playerProfile.Id });
+        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+        var afterAdd = await added.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(afterAdd);
+        Assert.Equal(2, afterAdd.OccupiedPlayerSlots);
+
+        using var promoted = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/members",
+            new AddCampaignMemberRequest
+            {
+                Revision = afterAdd.Revision,
+                UserId = playerProfile.Id,
+                IsGameMaster = true,
+                IsPlayer = true,
+            });
+        Assert.Equal(HttpStatusCode.OK, promoted.StatusCode);
+        var afterPromote = await promoted.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(afterPromote);
+        Assert.Contains(
+            afterPromote.Participants,
+            participant => participant.UserId == playerProfile.Id && participant.IsPlayer && participant.IsGameMaster);
+        Assert.Equal(2, afterPromote.OccupiedPlayerSlots);
+
+        using var manager = _factory.CreateClient();
+        var managerName = UniqueName("staff");
+        await RegisterConfirmAndLoginAsync(manager, $"{managerName}@example.test", managerName);
+        var managerProfile = await manager.GetFromJsonAsync<OwnProfileResponse>("/api/auth/me", JsonOptions);
+        Assert.NotNull(managerProfile);
+
+        using var staffOnly = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/members",
+            new AddCampaignMemberRequest
+            {
+                Revision = afterPromote.Revision,
+                UserId = managerProfile.Id,
+                IsGameMaster = true,
+                IsPlayer = false,
+            });
+        Assert.Equal(HttpStatusCode.OK, staffOnly.StatusCode);
+        var afterStaff = await staffOnly.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(afterStaff);
+        Assert.Contains(
+            afterStaff.Participants,
+            participant => participant.UserId == managerProfile.Id && participant.IsGameMaster && !participant.IsPlayer);
+        Assert.Equal(2, afterStaff.OccupiedPlayerSlots);
+        Assert.True(afterStaff.CanManage);
+    }
+
+    [Fact]
     public async Task MembersCanChatInAnUpcomingCampaignLog()
     {
         using var owner = _factory.CreateClient();
@@ -867,6 +1013,81 @@ public sealed class CampaignEndpointTests
         Assert.NotNull(viewerLog);
         Assert.False(viewerLog.CanChat);
         Assert.Equal("Log only.", Assert.Single(viewerLog.Log).Summary);
+    }
+
+    [Fact]
+    public async Task MembersCanMarkCampaignLogReadWithoutChangingRevision()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("host");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync(
+            "/api/campaigns",
+            ValidCampaignBody("Unread Chat War", isPubliclyViewable: false));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var player = _factory.CreateClient();
+        var playerName = UniqueName("joiner");
+        await RegisterConfirmAndLoginAsync(player, $"{playerName}@example.test", playerName);
+        using var joined = await player.PostAsJsonAsync($"/api/campaigns/{created.Id}/join", new JoinCampaignRequest());
+        Assert.Equal(HttpStatusCode.OK, joined.StatusCode);
+
+        var beforeChat = await owner.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(beforeChat);
+        var playerId = beforeChat.MentionableMembers.Single(member => member.Username == playerName).UserId;
+
+        using var mention = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/chat",
+            new PostCampaignChatRequest
+            {
+                Revision = beforeChat.Revision,
+                Message = $"Hello @{playerName}.",
+            });
+        Assert.Equal(HttpStatusCode.OK, mention.StatusCode);
+        var afterMention = await mention.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(afterMention);
+
+        using var direct = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/chat",
+            new PostCampaignChatRequest
+            {
+                Revision = afterMention.Revision,
+                Message = "Keep this between us",
+                ChannelKind = "Direct",
+                TargetId = playerId,
+            });
+        Assert.Equal(HttpStatusCode.OK, direct.StatusCode);
+        var afterDirect = await direct.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(afterDirect);
+
+        var unread = await player.GetFromJsonAsync<CampaignLogResponse>($"/api/campaigns/{created.Id}/log", JsonOptions);
+        Assert.NotNull(unread);
+        Assert.Null(unread.LastReadUtc);
+        Assert.Equal(1, unread.UnreadMentionCount);
+        Assert.Equal(1, unread.UnreadPrivateCount);
+        Assert.Equal(afterDirect.Revision, unread.Revision);
+
+        using var marked = await player.PostAsync($"/api/campaigns/{created.Id}/log/read", null);
+        Assert.Equal(HttpStatusCode.NoContent, marked.StatusCode);
+
+        var read = await player.GetFromJsonAsync<CampaignLogResponse>($"/api/campaigns/{created.Id}/log", JsonOptions);
+        Assert.NotNull(read);
+        Assert.NotNull(read.LastReadUtc);
+        Assert.Equal(0, read.UnreadMentionCount);
+        Assert.Equal(0, read.UnreadPrivateCount);
+        Assert.Equal(afterDirect.Revision, read.Revision);
+
+        using var stranger = _factory.CreateClient();
+        var strangerName = UniqueName("watch");
+        await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
+        using var forbidden = await stranger.PostAsync($"/api/campaigns/{created.Id}/log/read", null);
+        Assert.Equal(HttpStatusCode.NotFound, forbidden.StatusCode);
+
+        var ownerUnread = await owner.GetFromJsonAsync<CampaignLogResponse>($"/api/campaigns/{created.Id}/log", JsonOptions);
+        Assert.NotNull(ownerUnread);
+        Assert.Equal(0, ownerUnread.UnreadMentionCount);
+        Assert.Equal(0, ownerUnread.UnreadPrivateCount);
     }
 
     [Fact]

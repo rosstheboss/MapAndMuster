@@ -168,6 +168,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
                     AllyGroupName = faction.AllyGroupName,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     FlagImageStorageKey = faction.FlagImageStorageKey,
+                    TintFlagImage = faction.TintFlagImage,
                     SpecialRuleIds = faction.SpecialRuleIds.Count > 0
                         ? faction.SpecialRuleIds
                         : FactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],

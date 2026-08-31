@@ -14,7 +14,7 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  padding: 0.75rem;
+  padding: var(--space-3);
   background: var(--color-bg);
 }
 
@@ -303,6 +303,20 @@
   display: grid;
   place-items: center;
   overflow: hidden;
+}
+
+.faction-flag.has-image.is-tinted {
+  background: var(--faction-color, currentColor);
+  /* stylelint-disable property-no-vendor-prefix -- Chromium still applies HTML masks through -webkit-mask-* */
+  -webkit-mask-image: var(--logo-mask);
+  mask-image: var(--logo-mask);
+  -webkit-mask-size: 80%;
+  mask-size: 80%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  /* stylelint-enable property-no-vendor-prefix */
 }
 
 .move-drop-marker {

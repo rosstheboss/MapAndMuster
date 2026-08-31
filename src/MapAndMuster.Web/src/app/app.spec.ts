@@ -52,5 +52,8 @@ describe('App', () => {
     const footerLinks = [...compiled.querySelectorAll('.app-footer-links a')].map((node) => node.textContent.trim());
     expect(footerLinks).toContain('Privacy');
     expect(footerLinks).toContain('Terms');
+    const signIn = [...(nav?.querySelectorAll('a') ?? [])].find((link) => link.textContent.includes('Sign in'));
+    expect(signIn).toBeTruthy();
+    expect(signIn?.getAttribute('aria-current')).toBeNull();
   });
 });

@@ -19,8 +19,11 @@ export interface CampaignListItem {
   endsUtc: string;
   currentRound: number | null;
   currentPhaseLabel: string | null;
+  currentPhaseKind: string | null;
   currentPhaseEndsUtc: string | null;
   canPlay: boolean;
+  canChooseFaction: boolean;
+  isCommitted: boolean;
 }
 
 export interface CampaignDetail {
@@ -119,6 +122,7 @@ export interface CampaignFaction {
   allyGroupId?: string | null;
   requiresSubfaction: boolean;
   hasFlagImage: boolean;
+  tintFlagImage?: boolean;
   specialRuleIds?: string[];
   subfactionSpecialRules?: SubfactionSpecialRules[];
 }
@@ -292,6 +296,7 @@ export interface CampaignPointStanding {
   factionName?: string | null;
   factionColor?: string | null;
   hasFlagImage?: boolean;
+  tintFlagImage?: boolean;
   allyGroupName?: string | null;
   territoryAndStructurePoints: number;
   battlesWonPoints: number;
@@ -401,6 +406,7 @@ export interface SaveFactionPayload {
   allyGroupId?: string | null;
   requiresSubfaction: boolean;
   clearFlagImage?: boolean;
+  tintFlagImage?: boolean;
   specialRuleIds?: string[];
   subfactionSpecialRules?: SubfactionSpecialRules[];
 }
@@ -852,6 +858,7 @@ export interface CampaignParticipant {
   factionId?: string | null;
   factionColor?: string | null;
   hasFlagImage?: boolean;
+  tintFlagImage?: boolean;
   allyGroupName?: string | null;
   currentSupplyPoints?: number | null;
   temporarySupplyPoints?: number | null;

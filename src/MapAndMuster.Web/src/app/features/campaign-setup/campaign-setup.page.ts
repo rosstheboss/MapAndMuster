@@ -6,6 +6,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
+import { AppDialogComponent } from '../../shared/dialog/dialog.component';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type {
   CampaignDetail,
@@ -64,6 +65,7 @@ import { STRUCTURE_PRESETS, structureTypesFromPreset } from '../../core/campaign
 import { TERRAIN_PRESETS, terrainTypesFromPreset } from '../../core/campaigns/terrain-presets';
 import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
 import { CampaignMapPreviewComponent } from '../../shared/campaign-map-preview/campaign-map-preview.component';
+import { FactionLogoComponent } from '../../shared/faction-logo/faction-logo.component';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { PasswordInputComponent } from '../../shared/password-input/password-input.component';
@@ -114,6 +116,7 @@ type FactionGroup = FormGroup<{
   allyGroupId: FormControl<string>;
   flagSource: FormControl<'color' | 'image'>;
   clearFlagImage: FormControl<boolean>;
+  tintFlagImage: FormControl<boolean>;
   subfactions: FormArray<NamedGroup>;
   specialRuleIds: FormControl<string[]>;
   subfactionSpecialRuleIds: FormControl<Record<string, string[]>>;
@@ -243,11 +246,13 @@ const TOP_LEVEL_SECTION_IDS = [
     RouterLink,
     FilterableComboboxComponent,
     SaveCampaignPresetDialogComponent,
+    AppDialogComponent,
     IconComponent,
     InstantDatePipe,
     MapSymbolComponent,
     CampaignMapPreviewComponent,
     PasswordInputComponent,
+    FactionLogoComponent,
   ],
   templateUrl: './campaign-setup.page.html',
   styleUrl: './campaign-setup.page.css',
@@ -269,6 +274,8 @@ export class CampaignSetupPage {
   protected readonly successMessage = signal<string | null>(null);
   protected readonly lastSavedAtUtc = signal<string | null>(null);
   protected readonly saveStatus = signal<'success' | 'failure' | null>(null);
+  protected readonly confirmingEnd = signal(false);
+  protected readonly ending = signal(false);
   protected readonly serverFields = signal<ReadonlySet<string>>(new Set());
   protected readonly campaignId = signal<string | null>(null);
   protected readonly hasExistingMap = signal(false);
@@ -287,6 +294,7 @@ export class CampaignSetupPage {
   private readonly structurePillagedImages = new Map<string, File>();
   private readonly itemObjectiveImages = new Map<string, File>();
   private readonly flagImages = new Map<string, File>();
+  private readonly flagPreviewUrls = new Map<string, string>();
   private readonly missionFiles = new Map<string, File>();
   private readonly storedStructureImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedPillagedImages = signal<ReadonlySet<string>>(new Set());
@@ -442,7 +450,10 @@ export class CampaignSetupPage {
       this.formTick.update((value) => value + 1);
     });
 
-    this.destroyRef.onDestroy(() => this.revokeMapObjectUrl());
+    this.destroyRef.onDestroy(() => {
+      this.revokeMapObjectUrl();
+      this.revokeFlagPreviews();
+    });
   }
 
   protected get factions(): FormArray<FactionGroup> {
@@ -507,6 +518,38 @@ export class CampaignSetupPage {
 
   protected isEdit(): boolean {
     return this.campaignId() !== null;
+  }
+
+  protected canEndCampaign(): boolean {
+    return this.isEdit() && this.loadedDetail?.canManage === true && this.loadedDetail.status !== 'Completed';
+  }
+
+  protected requestEnd(): void {
+    this.confirmingEnd.set(true);
+  }
+
+  protected cancelEnd(): void {
+    this.confirmingEnd.set(false);
+  }
+
+  protected async confirmEnd(): Promise<void> {
+    const campaign = this.loadedDetail;
+    if (!campaign) {
+      return;
+    }
+
+    this.ending.set(true);
+    this.successMessage.set(null);
+    try {
+      await this.overlay.run(() => this.campaignsApi.end(campaign.id, campaign.revision));
+      this.confirmingEnd.set(false);
+      this.ending.set(false);
+      await this.router.navigateByUrl('/campaigns');
+    } catch (error: unknown) {
+      this.revealErrors(readApiErrorMessages(error, 'Unable to end this campaign.'));
+      this.confirmingEnd.set(false);
+      this.ending.set(false);
+    }
   }
 
   protected descriptionLength(): number {
@@ -855,6 +898,7 @@ export class CampaignSetupPage {
           color: faction.color,
           requiresSubfaction: faction.requiresSubfaction,
           hasFlagImage: faction.hasFlagImage,
+          tintFlagImage: faction.tintFlagImage,
           specialRuleIds: faction.specialRuleIds ?? [],
           subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
         }),
@@ -1395,6 +1439,7 @@ export class CampaignSetupPage {
     faction.controls.flagSource.setValue(source);
     if (source === 'color') {
       this.flagImages.delete(faction.controls.id.value);
+      this.revokeFlagPreview(faction.controls.id.value);
       this.bumpPendingUploads();
       faction.controls.clearFlagImage.setValue(true);
     } else {
@@ -1482,6 +1527,25 @@ export class CampaignSetupPage {
     }
   }
 
+  private setFlagPreview(factionId: string, file: File): void {
+    this.revokeFlagPreview(factionId);
+    this.flagPreviewUrls.set(factionId, URL.createObjectURL(file));
+  }
+
+  private revokeFlagPreview(factionId: string): void {
+    const url = this.flagPreviewUrls.get(factionId);
+    if (url) {
+      URL.revokeObjectURL(url);
+      this.flagPreviewUrls.delete(factionId);
+    }
+  }
+
+  private revokeFlagPreviews(): void {
+    for (const factionId of [...this.flagPreviewUrls.keys()]) {
+      this.revokeFlagPreview(factionId);
+    }
+  }
+
   private setStoredMapPreview(campaignId: string, revision: number, hasMap: boolean): void {
     this.revokeMapObjectUrl();
     this.mapPreviewUrl.set(hasMap ? this.campaignsApi.mapUrl(campaignId, revision) : null);
@@ -1525,6 +1589,7 @@ export class CampaignSetupPage {
     const file = input.files?.[0] ?? null;
     if (file) {
       this.flagImages.set(factionId, file);
+      this.setFlagPreview(factionId, file);
       this.bumpPendingUploads();
       const group = this.factions.controls.find((item) => item.controls.id.value === factionId);
       group?.controls.clearFlagImage.setValue(false);
@@ -1533,6 +1598,10 @@ export class CampaignSetupPage {
 
   protected flagImageName(factionId: string): string | null {
     return this.flagImages.get(factionId)?.name ?? null;
+  }
+
+  protected flagPreviewUrl(factionId: string): string | null {
+    return this.flagPreviewUrls.get(factionId) ?? this.factionFlagUrl(factionId);
   }
 
   protected hasStoredFlagImage(factionId: string): boolean {
@@ -1914,6 +1983,7 @@ export class CampaignSetupPage {
             color: faction.color,
             requiresSubfaction: faction.requiresSubfaction,
             hasFlagImage: faction.hasFlagImage,
+            tintFlagImage: faction.tintFlagImage,
             specialRuleIds: faction.specialRuleIds ?? [],
             subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
           }),
@@ -2024,6 +2094,7 @@ export class CampaignSetupPage {
       color?: string;
       requiresSubfaction?: boolean;
       hasFlagImage?: boolean;
+      tintFlagImage?: boolean;
       specialRuleIds?: readonly string[];
       subfactionSpecialRuleIds?: Record<string, string[]>;
     },
@@ -2037,6 +2108,7 @@ export class CampaignSetupPage {
       allyGroupId: [allyGroupId],
       flagSource: this.formBuilder.nonNullable.control<'color' | 'image'>(options?.hasFlagImage ? 'image' : 'color'),
       clearFlagImage: [false],
+      tintFlagImage: [options?.tintFlagImage === true],
       subfactions: this.formBuilder.array<NamedGroup>(names.map((value) => this.createNamedGroup(value))),
       specialRuleIds: [options?.specialRuleIds ? [...options.specialRuleIds] : []],
       subfactionSpecialRuleIds: this.formBuilder.nonNullable.control<Record<string, string[]>>(
@@ -2559,6 +2631,7 @@ export class CampaignSetupPage {
     this.structurePillagedImages.clear();
     this.itemObjectiveImages.clear();
     this.flagImages.clear();
+    this.revokeFlagPreviews();
     this.missionFiles.clear();
     this.bumpPendingUploads();
   }
@@ -2866,6 +2939,7 @@ export class CampaignSetupPage {
         allyGroupName: group?.name.trim() ? group.name.trim() : null,
         subfactions: faction.subfactions.map((item) => item.name.trim()).filter((name) => name.length > 0),
         clearFlagImage: faction.flagSource === 'color' || faction.clearFlagImage,
+        tintFlagImage: faction.flagSource === 'image' && faction.tintFlagImage === true,
         specialRuleIds: faction.specialRuleIds,
         subfactionSpecialRules: Object.entries(faction.subfactionSpecialRuleIds)
           .filter(([name]) => faction.subfactions.some((item) => item.name.trim() === name))

@@ -223,8 +223,11 @@ The campaign page lists attached members in a Participants panel: each player's 
 (linked to their public profile), selected faction and subfaction when chosen, and roles
 Manager, Player, and/or Admin when those apply. A manager or administrator may search accounts
 (including test users) by username or display name, add a player to a public or private campaign
-without the join password, kick a non-manager player (which notifies them in-app and by email
-unless they are a test account), and assign another player's faction and subfaction from one dropdown that lists subfactions as
+without the join password, promote an existing player to campaign manager, or bring in a user
+who is not yet attached as campaign manager only or as both manager and player. A manager-only
+member does not occupy a player slot. They may kick a non-manager player (which notifies them
+in-app and by email unless they are a test account), and assign another player's faction and
+subfaction from one dropdown that lists subfactions as
 `Faction Name - Subfaction Name`. Players may
 still change their own faction until the campaign starts; after launch only staff assignment
 changes it. A kicked player's forces, drafts, and unresolved battles are removed, and carried
@@ -343,10 +346,18 @@ end is start plus round length applied once per round.
 
 The campaign state machine is derived from the server clock:
 
-1. `Scheduled`: before the start instant.
+1. `Scheduled`: before the start instant, unless a manager has already closed the campaign.
 2. `InProgress`: inside a configured round and phase. The current round number, phase, and
    phase window are included on the campaign page.
-3. `Completed`: at or after the computed end instant.
+3. `Completed`: at or after the computed end instant, or immediately when a campaign manager or
+   administrator ends the campaign.
+
+A manager or administrator may end a campaign from the campaign page or Edit campaign. Ending
+closes play immediately and keeps the campaign stored in its final state: remaining orders are
+not resolved, files are kept, and members can still open logs, standings, and duplicate the
+campaign. Ended campaigns appear in the Completed group. All current members are notified in-app
+and by email. The original scheduled end instant is left unchanged; list ordering for completed
+campaigns uses the close instant when one is recorded.
 
 A phase boundary belongs to the following phase. After launch, actual phase windows are stored
 and may diverge from the original template when a window closes early or a manager extends it.
@@ -664,7 +675,9 @@ at about 70% fill with a centered checkmark of at most 50×50 pixels when it can
 at about 70% fill with a centered X of at most 50×50 pixels when it cannot. Dropping while red
 restores the group to the position it had when the drag started.
 Owned territories also show a flag at up to 50×50 pixels, using the faction color flag by default or an
-uploaded image that is not recolored. Structure logos and ownership flags sit at 50×50 pixels in the
+uploaded image. When logo tinting is enabled for that faction, the uploaded logo is filled with the
+faction color wherever it is shown, including the map. Untinted uploaded logos keep their original colors.
+Structure logos and ownership flags sit at 50×50 pixels in the
 territory center when that size fits; otherwise they shrink and shift to stay inside the polygon, as centered
 as possible. When a structure is present, the ownership flag sits beside it. Highlights use a subtle
 contrasting glow. Selected territories use a full highlight: about 70% fill and double the usual
@@ -753,7 +766,8 @@ territories and emphasizes their forces on the map. Force markers stay inside th
 or as close as possible without sitting on a neighboring territory. Clicking the same party again clears that focus.
 A profile link still opens the user profile. The campaign page and map editor can download a PNG of the latest saved map
 image with the unselected territory overlay rasterized on top. Spawn hatching, structure pins, and
-faction flags or uploaded logos are included. Download flags are twice the on-map marker size and
+faction flags or uploaded logos are included. When logo tinting is enabled, downloaded logos are filled
+with the faction color. Download flags are twice the on-map marker size and
 structures are three times that size so they remain readable on the PNG. Adjacency arrows are
 omitted. If the
 map editor has unsaved edits, downloading asks whether to save first; declining downloads the last
@@ -779,8 +793,9 @@ Each ally group lists its member factions in alphabetical order in a paragraph. 
 manager pick those members from a dropdown beside the ally group. When any ally group
 exists, unaligned factions are listed after the groups, also alphabetically.
 
-Each faction uses a color flag by default or an uploaded 50×50 flag image. Uploaded flags are not
-recolored.
+Each faction uses a color flag by default or an uploaded 50×50 flag image. Uploaded logos keep their
+original colors unless the manager enables tinting with the faction color. That tint applies everywhere
+the logo is shown, including the map and downloaded map PNG.
 
 The Your campaigns and All campaigns pages group campaigns as Active, Upcoming, and Completed.
 Each group can be expanded or collapsed. Campaigns start collapsed and expand to view or edit.

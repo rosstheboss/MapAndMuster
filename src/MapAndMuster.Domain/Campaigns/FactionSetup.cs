@@ -15,6 +15,7 @@ public sealed class FactionSetup
     /// <param name="allyGroupName">The ally group this faction joins, if any.</param>
     /// <param name="requiresSubfaction">Whether a player who chooses this faction must pick a subfaction.</param>
     /// <param name="clearFlagImage">Whether an existing uploaded flag image should be removed.</param>
+    /// <param name="tintFlagImage">Whether an uploaded logo should be tinted with the faction color.</param>
     /// <param name="specialRuleIds">Special rules assigned to this faction.</param>
     /// <param name="subfactionSpecialRules">Special rules assigned to named subfactions.</param>
     public FactionSetup(
@@ -25,6 +26,7 @@ public sealed class FactionSetup
         string? allyGroupName,
         bool requiresSubfaction,
         bool clearFlagImage,
+        bool tintFlagImage = false,
         IReadOnlyList<Guid>? specialRuleIds = null,
         IReadOnlyList<SubfactionSpecialRulesSetup>? subfactionSpecialRules = null)
     {
@@ -38,6 +40,7 @@ public sealed class FactionSetup
         AllyGroupName = allyGroupName;
         RequiresSubfaction = requiresSubfaction;
         ClearFlagImage = clearFlagImage;
+        TintFlagImage = tintFlagImage;
         SpecialRuleIds = specialRuleIds ?? [];
         SubfactionSpecialRules = subfactionSpecialRules ?? [];
     }
@@ -62,6 +65,9 @@ public sealed class FactionSetup
 
     /// <summary>Gets whether an existing uploaded flag image should be removed.</summary>
     public bool ClearFlagImage { get; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the faction color.</summary>
+    public bool TintFlagImage { get; }
 
     /// <summary>Gets special rules assigned to this faction.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; }

@@ -69,6 +69,8 @@ import {
   type MapTerritory,
 } from '../../core/maps/map-graph.models';
 import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
+import { ConfirmButtonComponent } from '../../shared/confirm-button/confirm-button.component';
+import { AppDialogComponent } from '../../shared/dialog/dialog.component';
 import { IconComponent } from '../../shared/icon/icon.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
@@ -86,6 +88,8 @@ export type { OverlayColorMode };
     IconComponent,
     MapSymbolComponent,
     InstantDatePipe,
+    ConfirmButtonComponent,
+    AppDialogComponent,
     SaveCampaignPresetDialogComponent,
   ],
   templateUrl: './map-editor.page.html',

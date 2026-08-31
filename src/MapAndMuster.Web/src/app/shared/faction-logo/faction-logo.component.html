@@ -1,0 +1,5 @@
+@if (tint()) {
+  <span class="logo is-tinted" [style.background]="color()" [style.--logo-mask]="maskUrl()" aria-hidden="true"></span>
+} @else {
+  <img class="logo" [src]="src()" [alt]="alt()" />
+}

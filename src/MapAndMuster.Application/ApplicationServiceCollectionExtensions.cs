@@ -36,6 +36,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<ListDiscoverableCampaignsHandler>();
         services.AddScoped<GetCampaignHandler>();
         services.AddScoped<GetCampaignLogHandler>();
+        services.AddScoped<MarkCampaignLogReadHandler>();
         services.AddScoped<PostCampaignChatHandler>();
         services.AddScoped<ExportCampaignLogHandler>();
         services.AddScoped<JoinCampaignHandler>();
@@ -44,7 +45,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<AddCampaignMemberHandler>();
         services.AddScoped<KickCampaignMemberHandler>();
         services.AddScoped<AssignPlayerFactionHandler>();
-        services.AddScoped<DeleteCampaignHandler>();
+        services.AddScoped<EndCampaignHandler>();
         services.AddScoped<DuplicateCampaignHandler>();
         services.AddScoped<ListCampaignPresetsHandler>();
         services.AddScoped<GetCampaignPresetHandler>();

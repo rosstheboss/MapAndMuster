@@ -220,6 +220,9 @@ public sealed class FactionRequest
     /// <summary>Gets whether an existing uploaded flag image should be removed.</summary>
     public bool ClearFlagImage { get; init; }
 
+    /// <summary>Gets whether an uploaded logo should be tinted with the faction color.</summary>
+    public bool TintFlagImage { get; init; }
+
     /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
     public IReadOnlyList<Guid>? SpecialRuleIds { get; init; }
 
@@ -643,11 +646,20 @@ public sealed class CampaignListItemResponse
     /// <summary>Gets the display label for the current phase when the campaign is in progress.</summary>
     public string? CurrentPhaseLabel { get; init; }
 
+    /// <summary>Gets the current phase kind when the campaign is in progress.</summary>
+    public string? CurrentPhaseKind { get; init; }
+
     /// <summary>Gets when the current phase closes, in UTC.</summary>
     public DateTimeOffset? CurrentPhaseEndsUtc { get; init; }
 
     /// <summary>Gets whether the viewer may act on the live campaign board.</summary>
     public required bool CanPlay { get; init; }
+
+    /// <summary>Gets whether the viewer may still choose or change their faction.</summary>
+    public required bool CanChooseFaction { get; init; }
+
+    /// <summary>Gets whether the viewer has committed required orders for the open action window.</summary>
+    public required bool IsCommitted { get; init; }
 }
 
 /// <summary>
@@ -912,6 +924,15 @@ public sealed class CampaignLogResponse
 
     /// <summary>Gets the campaign log, including chat the viewer is allowed to see.</summary>
     public required IReadOnlyList<PlayLogEntryResponse> Log { get; init; }
+
+    /// <summary>Gets when the viewer last marked this log read, in UTC.</summary>
+    public DateTimeOffset? LastReadUtc { get; init; }
+
+    /// <summary>Gets unread public chat messages that mention the viewer.</summary>
+    public int UnreadMentionCount { get; init; }
+
+    /// <summary>Gets unread private chat messages the viewer can see.</summary>
+    public int UnreadPrivateCount { get; init; }
 }
 
 /// <summary>
@@ -951,6 +972,9 @@ public sealed class CampaignParticipantResponse
 
     /// <summary>Gets whether the chosen faction has an uploaded flag image.</summary>
     public bool HasFlagImage { get; init; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the faction color.</summary>
+    public bool TintFlagImage { get; init; }
 
     /// <summary>Gets the ally-group name for the chosen faction, when one applies.</summary>
     public string? AllyGroupName { get; init; }
@@ -1068,6 +1092,9 @@ public sealed class FactionResponse
 
     /// <summary>Gets whether the faction has an uploaded flag image.</summary>
     public required bool HasFlagImage { get; init; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the faction color.</summary>
+    public bool TintFlagImage { get; init; }
 
     /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
@@ -1489,6 +1516,9 @@ public sealed class CampaignPointStandingResponse
     /// <summary>Gets whether the faction has an uploaded flag image.</summary>
     public bool HasFlagImage { get; init; }
 
+    /// <summary>Gets whether an uploaded logo should be tinted with the faction color.</summary>
+    public bool TintFlagImage { get; init; }
+
     /// <summary>Gets the ally-group name, when the faction is aligned.</summary>
     public string? AllyGroupName { get; init; }
 
@@ -1639,8 +1669,23 @@ public sealed class AddCampaignMemberRequest
     /// <summary>Gets the last observed campaign revision.</summary>
     public required int Revision { get; init; }
 
-    /// <summary>Gets the account to add.</summary>
+    /// <summary>Gets the account to add or promote.</summary>
     public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the account should be a campaign manager.</summary>
+    public bool IsGameMaster { get; init; }
+
+    /// <summary>Gets whether the account occupies a player slot. Defaults to a player-only add.</summary>
+    public bool IsPlayer { get; init; } = true;
+}
+
+/// <summary>
+/// Request for a manager or administrator to close a campaign while keeping its final state.
+/// </summary>
+public sealed class EndCampaignRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
 }
 
 /// <summary>
@@ -1759,8 +1804,11 @@ public static class CampaignResponses
             EndsUtc = item.EndsUtc,
             CurrentRound = item.CurrentRound,
             CurrentPhaseLabel = item.CurrentPhaseLabel,
+            CurrentPhaseKind = item.CurrentPhaseKind,
             CurrentPhaseEndsUtc = item.CurrentPhaseEndsUtc,
             CanPlay = item.CanPlay,
+            CanChooseFaction = item.CanChooseFaction,
+            IsCommitted = item.IsCommitted,
         };
     }
 
@@ -1819,6 +1867,7 @@ public static class CampaignResponses
                     Color = faction.Color,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     HasFlagImage = faction.HasFlagImage,
+                    TintFlagImage = faction.TintFlagImage,
                     SpecialRuleIds = faction.SpecialRuleIds,
                     SubfactionSpecialRules =
                     [
@@ -2068,6 +2117,7 @@ public static class CampaignResponses
                     FactionId = participant.FactionId,
                     FactionColor = participant.FactionColor,
                     HasFlagImage = participant.HasFlagImage,
+                    TintFlagImage = participant.TintFlagImage,
                     AllyGroupName = participant.AllyGroupName,
                     CurrentSupplyPoints = participant.CurrentSupplyPoints,
                     TemporarySupplyPoints = participant.TemporarySupplyPoints,
@@ -2138,6 +2188,9 @@ public static class CampaignResponses
             [
                 .. detail.Log.Select(PlayResponses.FromLogEntry),
             ],
+            LastReadUtc = detail.LastReadUtc,
+            UnreadMentionCount = detail.UnreadMentionCount,
+            UnreadPrivateCount = detail.UnreadPrivateCount,
         };
     }
 
@@ -2285,6 +2338,7 @@ public static class CampaignResponses
                 AllyGroupId = faction.AllyGroupId,
                 RequiresSubfaction = faction.RequiresSubfaction,
                 ClearFlagImage = faction.ClearFlagImage,
+                TintFlagImage = faction.TintFlagImage,
                 SpecialRuleIds = faction.SpecialRuleIds,
                 SubfactionSpecialRules = faction.SubfactionSpecialRules?
                     .Select(static item => new SubfactionSpecialRulesInput
@@ -2485,6 +2539,7 @@ public static class CampaignResponses
             FactionName = standing.FactionName,
             FactionColor = standing.FactionColor,
             HasFlagImage = standing.HasFlagImage,
+            TintFlagImage = standing.TintFlagImage,
             AllyGroupName = standing.AllyGroupName,
             TerritoryAndStructurePoints = standing.TerritoryAndStructurePoints,
             BattlesWonPoints = standing.BattlesWonPoints,

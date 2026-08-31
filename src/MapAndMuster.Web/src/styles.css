@@ -3,8 +3,24 @@
 @import '@fontsource-variable/source-serif-4';
 /* stylelint-enable import-notation */
 
+:root {
+  /* Spacing scale: layout gaps and padding use these instead of one-off rem values. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --touch-min: 44px;
+  --font-display: 'Cinzel Variable', 'Palatino', 'Palatino Linotype', 'Book Antiqua', serif;
+  --font-body: 'Source Serif 4 Variable', 'Palatino', 'Palatino Linotype', 'Book Antiqua', serif;
+}
+
 :root,
 [data-theme='light'] {
+  color-scheme: light;
+  accent-color: var(--color-accent);
+
   --color-bg: #f6f4f0;
   --color-surface: #fff;
   --color-nested: #fafaf9;
@@ -12,7 +28,9 @@
   --color-muted: #57534e;
   --color-accent: #245c4a;
   --color-accent-hover: #1b4638;
+  --color-on-accent: #fff;
   --color-danger: #9b1c1c;
+  --color-on-danger: #fff;
   --color-border: #d6d3d1;
   --color-glow: #f59e0b;
   --color-banner: #13191c;
@@ -23,12 +41,12 @@
   --color-dirty: #c87606;
   --color-dirty-bg: #fef3c7;
   --color-button-secondary: #e7e5e4;
-  --touch-min: 44px;
-  --font-display: 'Cinzel Variable', 'Palatino', 'Palatino Linotype', 'Book Antiqua', serif;
-  --font-body: 'Source Serif 4 Variable', 'Palatino', 'Palatino Linotype', 'Book Antiqua', serif;
 }
 
 [data-theme='dark'] {
+  color-scheme: dark;
+  accent-color: var(--color-accent);
+
   --color-bg: #1c1917;
   --color-surface: #292524;
   --color-nested: #1c1917;
@@ -36,7 +54,9 @@
   --color-muted: #a8a29e;
   --color-accent: #5eead4;
   --color-accent-hover: #2dd4bf;
+  --color-on-accent: #06251e;
   --color-danger: #fca5a5;
+  --color-on-danger: #3f0a0a;
   --color-border: #57534e;
   --color-glow: #fbbf24;
   --color-banner: #13191c;
@@ -98,24 +118,30 @@ summary:focus-visible,
 
 .page {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .panel {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
-  padding: 1rem;
+  padding: var(--space-4);
 }
 
 .stack {
   display: grid;
-  gap: 0.85rem;
+  gap: var(--space-3);
+}
+
+.page > :is(h1, h2, h3, h4, h5, h6, p),
+.stack > :is(h1, h2, h3, h4, h5, h6, p, ul, ol, dl),
+.panel > :is(h1, h2, h3, h4, h5, h6, p) {
+  margin: 0;
 }
 
 .field {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-1);
 }
 
 .field label {
@@ -127,15 +153,18 @@ summary:focus-visible,
 .field textarea {
   min-height: var(--touch-min);
   width: 100%;
-  padding: 0.5rem 0.75rem;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   font: inherit;
+  background: var(--color-surface);
+  color: var(--color-text);
+  accent-color: var(--color-accent);
 }
 
 /* stylelint-disable-next-line no-descending-specificity -- extra padding for the show/hide control */
 app-password-input input {
-  padding-right: calc(var(--touch-min) + 0.25rem);
+  padding-right: calc(var(--touch-min) + var(--space-1));
 }
 
 .field textarea {
@@ -146,13 +175,14 @@ app-password-input input {
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .button,
-.button-secondary {
+.button-secondary,
+.button-danger {
   min-height: var(--touch-min);
-  padding: 0.5rem 1rem;
+  padding: var(--space-2) var(--space-4);
   border: 0;
   border-radius: 0.5rem;
   font: inherit;
@@ -162,45 +192,16 @@ app-password-input input {
 
 .button {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 .button:hover {
   background: var(--color-accent-hover);
 }
 
-.button:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
 .button-danger {
-  min-height: var(--touch-min);
-  padding: 0.5rem 1rem;
-  border: 0;
-  border-radius: 0.5rem;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
   background: var(--color-danger);
-  color: #fff;
-}
-
-.button-danger:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
-.page-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.page-header h1 {
-  margin: 0;
+  color: var(--color-on-danger);
 }
 
 .button-secondary {
@@ -208,9 +209,27 @@ app-password-input input {
   color: var(--color-text);
 }
 
-.button-secondary:disabled {
+.button:disabled,
+.button-secondary:disabled,
+.button-danger:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.stack > :is(.button, .button-secondary, .button-danger) {
+  justify-self: start;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.page-header h1 {
+  margin: 0;
 }
 
 .muted {
@@ -223,20 +242,21 @@ app-password-input input {
 
 .error-banner {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-1);
   border: 1px solid var(--color-danger);
   background: var(--color-error-bg);
-  padding: 0.75rem 1rem;
+  color: var(--color-text);
+  padding: var(--space-3) var(--space-4);
   border-radius: 0.5rem;
 }
 
 .success-banner {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-1);
   border: 1px solid var(--color-accent);
   background: var(--color-success-bg);
   color: var(--color-accent);
-  padding: 0.75rem 1rem;
+  padding: var(--space-3) var(--space-4);
   border-radius: 0.5rem;
 }
 
@@ -261,12 +281,31 @@ app-password-input input {
 .field.invalid textarea {
   border-color: var(--color-danger);
   background: var(--color-error-bg);
+  color: var(--color-text);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.facts dt {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.facts dd {
+  margin: 0;
+  min-width: 0;
 }
 
 .choice-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
+  gap: var(--space-3) var(--space-5);
 }
 
 .choice-row label {
@@ -319,4 +358,11 @@ h2.has-dirty {
 .app-glow {
   filter: drop-shadow(0 0 0.35rem var(--glow-color, var(--color-glow)))
     drop-shadow(0 0 0.7rem var(--glow-color, var(--color-glow)));
+}
+
+@media (width <= 40rem) {
+  .facts {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
 }

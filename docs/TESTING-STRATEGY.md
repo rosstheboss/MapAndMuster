@@ -50,8 +50,9 @@ Cover:
 - Public site chat on All Campaigns, including unknown `@` mentions, prohibited language, mutual blocks, isolation from campaign logs, administrator announcements with notifications, and rejection of seeded test accounts.
 - Public profile campaign lists that include shared or publicly viewable campaigns and omit hidden private campaigns the viewer does not share.
 - Home notification board empty and populated states, and administrator-only news edits.
-- Manager add and kick of players (including private campaigns without the join password), staff
-  faction assignment, and administrator impersonation of seeded test accounts.
+- Manager add and kick of players (including private campaigns without the join password), promoting a
+  player to campaign manager, adding a manager-only member, staff faction assignment, ending a
+  campaign while keeping its final state, and administrator impersonation of seeded test accounts.
 - Administrator save-as-preset copies the map file and overlay graph; applying onto another campaign
   remaps overlay terrain identifiers onto that campaign's catalog.
 - Administrator download/upload of a `.mapandmuster-preset` ZIP round-trips map image and overlay
@@ -78,7 +79,7 @@ Cover components/services for:
   Administrators can save as a preset from the map editor; the save-name lookup includes The Hunt in
   Estalia. Edit campaign exposes administrator Download Preset and Upload Preset for a portable
   package of catalog, overlay, and map image.   Map PNG downloads rasterize unselected overlay fills, spawn hatching, structure pins, and
-  faction flags or logos, and omit adjacency arrows. Downloaded flags are twice the on-map marker
+  faction flags or logos (including faction-color tints when enabled), and omit adjacency arrows. Downloaded flags are twice the on-map marker
   size and structures are three times that size. Uploaded overlay SVG remaps terrain, structures,
   owners, and spawns onto the current campaign catalog by name when identifiers differ.
 - Permission-based navigation without relying on it as backend security.

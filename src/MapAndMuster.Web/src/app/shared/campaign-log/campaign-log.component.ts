@@ -20,9 +20,11 @@ import {
   type CampaignLogMember,
 } from '../../core/campaigns/campaign-log';
 
+import { AppDialogComponent } from '../dialog/dialog.component';
+
 @Component({
   selector: 'app-campaign-log',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, AppDialogComponent],
   templateUrl: './campaign-log.component.html',
   styleUrl: './campaign-log.component.css',
 })

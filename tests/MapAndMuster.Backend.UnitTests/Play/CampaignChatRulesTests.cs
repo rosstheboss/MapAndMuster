@@ -82,6 +82,59 @@ public sealed class CampaignChatRulesTests
     }
 
     [Fact]
+    public void UnreadCountsMentionsAndPrivateMessagesAfterLastRead()
+    {
+        Assert.True(CampaignChatRules.TryPost(
+            CampaignPlayState.Empty,
+            PlayerOne,
+            "Hi @southplayer",
+            Members(),
+            Now.AddMinutes(-10),
+            out var mentioned,
+            out _));
+        Assert.True(CampaignChatRules.TryPost(
+            mentioned!,
+            PlayerOne,
+            "Hello everyone",
+            Members(),
+            Now.AddMinutes(-8),
+            out var publicChat,
+            out _));
+        Assert.True(CampaignChatRules.TryPost(
+            publicChat!,
+            PlayerOne,
+            "Secret plan",
+            Members(),
+            Now.AddMinutes(-5),
+            out var withPrivate,
+            out _,
+            new ChatChannel(ChatChannelKind.Direct, PlayerTwo),
+            Memberships(),
+            Factions(),
+            AllyGroups()));
+        Assert.True(CampaignChatRules.TryPost(
+            withPrivate!,
+            PlayerTwo,
+            "I will reply later",
+            Members(),
+            Now.AddMinutes(-1),
+            out var withOwn,
+            out _));
+
+        var unread = CampaignChatRules.CountUnread(withOwn!.Log, PlayerTwo, lastReadUtc: null, Members());
+        Assert.Equal(1, unread.MentionCount);
+        Assert.Equal(1, unread.PrivateCount);
+
+        var afterRead = CampaignChatRules.CountUnread(withOwn.Log, PlayerTwo, Now.AddMinutes(-6), Members());
+        Assert.Equal(0, afterRead.MentionCount);
+        Assert.Equal(1, afterRead.PrivateCount);
+
+        var ownUnread = CampaignChatRules.CountUnread(withOwn.Log, PlayerOne, lastReadUtc: null, Members());
+        Assert.Equal(0, ownUnread.MentionCount);
+        Assert.Equal(0, ownUnread.PrivateCount);
+    }
+
+    [Fact]
     public void OutsiderCannotPost()
     {
         Assert.False(CampaignChatRules.TryPost(

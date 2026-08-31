@@ -8,7 +8,12 @@ that it changes presentation, layout, labelling, or focus behavior only. None of
 change to campaign rules, API contracts, authorization, or persisted state. Where a
 recommendation touches a template that also carries logic, the logic is left alone.
 
-- Status: proposal. Nothing here has been implemented.
+- Status: in progress. Step 1 (`UI-C1`, `UI-H3`, `UI-H4`, `UI-M5`) is implemented. Step 2
+  (`UI-C3`, `UI-C4`, `UI-M4`) is implemented (2026-08-30). Custom dialogs and confirm buttons.
+  Campaign list items expose remaining-setup and commitment fields, and campaign-log last-read
+  is persisted on the server (2026-08-30). Card badges, Home dashboard UI, and chat unread
+  indicators still follow in later steps. Step 3 (`UI-C5`, `UI-H9`, `UI-H12`, Playwright axe)
+  is implemented (2026-08-30). Map polygons (`UI-C2`) remain excluded from axe until step 4.
 - Ranking: Critical, High, Medium, Polish.
 - Each item has a stable identifier (`UI-C1`, `UI-H4`, …) so work can be tracked and split.
 
@@ -106,6 +111,9 @@ Call these out so they are not lost during refactoring.
 Blocks a user, or fails WCAG 2.1 AA on a core path.
 
 ## UI-C1 — Primary and danger buttons are unreadable in dark mode
+
+**Status:** implemented (2026-08-30). `--color-on-accent` and `--color-on-danger` tokens, contrast
+tests in `theme-tokens.spec.ts`.
 
 **Areas:** Accessibility, Visual design, Consistency
 
@@ -206,10 +214,13 @@ territory and scrolls the map into view, so the existing behavior is not lost du
 
 ## UI-C3 — Dialogs are not modal, Escape does not close them, and focus is not trapped
 
+**Status:** implemented (2026-08-30). Shared `AppDialogComponent` with `aria-modal`, focus trap,
+Escape/backdrop cancel, and inert on `.app-shell`.
+
 **Areas:** Accessibility, Error prevention, Consistency
 
 There are six hand-rolled dialogs. Only the saving overlay sets `aria-modal`. Measured against
-the **Delete campaign** dialog, which is the most destructive action in the product:
+the **End campaign** dialog, which is the most destructive action in the product:
 
 - `aria-modal` is absent, so screen readers continue to expose the whole page behind it.
 - Pressing Escape does not close it.
@@ -221,7 +232,7 @@ the **Delete campaign** dialog, which is the most destructive action in the prod
 | Dialog | File |
 | --- | --- |
 | Confirm action | `features/campaign-detail/campaign-detail.page.html` line 2026 |
-| Delete campaign | `features/campaign-detail/campaign-detail.page.html` line 2044 |
+| End campaign | `features/campaign-detail/campaign-detail.page.html` line 2044 |
 | Join campaign | `shared/campaign-list/campaign-list.component.html` line 92 |
 | Export log | `shared/campaign-log/campaign-log.component.html` line 27 |
 | Download map | `features/map-editor/map-editor.page.html` line 39 |
@@ -240,10 +251,14 @@ the behavior, then convert all six call sites to it. The component should:
 Default focus must land on the **safe** action. In the delete dialog, focus currently lands on
 the red `button-danger`; it should land on Cancel.
 
-**Verify:** integration tests per dialog asserting Escape closes it, focus starts inside,
-Tab cycles within, and focus returns to the trigger.
+**Verify:** Vitest coverage on `AppDialogComponent` (Escape, Tab cycle, focus restore, backdrop
+click) plus conversion assertions on each of the six call sites. A Playwright pass over a live
+dialog remains useful when the axe suite is expanded in step 3.
 
 ## UI-C4 — Irreversible actions fire on a single click with no confirmation
+
+**Status:** implemented (2026-08-30). Shared `ConfirmButtonComponent`; Surrender is `button-danger`
+and separated from Submit retreat.
 
 **Areas:** Error prevention, GM interface, Campaign workflow
 
@@ -272,10 +287,13 @@ concedes. A mis-click is easy and unrecoverable.
 3. For Surrender specifically, name the consequence in the confirmation text, for example
    "Surrender Windmere to Thornwild Clans? This cannot be undone."
 
-**Verify:** a Playwright test that a single click on Surrender does not call the endpoint, and
-that the second click does.
+**Verify:** Vitest: a single click on Surrender, Leave, Clear Connections, Remove Colors, and Remove
+player does not perform the action; the second click does. Playwright coverage for Surrender is
+deferred until a live battle fixture exists.
 
 ## UI-C5 — Invalid ARIA on the chat composer, the map, and the setup form
+
+**Status:** implemented (2026-08-30), except map `polygon` labels which remain `UI-C2`.
 
 **Areas:** Accessibility
 
@@ -339,18 +357,21 @@ before the deadline", the page opens on a conversation.
 **Fix:** reorder the campaign page to match the task order:
 
 1. Status bar (`UI-H1`)
-2. Actions (your orders) — the only section expanded by default
-3. Map
-4. Battles
-5. Campaign points
-6. Campaign log
+2. Actions (your orders)
+3. Campaign log (chat and history), with unread indicators for mentions and private messages
+4. Map
+5. Battles
+6. Campaign points (Standings)
 7. Reference sections (Campaign details, Factions, Ally groups, Links, Item objectives)
 8. Management sections (`UI-M3`)
 
-Change the default so **Actions** is the only expanded section and persist each user's
-expand/collapse choices per campaign in `localStorage`. "Expand All" and "Collapse All" stay.
+Default expanded sections while the campaign is running: **Actions**, **Chat**, and
+**Standings**. Persist each user's expand/collapse choices per campaign. "Expand All" and
+"Collapse All" stay.
 
 ## UI-H3 — Form controls ignore the theme
+
+**Status:** implemented (2026-08-30). `color-scheme`, themed `.field` backgrounds, and `accent-color`.
 
 **Areas:** Visual design, Consistency, Accessibility
 
@@ -388,6 +409,9 @@ Re-check `.field.invalid`, which sets `background: var(--color-error-bg)`; on da
 `#450a0a` and needs its text color checked.
 
 ## UI-H4 — Vertical rhythm wastes roughly half the page
+
+**Status:** implemented (2026-08-30). Spacing scale, paragraph reset inside `.page`/`.stack`/`.panel`,
+and Campaign details as a two-column `dl.facts`.
 
 **Areas:** Visual design, Information hierarchy
 
@@ -486,6 +510,8 @@ The mandatory subset is small: name, schedule, factions, terrain, and a map.
 
 ## UI-H9 — The standings table encodes faction by color alone and has no table semantics
 
+**Status:** implemented (2026-08-30).
+
 **Areas:** Accessibility, Information hierarchy, Consistency
 
 In **Campaign points**:
@@ -543,6 +569,8 @@ At 390 × 844:
 4. With `UI-H1` in place, ensure the status bar is the first thing under the title on phones.
 
 ## UI-H12 — The active navigation item is signalled by color alone
+
+**Status:** implemented (2026-08-30).
 
 **Areas:** Accessibility, Navigation
 
@@ -647,18 +675,21 @@ state chip per player and a "2 of 4 committed" summary.
 
 **Areas:** GM interface, Error prevention
 
-On the GM view, **Extend schedule**, **Debug**, **Edit map**, and **Delete campaign** sit in the
+On the GM view, **Extend schedule**, **Debug**, **Edit map**, and **End campaign** sit in the
 same undifferentiated stack of sections as **Actions**, **Battles**, and **Campaign points**.
-`Delete campaign` is a top-level `h2` section like any other. A GM who is also a player has no
+`End campaign` is a top-level `h2` section like any other. A GM who is also a player has no
 visual boundary between the moves they make as a player and the interventions they make as
 staff, which is exactly the separation `PRODUCT.md` calls for.
 
 **Fix:** group all manager-only sections under a single **Manage campaign** region, collapsed by
 default, with a distinct surface treatment (a tinted background or a left accent border) and a
-short line explaining that actions inside it are attributed and notified. Keep **Delete
+short line explaining that actions inside it are attributed and notified. Keep **End
 campaign** last inside it.
 
 ## UI-M4 — Six hand-rolled dialogs
+
+**Status:** implemented (2026-08-30). Shared `AppDialogComponent`; per-page `.dialog` / `.dialog-backdrop`
+rules removed.
 
 **Areas:** Consistency
 
@@ -669,6 +700,8 @@ and CSS across five files. Fixing any one of them today fixes only that one.
 the per-component `.dialog` and `.dialog-backdrop` rules once it lands.
 
 ## UI-M5 — Button widths are inconsistent
+
+**Status:** implemented (2026-08-30). `.stack >` buttons use `justify-self: start`.
 
 **Areas:** Consistency, Visual design
 
@@ -897,12 +930,12 @@ Territory hover applies a lift transform. Wrap the transition in a
 
 Grouped so that shared work lands before the items that depend on it.
 
-1. **Tokens and global CSS.** `UI-C1`, `UI-H3`, `UI-H4`, `UI-M5`. One change to `styles.css`
-   plus a sweep of component CSS. Everything else sits on top of this.
+1. **Tokens and global CSS.** `UI-C1`, `UI-H3`, `UI-H4`, `UI-M5`. Done 2026-08-30. One change
+   to `styles.css` plus a sweep of component CSS. Everything else sits on top of this.
 2. **Shared primitives.** The dialog component (`UI-C3`, `UI-M4`) and the confirm-button
-   component (`UI-C4`), then convert the six dialogs and four destructive actions.
+   component (`UI-C4`), then convert the six dialogs and four destructive actions. Done 2026-08-30.
 3. **Accessibility corrections.** `UI-C5`, `UI-H9`, `UI-H12`, and the axe assertions in the
-   Playwright suite.
+   Playwright suite. Done 2026-08-30. Map `polygon` labels stay excluded until `UI-C2`.
 4. **Map accessibility.** `UI-C2`, then `UI-M1`.
 5. **Campaign page restructure.** `UI-H1`, `UI-H2`, `UI-H13`, `UI-M2`, `UI-M3`, `UI-M11`,
    `UI-H7`, `UI-H10`. `UI-H13` depends on the dialog work in step 2.
@@ -913,10 +946,14 @@ Grouped so that shared work lands before the items that depend on it.
 
 # Constraints for whoever implements this
 
-- No new component library, no state-management library, and no CSS framework. See
-  `AGENTS.md`, "Change boundaries".
-- Nothing here changes an API contract, a campaign rule, an authorization decision, or persisted
-  state. If an implementation appears to need one, stop and raise it rather than proceeding.
+- Custom dialogs and confirm buttons, not a component library. See DECISIONS-NEEDED item 20.
+  Campaign list items expose `canChooseFaction`, `isCommitted`, and `currentPhaseKind`.
+  Campaign-log last-read is persisted (`GET /log` unread fields and `POST /log/read`). Card
+  badges, Home dashboard chrome, and chat unread indicators still follow in later UI steps.
+  Playwright axe scans login, campaign list, campaign detail, campaign setup, and the map
+  editor. Map `polygon` nodes stay excluded until `UI-C2`.
+- Nothing here changes a campaign rule, an authorization decision, or persisted play state. If an
+  implementation appears to need one, stop and raise it rather than proceeding.
 - Client-side validation and disclosure remain presentation only. Hiding a control is never an
   authorization decision; see `src/MapAndMuster.Web/AGENTS.md`.
 - Every behavioral UI change needs a Vitest update in the same commit, and the secrecy and
@@ -925,15 +962,17 @@ Grouped so that shared work lands before the items that depend on it.
 
 # Open questions for the product owner
 
-These affect the recommendations above and are not decided here.
+Resolved 2026-08-30. See `docs/DECISIONS-NEEDED.md`.
 
-1. Should any signed-in player be able to create a campaign? "Create campaign" is currently the
-   only primary action on an empty "Your campaigns" page, which pushes new players toward
-   creating rather than joining (`UI-M6`).
-2. Should the map remain editable after a campaign starts? `UI-H6` assumes not, matching the
-   current redirect, and proposes hiding the control. If editing should be possible, the
-   redirect is the bug instead.
-3. How much of the campaign page should a returning player see collapsed? `UI-H2` proposes
-   expanding only **Actions** and remembering the user's choices per campaign.
-4. Is the campaign log intended as the social centre of a campaign? Its current position at the
-   top of the page suggests yes, but the task flow suggests orders should come first (`UI-H2`).
+1. Resolved: any signed-in player can create a campaign. Empty "Your campaigns" should offer
+   **Join campaign** as a shortcut to All campaigns, with **Create a campaign** remaining available.
+   Joined campaigns with remaining setup choices (for example faction selection) show an indicator
+   on the card, and the same items appear in the Home notifications list (`UI-M6`, `UI-M7`).
+2. Resolved: the map is not editable after a campaign starts. Hide **Edit map** when status is
+   not `Scheduled`, and replace the silent redirect with a message if the editor is reached anyway
+   (`UI-H6`).
+3. Resolved: while a campaign is running, default expanded sections are **Actions**, **Chat**, and
+   **Standings**. Persist each player's last open/closed set per campaign (`UI-H2`).
+4. Resolved: page order is **Orders (Actions)**, then **Chat log**, then **Map**. The chat log is
+   the main social surface and campaign history. Unread mentions and private messages show unread
+   indicators on the chat log (`UI-H2`).

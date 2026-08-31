@@ -143,6 +143,7 @@ public sealed class CampaignStore : ICampaignStore
                     .SetProperty(item => item.TimeZoneId, campaign.TimeZoneId)
                     .SetProperty(item => item.StartsUtc, campaign.StartsUtc)
                     .SetProperty(item => item.EndsUtc, campaign.EndsUtc)
+                    .SetProperty(item => item.ClosedUtc, campaign.ClosedUtc)
                     .SetProperty(item => item.RoundCount, campaign.RoundCount)
                     .SetProperty(item => item.RoundLengthAmount, campaign.RoundLengthAmount)
                     .SetProperty(item => item.RoundLengthUnit, campaign.RoundLengthUnit)
@@ -429,6 +430,7 @@ public sealed class CampaignStore : ICampaignStore
                 campaign.TimeZoneId,
                 campaign.StartsUtc,
                 campaign.EndsUtc,
+                campaign.ClosedUtc,
                 campaign.RoundCount,
                 campaign.RoundLengthAmount,
                 campaign.RoundLengthUnit,
@@ -462,6 +464,7 @@ public sealed class CampaignStore : ICampaignStore
             TimeZoneId = row.TimeZoneId,
             StartsUtc = row.StartsUtc,
             EndsUtc = row.EndsUtc,
+            ClosedUtc = row.ClosedUtc,
             RoundCount = row.RoundCount,
             RoundLengthAmount = row.RoundLengthAmount,
             RoundLengthUnit = row.RoundLengthUnit,
@@ -538,6 +541,7 @@ public sealed class CampaignStore : ICampaignStore
             TimeZoneId = campaign.TimeZoneId,
             StartsUtc = campaign.StartsUtc,
             EndsUtc = campaign.EndsUtc,
+            ClosedUtc = campaign.ClosedUtc,
             RoundCount = campaign.RoundCount,
             RoundLengthAmount = campaign.RoundLengthAmount,
             RoundLengthUnit = campaign.RoundLengthUnit,
@@ -617,6 +621,7 @@ public sealed class CampaignStore : ICampaignStore
                 Color = faction.Color,
                 RequiresSubfaction = faction.RequiresSubfaction,
                 FlagImageStorageKey = faction.FlagImageStorageKey,
+                TintFlagImage = faction.TintFlagImage,
                 AllyGroup = allyGroup,
                 SortOrder = factionOrder++,
             };
@@ -750,6 +755,7 @@ public sealed class CampaignStore : ICampaignStore
                         ],
                         AllyGroupName = faction.AllyGroup?.Name,
                         FlagImageStorageKey = faction.FlagImageStorageKey,
+                        TintFlagImage = faction.TintFlagImage,
                         SpecialRuleIds = FactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
                         SubfactionSpecialRules = SubfactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
                     }),
@@ -768,6 +774,7 @@ public sealed class CampaignStore : ICampaignStore
             TimeZoneId = record.TimeZoneId,
             StartsUtc = record.StartsUtc,
             EndsUtc = record.EndsUtc,
+            ClosedUtc = record.ClosedUtc,
             RoundCount = record.RoundCount,
             RoundLengthAmount = record.RoundLengthAmount,
             RoundLengthUnit = record.RoundLengthUnit,

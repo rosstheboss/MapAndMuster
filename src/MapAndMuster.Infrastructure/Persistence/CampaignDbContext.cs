@@ -57,6 +57,11 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
     /// </summary>
     public DbSet<CampaignPresetRecord> CampaignPresets => Set<CampaignPresetRecord>();
 
+    /// <summary>
+    /// Gets per-viewer campaign-log last-read marks.
+    /// </summary>
+    public DbSet<CampaignLogReadMarkRecord> CampaignLogReadMarks => Set<CampaignLogReadMarkRecord>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -164,6 +169,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(faction => faction.Color).HasMaxLength(7).IsRequired();
             entity.Property(faction => faction.RequiresSubfaction).IsRequired();
             entity.Property(faction => faction.FlagImageStorageKey).HasMaxLength(260);
+            entity.Property(faction => faction.TintFlagImage).IsRequired();
             entity.HasOne(faction => faction.AllyGroup)
                 .WithMany(group => group.Factions)
                 .HasForeignKey(faction => faction.AllyGroupId)
@@ -254,6 +260,17 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(preset => preset.SettingsJson).HasColumnType("jsonb");
             entity.Property(preset => preset.MapGraphJson).HasColumnType("jsonb");
             entity.HasIndex(preset => preset.NormalizedName).IsUnique();
+        });
+
+        builder.Entity<CampaignLogReadMarkRecord>(entity =>
+        {
+            entity.ToTable("CampaignLogReadMarks");
+            entity.HasKey(mark => new { mark.CampaignId, mark.UserId });
+            entity.HasIndex(mark => mark.UserId);
+            entity.HasOne<CampaignRecord>()
+                .WithMany()
+                .HasForeignKey(mark => mark.CampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

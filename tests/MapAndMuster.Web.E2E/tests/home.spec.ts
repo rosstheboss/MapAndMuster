@@ -16,6 +16,7 @@ test('unauthenticated visitors are sent to sign in', async ({ page }) => {
     await expect(page.getByRole('link', { name: 'Your Campaigns' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'All Campaigns' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sign in' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByLabel('Email')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
 });

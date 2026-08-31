@@ -1,0 +1,342 @@
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test, type Page } from '@playwright/test';
+
+const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
+const player = {
+  id: '11111111-1111-1111-1111-111111111111',
+  email: 'ada@example.test',
+  username: 'ada',
+  firstName: 'Ada',
+  middleInitial: null,
+  lastName: 'Lovelace',
+  suffix: null,
+  city: 'Halifax',
+  region: null,
+  country: 'Canada',
+  displayNameMode: 'Username',
+  timeZoneId: null,
+  hasAvatar: false,
+  createdUtc: '2026-08-13T00:00:00+00:00',
+  updatedUtc: '2026-08-13T00:00:00+00:00',
+  profileRevision: 1,
+  emailConfirmed: true,
+  isAdministrator: false,
+  inAppNotificationsEnabled: true,
+  emailNotificationsEnabled: true,
+  preferredChatLanguage: 'English',
+};
+
+const admin = { ...player, isAdministrator: true };
+
+const campaign = {
+  id: campaignId,
+  name: 'Border War',
+  description: 'A contested frontier.',
+  playerSlotCount: 8,
+  occupiedPlayerSlots: 1,
+  isPrivate: false,
+  isPubliclyViewable: true,
+  creatorIsParticipant: true,
+  city: null,
+  region: null,
+  country: null,
+  hasMap: false,
+  canManage: true,
+  isParticipant: true,
+  revision: 2,
+  createdUtc: '2026-08-13T00:00:00+00:00',
+  updatedUtc: '2026-08-13T00:00:00+00:00',
+  factions: [
+    {
+      id: 'north',
+      name: 'North',
+      color: '#2563EB',
+      subfactions: [],
+      allyGroupName: null,
+      requiresSubfaction: false,
+      hasFlagImage: false,
+    },
+  ],
+  allyGroups: [],
+  links: [],
+  terrainTypes: [],
+  structureTypes: [],
+  timeZoneId: 'UTC',
+  startsAtLocal: '2026-08-14T12:00',
+  startsUtc: '2026-08-14T12:00:00+00:00',
+  endsUtc: '2026-08-16T12:00:00+00:00',
+  roundCount: 3,
+  roundLengthAmount: 1,
+  roundLengthUnit: 'Days',
+  phases: [],
+  status: 'InProgress',
+  currentRound: 1,
+  currentPhaseNumber: 1,
+  currentPhaseKind: 'Action',
+  currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+  currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+  factionId: 'north',
+  subfaction: null,
+  canPlay: true,
+  canChooseFaction: false,
+  canChat: true,
+  mentionableMembers: [{ userId: player.id, username: 'ada', displayName: 'ada' }],
+  log: [],
+  standings: [
+    {
+      userId: player.id,
+      username: 'ada',
+      displayName: 'ada',
+      factionId: 'north',
+      factionName: 'North',
+      factionColor: '#2563EB',
+      hasFlagImage: false,
+      allyGroupName: null,
+      territoryAndStructurePoints: 4,
+      battlesWonPoints: 2,
+      publicObjectivePoints: 1,
+      privateObjectivePoints: 0,
+      otherPoints: 3,
+      total: 10,
+      heldItems: [],
+    },
+  ],
+};
+
+function formatViolations(violations: { id: string; help: string; nodes: { html: string }[] }[]): string {
+  return violations
+    .map((violation) => `${violation.id}: ${violation.help}\n${violation.nodes.map((node) => node.html).join('\n')}`)
+    .join('\n\n');
+}
+
+async function expectNoAxeViolations(page: Page, options?: { exclude?: string[] }): Promise<void> {
+  let builder = new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice']);
+  for (const selector of options?.exclude ?? []) {
+    builder = builder.exclude(selector);
+  }
+
+  const results = await builder.analyze();
+  expect(results.violations, formatViolations(results.violations)).toEqual([]);
+}
+
+async function mockSession(page: Page, profile: typeof player): Promise<void> {
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profile) });
+  });
+  await page.route('**/api/auth/external-providers', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+}
+
+test('login has no axe violations', async ({ page }) => {
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: '{"code":"auth.unauthorized","message":"Sign in to continue."}',
+    });
+  });
+  await page.route('**/api/auth/external-providers', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sign in' })).toHaveAttribute('aria-current', 'page');
+  await expectNoAxeViolations(page);
+});
+
+test('campaign list has no axe violations', async ({ page }) => {
+  await mockSession(page, player);
+  await page.route('**/api/campaigns', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: campaignId,
+          name: 'Border War',
+          description: null,
+          playerSlotCount: 8,
+          occupiedPlayerSlots: 1,
+          isPrivate: false,
+          isPubliclyViewable: true,
+          canManage: true,
+          isParticipant: true,
+          canView: true,
+          canJoin: false,
+          canLeave: false,
+          city: null,
+          region: null,
+          country: null,
+          currentRound: 1,
+          currentPhaseLabel: 'Action 1',
+          currentPhaseKind: 'Action',
+          currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+          canPlay: true,
+          canChooseFaction: false,
+          isCommitted: false,
+          status: 'InProgress',
+          startsUtc: '2026-08-14T12:00:00+00:00',
+          endsUtc: '2026-08-16T12:00:00+00:00',
+        },
+      ]),
+    });
+  });
+
+  await page.goto('/campaigns');
+  await expect(page.getByRole('heading', { level: 1, name: 'Your campaigns' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Your Campaigns' })).toHaveAttribute('aria-current', 'page');
+  await expectNoAxeViolations(page);
+});
+
+test('campaign detail has no axe violations', async ({ page }) => {
+  await mockSession(page, player);
+  await page.route(`**/api/campaigns/${campaignId}/log`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: campaignId,
+        revision: campaign.revision,
+        canChat: true,
+        mentionableMembers: campaign.mentionableMembers,
+        chatChannels: [{ kind: 'Public', label: 'Everyone' }],
+        log: [],
+      }),
+    });
+  });
+  await page.route(`**/api/campaigns/${campaignId}/play`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: campaignId,
+        name: 'Border War',
+        revision: 2,
+        canManage: true,
+        isParticipant: true,
+        canChat: true,
+        mentionableMembers: campaign.mentionableMembers,
+        status: 'InProgress',
+        currentRound: 1,
+        currentPhaseNumber: 1,
+        currentPhaseKind: 'Action',
+        currentPhaseLabel: 'Action 1',
+        currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+        currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+        currentWindowId: 'window-1',
+        hasMap: false,
+        factionId: 'north',
+        canChooseFaction: false,
+        isCommitted: false,
+        roundCount: 3,
+        minRoundCount: 1,
+        remainingWindows: [],
+        factions: campaign.factions,
+        structureTypes: [],
+        forces: [],
+        myDrafts: [],
+        orders: [],
+        debugDrafts: [],
+        canDebug: true,
+        isDebugActive: false,
+        debugActorUserId: null,
+        commitments: [],
+        battles: [],
+        log: [],
+        standings: campaign.standings,
+        playersMissingFaction: [],
+      }),
+    });
+  });
+  await page.route(`**/api/campaigns/${campaignId}/map/graph`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        campaignId,
+        revision: 2,
+        canManage: true,
+        territories: [],
+        adjacencies: [],
+      }),
+    });
+  });
+  await page.route(`**/api/campaigns/${campaignId}`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(campaign) });
+  });
+
+  await page.goto(`/campaigns/${campaignId}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Border War' })).toBeVisible();
+  await expectNoAxeViolations(page);
+});
+
+test('campaign setup has no axe violations', async ({ page }) => {
+  test.setTimeout(90_000);
+  await mockSession(page, admin);
+
+  await page.goto('/campaigns/new');
+  await expect(page.getByRole('heading', { level: 1, name: 'Create campaign' })).toBeVisible();
+  await expect(page.getByLabel('Upload campaign preset')).toBeAttached();
+  await expectNoAxeViolations(page);
+});
+
+test('map editor has no axe violations', async ({ page }) => {
+  await mockSession(page, player);
+  await page.route(`**/api/campaigns/${campaignId}/map/graph`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        campaignId,
+        revision: 2,
+        canManage: true,
+        territories: [],
+        adjacencies: [],
+      }),
+    });
+  });
+  await page.route(`**/api/campaigns/${campaignId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...campaign,
+        hasMap: true,
+        status: 'Scheduled',
+        currentRound: null,
+        currentPhaseNumber: null,
+        currentPhaseKind: null,
+        currentPhaseStartsUtc: null,
+        currentPhaseEndsUtc: null,
+      }),
+    });
+  });
+  await page.route(`**/api/campaigns/${campaignId}/map**`, async (route) => {
+    if (route.request().url().includes('/map/graph')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'image/png',
+      body: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+      ),
+    });
+  });
+
+  await page.goto(`/campaigns/${campaignId}/map`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Map editor' })).toBeVisible();
+  // UI-C2: polygon aria-label without a role is still invalid; exclude until map keyboard access lands.
+  await expectNoAxeViolations(page, { exclude: ['polygon'] });
+});

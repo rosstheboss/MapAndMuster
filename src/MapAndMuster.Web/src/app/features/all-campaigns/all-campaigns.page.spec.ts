@@ -27,8 +27,11 @@ function item(
     country: null,
     currentRound: null,
     currentPhaseLabel: null,
+    currentPhaseKind: null,
     currentPhaseEndsUtc: null,
     canPlay: false,
+    canChooseFaction: false,
+    isCommitted: false,
     ...overrides,
   };
 }

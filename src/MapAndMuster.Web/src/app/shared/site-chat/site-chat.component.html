@@ -98,34 +98,41 @@
           }
         </div>
       }
-      <label class="field">
-        Message
-        <textarea
-          #composer
-          rows="1"
-          [ngModel]="draft()"
-          (ngModelChange)="onDraftInput($event)"
-          (keydown)="onKeydown($event)"
-          [disabled]="sending()"
-          maxlength="2000"
+      <div class="field">
+        <label id="site-chat-message-label" for="site-chat-composer">Message</label>
+        <div
+          class="mention-combobox"
+          role="combobox"
+          aria-labelledby="site-chat-message-label"
+          aria-haspopup="listbox"
           aria-autocomplete="list"
           [attr.aria-expanded]="suggestions().length > 0"
-          aria-controls="site-chat-suggest"
-        ></textarea>
-      </label>
+          [attr.aria-controls]="suggestions().length > 0 ? 'site-chat-suggest' : null"
+        >
+          <textarea
+            #composer
+            id="site-chat-composer"
+            rows="1"
+            [ngModel]="draft()"
+            (ngModelChange)="onDraftInput($event)"
+            (keydown)="onKeydown($event)"
+            [disabled]="sending()"
+            maxlength="2000"
+            [attr.aria-activedescendant]="suggestions().length > 0 ? 'site-chat-suggest-option-' + highlight() : null"
+          ></textarea>
+        </div>
+      </div>
       @if (suggestions().length > 0) {
         <ul id="site-chat-suggest" class="suggest" role="listbox">
           @for (member of suggestions(); track member.userId; let index = $index) {
-            <li>
-              <button
-                type="button"
-                role="option"
-                [class.is-active]="index === highlight()"
-                [attr.aria-selected]="index === highlight()"
-                (mousedown)="complete(member)"
-              >
-                {{ suggestionLabel(member) }}
-              </button>
+            <li
+              [id]="'site-chat-suggest-option-' + index"
+              role="option"
+              [class.is-active]="index === highlight()"
+              [attr.aria-selected]="index === highlight()"
+              (mousedown)="complete(member)"
+            >
+              {{ suggestionLabel(member) }}
             </li>
           }
         </ul>

@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 
 import { AuthService } from '../../core/auth/auth.service';
 import type { OwnProfile } from '../../core/auth/auth.models';
@@ -122,6 +122,19 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector('.setup-toolbar')?.textContent).toContain('Save as Preset');
     expect(compiled.querySelector('.setup-toolbar')?.textContent).toContain('Upload Preset');
     expect(compiled.querySelector('.setup-toolbar')?.textContent).not.toContain('Download Preset');
+    expect(compiled.querySelector('input.sr-only[type="file"]')?.getAttribute('aria-label')).toBe(
+      'Upload campaign preset',
+    );
+    expect(compiled.querySelector('h3')).toBeNull();
+    expect(compiled.querySelector('h4')).toBeNull();
+    expect([...compiled.querySelectorAll('.subsection-heading')].map((node) => node.textContent.trim())).toEqual(
+      expect.arrayContaining([
+        'Ranking public objectives',
+        'Running public objectives',
+        'Battle campaign points',
+        'Supply and battle reports',
+      ]),
+    );
     clickNamedButton(compiled, 'Save as Preset');
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
@@ -424,6 +437,8 @@ describe('CampaignSetupPage', () => {
     imageOption!.click();
     fixture.detectChanges();
     expect(compiled.textContent).toContain('Maximum size 50px × 50px');
+    expect(compiled.textContent).toContain('Tint logo with faction color');
+    expect(compiled.textContent).not.toContain('Uploaded flags are not recolored');
 
     page.factions.at(0).controls.name.setValue('Renamed Herd');
     fixture.detectChanges();
@@ -904,6 +919,7 @@ describe('CampaignSetupPage edit', () => {
     expect(toolbar?.textContent).toContain('Download Preset');
     expect(toolbar?.textContent).toContain('Upload Preset');
     expect(toolbar?.textContent).toContain('Clear Unsaved Changes');
+    expect(toolbar?.textContent).toContain('End campaign');
     const save = [...(toolbar?.querySelectorAll('button') ?? [])].find(
       (button) => button.textContent.trim() === 'Save campaign',
     );
@@ -916,6 +932,124 @@ describe('CampaignSetupPage edit', () => {
     expect(compiled.querySelector('app-campaign-map-preview img')?.getAttribute('src')).toContain(
       `/api/campaigns/${campaignId}/map?v=2`,
     );
+    http.verify();
+  });
+
+  it('ends the campaign from Edit campaign and returns to Your Campaigns', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(scheduledEditCampaign(campaignId));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    clickNamedButton(compiled, 'End campaign');
+    fixture.detectChanges();
+    expect(compiled.querySelector('[role="alertdialog"]')?.textContent).toContain('End this campaign?');
+    const confirm = [...compiled.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
+      (element) => element.textContent.trim() === 'End campaign',
+    );
+    expect(confirm).toBeTruthy();
+    confirm!.click();
+    const end = http.expectOne(`/api/campaigns/${campaignId}/end`);
+    expect(end.request.method).toBe('POST');
+    expect(end.request.body).toEqual({ revision: 2 });
+    end.flush(null, { status: 204, statusText: 'No Content' });
+    await fixture.whenStable();
+    expect(navigate).toHaveBeenCalledWith('/campaigns');
+    fixture.detectChanges();
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    fixture.destroy();
+    expect(document.querySelector('.app-dialog-backdrop')).toBeNull();
+    http.verify();
+  });
+
+  it('shows the logo tint toggle for a faction that uses an uploaded image', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    const campaign = scheduledEditCampaign(campaignId);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      ...campaign,
+      factions: [{ ...campaign.factions[0], hasFlagImage: true, tintFlagImage: true }, campaign.factions[1]],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const tint = [...compiled.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) =>
+      (input.closest('label')?.textContent ?? '').includes('Tint logo with faction color'),
+    );
+    expect(tint).toBeTruthy();
+    expect(tint?.checked).toBe(true);
+    expect(compiled.querySelector('app-faction-logo .is-tinted')).toBeTruthy();
+    http.verify();
+  });
+
+  it('saves logo tint when the toggle is checked or cleared', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    const campaign = scheduledEditCampaign(campaignId);
+    const withFlag = {
+      ...campaign,
+      factions: [{ ...campaign.factions[0], hasFlagImage: true, tintFlagImage: false }, campaign.factions[1]],
+    };
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(withFlag);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as { save: () => Promise<void> };
+    const tintCheckbox = (): HTMLInputElement | undefined =>
+      [...compiled.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) =>
+        (input.closest('label')?.textContent ?? '').includes('Tint logo with faction color'),
+      );
+
+    const tint = tintCheckbox();
+    expect(tint).toBeTruthy();
+    expect(tint?.checked).toBe(false);
+    tint!.click();
+    fixture.detectChanges();
+    expect(tintCheckbox()?.checked).toBe(true);
+    expect(compiled.querySelector('app-faction-logo .is-tinted')).toBeTruthy();
+
+    const enabling = page.save();
+    const enablePut = http.expectOne(`/api/campaigns/${campaignId}`);
+    expect(enablePut.request.method).toBe('PUT');
+    expect((enablePut.request.body as { factions: { tintFlagImage?: boolean }[] }).factions[0].tintFlagImage).toBe(
+      true,
+    );
+    const enabled = {
+      ...withFlag,
+      revision: 3,
+      factions: [{ ...withFlag.factions[0], hasFlagImage: true, tintFlagImage: true }, withFlag.factions[1]],
+    };
+    enablePut.flush(enabled);
+    await enabling;
+    fixture.detectChanges();
+    expect(tintCheckbox()?.checked).toBe(true);
+    expect(compiled.querySelector('app-faction-logo .is-tinted')).toBeTruthy();
+
+    tintCheckbox()!.click();
+    fixture.detectChanges();
+    expect(tintCheckbox()?.checked).toBe(false);
+    expect(compiled.querySelector('app-faction-logo .is-tinted')).toBeNull();
+
+    const disabling = page.save();
+    const disablePut = http.expectOne(`/api/campaigns/${campaignId}`);
+    expect((disablePut.request.body as { factions: { tintFlagImage?: boolean }[] }).factions[0].tintFlagImage).toBe(
+      false,
+    );
+    disablePut.flush({
+      ...enabled,
+      revision: 4,
+      factions: [{ ...enabled.factions[0], hasFlagImage: true, tintFlagImage: false }, enabled.factions[1]],
+    });
+    await disabling;
+    fixture.detectChanges();
+    expect(tintCheckbox()?.checked).toBe(false);
+    expect(compiled.querySelector('app-faction-logo .is-tinted')).toBeNull();
     http.verify();
   });
 

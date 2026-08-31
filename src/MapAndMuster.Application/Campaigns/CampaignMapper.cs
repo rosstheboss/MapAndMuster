@@ -46,12 +46,15 @@ public static class CampaignMapper
             Country = campaign.Country,
             Status = progress.Status.ToString(),
             StartsUtc = campaign.StartsUtc,
-            EndsUtc = campaign.EndsUtc,
+            EndsUtc = campaign.ClosedUtc ?? campaign.EndsUtc,
             CurrentRound = progress.CurrentRound,
             CurrentPhaseLabel = FormatCurrentPhaseLabel(campaign, progress),
+            CurrentPhaseKind = progress.CurrentPhaseKind?.ToString(),
             CurrentPhaseEndsUtc = progress.CurrentPhaseEndsUtc,
             CanPlay = (membership?.IsPlayer == true || membership?.IsGameMaster == true)
                 && progress.Status == CampaignStatus.InProgress,
+            CanChooseFaction = CanChooseFaction(membership, progress.Status),
+            IsCommitted = ViewerIsCommitted(campaign, viewerUserId),
         };
     }
 
@@ -119,6 +122,7 @@ public static class CampaignMapper
                 AllyGroupId = AllyGroupIdFor(campaign, faction.AllyGroupName),
                 RequiresSubfaction = faction.RequiresSubfaction,
                 HasFlagImage = !string.IsNullOrWhiteSpace(faction.FlagImageStorageKey),
+                TintFlagImage = faction.TintFlagImage,
                 SpecialRuleIds = faction.SpecialRuleIds,
                 SubfactionSpecialRules = faction.SubfactionSpecialRules
                     .Select(static item => new SubfactionSpecialRulesDetail
@@ -288,6 +292,21 @@ public static class CampaignMapper
         }
 
         return membership.FactionId is null || status == CampaignStatus.Scheduled;
+    }
+
+    /// <summary>
+    /// Whether the viewer has committed required orders for the currently open action window.
+    /// </summary>
+    internal static bool ViewerIsCommitted(StoredCampaign campaign, Guid viewerUserId)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        var play = campaign.PlayState;
+        if (play is null || play.CurrentWindow() is not { Kind: RoundPhaseKind.Action, Status: PhaseWindowStatus.Open } window)
+        {
+            return false;
+        }
+
+        return play.Commitments.Any(item => item.WindowId == window.Id && item.UserId == viewerUserId);
     }
 
     /// <summary>

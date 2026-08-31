@@ -1,5 +1,6 @@
 using MapAndMuster.Application.Common;
 using MapAndMuster.Application.Maps;
+using MapAndMuster.Application.Notifications;
 using MapAndMuster.Application.Play;
 using MapAndMuster.Application.Ports;
 using MapAndMuster.Domain.Play;
@@ -162,18 +163,22 @@ public sealed class GetCampaignLogHandler
 {
     private readonly ICampaignStore _campaigns;
     private readonly IUserAccountStore _accounts;
+    private readonly ICampaignLogReadStore _reads;
 
     /// <summary>
     /// Initializes a new handler.
     /// </summary>
     /// <param name="campaigns">The campaign store.</param>
     /// <param name="accounts">The user account store.</param>
-    public GetCampaignLogHandler(ICampaignStore campaigns, IUserAccountStore accounts)
+    /// <param name="reads">The log last-read store.</param>
+    public GetCampaignLogHandler(ICampaignStore campaigns, IUserAccountStore accounts, ICampaignLogReadStore reads)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(reads);
         _campaigns = campaigns;
         _accounts = accounts;
+        _reads = reads;
     }
 
     /// <summary>
@@ -202,6 +207,15 @@ public sealed class GetCampaignLogHandler
         var members = CampaignPlayMapper.ToChatMembers(participants);
         var inspect = CampaignChatContext.CanInspectPrivateChat(isAdministrator, userId, campaign.PlayState);
         var membership = CampaignMapper.MembershipFor(campaign, userId);
+        var lastReadUtc = await _reads.GetLastReadUtcAsync(campaign.Id, userId, cancellationToken).ConfigureAwait(false);
+        var chatMembers = members
+            .Select(static member => new CampaignChatMember(member.UserId, member.Username, member.DisplayName))
+            .ToArray();
+        var unread = CampaignChatRules.CountUnread(
+            CampaignPlayMapper.VisiblePlayLogEntries(campaign, userId, inspect),
+            userId,
+            lastReadUtc,
+            chatMembers);
         return OperationResults.Success(new CampaignLogDetail
         {
             Id = campaign.Id,
@@ -211,68 +225,142 @@ public sealed class GetCampaignLogHandler
             MentionableMembers = members,
             ChatChannels = CampaignChatContext.Channels(campaign, userId, members),
             Log = CampaignPlayMapper.ToLogEntries(campaign, names, userId, inspect),
+            LastReadUtc = lastReadUtc,
+            UnreadMentionCount = unread.MentionCount,
+            UnreadPrivateCount = unread.PrivateCount,
         });
     }
 }
 
 /// <summary>
-/// Deletes a campaign the caller manages.
+/// Records when a viewer marked the campaign log read. Does not change campaign revision.
 /// </summary>
-public sealed class DeleteCampaignHandler
+public sealed class MarkCampaignLogReadHandler
 {
     private readonly ICampaignStore _campaigns;
-    private readonly ICampaignMapStorage _maps;
+    private readonly ICampaignLogReadStore _reads;
+    private readonly IClock _clock;
 
     /// <summary>
     /// Initializes a new handler.
     /// </summary>
     /// <param name="campaigns">The campaign store.</param>
-    /// <param name="maps">The map storage.</param>
-    public DeleteCampaignHandler(ICampaignStore campaigns, ICampaignMapStorage maps)
+    /// <param name="reads">The log last-read store.</param>
+    /// <param name="clock">The authoritative clock.</param>
+    public MarkCampaignLogReadHandler(ICampaignStore campaigns, ICampaignLogReadStore reads, IClock clock)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
-        ArgumentNullException.ThrowIfNull(maps);
+        ArgumentNullException.ThrowIfNull(reads);
+        ArgumentNullException.ThrowIfNull(clock);
         _campaigns = campaigns;
-        _maps = maps;
+        _reads = reads;
+        _clock = clock;
     }
 
     /// <summary>
-    /// Deletes the campaign when the caller is a manager.
+    /// Marks the campaign log read when the caller may view it. Non-viewers receive not-found.
     /// </summary>
-    /// <param name="campaignId">The campaign identifier.</param>
-    /// <param name="userId">The authenticated user identifier.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A successful result when deleted.</returns>
-    public async Task<OperationResult> HandleAsync(Guid campaignId, Guid userId, CancellationToken cancellationToken)
+    public async Task<OperationResult> HandleAsync(
+        Guid campaignId,
+        Guid userId,
+        CancellationToken cancellationToken,
+        bool isAdministrator = false)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
-        var membership = campaign is null ? null : CampaignMapper.MembershipFor(campaign, userId);
-        if (campaign is null || membership is null)
+        if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
             return OperationResult.Failure(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
-        if (!membership.IsGameMaster)
-        {
-            return OperationResult.Failure(ErrorCodes.CampaignForbidden, "Only a campaign manager can delete this campaign.");
-        }
+        await _reads.MarkReadAsync(campaign.Id, userId, _clock.UtcNow, cancellationToken).ConfigureAwait(false);
+        return OperationResult.Success();
+    }
+}
 
-        var deleted = await _campaigns.DeleteAsync(campaignId, cancellationToken).ConfigureAwait(false);
-        if (!deleted)
+/// <summary>
+/// Closes a campaign while keeping its final stored state for logs and duplication.
+/// </summary>
+public sealed class EndCampaignHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly CampaignNotificationPublisher _notifications;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    public EndCampaignHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        CampaignNotificationPublisher notifications)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(notifications);
+        _campaigns = campaigns;
+        _clock = clock;
+        _notifications = notifications;
+    }
+
+    /// <summary>
+    /// Closes the campaign when the caller is a manager or administrator.
+    /// </summary>
+    public async Task<OperationResult> HandleAsync(EndCampaignCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var campaign = await _campaigns.FindByIdAsync(command.CampaignId, cancellationToken).ConfigureAwait(false);
+        if (campaign is null || !CampaignAccess.CanView(campaign, command.UserId, command.IsAdministrator))
         {
             return OperationResult.Failure(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
-        foreach (var key in CatalogFileBinder.CollectCampaignStorageKeys(campaign))
+        if (!CampaignAccess.CanStaffMembers(campaign, command.UserId, command.IsAdministrator))
         {
-            await CampaignAssetRetention.DeleteIfUnreferencedAsync(
-                _campaigns,
-                _maps.DeleteAsync,
-                key,
-                campaignId,
-                cancellationToken).ConfigureAwait(false);
+            return OperationResult.Failure(
+                ErrorCodes.CampaignForbidden,
+                "Only a campaign manager or administrator can end this campaign.");
         }
 
+        if (campaign.ClosedUtc is not null)
+        {
+            return OperationResult.Success();
+        }
+
+        if (command.ExpectedRevision is { } expected && campaign.Revision != expected)
+        {
+            return OperationResult.Failure(
+                ErrorCodes.ConcurrencyConflict,
+                "The campaign was updated by another request. Reload and try again.");
+        }
+
+        var utcNow = _clock.UtcNow;
+        var play = campaign.PlayState is null
+            ? null
+            : campaign.PlayState.AppendLog(new PlayLogEntry(
+                Guid.NewGuid(),
+                utcNow,
+                PlayLogKind.CampaignClosed,
+                null,
+                null,
+                command.UserId,
+                null,
+                null,
+                null,
+                null,
+                []));
+        var updated = CampaignMapClone.CloneWithClosed(campaign, utcNow, utcNow, play);
+        var outcome = await _campaigns
+            .UpdateAsync(updated, command.ExpectedRevision ?? campaign.Revision, cancellationToken)
+            .ConfigureAwait(false);
+        if (!outcome.IsSuccess || outcome.Campaign is null)
+        {
+            return OperationResult.Failure(
+                outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
+                outcome.Message ?? "The campaign could not be ended.");
+        }
+
+        await _notifications.PublishPlayAdvanceAsync(campaign, outcome.Campaign, cancellationToken)
+            .ConfigureAwait(false);
         return OperationResult.Success();
     }
 }
@@ -462,6 +550,7 @@ internal static class CampaignMapClone
             TimeZoneId = existing.TimeZoneId,
             StartsUtc = existing.StartsUtc,
             EndsUtc = existing.EndsUtc,
+            ClosedUtc = existing.ClosedUtc,
             RoundCount = existing.RoundCount,
             RoundLengthAmount = existing.RoundLengthAmount,
             RoundLengthUnit = existing.RoundLengthUnit,
@@ -517,6 +606,7 @@ internal static class CampaignMapClone
             TimeZoneId = existing.TimeZoneId,
             StartsUtc = existing.StartsUtc,
             EndsUtc = existing.EndsUtc,
+            ClosedUtc = existing.ClosedUtc,
             RoundCount = existing.RoundCount,
             RoundLengthAmount = existing.RoundLengthAmount,
             RoundLengthUnit = existing.RoundLengthUnit,
@@ -570,6 +660,7 @@ internal static class CampaignMapClone
             TimeZoneId = existing.TimeZoneId,
             StartsUtc = existing.StartsUtc,
             EndsUtc = existing.EndsUtc,
+            ClosedUtc = existing.ClosedUtc,
             RoundCount = existing.RoundCount,
             RoundLengthAmount = existing.RoundLengthAmount,
             RoundLengthUnit = existing.RoundLengthUnit,
@@ -624,6 +715,7 @@ internal static class CampaignMapClone
             TimeZoneId = existing.TimeZoneId,
             StartsUtc = existing.StartsUtc,
             EndsUtc = existing.EndsUtc,
+            ClosedUtc = existing.ClosedUtc,
             RoundCount = existing.RoundCount,
             RoundLengthAmount = existing.RoundLengthAmount,
             RoundLengthUnit = existing.RoundLengthUnit,
@@ -679,6 +771,7 @@ internal static class CampaignMapClone
             TimeZoneId = existing.TimeZoneId,
             StartsUtc = existing.StartsUtc,
             EndsUtc = existing.EndsUtc,
+            ClosedUtc = existing.ClosedUtc,
             RoundCount = existing.RoundCount,
             RoundLengthAmount = existing.RoundLengthAmount,
             RoundLengthUnit = existing.RoundLengthUnit,
@@ -699,6 +792,62 @@ internal static class CampaignMapClone
             BattleReportRules = existing.BattleReportRules,
             ArmyEscalations = existing.ArmyEscalations,
             PlayState = play,
+        };
+    }
+
+    public static StoredCampaign CloneWithClosed(
+        StoredCampaign existing,
+        DateTimeOffset closedUtc,
+        DateTimeOffset updatedUtc,
+        CampaignPlayState? playState = null)
+    {
+        ArgumentNullException.ThrowIfNull(existing);
+        return new StoredCampaign
+        {
+            Id = existing.Id,
+            Name = existing.Name,
+            Description = existing.Description,
+            PlayerSlotCount = existing.PlayerSlotCount,
+            IsPrivate = existing.IsPrivate,
+            IsPubliclyViewable = existing.IsPubliclyViewable,
+            JoinPasswordHash = existing.JoinPasswordHash,
+            CreatorIsParticipant = existing.CreatorIsParticipant,
+            City = existing.City,
+            Region = existing.Region,
+            Country = existing.Country,
+            MapStorageKey = existing.MapStorageKey,
+            Revision = existing.Revision,
+            CreatedUtc = existing.CreatedUtc,
+            UpdatedUtc = updatedUtc,
+            CreatedByUserId = existing.CreatedByUserId,
+            Memberships = existing.Memberships,
+            Factions = existing.Factions,
+            AllyGroups = existing.AllyGroups,
+            Links = existing.Links,
+            TimeZoneId = existing.TimeZoneId,
+            StartsUtc = existing.StartsUtc,
+            EndsUtc = existing.EndsUtc,
+            ClosedUtc = closedUtc,
+            RoundCount = existing.RoundCount,
+            RoundLengthAmount = existing.RoundLengthAmount,
+            RoundLengthUnit = existing.RoundLengthUnit,
+            Phases = existing.Phases,
+            MapGraph = existing.MapGraph,
+            TerrainTypes = existing.TerrainTypes,
+            StructureTypes = existing.StructureTypes,
+            ItemObjectiveTypes = existing.ItemObjectiveTypes,
+            PublicObjectiveTypes = existing.PublicObjectiveTypes,
+            SpecialRules = existing.SpecialRules,
+            Missions = existing.Missions,
+            ForceStatuses = existing.ForceStatuses,
+            PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
+            BattleScoring = existing.BattleScoring,
+            RankingObjectivePoints = existing.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
+            BattleReportRules = existing.BattleReportRules,
+            ArmyEscalations = existing.ArmyEscalations,
+            PlayState = playState ?? existing.PlayState,
         };
     }
 }

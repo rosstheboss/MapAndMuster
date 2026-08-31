@@ -19,15 +19,15 @@
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
-  margin-bottom: 1rem;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
 .campaign-list {
   margin: 0;
   padding-left: 1.2rem;
   display: grid;
-  gap: 0.85rem;
+  gap: var(--space-3);
 }
 
 .campaign-list p {

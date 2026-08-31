@@ -71,7 +71,7 @@
                       <button type="button" class="button" (click)="requestJoin(campaign)">Join</button>
                     }
                     @if (campaign.canLeave) {
-                      <button type="button" class="button-secondary" (click)="leave(campaign)">Leave</button>
+                      <app-confirm-button label="Leave" confirmLabel="Confirm leave" (confirmed)="leave(campaign)" />
                     }
                     @if (allowDuplicate()) {
                       <button type="button" class="button-secondary" (click)="duplicate(campaign)">
@@ -90,26 +90,24 @@
 }
 
 @if (joiningCampaign(); as joining) {
-  <div class="dialog-backdrop">
-    <div class="dialog panel stack" role="dialog" aria-labelledby="join-title" aria-describedby="join-desc">
-      <h2 id="join-title">Join {{ joining.name }}</h2>
-      <p id="join-desc">This campaign requires a password to join.</p>
-      <div class="field">
-        <label for="join-password">Join password</label>
-        <app-password-input>
-          <input
-            id="join-password"
-            type="password"
-            autocomplete="current-password"
-            [value]="joinPassword()"
-            (input)="onJoinPasswordInput($event)"
-          />
-        </app-password-input>
-      </div>
-      <div class="choice-row">
-        <button type="button" class="button" (click)="confirmJoin()">Join</button>
-        <button type="button" class="button-secondary" (click)="cancelJoin()">Cancel</button>
-      </div>
+  <app-dialog [open]="true" labelledBy="join-title" describedBy="join-desc" (cancelled)="cancelJoin()">
+    <h2 id="join-title">Join {{ joining.name }}</h2>
+    <p id="join-desc">This campaign requires a password to join.</p>
+    <div class="field">
+      <label for="join-password">Join password</label>
+      <app-password-input>
+        <input
+          id="join-password"
+          type="password"
+          autocomplete="current-password"
+          [value]="joinPassword()"
+          (input)="onJoinPasswordInput($event)"
+        />
+      </app-password-input>
     </div>
-  </div>
+    <div class="choice-row">
+      <button type="button" class="button" (click)="confirmJoin()">Join</button>
+      <button type="button" class="button-secondary" data-dialog-safe (click)="cancelJoin()">Cancel</button>
+    </div>
+  </app-dialog>
 }

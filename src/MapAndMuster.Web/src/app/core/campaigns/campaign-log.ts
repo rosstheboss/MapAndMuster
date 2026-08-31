@@ -26,6 +26,9 @@ export interface CampaignLogSync {
   canInspectPrivateChat?: boolean;
   mentionableMembers: CampaignLogMember[];
   chatChannels?: ChatChannel[];
+  lastReadUtc?: string | null;
+  unreadMentionCount?: number;
+  unreadPrivateCount?: number;
 }
 
 export function mergeCampaignLog<T extends CampaignLogSync>(current: T, incoming: CampaignLogSync): T {
@@ -37,6 +40,9 @@ export function mergeCampaignLog<T extends CampaignLogSync>(current: T, incoming
     canInspectPrivateChat: incoming.canInspectPrivateChat,
     mentionableMembers: incoming.mentionableMembers,
     chatChannels: incoming.chatChannels,
+    lastReadUtc: incoming.lastReadUtc,
+    unreadMentionCount: incoming.unreadMentionCount,
+    unreadPrivateCount: incoming.unreadPrivateCount,
   };
 }
 

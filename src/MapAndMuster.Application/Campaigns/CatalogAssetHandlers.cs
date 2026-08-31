@@ -414,16 +414,20 @@ public sealed class UploadFactionFlagHandler
         var newKey = await _assets
             .SaveAsync("flags", processed.Content, processed.FileExtension, "image/png", cancellationToken)
             .ConfigureAwait(false);
-        var previousKey = factions[index].FlagImageStorageKey;
+        var previous = factions[index];
+        var previousKey = previous.FlagImageStorageKey;
         factions[index] = new StoredFaction
         {
-            Id = factions[index].Id,
-            Name = factions[index].Name,
-            Color = factions[index].Color,
-            Subfactions = factions[index].Subfactions,
-            AllyGroupName = factions[index].AllyGroupName,
-            RequiresSubfaction = factions[index].RequiresSubfaction,
+            Id = previous.Id,
+            Name = previous.Name,
+            Color = previous.Color,
+            Subfactions = previous.Subfactions,
+            AllyGroupName = previous.AllyGroupName,
+            RequiresSubfaction = previous.RequiresSubfaction,
             FlagImageStorageKey = newKey,
+            TintFlagImage = previous.TintFlagImage,
+            SpecialRuleIds = previous.SpecialRuleIds,
+            SubfactionSpecialRules = previous.SubfactionSpecialRules,
         };
 
         var updated = CampaignMapClone.CloneWithFactions(access.Campaign, factions, _clock.UtcNow);

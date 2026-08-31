@@ -1,4 +1,4 @@
-<div class="app-shell" [attr.inert]="submitOverlay.busy() ? '' : null">
+<div class="app-shell" [attr.inert]="submitOverlay.busy() || dialogs.hasOpen() ? '' : null">
   <a class="skip-link" href="#main-content">Skip to content</a>
   <header class="app-banner">
     <a routerLink="/" class="app-brand">
@@ -13,30 +13,59 @@
     </a>
   </header>
   <nav class="app-menubar" aria-label="Main">
-    <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }" class="nav-link">
+    <a
+      routerLink="/"
+      routerLinkActive="is-active"
+      #homeNav="routerLinkActive"
+      [routerLinkActiveOptions]="{ exact: true }"
+      [attr.aria-current]="homeNav.isActive ? 'page' : null"
+      class="nav-link"
+    >
       <app-icon name="home" />
       Home
     </a>
     <a
       routerLink="/campaigns"
       routerLinkActive="is-active"
+      #campaignsNav="routerLinkActive"
       [routerLinkActiveOptions]="{ exact: true }"
+      [attr.aria-current]="campaignsNav.isActive ? 'page' : null"
       class="nav-link"
     >
       <app-icon name="map" />
       Your Campaigns
     </a>
-    <a routerLink="/campaigns/all" routerLinkActive="is-active" class="nav-link">
+    <a
+      routerLink="/campaigns/all"
+      routerLinkActive="is-active"
+      #allCampaignsNav="routerLinkActive"
+      [attr.aria-current]="allCampaignsNav.isActive ? 'page' : null"
+      class="nav-link"
+    >
       <app-icon name="shield" />
       All Campaigns
     </a>
-    <a routerLink="/profile" routerLinkActive="is-active" class="nav-link">
+    <a
+      routerLink="/profile"
+      routerLinkActive="is-active"
+      #profileNav="routerLinkActive"
+      [attr.aria-current]="profileNav.isActive ? 'page' : null"
+      class="nav-link"
+    >
       <app-icon name="helm" />
       Profile
     </a>
     @if (auth.currentUser(); as user) {
       @if (user.isAdministrator) {
-        <a routerLink="/admin/test-users" routerLinkActive="is-active" class="nav-link">Test users</a>
+        <a
+          routerLink="/admin/test-users"
+          routerLinkActive="is-active"
+          #testUsersNav="routerLinkActive"
+          [attr.aria-current]="testUsersNav.isActive ? 'page' : null"
+          class="nav-link"
+        >
+          Test users
+        </a>
       }
       <span class="nav-user">{{ user.username }}</span>
       <button type="button" class="nav-link nav-button" (click)="logout()" [disabled]="loggingOut()">
@@ -44,7 +73,13 @@
         Log out
       </button>
     } @else {
-      <a routerLink="/login" routerLinkActive="is-active" class="nav-link">
+      <a
+        routerLink="/login"
+        routerLinkActive="is-active"
+        #loginNav="routerLinkActive"
+        [attr.aria-current]="loginNav.isActive ? 'page' : null"
+        class="nav-link"
+      >
         <app-icon name="key" />
         Sign in
       </a>

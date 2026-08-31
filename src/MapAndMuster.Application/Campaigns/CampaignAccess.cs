@@ -48,7 +48,7 @@ public static class CampaignAccess
             return true;
         }
 
-        var status = CampaignMapper.ToSchedule(campaign).Evaluate(utcNow).Status;
+        var status = CampaignLifecycle.Progress(campaign, utcNow).Status;
         return status == CampaignStatus.Scheduled;
     }
 
@@ -72,7 +72,7 @@ public static class CampaignAccess
             return false;
         }
 
-        return CampaignMapper.ToSchedule(campaign).Evaluate(utcNow).Status == CampaignStatus.Scheduled;
+        return CampaignLifecycle.Progress(campaign, utcNow).Status == CampaignStatus.Scheduled;
     }
 
     /// <summary>

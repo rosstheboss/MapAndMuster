@@ -33,6 +33,7 @@
           type="file"
           tabindex="-1"
           accept=".mapandmuster-preset,.zip,application/zip"
+          aria-label="Upload campaign preset"
           (change)="uploadPreset($event)"
         />
       }
@@ -41,16 +42,26 @@
           type="button"
           class="button-secondary"
           (click)="discardUnsavedChanges()"
-          [disabled]="saving() || loading() || !hasUnsavedChanges()"
+          [disabled]="saving() || loading() || ending() || !hasUnsavedChanges()"
         >
           Clear Unsaved Changes
+        </button>
+      }
+      @if (canEndCampaign()) {
+        <button
+          type="button"
+          class="button-danger"
+          (click)="requestEnd()"
+          [disabled]="saving() || loading() || ending()"
+        >
+          End campaign
         </button>
       }
       <button
         class="button"
         type="submit"
         form="campaign-setup-form"
-        [disabled]="saving() || loading() || (isEdit() && !hasUnsavedChanges())"
+        [disabled]="saving() || loading() || ending() || (isEdit() && !hasUnsavedChanges())"
       >
         {{ isEdit() ? 'Save campaign' : 'Create campaign' }}
       </button>
@@ -636,7 +647,7 @@
             tied for first receives the points.
           </p>
           <div class="nested-card stack">
-            <h3>Ranking public objectives</h3>
+            <p class="subsection-heading">Ranking public objectives</p>
             <p class="muted">Set any of these to 0 to omit them from scoring and the campaign-page leaderboards.</p>
             <div class="nested-row">
               <div class="field">
@@ -686,7 +697,7 @@
             </p>
           </div>
           <div class="nested-card stack">
-            <h3>Running public objectives</h3>
+            <p class="subsection-heading">Running public objectives</p>
             <p class="muted">
               These add campaign points from live map state. Set any of these to 0 to ignore them. Points per territory
               also appears as a campaign-page top five; allied relic control does not.
@@ -719,7 +730,7 @@
             </p>
           </div>
           <div class="nested-card stack">
-            <h3>Battle campaign points</h3>
+            <p class="subsection-heading">Battle campaign points</p>
             <label class="choice-row">
               <input type="checkbox" formControlName="useDifferentialBattleScoring" />
               Award campaign points from the score difference
@@ -783,7 +794,7 @@
               </p>
             }
             <div class="nested-card stack">
-              <h3>Supply and battle reports</h3>
+              <p class="subsection-heading">Supply and battle reports</p>
               <div class="field">
                 <label for="splitForceSupplyPenaltyPercent">
                   Split-force supply penalty ({{ splitForcePenaltyIsPercent() ? 'percent' : 'raw value' }})
@@ -1327,7 +1338,10 @@
                       </label>
                     </div>
                     @if (faction.controls.flagSource.value === 'color') {
-                      <p class="muted">Default flag uses this faction’s color. Uploaded flags are not recolored.</p>
+                      <p class="muted">
+                        Default flag uses this faction’s color. Uploaded logos keep original colors unless tinting is
+                        enabled.
+                      </p>
                       <div
                         class="faction-flag-preview"
                         [style.background]="faction.controls.color.value"
@@ -1343,13 +1357,24 @@
                         />
                         <p class="muted">
                           Maximum size {{ flagImageMaxPx }}px × {{ flagImageMaxPx }}px. Larger images are shrunk to that
-                          size. Uploaded flags are not recolored.
+                          size. Uploaded logos keep original colors unless tinting is enabled.
                         </p>
+                        <label class="checkbox-row">
+                          <input type="checkbox" formControlName="tintFlagImage" />
+                          Tint logo with faction color
+                        </label>
                         @if (flagImageName(faction.controls.id.value); as fileName) {
                           <p class="muted">Selected: {{ fileName }}</p>
-                        } @else if (factionFlagUrl(faction.controls.id.value); as src) {
+                        } @else if (factionFlagUrl(faction.controls.id.value)) {
                           <p class="muted">A flag is already stored.</p>
-                          <img class="structure-logo-preview" [src]="src" alt="" />
+                        }
+                        @if (flagPreviewUrl(faction.controls.id.value); as src) {
+                          <app-faction-logo
+                            class="structure-logo-preview"
+                            [src]="src"
+                            [color]="faction.controls.color.value"
+                            [tint]="faction.controls.tintFlagImage.value"
+                          />
                         }
                       </div>
                     }
@@ -1419,7 +1444,7 @@
                     }
                   </div>
                   <div class="field" formArrayName="resultQuestions">
-                    <h4>Result questions</h4>
+                    <p class="subsection-heading">Result questions</p>
                     <p class="muted">
                       Extra questions asked when this mission is reported. True/false questions award the configured
                       points when the answer is yes. Battle-point questions take a reported amount.
@@ -2421,4 +2446,24 @@
       (confirmed)="confirmSavePreset($event)"
     />
   }
+
+  <app-dialog
+    [open]="confirmingEnd()"
+    dialogRole="alertdialog"
+    labelledBy="end-title"
+    describedBy="end-desc"
+    (cancelled)="cancelEnd()"
+  >
+    <h2 id="end-title">End this campaign?</h2>
+    <p id="end-desc">
+      The campaign will close immediately and stay in its final state. Members can still open it to review logs and
+      duplicate it. All players are notified.
+    </p>
+    <div class="actions">
+      <button type="button" class="button-danger" (click)="confirmEnd()" [disabled]="ending()">End campaign</button>
+      <button type="button" class="button-secondary" data-dialog-safe (click)="cancelEnd()" [disabled]="ending()">
+        Cancel
+      </button>
+    </div>
+  </app-dialog>
 </section>

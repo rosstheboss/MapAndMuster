@@ -223,6 +223,7 @@ public sealed class ApplyCampaignPresetHandler
             TimeZoneId = campaign.TimeZoneId,
             StartsUtc = campaign.StartsUtc,
             EndsUtc = campaign.EndsUtc,
+            ClosedUtc = campaign.ClosedUtc,
             RoundCount = campaign.RoundCount,
             RoundLengthAmount = campaign.RoundLengthAmount,
             RoundLengthUnit = campaign.RoundLengthUnit,

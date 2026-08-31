@@ -4,11 +4,12 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type { CampaignPresetListItem } from '../../core/campaigns/campaign.models';
 import { campaignPresetSaveNames } from '../../core/campaigns/campaign-presets';
+import { AppDialogComponent } from '../dialog/dialog.component';
 import { FilterableComboboxComponent } from '../filterable-combobox/filterable-combobox.component';
 
 @Component({
   selector: 'app-save-campaign-preset-dialog',
-  imports: [ReactiveFormsModule, FilterableComboboxComponent],
+  imports: [ReactiveFormsModule, FilterableComboboxComponent, AppDialogComponent],
   templateUrl: './save-campaign-preset-dialog.component.html',
   styleUrl: './save-campaign-preset-dialog.component.css',
 })

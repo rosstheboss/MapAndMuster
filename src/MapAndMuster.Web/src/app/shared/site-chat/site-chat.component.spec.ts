@@ -56,6 +56,30 @@ describe('SiteChatComponent', () => {
     );
   });
 
+  it('exposes mention suggestions as a combobox', () => {
+    const fixture = TestBed.createComponent(SiteChatComponent);
+    fixture.componentRef.setInput('canChat', true);
+    fixture.componentRef.setInput('members', [{ userId: '1', username: 'northplayer', displayName: 'northplayer' }]);
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onDraftInput(value: string): void;
+    };
+    page.onDraftInput('Hi @nor');
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const combobox = compiled.querySelector('.mention-combobox');
+    expect(combobox?.getAttribute('role')).toBe('combobox');
+    expect(combobox?.getAttribute('aria-labelledby')).toBe('site-chat-message-label');
+    expect(combobox?.getAttribute('aria-expanded')).toBe('true');
+    expect(combobox?.getAttribute('aria-controls')).toBe('site-chat-suggest');
+    expect(compiled.querySelector('textarea')?.getAttribute('aria-activedescendant')).toBe(
+      'site-chat-suggest-option-0',
+    );
+    expect(compiled.querySelector('#site-chat-suggest-option-0')?.getAttribute('role')).toBe('option');
+  });
+
   it('hides messages whose language filter is off', () => {
     const fixture = TestBed.createComponent(SiteChatComponent);
     fixture.componentRef.setInput('visibleLanguages', ['English']);

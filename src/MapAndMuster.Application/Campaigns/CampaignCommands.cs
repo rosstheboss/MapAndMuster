@@ -385,8 +385,14 @@ public sealed class AddCampaignMemberCommand
     /// <summary>Gets the campaign identifier.</summary>
     public required Guid CampaignId { get; init; }
 
-    /// <summary>Gets the account to add as a player.</summary>
+    /// <summary>Gets the account to add or promote.</summary>
     public required Guid TargetUserId { get; init; }
+
+    /// <summary>Gets whether the target should be a campaign manager.</summary>
+    public bool IsGameMaster { get; init; }
+
+    /// <summary>Gets whether the target occupies a player slot. Defaults to a player-only add.</summary>
+    public bool IsPlayer { get; init; } = true;
 
     /// <summary>Gets the last observed campaign revision.</summary>
     public required int ExpectedRevision { get; init; }
@@ -450,4 +456,22 @@ public sealed class DuplicateCampaignCommand
 
     /// <summary>Gets the source campaign identifier.</summary>
     public required Guid CampaignId { get; init; }
+}
+
+/// <summary>
+/// Command for a manager or administrator to close a campaign while keeping its final state.
+/// </summary>
+public sealed class EndCampaignCommand
+{
+    /// <summary>Gets the authenticated staff user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is a system administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed campaign revision, when the caller supplied one.</summary>
+    public int? ExpectedRevision { get; init; }
 }

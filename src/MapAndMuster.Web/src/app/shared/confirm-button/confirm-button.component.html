@@ -1,0 +1,9 @@
+<button
+  type="button"
+  [class]="armed() ? confirmAppearance() : appearance()"
+  [attr.aria-pressed]="armed()"
+  [disabled]="disabled()"
+  (click)="onClick()"
+>
+  {{ armed() ? confirmLabel() : label() }}
+</button>

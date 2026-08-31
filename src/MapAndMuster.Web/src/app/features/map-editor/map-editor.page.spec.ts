@@ -147,6 +147,9 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Show Connections');
     expect(compiled.textContent).not.toContain('Draw on the overlay, not the image');
     expect(compiled.textContent).toContain('Download map');
+    expect(compiled.querySelector('input[type="file"][accept=".svg,image/svg+xml"]')?.getAttribute('aria-label')).toBe(
+      'Upload SVG',
+    );
     expect(compiled.textContent).toContain('Edit campaign');
     expect(compiled.textContent).not.toContain('Save as Preset');
     expect(compiled.textContent).toContain('100%');
@@ -239,6 +242,7 @@ describe('MapEditorPage', () => {
     fixture.detectChanges();
 
     expect(compiled.querySelector('#savePresetName')).toBeTruthy();
+    expect(compiled.querySelector('[role="dialog"]')?.getAttribute('aria-modal')).toBe('true');
     http.verify();
   });
 
@@ -453,6 +457,9 @@ describe('MapEditorPage', () => {
     fixture.detectChanges();
     expect(page.confirmingDownload()).toBe(true);
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Save map before downloading?');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('[role="alertdialog"]')?.getAttribute('aria-modal'),
+    ).toBe('true');
     http.verify();
   });
 
@@ -829,6 +836,64 @@ describe('MapEditorPage', () => {
     page.colorClear();
     expect(page.colorMode()).toBe('manual');
     expect(page.graph().territories[0]?.overlayColor).toBeNull();
+    http.verify();
+  });
+
+  it('does not clear connections or colors until the second click', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        { ...namedSquare('t1', 1, 'Northmarch', 0.1), overlayColor: '#AABBCC' },
+        namedSquare('t2', 2, 'Southmarch', 0.4),
+      ],
+      adjacencies: [
+        {
+          id: 'ab',
+          territoryAId: 't1',
+          territoryBId: 't2',
+          origin: 'Manual',
+          marker: { x: 0.4, y: 0.2 },
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      graph: () => { adjacencies: { id: string }[]; territories: { overlayColor: string | null }[] };
+      colorMode: () => string;
+    };
+    const compiled = fixture.nativeElement as HTMLElement;
+    const clearConnections = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Clear Connections',
+    );
+    const removeColors = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Remove Colors',
+    );
+    expect(clearConnections).toBeTruthy();
+    expect(removeColors).toBeTruthy();
+
+    clearConnections!.click();
+    removeColors!.click();
+    fixture.detectChanges();
+    expect(page.graph().adjacencies).toHaveLength(1);
+    expect(page.graph().territories[0]?.overlayColor).toBe('#AABBCC');
+    expect(compiled.textContent).toContain('Confirm clear connections');
+    expect(compiled.textContent).toContain('Confirm remove colors');
+
+    [...compiled.querySelectorAll('button')]
+      .find((button) => button.textContent.trim() === 'Confirm clear connections')
+      ?.click();
+    [...compiled.querySelectorAll('button')]
+      .find((button) => button.textContent.trim() === 'Confirm remove colors')
+      ?.click();
+    fixture.detectChanges();
+    expect(page.graph().adjacencies).toHaveLength(0);
+    expect(page.graph().territories[0]?.overlayColor).toBeNull();
+    expect(page.colorMode()).toBe('manual');
     http.verify();
   });
 

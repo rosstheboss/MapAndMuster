@@ -130,7 +130,7 @@ export async function drawMapDecorations(
     if (owner && flagFit) {
       const flagUrl = owner.hasFlagImage ? (decorations.flagImageUrl?.(owner.id) ?? null) : null;
       const flagImage = flagUrl ? (images.get(flagUrl) ?? null) : null;
-      drawFactionFlag(ctx, width, height, flagFit, owner.color, flagImage);
+      drawFactionFlag(ctx, width, height, flagFit, owner.color, flagImage, owner.tintFlagImage === true);
     }
 
     if (structure && structureFit) {
@@ -243,14 +243,24 @@ function drawFactionFlag(
   fit: FittedSquare,
   color: string,
   image: CanvasImageSource | null,
+  tint = false,
 ): void {
   const box = markerBox(fit, width, height);
   if (image) {
     ctx.save();
     roundedRect(ctx, box.left, box.top, box.width, box.height, 2.4);
+    ctx.clip();
+    if (tint) {
+      drawContainedImage(ctx, image, box.left, box.top, box.width, box.height, MARKER_CONTENT_SCALE);
+      ctx.globalCompositeOperation = 'source-in';
+      ctx.fillStyle = color;
+      ctx.fillRect(box.left, box.top, box.width, box.height);
+      ctx.restore();
+      return;
+    }
+
     ctx.fillStyle = FLAG_IMAGE_FILL;
     ctx.fill();
-    ctx.clip();
     drawContainedImage(ctx, image, box.left, box.top, box.width, box.height, MARKER_CONTENT_SCALE);
     ctx.restore();
     return;

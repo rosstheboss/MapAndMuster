@@ -47,6 +47,11 @@ public static class CampaignEndpoints
             .Produces<CampaignLogResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/{campaignId:guid}/log/read", MarkLogReadAsync)
+            .WithName("MarkCampaignLogRead")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
         group.MapPost("/{campaignId:guid}/chat", PostChatAsync)
             .WithName("PostCampaignChat")
             .Produces<CampaignDetailResponse>()
@@ -157,8 +162,15 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
 
-        group.MapDelete("/{campaignId:guid}", DeleteAsync)
-            .WithName("DeleteCampaign")
+        group.MapPost("/{campaignId:guid}/end", EndAsync)
+            .WithName("EndCampaign")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapDelete("/{campaignId:guid}", EndWithoutRevisionAsync)
+            .WithName("EndCampaignLegacy")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
@@ -605,6 +617,27 @@ public static class CampaignEndpoints
         return Results.Ok(CampaignResponses.FromLog(result.Value));
     }
 
+    private static async Task<IResult> MarkLogReadAsync(
+        Guid campaignId,
+        ClaimsPrincipal principal,
+        MarkCampaignLogReadHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator())
+            .ConfigureAwait(false);
+        return result.IsSuccess ? Results.NoContent() : IdentityHttp.Problem(result);
+    }
+
     private static async Task<IResult> PostChatAsync(
         Guid campaignId,
         PostCampaignChatRequest request,
@@ -799,6 +832,8 @@ public static class CampaignEndpoints
                     IsAdministrator = principal.IsAdministrator(),
                     CampaignId = campaignId,
                     TargetUserId = request.UserId,
+                    IsGameMaster = request.IsGameMaster,
+                    IsPlayer = request.IsPlayer,
                     ExpectedRevision = request.Revision,
                 },
                 cancellationToken)
@@ -942,10 +977,31 @@ public static class CampaignEndpoints
         return Results.Ok(CampaignResponses.FromDetail(result.Value));
     }
 
-    private static async Task<IResult> DeleteAsync(
+    private static Task<IResult> EndWithoutRevisionAsync(
         Guid campaignId,
         ClaimsPrincipal principal,
-        DeleteCampaignHandler handler,
+        EndCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return EndCoreAsync(campaignId, null, principal, handler, cancellationToken);
+    }
+
+    private static Task<IResult> EndAsync(
+        Guid campaignId,
+        [FromBody] EndCampaignRequest request,
+        ClaimsPrincipal principal,
+        EndCampaignHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return EndCoreAsync(campaignId, request.Revision, principal, handler, cancellationToken);
+    }
+
+    private static async Task<IResult> EndCoreAsync(
+        Guid campaignId,
+        int? expectedRevision,
+        ClaimsPrincipal principal,
+        EndCampaignHandler handler,
         CancellationToken cancellationToken)
     {
         var userId = principal.GetUserId();
@@ -954,7 +1010,16 @@ public static class CampaignEndpoints
             return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
         }
 
-        var result = await handler.HandleAsync(campaignId, userId.Value, cancellationToken).ConfigureAwait(false);
+        var result = await handler.HandleAsync(
+                new EndCampaignCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = expectedRevision,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
         if (!result.IsSuccess)
         {
             return IdentityHttp.Problem(result);

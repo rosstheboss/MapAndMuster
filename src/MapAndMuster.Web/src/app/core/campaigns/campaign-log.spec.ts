@@ -62,10 +62,15 @@ describe('campaign log formatting', () => {
       ],
       canChat: true,
       mentionableMembers: [{ userId: '1', username: 'northplayer', displayName: 'northplayer' }],
+      lastReadUtc: null,
+      unreadMentionCount: 1,
+      unreadPrivateCount: 0,
     });
     expect(next.name).toBe('Border War');
     expect(next.revision).toBe(2);
     expect(next.log[0]?.summary).toBe('Ready to play');
+    expect(next.unreadMentionCount).toBe(1);
+    expect(next.lastReadUtc).toBeNull();
   });
 
   it('grows the composer from one to five lines and then scrolls', () => {

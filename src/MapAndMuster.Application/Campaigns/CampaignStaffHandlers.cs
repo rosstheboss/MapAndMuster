@@ -41,7 +41,7 @@ public sealed class SearchCampaignUsersHandler
         {
             return OperationResults.Failure<IReadOnlyList<MentionableAccount>>(
                 ErrorCodes.CampaignForbidden,
-                "Only a campaign manager or administrator can search for players to add.");
+                "Only a campaign manager or administrator can search for users to add.");
         }
 
         var query = command.Query?.Trim() ?? string.Empty;
@@ -58,7 +58,7 @@ public sealed class SearchCampaignUsersHandler
 }
 
 /// <summary>
-/// Adds a player to a public or private campaign without requiring the join password.
+/// Adds a player or campaign manager, or promotes an existing player to manager.
 /// </summary>
 public sealed class AddCampaignMemberHandler
 {
@@ -77,7 +77,7 @@ public sealed class AddCampaignMemberHandler
         _clock = clock;
     }
 
-    /// <summary>Adds the target as a player when a slot remains and the campaign is not completed.</summary>
+    /// <summary>Adds or promotes the target when a manager or administrator requests it.</summary>
     public async Task<OperationResult> HandleAsync(AddCampaignMemberCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -92,7 +92,7 @@ public sealed class AddCampaignMemberHandler
         {
             return OperationResult.Failure(
                 ErrorCodes.CampaignForbidden,
-                "Only a campaign manager or administrator can add players.");
+                "Only a campaign manager or administrator can add members.");
         }
 
         if (campaign.Revision != command.ExpectedRevision)
@@ -102,24 +102,49 @@ public sealed class AddCampaignMemberHandler
                 "The campaign was updated by another request. Reload and try again.");
         }
 
+        if (!command.IsGameMaster && !command.IsPlayer)
+        {
+            return OperationResult.Failure(
+                ErrorCodes.ValidationFailed,
+                "Choose whether they join as a player, a campaign manager, or both.");
+        }
+
         var target = await _accounts.FindByIdAsync(command.TargetUserId, cancellationToken).ConfigureAwait(false);
         if (target is null)
         {
             return OperationResult.Failure(ErrorCodes.ProfileNotFound, "The user was not found.");
         }
 
-        if (CampaignMapper.MembershipFor(campaign, command.TargetUserId) is not null)
+        var existingMember = CampaignMapper.MembershipFor(campaign, command.TargetUserId);
+        if (existingMember is not null)
         {
-            return OperationResult.Failure(ErrorCodes.CampaignAlreadyMember, "That user is already a member of this campaign.");
+            if (!command.IsGameMaster || existingMember.IsGameMaster)
+            {
+                return OperationResult.Failure(ErrorCodes.CampaignAlreadyMember, "That user is already a member of this campaign.");
+            }
+
+            var promoted = campaign.Memberships
+                .Select(member => member.UserId == command.TargetUserId
+                    ? new StoredCampaignMembership
+                    {
+                        UserId = member.UserId,
+                        IsGameMaster = true,
+                        IsPlayer = member.IsPlayer,
+                        FactionId = member.FactionId,
+                        Subfaction = member.Subfaction,
+                    }
+                    : member)
+                .ToArray();
+            return await SaveMembershipsAsync(campaign, promoted, utcNow, cancellationToken).ConfigureAwait(false);
         }
 
-        var progress = CampaignMapper.ToSchedule(campaign).Evaluate(utcNow);
-        if (progress.Status == CampaignStatus.Completed)
+        var progress = CampaignLifecycle.Progress(campaign, utcNow);
+        if (command.IsPlayer && progress.Status == CampaignStatus.Completed)
         {
             return OperationResult.Failure(ErrorCodes.CampaignJoinClosed, "Players cannot be added after the campaign ends.");
         }
 
-        if (CampaignMapper.OccupiedPlayerSlots(campaign) >= campaign.PlayerSlotCount)
+        if (command.IsPlayer && CampaignMapper.OccupiedPlayerSlots(campaign) >= campaign.PlayerSlotCount)
         {
             return OperationResult.Failure(ErrorCodes.CampaignJoinFull, "This campaign has no remaining player slots.");
         }
@@ -128,17 +153,26 @@ public sealed class AddCampaignMemberHandler
             .Append(new StoredCampaignMembership
             {
                 UserId = command.TargetUserId,
-                IsGameMaster = false,
-                IsPlayer = true,
+                IsGameMaster = command.IsGameMaster,
+                IsPlayer = command.IsPlayer,
             })
             .ToArray();
+        return await SaveMembershipsAsync(campaign, memberships, utcNow, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<OperationResult> SaveMembershipsAsync(
+        StoredCampaign campaign,
+        IReadOnlyList<StoredCampaignMembership> memberships,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken)
+    {
         var updated = CampaignMapClone.CloneWithMemberships(campaign, memberships, utcNow);
         var outcome = await _campaigns.UpdateAsync(updated, campaign.Revision, cancellationToken).ConfigureAwait(false);
         if (!outcome.IsSuccess)
         {
             return OperationResult.Failure(
                 outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
-                outcome.Message ?? "The player could not be added.");
+                outcome.Message ?? "The member could not be added.");
         }
 
         return OperationResult.Success();

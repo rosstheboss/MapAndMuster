@@ -74,6 +74,8 @@ import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
 import { normalizeStructureCondition, territoryLabel } from '../../core/maps/map-graph.models';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 import { CampaignLogComponent } from '../../shared/campaign-log/campaign-log.component';
+import { ConfirmButtonComponent } from '../../shared/confirm-button/confirm-button.component';
+import { AppDialogComponent } from '../../shared/dialog/dialog.component';
 import {
   CampaignMapViewComponent,
   type MapForceMarker,
@@ -81,6 +83,7 @@ import {
   type MapItemMarker,
 } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
+import { FactionLogoComponent } from '../../shared/faction-logo/faction-logo.component';
 import { PhaseCountdownComponent } from '../../shared/phase-countdown/phase-countdown.component';
 
 const CAMPAIGN_SECTIONS = [
@@ -101,7 +104,7 @@ const CAMPAIGN_SECTIONS = [
   'allies',
   'links',
   'standings',
-  'delete',
+  'end',
 ] as const;
 
 type CampaignSection = (typeof CAMPAIGN_SECTIONS)[number];
@@ -151,7 +154,10 @@ function openSections(): Record<CampaignSection, boolean> {
     InstantDatePipe,
     CampaignLogComponent,
     CampaignMapViewComponent,
+    ConfirmButtonComponent,
+    AppDialogComponent,
     MapSymbolComponent,
+    FactionLogoComponent,
     PhaseCountdownComponent,
   ],
   templateUrl: './campaign-detail.page.html',
@@ -180,8 +186,8 @@ export class CampaignDetailPage {
   protected readonly graph = signal<MapGraph>({ territories: [], adjacencies: [] });
   protected readonly hoveredTerritoryId = signal<string | null>(null);
   protected readonly selectedIds = signal<string[]>([]);
-  protected readonly confirmingDelete = signal(false);
-  protected readonly deleting = signal(false);
+  protected readonly confirmingEnd = signal(false);
+  protected readonly ending = signal(false);
   protected readonly downloading = signal(false);
   protected readonly downloadingLog = signal(false);
   protected readonly chatBusy = signal(false);
@@ -204,7 +210,6 @@ export class CampaignDetailPage {
   protected readonly memberQuery = signal('');
   protected readonly memberHits = signal<UserSearchHit[]>([]);
   protected readonly staffFactionId = signal<Partial<Record<string, string>>>({});
-  protected readonly kickUserId = signal<string | null>(null);
   protected readonly roundCount = signal(3);
   protected readonly extensionAmount = signal(1);
   protected readonly extensionUnit = signal('Hours');
@@ -508,7 +513,10 @@ export class CampaignDetailPage {
     }
   }
 
-  protected async addMember(hit: UserSearchHit): Promise<void> {
+  protected async addMember(
+    hit: UserSearchHit,
+    options: { isGameMaster?: boolean; isPlayer?: boolean } = {},
+  ): Promise<void> {
     const campaign = this.campaign();
     if (!campaign) {
       return;
@@ -517,13 +525,35 @@ export class CampaignDetailPage {
     this.error.set(null);
     this.successMessage.set(null);
     try {
-      await this.overlay.run(() => this.campaignsApi.addMember(campaign.id, hit.userId, campaign.revision));
+      await this.overlay.run(() => this.campaignsApi.addMember(campaign.id, hit.userId, campaign.revision, options));
       this.memberQuery.set('');
       this.memberHits.set([]);
       await this.load(campaign.id);
       this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
     } catch (error: unknown) {
-      this.error.set(readApiError(error, 'Unable to add that player.'));
+      this.error.set(readApiError(error, 'Unable to add that member.'));
+    }
+  }
+
+  protected async promoteMember(participant: CampaignParticipant): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return;
+    }
+
+    this.error.set(null);
+    this.successMessage.set(null);
+    try {
+      await this.overlay.run(() =>
+        this.campaignsApi.addMember(campaign.id, participant.userId, campaign.revision, {
+          isGameMaster: true,
+          isPlayer: true,
+        }),
+      );
+      await this.load(campaign.id);
+      this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
+    } catch (error: unknown) {
+      this.error.set(readApiError(error, 'Unable to make that player a campaign manager.'));
     }
   }
 
@@ -533,21 +563,14 @@ export class CampaignDetailPage {
       return;
     }
 
-    if (this.kickUserId() !== participant.userId) {
-      this.kickUserId.set(participant.userId);
-      return;
-    }
-
     this.error.set(null);
     this.successMessage.set(null);
     try {
       await this.overlay.run(() => this.campaignsApi.kickMember(campaign.id, participant.userId, campaign.revision));
-      this.kickUserId.set(null);
       await this.load(campaign.id);
       this.successMessage.set(FORM_SAVE_SUCCESS_MESSAGE);
     } catch (error: unknown) {
       this.error.set(readApiError(error, 'Unable to remove that player.'));
-      this.kickUserId.set(null);
     }
   }
 
@@ -626,6 +649,10 @@ export class CampaignDetailPage {
     }
 
     return sort.direction === 'asc' ? 'ascending' : 'descending';
+  }
+
+  protected isStandingViewer(userId: string): boolean {
+    return this.auth.currentUser()?.id === userId;
   }
 
   protected onChatChannelChange(key: string): void {
@@ -1774,6 +1801,19 @@ export class CampaignDetailPage {
     );
   }
 
+  protected surrenderConfirmLabel(battle: PlayBattle): string {
+    const territory = this.territoryName(battle.territoryId);
+    const opponentForce = this.play()?.forces.find(
+      (force) => battle.participantForceIds.includes(force.id) && !force.isMine,
+    );
+    const opponent = this.factionName(opponentForce?.factionId);
+    if (opponentForce && opponent !== 'Unknown faction') {
+      return `Surrender ${territory} to ${opponent}? This cannot be undone.`;
+    }
+
+    return `Surrender ${territory}? This cannot be undone.`;
+  }
+
   protected async submitSurrender(battle: PlayBattle): Promise<void> {
     const play = this.play();
     const targetTerritoryId = this.retreatTarget()[battle.id];
@@ -1979,29 +2019,31 @@ export class CampaignDetailPage {
     void this.refreshBoard();
   }
 
-  protected requestDelete(): void {
-    this.confirmingDelete.set(true);
+  protected requestEnd(): void {
+    this.confirmingEnd.set(true);
   }
 
-  protected cancelDelete(): void {
-    this.confirmingDelete.set(false);
+  protected cancelEnd(): void {
+    this.confirmingEnd.set(false);
   }
 
-  protected async confirmDelete(): Promise<void> {
+  protected async confirmEnd(): Promise<void> {
     const campaign = this.campaign();
     if (!campaign) {
       return;
     }
 
-    this.deleting.set(true);
+    this.ending.set(true);
     this.error.set(null);
     try {
-      await this.campaignsApi.delete(campaign.id);
+      await this.campaignsApi.end(campaign.id, campaign.revision);
+      this.confirmingEnd.set(false);
+      this.ending.set(false);
       await this.router.navigateByUrl('/campaigns');
     } catch (error: unknown) {
-      this.error.set(readApiError(error, 'Unable to delete this campaign.'));
-      this.confirmingDelete.set(false);
-      this.deleting.set(false);
+      this.error.set(readApiError(error, 'Unable to end this campaign.'));
+      this.confirmingEnd.set(false);
+      this.ending.set(false);
     }
   }
 

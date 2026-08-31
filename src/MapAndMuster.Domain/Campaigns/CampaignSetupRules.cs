@@ -687,6 +687,7 @@ public static class CampaignSetupRules
                 canonicalGroup,
                 faction.RequiresSubfaction,
                 faction.ClearFlagImage,
+                faction.TintFlagImage,
                 ParseAssignedSpecialRuleIds(
                     faction.SpecialRuleIds,
                     knownSpecialRuleIds,

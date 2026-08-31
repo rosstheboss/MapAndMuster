@@ -3,7 +3,7 @@
 }
 
 .discord-invite {
-  margin: 0 0 1rem;
+  margin: 0;
 }
 
 .discord-invite a {
@@ -30,7 +30,7 @@
   gap: 0.15rem;
   width: 100%;
   text-align: left;
-  padding: 0.75rem 0.9rem;
+  padding: var(--space-3) 0.9rem;
   border: 1px solid var(--color-border);
   border-radius: 0.6rem;
   background: var(--color-nested);
@@ -50,11 +50,11 @@
 }
 
 .news-body :where(h1, h2, h3) {
-  margin: 0 0 0.4rem;
+  margin: 0 0 var(--space-2);
 }
 
 .news-body p,
 .news-body ul,
 .news-body ol {
-  margin: 0 0 0.65rem;
+  margin: 0 0 var(--space-3);
 }

@@ -227,16 +227,18 @@
             <div
               class="faction-flag"
               [class.has-image]="!!flag.image"
+              [class.is-tinted]="!!flag.image && flag.tint"
               [style.left.%]="flag.x * 100"
               [style.top.%]="flag.y * 100"
               [style.width.px]="markerSize(flag).width"
               [style.height.px]="markerSize(flag).height"
               [style.margin-left.px]="-markerSize(flag).width / 2"
               [style.margin-top.px]="-markerSize(flag).height / 2"
-              [style.background]="flag.image ? 'transparent' : flag.color"
+              [style.background]="flagBackground(flag)"
+              [style.--logo-mask]="flag.image && flag.tint ? maskUrl(flag.image) : null"
             >
-              @if (flag.image; as src) {
-                <img [src]="src" alt="" />
+              @if (flag.image && !flag.tint) {
+                <img [src]="flag.image" alt="" />
               }
             </div>
           }

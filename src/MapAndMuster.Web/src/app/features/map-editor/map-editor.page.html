@@ -13,7 +13,14 @@
         }
         @if (canManage()) {
           <button type="button" class="button-secondary" (click)="requestUploadSvg()">Upload SVG</button>
-          <input #svgFile type="file" accept=".svg,image/svg+xml" hidden (change)="onSvgFile($event)" />
+          <input
+            #svgFile
+            type="file"
+            accept=".svg,image/svg+xml"
+            hidden
+            aria-label="Upload SVG"
+            (change)="onSvgFile($event)"
+          />
         }
         @if (canManage() && campaign.status === 'Scheduled') {
           <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
@@ -37,31 +44,36 @@
     <p>Loading map…</p>
   } @else {
     @if (confirmingDownload()) {
-      <div class="dialog-backdrop">
-        <div
-          class="dialog panel stack"
-          role="alertdialog"
-          aria-labelledby="download-title"
-          aria-describedby="download-desc"
-        >
-          <h2 id="download-title">Save map before downloading?</h2>
-          <p id="download-desc">
-            This map has unsaved edits. Save to download the current overlay, or download the last saved
-            {{ pendingDownload() === 'svg' ? 'SVG data' : 'map' }}.
-          </p>
-          <div class="actions">
-            <button type="button" class="button" (click)="saveAndDownload()" [disabled]="saving() || downloading()">
-              Save and download
-            </button>
-            <button type="button" class="button-secondary" (click)="downloadLastSaved()" [disabled]="downloading()">
-              Download last saved
-            </button>
-            <button type="button" class="button-secondary" (click)="cancelDownloadPrompt()" [disabled]="downloading()">
-              Cancel
-            </button>
-          </div>
+      <app-dialog
+        [open]="true"
+        dialogRole="alertdialog"
+        labelledBy="download-title"
+        describedBy="download-desc"
+        (cancelled)="cancelDownloadPrompt()"
+      >
+        <h2 id="download-title">Save map before downloading?</h2>
+        <p id="download-desc">
+          This map has unsaved edits. Save to download the current overlay, or download the last saved
+          {{ pendingDownload() === 'svg' ? 'SVG data' : 'map' }}.
+        </p>
+        <div class="actions">
+          <button type="button" class="button" (click)="saveAndDownload()" [disabled]="saving() || downloading()">
+            Save and download
+          </button>
+          <button type="button" class="button-secondary" (click)="downloadLastSaved()" [disabled]="downloading()">
+            Download last saved
+          </button>
+          <button
+            type="button"
+            class="button-secondary"
+            data-dialog-safe
+            (click)="cancelDownloadPrompt()"
+            [disabled]="downloading()"
+          >
+            Cancel
+          </button>
         </div>
-      </div>
+      </app-dialog>
     }
     @if (errorMessages().length > 0 || successMessage()) {
       <div
@@ -122,7 +134,11 @@
             <button type="button" class="button-secondary" (click)="generateConnections()">
               Auto Generate Connections
             </button>
-            <button type="button" class="button-secondary" (click)="clearConnections()">Clear Connections</button>
+            <app-confirm-button
+              label="Clear Connections"
+              confirmLabel="Confirm clear connections"
+              (confirmed)="clearConnections()"
+            />
           </div>
           <div class="tool-row">
             <div class="tool-toggle-group" role="radiogroup" aria-label="Overlay color mode">
@@ -140,7 +156,11 @@
               }
             </div>
             <div class="tool-group">
-              <button type="button" class="button-secondary" (click)="colorClear()">Remove Colors</button>
+              <app-confirm-button
+                label="Remove Colors"
+                confirmLabel="Confirm remove colors"
+                (confirmed)="colorClear()"
+              />
             </div>
           </div>
           <div class="tool-group">

@@ -39,6 +39,7 @@ test('signed-in players can open their campaigns and start setup', async ({ page
 
   await page.goto('/campaigns');
   await expect(page.getByRole('heading', { level: 1, name: 'Your campaigns' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Your Campaigns' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('link', { name: 'Create campaign' })).toBeVisible();
   await page.getByRole('link', { name: 'Create campaign' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Create campaign' })).toBeVisible();
@@ -220,8 +221,11 @@ test('players can duplicate a campaign from Your campaigns', async ({ page }) =>
           country: null,
           currentRound: null,
           currentPhaseLabel: null,
+          currentPhaseKind: null,
           currentPhaseEndsUtc: null,
           canPlay: false,
+          canChooseFaction: true,
+          isCommitted: false,
           status: 'Scheduled',
           startsUtc: '2099-01-05T12:00:00+00:00',
           endsUtc: '2099-03-02T12:00:00+00:00',
@@ -526,7 +530,7 @@ test('players can read and chat in the campaign log', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Expand All' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Commit Actions' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Play' })).toHaveCount(0);
-  await page.getByLabel('Message').fill('Hey, everybody! This is a message to all of you.');
+  await page.getByRole('textbox', { name: 'Message' }).fill('Hey, everybody! This is a message to all of you.');
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.getByText('ada:')).toBeVisible();
   await expect(page.getByText('Hey, everybody! This is a message to all of you.')).toBeVisible();

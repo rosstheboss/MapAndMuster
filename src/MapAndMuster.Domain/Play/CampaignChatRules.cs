@@ -36,6 +36,13 @@ public sealed record CampaignChatFaction(Guid Id, string Name, Guid? AllyGroupId
 public sealed record CampaignChatAllyGroup(Guid Id, string Name);
 
 /// <summary>
+/// Unread mention and private-message counts for a viewer of already-visible chat.
+/// </summary>
+/// <param name="MentionCount">Public chat messages that mention the viewer after last-read.</param>
+/// <param name="PrivateCount">Private chat messages the viewer can see after last-read, excluding their own.</param>
+public readonly record struct CampaignChatUnreadCounts(int MentionCount, int PrivateCount);
+
+/// <summary>
 /// Destination for a chat message.
 /// </summary>
 /// <param name="Kind">The audience kind.</param>
@@ -304,6 +311,48 @@ public static class CampaignChatRules
         }
 
         return mentioned;
+    }
+
+    /// <summary>
+    /// Counts unread mentions and private messages in entries the viewer is already allowed to see.
+    /// Own messages are omitted. A private message is counted as private even when it also mentions
+    /// the viewer. Messages at or before <paramref name="lastReadUtc"/> are treated as read.
+    /// </summary>
+    public static CampaignChatUnreadCounts CountUnread(
+        IReadOnlyList<PlayLogEntry> visibleEntries,
+        Guid viewerUserId,
+        DateTimeOffset? lastReadUtc,
+        IReadOnlyList<CampaignChatMember> members)
+    {
+        ArgumentNullException.ThrowIfNull(visibleEntries);
+        ArgumentNullException.ThrowIfNull(members);
+        var mentionCount = 0;
+        var privateCount = 0;
+        foreach (var entry in visibleEntries)
+        {
+            if (entry.Kind != PlayLogKind.PlayerChat || entry.ActorUserId == viewerUserId)
+            {
+                continue;
+            }
+
+            if (lastReadUtc is { } read && entry.OccurredUtc <= read)
+            {
+                continue;
+            }
+
+            if (entry.IsPrivateChat)
+            {
+                privateCount++;
+                continue;
+            }
+
+            if (ResolveMentions(entry.Message ?? string.Empty, members).Any(member => member.UserId == viewerUserId))
+            {
+                mentionCount++;
+            }
+        }
+
+        return new CampaignChatUnreadCounts(mentionCount, privateCount);
     }
 
     /// <summary>

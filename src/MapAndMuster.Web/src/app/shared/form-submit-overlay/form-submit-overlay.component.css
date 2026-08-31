@@ -8,7 +8,7 @@
   z-index: 100;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding: var(--space-4);
   background: rgb(28 25 23 / 45%);
 }
 
@@ -22,6 +22,6 @@
 }
 
 .form-submit-dialog:focus {
-  outline: 3px solid #f59e0b;
+  outline: 3px solid var(--color-glow);
   outline-offset: 2px;
 }

@@ -14,9 +14,9 @@
   top: 0;
   z-index: 20;
   display: grid;
-  gap: 0.75rem;
-  padding-bottom: 0.75rem;
-  margin-bottom: 0.75rem;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-border);
 }
@@ -76,7 +76,7 @@
 }
 
 .panel h3 {
-  margin: 0.35rem 0 0;
+  margin: 0;
   font-size: 1.05rem;
 }
 
@@ -165,7 +165,7 @@
 
 .map-view {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-4);
   width: 100%;
 }
 
@@ -277,6 +277,10 @@
   white-space: nowrap;
 }
 
+.standings-table tbody th {
+  font-weight: 600;
+}
+
 .standings-table th button {
   border: 0;
   background: transparent;
@@ -297,9 +301,24 @@
   text-align: right;
 }
 
+.standings-table .standings-total,
+.standings-table .standings-total button {
+  font-weight: 800;
+}
+
+.standings-table tr.is-viewer > :first-child {
+  box-shadow: inset 4px 0 0 var(--color-accent);
+}
+
+.standing-faction {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .leaderboards {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .leaderboard ol {
@@ -323,7 +342,7 @@
 .nested-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .standing-item {
@@ -345,6 +364,17 @@
   height: 1.35rem;
   object-fit: contain;
   vertical-align: middle;
+}
+
+app-faction-logo.standing-faction-logo {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+app-faction-logo.faction-list-logo {
+  width: 1.35rem;
+  height: 1.35rem;
+  margin-left: 0.4rem;
 }
 
 .award-row {
@@ -369,12 +399,12 @@
 fieldset {
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
-  padding: 0.85rem;
+  padding: var(--space-3);
 }
 
 .battle-supply {
   display: grid;
-  gap: 0.85rem;
+  gap: var(--space-3);
 }
 
 .battle-supply li {
@@ -397,20 +427,7 @@ fieldset {
   font: inherit;
 }
 
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgb(28 25 23 / 45%);
-}
-
-.dialog {
-  width: min(100%, 28rem);
-}
-
-.dialog h2 {
-  margin: 0;
+.surrender-group {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }

@@ -66,11 +66,21 @@ export class CampaignService {
     );
   }
 
-  async addMember(campaignId: string, userId: string, revision: number): Promise<CampaignDetail> {
+  async addMember(
+    campaignId: string,
+    userId: string,
+    revision: number,
+    options?: { isGameMaster?: boolean; isPlayer?: boolean },
+  ): Promise<CampaignDetail> {
     return firstValueFrom(
       this.http.post<CampaignDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/members`,
-        { userId, revision },
+        {
+          userId,
+          revision,
+          isGameMaster: options?.isGameMaster ?? false,
+          isPlayer: options?.isPlayer ?? true,
+        },
         { withCredentials: true },
       ),
     );
@@ -97,6 +107,12 @@ export class CampaignService {
       this.http.get<CampaignLogSync>(`/api/campaigns/${encodeURIComponent(campaignId)}/log`, {
         withCredentials: true,
       }),
+    );
+  }
+
+  async markLogRead(campaignId: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post(`/api/campaigns/${encodeURIComponent(campaignId)}/log/read`, {}, { withCredentials: true }),
     );
   }
 
@@ -132,9 +148,13 @@ export class CampaignService {
     );
   }
 
-  async delete(campaignId: string): Promise<void> {
+  async end(campaignId: string, revision: number): Promise<void> {
     await firstValueFrom(
-      this.http.delete(`/api/campaigns/${encodeURIComponent(campaignId)}`, { withCredentials: true }),
+      this.http.post(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/end`,
+        { revision },
+        { withCredentials: true },
+      ),
     );
   }
 

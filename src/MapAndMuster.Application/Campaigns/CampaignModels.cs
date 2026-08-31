@@ -68,11 +68,20 @@ public sealed class CampaignListItem
     /// <summary>Gets the display label for the current phase when the campaign is in progress.</summary>
     public string? CurrentPhaseLabel { get; init; }
 
+    /// <summary>Gets the current phase kind when the campaign is in progress.</summary>
+    public string? CurrentPhaseKind { get; init; }
+
     /// <summary>Gets when the current phase closes, in UTC.</summary>
     public DateTimeOffset? CurrentPhaseEndsUtc { get; init; }
 
     /// <summary>Gets whether the viewer may act on the live campaign board.</summary>
     public required bool CanPlay { get; init; }
+
+    /// <summary>Gets whether the viewer may still choose or change their faction.</summary>
+    public required bool CanChooseFaction { get; init; }
+
+    /// <summary>Gets whether the viewer has committed required orders for the open action window.</summary>
+    public required bool IsCommitted { get; init; }
 }
 
 /// <summary>
@@ -339,6 +348,15 @@ public sealed class CampaignLogDetail
 
     /// <summary>Gets the campaign log, including chat the viewer is allowed to see. Unrevealed orders are omitted.</summary>
     public required IReadOnlyList<PlayLogEntryDetail> Log { get; init; }
+
+    /// <summary>Gets when the viewer last marked this log read, in UTC.</summary>
+    public DateTimeOffset? LastReadUtc { get; init; }
+
+    /// <summary>Gets unread public chat messages that mention the viewer.</summary>
+    public int UnreadMentionCount { get; init; }
+
+    /// <summary>Gets unread private chat messages the viewer can see.</summary>
+    public int UnreadPrivateCount { get; init; }
 }
 
 /// <summary>
@@ -378,6 +396,9 @@ public sealed class CampaignParticipantDetail
 
     /// <summary>Gets whether the chosen faction has an uploaded flag image.</summary>
     public bool HasFlagImage { get; init; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the faction color.</summary>
+    public bool TintFlagImage { get; init; }
 
     /// <summary>Gets the ally-group name for the chosen faction, when one applies.</summary>
     public string? AllyGroupName { get; init; }
@@ -477,6 +498,9 @@ public sealed class FactionDetail
 
     /// <summary>Gets whether the faction has an uploaded flag image.</summary>
     public required bool HasFlagImage { get; init; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the faction color.</summary>
+    public bool TintFlagImage { get; init; }
 
     /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
@@ -600,6 +624,12 @@ public sealed class StoredCampaign
 
     /// <summary>Gets the campaign end instant, in UTC.</summary>
     public required DateTimeOffset EndsUtc { get; init; }
+
+    /// <summary>
+    /// Gets when a manager or administrator closed the campaign, in UTC.
+    /// Closed campaigns stay stored in their final state and evaluate as completed.
+    /// </summary>
+    public DateTimeOffset? ClosedUtc { get; init; }
 
     /// <summary>Gets the number of rounds.</summary>
     public required int RoundCount { get; init; }
@@ -734,6 +764,9 @@ public sealed class StoredFaction
 
     /// <summary>Gets the stored flag image key, when a custom flag was uploaded.</summary>
     public string? FlagImageStorageKey { get; init; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the faction color.</summary>
+    public bool TintFlagImage { get; init; }
 
     /// <summary>Gets special-rule identifiers assigned to this faction.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
@@ -1118,6 +1151,9 @@ public sealed class CampaignPointStandingDetail
 
     /// <summary>Gets whether the faction has an uploaded flag image.</summary>
     public bool HasFlagImage { get; init; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the faction color.</summary>
+    public bool TintFlagImage { get; init; }
 
     /// <summary>Gets the ally-group name, when the faction is aligned.</summary>
     public string? AllyGroupName { get; init; }

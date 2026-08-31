@@ -111,6 +111,29 @@ describe('map export', () => {
     expect(ctx.fillStyle).toBe('rgba(255, 255, 255, 0.92)');
   });
 
+  it('tints an uploaded faction logo with the faction color', async () => {
+    const { ctx, calls } = mockCanvas();
+    const flag = document.createElement('canvas');
+    flag.width = 20;
+    flag.height = 10;
+    await drawMapDecorations(
+      ctx,
+      100,
+      100,
+      [territory({ ownerFactionId: 'north' })],
+      {
+        factions: [faction({ hasFlagImage: true, tintFlagImage: true })],
+        structures: [],
+        flagImageUrl: () => '/flags/north.png',
+      },
+      () => Promise.resolve(flag),
+    );
+
+    expect(calls).toContain('composite:source-in');
+    expect(calls.some((call) => call.startsWith('fillRect:'))).toBe(true);
+    expect(ctx.fillStyle).toBe('#112233');
+  });
+
   it('draws a structure pin using the builtin symbol', async () => {
     const { ctx, calls } = mockCanvas();
     const symbol = document.createElement('canvas');
@@ -244,12 +267,20 @@ function pennantWidth(calls: string[]): number {
 
 function mockCanvas(): { ctx: CanvasRenderingContext2D; calls: string[] } {
   const calls: string[] = [];
+  let composite = 'source-over';
   const ctx = {
     lineJoin: '',
     lineCap: '',
     lineWidth: 0,
     strokeStyle: '',
     fillStyle: '',
+    get globalCompositeOperation() {
+      return composite;
+    },
+    set globalCompositeOperation(value: string) {
+      composite = value;
+      calls.push(`composite:${value}`);
+    },
     beginPath: () => calls.push('begin'),
     moveTo: (x: number, y: number) => calls.push(`move:${x},${y}`),
     lineTo: (x: number, y: number) => calls.push(`line:${x},${y}`),

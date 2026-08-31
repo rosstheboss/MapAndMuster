@@ -1,0 +1,16 @@
+@if (open()) {
+  <div class="app-dialog-backdrop" (pointerdown)="onBackdropClick($event)">
+    <div
+      #panel
+      class="app-dialog panel stack"
+      [attr.role]="dialogRole()"
+      aria-modal="true"
+      [attr.aria-labelledby]="labelledBy()"
+      [attr.aria-describedby]="describedBy()"
+      tabindex="-1"
+      (keydown)="onKeydown($event)"
+    >
+      <ng-content />
+    </div>
+  </div>
+}

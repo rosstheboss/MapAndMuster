@@ -46,7 +46,10 @@ Player and Game Master in the same campaign.
 - Configurable force statuses with enable/clear triggers and display-only tabletop effects.
 - Public faction rules and private player/faction/alliance objectives.
 - Multiple GMs, ephemeral ringer battles, campaign extension, corrections, revision history, and audit.
-- Manager add/kick of players, delinquency kick recommendations from the third missed-order offence, and staff assignment of another player's faction.
+- Manager add/kick of players, promotion of a player to campaign manager, bringing in a user as
+  manager-only or as manager and player, delinquency kick recommendations from the third missed-order
+  offence, and staff assignment of another player's faction.
+- Ending a campaign (closing play while keeping the final state for logs and duplication).
 - In-app and email notifications.
 - Public site-wide chat on All Campaigns, with language flags, block lists, and administrator announcements.
 - Seeded administrator test accounts (Test 1–Test 45) that skip email and public site chat.

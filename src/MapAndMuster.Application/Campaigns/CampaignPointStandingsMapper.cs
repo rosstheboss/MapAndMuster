@@ -104,6 +104,7 @@ internal static class CampaignPointStandingsMapper
                 FactionName = participant.FactionName,
                 FactionColor = participant.FactionColor,
                 HasFlagImage = participant.HasFlagImage,
+                TintFlagImage = participant.TintFlagImage,
                 AllyGroupName = participant.AllyGroupName,
                 TerritoryAndStructurePoints = standing.TerritoryAndStructurePoints,
                 BattlesWonPoints = standing.BattlesWonPoints,

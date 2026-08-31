@@ -102,7 +102,7 @@
           <form class="stack" (ngSubmit)="searchMembers()">
             <div class="nested-row">
               <div class="field grow">
-                <label for="member-search">Add a player</label>
+                <label for="member-search">Add a member</label>
                 <input
                   id="member-search"
                   type="search"
@@ -118,9 +118,27 @@
           @if (memberHits().length > 0) {
             <ul class="plain-list">
               @for (hit of memberHits(); track hit.userId) {
-                <li class="nested-row">
+                <li class="stack">
                   <span>{{ hit.displayName }} ({{ hit.username }})</span>
-                  <button type="button" class="button-secondary" (click)="addMember(hit)">Add player</button>
+                  <div class="nested-row">
+                    @if (campaign.status !== 'Completed') {
+                      <button type="button" class="button-secondary" (click)="addMember(hit)">Add player</button>
+                      <button
+                        type="button"
+                        class="button-secondary"
+                        (click)="addMember(hit, { isGameMaster: true, isPlayer: true })"
+                      >
+                        Add as manager and player
+                      </button>
+                    }
+                    <button
+                      type="button"
+                      class="button-secondary"
+                      (click)="addMember(hit, { isGameMaster: true, isPlayer: false })"
+                    >
+                      Add as manager only
+                    </button>
+                  </div>
                 </li>
               }
             </ul>
@@ -185,15 +203,14 @@
                       </select>
                     </div>
                     <button type="button" class="button-secondary" (click)="assignFaction(participant)">Assign</button>
-                    @if (kickUserId() === participant.userId) {
-                      <button type="button" class="button-danger" (click)="kickMember(participant)">
-                        Confirm remove
-                      </button>
-                    } @else {
-                      <button type="button" class="button-secondary" (click)="kickMember(participant)">
-                        Remove player
-                      </button>
-                    }
+                    <button type="button" class="button-secondary" (click)="promoteMember(participant)">
+                      Make campaign manager
+                    </button>
+                    <app-confirm-button
+                      label="Remove player"
+                      confirmLabel="Confirm remove"
+                      (confirmed)="kickMember(participant)"
+                    />
                   </div>
                 }
               </li>
@@ -1310,7 +1327,15 @@
                   <button type="button" class="button" (click)="submitRetreat(battle)">Submit retreat</button>
                 }
                 @if (battle.canSurrender) {
-                  <button type="button" class="button" (click)="submitSurrender(battle)">Surrender</button>
+                  <div class="surrender-group">
+                    <app-confirm-button
+                      label="Surrender"
+                      [confirmLabel]="surrenderConfirmLabel(battle)"
+                      appearance="button-danger"
+                      confirmAppearance="button-danger"
+                      (confirmed)="submitSurrender(battle)"
+                    />
+                  </div>
                 }
               }
             </article>
@@ -1606,28 +1631,40 @@
         @if (campaign.description) {
           <p>{{ campaign.description }}</p>
         }
-        @if (locationText(campaign); as location) {
-          <p>Location: {{ location }}</p>
-        }
-        <p>Players: {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} occupied</p>
-        <p>{{ campaign.isPrivate ? 'Private campaign' : 'Public campaign' }}</p>
-        <p>
-          Creator role:
-          {{ campaign.creatorIsParticipant ? 'Manager and participant' : 'Manager only' }}
-        </p>
-        <p>Your role: {{ roleLabel(campaign) }}</p>
-        <p>Start: {{ campaign.startsUtc | instantDate: timeZoneId() }}</p>
-        <p>End: {{ campaign.endsUtc | instantDate: timeZoneId() }}</p>
-        <p>Rounds: {{ campaign.roundCount }} · each {{ roundLengthText(campaign) }}</p>
+        <dl class="facts">
+          @if (locationText(campaign); as location) {
+            <dt>Location</dt>
+            <dd>{{ location }}</dd>
+          }
+          <dt>Players</dt>
+          <dd>{{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} occupied</dd>
+          <dt>Visibility</dt>
+          <dd>{{ campaign.isPrivate ? 'Private campaign' : 'Public campaign' }}</dd>
+          <dt>Creator role</dt>
+          <dd>{{ campaign.creatorIsParticipant ? 'Manager and participant' : 'Manager only' }}</dd>
+          <dt>Your role</dt>
+          <dd>{{ roleLabel(campaign) }}</dd>
+          <dt>Start</dt>
+          <dd>{{ campaign.startsUtc | instantDate: timeZoneId() }}</dd>
+          <dt>End</dt>
+          <dd>{{ campaign.endsUtc | instantDate: timeZoneId() }}</dd>
+          <dt>Rounds</dt>
+          <dd>{{ campaign.roundCount }} · each {{ roundLengthText(campaign) }}</dd>
+        </dl>
         <h3>Round structure</h3>
         <ol class="plain-list">
           @for (phase of campaign.phases; track $index; let index = $index) {
             <li>{{ phaseText(campaign, index) }}</li>
           }
         </ol>
-        <p class="muted">Schedule time zone: {{ campaign.timeZoneId }}</p>
-        <p class="muted">Created {{ campaign.createdUtc | instantDate: timeZoneId() }}</p>
-        <p class="muted">Last edited {{ campaign.updatedUtc | instantDate: timeZoneId() }}</p>
+        <dl class="facts muted">
+          <dt>Schedule time zone</dt>
+          <dd>{{ campaign.timeZoneId }}</dd>
+          <dt>Created</dt>
+          <dd>{{ campaign.createdUtc | instantDate: timeZoneId() }}</dd>
+          <dt>Last edited</dt>
+          <dd>{{ campaign.updatedUtc | instantDate: timeZoneId() }}</dd>
+        </dl>
       }
     </div>
 
@@ -1668,7 +1705,16 @@
                 ></button>
                 <span class="muted">{{ place.suffix }}</span>
               }
-              <span class="faction-swatch" [style.background]="faction.color" aria-hidden="true"></span>
+              @if (faction.hasFlagImage && flagImageUrl(faction.id); as src) {
+                <app-faction-logo
+                  class="faction-list-logo"
+                  [src]="src"
+                  [color]="faction.color"
+                  [tint]="faction.tintFlagImage === true"
+                />
+              } @else {
+                <span class="faction-swatch" [style.background]="faction.color" aria-hidden="true"></span>
+              }
               @if (faction.requiresSubfaction) {
                 <span class="muted"> · Subfaction required</span>
               }
@@ -1812,39 +1858,42 @@
                 </caption>
                 <thead>
                   <tr>
-                    <th [attr.aria-sort]="sortDirection('displayName')">
+                    <th scope="col" [attr.aria-sort]="sortDirection('displayName')">
                       <button type="button" (click)="sortBy('displayName')">Display name</button>
                     </th>
-                    <th [attr.aria-sort]="sortDirection('faction')">
+                    <th scope="col" [attr.aria-sort]="sortDirection('faction')">
                       <button type="button" (click)="sortBy('faction')">Faction</button>
                     </th>
-                    <th [attr.aria-sort]="sortDirection('allyGroup')">
+                    <th scope="col" [attr.aria-sort]="sortDirection('allyGroup')">
                       <button type="button" (click)="sortBy('allyGroup')">Alliance group</button>
                     </th>
-                    <th [attr.aria-sort]="sortDirection('territory')">
-                      <button type="button" (click)="sortBy('territory')">Structures captured</button>
+                    <th scope="col" [attr.aria-sort]="sortDirection('territory')">
+                      <button type="button" (click)="sortBy('territory')">Territories and structures</button>
                     </th>
-                    <th [attr.aria-sort]="sortDirection('battles')">
+                    <th scope="col" [attr.aria-sort]="sortDirection('battles')">
                       <button type="button" (click)="sortBy('battles')">Battles Won</button>
                     </th>
-                    <th [attr.aria-sort]="sortDirection('public')">
+                    <th scope="col" [attr.aria-sort]="sortDirection('public')">
                       <button type="button" (click)="sortBy('public')">Public Objectives</button>
                     </th>
-                    <th [attr.aria-sort]="sortDirection('private')">
+                    <th scope="col" [attr.aria-sort]="sortDirection('private')">
                       <button type="button" (click)="sortBy('private')">Private Objectives</button>
                     </th>
-                    <th [attr.aria-sort]="sortDirection('other')">
+                    <th scope="col" [attr.aria-sort]="sortDirection('other')">
                       <button type="button" (click)="sortBy('other')">Other</button>
                     </th>
-                    <th [attr.aria-sort]="sortDirection('total')">
+                    <th scope="col" class="standings-total" [attr.aria-sort]="sortDirection('total')">
                       <button type="button" (click)="sortBy('total')">Total</button>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (row of sortedStandings(); track row.userId) {
-                    <tr>
-                      <td>
+                    <tr [class.is-viewer]="isStandingViewer(row.userId)">
+                      <th scope="row">
+                        @if (isStandingViewer(row.userId)) {
+                          <span class="sr-only">You</span>
+                        }
                         <button
                           type="button"
                           class="map-focus-button"
@@ -1854,9 +1903,14 @@
                         >
                           {{ row.displayName }}
                         </button>
-                        <a class="profile-link" [routerLink]="['/users', row.username]" [queryParams]="profileFrom()">{{
-                          row.username
-                        }}</a>
+                        @if (row.username !== row.displayName) {
+                          <a
+                            class="profile-link"
+                            [routerLink]="['/users', row.username]"
+                            [queryParams]="profileFrom()"
+                            >{{ row.username }}</a
+                          >
+                        }
                         @for (item of row.heldItems ?? []; track item.typeId) {
                           <span class="standing-item" [style.color]="item.color || '#C45C26'" [title]="item.name">
                             @if (standingItemImageUrl(item); as src) {
@@ -1866,27 +1920,31 @@
                             }
                           </span>
                         }
-                      </td>
+                      </th>
                       <td>
                         @if (row.factionId) {
                           <button
                             type="button"
-                            class="map-focus-button"
+                            class="map-focus-button standing-faction"
                             [class.is-map-focused]="isMapFocused('faction', row.factionId)"
                             [disabled]="!!mapAction()"
                             (click)="focusOnMap('faction', row.factionId)"
                           >
                             @if (row.hasFlagImage && flagImageUrl(row.factionId); as src) {
-                              <img class="standing-faction-logo" [src]="src" [alt]="row.factionName || 'Faction'" />
+                              <app-faction-logo
+                                class="standing-faction-logo"
+                                [src]="src"
+                                [color]="row.factionColor || '#2563EB'"
+                                [tint]="row.tintFlagImage === true"
+                              />
                             } @else if (row.factionColor) {
                               <span
                                 class="faction-swatch standing-faction-logo"
                                 [style.background]="row.factionColor"
-                                [attr.aria-label]="row.factionName || 'Faction'"
+                                aria-hidden="true"
                               ></span>
-                            } @else {
-                              {{ row.factionName }}
                             }
+                            {{ row.factionName }}
                           </button>
                         }
                       </td>
@@ -1910,7 +1968,7 @@
                       <td>{{ row.publicObjectivePoints }}</td>
                       <td>{{ row.privateObjectivePoints ?? 0 }}</td>
                       <td>{{ row.otherPoints }}</td>
-                      <td>{{ row.total }}</td>
+                      <td class="standings-total">{{ row.total }}</td>
                     </tr>
                   }
                 </tbody>
@@ -1971,64 +2029,61 @@
       </div>
     }
 
-    @if (campaign.canManage) {
+    @if (campaign.canManage && campaign.status !== 'Completed') {
       <div class="panel stack">
         <h2>
           <button
             type="button"
             class="section-toggle"
-            [attr.aria-expanded]="isOpen('delete')"
-            (click)="toggleSection('delete')"
+            [attr.aria-expanded]="isOpen('end')"
+            (click)="toggleSection('end')"
           >
-            Delete campaign
+            End campaign
           </button>
         </h2>
-        @if (isOpen('delete')) {
+        @if (isOpen('end')) {
           <div class="actions">
-            <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
+            <button type="button" class="button-danger" (click)="requestEnd()">End campaign</button>
           </div>
         }
       </div>
     }
 
     @if (mapAction()?.step === 'confirm') {
-      <div class="dialog-backdrop">
-        <div
-          class="dialog panel stack"
-          role="alertdialog"
-          aria-labelledby="action-confirm-title"
-          aria-describedby="action-confirm-desc"
-        >
-          <h2 id="action-confirm-title">Confirm action</h2>
-          <p id="action-confirm-desc">{{ confirmActionSummary() }}</p>
-          <div class="actions">
-            <button type="button" class="button" (click)="confirmMapAction()">Confirm</button>
-            <button type="button" class="button-secondary" (click)="cancelMapAction()">Cancel</button>
-          </div>
+      <app-dialog
+        [open]="true"
+        dialogRole="alertdialog"
+        labelledBy="action-confirm-title"
+        describedBy="action-confirm-desc"
+        (cancelled)="cancelMapAction()"
+      >
+        <h2 id="action-confirm-title">Confirm action</h2>
+        <p id="action-confirm-desc">{{ confirmActionSummary() }}</p>
+        <div class="actions">
+          <button type="button" class="button" (click)="confirmMapAction()">Confirm</button>
+          <button type="button" class="button-secondary" data-dialog-safe (click)="cancelMapAction()">Cancel</button>
         </div>
-      </div>
+      </app-dialog>
     }
 
-    @if (confirmingDelete()) {
-      <div class="dialog-backdrop">
-        <div
-          class="dialog panel stack"
-          role="alertdialog"
-          aria-labelledby="delete-title"
-          aria-describedby="delete-desc"
-        >
-          <h2 id="delete-title">Delete this campaign?</h2>
-          <p id="delete-desc">This cannot be undone. The campaign will disappear from every member's list.</p>
-          <div class="actions">
-            <button type="button" class="button-danger" (click)="confirmDelete()" [disabled]="deleting()">
-              Delete campaign
-            </button>
-            <button type="button" class="button-secondary" (click)="cancelDelete()" [disabled]="deleting()">
-              Cancel
-            </button>
-          </div>
-        </div>
+    <app-dialog
+      [open]="confirmingEnd()"
+      dialogRole="alertdialog"
+      labelledBy="end-title"
+      describedBy="end-desc"
+      (cancelled)="cancelEnd()"
+    >
+      <h2 id="end-title">End this campaign?</h2>
+      <p id="end-desc">
+        The campaign will close immediately and stay in its final state. Members can still open it to review logs and
+        duplicate it. All players are notified.
+      </p>
+      <div class="actions">
+        <button type="button" class="button-danger" (click)="confirmEnd()" [disabled]="ending()">End campaign</button>
+        <button type="button" class="button-secondary" data-dialog-safe (click)="cancelEnd()" [disabled]="ending()">
+          Cancel
+        </button>
       </div>
-    }
+    </app-dialog>
   }
 </section>

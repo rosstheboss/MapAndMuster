@@ -27,6 +27,7 @@ internal static class CatalogFileBinder
                     AllyGroupName = faction.AllyGroupName,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     FlagImageStorageKey = faction.ClearFlagImage ? null : existing?.FlagImageStorageKey,
+                    TintFlagImage = faction.TintFlagImage,
                     SpecialRuleIds = faction.SpecialRuleIds,
                     SubfactionSpecialRules = faction.SubfactionSpecialRules
                         .Select(static item => new SubfactionSpecialRulesDetail

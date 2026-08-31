@@ -252,6 +252,7 @@ export class CampaignMapViewComponent {
                 ...flagFit,
                 color: owner.color,
                 image: owner.hasFlagImage ? this.flagImageUrl()(owner.id) : null,
+                tint: owner.tintFlagImage === true,
               }
             : null,
         forces: forcePins,
@@ -383,6 +384,18 @@ export class CampaignMapViewComponent {
   protected markerSize(fit: FittedSquare): { width: number; height: number } {
     const image = this.imageSize();
     return { width: fit.width * image.width, height: fit.height * image.height };
+  }
+
+  protected flagBackground(flag: { image: string | null; tint: boolean; color: string }): string {
+    if (flag.image && flag.tint) {
+      return flag.color;
+    }
+
+    return flag.image ? 'transparent' : flag.color;
+  }
+
+  protected maskUrl(src: string): string {
+    return `url(${JSON.stringify(src)})`;
   }
 
   protected forceLabel(force: MapForceMarker): string {

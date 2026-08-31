@@ -60,7 +60,7 @@
 
 .tool-toggle-group .button-secondary.is-active {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 .list-button.is-active {
@@ -70,7 +70,7 @@
 
 .editor-layout {
   display: grid;
-  gap: 1rem;
+  gap: var(--space-4);
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
@@ -328,22 +328,4 @@
 .connection-list .list-button {
   width: auto;
   flex: 1 1 auto;
-}
-
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgb(28 25 23 / 45%);
-}
-
-.dialog {
-  width: min(100%, 28rem);
-}
-
-.dialog h2 {
-  margin: 0;
 }

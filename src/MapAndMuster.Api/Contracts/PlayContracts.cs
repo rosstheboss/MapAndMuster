@@ -1007,6 +1007,7 @@ public static class PlayResponses
                     Color = faction.Color,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     HasFlagImage = faction.HasFlagImage,
+                    TintFlagImage = faction.TintFlagImage,
                     SpecialRuleIds = faction.SpecialRuleIds,
                     SubfactionSpecialRules =
                     [

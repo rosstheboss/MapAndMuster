@@ -261,6 +261,56 @@ describe('CampaignMapViewComponent', () => {
     expect(polygon()?.getAttribute('fill')).toBe('#DC2626');
   });
 
+  it('tints an uploaded ownership logo with the faction color', () => {
+    const owned = { ...territory, ownerFactionId: 'f1' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'f1',
+        name: 'North',
+        color: '#DC2626',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+        tintFlagImage: true,
+      },
+    ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
+    fixture.detectChanges();
+
+    const flag = (fixture.nativeElement as HTMLElement).querySelector('.faction-flag');
+    expect(flag?.classList.contains('is-tinted')).toBe(true);
+    expect(flag?.querySelector('img')).toBeNull();
+  });
+
+  it('shows an uploaded ownership logo without tinting by default', () => {
+    const owned = { ...territory, ownerFactionId: 'f1' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'f1',
+        name: 'North',
+        color: '#DC2626',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+      },
+    ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
+    fixture.detectChanges();
+
+    const flag = (fixture.nativeElement as HTMLElement).querySelector('.faction-flag');
+    expect(flag?.classList.contains('has-image')).toBe(true);
+    expect(flag?.classList.contains('is-tinted')).toBe(false);
+    expect(flag?.querySelector('img')?.getAttribute('src')).toBe(png);
+  });
+
   it('shows carried item objectives on the possessing force instead of a ground pin', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);

@@ -76,6 +76,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<LocalTestCampaignSeeder>();
         services.AddSingleton<ICampaignPresetPackageCodec, CampaignPresetPackageCodec>();
         services.AddScoped<ICampaignStore, CampaignStore>();
+        services.AddScoped<ICampaignLogReadStore, CampaignLogReadStore>();
         services.AddScoped<ICampaignPresetStore, CampaignPresetStore>();
         services.AddScoped<IUserNotificationStore, UserNotificationStore>();
         services.AddScoped<INewsStore, NewsStore>();

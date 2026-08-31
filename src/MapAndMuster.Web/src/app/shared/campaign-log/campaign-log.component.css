@@ -6,7 +6,7 @@
 .campaign-log {
   display: grid;
   gap: 0.65rem;
-  padding: 0.75rem 1rem 1rem;
+  padding: var(--space-3) var(--space-4) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   background: var(--color-surface);
@@ -47,7 +47,7 @@
 
 .chat-compose {
   display: grid;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .recipient-combobox {
@@ -58,7 +58,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem 1.25rem;
+  gap: var(--space-3) var(--space-5);
   margin: 0;
   padding: 0;
   border: 0;
@@ -78,24 +78,6 @@
 
 .log-download {
   margin-left: auto;
-}
-
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgb(28 25 23 / 45%);
-}
-
-.dialog {
-  width: min(100%, 28rem);
-}
-
-.dialog h2 {
-  margin: 0;
 }
 
 .choice-row {
@@ -122,6 +104,10 @@
   resize: none;
 }
 
+.mention-combobox {
+  display: block;
+}
+
 .suggest {
   margin: 0;
   padding: 0;
@@ -133,17 +119,16 @@
   overflow: auto;
 }
 
-.suggest button {
-  width: 100%;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  color: inherit;
+.suggest [role='option'] {
+  min-height: var(--touch-min);
+  display: flex;
+  align-items: center;
   padding: 0.4rem 0.6rem;
+  cursor: pointer;
 }
 
-.suggest button.is-active,
-.suggest button:hover {
+.suggest [role='option'].is-active,
+.suggest [role='option']:hover {
   background: var(--color-button-secondary);
 }
 

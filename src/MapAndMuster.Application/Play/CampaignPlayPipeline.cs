@@ -26,6 +26,18 @@ internal static class CampaignPlayPipeline
         }
 
         var utcNow = clock.UtcNow;
+        if (campaign.ClosedUtc is not null)
+        {
+            return new PlayLoad
+            {
+                IsSuccess = true,
+                Campaign = campaign,
+                Previous = campaign,
+                OriginalRevision = campaign.Revision,
+                Changed = false,
+            };
+        }
+
         if (CampaignLifecycle.Progress(campaign, utcNow).Status == CampaignStatus.Scheduled)
         {
             return PlayLoad.Fail("play.not_started", "This campaign has not started yet.");
@@ -144,6 +156,13 @@ internal static class CampaignPlayPipeline
             return OperationResults.Failure<CampaignPlayDetail>(
                 loaded.ErrorCode ?? ErrorCodes.CampaignNotFound,
                 loaded.Message ?? "The campaign was not found.");
+        }
+
+        if (loaded.Campaign.ClosedUtc is not null)
+        {
+            return OperationResults.Failure<CampaignPlayDetail>(
+                "play.ended",
+                "This campaign has ended.");
         }
 
         var membership = CampaignMapper.MembershipFor(loaded.Campaign, userId);
@@ -283,6 +302,7 @@ internal static class CampaignPlayPipeline
             TimeZoneId = existing.TimeZoneId,
             StartsUtc = existing.StartsUtc,
             EndsUtc = endsUtc,
+            ClosedUtc = existing.ClosedUtc,
             RoundCount = roundCount,
             RoundLengthAmount = existing.RoundLengthAmount,
             RoundLengthUnit = existing.RoundLengthUnit,

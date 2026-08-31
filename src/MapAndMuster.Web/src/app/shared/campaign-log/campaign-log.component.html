@@ -21,67 +21,66 @@
     }
   </fieldset>
   @if (exportOpen()) {
-    <div class="dialog-backdrop">
-      <div
-        class="dialog panel stack"
-        role="dialog"
-        aria-labelledby="download-log-title"
-        aria-describedby="download-log-desc"
-      >
-        <h2 id="download-log-title">Download campaign log</h2>
-        <p id="download-log-desc">Save public chat and game-log facts as one file. Private chats are never included.</p>
-        <fieldset class="log-filters">
-          <legend>Include</legend>
-          <label>
-            <input type="checkbox" [ngModel]="exportPublicChat()" (ngModelChange)="exportPublicChat.set($event)" />
-            Public chat
-          </label>
-          <label>
-            <input type="checkbox" [ngModel]="exportGameLog()" (ngModelChange)="exportGameLog.set($event)" />
-            Game log
-          </label>
-        </fieldset>
-        <fieldset class="log-filters">
-          <legend>File type</legend>
-          <label>
-            <input
-              type="radio"
-              name="log-export-format"
-              value="txt"
-              [ngModel]="exportFormat()"
-              (ngModelChange)="setExportFormat($event)"
-            />
-            Text (.txt)
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="log-export-format"
-              value="csv"
-              [ngModel]="exportFormat()"
-              (ngModelChange)="setExportFormat($event)"
-            />
-            CSV (.csv)
-          </label>
-        </fieldset>
-        @if (!canConfirmExport()) {
-          <p class="error" role="alert">Choose public chat, the game log, or both.</p>
-        }
-        <div class="choice-row">
-          <button
-            type="button"
-            class="button"
-            (click)="confirmExport()"
-            [disabled]="!canConfirmExport() || exporting()"
-          >
-            Download
-          </button>
-          <button type="button" class="button-secondary" (click)="closeExportDialog()" [disabled]="exporting()">
-            Cancel
-          </button>
-        </div>
+    <app-dialog
+      [open]="true"
+      labelledBy="download-log-title"
+      describedBy="download-log-desc"
+      (cancelled)="closeExportDialog()"
+    >
+      <h2 id="download-log-title">Download campaign log</h2>
+      <p id="download-log-desc">Save public chat and game-log facts as one file. Private chats are never included.</p>
+      <fieldset class="log-filters">
+        <legend>Include</legend>
+        <label>
+          <input type="checkbox" [ngModel]="exportPublicChat()" (ngModelChange)="exportPublicChat.set($event)" />
+          Public chat
+        </label>
+        <label>
+          <input type="checkbox" [ngModel]="exportGameLog()" (ngModelChange)="exportGameLog.set($event)" />
+          Game log
+        </label>
+      </fieldset>
+      <fieldset class="log-filters">
+        <legend>File type</legend>
+        <label>
+          <input
+            type="radio"
+            name="log-export-format"
+            value="txt"
+            [ngModel]="exportFormat()"
+            (ngModelChange)="setExportFormat($event)"
+          />
+          Text (.txt)
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="log-export-format"
+            value="csv"
+            [ngModel]="exportFormat()"
+            (ngModelChange)="setExportFormat($event)"
+          />
+          CSV (.csv)
+        </label>
+      </fieldset>
+      @if (!canConfirmExport()) {
+        <p class="error" role="alert">Choose public chat, the game log, or both.</p>
+      }
+      <div class="choice-row">
+        <button type="button" class="button" (click)="confirmExport()" [disabled]="!canConfirmExport() || exporting()">
+          Download
+        </button>
+        <button
+          type="button"
+          class="button-secondary"
+          data-dialog-safe
+          (click)="closeExportDialog()"
+          [disabled]="exporting()"
+        >
+          Cancel
+        </button>
       </div>
-    </div>
+    </app-dialog>
   }
   <div
     class="log-scroll"
@@ -167,34 +166,41 @@
           </ul>
         }
       </div>
-      <label class="field">
-        Message
-        <textarea
-          #composer
-          rows="1"
-          [ngModel]="draft()"
-          (ngModelChange)="onDraftInput($event)"
-          (keydown)="onKeydown($event)"
-          [disabled]="sending()"
-          maxlength="2000"
+      <div class="field">
+        <label id="chat-message-label" for="chat-composer">Message</label>
+        <div
+          class="mention-combobox"
+          role="combobox"
+          aria-labelledby="chat-message-label"
+          aria-haspopup="listbox"
           aria-autocomplete="list"
           [attr.aria-expanded]="suggestions().length > 0"
-          aria-controls="chat-suggest"
-        ></textarea>
-      </label>
+          [attr.aria-controls]="suggestions().length > 0 ? 'chat-suggest' : null"
+        >
+          <textarea
+            #composer
+            id="chat-composer"
+            rows="1"
+            [ngModel]="draft()"
+            (ngModelChange)="onDraftInput($event)"
+            (keydown)="onKeydown($event)"
+            [disabled]="sending()"
+            maxlength="2000"
+            [attr.aria-activedescendant]="suggestions().length > 0 ? 'chat-suggest-option-' + highlight() : null"
+          ></textarea>
+        </div>
+      </div>
       @if (suggestions().length > 0) {
         <ul id="chat-suggest" class="suggest" role="listbox">
           @for (member of suggestions(); track member.userId; let index = $index) {
-            <li>
-              <button
-                type="button"
-                role="option"
-                [class.is-active]="index === highlight()"
-                [attr.aria-selected]="index === highlight()"
-                (mousedown)="complete(member)"
-              >
-                {{ suggestionLabel(member) }}
-              </button>
+            <li
+              [id]="'chat-suggest-option-' + index"
+              role="option"
+              [class.is-active]="index === highlight()"
+              [attr.aria-selected]="index === highlight()"
+              (mousedown)="complete(member)"
+            >
+              {{ suggestionLabel(member) }}
             </li>
           }
         </ul>

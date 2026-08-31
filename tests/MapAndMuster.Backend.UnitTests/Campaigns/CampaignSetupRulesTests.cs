@@ -83,6 +83,37 @@ public sealed class CampaignSetupRulesTests
     }
 
     [Fact]
+    public void KeepsTintFlagImageOnFactions()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            factions:
+            [
+                new FactionInput { Name = "North", TintFlagImage = true },
+                new FactionInput { Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            schedule: WeekSchedule(),
+            out var setup,
+            out _,
+            out var errors);
+
+        Assert.True(succeeded);
+        Assert.Empty(errors);
+        Assert.NotNull(setup);
+        Assert.True(setup.Factions[0].TintFlagImage);
+        Assert.False(setup.Factions[1].TintFlagImage);
+    }
+
+    [Fact]
     public void AcceptsOptionalLocationAndPublicViewToggle()
     {
         var succeeded = CampaignSetupRules.TryCreate(

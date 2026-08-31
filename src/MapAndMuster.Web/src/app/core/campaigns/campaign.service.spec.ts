@@ -148,8 +148,68 @@ describe('CampaignService', () => {
       mentionableMembers: [],
       chatChannels: [],
       log: [],
+      lastReadUtc: null,
+      unreadMentionCount: 0,
+      unreadPrivateCount: 0,
     });
     expect((await pending).canChat).toBe(true);
+    http.verify();
+  });
+
+  it('ends a campaign with its current revision', async () => {
+    const service = TestBed.inject(CampaignService);
+    const http = TestBed.inject(HttpTestingController);
+    const pending = service.end('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 4);
+    const request = http.expectOne('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/end');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ revision: 4 });
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await pending;
+    http.verify();
+  });
+
+  it('adds a campaign manager without occupying a player slot', async () => {
+    const service = TestBed.inject(CampaignService);
+    const http = TestBed.inject(HttpTestingController);
+    const pending = service.addMember('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'user-3', 2, {
+      isGameMaster: true,
+      isPlayer: false,
+    });
+    const request = http.expectOne('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/members');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      userId: 'user-3',
+      revision: 2,
+      isGameMaster: true,
+      isPlayer: false,
+    });
+    request.flush({
+      id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      name: 'Border War',
+      description: null,
+      playerSlotCount: 8,
+      occupiedPlayerSlots: 1,
+      isPrivate: false,
+      isPubliclyViewable: true,
+      canManage: true,
+      isParticipant: true,
+      revision: 3,
+      status: 'Scheduled',
+      startsUtc: '2099-01-05T12:00:00+00:00',
+      endsUtc: '2099-03-02T12:00:00+00:00',
+    });
+    expect((await pending).revision).toBe(3);
+    http.verify();
+  });
+
+  it('marks a campaign log read', async () => {
+    const service = TestBed.inject(CampaignService);
+    const http = TestBed.inject(HttpTestingController);
+    const pending = service.markLogRead('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    const request = http.expectOne('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/log/read');
+    expect(request.request.method).toBe('POST');
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await pending;
     http.verify();
   });
 

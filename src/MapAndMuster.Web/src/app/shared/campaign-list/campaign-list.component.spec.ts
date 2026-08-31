@@ -26,8 +26,11 @@ function item(
     country: null,
     currentRound: null,
     currentPhaseLabel: null,
+    currentPhaseKind: null,
     currentPhaseEndsUtc: null,
     canPlay: false,
+    canChooseFaction: false,
+    isCommitted: false,
     ...overrides,
   };
 }
@@ -208,6 +211,7 @@ describe('CampaignListComponent', () => {
     fixture.detectChanges();
 
     expect(compiled.querySelector('[role="dialog"]')?.textContent).toContain('Join Secret War');
+    expect(compiled.querySelector('[role="dialog"]')?.getAttribute('aria-modal')).toBe('true');
     const input = compiled.querySelector<HTMLInputElement>('#join-password');
     expect(input).toBeTruthy();
     input!.value = 'join-secret';
@@ -234,6 +238,37 @@ describe('CampaignListComponent', () => {
     );
     await fixture.whenStable();
     http.verify();
+  });
+
+  it('closes the join dialog on Escape', async () => {
+    const fixture = TestBed.createComponent(CampaignListComponent);
+    fixture.componentRef.setInput('campaigns', [
+      item({
+        id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        name: 'Secret War',
+        isPrivate: true,
+        canJoin: true,
+        canView: false,
+        status: 'Scheduled',
+        startsUtc: '2099-02-01T12:00:00+00:00',
+        endsUtc: '2099-04-01T12:00:00+00:00',
+      }),
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('button.campaign-toggle')?.click();
+    fixture.detectChanges();
+    [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Join')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const dialog = compiled.querySelector<HTMLElement>('[role="dialog"]');
+    expect(dialog).toBeTruthy();
+    dialog?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fixture.detectChanges();
+    expect(compiled.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it('shows round, phase, and a leave action for an active player', async () => {
@@ -270,9 +305,14 @@ describe('CampaignListComponent', () => {
     expect(compiled.textContent).toContain('Phase ends in');
     const leave = [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Leave');
     expect(leave).toBeTruthy();
-    leave?.click();
+    leave!.click();
+    fixture.detectChanges();
+    expect(leave!.textContent.trim()).toBe('Confirm leave');
 
     const http = TestBed.inject(HttpTestingController);
+    http.verify();
+
+    [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Confirm leave')?.click();
     const request = http.expectOne('/api/campaigns/dddddddd-dddd-dddd-dddd-dddddddddddd/leave');
     expect(request.request.method).toBe('POST');
     request.flush(null, { status: 204, statusText: 'No Content' });

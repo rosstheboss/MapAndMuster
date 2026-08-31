@@ -152,8 +152,7 @@ internal static class CampaignPlayMapper
             HasMap = CampaignMapper.HasMapData(campaign),
             FactionId = membership?.FactionId,
             CanChooseFaction = CampaignMapper.CanChooseFaction(membership, progress.Status),
-            IsCommitted = currentActionId is { } id
-                && play.Commitments.Any(item => item.WindowId == id && item.UserId == viewerUserId),
+            IsCommitted = CampaignMapper.ViewerIsCommitted(campaign, viewerUserId),
             RoundCount = campaign.RoundCount,
             MinRoundCount = Math.Max(progress.CurrentRound ?? CampaignSetupRules.MinRoundCount, CampaignSetupRules.MinRoundCount),
             RemainingWindows = remaining,
@@ -227,7 +226,7 @@ internal static class CampaignPlayMapper
             DebugDrafts = DebugDraftsFor(play, staffView),
             Commitments = commitments,
             Battles = battles,
-            Log = VisibleLogEntries(
+            Log = ToLogEntries(
                 campaign,
                 names,
                 viewerUserId,
@@ -490,25 +489,29 @@ internal static class CampaignPlayMapper
         Guid viewerUserId,
         bool inspectPrivateChat)
     {
-        return VisibleLogEntries(campaign, names, viewerUserId, inspectPrivateChat);
+        var play = campaign.PlayState ?? CampaignPlayState.Empty;
+        var map = CampaignLifecycle.ToPlayMap(campaign);
+        return
+        [
+            .. VisiblePlayLogEntries(campaign, viewerUserId, inspectPrivateChat)
+                .Select(item => ToLogEntry(item, campaign, map, play, names)),
+        ];
     }
 
-    private static IReadOnlyList<PlayLogEntryDetail> VisibleLogEntries(
+    internal static IReadOnlyList<PlayLogEntry> VisiblePlayLogEntries(
         StoredCampaign campaign,
-        IReadOnlyDictionary<Guid, string> names,
         Guid viewerUserId,
         bool inspectPrivateChat)
     {
+        ArgumentNullException.ThrowIfNull(campaign);
         var play = campaign.PlayState ?? CampaignPlayState.Empty;
-        var map = CampaignLifecycle.ToPlayMap(campaign);
         var memberships = CampaignChatContext.Memberships(campaign);
         return
         [
             .. play.Log
                 .Where(entry => CampaignChatRules.CanView(entry, viewerUserId, memberships, inspectPrivateChat))
                 .OrderBy(static item => item.OccurredUtc)
-                .ThenBy(static item => item.Id)
-                .Select(item => ToLogEntry(item, campaign, map, play, names)),
+                .ThenBy(static item => item.Id),
         ];
     }
 
@@ -616,6 +619,7 @@ internal static class CampaignPlayMapper
                 FactionId = faction?.Id,
                 FactionColor = faction?.Color,
                 HasFlagImage = !string.IsNullOrWhiteSpace(faction?.FlagImageStorageKey),
+                TintFlagImage = faction?.TintFlagImage == true,
                 AllyGroupName = faction?.AllyGroupName,
                 CurrentSupplyPoints = supply?.CurrentSupplyPoints,
                 TemporarySupplyPoints = supply?.TemporarySupplyPoints,
@@ -793,6 +797,10 @@ internal static class CampaignPlayMapper
                 $"{actor} started a ringer battle in {territory}.",
             PlayLogKind.RingerBattleVoided =>
                 $"The ringer battle in {territory} was voided because nobody reported.",
+            PlayLogKind.CampaignClosed =>
+                actor == "A force"
+                    ? "A manager ended the campaign."
+                    : $"{actor} ended the campaign.",
             PlayLogKind.CampaignStarted =>
                 "The campaign started.",
             PlayLogKind.ScheduleExtended =>

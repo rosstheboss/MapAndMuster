@@ -271,6 +271,9 @@ namespace MapAndMuster.Infrastructure.Persistence.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("TintFlagImage")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AllyGroupId");
@@ -344,6 +347,24 @@ namespace MapAndMuster.Infrastructure.Persistence.Migrations
                     b.ToTable("CampaignMemberships", (string)null);
                 });
 
+            modelBuilder.Entity("MapAndMuster.Infrastructure.Persistence.Entities.CampaignLogReadMarkRecord", b =>
+                {
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("LastReadUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CampaignId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("CampaignLogReadMarks", (string)null);
+                });
+
             modelBuilder.Entity("MapAndMuster.Infrastructure.Persistence.Entities.CampaignRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -356,6 +377,9 @@ namespace MapAndMuster.Infrastructure.Persistence.Migrations
                     b.Property<string>("City")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("ClosedUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Country")
                         .HasMaxLength(100)
@@ -887,6 +911,15 @@ namespace MapAndMuster.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("MapAndMuster.Infrastructure.Persistence.Entities.CampaignLogReadMarkRecord", b =>
+                {
+                    b.HasOne("MapAndMuster.Infrastructure.Persistence.Entities.CampaignRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MapAndMuster.Infrastructure.Persistence.Entities.CampaignRoundPhaseRecord", b =>
