@@ -2,6 +2,7 @@
   display: grid;
   gap: 0.65rem;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .map-shell {
@@ -14,16 +15,29 @@
   position: fixed;
   inset: 0;
   z-index: 40;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100dvh;
+  max-height: 100dvh;
   padding: var(--space-3);
+  overflow: hidden;
   background: var(--color-bg);
 }
 
 :host.is-fullscreen .map-shell {
+  min-height: 0;
   height: 100%;
+  overflow: hidden;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
 .map-body {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.map-main {
   display: grid;
   gap: var(--space-3);
   min-width: 0;
@@ -39,6 +53,16 @@
 :host.is-fullscreen .map-body {
   min-height: 0;
   height: 100%;
+  align-items: stretch;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 13rem);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+:host.is-fullscreen .map-main {
+  min-height: 0;
+  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .map-toolbar {
@@ -94,6 +118,12 @@
 
 :host.is-fullscreen .map-viewport {
   height: 100%;
+  min-height: 0;
+}
+
+:host.is-fullscreen .map-main > :not(.map-viewport) {
+  max-height: 28vh;
+  overflow: auto;
 }
 
 .map-viewport.is-panning,
@@ -202,16 +232,18 @@
   }
 }
 
-.territory.is-half-highlighted {
-  fill-opacity: 0.62;
+.territory.is-half-highlighted,
+.territory.is-selected {
   filter: drop-shadow(0 0 2px var(--glow-color, var(--color-glow)))
     drop-shadow(0 0 4px var(--glow-color, var(--color-glow)));
 }
 
+.territory.is-half-highlighted {
+  fill-opacity: 0.62;
+}
+
 .territory.is-selected {
   fill-opacity: 0.7;
-  filter: drop-shadow(0 0 2px var(--glow-color, var(--color-glow)))
-    drop-shadow(0 0 4px var(--glow-color, var(--color-glow)));
 }
 
 .territory.is-move-valid {
@@ -243,13 +275,15 @@
   pointer-events: auto;
 }
 
-.force-pin.is-mine {
+.force-pin.is-mine,
+.legend-pin-force.is-mine {
   box-shadow:
     0 0 0 2px #fff,
     0 0 0 3px rgb(28 25 23 / 80%);
 }
 
-.force-pin.is-battle {
+.force-pin.is-battle,
+.legend-pin-force.is-battle {
   box-shadow:
     0 0 0 2px #7c2d12,
     0 0 0 4px rgb(254 243 226 / 90%);
@@ -430,14 +464,17 @@
 .territory-name {
   position: absolute;
   z-index: 4;
-  transform: translate(-50%, -50%);
-  padding: 0.05rem 0.3rem;
-  font-size: 0.7rem;
+  transform: translate(-50%, -50%) scale(calc(1 / var(--map-scale, 1)));
+  transform-origin: center center;
+  padding: 0.15rem 0.4rem;
+  font-size: 1rem;
   font-weight: 700;
   line-height: 1.2;
   color: var(--color-text);
-  background: rgb(255 255 255 / 82%);
-  border-radius: 0.2rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  box-shadow: 0 0 0 1px var(--color-bg);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -448,7 +485,13 @@
   min-width: 0;
 }
 
-.map-legend summary {
+:host.is-fullscreen .map-guide {
+  min-height: 0;
+  overflow: auto;
+}
+
+.map-legend summary,
+.territory-directory summary {
   min-height: var(--touch-min);
   cursor: pointer;
   font-weight: 600;
@@ -499,18 +542,6 @@
   box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
 }
 
-.legend-pin-force.is-mine {
-  box-shadow:
-    0 0 0 2px #fff,
-    0 0 0 3px rgb(28 25 23 / 80%);
-}
-
-.legend-pin-force.is-battle {
-  box-shadow:
-    0 0 0 2px #7c2d12,
-    0 0 0 4px rgb(254 243 226 / 90%);
-}
-
 .legend-pin-structure {
   background: rgb(254 243 226 / 94%);
   box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
@@ -530,6 +561,7 @@
 .territory-directory-heading {
   margin: 0;
   font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .territory-directory-item {

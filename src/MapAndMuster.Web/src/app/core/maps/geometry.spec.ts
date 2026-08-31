@@ -18,6 +18,7 @@ import {
   isValidTerritoryPolygon,
   normalizedFromPixels,
   polygonIntersectsRect,
+  rectanglesOverlap,
   resolveTerritoryTranslation,
   segmentsCross,
   sharedBorderMidpoint,
@@ -293,6 +294,18 @@ describe('map geometry', () => {
       Math.abs(marker.y - occupied.y) < (marker.height + occupied.height) / 2;
     expect(overlapsOccupied(overlapping)).toBe(true);
     expect(overlapsOccupied(fitted)).toBe(false);
+  });
+
+  it('keeps a force pin off logos by shrinking no more than 50 percent', () => {
+    const occupied = { x: 0.3, y: 0.3, width: 0.08, height: 0.08 };
+    const preferred = { x: 0.3, y: 0.3 };
+    const polygon = square(0.1, 0.1, 0.4);
+    const fitted = fitSquareInPolygon(polygon, preferred, 0.08, 0.08, [occupied], {
+      minScale: 0.5,
+      allowOverlapFallback: false,
+    });
+    expect(rectanglesOverlap(fitted, occupied)).toBe(false);
+    expect(fitted.width).toBeGreaterThanOrEqual(0.04 - 1e-9);
   });
 
   it('keeps a marker inside a C-shaped territory whose vertex centroid is in the hole', () => {

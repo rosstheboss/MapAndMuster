@@ -118,6 +118,13 @@
   align-items: end;
 }
 
+.subfaction-block {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
 .grow {
   flex: 1 1 12rem;
 }

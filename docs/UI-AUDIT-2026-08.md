@@ -15,7 +15,11 @@ recommendation touches a template that also carries logic, the logic is left alo
   indicators still follow in later steps. Step 3 (`UI-C5`, `UI-H9`, `UI-H12`, Playwright axe)
   is implemented (2026-08-30). Step 4 (`UI-C2`, `UI-M1`) is implemented (2026-08-30). Map
   territory hits are named buttons, the map has a legend and a territory directory, and axe no
-  longer excludes map polygons.
+  longer excludes map polygons. Step 5 (`UI-H1`, `UI-H2`, `UI-H13`, `UI-M2`, `UI-M3`,
+  `UI-M11`, `UI-H7`, `UI-H10`) is implemented (2026-08-30). The campaign page has a sticky status
+  bar, task-order sections, a last-commit dialog, and display names for enums. Expand/collapse
+  choices stay in a per-campaign cookie (no sections API). Chat unread is a summary badge on
+  the log heading; marking last-read is unchanged.
 - Ranking: Critical, High, Medium, Polish.
 - Each item has a stable identifier (`UI-C1`, `UI-H4`, …) so work can be tracked and split.
 
@@ -330,6 +334,9 @@ Significant friction on a core path for a common role.
 
 ## UI-H1 — The campaign page has no "what do I need to do now" summary
 
+**Status:** implemented (2026-08-30). Sticky status bar under the title with round/phase, urgency
+countdown, viewer commit chip, compact commitment count, and **Go to your orders**.
+
 **Areas:** Information hierarchy, Campaign workflow, Feedback
 
 The campaign page is 9,471 px tall with all 14 sections expanded by default. The three things a
@@ -354,6 +361,11 @@ Keep the countdown in an `aria-live="polite"` region but throttle announcements 
 speak every second.
 
 ## UI-H2 — The campaign log occupies the top of the campaign page
+
+**Status:** implemented (2026-08-30). Page order is status bar, faction, Actions, campaign log,
+map, battles, standings, then reference, then **Manage campaign**. Running campaigns default to
+Actions, Chat, and Standings open. Per-campaign expand/collapse is stored in a cookie. The log
+summary shows unread mention and private counts from `GET /log`.
 
 **Areas:** Information hierarchy, Navigation
 
@@ -479,6 +491,9 @@ editing is closed. Either way, replace the silent redirect with a message.
 
 ## UI-H7 — Battle reminders and the hidden-relic notice render twice
 
+**Status:** implemented (2026-08-30). Duplicate relic/reminder block removed; Vitest asserts
+each string once.
+
 **Areas:** Consistency, Information hierarchy
 
 `campaign-detail.page.html` renders the same two pieces of information twice in each force card:
@@ -542,6 +557,9 @@ to **Territories and structures**.
 
 ## UI-H10 — Raw enum values are shown to users
 
+**Status:** implemented (2026-08-30). Display maps for campaign status, battle status, phase kind,
+and force-status triggers; Vitest covers every enum member.
+
 **Areas:** Consistency, Feedback
 
 Battle headings render the status enum unmodified, producing `Windmere · AwaitingResults`. This
@@ -592,6 +610,10 @@ template reference on each nav link, and add a non-color indicator such as an in
 border to `.nav-link.is-active`.
 
 ## UI-H13 — Commit can be irreversible, and the UI promises the opposite
+
+**Status:** implemented (2026-08-30). Last required commitment uses **Commit Actions and close the
+phase** plus a confirmation dialog. Uncommit is offered only while the action window is open.
+A compact commitment summary sits above the Commit button.
 
 **Areas:** Error prevention, Feedback, Campaign workflow
 
@@ -666,6 +688,9 @@ centroid. Raise the ownership fill opacity so ownership is readable at Fit zoom.
 
 ## UI-M2 — Order entry is hard to scan and the confirm control is unlabelled
 
+**Status:** implemented (2026-08-30). Force identity is the card heading with a faction-color
+accent; **Save draft** is visible text; commitments are a roster of chips plus a count.
+
 **Areas:** Campaign workflow, Information hierarchy, Accessibility
 
 Within a force card:
@@ -682,6 +707,9 @@ give the confirm control a visible label ("Save draft") or at minimum a tooltip 
 state chip per player and a "2 of 4 committed" summary.
 
 ## UI-M3 — Management controls are interleaved with play controls
+
+**Status:** implemented (2026-08-30). Staff tools sit under a collapsed **Manage campaign** region
+with a distinct surface and an attribution note. **End campaign** is last inside it.
 
 **Areas:** GM interface, Error prevention
 
@@ -800,6 +828,9 @@ before the label, rotating on expand — and apply it to `.section-toggle`, the 
 the campaign list groups. Keep the whole header row clickable.
 
 ## UI-M11 — Battle cards are flat text
+
+**Status:** implemented (2026-08-30). Attacker/Defender chips in two columns, supply in a table,
+and the report form in its own group.
 
 **Areas:** Information hierarchy, Campaign workflow
 
@@ -948,7 +979,7 @@ Grouped so that shared work lands before the items that depend on it.
    Playwright suite. Done 2026-08-30.
 4. **Map accessibility.** `UI-C2`, then `UI-M1`. Done 2026-08-30.
 5. **Campaign page restructure.** `UI-H1`, `UI-H2`, `UI-H13`, `UI-M2`, `UI-M3`, `UI-M11`,
-   `UI-H7`, `UI-H10`. `UI-H13` depends on the dialog work in step 2.
+   `UI-H7`, `UI-H10`. Done 2026-08-30. `UI-H13` depends on the dialog work in step 2.
 6. **Entry points.** `UI-H5`, `UI-M6`, `UI-M7`, `UI-M12`.
 7. **Setup and editor.** `UI-H6`, `UI-H8`, `UI-M9`, `UI-M14`.
 8. **Responsive.** `UI-H11`, `UI-M8`, `UI-M13`.

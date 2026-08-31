@@ -1,5 +1,20 @@
 <details class="campaign-log" [open]="expanded()" (toggle)="onToggle($event)">
-  <summary>Campaign log</summary>
+  <summary>
+    Campaign log
+    @if (unreadMentionCount() > 0 || unreadPrivateCount() > 0) {
+      <span class="log-unread">
+        @if (unreadMentionCount() > 0) {
+          {{ unreadMentionCount() }} unread mention{{ unreadMentionCount() === 1 ? '' : 's' }}
+        }
+        @if (unreadMentionCount() > 0 && unreadPrivateCount() > 0) {
+          ·
+        }
+        @if (unreadPrivateCount() > 0) {
+          {{ unreadPrivateCount() }} unread private
+        }
+      </span>
+    }
+  </summary>
   <fieldset class="log-filters">
     <legend>Show</legend>
     <label>

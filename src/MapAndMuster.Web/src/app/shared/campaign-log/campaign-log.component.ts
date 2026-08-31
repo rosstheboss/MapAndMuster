@@ -41,6 +41,8 @@ export class CampaignLogComponent {
   readonly expanded = input(true);
   readonly canExport = input(false);
   readonly exporting = input(false);
+  readonly unreadMentionCount = input(0);
+  readonly unreadPrivateCount = input(0);
   readonly initialChannelKey = input('Public:');
   readonly initialScrollTop = input<number | null>(null);
 

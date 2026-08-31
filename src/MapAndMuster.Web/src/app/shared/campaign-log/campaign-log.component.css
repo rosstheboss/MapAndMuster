@@ -17,6 +17,11 @@
   font-weight: 700;
 }
 
+.log-unread {
+  margin-left: 0.45rem;
+  font-weight: 600;
+}
+
 .log-scroll {
   max-height: 16.5em;
   overflow: auto;

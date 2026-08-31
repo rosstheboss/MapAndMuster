@@ -107,7 +107,9 @@ in an ADR or the relevant domain document and update tests.
     devices. See `UI-H2`. `GET /api/campaigns/{id}/log` now returns `lastReadUtc`,
     `unreadMentionCount`, and `unreadPrivateCount`. `POST /api/campaigns/{id}/log/read`
     records last-read from the server clock and does not bump campaign revision. Per-player
-    open/closed campaign-page sections still need an API contract in the campaign-page step.
+    open/closed campaign-page sections stay in a per-campaign cookie; the UI audit forbids an
+    API contract change for this presentation-only step. Chat unread is a summary badge on the
+    log heading; the campaign page does not auto-call `POST /log/read`.
 24. Resolved: managers and administrators end a campaign rather than deleting it. The campaign
     stays stored in its final state (closed / Completed), remaining orders are not resolved,
     members can still open logs and duplicate it, and all current members are notified in-app

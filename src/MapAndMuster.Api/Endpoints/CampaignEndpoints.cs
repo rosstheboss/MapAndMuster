@@ -249,10 +249,24 @@ public static class CampaignEndpoints
             .Produces(StatusCodes.Status200OK)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/{campaignId:guid}/factions/{factionId:guid}/subfactions/{subfactionName}/flag", GetSubfactionFlagAsync)
+            .WithName("GetCampaignSubfactionFlag")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
         group.MapPost("/{campaignId:guid}/factions/{factionId:guid}/flag", UploadFactionFlagAsync)
             .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
             .DisableAntiforgery()
             .WithName("UploadCampaignFactionFlag")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/factions/{factionId:guid}/subfactions/{subfactionName}/flag", UploadSubfactionFlagAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignSubfactionFlag")
             .Produces<CampaignDetailResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
@@ -1659,6 +1673,36 @@ public static class CampaignEndpoints
         return Results.File(result.Value.Content, result.Value.ContentType);
     }
 
+    private static async Task<IResult> GetSubfactionFlagAsync(
+        Guid campaignId,
+        Guid factionId,
+        string subfactionName,
+        ClaimsPrincipal principal,
+        GetFactionFlagHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                factionId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator(),
+                subfactionName)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(result.Value.Content, result.Value.ContentType);
+    }
+
     private static async Task<IResult> UploadFactionFlagAsync(
         Guid campaignId,
         Guid factionId,
@@ -1697,6 +1741,61 @@ public static class CampaignEndpoints
                     UserId = userId.Value,
                     CampaignId = campaignId,
                     FactionId = factionId,
+                    ExpectedRevision = revision,
+                    Content = stream,
+                    ContentType = file.ContentType,
+                    Length = file.Length,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static async Task<IResult> UploadSubfactionFlagAsync(
+        Guid campaignId,
+        Guid factionId,
+        string subfactionName,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadFactionFlagHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Upload a JPEG, PNG, or WebP image.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("image") ?? form.Files.GetFile("file");
+        if (file is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Choose a faction flag image to upload.");
+        }
+
+        if (!int.TryParse(form["revision"].ToString(), out var revision))
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await handler.HandleAsync(
+                new UploadFactionFlagCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    FactionId = factionId,
+                    SubfactionName = subfactionName,
                     ExpectedRevision = revision,
                     Content = stream,
                     ContentType = file.ContentType,

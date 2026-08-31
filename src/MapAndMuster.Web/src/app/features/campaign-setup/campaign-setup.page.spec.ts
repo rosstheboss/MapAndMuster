@@ -405,6 +405,18 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector<HTMLInputElement>(`#subfaction-${daemonsIndex}-1`)?.value).toBe('Nurgle');
     expect(compiled.querySelector<HTMLInputElement>(`#subfaction-${daemonsIndex}-2`)?.value).toBe('Slaanesh');
     expect(compiled.querySelector<HTMLInputElement>(`#subfaction-${daemonsIndex}-3`)?.value).toBe('Tzeentch');
+    expect(compiled.querySelector<HTMLInputElement>(`#subfaction-color-${daemonsIndex}-0`)?.value.toUpperCase()).toBe(
+      '#B91C1C',
+    );
+    expect(compiled.querySelector<HTMLInputElement>(`#subfaction-color-${daemonsIndex}-1`)?.value.toUpperCase()).toBe(
+      '#3F6212',
+    );
+    expect(compiled.querySelector<HTMLInputElement>(`#subfaction-color-${daemonsIndex}-2`)?.value.toUpperCase()).toBe(
+      '#F472B6',
+    );
+    expect(compiled.querySelector<HTMLInputElement>(`#subfaction-color-${daemonsIndex}-3`)?.value.toUpperCase()).toBe(
+      '#0E7490',
+    );
     const daemonsGroup = page.factions.at(daemonsIndex) as unknown as {
       controls: {
         requiresSubfaction: { value: boolean };
@@ -430,8 +442,10 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector<HTMLInputElement>('#terrain-mission-name-0-0')?.value).toBe('');
     expect(compiled.querySelector('#structure-mission-name-0-0')).toBeNull();
     expect(compiled.textContent).toContain('Color flag');
-    const imageOption = [...compiled.querySelectorAll<HTMLInputElement>('input[type="radio"]')].find((input) =>
-      (input.closest('label')?.textContent ?? '').includes('Uploaded image'),
+    const imageOption = [...compiled.querySelectorAll<HTMLInputElement>('input[type="radio"]')].find(
+      (input) =>
+        input.name.startsWith('faction-flag-') &&
+        (input.closest('label')?.textContent ?? '').includes('Uploaded image'),
     );
     expect(imageOption).toBeTruthy();
     imageOption!.click();
@@ -470,6 +484,62 @@ describe('CampaignSetupPage', () => {
     await pageSave.save();
     fixture.detectChanges();
     expect(factionsToggle?.getAttribute('aria-expanded')).toBe('true');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('shows subfaction color and flag controls when a faction is expanded after collapse all', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      presetId: { setValue: (value: string) => void };
+      applySelectedPreset: () => void;
+      collapseAllSections: () => void;
+    };
+
+    page.presetId.setValue(WARHAMMER_OLD_WORLD_PRESET_ID);
+    page.applySelectedPreset();
+    fixture.detectChanges();
+    page.collapseAllSections();
+    fixture.detectChanges();
+
+    const names = factionNames(compiled);
+    const daemonsIndex = names.indexOf('Daemons of Chaos');
+    expect(daemonsIndex).toBeGreaterThan(-1);
+
+    const factionsToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
+      button.textContent.trim().startsWith('Factions'),
+    );
+    factionsToggle?.click();
+    fixture.detectChanges();
+    const daemonsToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
+      button.textContent.includes('Daemons of Chaos'),
+    );
+    daemonsToggle?.click();
+    fixture.detectChanges();
+
+    const khorneColor = compiled.querySelector<HTMLInputElement>(`#subfaction-color-${daemonsIndex}-0`);
+    expect(khorneColor).toBeTruthy();
+    expect(khorneColor!.closest('[hidden]')).toBeNull();
+    expect(khorneColor!.value.toUpperCase()).toBe('#B91C1C');
+    const khorneFlagRadios = [
+      ...compiled.querySelectorAll<HTMLInputElement>(`input[name="subfaction-flag-${daemonsIndex}-0"]`),
+    ];
+    expect(khorneFlagRadios.map((input) => input.closest('label')?.textContent?.trim())).toEqual([
+      'Color flag',
+      'Uploaded image',
+    ]);
+    expect(compiled.textContent).toContain('Inherit faction color');
+
+    const upload = khorneFlagRadios.find((input) =>
+      (input.closest('label')?.textContent ?? '').includes('Uploaded image'),
+    );
+    upload?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector(`#subfaction-flag-image-${daemonsIndex}-0`)).toBeTruthy();
+    expect(compiled.textContent).toContain('Tint logo with subfaction color');
     TestBed.inject(HttpTestingController).verify();
   });
 

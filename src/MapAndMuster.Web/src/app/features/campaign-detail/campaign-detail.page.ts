@@ -9,11 +9,13 @@ import {
   viewChild,
   type ElementRef,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
+import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import type {
   CampaignChatSend,
   CampaignDetail,
@@ -54,10 +56,13 @@ import { compareNames } from '../../core/campaigns/faction-presets';
 import {
   actionNumberAt,
   DURATION_UNITS,
+  formatCountdown,
   formatDuration,
   formatPhaseEndTimestamp,
   formatPhaseLabel,
   statusLabel,
+  battleStatusLabel,
+  forceStatusLabel,
 } from '../../core/campaigns/campaign-schedule';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
@@ -105,6 +110,7 @@ const CAMPAIGN_SECTIONS = [
   'links',
   'standings',
   'end',
+  'manage',
 ] as const;
 
 type CampaignSection = (typeof CAMPAIGN_SECTIONS)[number];
@@ -142,6 +148,27 @@ interface MapActionFlow {
   menuY: number;
 }
 
+const RUNNING_OPEN_SECTIONS: readonly CampaignSection[] = [
+  'orders',
+  'log',
+  'standings',
+  'debug',
+  'ringer',
+  'schedule',
+  'end',
+];
+
+function defaultOpenSections(status: string): Record<CampaignSection, boolean> {
+  if (status !== 'InProgress') {
+    return openSections();
+  }
+
+  return Object.fromEntries(CAMPAIGN_SECTIONS.map((id) => [id, RUNNING_OPEN_SECTIONS.includes(id)])) as Record<
+    CampaignSection,
+    boolean
+  >;
+}
+
 function openSections(): Record<CampaignSection, boolean> {
   return Object.fromEntries(CAMPAIGN_SECTIONS.map((id) => [id, true])) as Record<CampaignSection, boolean>;
 }
@@ -150,6 +177,7 @@ function openSections(): Record<CampaignSection, boolean> {
   selector: 'app-campaign-detail-page',
   imports: [
     FormsModule,
+    NgTemplateOutlet,
     RouterLink,
     InstantDatePipe,
     CampaignLogComponent,
@@ -174,6 +202,8 @@ export class CampaignDetailPage {
   private readonly injector = inject(Injector);
   private readonly mapBoard = viewChild<ElementRef<HTMLElement>>('mapBoard');
   private readonly mapSection = viewChild<ElementRef<HTMLElement>>('mapSection');
+  private readonly ordersSection = viewChild<ElementRef<HTMLElement>>('ordersSection');
+  private readonly commitmentsBlock = viewChild<ElementRef<HTMLElement>>('commitmentsBlock');
 
   protected readonly loading = signal(true);
   protected readonly chatLoading = signal(true);
@@ -187,7 +217,9 @@ export class CampaignDetailPage {
   protected readonly hoveredTerritoryId = signal<string | null>(null);
   protected readonly selectedIds = signal<string[]>([]);
   protected readonly confirmingEnd = signal(false);
+  protected readonly confirmingCommit = signal(false);
   protected readonly ending = signal(false);
+  protected readonly nowMs = signal(Date.now());
   protected readonly downloading = signal(false);
   protected readonly downloadingLog = signal(false);
   protected readonly chatBusy = signal(false);
@@ -203,6 +235,7 @@ export class CampaignDetailPage {
   protected readonly grantHolderId = signal('');
   protected readonly grantTypeId = signal('');
   private prefsHydrated = false;
+  private storedSectionPrefs: Record<string, boolean> | null = null;
   private lastChatScrollTop = 0;
   private readonly campaignId = this.route.snapshot.paramMap.get('id');
   protected readonly durationUnits = DURATION_UNITS;
@@ -235,7 +268,9 @@ export class CampaignDetailPage {
 
   constructor() {
     const id = this.campaignId;
+    const clock = globalThis.setInterval(() => this.nowMs.set(Date.now()), 15_000);
     this.destroyRef.onDestroy(() => {
+      globalThis.clearInterval(clock);
       this.persistViewPrefs();
       for (const timer of this.armyListParseTimers.values()) {
         globalThis.clearTimeout(timer);
@@ -295,6 +330,73 @@ export class CampaignDetailPage {
 
     return forces.every((force) => play.myDrafts.some((draft) => draft.forceId === force.id));
   });
+  protected readonly isFinalRequiredCommitment = computed(() => {
+    const play = this.play();
+    const viewerId = this.auth.currentUser()?.id;
+    if (!play || play.isCommitted || !viewerId) {
+      return false;
+    }
+
+    const others = play.commitments.filter((item) => item.userId !== viewerId);
+    return others.every((item) => item.isCommitted);
+  });
+  protected readonly canUncommit = computed(() => {
+    const play = this.play();
+    return !!play?.isCommitted && play.currentPhaseKind === 'Action' && !!play.currentWindowId;
+  });
+  protected readonly commitmentSummary = computed(() => {
+    const play = this.play();
+    if (!play) {
+      return null;
+    }
+
+    const total = play.commitments.length;
+    const committed = play.commitments.filter((item) => item.isCommitted).length;
+    const waiting = play.commitments.filter((item) => !item.isCommitted).map((item) => item.username ?? item.userId);
+    return {
+      committed,
+      total,
+      waiting,
+      text:
+        waiting.length === 0
+          ? `${committed} of ${total} players committed.`
+          : `${committed} of ${total} players committed. Waiting on ${waiting.join(', ')}.`,
+    };
+  });
+  protected readonly viewerCommitChip = computed(() => {
+    const play = this.play();
+    if (!play?.isParticipant || play.canChooseFaction || play.currentPhaseKind !== 'Action') {
+      return null;
+    }
+
+    return play.isCommitted ? 'Committed' : 'Not committed';
+  });
+  protected readonly countdownUrgency = computed(() => {
+    const endsUtc = this.play()?.currentPhaseEndsUtc ?? this.campaign()?.currentPhaseEndsUtc;
+    if (!endsUtc) {
+      return null;
+    }
+
+    const remaining = Date.parse(endsUtc) - this.nowMs();
+    if (!Number.isFinite(remaining) || remaining <= 0) {
+      return 'danger';
+    }
+
+    if (remaining <= 2 * 60 * 60 * 1000) {
+      return 'danger';
+    }
+
+    if (remaining <= 24 * 60 * 60 * 1000) {
+      return 'dirty';
+    }
+
+    return null;
+  });
+  protected readonly announcedCountdown = computed(() => {
+    const endsUtc = this.play()?.currentPhaseEndsUtc ?? this.campaign()?.currentPhaseEndsUtc;
+    return endsUtc ? formatCountdown(endsUtc, this.nowMs()) : '';
+  });
+  protected readonly battleStatusLabel = battleStatusLabel;
   protected readonly buildableStructures = computed(() =>
     (this.play()?.structureTypes ?? this.campaign()?.structureTypes ?? []).filter((type) => type.isBuildable),
   );
@@ -340,6 +442,7 @@ export class CampaignDetailPage {
       id: force.id,
       territoryId: force.territoryId,
       factionId: force.factionId,
+      subfaction: force.subfaction ?? null,
       isMine: force.isMine,
       inBattle: force.inBattle,
       label: `${this.forceLabel(force)} in ${this.territoryName(force.territoryId)}`,
@@ -990,11 +1093,64 @@ export class CampaignDetailPage {
     return force ? this.forceLabel(force) : forceId;
   }
 
+  protected supplyFor(battle: PlayBattle, forceId: string | null | undefined): PlayBattleForceSupply | undefined {
+    if (!forceId) {
+      return undefined;
+    }
+
+    return battle.forceSupplies?.find((supply) => supply.forceId === forceId);
+  }
+
   protected forceLabel(force: PlayForce): string {
     const name = force.controllerUsername ?? 'Player';
-    const status = force.statusName?.trim();
+    const status = forceStatusLabel(force.statusName);
     const base = `${name} · ${this.factionName(force.factionId)}`;
-    return status ? `${base} · ${status}` : base;
+    return status === 'Normal' ? base : `${base} · ${status}`;
+  }
+
+  protected forceAccent(force: PlayForce): string {
+    return this.campaign()?.factions.find((faction) => faction.id === force.factionId)?.color ?? 'var(--color-accent)';
+  }
+
+  protected goToOrders(): void {
+    this.setSection('orders', true);
+    afterNextRender(
+      () => {
+        this.ordersSection()?.nativeElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest',
+        });
+      },
+      { injector: this.injector },
+    );
+  }
+
+  protected goToCommitments(): void {
+    this.setSection('orders', true);
+    afterNextRender(
+      () => {
+        this.commitmentsBlock()?.nativeElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest',
+        });
+      },
+      { injector: this.injector },
+    );
+  }
+
+  protected requestCommit(): void {
+    this.confirmingCommit.set(true);
+  }
+
+  protected cancelCommit(): void {
+    this.confirmingCommit.set(false);
+  }
+
+  protected async confirmCommit(): Promise<void> {
+    this.confirmingCommit.set(false);
+    await this.commit();
   }
 
   protected territoryName(id: string | null | undefined): string {
@@ -1156,15 +1312,24 @@ export class CampaignDetailPage {
     return this.campaignsApi.itemObjectiveImageUrl(campaign.id, item.typeId, campaign.revision);
   }
 
-  protected flagImageUrl = (factionId: string): string | null => {
+  protected flagImageUrl = (factionId: string, subfaction?: string | null): string | null => {
     const campaign = this.campaign();
     const faction = campaign?.factions.find((item) => item.id === factionId);
-    if (!campaign || !faction?.hasFlagImage) {
+    if (!campaign || !faction) {
       return null;
     }
 
-    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.revision);
+    const appearance = resolveFactionAppearance(faction, subfaction);
+    if (!appearance.hasFlagImage) {
+      return null;
+    }
+
+    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.revision, subfaction);
   };
+
+  protected standingSubfaction(userId: string): string | null {
+    return this.campaign()?.participants?.find((participant) => participant.userId === userId)?.subfaction ?? null;
+  }
 
   protected missionFileUrl(mission: CampaignMission): string | null {
     const campaign = this.campaign();
@@ -2008,7 +2173,7 @@ export class CampaignDetailPage {
       return '';
     }
 
-    return `Round ${round} - ${label}`;
+    return `Round ${round} · ${label}`;
   }
 
   protected phaseEndTimestamp(endsUtc: string): string {
@@ -2431,6 +2596,7 @@ export class CampaignDetailPage {
       this.campaign.set(campaign);
       this.factionChoice.set(campaign.factionId ? mapFactionOptionValue(campaign.factionId, campaign.subfaction) : '');
       this.mapRevision.set(campaign.revision);
+      this.applySectionPrefs(campaign.status);
       this.startPolling();
       this.applyGraph(graph);
       if (play) {
@@ -2467,18 +2633,21 @@ export class CampaignDetailPage {
     this.chatChannelKey.set(prefs.chatChannelKey);
     this.lastChatScrollTop = prefs.chatScrollTop;
     this.restoreChatScroll.set(stored ? stored.chatScrollTop : null);
-    if (stored?.sections) {
-      const next = openSections();
+    this.storedSectionPrefs = stored?.sections && typeof stored.sections === 'object' ? stored.sections : null;
+    this.prefsHydrated = true;
+  }
+
+  private applySectionPrefs(status: string): void {
+    const next = defaultOpenSections(status);
+    if (this.storedSectionPrefs) {
       for (const id of CAMPAIGN_SECTIONS) {
-        if (typeof stored.sections[id] === 'boolean') {
-          next[id] = stored.sections[id]!;
+        if (typeof this.storedSectionPrefs[id] === 'boolean') {
+          next[id] = this.storedSectionPrefs[id]!;
         }
       }
-
-      this.openSections.set(next);
     }
 
-    this.prefsHydrated = true;
+    this.openSections.set(next);
   }
 
   private persistViewPrefs(): void {

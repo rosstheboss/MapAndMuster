@@ -59,7 +59,12 @@ requires a state or province and a state or province requires a country), public
 visibility, a publicly-viewable flag (on by default), optional labeled external links (at most 20
 http/https URLs), a raster map image, and at least two factions. Each faction has a unique
 color and may have subfactions. A faction may require players who choose it to pick a
-subfaction; that flag may only be enabled when at least one subfaction is listed. Optional
+subfaction; that flag may only be enabled when at least one subfaction is listed. Named
+subfactions may inherit the parent color and flag or choose their own unique color, a color
+flag, and/or an uploaded logo. The same uniqueness, tint, and 50×50 logo rules that apply to
+faction flags apply to a subfaction when it chooses a color or logo. When a faction requires a
+subfaction, each listed subfaction must have a unique color and either a color flag or an
+uploaded logo (it cannot inherit). Optional
 ally groups may include two or more factions; every faction cannot belong to a single ally
 group. Each ally group has a unique color used for alliance map highlighting. On Edit campaign, each
 ally group includes a faction dropdown that assigns named factions to that group and updates the
@@ -67,11 +72,14 @@ ally-group field on each faction in the Factions section. Renaming an ally
 group keeps existing faction membership: factions stay in that group and show the new name.
 
 Setup may apply a faction preset. Applying a preset replaces the current faction and subfaction
-list with an alphabetically sorted copy of that catalog entry, including colors and whether a
-subfaction is required. Later add/remove/rename edits apply only to that campaign and do not
+list with an alphabetically sorted copy of that catalog entry, including colors, whether a
+subfaction is required, and any configured subfaction colors and flags. Later add/remove/rename edits apply only to that campaign and do not
 change the preset. The initial catalog includes Warhammer: The Old World. In that preset,
 Daemons of Chaos includes the subfactions Khorne, Nurgle, Slaanesh, and Tzeentch (alphabetical)
-and requires a subfaction choice. Setup can also clear the faction list (back to two empty
+and requires a subfaction choice. Those four use unique colors (Khorne red `#B91C1C`, Nurgle
+dark yellow-green `#3F6212`, Slaanesh pink `#F472B6`, Tzeentch teal `#0E7490`) and color flags.
+On Edit campaign, expanding a faction shows that faction’s subfaction names, colors, flags, and
+logo uploads on the same card. Setup can also clear the faction list (back to two empty
 slots) or clear all ally groups. Armies of infamy are out of application scope as a dedicated
 feature. They are ordinary subfaction configuration; if needed later they may be added to a
 campaign preset or faction catalog.
@@ -596,8 +604,8 @@ place catalog item objectives that use Placed launch placement, and apply a
 transparent overlay color. Setting a spawn always sets ownership to the same faction or required
 subfaction. The spawn list disables factions whose special rules include `UndergroundNetwork`
 because those forces have no fixed spawn. Factions that require a subfaction are listed as
-"Faction Name - Subfaction Name" rather than the parent name; map flags and colors use a
-subfaction logo when one exists and otherwise the parent faction's logo and color. The collapsible
+"Faction Name - Subfaction Name" rather than the parent name; map flags and colors use that
+subfaction's chosen color and logo when configured, otherwise the parent faction's logo and color. The collapsible
 Territory editor above the map keeps a fixed field area, tall enough for its three field rows
 without a scrollbar, while it is open so hover, selection, deselection, zoom, and drag on the map
 do not shift the map up or down the page. Fields are name
@@ -674,12 +682,14 @@ into another territory's interior. While a group is being dragged, it is highlig
 at about 70% fill with a centered checkmark of at most 50×50 pixels when it can be dropped, or red
 at about 70% fill with a centered X of at most 50×50 pixels when it cannot. Dropping while red
 restores the group to the position it had when the drag started.
-Owned territories also show a flag at up to 50×50 pixels, using the faction color flag by default or an
-uploaded image. When logo tinting is enabled for that faction, the uploaded logo is filled with the
-faction color wherever it is shown, including the map. Untinted uploaded logos keep their original colors.
+Owned territories also show a flag at up to 50×50 pixels, using the faction or subfaction color flag by default or an
+uploaded image. When logo tinting is enabled for that faction or subfaction, the uploaded logo is filled with the
+resolved color wherever it is shown, including the map. Untinted uploaded logos keep their original colors.
 Structure logos and ownership flags sit at 50×50 pixels in the
 territory center when that size fits; otherwise they shrink and shift to stay inside the polygon, as centered
-as possible. When a structure is present, the ownership flag sits beside it. Highlights use a subtle
+as possible. When a structure is present, the ownership flag sits beside it. Force markers sit in the
+territory as colored dots. They stay off structure logos and ownership flags, shrinking as far as 50% of
+their usual size when needed so they remain visible without covering those markers. Highlights use a subtle
 contrasting glow. Selected territories use a full highlight: about 70% fill and double the usual
 border thickness. Hovered territories, possible action destinations, and territories connected to
 the current selection use a half highlight: 50% fill and 1.5 times the usual border thickness.
@@ -702,16 +712,21 @@ until Random Colors or Color By Terrain is chosen again. Switching to Random Col
 Terrain recolors every territory. A new territory, or a terrain change while Color By Terrain is on,
 uses that mode's color. Remove Colors switches to Manual Colors and clears every overlay color.
 
-The map overlay starts fitted to the panel. Map panels are full width in their parent. Zoom
+The map overlay starts fitted to the panel. Map panels are full width in their parent. On the
+campaign page, the Territories directory beside the map is collapsible, and selected-territory
+details sit under the map in that left column rather than spanning the directory. Zoom
 controls sit across the top of the map in this order: zoom percent field, +, -, Fit, 100%, and Full
 screen. Zoom is 10% to 800% of the map image's actual pixel size, in 10% steps. 100% shows the
 image at its native size and centers it. Fit scales the image to the view and recenters it.
 The F key fits the map; 1 (and 0) set 100 percent. M toggles full-screen map mode on the campaign
-page and map editor while the map is shown; Escape exits full screen. The first time a map view
+page and map editor while the map is shown; Escape exits full screen. Full-screen mode keeps the map
+inside the viewport: a fitted map recenters when the panel size changes, and a zoomed map clamps pan
+so the image cannot sit off-screen. The first time a map view
 opens, the panel shows a loading ellipsis and hides overlay markers until that image has loaded so
 they do not cluster in the corner. Hover, selection, and later map updates do not show it again. Drawing coordinates stay normalized to the full-size image. Snap distance, minimum draw spacing, and
 overlay stroke widths are measured in screen pixels so zooming in lets a manager trace fine coasts and
-province borders. When the zoomed image is larger than the panel, it can be panned
+province borders. Territory names drawn on the map stay a readable screen size at Fit zoom and use
+the current theme's surface and text colors. When the zoomed image is larger than the panel, it can be panned
 but not dragged past the image bounds. Hold a right-click (context-click) or middle-click and drag to
 pan without drawing, erasing, or selecting; the mouse wheel still zooms the same way it does with any
 tool. Left-click drag does not pan. On a touch screen, pinch with two fingers to zoom and drag with

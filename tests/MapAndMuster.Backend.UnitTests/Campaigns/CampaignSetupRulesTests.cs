@@ -873,6 +873,15 @@ public sealed class CampaignSetupRulesTests
                     Name = "North",
                     RequiresSubfaction = true,
                     Subfactions = ["Riders"],
+                    SubfactionAppearances =
+                    [
+                        new SubfactionAppearanceInput
+                        {
+                            Name = "Riders",
+                            Color = "#B91C1C",
+                            FlagSource = SubfactionFlagSource.Color,
+                        },
+                    ],
                 },
                 new FactionInput { Name = "South" },
             ],
@@ -887,6 +896,114 @@ public sealed class CampaignSetupRulesTests
         Assert.Empty(errors);
         Assert.True(setup!.Factions[0].RequiresSubfaction);
         Assert.Equal("Riders", setup.Factions[0].Subfactions[0]);
+        Assert.Equal("#B91C1C", setup.Factions[0].SubfactionAppearances[0].Color);
+        Assert.Equal(SubfactionFlagSource.Color, setup.Factions[0].SubfactionAppearances[0].FlagSource);
+    }
+
+    [Fact]
+    public void RejectsRequiredSubfactionWithoutColorAndFlag()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            factions:
+            [
+                new FactionInput
+                {
+                    Name = "North",
+                    RequiresSubfaction = true,
+                    Subfactions = ["Riders"],
+                },
+                new FactionInput { Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            schedule: WeekSchedule(),
+            out _,
+            out _,
+            out var errors);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Code == "factions.subfaction.flag.required");
+        Assert.Contains(errors, error => error.Code == "factions[0].subfactions[0].color.invalid");
+    }
+
+    [Fact]
+    public void RejectsSubfactionColorSharedWithAFaction()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            factions:
+            [
+                new FactionInput
+                {
+                    Name = "North",
+                    Color = "#2563EB",
+                    Subfactions = ["Riders"],
+                    SubfactionAppearances =
+                    [
+                        new SubfactionAppearanceInput
+                        {
+                            Name = "Riders",
+                            Color = "#2563EB",
+                            FlagSource = SubfactionFlagSource.Color,
+                        },
+                    ],
+                },
+                new FactionInput { Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            schedule: WeekSchedule(),
+            out _,
+            out _,
+            out var errors);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Code.EndsWith(".color.duplicate", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AllowsOptionalSubfactionToInheritColorAndFlag()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            factions:
+            [
+                new FactionInput { Name = "North", Subfactions = ["Riders"] },
+                new FactionInput { Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            schedule: WeekSchedule(),
+            out var setup,
+            out _,
+            out var errors);
+
+        Assert.True(succeeded, string.Join("; ", errors.Select(error => error.Message)));
+        Assert.Empty(errors);
+        Assert.Null(setup!.Factions[0].SubfactionAppearances[0].Color);
+        Assert.Equal(SubfactionFlagSource.Inherit, setup.Factions[0].SubfactionAppearances[0].FlagSource);
     }
 
     [Fact]

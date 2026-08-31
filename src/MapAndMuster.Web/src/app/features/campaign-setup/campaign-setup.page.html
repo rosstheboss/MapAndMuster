@@ -1133,7 +1133,8 @@
           <p class="muted">
             At least two factions are required. Subfactions are optional unless a faction requires players to pick one.
             Adding a preset replaces the current faction and subfaction list with a copy you can then edit. The preset
-            itself is not changed. Each faction has a unique color.
+            itself is not changed. Each faction has a unique color. Named subfactions may inherit that color and flag or
+            choose their own color, a color flag, and/or an uploaded logo.
           </p>
           <div class="nested-row">
             <div class="field grow">
@@ -1210,38 +1211,171 @@
                       </select>
                     </div>
                   }
-                  <div class="field" formArrayName="subfactions">
-                    <button
-                      type="button"
-                      class="section-toggle nested-toggle"
-                      [class.has-dirty]="sectionHeaderDirty('faction-sub-' + index)"
-                      [attr.aria-expanded]="isOpen('faction-sub-' + index)"
-                      (click)="toggleSection('faction-sub-' + index)"
-                    >
+                  <fieldset class="field" formArrayName="subfactions">
+                    <legend>
                       Subfactions {{ faction.controls.requiresSubfaction.value ? '(required)' : '(optional)' }}
-                    </button>
-                    <div [hidden]="!isOpen('faction-sub-' + index)">
-                      @for (subfaction of subfactionsOf(faction).controls; track subfaction; let subIndex = $index) {
-                        <div class="nested-row" [formGroupName]="subIndex">
-                          <label class="sr-only" [attr.for]="'subfaction-' + index + '-' + subIndex">
-                            Faction {{ index + 1 }} subfaction {{ subIndex + 1 }}
-                          </label>
-                          <input
-                            class="grow"
-                            [id]="'subfaction-' + index + '-' + subIndex"
-                            formControlName="name"
-                            maxlength="60"
-                          />
+                    </legend>
+                    @for (subfaction of subfactionsOf(faction).controls; track subfaction; let subIndex = $index) {
+                      <div class="subfaction-block" [formGroupName]="subIndex">
+                        <div class="nested-row">
+                          <div class="field grow">
+                            <label [attr.for]="'subfaction-' + index + '-' + subIndex">Name</label>
+                            <input
+                              [id]="'subfaction-' + index + '-' + subIndex"
+                              formControlName="name"
+                              maxlength="60"
+                            />
+                          </div>
                           <button type="button" class="button-secondary" (click)="removeSubfaction(faction, subIndex)">
                             Remove
                           </button>
                         </div>
-                      }
-                      <button type="button" class="button-secondary" (click)="addSubfaction(faction)">
-                        Add subfaction
-                      </button>
-                    </div>
-                  </div>
+                        @if (faction.controls.requiresSubfaction.value) {
+                          <div class="field color-field">
+                            <label [attr.for]="'subfaction-color-' + index + '-' + subIndex">Color</label>
+                            <input
+                              [id]="'subfaction-color-' + index + '-' + subIndex"
+                              type="color"
+                              formControlName="color"
+                            />
+                          </div>
+                        } @else {
+                          <label class="checkbox-row">
+                            <input
+                              type="checkbox"
+                              formControlName="inheritColor"
+                              (change)="onSubfactionInheritColor(faction, subfaction)"
+                            />
+                            Inherit faction color
+                          </label>
+                          @if (!subfaction.controls.inheritColor.value) {
+                            <div class="field color-field">
+                              <label [attr.for]="'subfaction-color-' + index + '-' + subIndex">Color</label>
+                              <input
+                                [id]="'subfaction-color-' + index + '-' + subIndex"
+                                type="color"
+                                formControlName="color"
+                              />
+                            </div>
+                          }
+                        }
+                        <fieldset class="field">
+                          <legend>Flag</legend>
+                          <div class="choice-row">
+                            @if (!faction.controls.requiresSubfaction.value) {
+                              <label>
+                                <input
+                                  type="radio"
+                                  [attr.name]="'subfaction-flag-' + index + '-' + subIndex"
+                                  [checked]="subfaction.controls.flagSource.value === 'inherit'"
+                                  (change)="setSubfactionFlagSource(faction, subfaction, 'inherit')"
+                                />
+                                Inherit
+                              </label>
+                            }
+                            <label>
+                              <input
+                                type="radio"
+                                [attr.name]="'subfaction-flag-' + index + '-' + subIndex"
+                                [checked]="subfaction.controls.flagSource.value === 'color'"
+                                (change)="setSubfactionFlagSource(faction, subfaction, 'color')"
+                              />
+                              Color flag
+                            </label>
+                            <label>
+                              <input
+                                type="radio"
+                                [attr.name]="'subfaction-flag-' + index + '-' + subIndex"
+                                [checked]="subfaction.controls.flagSource.value === 'image'"
+                                (change)="setSubfactionFlagSource(faction, subfaction, 'image')"
+                              />
+                              Uploaded image
+                            </label>
+                          </div>
+                          @if (subfaction.controls.flagSource.value === 'color') {
+                            <p class="muted">
+                              Default flag uses this subfaction’s color, or the parent faction color when inherited.
+                            </p>
+                            <div
+                              class="faction-flag-preview"
+                              [style.background]="
+                                subfaction.controls.inheritColor.value
+                                  ? faction.controls.color.value
+                                  : subfaction.controls.color.value
+                              "
+                              aria-hidden="true"
+                            ></div>
+                          } @else if (subfaction.controls.flagSource.value === 'image') {
+                            <div
+                              class="field"
+                              [class.is-dirty]="
+                                hasPendingFlag(
+                                  subfactionFlagKey(faction.controls.id.value, subfaction.controls.name.value)
+                                )
+                              "
+                            >
+                              <label class="sr-only" [attr.for]="'subfaction-flag-image-' + index + '-' + subIndex">
+                                {{ subfaction.controls.name.value.trim() || 'Subfaction' }} logo
+                              </label>
+                              <input
+                                [id]="'subfaction-flag-image-' + index + '-' + subIndex"
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                (change)="
+                                  onFlagImageSelected(
+                                    subfactionFlagKey(faction.controls.id.value, subfaction.controls.name.value),
+                                    $event
+                                  )
+                                "
+                              />
+                              <p class="muted">
+                                Maximum size {{ flagImageMaxPx }}px × {{ flagImageMaxPx }}px. Larger images are shrunk
+                                to that size. Uploaded logos keep original colors unless tinting is enabled.
+                              </p>
+                              <label class="checkbox-row">
+                                <input type="checkbox" formControlName="tintFlagImage" />
+                                Tint logo with subfaction color
+                              </label>
+                              @if (
+                                flagImageName(
+                                  subfactionFlagKey(faction.controls.id.value, subfaction.controls.name.value)
+                                );
+                                as fileName
+                              ) {
+                                <p class="muted">Selected: {{ fileName }}</p>
+                              } @else if (
+                                factionFlagUrl(
+                                  subfactionFlagKey(faction.controls.id.value, subfaction.controls.name.value)
+                                )
+                              ) {
+                                <p class="muted">A flag is already stored.</p>
+                              }
+                              @if (
+                                flagPreviewUrl(
+                                  subfactionFlagKey(faction.controls.id.value, subfaction.controls.name.value)
+                                );
+                                as src
+                              ) {
+                                <app-faction-logo
+                                  class="structure-logo-preview"
+                                  [src]="src"
+                                  [color]="
+                                    subfaction.controls.inheritColor.value
+                                      ? faction.controls.color.value
+                                      : subfaction.controls.color.value
+                                  "
+                                  [tint]="subfaction.controls.tintFlagImage.value"
+                                />
+                              }
+                            </div>
+                          }
+                        </fieldset>
+                      </div>
+                    }
+                    <button type="button" class="button-secondary" (click)="addSubfaction(faction)">
+                      Add subfaction
+                    </button>
+                  </fieldset>
                   <fieldset class="field">
                     <legend>Faction special rules</legend>
                     <p class="muted">

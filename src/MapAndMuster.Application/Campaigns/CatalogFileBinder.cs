@@ -18,12 +18,30 @@ internal static class CatalogFileBinder
             .. incoming.Select(faction =>
             {
                 previousById.TryGetValue(faction.Id, out var existing);
+                var previousAppearances = existing?.SubfactionAppearances
+                    .ToDictionary(static item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    ?? new Dictionary<string, StoredSubfactionAppearance>(StringComparer.OrdinalIgnoreCase);
                 return new StoredFaction
                 {
                     Id = faction.Id,
                     Name = faction.Name,
                     Color = faction.Color,
                     Subfactions = faction.Subfactions,
+                    SubfactionAppearances =
+                    [
+                        .. faction.SubfactionAppearances.Select(appearance =>
+                        {
+                            previousAppearances.TryGetValue(appearance.Name, out var previous);
+                            return new StoredSubfactionAppearance
+                            {
+                                Name = appearance.Name,
+                                Color = appearance.Color,
+                                FlagSource = appearance.FlagSource,
+                                FlagImageStorageKey = appearance.ClearFlagImage ? null : previous?.FlagImageStorageKey,
+                                TintFlagImage = appearance.TintFlagImage,
+                            };
+                        }),
+                    ],
                     AllyGroupName = faction.AllyGroupName,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     FlagImageStorageKey = faction.ClearFlagImage ? null : existing?.FlagImageStorageKey,
@@ -260,6 +278,14 @@ internal static class CatalogFileBinder
                 if (IsUserUploadedFileKey(faction.FlagImageStorageKey))
                 {
                     yield return faction.FlagImageStorageKey;
+                }
+
+                foreach (var appearance in faction.SubfactionAppearances)
+                {
+                    if (IsUserUploadedFileKey(appearance.FlagImageStorageKey))
+                    {
+                        yield return appearance.FlagImageStorageKey;
+                    }
                 }
             }
         }

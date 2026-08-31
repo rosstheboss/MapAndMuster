@@ -1017,6 +1017,17 @@ public static class PlayResponses
                             SpecialRuleIds = item.SpecialRuleIds,
                         }),
                     ],
+                    SubfactionAppearances =
+                    [
+                        .. faction.SubfactionAppearances.Select(static item => new SubfactionAppearanceResponse
+                        {
+                            Name = item.Name,
+                            Color = item.Color,
+                            FlagSource = item.FlagSource,
+                            HasFlagImage = item.HasFlagImage,
+                            TintFlagImage = item.TintFlagImage,
+                        }),
+                    ],
                 }),
             ],
             StructureTypes =

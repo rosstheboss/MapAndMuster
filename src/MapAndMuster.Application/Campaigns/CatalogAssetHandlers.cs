@@ -415,20 +415,36 @@ public sealed class UploadFactionFlagHandler
             .SaveAsync("flags", processed.Content, processed.FileExtension, "image/png", cancellationToken)
             .ConfigureAwait(false);
         var previous = factions[index];
-        var previousKey = previous.FlagImageStorageKey;
-        factions[index] = new StoredFaction
+        string? previousKey;
+        if (!string.IsNullOrWhiteSpace(command.SubfactionName))
         {
-            Id = previous.Id,
-            Name = previous.Name,
-            Color = previous.Color,
-            Subfactions = previous.Subfactions,
-            AllyGroupName = previous.AllyGroupName,
-            RequiresSubfaction = previous.RequiresSubfaction,
-            FlagImageStorageKey = newKey,
-            TintFlagImage = previous.TintFlagImage,
-            SpecialRuleIds = previous.SpecialRuleIds,
-            SubfactionSpecialRules = previous.SubfactionSpecialRules,
-        };
+            if (!previous.Subfactions.Contains(command.SubfactionName, StringComparer.OrdinalIgnoreCase))
+            {
+                await _assets.DeleteAsync(newKey, cancellationToken).ConfigureAwait(false);
+                return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The subfaction was not found.");
+            }
+
+            previousKey = FactionAppearance.Find(previous, command.SubfactionName)?.FlagImageStorageKey;
+            factions[index] = FactionAppearance.WithSubfactionFlag(previous, command.SubfactionName, newKey);
+        }
+        else
+        {
+            previousKey = previous.FlagImageStorageKey;
+            factions[index] = new StoredFaction
+            {
+                Id = previous.Id,
+                Name = previous.Name,
+                Color = previous.Color,
+                Subfactions = previous.Subfactions,
+                SubfactionAppearances = previous.SubfactionAppearances,
+                AllyGroupName = previous.AllyGroupName,
+                RequiresSubfaction = previous.RequiresSubfaction,
+                FlagImageStorageKey = newKey,
+                TintFlagImage = previous.TintFlagImage,
+                SpecialRuleIds = previous.SpecialRuleIds,
+                SubfactionSpecialRules = previous.SubfactionSpecialRules,
+            };
+        }
 
         var updated = CampaignMapClone.CloneWithFactions(access.Campaign, factions, _clock.UtcNow);
         var outcome = await _campaigns.UpdateAsync(updated, command.ExpectedRevision, cancellationToken).ConfigureAwait(false);
@@ -483,13 +499,15 @@ public sealed class GetFactionFlagHandler
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <param name="subfactionName">The subfaction name when reading a subfaction logo.</param>
     /// <returns>The stored image.</returns>
     public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
         Guid campaignId,
         Guid factionId,
         Guid userId,
         CancellationToken cancellationToken,
-        bool isAdministrator = false)
+        bool isAdministrator = false,
+        string? subfactionName = null)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
         if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
@@ -498,12 +516,18 @@ public sealed class GetFactionFlagHandler
         }
 
         var faction = campaign.Factions.FirstOrDefault(item => item.Id == factionId);
-        if (faction is null || string.IsNullOrWhiteSpace(faction.FlagImageStorageKey))
+        if (faction is null)
         {
             return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The faction flag was not found.");
         }
 
-        var file = await _assets.OpenReadAsync(faction.FlagImageStorageKey, cancellationToken).ConfigureAwait(false);
+        var key = FactionAppearance.Resolve(faction, subfactionName).FlagImageStorageKey;
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The faction flag was not found.");
+        }
+
+        var file = await _assets.OpenReadAsync(key, cancellationToken).ConfigureAwait(false);
         return file is null
             ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The faction flag was not found.")
             : OperationResults.Success(file);
@@ -862,6 +886,9 @@ public sealed class UploadFactionFlagCommand
 
     /// <summary>Gets the faction identifier.</summary>
     public required Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction name when replacing a subfaction logo.</summary>
+    public string? SubfactionName { get; init; }
 
     /// <summary>Gets the last observed campaign revision.</summary>
     public required int ExpectedRevision { get; init; }

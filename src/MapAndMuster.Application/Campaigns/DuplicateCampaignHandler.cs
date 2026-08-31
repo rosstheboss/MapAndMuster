@@ -92,6 +92,7 @@ public sealed class DuplicateCampaignHandler
                     Name = faction.Name,
                     Color = faction.Color,
                     Subfactions = faction.Subfactions,
+                    SubfactionAppearances = faction.SubfactionAppearances,
                     AllyGroupName = faction.AllyGroupName,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     FlagImageStorageKey = faction.FlagImageStorageKey,

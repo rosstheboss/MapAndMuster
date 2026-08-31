@@ -44,6 +44,12 @@ describe('campaign presets', () => {
       Slaanesh: ['Alluring'],
       Tzeentch: ['Magical Supply'],
     });
+    expect(copy!.factions.find((faction) => faction.name === 'Daemons of Chaos')?.subfactionAppearances).toEqual([
+      { name: 'Khorne', color: '#B91C1C', flagSource: 'color' },
+      { name: 'Nurgle', color: '#3F6212', flagSource: 'color' },
+      { name: 'Slaanesh', color: '#F472B6', flagSource: 'color' },
+      { name: 'Tzeentch', color: '#0E7490', flagSource: 'color' },
+    ]);
     expect(copy!.factions.some((faction) => faction.name === 'Renegade Crowns')).toBe(true);
     expect(copy!.terrainTypes.find((entry) => entry.name === 'Sea')?.isWaterFeature).toBe(true);
     expect(campaignFromPreset('unknown')).toBeNull();

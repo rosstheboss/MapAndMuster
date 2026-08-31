@@ -131,6 +131,16 @@ public static class CampaignMapper
                         SpecialRuleIds = item.SpecialRuleIds,
                     })
                     .ToArray(),
+                SubfactionAppearances = faction.SubfactionAppearances
+                    .Select(static item => new SubfactionAppearanceDetail
+                    {
+                        Name = item.Name,
+                        Color = item.Color,
+                        FlagSource = item.FlagSource,
+                        HasFlagImage = !string.IsNullOrWhiteSpace(item.FlagImageStorageKey),
+                        TintFlagImage = item.TintFlagImage,
+                    })
+                    .ToArray(),
             })],
             TerrainTypes = [.. campaign.TerrainTypes.Select(static type => new TerrainTypeDetail
             {

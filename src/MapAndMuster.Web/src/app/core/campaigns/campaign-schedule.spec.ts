@@ -1,13 +1,22 @@
 import {
   actionNumberAt,
+  battleStatusLabel,
+  BATTLE_STATUSES,
+  CAMPAIGN_STATUSES,
   durationRangeMessage,
   formatCountdown,
   formatDuration,
   formatPhaseEndTimestamp,
   formatPhaseLabel,
+  forceStatusClearLabel,
+  forceStatusEnableLabel,
+  forceStatusLabel,
   maxAmountForUnit,
+  PHASE_KINDS,
+  phaseKindLabel,
   statusLabel,
 } from './campaign-schedule';
+import { FORCE_STATUS_CLEAR_OPTIONS, FORCE_STATUS_ENABLE_OPTIONS } from './force-status-presets';
 
 describe('campaign-schedule helpers', () => {
   it('formats durations, phases, and status labels', () => {
@@ -47,5 +56,29 @@ describe('campaign-schedule helpers', () => {
     expect(maxAmountForUnit('Months')).toBe(12);
     expect(durationRangeMessage('Round length', 8, 'Days')).toBe('Round length must be between 1 and 7 days.');
     expect(durationRangeMessage('Round length', 1, 'Weeks')).toBeNull();
+  });
+
+  it('labels every campaign status, battle status, and phase kind without leaking PascalCase', () => {
+    expect(CAMPAIGN_STATUSES.map((status) => statusLabel(status))).toEqual(['Scheduled', 'In progress', 'Completed']);
+    expect(BATTLE_STATUSES.map((status) => battleStatusLabel(status))).toEqual([
+      'Pending',
+      'Awaiting results',
+      'Finalized',
+      'Disputed',
+      'GM resolved',
+    ]);
+    expect(PHASE_KINDS.map((kind) => phaseKindLabel(kind))).toEqual(['Action', 'Battle']);
+    expect(battleStatusLabel('AwaitingResults')).not.toBe('AwaitingResults');
+  });
+
+  it('labels every force-status trigger and leaves catalog status names as written', () => {
+    expect(FORCE_STATUS_ENABLE_OPTIONS.map((option) => forceStatusEnableLabel(option.id))).toEqual(
+      FORCE_STATUS_ENABLE_OPTIONS.map((option) => option.label),
+    );
+    expect(FORCE_STATUS_CLEAR_OPTIONS.map((option) => forceStatusClearLabel(option.id))).toEqual(
+      FORCE_STATUS_CLEAR_OPTIONS.map((option) => option.label),
+    );
+    expect(forceStatusLabel('Shaken')).toBe('Shaken');
+    expect(forceStatusLabel(null)).toBe('Normal');
   });
 });

@@ -178,6 +178,96 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task UpdateRoundTripsRequiredSubfactionAppearance()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("gm");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Daemon Host"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        var north = created.Factions[0];
+        var south = created.Factions[1];
+        using var updatedResponse = await client.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}",
+            new SaveCampaignRequest
+            {
+                Name = created.Name,
+                Description = "A contested frontier.",
+                PlayerCount = created.PlayerSlotCount,
+                IsPrivate = false,
+                IsPubliclyViewable = true,
+                CreatorIsParticipant = true,
+                Factions =
+                [
+                    new FactionRequest
+                    {
+                        Id = north.Id,
+                        Name = north.Name,
+                        Color = north.Color,
+                        Subfactions = ["Khorne", "Nurgle"],
+                        RequiresSubfaction = true,
+                        SubfactionAppearances =
+                        [
+                            new SubfactionAppearanceRequest
+                            {
+                                Name = "Khorne",
+                                Color = "#B91C1C",
+                                FlagSource = "color",
+                            },
+                            new SubfactionAppearanceRequest
+                            {
+                                Name = "Nurgle",
+                                Color = "#3F6212",
+                                FlagSource = "color",
+                            },
+                        ],
+                    },
+                    new FactionRequest
+                    {
+                        Id = south.Id,
+                        Name = south.Name,
+                        Color = south.Color,
+                    },
+                ],
+                Revision = created.Revision,
+                TimeZoneId = "UTC",
+                StartsAtLocal = created.StartsAtLocal,
+                RoundCount = created.RoundCount,
+                RoundLengthAmount = created.RoundLengthAmount,
+                RoundLengthUnit = created.RoundLengthUnit,
+                Phases =
+                [
+                    new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                    new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                    new RoundPhaseRequest { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+                ],
+            });
+        Assert.Equal(HttpStatusCode.OK, updatedResponse.StatusCode);
+        var updated = await updatedResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(updated);
+        var host = updated.Factions.Single(faction => faction.Id == north.Id);
+        Assert.True(host.RequiresSubfaction);
+        Assert.Equal(["Khorne", "Nurgle"], host.Subfactions);
+        Assert.Equal(2, host.SubfactionAppearances.Count);
+        Assert.Equal("Khorne", host.SubfactionAppearances[0].Name);
+        Assert.Equal("#B91C1C", host.SubfactionAppearances[0].Color);
+        Assert.Equal("color", host.SubfactionAppearances[0].FlagSource);
+        Assert.False(host.SubfactionAppearances[0].HasFlagImage);
+        Assert.Equal("Nurgle", host.SubfactionAppearances[1].Name);
+        Assert.Equal("#3F6212", host.SubfactionAppearances[1].Color);
+        Assert.Equal("color", host.SubfactionAppearances[1].FlagSource);
+
+        var reloaded = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(reloaded);
+        var stored = reloaded.Factions.Single(faction => faction.Id == north.Id);
+        Assert.Equal("#B91C1C", stored.SubfactionAppearances.Single(item => item.Name == "Khorne").Color);
+        Assert.Equal("color", stored.SubfactionAppearances.Single(item => item.Name == "Nurgle").FlagSource);
+    }
+
+    [Fact]
     public async Task DuplicateCampaignCopiesSetupAndStartsOneWeekLater()
     {
         using var client = _factory.CreateClient();

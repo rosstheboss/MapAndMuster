@@ -17,6 +17,9 @@ public sealed class FactionInput
     /// <summary>Gets optional subfaction names.</summary>
     public IReadOnlyList<string>? Subfactions { get; init; }
 
+    /// <summary>Gets optional color, flag, and logo choices for named subfactions.</summary>
+    public IReadOnlyList<SubfactionAppearanceInput>? SubfactionAppearances { get; init; }
+
     /// <summary>Gets the optional ally-group name this faction joins.</summary>
     public string? AllyGroupName { get; init; }
 

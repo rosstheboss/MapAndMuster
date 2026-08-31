@@ -679,6 +679,14 @@ public static class CampaignSetupRules
                     $"factions[{index}].subfactions"));
             }
 
+            var appearances = ParseSubfactionAppearances(
+                faction.SubfactionAppearances,
+                subfactions,
+                faction.RequiresSubfaction,
+                usedColors,
+                index,
+                errors);
+
             parsed.Add(new FactionSetup(
                 ResolveId(faction.Id, usedIds, $"factions[{index}].id", errors),
                 name,
@@ -699,7 +707,8 @@ public static class CampaignSetupRules
                     subfactions,
                     knownSpecialRuleIds,
                     index,
-                    errors)));
+                    errors),
+                appearances));
         }
 
         return parsed;
@@ -755,6 +764,98 @@ public static class CampaignSetupRules
             }
 
             parsed.Add(name);
+        }
+
+        return parsed;
+    }
+
+    private static List<SubfactionAppearanceSetup> ParseSubfactionAppearances(
+        IReadOnlyList<SubfactionAppearanceInput>? appearances,
+        List<string> subfactions,
+        bool requiresSubfaction,
+        HashSet<string> usedColors,
+        int factionIndex,
+        List<DomainError> errors)
+    {
+        var byName = new Dictionary<string, (SubfactionAppearanceInput Input, int Index)>(StringComparer.OrdinalIgnoreCase);
+        if (appearances is not null)
+        {
+            for (var index = 0; index < appearances.Count; index++)
+            {
+                var appearance = appearances[index];
+                var name = appearance.Name?.Trim() ?? string.Empty;
+                var field = $"factions[{factionIndex}].subfactionAppearances[{index}].name";
+                if (name.Length == 0)
+                {
+                    errors.Add(new DomainError(
+                        "factions.subfaction.appearance.invalid",
+                        $"Faction {factionIndex + 1} subfaction appearance {index + 1} must name a listed subfaction.",
+                        field));
+                    continue;
+                }
+
+                if (!subfactions.Contains(name, StringComparer.OrdinalIgnoreCase))
+                {
+                    errors.Add(new DomainError(
+                        "factions.subfaction.appearance.unknown",
+                        $"Faction {factionIndex + 1} subfaction appearance {index + 1} must name a listed subfaction.",
+                        field));
+                    continue;
+                }
+
+                if (!byName.TryAdd(name, (appearance, index)))
+                {
+                    errors.Add(new DomainError(
+                        "factions.subfaction.appearance.duplicate",
+                        $"Faction {factionIndex + 1} subfaction appearances must be unique.",
+                        field));
+                }
+            }
+        }
+
+        var parsed = new List<SubfactionAppearanceSetup>();
+        for (var index = 0; index < subfactions.Count; index++)
+        {
+            var name = subfactions[index];
+            byName.TryGetValue(name, out var match);
+            var fieldPrefix = match.Input is null
+                ? $"factions[{factionIndex}].subfactions[{index}]"
+                : $"factions[{factionIndex}].subfactionAppearances[{match.Index}]";
+            var flagSource = SubfactionFlagSource.Normalize(match.Input?.FlagSource);
+            if (flagSource is null)
+            {
+                errors.Add(new DomainError(
+                    "factions.subfaction.flag.invalid",
+                    $"Faction {factionIndex + 1} subfaction {name} flag must be inherit, a color flag, or an uploaded image.",
+                    $"{fieldPrefix}.flagSource"));
+                flagSource = SubfactionFlagSource.Inherit;
+            }
+
+            if (requiresSubfaction && flagSource == SubfactionFlagSource.Inherit)
+            {
+                errors.Add(new DomainError(
+                    "factions.subfaction.flag.required",
+                    $"Faction {factionIndex + 1} requires a subfaction, so {name} must use a color flag or an uploaded image.",
+                    $"{fieldPrefix}.flagSource"));
+            }
+
+            var colorRequired = requiresSubfaction || !string.IsNullOrWhiteSpace(match.Input?.Color);
+            var color = colorRequired
+                ? ParseUniqueColor(
+                    match.Input?.Color,
+                    usedColors,
+                    $"{fieldPrefix}.color",
+                    $"Faction {factionIndex + 1} subfaction {name} color",
+                    assignDefault: false,
+                    errors)
+                : null;
+
+            parsed.Add(new SubfactionAppearanceSetup(
+                name,
+                color,
+                flagSource,
+                match.Input?.ClearFlagImage == true || flagSource != SubfactionFlagSource.Image,
+                flagSource == SubfactionFlagSource.Image && match.Input?.TintFlagImage == true));
         }
 
         return parsed;

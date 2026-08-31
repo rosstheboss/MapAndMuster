@@ -194,8 +194,12 @@ export class CampaignService {
     return `/api/campaigns/${encodeURIComponent(campaignId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image?v=${revision}`;
   }
 
-  flagImageUrl(campaignId: string, factionId: string, revision: number): string {
-    return `/api/campaigns/${encodeURIComponent(campaignId)}/factions/${encodeURIComponent(factionId)}/flag?v=${revision}`;
+  flagImageUrl(campaignId: string, factionId: string, revision: number, subfaction?: string | null): string {
+    const factionPath = `/api/campaigns/${encodeURIComponent(campaignId)}/factions/${encodeURIComponent(factionId)}`;
+    const flagPath = subfaction?.trim()
+      ? `${factionPath}/subfactions/${encodeURIComponent(subfaction.trim())}/flag`
+      : `${factionPath}/flag`;
+    return `${flagPath}?v=${revision}`;
   }
 
   missionFileUrl(campaignId: string, missionId: string): string {
@@ -240,17 +244,21 @@ export class CampaignService {
     );
   }
 
-  async uploadFlagImage(campaignId: string, factionId: string, file: File, revision: number): Promise<CampaignDetail> {
+  async uploadFlagImage(
+    campaignId: string,
+    factionId: string,
+    file: File,
+    revision: number,
+    subfaction?: string | null,
+  ): Promise<CampaignDetail> {
     const form = new FormData();
     form.set('image', file);
     form.set('revision', String(revision));
-    return firstValueFrom(
-      this.http.post<CampaignDetail>(
-        `/api/campaigns/${encodeURIComponent(campaignId)}/factions/${encodeURIComponent(factionId)}/flag`,
-        form,
-        { withCredentials: true },
-      ),
-    );
+    const factionPath = `/api/campaigns/${encodeURIComponent(campaignId)}/factions/${encodeURIComponent(factionId)}`;
+    const path = subfaction?.trim()
+      ? `${factionPath}/subfactions/${encodeURIComponent(subfaction.trim())}/flag`
+      : `${factionPath}/flag`;
+    return firstValueFrom(this.http.post<CampaignDetail>(path, form, { withCredentials: true }));
   }
 
   async uploadMissionFile(

@@ -1,4 +1,5 @@
 import type { CampaignFaction, CampaignStructureType } from '../campaigns/campaign.models';
+import { resolveFactionAppearance } from '../campaigns/faction-appearance';
 import { fitSquareInPolygon, interiorAnchor, MARKER_MAX_PX, OVERLAY_FILL_OPACITY, STROKE_SCREEN_PX } from './geometry';
 import type { FittedSquare, MapPoint } from './geometry';
 import type { MapTerritory } from './map-graph.models';
@@ -17,7 +18,7 @@ export interface MapExportDecorations {
   factions: readonly CampaignFaction[];
   structures: readonly CampaignStructureType[];
   structureImageUrl?: (structureTypeId: string, pillaged?: boolean) => string | null;
-  flagImageUrl?: (factionId: string) => string | null;
+  flagImageUrl?: (factionId: string, subfaction?: string | null) => string | null;
 }
 
 export type MapExportImageLoader = (url: string) => Promise<CanvasImageSource | null>;
@@ -65,7 +66,9 @@ export function drawTerritoryOverlay(
     tracePolygon(ctx, territory.polygon, width, height);
     if (territory.spawnFactionId) {
       const spawnFaction = factions.find((faction) => faction.id === territory.spawnFactionId) ?? null;
-      const stripeColor = territory.overlayColor ?? spawnFaction?.color ?? DEFAULT_SPAWN_STRIPE;
+      const stripeColor =
+        territory.overlayColor ??
+        (spawnFaction ? resolveFactionAppearance(spawnFaction, territory.spawnSubfaction).color : DEFAULT_SPAWN_STRIPE);
       ctx.save();
       ctx.clip();
       fillSpawnStripes(ctx, width, height, stripeColor);
@@ -128,9 +131,12 @@ export async function drawMapDecorations(
       : null;
 
     if (owner && flagFit) {
-      const flagUrl = owner.hasFlagImage ? (decorations.flagImageUrl?.(owner.id) ?? null) : null;
+      const appearance = resolveFactionAppearance(owner, territory.ownerSubfaction);
+      const flagUrl = appearance.hasFlagImage
+        ? (decorations.flagImageUrl?.(owner.id, territory.ownerSubfaction) ?? null)
+        : null;
       const flagImage = flagUrl ? (images.get(flagUrl) ?? null) : null;
-      drawFactionFlag(ctx, width, height, flagFit, owner.color, flagImage, owner.tintFlagImage === true);
+      drawFactionFlag(ctx, width, height, flagFit, appearance.color, flagImage, appearance.tint);
     }
 
     if (structure && structureFit) {
@@ -197,8 +203,9 @@ function collectDecorationImageUrls(territories: readonly MapTerritory[], decora
   const urls = new Set<string>();
   for (const territory of territories) {
     const owner = decorations.factions.find((faction) => faction.id === territory.ownerFactionId) ?? null;
-    if (owner?.hasFlagImage) {
-      const flagUrl = decorations.flagImageUrl?.(owner.id) ?? null;
+    const appearance = resolveFactionAppearance(owner, territory.ownerSubfaction);
+    if (appearance.hasFlagImage) {
+      const flagUrl = decorations.flagImageUrl?.(owner?.id ?? '', territory.ownerSubfaction) ?? null;
       if (flagUrl) {
         urls.add(flagUrl);
       }

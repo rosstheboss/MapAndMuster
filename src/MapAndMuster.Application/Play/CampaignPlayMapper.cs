@@ -597,6 +597,9 @@ internal static class CampaignPlayMapper
             var faction = membership.FactionId is { } factionId
                 ? campaign.Factions.FirstOrDefault(item => item.Id == factionId)
                 : null;
+            var appearance = faction is null
+                ? null
+                : FactionAppearance.Resolve(faction, membership.Subfaction);
             PlayerSupplySnapshot? supply = null;
             if (campaign.PlayState is { Forces.Count: > 0 } play && membership.IsPlayer)
             {
@@ -617,9 +620,9 @@ internal static class CampaignPlayMapper
                 FactionName = faction?.Name,
                 Subfaction = membership.Subfaction,
                 FactionId = faction?.Id,
-                FactionColor = faction?.Color,
-                HasFlagImage = !string.IsNullOrWhiteSpace(faction?.FlagImageStorageKey),
-                TintFlagImage = faction?.TintFlagImage == true,
+                FactionColor = appearance?.Color,
+                HasFlagImage = appearance?.HasFlagImage == true,
+                TintFlagImage = appearance?.TintFlagImage == true,
                 AllyGroupName = faction?.AllyGroupName,
                 CurrentSupplyPoints = supply?.CurrentSupplyPoints,
                 TemporarySupplyPoints = supply?.TemporarySupplyPoints,

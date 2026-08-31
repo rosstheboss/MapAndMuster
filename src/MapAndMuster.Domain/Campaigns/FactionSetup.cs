@@ -18,6 +18,7 @@ public sealed class FactionSetup
     /// <param name="tintFlagImage">Whether an uploaded logo should be tinted with the faction color.</param>
     /// <param name="specialRuleIds">Special rules assigned to this faction.</param>
     /// <param name="subfactionSpecialRules">Special rules assigned to named subfactions.</param>
+    /// <param name="subfactionAppearances">Color, flag, and logo choices for named subfactions.</param>
     public FactionSetup(
         Guid id,
         string name,
@@ -28,7 +29,8 @@ public sealed class FactionSetup
         bool clearFlagImage,
         bool tintFlagImage = false,
         IReadOnlyList<Guid>? specialRuleIds = null,
-        IReadOnlyList<SubfactionSpecialRulesSetup>? subfactionSpecialRules = null)
+        IReadOnlyList<SubfactionSpecialRulesSetup>? subfactionSpecialRules = null,
+        IReadOnlyList<SubfactionAppearanceSetup>? subfactionAppearances = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(color);
@@ -43,6 +45,7 @@ public sealed class FactionSetup
         TintFlagImage = tintFlagImage;
         SpecialRuleIds = specialRuleIds ?? [];
         SubfactionSpecialRules = subfactionSpecialRules ?? [];
+        SubfactionAppearances = subfactionAppearances ?? [];
     }
 
     /// <summary>Gets the faction identifier.</summary>
@@ -74,4 +77,7 @@ public sealed class FactionSetup
 
     /// <summary>Gets special rules assigned to named subfactions.</summary>
     public IReadOnlyList<SubfactionSpecialRulesSetup> SubfactionSpecialRules { get; }
+
+    /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
+    public IReadOnlyList<SubfactionAppearanceSetup> SubfactionAppearances { get; }
 }

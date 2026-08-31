@@ -125,6 +125,17 @@ export interface CampaignFaction {
   tintFlagImage?: boolean;
   specialRuleIds?: string[];
   subfactionSpecialRules?: SubfactionSpecialRules[];
+  subfactionAppearances?: SubfactionAppearance[];
+}
+
+export type SubfactionFlagSource = 'inherit' | 'color' | 'image';
+
+export interface SubfactionAppearance {
+  name: string;
+  color: string | null;
+  flagSource: SubfactionFlagSource;
+  hasFlagImage: boolean;
+  tintFlagImage?: boolean;
 }
 
 export interface SubfactionSpecialRules {
@@ -409,6 +420,15 @@ export interface SaveFactionPayload {
   tintFlagImage?: boolean;
   specialRuleIds?: string[];
   subfactionSpecialRules?: SubfactionSpecialRules[];
+  subfactionAppearances?: SaveSubfactionAppearancePayload[];
+}
+
+export interface SaveSubfactionAppearancePayload {
+  name: string;
+  color?: string | null;
+  flagSource?: SubfactionFlagSource;
+  clearFlagImage?: boolean;
+  tintFlagImage?: boolean;
 }
 
 export interface SaveAllyGroupPayload {

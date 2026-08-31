@@ -1,8 +1,32 @@
 import { formatInstant } from '../time/date-time-display';
+import { FORCE_STATUS_CLEAR_OPTIONS, FORCE_STATUS_ENABLE_OPTIONS } from './force-status-presets';
 
 export const DURATION_UNITS = ['Minutes', 'Hours', 'Days', 'Weeks', 'Months'] as const;
 
 export const PHASE_KINDS = ['Action', 'Battle'] as const;
+
+export const CAMPAIGN_STATUSES = ['Scheduled', 'InProgress', 'Completed'] as const;
+
+export const BATTLE_STATUSES = ['Pending', 'AwaitingResults', 'Finalized', 'Disputed', 'GMResolved'] as const;
+
+const CAMPAIGN_STATUS_LABELS: Readonly<Record<(typeof CAMPAIGN_STATUSES)[number], string>> = {
+  Scheduled: 'Scheduled',
+  InProgress: 'In progress',
+  Completed: 'Completed',
+};
+
+const BATTLE_STATUS_LABELS: Readonly<Record<(typeof BATTLE_STATUSES)[number], string>> = {
+  Pending: 'Pending',
+  AwaitingResults: 'Awaiting results',
+  Finalized: 'Finalized',
+  Disputed: 'Disputed',
+  GMResolved: 'GM resolved',
+};
+
+const PHASE_KIND_LABELS: Readonly<Record<(typeof PHASE_KINDS)[number], string>> = {
+  Action: 'Action',
+  Battle: 'Battle',
+};
 
 const SINGULAR_UNITS: Readonly<Record<string, string>> = {
   Minutes: 'minute',
@@ -58,11 +82,39 @@ export function formatCountdown(endsUtc: string, nowMs: number): string {
 }
 
 export function statusLabel(status: string): string {
-  if (status === 'InProgress') {
-    return 'In progress';
+  const labels: Readonly<Record<string, string>> = CAMPAIGN_STATUS_LABELS;
+  return labels[status] ?? humanizeEnum(status);
+}
+
+export function battleStatusLabel(status: string): string {
+  const labels: Readonly<Record<string, string>> = BATTLE_STATUS_LABELS;
+  return labels[status] ?? humanizeEnum(status);
+}
+
+export function phaseKindLabel(kind: string): string {
+  const labels: Readonly<Record<string, string>> = PHASE_KIND_LABELS;
+  return labels[kind] ?? humanizeEnum(kind);
+}
+
+export function forceStatusEnableLabel(value: string): string {
+  return FORCE_STATUS_ENABLE_OPTIONS.find((option) => option.id === value)?.label ?? humanizeEnum(value);
+}
+
+export function forceStatusClearLabel(value: string): string {
+  return FORCE_STATUS_CLEAR_OPTIONS.find((option) => option.id === value)?.label ?? humanizeEnum(value);
+}
+
+export function forceStatusLabel(status: string | null | undefined): string {
+  const name = status?.trim();
+  if (!name) {
+    return 'Normal';
   }
 
-  return status;
+  return name;
+}
+
+function humanizeEnum(value: string): string {
+  return value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
 }
 
 export function actionNumberAt(phases: readonly { kind: string }[], index: number): number {

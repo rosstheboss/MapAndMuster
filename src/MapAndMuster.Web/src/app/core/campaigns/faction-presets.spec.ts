@@ -62,13 +62,26 @@ describe('faction presets', () => {
     const daemons = factions!.find((faction) => faction.name === 'Daemons of Chaos');
     expect(daemons?.subfactions).toEqual(['Khorne', 'Nurgle', 'Slaanesh', 'Tzeentch']);
     expect(daemons?.requiresSubfaction).toBe(true);
+    expect(daemons?.subfactionAppearances).toEqual([
+      { name: 'Khorne', color: '#B91C1C', flagSource: 'color' },
+      { name: 'Nurgle', color: '#3F6212', flagSource: 'color' },
+      { name: 'Slaanesh', color: '#F472B6', flagSource: 'color' },
+      { name: 'Tzeentch', color: '#0E7490', flagSource: 'color' },
+    ]);
     expect(daemons?.subfactionSpecialRules).toEqual({
       Khorne: ['Only Blood Satisfies!'],
       Nurgle: ['Bringers of the Plague'],
       Slaanesh: ['Alluring'],
       Tzeentch: ['Magical Supply'],
     });
-    const colors = factions!.map((faction) => faction.color.toUpperCase());
+    const colors = [
+      ...factions!.map((faction) => faction.color.toUpperCase()),
+      ...factions!.flatMap((faction) =>
+        (faction.subfactionAppearances ?? [])
+          .map((appearance) => appearance.color.toUpperCase())
+          .filter((color): color is string => !!color),
+      ),
+    ];
     expect(new Set(colors).size).toBe(colors.length);
   });
 

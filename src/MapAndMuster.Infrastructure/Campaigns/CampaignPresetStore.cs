@@ -165,6 +165,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
                     Name = faction.Name,
                     Color = faction.Color,
                     Subfactions = faction.Subfactions,
+                    SubfactionAppearances = faction.SubfactionAppearances,
                     AllyGroupName = faction.AllyGroupName,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     FlagImageStorageKey = faction.FlagImageStorageKey,

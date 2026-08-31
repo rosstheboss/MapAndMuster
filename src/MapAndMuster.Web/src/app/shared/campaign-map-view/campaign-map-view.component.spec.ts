@@ -209,6 +209,43 @@ describe('CampaignMapViewComponent', () => {
     expect(view.fullscreen()).toBe(false);
   });
 
+  it('recenters a fitted map when the viewport grows', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.detectChanges();
+
+    const view = mapView(fixture.componentInstance);
+    view.imageSize.set({ width: 1000, height: 800 });
+    view.viewportSize.set({ width: 400, height: 300 });
+    view.fitToPanel.set(true);
+    view.repositionAfterViewportChange();
+    expect(view.panX()).toBe(12.5);
+    expect(view.panY()).toBe(0);
+
+    view.viewportSize.set({ width: 800, height: 600 });
+    view.repositionAfterViewportChange();
+    expect(view.panX()).toBe(25);
+    expect(view.panY()).toBe(0);
+  });
+
+  it('clamps overflow pan when the viewport shrinks', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.detectChanges();
+
+    const view = mapView(fixture.componentInstance);
+    view.imageSize.set({ width: 1000, height: 800 });
+    view.viewportSize.set({ width: 800, height: 600 });
+    view.fitToPanel.set(false);
+    view.zoom.set(1);
+    view.panX.set(-2000);
+    view.panY.set(-2000);
+    view.viewportSize.set({ width: 400, height: 300 });
+    view.repositionAfterViewportChange();
+    expect(view.panX()).toBe(-600);
+    expect(view.panY()).toBe(-500);
+  });
+
   it('renders an item objective marker in a territory', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
@@ -812,6 +849,14 @@ describe('CampaignMapViewComponent', () => {
     expect(compiled.querySelector('.map-legend')).toBeTruthy();
     expect(compiled.textContent).toContain('Ownership tint');
     expect(compiled.textContent).toContain('Show names');
+    const directoryPanel = compiled.querySelector<HTMLDetailsElement>('.territory-directory')!;
+    expect(directoryPanel.open).toBe(true);
+    const summary = directoryPanel.querySelector('summary');
+    expect(summary?.textContent).toContain('Territories');
+    summary?.click();
+    fixture.detectChanges();
+    expect(directoryPanel.open).toBe(false);
+    expect(summary?.textContent).toContain('Territories');
   });
 
   it('selects a territory from the keyboard and from the directory list', () => {
@@ -865,6 +910,16 @@ describe('CampaignMapViewComponent', () => {
     toggle!.click();
     fixture.detectChanges();
     expect(compiled.querySelector('.territory-name')?.textContent.trim()).toBe('4');
+
+    const view = mapView(fixture.componentInstance);
+    view.imageSize.set({ width: 1000, height: 800 });
+    view.fitToPanel.set(false);
+    view.zoom.set(1);
+    fixture.detectChanges();
+    const label = compiled.querySelector('.territory-name');
+    const canvas = compiled.querySelector<HTMLElement>('.map-canvas');
+    expect(label?.textContent.trim()).toBe('Coast');
+    expect(canvas?.style.getPropertyValue('--map-scale')).toBe('1');
   });
 
   it('hides the territory directory when the host supplies its own list', () => {
@@ -911,15 +966,28 @@ function canvasTransform(root: HTMLElement): string {
   return root.querySelector<HTMLElement>('.map-canvas')!.style.transform;
 }
 
-function prepareOverflowingMap(component: CampaignMapViewComponent): void {
-  const view = component as unknown as {
+function mapView(component: CampaignMapViewComponent): {
+  imageSize: { set(value: { width: number; height: number }): void };
+  viewportSize: { set(value: { width: number; height: number }): void };
+  fitToPanel: { set(value: boolean): void };
+  zoom: { set(value: number): void };
+  panX: { set(value: number): void; (): number };
+  panY: { set(value: number): void; (): number };
+  repositionAfterViewportChange: () => void;
+} {
+  return component as unknown as {
     imageSize: { set(value: { width: number; height: number }): void };
     viewportSize: { set(value: { width: number; height: number }): void };
     fitToPanel: { set(value: boolean): void };
     zoom: { set(value: number): void };
-    panX: { set(value: number): void };
-    panY: { set(value: number): void };
+    panX: { set(value: number): void; (): number };
+    panY: { set(value: number): void; (): number };
+    repositionAfterViewportChange: () => void;
   };
+}
+
+function prepareOverflowingMap(component: CampaignMapViewComponent): void {
+  const view = mapView(component);
   view.imageSize.set({ width: 1000, height: 800 });
   view.viewportSize.set({ width: 400, height: 300 });
   view.fitToPanel.set(false);

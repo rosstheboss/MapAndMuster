@@ -732,28 +732,70 @@ export interface FittedSquare {
   height: number;
 }
 
+export interface FitSquareOptions {
+  minScale?: number;
+  allowOverlapFallback?: boolean;
+}
+
+export function rectanglesOverlap(left: FittedSquare, right: FittedSquare): boolean {
+  return (
+    Math.abs(left.x - right.x) < (left.width + right.width) / 2 &&
+    Math.abs(left.y - right.y) < (left.height + right.height) / 2
+  );
+}
+
 export function fitSquareInPolygon(
   polygon: readonly MapPoint[],
   preferred: MapPoint,
   maxWidth: number,
   maxHeight: number,
   avoid: readonly FittedSquare[] | null = null,
+  options?: FitSquareOptions,
 ): FittedSquare {
-  const minWidth = Math.max(maxWidth * 0.2, 0.004);
-  const minHeight = Math.max(maxHeight * 0.2, 0.004);
+  const minScale = Math.min(1, Math.max(options?.minScale ?? 0.2, 0.05));
+  const allowOverlapFallback = options?.allowOverlapFallback ?? true;
+  const minWidth = Math.max(maxWidth * minScale, 0.004);
+  const minHeight = Math.max(maxHeight * minScale, 0.004);
   const searchFrom = containsInclusive(polygon, preferred) ? preferred : interiorAnchor(polygon);
   const avoided = avoid ?? [];
-  const fitted =
-    searchFittedSquare(polygon, searchFrom, maxWidth, maxHeight, minWidth, minHeight, avoided) ??
-    (avoided.length > 0 ? searchFittedSquare(polygon, searchFrom, maxWidth, maxHeight, minWidth, minHeight, []) : null);
+  const fitted = tryFitSquareInPolygon(polygon, searchFrom, maxWidth, maxHeight, avoided, minScale);
+  if (fitted) {
+    return fitted;
+  }
 
-  return (
-    fitted ?? {
-      x: searchFrom.x,
-      y: searchFrom.y,
-      width: minWidth,
-      height: minHeight,
+  if (allowOverlapFallback && avoided.length > 0) {
+    const overlapping = tryFitSquareInPolygon(polygon, searchFrom, maxWidth, maxHeight, [], minScale);
+    if (overlapping) {
+      return overlapping;
     }
+  }
+
+  return {
+    x: searchFrom.x,
+    y: searchFrom.y,
+    width: minWidth,
+    height: minHeight,
+  };
+}
+
+export function tryFitSquareInPolygon(
+  polygon: readonly MapPoint[],
+  origin: MapPoint,
+  maxWidth: number,
+  maxHeight: number,
+  avoid: readonly FittedSquare[] | null = null,
+  minScale = 0.2,
+): FittedSquare | null {
+  const clampedScale = Math.min(1, Math.max(minScale, 0.05));
+  return searchFittedSquare(
+    polygon,
+    origin,
+    maxWidth,
+    maxHeight,
+    Math.max(maxWidth * clampedScale, 0.004),
+    Math.max(maxHeight * clampedScale, 0.004),
+    avoid ?? [],
+    clampedScale,
   );
 }
 
@@ -765,10 +807,13 @@ function searchFittedSquare(
   minWidth: number,
   minHeight: number,
   avoided: readonly FittedSquare[],
+  minScale = 0.2,
 ): FittedSquare | null {
   let best: FittedSquare | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
-  const sizes = [1, 0.85, 0.7, 0.55, 0.4, 0.28, 0.2];
+  const sizes = [1, 0.85, 0.7, 0.55, 0.5, 0.4, 0.28, 0.2]
+    .filter((factor) => factor + 1e-9 >= minScale)
+    .sort((left, right) => right - left);
   for (const factor of sizes) {
     const width = Math.max(minWidth, maxWidth * factor);
     const height = Math.max(minHeight, maxHeight * factor);
@@ -829,6 +874,18 @@ function markerOffsets(): MapPoint[] {
     { x: -1.1, y: 0 },
     { x: 0, y: 1.1 },
     { x: 0, y: -1.1 },
+    { x: 1.4, y: 0 },
+    { x: -1.4, y: 0 },
+    { x: 0, y: 1.4 },
+    { x: 0, y: -1.4 },
+    { x: 1.8, y: 0.55 },
+    { x: -1.8, y: 0.55 },
+    { x: 1.8, y: -0.55 },
+    { x: -1.8, y: -0.55 },
+    { x: 0.55, y: 1.8 },
+    { x: -0.55, y: 1.8 },
+    { x: 0.55, y: -1.8 },
+    { x: -0.55, y: -1.8 },
   ];
 }
 
@@ -855,13 +912,6 @@ function squareFitsPolygon(
     { x: square.x + hw, y: square.y },
   ];
   return samples.every((point) => containsInclusive(polygon, point));
-}
-
-function rectanglesOverlap(left: FittedSquare, right: FittedSquare): boolean {
-  return (
-    Math.abs(left.x - right.x) < (left.width + right.width) / 2 &&
-    Math.abs(left.y - right.y) < (left.height + right.height) / 2
-  );
 }
 
 function containsInclusive(polygon: readonly MapPoint[], point: MapPoint): boolean {

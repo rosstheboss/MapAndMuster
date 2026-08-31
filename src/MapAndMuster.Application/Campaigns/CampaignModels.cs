@@ -507,6 +507,9 @@ public sealed class FactionDetail
 
     /// <summary>Gets special-rule assignments for named subfactions.</summary>
     public IReadOnlyList<SubfactionSpecialRulesDetail> SubfactionSpecialRules { get; init; } = [];
+
+    /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
+    public IReadOnlyList<SubfactionAppearanceDetail> SubfactionAppearances { get; init; } = [];
 }
 
 /// <summary>
@@ -519,6 +522,27 @@ public sealed class SubfactionSpecialRulesDetail
 
     /// <summary>Gets special-rule identifiers assigned to this subfaction.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+}
+
+/// <summary>
+/// Color, flag, and logo choices for one named subfaction.
+/// </summary>
+public sealed class SubfactionAppearanceDetail
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the unique color when chosen, otherwise inherit the parent.</summary>
+    public string? Color { get; init; }
+
+    /// <summary>Gets whether the subfaction inherits, uses a color flag, or uses an uploaded logo.</summary>
+    public required string FlagSource { get; init; }
+
+    /// <summary>Gets whether this subfaction has an uploaded logo.</summary>
+    public required bool HasFlagImage { get; init; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the resolved color.</summary>
+    public bool TintFlagImage { get; init; }
 }
 
 /// <summary>
@@ -756,6 +780,9 @@ public sealed class StoredFaction
     /// <summary>Gets the subfaction names.</summary>
     public required IReadOnlyList<string> Subfactions { get; init; }
 
+    /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
+    public IReadOnlyList<StoredSubfactionAppearance> SubfactionAppearances { get; init; } = [];
+
     /// <summary>Gets the ally-group name this faction joins, if any.</summary>
     public string? AllyGroupName { get; init; }
 
@@ -773,6 +800,27 @@ public sealed class StoredFaction
 
     /// <summary>Gets special-rule assignments for named subfactions.</summary>
     public IReadOnlyList<SubfactionSpecialRulesDetail> SubfactionSpecialRules { get; init; } = [];
+}
+
+/// <summary>
+/// Persisted color, flag, and logo choices for one named subfaction.
+/// </summary>
+public sealed class StoredSubfactionAppearance
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the unique color when chosen, otherwise inherit the parent.</summary>
+    public string? Color { get; init; }
+
+    /// <summary>Gets whether the subfaction inherits, uses a color flag, or uses an uploaded logo.</summary>
+    public required string FlagSource { get; init; }
+
+    /// <summary>Gets the stored logo key, when a custom logo was uploaded.</summary>
+    public string? FlagImageStorageKey { get; init; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the resolved color.</summary>
+    public bool TintFlagImage { get; init; }
 }
 
 /// <summary>

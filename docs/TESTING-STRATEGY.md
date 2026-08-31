@@ -64,7 +64,8 @@ Use Angular's Vitest integration.
 
 Cover components/services for:
 
-- Order drafting from the map menu or force-panel checkmark, commit only when every required draft is saved, uncommit, and locked state.
+- Order drafting from the map menu or force-panel **Save draft**, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed.
+- Campaign-page status bar (round/phase, throttled countdown live region, viewer commit chip, compact commitment count, Go to your orders). While a campaign is running, Actions, Chat, and Standings are open by default; other sections stay collapsed and the last set is stored in a per-campaign cookie. Staff tools are under collapsed Manage campaign. Battle, campaign, phase, and force-status enums use display labels. A hidden-relic notice and each battle reminder render once. The campaign log summary shows unread mention and private counts from `GET /log` without marking the log read on load.
 - Countdown display without treating the browser clock as authoritative.
 - Map territory selection, force markers, polygon editing including Close Territory enclose and
   shared-border versus overlapping-interior checks, move drop validity, keyboard alternatives,
@@ -72,10 +73,16 @@ Cover components/services for:
   dimming, black connection arrows without size or outline changes, spawn ownership copy, required-
   subfaction spawn labels, disabled no-fixed-spawn factions, save-status check and X, and metadata forms.
   Map pinch-zoom and two-finger pan, full-screen toggle (M), map-image loading ellipsis, and force
-  markers staying inside their territory are covered in map-view tests.
+  markers staying inside their territory are covered in map-view tests. Force dots stay off flags and
+  structure logos, shrinking no more than 50%. Subfaction colors, color flags, and uploaded logos follow
+  the same uniqueness and tint rules as faction flags.
+  Full-screen map mode keeps the image inside the viewport: a fitted map recenters after the panel
+  resizes, and a zoomed map clamps pan so it cannot sit off-screen.
   Territory hit polygons are named buttons; keyboard focus and Enter/Space select a territory, and a
-  display-number-ordered directory is the accessible alternative on the campaign map (hidden in the
-  map editor, which keeps its own list). Playwright axe includes map polygons; a Playwright test
+  collapsible display-number-ordered directory is the accessible alternative on the campaign map
+  (hidden in the map editor, which keeps its own list). Campaign territory details sit under the map
+  in the left column, not under the directory. Show-names labels stay screen-sized while zoomed and
+  use theme surface/text colors. Playwright axe includes map polygons; a Playwright test
   tabs to a territory, presses Enter, and asserts the details panel updates.
   The map editor does not show hover-placeholder copy above the map, and hovering or selecting a
   territory does not change that field panel's height. The expanded Territories list stays within the

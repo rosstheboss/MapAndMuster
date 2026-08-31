@@ -1,4 +1,11 @@
 import { specialRuleNamesForFaction, specialRuleNamesForSubfaction } from './special-rule-presets';
+import type { SubfactionFlagSource } from './campaign.models';
+
+export interface FactionPresetSubfactionAppearance {
+  name: string;
+  color: string;
+  flagSource: SubfactionFlagSource;
+}
 
 export interface FactionPresetFaction {
   name: string;
@@ -7,6 +14,7 @@ export interface FactionPresetFaction {
   requiresSubfaction: boolean;
   specialRuleNames?: readonly string[];
   subfactionSpecialRules?: Readonly<Record<string, readonly string[]>>;
+  subfactionAppearances?: readonly FactionPresetSubfactionAppearance[];
 }
 
 export interface FactionPreset {
@@ -54,6 +62,12 @@ const WARHAMMER_OLD_WORLD_FACTIONS: readonly FactionPresetFaction[] = [
     color: '#AD1457',
     subfactions: ['Khorne', 'Nurgle', 'Slaanesh', 'Tzeentch'],
     requiresSubfaction: true,
+    subfactionAppearances: [
+      { name: 'Khorne', color: '#B91C1C', flagSource: 'color' },
+      { name: 'Nurgle', color: '#3F6212', flagSource: 'color' },
+      { name: 'Slaanesh', color: '#F472B6', flagSource: 'color' },
+      { name: 'Tzeentch', color: '#0E7490', flagSource: 'color' },
+    ],
   },
   {
     name: 'Dwarfen Mountain Holds',
@@ -135,6 +149,9 @@ export function sortedPresetFactions(factions: readonly FactionPresetFaction[]):
       color: faction.color,
       requiresSubfaction: faction.requiresSubfaction,
       subfactions: [...faction.subfactions].sort(compareNames),
+      subfactionAppearances: [...(faction.subfactionAppearances ?? [])]
+        .map((appearance) => ({ ...appearance }))
+        .sort((left, right) => compareNames(left.name, right.name)),
       specialRuleNames: [...(faction.specialRuleNames ?? specialRuleNamesForFaction(faction.name))],
       subfactionSpecialRules: Object.fromEntries(
         [...faction.subfactions].map((name) => [

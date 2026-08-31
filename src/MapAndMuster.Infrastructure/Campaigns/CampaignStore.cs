@@ -246,7 +246,8 @@ public sealed class CampaignStore : ICampaignStore
         return await query
             .AnyAsync(
                 campaign => campaign.MapStorageKey == storageKey
-                    || campaign.Factions.Any(faction => faction.FlagImageStorageKey == storageKey)
+                    || campaign.Factions.Any(faction => faction.FlagImageStorageKey == storageKey
+                        || faction.Subfactions.Any(subfaction => subfaction.FlagImageStorageKey == storageKey))
                     || (campaign.CatalogJson != null && campaign.CatalogJson.Contains(storageKey)),
                 cancellationToken)
             .ConfigureAwait(false)
@@ -626,12 +627,18 @@ public sealed class CampaignStore : ICampaignStore
                 SortOrder = factionOrder++,
             };
             var subOrder = 0;
-            foreach (var subfaction in faction.Subfactions)
+            foreach (var name in faction.Subfactions)
             {
+                var appearance = faction.SubfactionAppearances
+                    .FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
                 factionRecord.Subfactions.Add(new CampaignSubfactionRecord
                 {
-                    Name = subfaction,
+                    Name = name,
                     SortOrder = subOrder++,
+                    Color = appearance?.Color,
+                    FlagSource = appearance?.FlagSource ?? "inherit",
+                    FlagImageStorageKey = appearance?.FlagImageStorageKey,
+                    TintFlagImage = appearance?.TintFlagImage == true,
                 });
             }
 
@@ -752,6 +759,21 @@ public sealed class CampaignStore : ICampaignStore
                             .. faction.Subfactions
                                 .OrderBy(subfaction => subfaction.SortOrder)
                                 .Select(subfaction => subfaction.Name),
+                        ],
+                        SubfactionAppearances =
+                        [
+                            .. faction.Subfactions
+                                .OrderBy(subfaction => subfaction.SortOrder)
+                                .Select(subfaction => new StoredSubfactionAppearance
+                                {
+                                    Name = subfaction.Name,
+                                    Color = subfaction.Color,
+                                    FlagSource = string.IsNullOrWhiteSpace(subfaction.FlagSource)
+                                        ? "inherit"
+                                        : subfaction.FlagSource,
+                                    FlagImageStorageKey = subfaction.FlagImageStorageKey,
+                                    TintFlagImage = subfaction.TintFlagImage,
+                                }),
                         ],
                         AllyGroupName = faction.AllyGroup?.Name,
                         FlagImageStorageKey = faction.FlagImageStorageKey,

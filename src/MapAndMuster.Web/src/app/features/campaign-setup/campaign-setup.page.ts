@@ -21,6 +21,8 @@ import type {
   ItemObjectiveChoiceResult,
   SaveCampaignPayload,
   SaveMissionPayload,
+  SubfactionAppearance,
+  SubfactionFlagSource,
 } from '../../core/campaigns/campaign.models';
 import { defaultStructureCatalog, defaultTerrainCatalog } from '../../core/campaigns/catalog-defaults';
 import { campaignFromPreset, campaignPresetApplyOptions } from '../../core/campaigns/campaign-presets';
@@ -53,6 +55,7 @@ import {
   FACTION_PRESETS,
   factionsFromPreset,
   nextUnusedFactionColor,
+  type FactionPresetSubfactionAppearance,
 } from '../../core/campaigns/faction-presets';
 import {
   defaultItemObjective,
@@ -83,7 +86,14 @@ import {
   scrollAlertIntoView,
 } from '../../core/forms/validators';
 
-type NamedGroup = FormGroup<{ name: FormControl<string> }>;
+type NamedGroup = FormGroup<{
+  name: FormControl<string>;
+  color: FormControl<string>;
+  inheritColor: FormControl<boolean>;
+  flagSource: FormControl<'inherit' | 'color' | 'image'>;
+  clearFlagImage: FormControl<boolean>;
+  tintFlagImage: FormControl<boolean>;
+}>;
 type AllyGroupForm = FormGroup<{ id: FormControl<string>; name: FormControl<string>; color: FormControl<string> }>;
 type LinkGroup = FormGroup<{ label: FormControl<string>; url: FormControl<string> }>;
 type MissionQuestionGroup = FormGroup<{
@@ -635,7 +645,18 @@ export class CampaignSetupPage {
 
   protected hasPendingFlag(factionId: string): boolean {
     this.pendingUploadsTick();
-    return this.flagImages.has(factionId);
+    if (this.flagImages.has(factionId)) {
+      return true;
+    }
+
+    const prefix = `${factionId}::`;
+    for (const key of this.flagImages.keys()) {
+      if (key.startsWith(prefix)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   protected hasPendingStructureImage(structureId: string): boolean {
@@ -733,6 +754,7 @@ export class CampaignSetupPage {
         this.createFactionGroup(faction.name, '', faction.subfactions, {
           color: faction.color,
           requiresSubfaction: faction.requiresSubfaction,
+          appearances: faction.subfactionAppearances,
           specialRuleIds: (faction.specialRuleNames ?? [])
             .map((name) => ruleIds.get(name))
             .filter((id): id is string => !!id),
@@ -817,6 +839,7 @@ export class CampaignSetupPage {
         this.createFactionGroup(faction.name, '', faction.subfactions, {
           color: faction.color,
           requiresSubfaction: faction.requiresSubfaction,
+          appearances: faction.subfactionAppearances,
           specialRuleIds: (faction.specialRuleNames ?? [])
             .map((name) => ruleIds.get(name))
             .filter((id): id is string => !!id),
@@ -897,6 +920,7 @@ export class CampaignSetupPage {
           id: faction.id,
           color: faction.color,
           requiresSubfaction: faction.requiresSubfaction,
+          appearances: faction.subfactionAppearances,
           hasFlagImage: faction.hasFlagImage,
           tintFlagImage: faction.tintFlagImage,
           specialRuleIds: faction.specialRuleIds ?? [],
@@ -1024,7 +1048,9 @@ export class CampaignSetupPage {
   }
 
   protected addSubfaction(faction: FactionGroup): void {
-    faction.controls.subfactions.push(this.createNamedGroup());
+    faction.controls.subfactions.push(
+      this.createNamedGroup('', { requiresSubfaction: faction.controls.requiresSubfaction.value }),
+    );
   }
 
   protected removeSubfaction(faction: FactionGroup, index: number): void {
@@ -1447,6 +1473,36 @@ export class CampaignSetupPage {
     }
   }
 
+  protected setSubfactionFlagSource(faction: FactionGroup, subfaction: NamedGroup, source: SubfactionFlagSource): void {
+    subfaction.controls.flagSource.setValue(source);
+    const key = this.subfactionFlagKey(faction.controls.id.value, subfaction.controls.name.value);
+    if (source !== 'image') {
+      this.flagImages.delete(key);
+      this.revokeFlagPreview(key);
+      this.bumpPendingUploads();
+      subfaction.controls.clearFlagImage.setValue(true);
+    } else {
+      subfaction.controls.clearFlagImage.setValue(false);
+    }
+  }
+
+  protected setSubfactionInheritColor(_faction: FactionGroup, subfaction: NamedGroup, inherit: boolean): void {
+    subfaction.controls.inheritColor.setValue(inherit);
+    if (inherit) {
+      subfaction.controls.color.setValue('');
+    } else if (!subfaction.controls.color.value) {
+      subfaction.controls.color.setValue(nextUnusedFactionColor(this.usedFactionAndSubfactionColors()));
+    }
+  }
+
+  protected onSubfactionInheritColor(faction: FactionGroup, subfaction: NamedGroup): void {
+    this.setSubfactionInheritColor(faction, subfaction, subfaction.controls.inheritColor.value);
+  }
+
+  protected subfactionFlagKey(factionId: string, name: string): string {
+    return `${factionId}::${name.trim()}`;
+  }
+
   protected removeMission(group: TerrainGroup | StructureGroup, index: number): void {
     const missionId = group.controls.missions.at(index).controls.id.value;
     group.controls.missions.removeAt(index);
@@ -1592,7 +1648,20 @@ export class CampaignSetupPage {
       this.setFlagPreview(factionId, file);
       this.bumpPendingUploads();
       const group = this.factions.controls.find((item) => item.controls.id.value === factionId);
-      group?.controls.clearFlagImage.setValue(false);
+      if (group) {
+        group.controls.clearFlagImage.setValue(false);
+      } else {
+        const separator = factionId.indexOf('::');
+        if (separator >= 0) {
+          const id = factionId.slice(0, separator);
+          const name = factionId.slice(separator + 2);
+          const faction = this.factions.controls.find((item) => item.controls.id.value === id);
+          const subfaction = faction?.controls.subfactions.controls.find(
+            (item) => item.controls.name.value.trim() === name,
+          );
+          subfaction?.controls.clearFlagImage.setValue(false);
+        }
+      }
     }
   }
 
@@ -1608,13 +1677,23 @@ export class CampaignSetupPage {
     return this.storedFlagImages().has(factionId);
   }
 
-  protected factionFlagUrl(factionId: string): string | null {
+  protected factionFlagUrl(flagKey: string): string | null {
     const campaignId = this.campaignId();
-    if (!campaignId || !this.hasStoredFlagImage(factionId)) {
+    if (!campaignId || !this.hasStoredFlagImage(flagKey)) {
       return null;
     }
 
-    return this.campaignsApi.flagImageUrl(campaignId, factionId, this.revision);
+    const separator = flagKey.indexOf('::');
+    if (separator >= 0) {
+      return this.campaignsApi.flagImageUrl(
+        campaignId,
+        flagKey.slice(0, separator),
+        this.revision,
+        flagKey.slice(separator + 2),
+      );
+    }
+
+    return this.campaignsApi.flagImageUrl(campaignId, flagKey, this.revision);
   }
 
   protected onMissionFileSelected(missionId: string, event: Event): void {
@@ -1905,6 +1984,22 @@ export class CampaignSetupPage {
     }
 
     for (const [factionId, file] of this.flagImages) {
+      const separator = factionId.indexOf('::');
+      if (separator >= 0) {
+        const id = factionId.slice(0, separator);
+        const name = factionId.slice(separator + 2);
+        const faction = this.factions.controls.find((item) => item.controls.id.value === id);
+        const subfaction = faction?.controls.subfactions.controls.find(
+          (item) => item.controls.name.value.trim() === name,
+        );
+        if (subfaction?.controls.flagSource.value !== 'image') {
+          continue;
+        }
+
+        detail = await this.campaignsApi.uploadFlagImage(detail.id, id, file, detail.revision, name);
+        continue;
+      }
+
       const faction = this.factions.controls.find((item) => item.controls.id.value === factionId);
       if (faction?.controls.flagSource.value !== 'image') {
         continue;
@@ -1984,6 +2079,7 @@ export class CampaignSetupPage {
             requiresSubfaction: faction.requiresSubfaction,
             hasFlagImage: faction.hasFlagImage,
             tintFlagImage: faction.tintFlagImage,
+            appearances: faction.subfactionAppearances,
             specialRuleIds: faction.specialRuleIds ?? [],
             subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
           }),
@@ -2095,11 +2191,13 @@ export class CampaignSetupPage {
       requiresSubfaction?: boolean;
       hasFlagImage?: boolean;
       tintFlagImage?: boolean;
+      appearances?: readonly (SubfactionAppearance | FactionPresetSubfactionAppearance)[];
       specialRuleIds?: readonly string[];
       subfactionSpecialRuleIds?: Record<string, string[]>;
     },
   ): FactionGroup {
     const names = subfactions.length > 0 ? subfactions : [''];
+    const appearances = options?.appearances ?? [];
     return this.formBuilder.nonNullable.group({
       id: [options?.id ?? crypto.randomUUID()],
       name: [name, [required, maxLength(60)]],
@@ -2109,7 +2207,18 @@ export class CampaignSetupPage {
       flagSource: this.formBuilder.nonNullable.control<'color' | 'image'>(options?.hasFlagImage ? 'image' : 'color'),
       clearFlagImage: [false],
       tintFlagImage: [options?.tintFlagImage === true],
-      subfactions: this.formBuilder.array<NamedGroup>(names.map((value) => this.createNamedGroup(value))),
+      subfactions: this.formBuilder.array<NamedGroup>(
+        names.map((value) => {
+          const appearance = appearances.find((item) => item.name.toLowerCase() === value.trim().toLowerCase());
+          return this.createNamedGroup(value, {
+            color: appearance?.color,
+            flagSource: appearance?.flagSource,
+            tintFlagImage:
+              appearance !== undefined && 'tintFlagImage' in appearance && appearance.tintFlagImage === true,
+            requiresSubfaction: options?.requiresSubfaction === true,
+          });
+        }),
+      ),
       specialRuleIds: [options?.specialRuleIds ? [...options.specialRuleIds] : []],
       subfactionSpecialRuleIds: this.formBuilder.nonNullable.control<Record<string, string[]>>(
         options?.subfactionSpecialRuleIds ? { ...options.subfactionSpecialRuleIds } : {},
@@ -2117,10 +2226,40 @@ export class CampaignSetupPage {
     });
   }
 
-  private createNamedGroup(name = ''): NamedGroup {
+  private createNamedGroup(
+    name = '',
+    options?: {
+      color?: string | null;
+      flagSource?: SubfactionFlagSource;
+      tintFlagImage?: boolean;
+      requiresSubfaction?: boolean;
+    },
+  ): NamedGroup {
+    const required = options?.requiresSubfaction === true;
+    const inheritColor = !required && !options?.color;
+    const flagSource: SubfactionFlagSource = options?.flagSource ?? (required ? 'color' : 'inherit');
     return this.formBuilder.nonNullable.group({
       name: [name, maxLength(60)],
+      color: [options?.color ?? (required ? nextUnusedFactionColor(this.usedFactionAndSubfactionColors()) : '')],
+      inheritColor: [inheritColor],
+      flagSource: this.formBuilder.nonNullable.control<SubfactionFlagSource>(flagSource),
+      clearFlagImage: [flagSource !== 'image'],
+      tintFlagImage: [flagSource === 'image' && options?.tintFlagImage === true],
     });
+  }
+
+  private usedFactionAndSubfactionColors(): string[] {
+    const colors: string[] = [];
+    for (const faction of this.form.controls.factions.controls) {
+      colors.push(faction.controls.color.value);
+      for (const subfaction of faction.controls.subfactions.controls) {
+        if (!subfaction.controls.inheritColor.value && subfaction.controls.color.value) {
+          colors.push(subfaction.controls.color.value);
+        }
+      }
+    }
+
+    return colors;
   }
 
   private createAllyGroup(id?: string, name = '', color?: string): AllyGroupForm {
@@ -2774,10 +2913,14 @@ export class CampaignSetupPage {
         }
 
         const faction = this.factions.at(index);
-        return faction.dirty || this.hasPendingFlag(faction.controls.id.value);
+        return (
+          faction.dirty ||
+          this.hasPendingFlag(faction.controls.id.value) ||
+          faction.controls.subfactions.controls.some((subfaction) =>
+            this.hasPendingFlag(this.subfactionFlagKey(faction.controls.id.value, subfaction.controls.name.value)),
+          )
+        );
       }
-      case 'faction-sub':
-        return this.hasArrayIndex(this.factions, index) && this.factions.at(index).controls.subfactions.dirty;
       case 'mission-item': {
         if (!this.hasArrayIndex(this.missions, index)) {
           return false;
@@ -2938,6 +3081,15 @@ export class CampaignSetupPage {
         allyGroupId: faction.allyGroupId.trim().length > 0 ? faction.allyGroupId : null,
         allyGroupName: group?.name.trim() ? group.name.trim() : null,
         subfactions: faction.subfactions.map((item) => item.name.trim()).filter((name) => name.length > 0),
+        subfactionAppearances: faction.subfactions
+          .filter((item) => item.name.trim().length > 0)
+          .map((item) => ({
+            name: item.name.trim(),
+            color: item.inheritColor || !item.color ? null : item.color,
+            flagSource: item.flagSource,
+            clearFlagImage: item.flagSource !== 'image' || item.clearFlagImage,
+            tintFlagImage: item.flagSource === 'image' && item.tintFlagImage === true,
+          })),
         clearFlagImage: faction.flagSource === 'color' || faction.clearFlagImage,
         tintFlagImage: faction.flagSource === 'image' && faction.tintFlagImage === true,
         specialRuleIds: faction.specialRuleIds,
@@ -3276,8 +3428,33 @@ export class CampaignSetupPage {
         failures.push(`Faction ${index + 1} requires at least one subfaction.`);
         sections.add('factions');
         sections.add(`faction-item-${index}`);
-        sections.add(`faction-sub-${index}`);
       }
+
+      namedSubfactions.forEach((subfaction) => {
+        const name = subfaction.controls.name.value.trim();
+        if (faction.controls.requiresSubfaction.value) {
+          if (subfaction.controls.inheritColor.value || !subfaction.controls.color.value) {
+            failures.push(`Faction ${index + 1} subfaction ${name} needs a unique color.`);
+            sections.add('factions');
+            sections.add(`faction-item-${index}`);
+          }
+
+          if (subfaction.controls.flagSource.value === 'inherit') {
+            failures.push(`Faction ${index + 1} subfaction ${name} must use a color flag or an uploaded image.`);
+            sections.add('factions');
+            sections.add(`faction-item-${index}`);
+          }
+        }
+
+        if (subfaction.controls.flagSource.value === 'image') {
+          const key = this.subfactionFlagKey(faction.controls.id.value, name);
+          if (!this.flagImages.has(key) && !this.hasStoredFlagImage(key)) {
+            failures.push(`Faction ${index + 1} subfaction ${name} needs a flag image or the color flag.`);
+            sections.add('factions');
+            sections.add(`faction-item-${index}`);
+          }
+        }
+      });
     });
 
     if (this.factions.length < 2) {
@@ -3295,6 +3472,26 @@ export class CampaignSetupPage {
       }
 
       usedFactionColors.add(color);
+      faction.controls.subfactions.controls.forEach((subfaction) => {
+        if (subfaction.controls.inheritColor.value || !subfaction.controls.name.value.trim()) {
+          return;
+        }
+
+        const subColor = subfaction.controls.color.value.toUpperCase();
+        if (!subColor) {
+          return;
+        }
+
+        if (usedFactionColors.has(subColor)) {
+          failures.push(
+            `Faction ${index + 1} subfaction ${subfaction.controls.name.value.trim()} color must be unique.`,
+          );
+          sections.add('factions');
+          sections.add(`faction-item-${index}`);
+        }
+
+        usedFactionColors.add(subColor);
+      });
     });
 
     this.factions.controls.forEach((faction, index) => {
@@ -3693,7 +3890,7 @@ export class CampaignSetupPage {
       ids.push(`mission-item-${index}`);
     });
     this.factions.controls.forEach((_, index) => {
-      ids.push(`faction-item-${index}`, `faction-sub-${index}`);
+      ids.push(`faction-item-${index}`);
     });
     this.terrainTypes.controls.forEach((_, index) => {
       ids.push(`terrain-item-${index}`, `terrain-missions-${index}`);
@@ -3726,7 +3923,14 @@ export class CampaignSetupPage {
       new Set(campaign.structureTypes.filter((type) => type.hasPillagedImage).map((type) => type.id)),
     );
     this.storedFlagImages.set(
-      new Set(campaign.factions.filter((faction) => faction.hasFlagImage).map((faction) => faction.id)),
+      new Set([
+        ...campaign.factions.filter((faction) => faction.hasFlagImage).map((faction) => faction.id),
+        ...campaign.factions.flatMap((faction) =>
+          (faction.subfactionAppearances ?? [])
+            .filter((appearance) => appearance.hasFlagImage)
+            .map((appearance) => this.subfactionFlagKey(faction.id, appearance.name)),
+        ),
+      ]),
     );
     this.storedItemObjectiveImages.set(
       new Set((campaign.itemObjectiveTypes ?? []).filter((type) => type.hasImage).map((type) => type.id)),

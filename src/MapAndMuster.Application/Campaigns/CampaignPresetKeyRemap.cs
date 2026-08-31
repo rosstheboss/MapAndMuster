@@ -32,6 +32,17 @@ internal static class CampaignPresetKeyRemap
                     Name = faction.Name,
                     Color = faction.Color,
                     Subfactions = faction.Subfactions,
+                    SubfactionAppearances =
+                    [
+                        .. faction.SubfactionAppearances.Select(appearance => new StoredSubfactionAppearance
+                        {
+                            Name = appearance.Name,
+                            Color = appearance.Color,
+                            FlagSource = appearance.FlagSource,
+                            FlagImageStorageKey = RemapKey(appearance.FlagImageStorageKey, keys),
+                            TintFlagImage = appearance.TintFlagImage,
+                        }),
+                    ],
                     AllyGroupName = faction.AllyGroupName,
                     RequiresSubfaction = faction.RequiresSubfaction,
                     FlagImageStorageKey = RemapKey(faction.FlagImageStorageKey, keys),

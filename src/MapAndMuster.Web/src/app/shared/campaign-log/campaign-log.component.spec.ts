@@ -268,4 +268,15 @@ describe('CampaignLogComponent', () => {
       'bobisthebest',
     );
   });
+
+  it('shows unread mention and private counts on the log summary', () => {
+    const fixture = TestBed.createComponent(CampaignLogComponent);
+    fixture.componentRef.setInput('unreadMentionCount', 1);
+    fixture.componentRef.setInput('unreadPrivateCount', 2);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('1 unread mention');
+    expect(compiled.textContent).toContain('2 unread private');
+  });
 });

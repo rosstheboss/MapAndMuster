@@ -185,6 +185,10 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.ToTable("CampaignSubfactions");
             entity.HasKey(subfaction => subfaction.Id);
             entity.Property(subfaction => subfaction.Name).HasMaxLength(60).IsRequired();
+            entity.Property(subfaction => subfaction.Color).HasMaxLength(7);
+            entity.Property(subfaction => subfaction.FlagSource).HasMaxLength(16).IsRequired();
+            entity.Property(subfaction => subfaction.FlagImageStorageKey).HasMaxLength(260);
+            entity.Property(subfaction => subfaction.TintFlagImage).IsRequired();
         });
 
         builder.Entity<CampaignLinkRecord>(entity =>

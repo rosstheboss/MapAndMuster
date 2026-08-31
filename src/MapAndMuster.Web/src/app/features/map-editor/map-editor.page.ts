@@ -14,6 +14,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { readApiErrorMessages } from '../../core/auth/auth.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
+import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import type { CampaignDetail, CampaignMission, MapGraphDetail } from '../../core/campaigns/campaign.models';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
@@ -960,14 +961,19 @@ export class MapEditorPage {
     return this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.revision);
   };
 
-  protected flagImageUrl = (factionId: string): string | null => {
+  protected flagImageUrl = (factionId: string, subfaction?: string | null): string | null => {
     const campaign = this.campaign();
     const faction = campaign?.factions.find((item) => item.id === factionId);
-    if (!campaign || !faction?.hasFlagImage) {
+    if (!campaign || !faction) {
       return null;
     }
 
-    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.revision);
+    const appearance = resolveFactionAppearance(faction, subfaction);
+    if (!appearance.hasFlagImage) {
+      return null;
+    }
+
+    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.revision, subfaction);
   };
 
   protected missionFileUrl(mission: CampaignMission): string | null {

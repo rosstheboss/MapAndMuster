@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 
 import type { CampaignAllyGroup, CampaignFaction, CampaignStructureType } from '../../core/campaigns/campaign.models';
+import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import type { MapHighlightMode } from '../../core/campaigns/campaign-view-prefs.service';
 import { adjacencyArrowEndpoints, adjacencyArrowGeometry } from '../../core/maps/adjacency';
 import {
@@ -31,6 +32,7 @@ import {
   pointOnPolygonBoundary,
   polygonIntersectsRect,
   polygonPointsAttribute,
+  rectanglesOverlap,
   SNAP_RING_SCREEN_PX,
   STROKE_FULL_HIGHLIGHT_SCREEN_PX,
   STROKE_HALF_HIGHLIGHT_SCREEN_PX,
@@ -58,6 +60,7 @@ export interface MapForceMarker {
   id: string;
   territoryId: string;
   factionId: string;
+  subfaction?: string | null;
   isMine: boolean;
   inBattle: boolean;
   label: string;
@@ -118,7 +121,7 @@ export class CampaignMapViewComponent {
   readonly factions = input<readonly CampaignFaction[]>([]);
   readonly structures = input<readonly CampaignStructureType[]>([]);
   readonly structureImageUrl = input<(structureTypeId: string, pillaged?: boolean) => string | null>(() => null);
-  readonly flagImageUrl = input<(factionId: string) => string | null>(() => null);
+  readonly flagImageUrl = input<(factionId: string, subfaction?: string | null) => string | null>(() => null);
   readonly forces = input<readonly MapForceMarker[]>([]);
   readonly items = input<readonly MapItemMarker[]>([]);
   readonly colorMode = input<MapHighlightMode>('configured');
@@ -188,6 +191,7 @@ export class CampaignMapViewComponent {
       const destroyed = territory.structureCondition === 'Destroyed';
       const pillaged = territory.structureCondition === 'Pillaged';
       const owner = this.factions().find((faction) => faction.id === territory.ownerFactionId) ?? null;
+      const appearance = resolveFactionAppearance(owner, territory.ownerSubfaction);
       const selected = this.isSelected(territory.id);
       const structureFit =
         structure && !destroyed ? fitSquareInPolygon(territory.polygon, center, maxWidth, maxHeight) : null;
@@ -201,27 +205,30 @@ export class CampaignMapViewComponent {
             structureFit ? [structureFit] : null,
           )
         : null;
-      const avoided: FittedSquare[] = [];
+      const logos: FittedSquare[] = [];
       if (structureFit) {
-        avoided.push(structureFit);
+        logos.push(structureFit);
       }
 
       if (flagFit) {
-        avoided.push(flagFit);
+        logos.push(flagFit);
       }
 
+      const avoided: FittedSquare[] = [...logos];
       const present = this.forces().filter((force) => force.territoryId === territory.id);
       const forcePins = present.map((force, index) => {
         const preferred = {
           x: center.x + (index - (present.length - 1) / 2) * maxWidth * 0.6,
           y: center.y + maxHeight * 0.38,
         };
-        const fit = fitSquareInPolygon(territory.polygon, preferred, maxWidth, maxHeight, avoided);
+        const fit = this.fitForcePin(territory.polygon, preferred, maxWidth, maxHeight, logos, avoided);
         avoided.push(fit);
+        const forceOwner = this.factions().find((faction) => faction.id === force.factionId) ?? null;
+        const forceAppearance = resolveFactionAppearance(forceOwner, force.subfaction);
         return {
           force,
           fit,
-          color: this.factions().find((faction) => faction.id === force.factionId)?.color ?? '#44403c',
+          color: forceAppearance.color,
           emphasized: this.emphasizedForceIds().includes(force.id),
         };
       });
@@ -235,10 +242,13 @@ export class CampaignMapViewComponent {
         avoided.push(fit);
         return { item, fit };
       });
-      const fill = this.territoryFill(territory, owner);
+      const fill = this.territoryFill(territory, owner, appearance.color);
       const spawnFaction = this.factions().find((faction) => faction.id === territory.spawnFactionId) ?? null;
+      const spawnColor = spawnFaction
+        ? resolveFactionAppearance(spawnFaction, territory.spawnSubfaction).color
+        : '#78716c';
       const isSpawn = !!territory.spawnFactionId;
-      const stripeColor = fill === 'transparent' ? (spawnFaction?.color ?? '#78716c') : fill;
+      const stripeColor = fill === 'transparent' ? spawnColor : fill;
       const hovered = territory.id === this.hoveredTerritoryId();
       const lifted = hovered && !selected && !this.marqueeBox();
       const hoverLift = -this.screenToMap(HOVER_LIFT_SCREEN_PX);
@@ -252,9 +262,9 @@ export class CampaignMapViewComponent {
           owner && flagFit
             ? {
                 ...flagFit,
-                color: owner.color,
-                image: owner.hasFlagImage ? this.flagImageUrl()(owner.id) : null,
-                tint: owner.tintFlagImage === true,
+                color: appearance.color,
+                image: appearance.hasFlagImage ? this.flagImageUrl()(owner.id, territory.ownerSubfaction) : null,
+                tint: appearance.tint,
               }
             : null,
         forces: forcePins,
@@ -317,9 +327,15 @@ export class CampaignMapViewComponent {
       }
 
       const owner = this.factions().find((faction) => faction.id === territory.ownerFactionId) ?? null;
-      const fill = this.territoryFill(territory, owner);
+      const appearance = resolveFactionAppearance(owner, territory.ownerSubfaction);
+      const fill = this.territoryFill(territory, owner, appearance.color);
       const spawnFaction = this.factions().find((faction) => faction.id === territory.spawnFactionId) ?? null;
-      const color = fill === 'transparent' ? (spawnFaction?.color ?? '#78716c') : fill;
+      const color =
+        fill === 'transparent'
+          ? spawnFaction
+            ? resolveFactionAppearance(spawnFaction, territory.spawnSubfaction).color
+            : '#78716c'
+          : fill;
       if (!seen.has(color)) {
         seen.set(color, { id: spawnStripePatternId(color), color });
       }
@@ -395,6 +411,8 @@ export class CampaignMapViewComponent {
     const scale = this.currentScale();
     return `translate(${this.panX()}px, ${this.panY()}px) scale(${scale})`;
   });
+
+  protected readonly mapScale = computed(() => Math.max(this.currentScale(), 0.01));
 
   protected readonly zoomPercent = computed(() => Math.round(this.currentScale() * 100));
 
@@ -900,7 +918,24 @@ export class CampaignMapViewComponent {
     return this.selectedTerritoryIds().includes(territoryId);
   }
 
-  private territoryFill(territory: MapTerritory, owner: CampaignFaction | null): string {
+  private fitForcePin(
+    polygon: readonly MapPoint[],
+    preferred: MapPoint,
+    maxWidth: number,
+    maxHeight: number,
+    logos: readonly FittedSquare[],
+    otherDots: readonly FittedSquare[],
+  ): FittedSquare {
+    const options = { minScale: 0.5, allowOverlapFallback: false } as const;
+    const withAll = fitSquareInPolygon(polygon, preferred, maxWidth, maxHeight, [...logos, ...otherDots], options);
+    if (!logos.some((logo) => rectanglesOverlap(withAll, logo))) {
+      return withAll;
+    }
+
+    return fitSquareInPolygon(polygon, preferred, maxWidth, maxHeight, logos, options);
+  }
+
+  private territoryFill(territory: MapTerritory, owner: CampaignFaction | null, factionColor?: string): string {
     const mode = this.colorMode();
     if (mode === 'configured') {
       return territory.overlayColor ?? 'transparent';
@@ -917,7 +952,7 @@ export class CampaignMapViewComponent {
       }
     }
 
-    return owner.color;
+    return factionColor ?? owner.color;
   }
 
   private isHalfHighlighted(territoryId: string): boolean {
@@ -1039,16 +1074,14 @@ export class CampaignMapViewComponent {
     this.fullscreen.set(on);
     document.body.style.overflow = on ? 'hidden' : '';
     requestAnimationFrame(() => {
-      if (this.destroyed) {
-        return;
-      }
+      requestAnimationFrame(() => {
+        if (this.destroyed) {
+          return;
+        }
 
-      this.observeViewport();
-      if (this.fitToPanel()) {
-        this.zoomToFit();
-      } else {
-        this.clampPan();
-      }
+        this.observeViewport();
+        this.repositionAfterViewportChange();
+      });
     });
   }
 
@@ -1204,18 +1237,36 @@ export class CampaignMapViewComponent {
       return;
     }
 
-    this.viewportSize.set({ width: element.clientWidth || 1, height: element.clientHeight || 1 });
+    this.syncViewportToElement();
     this.resizeObserver?.disconnect();
     this.resizeObserver = new ResizeObserver((entries) => {
       const box = entries[0].contentRect;
       this.viewportSize.set({ width: box.width || 1, height: box.height || 1 });
-      this.clampPan();
+      this.repositionAfterViewportChange();
     });
     this.resizeObserver.observe(element);
     if (!this.observedDestroy) {
       this.observedDestroy = true;
       this.destroyRef.onDestroy(() => this.resizeObserver?.disconnect());
     }
+  }
+
+  private syncViewportToElement(): void {
+    const element = this.viewport()?.nativeElement;
+    if (!element) {
+      return;
+    }
+
+    this.viewportSize.set({ width: element.clientWidth || 1, height: element.clientHeight || 1 });
+  }
+
+  private repositionAfterViewportChange(): void {
+    if (this.fitToPanel()) {
+      this.centerImage();
+      return;
+    }
+
+    this.clampPan();
   }
 
   private currentScale(): number {
@@ -1326,7 +1377,7 @@ function spawnStripePatternId(color: string): string {
   return `spawn-stripe-${color.replace(/[^a-zA-Z0-9]/g, '')}`;
 }
 
-const NAME_CHAR_PX = 7;
+const NAME_CHAR_PX = 10;
 
 function overlayNameLabel(territory: MapTerritory, image: { width: number }, scale: number): string {
   const name = territory.name?.trim();

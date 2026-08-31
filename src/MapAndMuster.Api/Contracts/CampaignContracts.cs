@@ -228,6 +228,9 @@ public sealed class FactionRequest
 
     /// <summary>Gets special-rule assignments for named subfactions.</summary>
     public IReadOnlyList<SubfactionSpecialRulesRequest>? SubfactionSpecialRules { get; init; }
+
+    /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
+    public IReadOnlyList<SubfactionAppearanceRequest>? SubfactionAppearances { get; init; }
 }
 
 /// <summary>
@@ -240,6 +243,27 @@ public sealed class SubfactionSpecialRulesRequest
 
     /// <summary>Gets special-rule identifiers assigned to this subfaction.</summary>
     public IReadOnlyList<Guid>? SpecialRuleIds { get; init; }
+}
+
+/// <summary>
+/// Color, flag, and logo choices for one named subfaction in a save request.
+/// </summary>
+public sealed class SubfactionAppearanceRequest
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the unique color when chosen, otherwise inherit the parent.</summary>
+    public string? Color { get; init; }
+
+    /// <summary>Gets whether the subfaction inherits, uses a color flag, or uses an uploaded logo.</summary>
+    public string? FlagSource { get; init; }
+
+    /// <summary>Gets whether an existing uploaded logo should be removed.</summary>
+    public bool ClearFlagImage { get; init; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the resolved color.</summary>
+    public bool TintFlagImage { get; init; }
 }
 
 /// <summary>
@@ -1101,6 +1125,9 @@ public sealed class FactionResponse
 
     /// <summary>Gets special-rule assignments for named subfactions.</summary>
     public IReadOnlyList<SubfactionSpecialRulesResponse> SubfactionSpecialRules { get; init; } = [];
+
+    /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
+    public IReadOnlyList<SubfactionAppearanceResponse> SubfactionAppearances { get; init; } = [];
 }
 
 /// <summary>
@@ -1113,6 +1140,27 @@ public sealed class SubfactionSpecialRulesResponse
 
     /// <summary>Gets special-rule identifiers assigned to this subfaction.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+}
+
+/// <summary>
+/// Color, flag, and logo choices for one named subfaction.
+/// </summary>
+public sealed class SubfactionAppearanceResponse
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the unique color when chosen, otherwise inherit the parent.</summary>
+    public string? Color { get; init; }
+
+    /// <summary>Gets whether the subfaction inherits, uses a color flag, or uses an uploaded logo.</summary>
+    public required string FlagSource { get; init; }
+
+    /// <summary>Gets whether this subfaction has an uploaded logo.</summary>
+    public required bool HasFlagImage { get; init; }
+
+    /// <summary>Gets whether an uploaded logo should be tinted with the resolved color.</summary>
+    public bool TintFlagImage { get; init; }
 }
 
 /// <summary>
@@ -1877,6 +1925,17 @@ public static class CampaignResponses
                             SpecialRuleIds = item.SpecialRuleIds,
                         }),
                     ],
+                    SubfactionAppearances =
+                    [
+                        .. faction.SubfactionAppearances.Select(static item => new SubfactionAppearanceResponse
+                        {
+                            Name = item.Name,
+                            Color = item.Color,
+                            FlagSource = item.FlagSource,
+                            HasFlagImage = item.HasFlagImage,
+                            TintFlagImage = item.TintFlagImage,
+                        }),
+                    ],
                 }),
             ],
             TerrainTypes =
@@ -2345,6 +2404,16 @@ public static class CampaignResponses
                     {
                         Name = item.Name,
                         SpecialRuleIds = item.SpecialRuleIds,
+                    })
+                    .ToArray(),
+                SubfactionAppearances = faction.SubfactionAppearances?
+                    .Select(static item => new SubfactionAppearanceInput
+                    {
+                        Name = item.Name,
+                        Color = item.Color,
+                        FlagSource = item.FlagSource,
+                        ClearFlagImage = item.ClearFlagImage,
+                        TintFlagImage = item.TintFlagImage,
                     })
                     .ToArray(),
             }),
