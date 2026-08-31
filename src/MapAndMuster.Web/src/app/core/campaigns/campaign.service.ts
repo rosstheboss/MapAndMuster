@@ -150,11 +150,7 @@ export class CampaignService {
 
   async end(campaignId: string, revision: number): Promise<void> {
     await firstValueFrom(
-      this.http.post(
-        `/api/campaigns/${encodeURIComponent(campaignId)}/end`,
-        { revision },
-        { withCredentials: true },
-      ),
+      this.http.post(`/api/campaigns/${encodeURIComponent(campaignId)}/end`, { revision }, { withCredentials: true }),
     );
   }
 

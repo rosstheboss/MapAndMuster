@@ -13,7 +13,9 @@ recommendation touches a template that also carries logic, the logic is left alo
   Campaign list items expose remaining-setup and commitment fields, and campaign-log last-read
   is persisted on the server (2026-08-30). Card badges, Home dashboard UI, and chat unread
   indicators still follow in later steps. Step 3 (`UI-C5`, `UI-H9`, `UI-H12`, Playwright axe)
-  is implemented (2026-08-30). Map polygons (`UI-C2`) remain excluded from axe until step 4.
+  is implemented (2026-08-30). Step 4 (`UI-C2`, `UI-M1`) is implemented (2026-08-30). Map
+  territory hits are named buttons, the map has a legend and a territory directory, and axe no
+  longer excludes map polygons.
 - Ranking: Critical, High, Medium, Polish.
 - Each item has a stable identifier (`UI-C1`, `UI-H4`, …) so work can be tracked and split.
 
@@ -160,6 +162,11 @@ Surrender, Save schedule, and Save Map.
 
 ## UI-C2 — The map cannot be operated with a keyboard
 
+**Status:** implemented (2026-08-30). Territory hits are named buttons with Enter/Space selection,
+focus drives the details panel, empty copy is “Select a territory to see its details.”, and a
+display-number-ordered territory directory sits beside the map. The map editor keeps its own list
+and hides the shared directory.
+
 **Areas:** Accessibility, Map usability
 
 The campaign map is the primary interface of the product, and it works only for users who can
@@ -293,7 +300,7 @@ deferred until a live battle fixture exists.
 
 ## UI-C5 — Invalid ARIA on the chat composer, the map, and the setup form
 
-**Status:** implemented (2026-08-30), except map `polygon` labels which remain `UI-C2`.
+**Status:** implemented (2026-08-30). Map `polygon` labels are named `role="button"` controls.
 
 **Areas:** Accessibility
 
@@ -642,6 +649,9 @@ Worth doing, but a user can complete their task without it.
 
 ## UI-M1 — The map has no legend and no territory labels
 
+**Status:** implemented (2026-08-30). Collapsible legend, Show names toggle (display number, or the
+name when it fits), and ownership fill opacity 0.5 / 0.62 / 0.7.
+
 **Areas:** Map usability, Information hierarchy
 
 The map simultaneously uses four visual encodings — a faint fill tint for ownership, diagonal
@@ -935,8 +945,8 @@ Grouped so that shared work lands before the items that depend on it.
 2. **Shared primitives.** The dialog component (`UI-C3`, `UI-M4`) and the confirm-button
    component (`UI-C4`), then convert the six dialogs and four destructive actions. Done 2026-08-30.
 3. **Accessibility corrections.** `UI-C5`, `UI-H9`, `UI-H12`, and the axe assertions in the
-   Playwright suite. Done 2026-08-30. Map `polygon` labels stay excluded until `UI-C2`.
-4. **Map accessibility.** `UI-C2`, then `UI-M1`.
+   Playwright suite. Done 2026-08-30.
+4. **Map accessibility.** `UI-C2`, then `UI-M1`. Done 2026-08-30.
 5. **Campaign page restructure.** `UI-H1`, `UI-H2`, `UI-H13`, `UI-M2`, `UI-M3`, `UI-M11`,
    `UI-H7`, `UI-H10`. `UI-H13` depends on the dialog work in step 2.
 6. **Entry points.** `UI-H5`, `UI-M6`, `UI-M7`, `UI-M12`.
@@ -951,7 +961,8 @@ Grouped so that shared work lands before the items that depend on it.
   Campaign-log last-read is persisted (`GET /log` unread fields and `POST /log/read`). Card
   badges, Home dashboard chrome, and chat unread indicators still follow in later UI steps.
   Playwright axe scans login, campaign list, campaign detail, campaign setup, and the map
-  editor. Map `polygon` nodes stay excluded until `UI-C2`.
+  editor, including named map polygons. The campaign map has a keyboard path: Tab/Enter/Space on
+  territory hits and a companion territory directory.
 - Nothing here changes a campaign rule, an authorization decision, or persisted play state. If an
   implementation appears to need one, stop and raise it rather than proceeding.
 - Client-side validation and disclosure remain presentation only. Hiding a control is never an

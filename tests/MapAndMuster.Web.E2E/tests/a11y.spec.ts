@@ -104,6 +104,30 @@ const campaign = {
   ],
 };
 
+const png = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+const coast = {
+  id: 't1',
+  displayNumber: 1,
+  name: 'Coast',
+  description: null,
+  polygon: [
+    { x: 0.1, y: 0.1 },
+    { x: 0.4, y: 0.1 },
+    { x: 0.4, y: 0.4 },
+    { x: 0.1, y: 0.4 },
+  ],
+  terrainTypeId: null,
+  structureTypeId: null,
+  structureCondition: 'Operational',
+  overlayColor: '#2563EB',
+  ownerFactionId: 'north',
+  spawnFactionId: null,
+};
+
 function formatViolations(violations: { id: string; help: string; nodes: { html: string }[] }[]): string {
   return violations
     .map((violation) => `${violation.id}: ${violation.help}\n${violation.nodes.map((node) => node.html).join('\n')}`)
@@ -126,6 +150,21 @@ async function mockSession(page: Page, profile: typeof player): Promise<void> {
   });
   await page.route('**/api/auth/external-providers', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+}
+
+async function mockMapImage(page: Page): Promise<void> {
+  await page.route(`**/api/campaigns/${campaignId}/map**`, async (route) => {
+    if (route.request().url().includes('/map/graph')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'image/png',
+      body: png,
+    });
   });
 }
 
@@ -278,6 +317,100 @@ test('campaign detail has no axe violations', async ({ page }) => {
   await expectNoAxeViolations(page);
 });
 
+test('campaign map territories are keyboard selectable', async ({ page }) => {
+  await mockSession(page, player);
+  await page.route(`**/api/campaigns/${campaignId}/log`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: campaignId,
+        revision: campaign.revision,
+        canChat: true,
+        mentionableMembers: campaign.mentionableMembers,
+        chatChannels: [{ kind: 'Public', label: 'Everyone' }],
+        log: [],
+      }),
+    });
+  });
+  await page.route(`**/api/campaigns/${campaignId}/play`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: campaignId,
+        name: 'Border War',
+        revision: 2,
+        canManage: true,
+        isParticipant: true,
+        canChat: true,
+        mentionableMembers: campaign.mentionableMembers,
+        status: 'InProgress',
+        currentRound: 1,
+        currentPhaseNumber: 1,
+        currentPhaseKind: 'Action',
+        currentPhaseLabel: 'Action 1',
+        currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+        currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+        currentWindowId: 'window-1',
+        hasMap: true,
+        factionId: 'north',
+        canChooseFaction: false,
+        isCommitted: false,
+        roundCount: 3,
+        minRoundCount: 1,
+        remainingWindows: [],
+        factions: campaign.factions,
+        structureTypes: [],
+        forces: [],
+        myDrafts: [],
+        orders: [],
+        debugDrafts: [],
+        canDebug: true,
+        isDebugActive: false,
+        debugActorUserId: null,
+        commitments: [],
+        battles: [],
+        log: [],
+        standings: campaign.standings,
+        playersMissingFaction: [],
+      }),
+    });
+  });
+  await page.route(`**/api/campaigns/${campaignId}/map/graph`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        campaignId,
+        revision: 2,
+        canManage: true,
+        territories: [coast],
+        adjacencies: [],
+      }),
+    });
+  });
+  await mockMapImage(page);
+  await page.route(`**/api/campaigns/${campaignId}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...campaign, hasMap: true }),
+    });
+  });
+
+  await page.goto(`/campaigns/${campaignId}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Border War' })).toBeVisible();
+  await expect(page.locator('.map-meta')).toContainText('Select a territory to see its details.');
+  const hit = page.locator('.territory-hit[data-id="t1"]');
+  await expect(hit).toHaveAttribute('role', 'button');
+  await hit.focus();
+  await expect(hit).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.map-meta')).toContainText('Coast');
+  await expect(page.locator('.map-meta')).not.toContainText('Select a territory to see its details.');
+});
+
 test('campaign setup has no axe violations', async ({ page }) => {
   test.setTimeout(90_000);
   await mockSession(page, admin);
@@ -298,7 +431,7 @@ test('map editor has no axe violations', async ({ page }) => {
         campaignId,
         revision: 2,
         canManage: true,
-        territories: [],
+        territories: [coast],
         adjacencies: [],
       }),
     });
@@ -319,24 +452,10 @@ test('map editor has no axe violations', async ({ page }) => {
       }),
     });
   });
-  await page.route(`**/api/campaigns/${campaignId}/map**`, async (route) => {
-    if (route.request().url().includes('/map/graph')) {
-      await route.fallback();
-      return;
-    }
-
-    await route.fulfill({
-      status: 200,
-      contentType: 'image/png',
-      body: Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-        'base64',
-      ),
-    });
-  });
+  await mockMapImage(page);
 
   await page.goto(`/campaigns/${campaignId}/map`);
   await expect(page.getByRole('heading', { level: 1, name: 'Map editor' })).toBeVisible();
-  // UI-C2: polygon aria-label without a role is still invalid; exclude until map keyboard access lands.
-  await expectNoAxeViolations(page, { exclude: ['polygon'] });
+  await expect(page.locator('.territory-hit[data-id="t1"]')).toHaveAttribute('role', 'button');
+  await expectNoAxeViolations(page);
 });

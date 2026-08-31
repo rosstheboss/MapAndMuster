@@ -23,6 +23,24 @@
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.map-body {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+@media (width >= 720px) {
+  .map-body {
+    grid-template-columns: minmax(0, 1fr) 13rem;
+    align-items: start;
+  }
+}
+
+:host.is-fullscreen .map-body {
+  min-height: 0;
+  height: 100%;
+}
+
 .map-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -149,7 +167,7 @@
 }
 
 .territory {
-  fill-opacity: 0.32;
+  fill-opacity: 0.5;
   stroke: rgb(28 25 23 / 75%);
   pointer-events: none;
 }
@@ -169,6 +187,15 @@
   pointer-events: fill;
 }
 
+.territory-hit:focus {
+  outline: none;
+}
+
+.territory-hit:focus-visible {
+  stroke: var(--color-glow);
+  stroke-width: 0.012;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .territory-visual.is-hover-motion {
     transition: none;
@@ -176,7 +203,7 @@
 }
 
 .territory.is-half-highlighted {
-  fill-opacity: 0.5;
+  fill-opacity: 0.62;
   filter: drop-shadow(0 0 2px var(--glow-color, var(--color-glow)))
     drop-shadow(0 0 4px var(--glow-color, var(--color-glow)));
 }
@@ -398,4 +425,129 @@
 
 .adjacency-visual {
   pointer-events: none;
+}
+
+.territory-name {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  padding: 0.05rem 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: rgb(255 255 255 / 82%);
+  border-radius: 0.2rem;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.map-guide {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.map-legend summary {
+  min-height: var(--touch-min);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.map-legend .plain-list,
+.territory-directory .plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.map-legend li,
+.territory-directory li {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  min-height: 1.6rem;
+}
+
+.legend-swatch,
+.legend-pin {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+}
+
+.legend-swatch-ownership {
+  background: #2563eb;
+  opacity: 0.5;
+  border: 1px solid rgb(28 25 23 / 75%);
+}
+
+.legend-swatch-spawn {
+  background: repeating-linear-gradient(
+    45deg,
+    #2563eb,
+    #2563eb 3px,
+    rgb(255 255 255 / 70%) 3px,
+    rgb(255 255 255 / 70%) 6px
+  );
+  border: 1px solid rgb(28 25 23 / 75%);
+}
+
+.legend-pin-force {
+  border-radius: 50%;
+  background: #44403c;
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
+}
+
+.legend-pin-force.is-mine {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 3px rgb(28 25 23 / 80%);
+}
+
+.legend-pin-force.is-battle {
+  box-shadow:
+    0 0 0 2px #7c2d12,
+    0 0 0 4px rgb(254 243 226 / 90%);
+}
+
+.legend-pin-structure {
+  background: rgb(254 243 226 / 94%);
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
+}
+
+.legend-pin-structure.is-pillaged {
+  color: #7c2d12;
+  box-shadow: 0 0 0 1px rgb(124 45 18 / 45%);
+}
+
+.legend-pin-item {
+  border-radius: 2px;
+  background: rgb(254 243 226 / 94%);
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 55%);
+}
+
+.territory-directory-heading {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.territory-directory-item {
+  display: block;
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0.2rem 0.4rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.territory-directory-item.is-selected,
+.territory-directory-item:focus-visible {
+  background: var(--color-hover, rgb(28 25 23 / 8%));
+  outline: 2px solid var(--color-glow);
+  outline-offset: -2px;
 }

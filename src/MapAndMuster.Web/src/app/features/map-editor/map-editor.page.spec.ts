@@ -145,6 +145,8 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Save Map');
     expect(compiled.textContent).toContain('Show Overlay');
     expect(compiled.textContent).toContain('Show Connections');
+    expect(compiled.textContent).toContain('Show names');
+    expect(compiled.querySelector('.territory-directory')).toBeNull();
     expect(compiled.textContent).not.toContain('Draw on the overlay, not the image');
     expect(compiled.textContent).toContain('Download map');
     expect(compiled.querySelector('input[type="file"][accept=".svg,image/svg+xml"]')?.getAttribute('aria-label')).toBe(

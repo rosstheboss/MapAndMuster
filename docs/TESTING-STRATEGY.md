@@ -73,6 +73,10 @@ Cover components/services for:
   subfaction spawn labels, disabled no-fixed-spawn factions, save-status check and X, and metadata forms.
   Map pinch-zoom and two-finger pan, full-screen toggle (M), map-image loading ellipsis, and force
   markers staying inside their territory are covered in map-view tests.
+  Territory hit polygons are named buttons; keyboard focus and Enter/Space select a territory, and a
+  display-number-ordered directory is the accessible alternative on the campaign map (hidden in the
+  map editor, which keeps its own list). Playwright axe includes map polygons; a Playwright test
+  tabs to a territory, presses Enter, and asserts the details panel updates.
   The map editor does not show hover-placeholder copy above the map, and hovering or selecting a
   territory does not change that field panel's height. The expanded Territories list stays within the
   map column height, scrolls vertically, and scrolls the topmost selected territory into view.

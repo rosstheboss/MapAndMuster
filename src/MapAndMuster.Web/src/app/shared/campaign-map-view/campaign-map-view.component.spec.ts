@@ -585,7 +585,10 @@ describe('CampaignMapViewComponent', () => {
     fixture.detectChanges();
     expect(compiled.querySelector('.territory')).toBeNull();
     expect(compiled.querySelector('.adjacency')).toBeNull();
-    expect(compiled.querySelector<HTMLInputElement>('.layer-toggle input')?.checked).toBe(false);
+    const overlayToggle = [...compiled.querySelectorAll('.layer-toggle')].find((label) =>
+      label.textContent.includes('Show Overlay'),
+    );
+    expect(overlayToggle?.querySelector('input')?.checked).toBe(false);
   });
 
   it('shows a green check when a move can be dropped and a red X when it cannot', () => {
@@ -779,6 +782,103 @@ describe('CampaignMapViewComponent', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('exposes each territory hit as a named, pressable control', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      { ...squareTerritory('t2', 0.4, 0.1), displayNumber: 2, name: 'Ridge' },
+      { ...squareTerritory('t1', 0.1, 0.1), displayNumber: 1, name: 'Coast' },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const hits = [...compiled.querySelectorAll<SVGPolygonElement>('.territory-hit')];
+    expect(hits).toHaveLength(2);
+    for (const hit of hits) {
+      expect(hit.getAttribute('role')).toBe('button');
+      expect(hit.getAttribute('tabindex')).toBe('0');
+      expect(hit.getAttribute('aria-label')).toBeTruthy();
+      expect(hit.getAttribute('aria-pressed')).toBe('false');
+    }
+
+    const coast = compiled.querySelector('.territory-hit[data-id="t1"]');
+    expect(coast?.getAttribute('aria-label')).toBe('Coast');
+    const directory = [...compiled.querySelectorAll('.territory-directory-item')].map((item) =>
+      item.textContent.trim(),
+    );
+    expect(directory).toEqual(['Coast', 'Ridge']);
+    expect(compiled.querySelector('.map-legend')).toBeTruthy();
+    expect(compiled.textContent).toContain('Ownership tint');
+    expect(compiled.textContent).toContain('Show names');
+  });
+
+  it('selects a territory from the keyboard and from the directory list', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      { ...squareTerritory('t1', 0.1, 0.1), displayNumber: 1, name: 'Coast' },
+    ]);
+    fixture.componentRef.setInput('interactive', true);
+    const selected = vi.fn();
+    const hover = vi.fn();
+    fixture.componentInstance.territorySelect.subscribe(selected);
+    fixture.componentInstance.territoryHover.subscribe(hover);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const hit = compiled.querySelector('.territory-hit[data-id="t1"]')!;
+    hit.dispatchEvent(new FocusEvent('focus'));
+    expect(hover).toHaveBeenCalledWith('t1');
+
+    hit.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(selected).toHaveBeenCalledWith({ id: 't1', additive: false, clientX: 0, clientY: 0 });
+
+    selected.mockClear();
+    hit.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    expect(selected).toHaveBeenCalledWith({ id: 't1', additive: false, clientX: 0, clientY: 0 });
+
+    selected.mockClear();
+    const directory = [...compiled.querySelectorAll<HTMLButtonElement>('.territory-directory-item')].find(
+      (button) => button.textContent.trim() === 'Coast',
+    );
+    expect(directory).toBeTruthy();
+    directory!.click();
+    expect(selected).toHaveBeenCalledWith(expect.objectContaining({ id: 't1', additive: false }));
+  });
+
+  it('draws a name or display number on the map when Show names is on', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      { ...squareTerritory('t1', 0.1, 0.1), displayNumber: 4, name: 'Coast' },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.territory-name')).toBeNull();
+    const toggle = [...compiled.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) =>
+      (input.closest('label')?.textContent ?? '').includes('Show names'),
+    );
+    expect(toggle).toBeTruthy();
+    toggle!.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('.territory-name')?.textContent.trim()).toBe('4');
+  });
+
+  it('hides the territory directory when the host supplies its own list', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      { ...squareTerritory('t1', 0.1, 0.1), displayNumber: 1, name: 'Coast' },
+    ]);
+    fixture.componentRef.setInput('showTerritoryDirectory', false);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.territory-directory')).toBeNull();
+    expect(compiled.querySelector('.map-legend')).toBeTruthy();
   });
 });
 

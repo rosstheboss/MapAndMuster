@@ -39,7 +39,7 @@ import {
   ZOOM_STEP,
 } from '../../core/maps/geometry';
 import type { FittedSquare, MapPoint } from '../../core/maps/geometry';
-import type { MapAdjacency, MapTerritory } from '../../core/maps/map-graph.models';
+import { territoryLabel, type MapAdjacency, type MapTerritory } from '../../core/maps/map-graph.models';
 import { IconComponent } from '../icon/icon.component';
 import { MapSymbolComponent } from '../map-symbol/map-symbol.component';
 import { isAdditiveModifier } from '../../core/maps/pointer';
@@ -105,6 +105,7 @@ export class CampaignMapViewComponent {
   readonly showOverlay = input(true);
   readonly showAdjacencies = input(false);
   readonly layerToggles = input(false);
+  readonly showTerritoryDirectory = input(true);
   readonly showConnectionsToggle = input(true);
   readonly adjacenciesInteractive = input(false);
   readonly focusSelectedTerritories = input(false);
@@ -148,6 +149,7 @@ export class CampaignMapViewComponent {
   private readonly spaceHeld = signal(false);
   protected readonly panning = signal(false);
   protected readonly fullscreen = signal(false);
+  protected readonly showNames = signal(false);
   protected readonly imageReady = signal(false);
   protected readonly marqueeBox = signal<{ left: number; top: number; width: number; height: number } | null>(null);
   private movingTerritory = false;
@@ -286,9 +288,24 @@ export class CampaignMapViewComponent {
               : STROKE_SCREEN_PX,
         ),
         glowColor: glowSource === 'transparent' ? 'var(--color-glow)' : glowSource,
+        accessibleName: territoryLabel(territory),
+        mapLabel: overlayNameLabel(territory, image, scale),
       };
     });
   });
+
+  protected readonly territoryDirectory = computed(() =>
+    [...this.territories()]
+      .sort(
+        (left, right) =>
+          left.displayNumber - right.displayNumber || territoryLabel(left).localeCompare(territoryLabel(right)),
+      )
+      .map((territory) => ({
+        id: territory.id,
+        label: territoryLabel(territory),
+        selected: this.selectedTerritoryIds().includes(territory.id),
+      })),
+  );
 
   protected readonly spawnStripePatterns = computed(() => {
     const stripe = this.screenToMap(SPAWN_STRIPE_SCREEN_PX);
@@ -548,12 +565,7 @@ export class CampaignMapViewComponent {
     const territoryId = kind === 'territory' && id ? id : this.territoryIdAt(point);
     if (territoryId) {
       const additive = isAdditiveModifier(event);
-      this.territorySelect.emit({
-        id: territoryId,
-        additive,
-        clientX: event.clientX,
-        clientY: event.clientY,
-      });
+      this.activateTerritory(territoryId, additive, event.clientX, event.clientY);
       this.mapPoint.emit(point);
       if (!additive && this.moveTerritories()) {
         this.movingTerritory = true;
@@ -605,6 +617,34 @@ export class CampaignMapViewComponent {
     }
 
     this.scheduleTerritoryHover(id);
+  }
+
+  protected onTerritoryFocus(id: string): void {
+    this.clearHoverIntentTimer();
+    this.hoverIntentId = undefined;
+    this.emitTerritoryHover(id);
+  }
+
+  protected onTerritoryKeydown(event: KeyboardEvent, id: string): void {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.activateTerritory(id, isAdditiveModifier(event), 0, 0);
+  }
+
+  protected onDirectorySelect(id: string, event: MouseEvent): void {
+    this.activateTerritory(id, isAdditiveModifier(event), event.clientX, event.clientY);
+    this.emitTerritoryHover(id);
+  }
+
+  protected onShowNamesChange(event: Event): void {
+    const target = event.target;
+    if (target instanceof HTMLInputElement) {
+      this.showNames.set(target.checked);
+    }
   }
 
   protected onTerritoryLeave(id: string): void {
@@ -753,6 +793,10 @@ export class CampaignMapViewComponent {
     }
 
     if (event.key === ' ' || event.code === 'Space') {
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+
       event.preventDefault();
       this.spaceHeld.set(true);
       return;
@@ -842,6 +886,14 @@ export class CampaignMapViewComponent {
     if (target instanceof HTMLInputElement) {
       this.showConnectionsChange.emit(target.checked);
     }
+  }
+
+  private activateTerritory(id: string, additive: boolean, clientX: number, clientY: number): void {
+    if (!this.interactive()) {
+      return;
+    }
+
+    this.territorySelect.emit({ id, additive, clientX, clientY });
   }
 
   private isSelected(territoryId: string): boolean {
@@ -1272,4 +1324,21 @@ function clampAxis(pan: number, viewport: number, scaled: number): number {
 
 function spawnStripePatternId(color: string): string {
   return `spawn-stripe-${color.replace(/[^a-zA-Z0-9]/g, '')}`;
+}
+
+const NAME_CHAR_PX = 7;
+
+function overlayNameLabel(territory: MapTerritory, image: { width: number }, scale: number): string {
+  const name = territory.name?.trim();
+  if (!name || territory.polygon.length === 0) {
+    return String(territory.displayNumber);
+  }
+
+  const xs = territory.polygon.map((point) => point.x);
+  const widthPx = (Math.max(...xs) - Math.min(...xs)) * image.width * scale;
+  if (name.length * NAME_CHAR_PX + 8 > widthPx) {
+    return String(territory.displayNumber);
+  }
+
+  return name;
 }

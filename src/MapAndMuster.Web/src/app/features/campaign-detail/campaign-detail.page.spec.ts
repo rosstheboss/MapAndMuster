@@ -2128,6 +2128,47 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
+  it('selects a territory from the map directory and announces details', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+      currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [squareTerritory('t1', 'Coast', 0.1), squareTerritory('t2', 'Ridge', 0.4)],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(playState());
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.map-meta')?.getAttribute('aria-live')).toBe('polite');
+    expect(compiled.textContent).toContain('Select a territory to see its details.');
+    const hit = compiled.querySelector('.territory-hit[data-id="t1"]');
+    expect(hit?.getAttribute('role')).toBe('button');
+    expect(hit?.getAttribute('tabindex')).toBe('0');
+    hit?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+    expect(compiled.querySelector('.map-meta h3')?.textContent).toContain('Coast');
+    expect(compiled.textContent).not.toContain('Select a territory to see its details.');
+    http.verify();
+  });
+
   it('shows a top five for each enabled public objective except allied relic control', async () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
