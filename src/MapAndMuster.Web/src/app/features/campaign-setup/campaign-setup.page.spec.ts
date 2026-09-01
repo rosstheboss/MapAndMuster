@@ -1190,6 +1190,49 @@ describe('CampaignSetupPage edit', () => {
     http.verify();
   });
 
+  it('applies a saved preset including logos onto matching catalog names', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    TestBed.inject(AuthService).currentUser.set(administratorProfile());
+    const http = TestBed.inject(HttpTestingController);
+    const campaign = scheduledEditCampaign(campaignId);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      campaignPresetId: { setValue: (value: string) => void };
+      applySelectedCampaignPreset: () => void;
+      factions: { at: (index: number) => { controls: { id: { value: string } } } };
+      hasStoredFlagImage: (factionId: string) => boolean;
+    };
+    page.campaignPresetId.setValue('saved:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
+    page.applySelectedCampaignPreset();
+
+    http.expectOne('/api/campaign-presets/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb').flush({
+      ...campaign,
+      id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      name: 'Logo War',
+      factions: [
+        { ...campaign.factions[0], id: 'preset-north', hasFlagImage: true },
+        { ...campaign.factions[1], id: 'preset-south' },
+      ],
+    });
+    await fixture.whenStable();
+    const applied = http.expectOne(`/api/campaigns/${campaignId}/apply-preset`);
+    expect(applied.request.method).toBe('POST');
+    applied.flush({
+      ...campaign,
+      revision: 3,
+      factions: [{ ...campaign.factions[0], hasFlagImage: true }, campaign.factions[1]],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(page.factions.at(0).controls.id.value).toBe('1');
+    expect(page.hasStoredFlagImage('1')).toBe(true);
+    http.verify();
+  });
+
   it('enables save after an edit and can discard unsaved campaign changes', async () => {
     const fixture = TestBed.createComponent(CampaignSetupPage);
     const http = TestBed.inject(HttpTestingController);

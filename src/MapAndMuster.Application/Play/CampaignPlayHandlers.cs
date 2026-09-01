@@ -1256,7 +1256,7 @@ public sealed class SetPublicObjectiveAwardHandler
 }
 
 /// <summary>
-/// Grants a still-available private objective to a player, faction, or ally group.
+/// Grants a catalog private objective to a player, faction, or ally group.
 /// </summary>
 public sealed class GrantPrivateObjectiveHandler
 {
@@ -1281,7 +1281,7 @@ public sealed class GrantPrivateObjectiveHandler
         _notifications = notifications;
     }
 
-    /// <summary>Grants a specific or random still-available private objective.</summary>
+    /// <summary>Grants a specific catalog objective, or a random one from that holder's pool.</summary>
     public Task<OperationResult<CampaignPlayDetail>> HandleAsync(
         GrantPrivateObjectiveCommand command,
         CancellationToken cancellationToken)

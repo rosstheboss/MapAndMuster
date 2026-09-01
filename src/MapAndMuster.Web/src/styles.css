@@ -474,6 +474,7 @@ app-campaign-map-view .map-toolbar > * {
 app-campaign-map-view .map-toolbar .button-secondary,
 app-campaign-map-view .map-toolbar .layer-toggle,
 app-campaign-map-view .map-guide,
+app-map-legend,
 app-map-editor-page .side-pane {
   overflow-wrap: anywhere;
   white-space: normal;

@@ -51,7 +51,7 @@
       </label>
     }
   </div>
-  <div class="map-body">
+  <div class="map-body" [class.has-guide]="showTerritoryDirectory()">
     <div class="map-main">
       <div
         #viewport
@@ -380,45 +380,9 @@
       </div>
       <div class="map-details"><ng-content select="[mapDetails]" /></div>
     </div>
-    <aside class="map-guide">
-      <details class="map-legend">
-        <summary>Map legend</summary>
-        <ul class="plain-list">
-          <li>
-            <span class="legend-swatch legend-swatch-ownership" aria-hidden="true"></span>
-            Ownership tint
-          </li>
-          <li>
-            <span class="legend-swatch legend-swatch-spawn" aria-hidden="true"></span>
-            Spawn location
-          </li>
-          <li>
-            <span class="legend-pin legend-pin-force" aria-hidden="true"></span>
-            Force
-          </li>
-          <li>
-            <span class="legend-pin legend-pin-force is-mine" aria-hidden="true"></span>
-            Your force
-          </li>
-          <li>
-            <span class="legend-pin legend-pin-force is-battle" aria-hidden="true"></span>
-            Force in battle
-          </li>
-          <li>
-            <span class="legend-pin legend-pin-structure" aria-hidden="true"></span>
-            Structure
-          </li>
-          <li>
-            <span class="legend-pin legend-pin-structure is-pillaged" aria-hidden="true"></span>
-            Pillaged structure
-          </li>
-          <li>
-            <span class="legend-pin legend-pin-item" aria-hidden="true"></span>
-            Item objective
-          </li>
-        </ul>
-      </details>
-      @if (showTerritoryDirectory()) {
+    @if (showTerritoryDirectory()) {
+      <aside class="map-guide">
+        <app-map-legend />
         <details class="territory-directory" open>
           <summary class="territory-directory-heading">Territories</summary>
           <div class="territory-directory-body">
@@ -441,7 +405,7 @@
             </nav>
           </div>
         </details>
-      }
-    </aside>
+      </aside>
+    }
   </div>
 </div>

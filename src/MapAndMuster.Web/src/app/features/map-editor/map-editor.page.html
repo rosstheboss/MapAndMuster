@@ -606,37 +606,42 @@
         </div>
 
         <aside class="side-pane panel" [class.is-collapsed]="territoryListCollapsed()" aria-live="polite">
-          <button
-            type="button"
-            class="side-pane-toggle"
-            [class.has-dirty]="territoryListDirty() && territoryListCollapsed()"
-            [attr.aria-expanded]="!territoryListCollapsed()"
-            [attr.aria-label]="territoryListCollapsed() ? 'Expand territories' : 'Collapse territories'"
-            (click)="toggleTerritoryList()"
-          >
-            <app-icon class="side-pane-chevron" name="chevron-down" />
-            @if (!territoryListCollapsed()) {
-              <span>Territories</span>
-            }
-          </button>
           @if (!territoryListCollapsed()) {
-            <ul #territoryList class="plain-list territory-list" aria-label="Territories">
-              @for (territory of sortedTerritories(); track territory.id) {
-                <li>
-                  <app-territory-list-item
-                    [marks]="territoryListMarks(territory)"
-                    [territoryId]="territory.id"
-                    [selected]="selectedIds().includes(territory.id)"
-                    [dirty]="isTerritoryDirty(territory.id)"
-                    [tooltip]="territoryListTooltip(territory)"
-                    (activate)="onTerritorySelect({ id: territory.id, additive: isAdditiveClick($event) })"
-                  />
-                </li>
-              } @empty {
-                <li class="muted">No territories yet.</li>
-              }
-            </ul>
+            <app-map-legend />
           }
+          <div class="territory-list-section">
+            <button
+              type="button"
+              class="side-pane-toggle"
+              [class.has-dirty]="territoryListDirty() && territoryListCollapsed()"
+              [attr.aria-expanded]="!territoryListCollapsed()"
+              [attr.aria-label]="territoryListCollapsed() ? 'Expand territories' : 'Collapse territories'"
+              (click)="toggleTerritoryList()"
+            >
+              <app-icon class="side-pane-chevron" name="chevron-down" />
+              @if (!territoryListCollapsed()) {
+                <span>Territories</span>
+              }
+            </button>
+            @if (!territoryListCollapsed()) {
+              <ul #territoryList class="plain-list territory-list" aria-label="Territories">
+                @for (territory of sortedTerritories(); track territory.id) {
+                  <li>
+                    <app-territory-list-item
+                      [marks]="territoryListMarks(territory)"
+                      [territoryId]="territory.id"
+                      [selected]="selectedIds().includes(territory.id)"
+                      [dirty]="isTerritoryDirty(territory.id)"
+                      [tooltip]="territoryListTooltip(territory)"
+                      (activate)="onTerritorySelect({ id: territory.id, additive: isAdditiveClick($event) })"
+                    />
+                  </li>
+                } @empty {
+                  <li class="muted">No territories yet.</li>
+                }
+              </ul>
+            }
+          </div>
         </aside>
       </div>
     }

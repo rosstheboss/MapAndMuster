@@ -647,6 +647,91 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task AdministratorPresetPackageRoundTripsFactionFlags()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("logo");
+        var email = $"{username}@example.test";
+        await RegisterConfirmAndLoginAsync(client, email, username);
+
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Logo Border"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        var north = created.Factions.Single(faction => faction.Name == "North");
+
+        using var flagContent = new MultipartFormDataContent();
+        var png = new ByteArrayContent(PngBytes);
+        png.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        flagContent.Add(png, "image", "north.png");
+        flagContent.Add(new StringContent(created.Revision.ToString(CultureInfo.InvariantCulture)), "revision");
+        using var flagResponse = await client.PostAsync(
+            $"/api/campaigns/{created.Id}/factions/{north.Id}/flag",
+            flagContent);
+        Assert.Equal(HttpStatusCode.OK, flagResponse.StatusCode);
+        var flagged = await flagResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(flagged);
+        Assert.True(flagged.Factions.Single(faction => faction.Name == "North").HasFlagImage);
+
+        await MakeAdministratorAsync(username);
+        using var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        var presetName = UniqueName("LogoPreset");
+        using var savedResponse = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/presets",
+            new SaveCampaignPresetRequest { Name = presetName });
+        Assert.Equal(HttpStatusCode.Created, savedResponse.StatusCode);
+        var saved = await savedResponse.Content.ReadFromJsonAsync<CampaignPresetListItemResponse>(JsonOptions);
+        Assert.NotNull(saved);
+
+        var preset = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaign-presets/{saved.Id}", JsonOptions);
+        Assert.NotNull(preset);
+        Assert.True(preset.Factions.Single(faction => faction.Name == "North").HasFlagImage);
+
+        using var exportedResponse = await client.GetAsync($"/api/campaigns/{created.Id}/preset-package");
+        Assert.Equal(HttpStatusCode.OK, exportedResponse.StatusCode);
+        var packageBytes = await exportedResponse.Content.ReadAsByteArrayAsync();
+        using (var zip = new ZipArchive(new MemoryStream(packageBytes), ZipArchiveMode.Read))
+        {
+            Assert.Contains(
+                zip.Entries,
+                entry => entry.FullName.StartsWith("assets/flags/", StringComparison.Ordinal));
+        }
+
+        using var importContent = new MultipartFormDataContent();
+        var package = new ByteArrayContent(packageBytes);
+        package.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+        importContent.Add(package, "package", "logo-border-preset.mapandmuster-preset");
+        using var importedResponse = await client.PostAsync("/api/campaign-presets/package", importContent);
+        Assert.Equal(HttpStatusCode.Created, importedResponse.StatusCode);
+        var imported = await importedResponse.Content.ReadFromJsonAsync<CampaignPresetListItemResponse>(JsonOptions);
+        Assert.NotNull(imported);
+
+        var importedPreset = await client.GetFromJsonAsync<CampaignDetailResponse>(
+            $"/api/campaign-presets/{imported.Id}",
+            JsonOptions);
+        Assert.NotNull(importedPreset);
+        Assert.True(importedPreset.Factions.Single(faction => faction.Name == "North").HasFlagImage);
+
+        using var targetResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Empty Logo"));
+        var target = await targetResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(target);
+
+        using var appliedResponse = await client.PostAsJsonAsync(
+            $"/api/campaigns/{target.Id}/apply-preset",
+            new ApplyCampaignPresetRequest { PresetId = imported.Id, Revision = target.Revision });
+        Assert.Equal(HttpStatusCode.OK, appliedResponse.StatusCode);
+        var applied = await appliedResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(applied);
+        var appliedNorth = applied.Factions.Single(faction => faction.Name == "North");
+        Assert.True(appliedNorth.HasFlagImage);
+
+        using var appliedFlag = await client.GetAsync($"/api/campaigns/{target.Id}/factions/{appliedNorth.Id}/flag");
+        Assert.Equal(HttpStatusCode.OK, appliedFlag.StatusCode);
+        Assert.Equal("image/png", appliedFlag.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
     public async Task UnauthenticatedAccessIsRejected()
     {
         using var client = _factory.CreateClient();

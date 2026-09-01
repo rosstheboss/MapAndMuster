@@ -1,0 +1,82 @@
+:host {
+  display: block;
+  flex: none;
+  min-width: 0;
+}
+
+.map-legend summary {
+  min-height: var(--touch-min);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.map-legend .plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.map-legend li {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  min-height: 1.6rem;
+}
+
+.legend-swatch,
+.legend-pin {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+}
+
+.legend-swatch-ownership {
+  background: #2563eb;
+  opacity: 0.5;
+  border: 1px solid rgb(28 25 23 / 75%);
+}
+
+.legend-swatch-spawn {
+  background: repeating-linear-gradient(
+    45deg,
+    #2563eb,
+    #2563eb 3px,
+    rgb(255 255 255 / 70%) 3px,
+    rgb(255 255 255 / 70%) 6px
+  );
+  border: 1px solid rgb(28 25 23 / 75%);
+}
+
+.legend-pin-force {
+  border-radius: 50%;
+  background: #44403c;
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
+}
+
+.legend-pin-force.is-mine {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 3px rgb(28 25 23 / 80%);
+}
+
+.legend-pin-force.is-battle {
+  box-shadow:
+    0 0 0 2px #7c2d12,
+    0 0 0 4px rgb(254 243 226 / 90%);
+}
+
+.legend-pin-structure {
+  background: rgb(254 243 226 / 94%);
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
+}
+
+.legend-pin-structure.is-pillaged {
+  color: #7c2d12;
+  box-shadow: 0 0 0 1px rgb(124 45 18 / 45%);
+}
+
+.legend-pin-item {
+  border-radius: 2px;
+  background: rgb(254 243 226 / 94%);
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 55%);
+}

@@ -525,5 +525,16 @@ test('map editor has no axe violations', async ({ page }) => {
   await page.goto(`/campaigns/${campaignId}/map`);
   await expect(page.getByRole('heading', { level: 1, name: 'Map editor' })).toBeVisible();
   await expect(page.locator('.territory-hit[data-id="t1"]')).toHaveAttribute('role', 'button');
+  await expect(page.locator('.side-pane .map-legend')).toBeVisible();
+  await expect(page.locator('.map-pane .map-legend')).toHaveCount(0);
+  const editorLayout = page.locator('.editor-layout');
+  const layoutEmpty = await editorLayout.boundingBox();
+  expect(layoutEmpty).toBeTruthy();
+  await page.locator('.side-pane .map-legend').evaluate((element) => {
+    (element as HTMLDetailsElement).open = true;
+  });
+  await expect(page.getByText('Ownership tint')).toBeVisible();
+  const layoutWithLegend = await editorLayout.boundingBox();
+  expect(layoutWithLegend?.height).toBeCloseTo(layoutEmpty!.height, 1);
   await expectNoAxeViolations(page);
 });

@@ -233,9 +233,16 @@
 .side-pane {
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
   min-width: 0;
   width: var(--map-side-width);
   overflow: hidden;
+}
+
+.side-pane.is-collapsed {
+  gap: 0;
+  width: 2.75rem;
+  padding: 0.35rem;
 }
 
 @media (width >= 64rem) {
@@ -247,9 +254,16 @@
   }
 }
 
-.side-pane.is-collapsed {
-  width: 2.75rem;
-  padding: 0.35rem;
+.territory-list-section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.side-pane:not(.is-collapsed) .territory-list-section {
+  flex: 1 1 0;
+  overflow: hidden;
 }
 
 .side-pane-toggle {

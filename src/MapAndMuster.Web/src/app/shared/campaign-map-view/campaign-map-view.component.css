@@ -44,7 +44,7 @@
 }
 
 @media (width >= 720px) {
-  .map-body {
+  .map-body.has-guide {
     grid-template-columns: minmax(0, 1fr) var(--map-side-width);
     align-items: stretch;
   }
@@ -55,8 +55,11 @@
   height: 100%;
   align-items: stretch;
   overflow: hidden;
-  grid-template-columns: minmax(0, 1fr) minmax(10rem, var(--map-side-width));
   grid-template-rows: minmax(0, 1fr);
+}
+
+:host.is-fullscreen .map-body.has-guide {
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, var(--map-side-width));
 }
 
 :host.is-fullscreen .map-main {
@@ -278,15 +281,13 @@
   pointer-events: auto;
 }
 
-.force-pin.is-mine,
-.legend-pin-force.is-mine {
+.force-pin.is-mine {
   box-shadow:
     0 0 0 2px #fff,
     0 0 0 3px rgb(28 25 23 / 80%);
 }
 
-.force-pin.is-battle,
-.legend-pin-force.is-battle {
+.force-pin.is-battle {
   box-shadow:
     0 0 0 2px #7c2d12,
     0 0 0 4px rgb(254 243 226 / 90%);
@@ -509,77 +510,25 @@
   overflow: auto;
 }
 
-.map-legend summary,
 .territory-directory summary {
   min-height: var(--touch-min);
   cursor: pointer;
   font-weight: 600;
 }
 
-.map-legend .plain-list,
 .territory-directory .plain-list {
   list-style: none;
   margin: 0;
   padding: 0;
-}
-
-.territory-directory .plain-list {
   display: grid;
   gap: 0.35rem;
 }
 
-.map-legend li,
 .territory-directory li {
   display: flex;
   gap: 0.45rem;
   align-items: center;
   min-height: 1.6rem;
-}
-
-.legend-swatch,
-.legend-pin {
-  flex-shrink: 0;
-  width: 1rem;
-  height: 1rem;
-}
-
-.legend-swatch-ownership {
-  background: #2563eb;
-  opacity: 0.5;
-  border: 1px solid rgb(28 25 23 / 75%);
-}
-
-.legend-swatch-spawn {
-  background: repeating-linear-gradient(
-    45deg,
-    #2563eb,
-    #2563eb 3px,
-    rgb(255 255 255 / 70%) 3px,
-    rgb(255 255 255 / 70%) 6px
-  );
-  border: 1px solid rgb(28 25 23 / 75%);
-}
-
-.legend-pin-force {
-  border-radius: 50%;
-  background: #44403c;
-  box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
-}
-
-.legend-pin-structure {
-  background: rgb(254 243 226 / 94%);
-  box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
-}
-
-.legend-pin-structure.is-pillaged {
-  color: #7c2d12;
-  box-shadow: 0 0 0 1px rgb(124 45 18 / 45%);
-}
-
-.legend-pin-item {
-  border-radius: 2px;
-  background: rgb(254 243 226 / 94%);
-  box-shadow: 0 0 0 1px rgb(28 25 23 / 55%);
 }
 
 .territory-directory-heading {

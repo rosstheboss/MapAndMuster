@@ -100,9 +100,11 @@ and the per-round army size / free supply / free character table.
 An administrator may save the current campaign settings as a named preset from Edit campaign or
 Edit map. The dialog accepts a new name or autocompletes an existing saved preset or The Hunt in
 Estalia. Names that match after trimming and collapsing whitespace overwrite the previous saved
-preset instead of creating another. Saving a preset also stores the map image and overlay graph.
+preset instead of creating another. Saving a preset also stores the map image, overlay graph, and
+uploaded catalog files (faction flags, subfaction logos, structure logos, and item-objective logos).
 Applying a saved preset onto another campaign remaps overlay catalog identifiers by name onto that
-campaign's terrain, structures, factions, and item objectives. Saved presets appear in the campaign
+campaign's terrain, structures, factions, and item objectives, and copies those uploaded files onto
+matching catalog names. Saved presets appear in the campaign
 preset list for later apply. A saved preset with the same collapsed name as a built-in catalog
 preset replaces that catalog entry in the apply list.
 
@@ -141,12 +143,15 @@ Private objectives are a separate optional catalog (at most 50). Each private ob
 name, optional description, campaign points, one or more holder kinds (player, faction, and/or
 ally group), and either Manual or Automatic scoring. Automatic objectives name a map criterion:
 control a number of territories, control listed territories, or control, pillage, or destroy a
-number of a chosen structure type. A catalog entry may be assigned at most once. At launch, each
-occupying player, each faction, and each ally group receives one random still-available objective
-whose holder kinds include that group; leftover holders receive none when the pool is empty. A
-player who joins play later receives one player-scoped objective the same way when one remains.
-After launch, a manager may grant a specific still-available catalog objective, or a random
-still-available one, to a chosen player, faction, or ally group. Private-objective catalog
+number of a chosen structure type. At launch, occupying players, factions, and ally groups each
+receive one secret objective from that holder kind's pool. A holder kind with no configured
+objectives receives none. Assignments in a pool are unique until that pool is exhausted; remaining
+holders then receive duplicates from a newly shuffled copy of the same pool, repeating until
+everyone in the pool has one. Duplicate catalog types are independent assignments: each recipient
+must complete their own copy, and each revealed copy awards its points to that player, faction, or
+ally group. A player who joins play later receives one player-pool objective the same way. After
+launch, a manager may grant a specific catalog objective, or a random one from that holder's pool,
+to a chosen player, faction, or ally group. Private-objective catalog
 entries cannot be added after launch.
 
 Points per finalized battle win are configured with public objectives (default 0). Battle-point
@@ -268,7 +273,8 @@ Objectives but is not shown as a top five. Private Objectives is the
 total of revealed or completed private-objective points that apply to that player: a
 player-scoped award counts only for that player; a faction award counts for every current
 player of that faction; an ally-group award counts for every current player whose faction is
-still in that group. Manual private objectives enter this column after a manager approves a
+still in that group. Each assignment is scored on its own, including duplicate catalog types.
+Manual private objectives enter this column after a manager approves a
 claim, or when the campaign is completed while the objective is still held. Automatic private
 objectives enter it when their map criterion is met. Other is currently held visible
 item-objective points. Destroyed items contribute nothing. Hidden items are omitted from
@@ -383,7 +389,7 @@ and may diverge from the original template when a window closes early or a manag
 After the start instant, managers cannot change the map, the ordered action and battle steps,
 name, description, factions, faction abilities, special-rule catalog, ally groups, terrain,
 structures, missions, private-objective catalog, or most other setup. They may still grant
-remaining catalog private objectives and approve or deny claims. They may increase the number of rounds, not below the current round and not
+catalog private objectives and approve or deny claims. They may increase the number of rounds, not below the current round and not
 above 52. They may lengthen the current round by adding time to the current or remaining action
 and battle windows; a window cannot be shortened below the duration already in effect for that
 window. Added rounds use the original phase template and make the campaign longer.

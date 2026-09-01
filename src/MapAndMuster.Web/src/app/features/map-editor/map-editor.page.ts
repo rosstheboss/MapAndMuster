@@ -73,6 +73,7 @@ import {
 import { territoryHoverTooltip } from '../../core/maps/territory-tooltip';
 import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { ConfirmButtonComponent } from '../../shared/confirm-button/confirm-button.component';
+import { MapLegendComponent } from '../../shared/map-legend/map-legend.component';
 import {
   TerritoryListItemComponent,
   territoryListItemMarks,
@@ -94,6 +95,7 @@ export type { OverlayColorMode };
     RouterLink,
     CampaignMapViewComponent,
     IconComponent,
+    MapLegendComponent,
     MapSymbolComponent,
     TerritoryListItemComponent,
     InstantDatePipe,

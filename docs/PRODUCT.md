@@ -41,7 +41,7 @@ Player and Game Master in the same campaign.
   Action windows), agreement or dispute, no-result forced retreats, staff confirmation, retreats,
   scoring, and optional GM ringer battles against idle forces.
 - Administrators can save campaign settings and map data as named reusable presets, and can download
-  or upload a portable preset package (catalog, overlay, and map image) between hosts.
+  or upload a portable preset package (catalog, overlay, map image, and uploaded logos) between hosts.
 - Campaign-point, supply-line, temporary-supply, status, objective, and relic tracking.
 - Configurable force statuses with enable/clear triggers and display-only tabletop effects.
 - Public faction rules and private player/faction/alliance objectives.

@@ -18,7 +18,7 @@ public enum PrivateObjectiveAssignmentStatus
 }
 
 /// <summary>
-/// One assigned private objective instance. Catalog types are unique across assignments.
+/// One assigned private objective instance. Duplicate catalog types are independent assignments.
 /// </summary>
 public sealed class PrivateObjectiveAssignment
 {

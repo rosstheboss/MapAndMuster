@@ -45,7 +45,143 @@ public sealed class PrivateObjectiveRulesTests
     }
 
     [Fact]
-    public void GrantRejectsAlreadyAssignedCatalogEntry()
+    public void SeedSkipsAHolderKindWhenItsPoolIsEmpty()
+    {
+        var playerType = Manual(
+            "Player hunt",
+            Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            PrivateObjectiveHolderKind.Player);
+        var allyType = Manual(
+            "Ally hunt",
+            Guid.Parse("00000000-0000-0000-0000-000000000003"),
+            PrivateObjectiveHolderKind.AllyGroup);
+        var player = Guid.NewGuid();
+        var faction = Guid.NewGuid();
+        var ally = Guid.NewGuid();
+
+        var seeded = PrivateObjectiveRules.SeedInitial(
+            [playerType, allyType],
+            [player],
+            [faction],
+            [ally],
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+
+        Assert.Equal(2, seeded.Count);
+        Assert.Contains(seeded, item => item.HolderKind == PrivateObjectiveHolderKind.Player && item.TypeId == playerType.Id);
+        Assert.Contains(seeded, item => item.HolderKind == PrivateObjectiveHolderKind.AllyGroup && item.TypeId == allyType.Id);
+        Assert.DoesNotContain(seeded, item => item.HolderKind == PrivateObjectiveHolderKind.Faction);
+    }
+
+    [Fact]
+    public void SeedGivesUniqueThenReshuffledDuplicatesUntilEveryHolderHasOne()
+    {
+        var first = Manual(
+            "First",
+            Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            PrivateObjectiveHolderKind.Player);
+        var second = Manual(
+            "Second",
+            Guid.Parse("00000000-0000-0000-0000-000000000002"),
+            PrivateObjectiveHolderKind.Player);
+        var players = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).OrderBy(id => id).ToArray();
+
+        var seeded = PrivateObjectiveRules.SeedInitial(
+            [first, second],
+            players,
+            [],
+            [],
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+
+        Assert.Equal(5, seeded.Count);
+        Assert.Equal(players.Length, seeded.Select(item => item.HolderId).Distinct().Count());
+        Assert.Equal(
+            [first.Id, second.Id, first.Id, second.Id, first.Id],
+            seeded.OrderBy(item => item.HolderId).Select(item => item.TypeId).ToArray());
+        Assert.Equal(2, seeded.Select(item => item.TypeId).Distinct().Count());
+    }
+
+    [Fact]
+    public void SeedAllowsTheSameCatalogEntryInSeparateHolderKindPools()
+    {
+        var shared = Manual(
+            "Shared hunt",
+            Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            PrivateObjectiveHolderKind.Player,
+            PrivateObjectiveHolderKind.Faction);
+        var player = Guid.NewGuid();
+        var faction = Guid.NewGuid();
+
+        var seeded = PrivateObjectiveRules.SeedInitial(
+            [shared],
+            [player],
+            [faction],
+            [],
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+
+        Assert.Equal(2, seeded.Count);
+        Assert.All(seeded, item => Assert.Equal(shared.Id, item.TypeId));
+        Assert.Contains(seeded, item => item.HolderKind == PrivateObjectiveHolderKind.Player);
+        Assert.Contains(seeded, item => item.HolderKind == PrivateObjectiveHolderKind.Faction);
+    }
+
+    [Fact]
+    public void DuplicateAssignmentsScoreIndependently()
+    {
+        var type = Manual("Shared hunt", PrivateObjectiveHolderKind.Player);
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var seeded = PrivateObjectiveRules.SeedInitial(
+            [type],
+            [first, second],
+            [],
+            [],
+            now,
+            static _ => 0);
+        var names = new Dictionary<Guid, string> { [type.Id] = type.Name };
+        var points = new Dictionary<Guid, int> { [type.Id] = 5 };
+        var state = CampaignPlayState.Empty.With(privateObjectives: seeded);
+        var firstAssignment = seeded.Single(item => item.HolderId == first);
+        var secondAssignment = seeded.Single(item => item.HolderId == second);
+
+        Assert.True(PrivateObjectiveRules.TryApprove(state, firstAssignment.Id, first, now, names, out var afterFirst, out _));
+        Assert.Equal(5, PrivateObjectiveRules.PointsForPlayer(
+            afterFirst.PrivateObjectives,
+            points,
+            first,
+            factionId: null,
+            allyGroupId: null,
+            campaignCompleted: false));
+        Assert.Equal(0, PrivateObjectiveRules.PointsForPlayer(
+            afterFirst.PrivateObjectives,
+            points,
+            second,
+            factionId: null,
+            allyGroupId: null,
+            campaignCompleted: false));
+
+        Assert.True(PrivateObjectiveRules.TryApprove(afterFirst, secondAssignment.Id, second, now, names, out var afterBoth, out _));
+        Assert.Equal(5, PrivateObjectiveRules.PointsForPlayer(
+            afterBoth.PrivateObjectives,
+            points,
+            first,
+            factionId: null,
+            allyGroupId: null,
+            campaignCompleted: false));
+        Assert.Equal(5, PrivateObjectiveRules.PointsForPlayer(
+            afterBoth.PrivateObjectives,
+            points,
+            second,
+            factionId: null,
+            allyGroupId: null,
+            campaignCompleted: false));
+    }
+
+    [Fact]
+    public void GrantAllowsTheSameCatalogEntryForAnotherHolder()
     {
         var type = Manual("Unique", PrivateObjectiveHolderKind.Player);
         var first = Guid.NewGuid();
@@ -59,7 +195,7 @@ public sealed class PrivateObjectiveRulesTests
             static _ => 0);
         var state = CampaignPlayState.Empty.With(privateObjectives: assigned);
 
-        Assert.False(PrivateObjectiveRules.TryGrant(
+        Assert.True(PrivateObjectiveRules.TryGrant(
             state,
             [type],
             PrivateObjectiveHolderKind.Player,
@@ -67,9 +203,64 @@ public sealed class PrivateObjectiveRulesTests
             type.Id,
             DateTimeOffset.UtcNow,
             static _ => 0,
+            out var granted,
+            out _));
+        Assert.Equal(2, granted.PrivateObjectives.Count);
+        Assert.All(granted.PrivateObjectives, item => Assert.Equal(type.Id, item.TypeId));
+        Assert.NotEqual(granted.PrivateObjectives[0].Id, granted.PrivateObjectives[1].Id);
+    }
+
+    [Fact]
+    public void GrantRejectsGivingTheSameCatalogEntryToTheSameHolderTwice()
+    {
+        var type = Manual("Unique", PrivateObjectiveHolderKind.Player);
+        var player = Guid.NewGuid();
+        var assigned = PrivateObjectiveRules.SeedInitial(
+            [type],
+            [player],
+            [],
+            [],
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+        var state = CampaignPlayState.Empty.With(privateObjectives: assigned);
+
+        Assert.False(PrivateObjectiveRules.TryGrant(
+            state,
+            [type],
+            PrivateObjectiveHolderKind.Player,
+            player,
+            type.Id,
+            DateTimeOffset.UtcNow,
+            static _ => 0,
             out _,
             out var error));
         Assert.Equal("privateObjective.unavailable", error?.Code);
+    }
+
+    [Fact]
+    public void LateJoiningPlayerReceivesADuplicateWhenThePlayerPoolIsExhausted()
+    {
+        var type = Manual("Player hunt", PrivateObjectiveHolderKind.Player);
+        var first = Guid.NewGuid();
+        var late = Guid.NewGuid();
+        var seeded = PrivateObjectiveRules.SeedInitial(
+            [type],
+            [first],
+            [],
+            [],
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+        var state = CampaignPlayState.Empty.With(privateObjectives: seeded);
+
+        var next = PrivateObjectiveRules.EnsurePlayerAssignment(
+            state,
+            [type],
+            late,
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+
+        Assert.Equal(2, next.PrivateObjectives.Count);
+        Assert.Contains(next.PrivateObjectives, item => item.HolderId == late && item.TypeId == type.Id);
     }
 
     [Fact]
@@ -163,6 +354,66 @@ public sealed class PrivateObjectiveRulesTests
             new Dictionary<Guid, int> { [type.Id] = 4 },
             player,
             faction,
+            allyGroupId: null,
+            campaignCompleted: false));
+    }
+
+    [Fact]
+    public void AutomaticDuplicatesCompleteOnlyForTheHolderWhoMeetsTheCriterion()
+    {
+        var type = new PrivateObjectiveTypePlayRules(
+            Guid.NewGuid(),
+            "Hold towns",
+            4,
+            [PrivateObjectiveHolderKind.Faction],
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAutomaticKind.ControlStructureType,
+            requiredCount: 2,
+            Guid.NewGuid(),
+            []);
+        var north = Guid.NewGuid();
+        var south = Guid.NewGuid();
+        var northPlayer = Guid.NewGuid();
+        var southPlayer = Guid.NewGuid();
+        var structure = type.StructureTypeId!.Value;
+        var seeded = PrivateObjectiveRules.SeedInitial(
+            [type],
+            [],
+            [north, south],
+            [],
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+        var state = CampaignPlayState.Empty.With(privateObjectives: seeded);
+        var next = PrivateObjectiveRules.EvaluateAutomatic(
+            state,
+            [type],
+            [
+                new PrivateObjectiveTerritory(Guid.NewGuid(), north, structure, StructureCondition.Operational),
+                new PrivateObjectiveTerritory(Guid.NewGuid(), north, structure, StructureCondition.Pillaged),
+            ],
+            new Dictionary<Guid, Guid> { [northPlayer] = north, [southPlayer] = south },
+            new Dictionary<Guid, Guid?>(),
+            new HashSet<Guid>(),
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(
+            PrivateObjectiveAssignmentStatus.Revealed,
+            next.PrivateObjectives.Single(item => item.HolderId == north).Status);
+        Assert.Equal(
+            PrivateObjectiveAssignmentStatus.Assigned,
+            next.PrivateObjectives.Single(item => item.HolderId == south).Status);
+        Assert.Equal(4, PrivateObjectiveRules.PointsForPlayer(
+            next.PrivateObjectives,
+            new Dictionary<Guid, int> { [type.Id] = 4 },
+            northPlayer,
+            north,
+            allyGroupId: null,
+            campaignCompleted: false));
+        Assert.Equal(0, PrivateObjectiveRules.PointsForPlayer(
+            next.PrivateObjectives,
+            new Dictionary<Guid, int> { [type.Id] = 4 },
+            southPlayer,
+            south,
             allyGroupId: null,
             campaignCompleted: false));
     }

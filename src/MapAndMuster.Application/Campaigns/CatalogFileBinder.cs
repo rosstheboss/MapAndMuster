@@ -422,4 +422,24 @@ internal static class CatalogFileBinder
 
         return indexed;
     }
+
+    internal static Dictionary<string, T> IndexByName<T>(IEnumerable<T>? items, Func<T, string> nameSelector)
+    {
+        var indexed = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+        if (items is null)
+        {
+            return indexed;
+        }
+
+        foreach (var item in items)
+        {
+            var name = nameSelector(item).Trim();
+            if (name.Length > 0)
+            {
+                indexed.TryAdd(name, item);
+            }
+        }
+
+        return indexed;
+    }
 }

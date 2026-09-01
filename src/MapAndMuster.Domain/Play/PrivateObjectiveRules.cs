@@ -85,7 +85,9 @@ public readonly record struct PrivateObjectiveTerritory(
 public static class PrivateObjectiveRules
 {
     /// <summary>
-    /// Assigns one still-available catalog objective to each player, faction, and ally group at launch.
+    /// Assigns one secret catalog objective to each occupying player, faction, and ally group at launch.
+    /// Empty holder-kind pools are skipped. Unique draws are used first; the pool is reshuffled for
+    /// remaining holders so everyone in a non-empty pool still receives an independent assignment.
     /// </summary>
     public static IReadOnlyList<PrivateObjectiveAssignment> SeedInitial(
         IReadOnlyList<PrivateObjectiveTypePlayRules> types,
@@ -102,15 +104,15 @@ public static class PrivateObjectiveRules
         ArgumentNullException.ThrowIfNull(pickIndex);
 
         var assigned = new List<PrivateObjectiveAssignment>();
-        var used = new HashSet<Guid>();
-        AssignGroup(assigned, used, types, PrivateObjectiveHolderKind.Player, playerUserIds, utcNow, pickIndex);
-        AssignGroup(assigned, used, types, PrivateObjectiveHolderKind.Faction, factionIds, utcNow, pickIndex);
-        AssignGroup(assigned, used, types, PrivateObjectiveHolderKind.AllyGroup, allyGroupIds, utcNow, pickIndex);
+        AssignGroup(assigned, types, PrivateObjectiveHolderKind.Player, playerUserIds, utcNow, pickIndex);
+        AssignGroup(assigned, types, PrivateObjectiveHolderKind.Faction, factionIds, utcNow, pickIndex);
+        AssignGroup(assigned, types, PrivateObjectiveHolderKind.AllyGroup, allyGroupIds, utcNow, pickIndex);
         return assigned;
     }
 
     /// <summary>
-    /// Grants one still-available catalog objective to a late-joining player when they have none.
+    /// Grants one player-pool catalog objective to a late-joining player when they have none.
+    /// Prefers a still-unique type in that pool, then a reshuffled duplicate when the pool is exhausted.
     /// </summary>
     public static CampaignPlayState EnsurePlayerAssignment(
         CampaignPlayState state,
@@ -146,7 +148,8 @@ public static class PrivateObjectiveRules
     }
 
     /// <summary>
-    /// Assigns a specific or random still-available catalog objective to a holder.
+    /// Assigns a specific or random catalog objective from the holder's pool.
+    /// Random grants prefer a still-unique type for that holder kind, then a duplicate from a rebuilt pool.
     /// </summary>
     public static bool TryGrant(
         CampaignPlayState state,
@@ -164,7 +167,6 @@ public static class PrivateObjectiveRules
         ArgumentNullException.ThrowIfNull(pickIndex);
         next = state;
         error = null;
-        var used = state.PrivateObjectives.Select(static item => item.TypeId).ToHashSet();
         PrivateObjectiveTypePlayRules? type;
         if (typeId is { } requested)
         {
@@ -172,12 +174,6 @@ public static class PrivateObjectiveRules
             if (type is null)
             {
                 error = new DomainError("privateObjective.unknown", "That private objective was not found.", "typeId");
-                return false;
-            }
-
-            if (used.Contains(type.Id))
-            {
-                error = new DomainError("privateObjective.unavailable", "That private objective is already assigned.", "typeId");
                 return false;
             }
 
@@ -189,20 +185,24 @@ public static class PrivateObjectiveRules
                     "holderKind");
                 return false;
             }
+
+            if (HolderAlreadyHas(state.PrivateObjectives, holderKind, holderId, type.Id))
+            {
+                error = new DomainError(
+                    "privateObjective.unavailable",
+                    "This holder already has that private objective.",
+                    "typeId");
+                return false;
+            }
         }
         else
         {
-            var available = types
-                .Where(item => item.Allows(holderKind) && !used.Contains(item.Id))
-                .OrderBy(static item => item.Id)
-                .ToArray();
-            if (available.Length == 0)
+            type = PickFromPool(types, state.PrivateObjectives, holderKind, holderId, pickIndex);
+            if (type is null)
             {
                 error = new DomainError("privateObjective.none_available", "No available private objective remains for that holder.");
                 return false;
             }
-
-            type = available[pickIndex(available.Length)];
         }
 
         var assignment = new PrivateObjectiveAssignment(
@@ -510,26 +510,29 @@ public static class PrivateObjectiveRules
 
     private static void AssignGroup(
         List<PrivateObjectiveAssignment> assigned,
-        HashSet<Guid> used,
         IReadOnlyList<PrivateObjectiveTypePlayRules> types,
         PrivateObjectiveHolderKind holderKind,
         IReadOnlyList<Guid> holderIds,
         DateTimeOffset utcNow,
         Func<int, int> pickIndex)
     {
+        var pool = PoolFor(types, holderKind);
+        if (pool.Length == 0)
+        {
+            return;
+        }
+
+        var remaining = new List<PrivateObjectiveTypePlayRules>();
         foreach (var holderId in holderIds.OrderBy(static id => id))
         {
-            var available = types
-                .Where(item => item.Allows(holderKind) && !used.Contains(item.Id))
-                .OrderBy(static item => item.Id)
-                .ToArray();
-            if (available.Length == 0)
+            if (remaining.Count == 0)
             {
-                continue;
+                remaining.AddRange(pool);
             }
 
-            var type = available[pickIndex(available.Length)];
-            used.Add(type.Id);
+            var pick = pickIndex(remaining.Count);
+            var type = remaining[pick];
+            remaining.RemoveAt(pick);
             assigned.Add(new PrivateObjectiveAssignment(
                 Guid.NewGuid(),
                 type.Id,
@@ -539,6 +542,56 @@ public static class PrivateObjectiveRules
                 PrivateObjectiveAssignmentStatus.Assigned,
                 utcNow));
         }
+    }
+
+    private static PrivateObjectiveTypePlayRules? PickFromPool(
+        IReadOnlyList<PrivateObjectiveTypePlayRules> types,
+        IReadOnlyList<PrivateObjectiveAssignment> existing,
+        PrivateObjectiveHolderKind holderKind,
+        Guid holderId,
+        Func<int, int> pickIndex)
+    {
+        var pool = PoolFor(types, holderKind);
+        if (pool.Length == 0)
+        {
+            return null;
+        }
+
+        var holderHas = existing
+            .Where(item => item.HolderKind == holderKind && item.HolderId == holderId)
+            .Select(static item => item.TypeId)
+            .ToHashSet();
+        var usedInKind = existing
+            .Where(item => item.HolderKind == holderKind)
+            .Select(static item => item.TypeId)
+            .ToHashSet();
+        var unused = pool.Where(item => !usedInKind.Contains(item.Id) && !holderHas.Contains(item.Id)).ToArray();
+        var candidates = unused.Length > 0
+            ? unused
+            : pool.Where(item => !holderHas.Contains(item.Id)).ToArray();
+        if (candidates.Length == 0)
+        {
+            return null;
+        }
+
+        return candidates[pickIndex(candidates.Length)];
+    }
+
+    private static PrivateObjectiveTypePlayRules[] PoolFor(
+        IReadOnlyList<PrivateObjectiveTypePlayRules> types,
+        PrivateObjectiveHolderKind holderKind)
+    {
+        return [.. types.Where(item => item.Allows(holderKind)).OrderBy(static item => item.Id)];
+    }
+
+    private static bool HolderAlreadyHas(
+        IReadOnlyList<PrivateObjectiveAssignment> existing,
+        PrivateObjectiveHolderKind holderKind,
+        Guid holderId,
+        Guid typeId)
+    {
+        return existing.Any(item =>
+            item.HolderKind == holderKind && item.HolderId == holderId && item.TypeId == typeId);
     }
 
     private static bool IsAutomaticComplete(

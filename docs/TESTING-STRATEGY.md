@@ -20,15 +20,18 @@ Required early suites:
 - Supply graph traversal, alliance inclusion, temporary supply, and split forces.
 - Status transitions and faction exceptions, including configured force-status enable/clear
   triggers and catalog order when more than one trigger matches.
-- Public/private objective visibility, completion, manager approval of private claims, and automatic private-objective scoring.
+- Public/private objective visibility, completion, manager approval of private claims, automatic
+  private-objective scoring, and launch assignment (unique draws per holder-kind pool, then
+  reshuffled duplicates until every holder in a non-empty pool has an independent assignment).
 - Relic discovery, transfer, drop, choice resolution, destroy-and-replace, tie-breaking, and secrecy.
 - Campaign-point components and graph objectives.
 - Public-objective award/revoke facts and hidden item-objective standings secrecy.
 - Battle-submission equivalence, single submission, disagreement, and GM resolution.
-- Campaign-preset save copies map image and overlay; apply remaps overlay catalog identifiers by name.
+- Campaign-preset save copies map image, overlay, and catalog files; apply remaps overlay catalog
+  identifiers by name and copies uploaded logos onto matching catalog names.
   Saving the same name after trimming whitespace overwrites the previous preset.
   Administrator preset-package download/upload copies catalog, overlay JSON, map image, and catalog
-  files; non-administrators are rejected.
+  files including logos; non-administrators are rejected.
 
 ## Backend integration tests
 
@@ -55,10 +58,11 @@ Cover:
 - Manager add and kick of players (including private campaigns without the join password), promoting a
   player to campaign manager, adding a manager-only member, staff faction assignment, ending a
   campaign while keeping its final state, and administrator impersonation of seeded test accounts.
-- Administrator save-as-preset copies the map file and overlay graph; applying onto another campaign
-  remaps overlay terrain identifiers onto that campaign's catalog.
-- Administrator download/upload of a `.mapandmuster-preset` ZIP round-trips map image and overlay
-  graph; non-administrators receive 403.
+- Administrator save-as-preset copies the map file, overlay graph, and uploaded catalog logos;
+  applying onto another campaign remaps overlay terrain identifiers onto that campaign's catalog
+  and copies matching logos.
+- Administrator download/upload of a `.mapandmuster-preset` ZIP round-trips map image, overlay
+  graph, and catalog logos; non-administrators receive 403.
 
 ## Angular tests
 
@@ -86,12 +90,14 @@ Cover components/services for:
   and zooms out only when the current scale cannot encapsulate the selection, never past Fit.
   Territory hit polygons are named buttons; keyboard focus and Enter/Space select a territory, and a
   collapsible display-number-ordered directory is the accessible alternative on the campaign map
-  (hidden in the map editor, which keeps its own list). Campaign territory details sit under the map
+  (hidden in the map editor, which keeps its own legend and list). Campaign territory details sit under the map
   in the left column, not under the directory. That details panel keeps a reserved height whether
   empty or populated and scrolls overflow so hovering or selecting a territory does not grow the
   campaign page or shrink the full-screen map. The campaign map Territories list stays within the
   map column height, scrolls vertically, and shrinks when Map legend is expanded so the Map panel
-  does not grow. Show-names labels stay screen-sized while zoomed and
+  does not grow. The map editor uses the same collapsible Map legend above its Territories list in the
+  right column; expanding the legend shrinks the list so the editor layout does not grow. Show-names
+  labels stay screen-sized while zoomed and
   use theme surface/text colors. Named territories keep their full name at any size; unnamed display
   numbers hide when they would not fit. N toggles Show names. Hovering a map territory or a
   Territories row shows name, owner or Neutral, structure (with pillaged state), terrain, forces,
@@ -109,7 +115,7 @@ Cover components/services for:
   longer Scheduled; opening the editor anyway returns to the campaign page with a notice.
   Administrators can save as a preset from the map editor; the save-name lookup includes The Hunt in
   Estalia. Edit campaign exposes administrator Download Preset and Upload Preset for a portable
-  package of catalog, overlay, and map image.   Map PNG downloads rasterize unselected overlay fills, spawn hatching, structure pins, and
+  package of catalog, overlay, map image, and uploaded logos. Map PNG downloads rasterize unselected overlay fills, spawn hatching, structure pins, and
   faction flags or logos (including faction-color tints when enabled), and omit adjacency arrows. Downloaded flags are twice the on-map marker
   size and structures are three times that size. Uploaded overlay SVG remaps terrain, structures,
   owners, and spawns onto the current campaign catalog by name when identifiers differ.

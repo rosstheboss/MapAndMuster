@@ -1518,6 +1518,43 @@ describe('MapEditorPage', () => {
     http.verify();
   });
 
+  it('puts the shared map legend above the Territories list', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.map-pane .map-guide')).toBeNull();
+    expect(compiled.querySelector('.map-pane .map-legend')).toBeNull();
+
+    const sidePane = compiled.querySelector('.side-pane');
+    const legend = sidePane?.querySelector<HTMLDetailsElement>('.map-legend');
+    const section = sidePane?.querySelector('.territory-list-section');
+    expect(legend).toBeTruthy();
+    expect(legend?.open).toBe(false);
+    expect(legend?.textContent).toContain('Ownership tint');
+    expect(legend?.textContent).toContain('Item objective');
+    expect(section?.querySelector('.territory-list')).toBeTruthy();
+    expect(sidePane?.children[0]?.tagName.toLowerCase()).toBe('app-map-legend');
+    expect(sidePane?.children[1]).toBe(section);
+
+    legend?.querySelector('summary')?.click();
+    fixture.detectChanges();
+    expect(legend?.open).toBe(true);
+
+    compiled.querySelector<HTMLButtonElement>('.side-pane-toggle')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('.side-pane .map-legend')).toBeNull();
+    expect(compiled.querySelector('.territory-list')).toBeNull();
+    http.verify();
+  });
+
   it('scrolls the expanded territory list to the topmost selected name', async () => {
     const scrollIntoView = vi.fn();
     HTMLElement.prototype.scrollIntoView = scrollIntoView;

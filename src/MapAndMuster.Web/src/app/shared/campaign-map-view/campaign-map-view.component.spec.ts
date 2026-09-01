@@ -1307,7 +1307,7 @@ describe('CampaignMapViewComponent', () => {
     expect(compiled.querySelector('.territory-name')?.textContent.trim()).toBe('4');
   });
 
-  it('hides the territory directory when the host supplies its own list', () => {
+  it('hides the map guide when the host supplies its own list', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
     fixture.componentRef.setInput('territories', [
@@ -1318,7 +1318,9 @@ describe('CampaignMapViewComponent', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.territory-directory')).toBeNull();
-    expect(compiled.querySelector('.map-legend')).toBeTruthy();
+    expect(compiled.querySelector('.map-legend')).toBeNull();
+    expect(compiled.querySelector('.map-guide')).toBeNull();
+    expect(compiled.querySelector('.map-body')?.classList.contains('has-guide')).toBe(false);
   });
 });
 

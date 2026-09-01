@@ -53,6 +53,7 @@ import { overlayNameLabel } from '../../core/maps/map-labels';
 import { territoryLabel, type MapAdjacency, type MapTerritory } from '../../core/maps/map-graph.models';
 import { territoryHoverTooltip, type TerritoryTooltipBattle } from '../../core/maps/territory-tooltip';
 import { IconComponent } from '../icon/icon.component';
+import { MapLegendComponent } from '../map-legend/map-legend.component';
 import { MapSymbolComponent } from '../map-symbol/map-symbol.component';
 import { TerritoryListItemComponent, territoryListItemMarks } from '../territory-list-item/territory-list-item';
 import { isAdditiveModifier } from '../../core/maps/pointer';
@@ -104,7 +105,7 @@ export interface MapItemMarker {
 
 @Component({
   selector: 'app-campaign-map-view',
-  imports: [IconComponent, MapSymbolComponent, TerritoryListItemComponent],
+  imports: [IconComponent, MapLegendComponent, MapSymbolComponent, TerritoryListItemComponent],
   templateUrl: './campaign-map-view.component.html',
   styleUrl: './campaign-map-view.component.css',
   host: {
@@ -126,6 +127,7 @@ export class CampaignMapViewComponent {
   readonly showOverlay = input(true);
   readonly showAdjacencies = input(false);
   readonly layerToggles = input(false);
+  /** When false, the host supplies the right-hand Map legend and Territories column. */
   readonly showTerritoryDirectory = input(true);
   readonly showConnectionsToggle = input(true);
   readonly adjacenciesInteractive = input(false);

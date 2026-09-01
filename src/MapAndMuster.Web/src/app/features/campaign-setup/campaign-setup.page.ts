@@ -927,12 +927,13 @@ export class CampaignSetupPage {
       }
 
       this.applyCatalogFromDetail(preset);
-      if (this.isEdit() && this.campaignId() && preset.hasMap) {
+      this.rememberCatalogFilesFrom(preset);
+      if (this.isEdit() && this.campaignId()) {
         const detail = await this.campaignsApi.applyPresetMap(this.campaignId()!, presetId, this.revision);
         this.revision = detail.revision;
         this.hasExistingMap.set(detail.hasMap);
         this.setStoredMapPreview(detail.id, detail.revision, detail.hasMap);
-      } else if (preset.hasMap) {
+      } else {
         this.pendingPresetMapId = presetId;
         this.bumpPendingUploads();
       }
@@ -942,6 +943,21 @@ export class CampaignSetupPage {
   }
 
   private applyCatalogFromDetail(campaign: CampaignDetail): void {
+    const factionIds = this.catalogIdByName(
+      this.factions.controls.map((item) => ({ id: item.controls.id.value, name: item.controls.name.value })),
+    );
+    const terrainIds = this.catalogIdByName(
+      this.terrainTypes.controls.map((item) => ({ id: item.controls.id.value, name: item.controls.name.value })),
+    );
+    const structureIds = this.catalogIdByName(
+      this.structureTypes.controls.map((item) => ({ id: item.controls.id.value, name: item.controls.name.value })),
+    );
+    const itemIds = this.catalogIdByName(
+      this.itemObjectiveTypes.controls.map((item) => ({ id: item.controls.id.value, name: item.controls.name.value })),
+    );
+    const missionIds = this.catalogIdByName(
+      this.missions.controls.map((item) => ({ id: item.controls.id.value, name: item.controls.name.value })),
+    );
     this.replaceArray(
       this.specialRules,
       (campaign.specialRules ?? []).map((rule) =>
@@ -959,10 +975,13 @@ export class CampaignSetupPage {
       this.factions,
       campaign.factions.map((faction) =>
         this.createFactionGroup(faction.name, this.allyGroupIdFor(campaign, faction), faction.subfactions, {
-          id: faction.id,
+          id: factionIds.get(faction.name.trim().toLowerCase()) ?? faction.id,
           color: faction.color,
           requiresSubfaction: faction.requiresSubfaction,
-          appearances: faction.subfactionAppearances,
+          appearances: (faction.subfactionAppearances ?? []).map((appearance) => ({
+            ...appearance,
+            flagSource: appearance.hasFlagImage ? 'image' : appearance.flagSource,
+          })),
           hasFlagImage: faction.hasFlagImage,
           tintFlagImage: faction.tintFlagImage,
           specialRuleIds: faction.specialRuleIds ?? [],
@@ -977,16 +996,31 @@ export class CampaignSetupPage {
     this.replaceArray(
       this.terrainTypes,
       campaign.terrainTypes.length > 0
-        ? campaign.terrainTypes.map((type) => this.createTerrainGroupFromDetail(type))
+        ? campaign.terrainTypes.map((type) =>
+            this.createTerrainGroupFromDetail({
+              ...type,
+              id: terrainIds.get(type.name.trim().toLowerCase()) ?? type.id,
+            }),
+          )
         : this.createDefaultTerrainGroups(),
     );
     this.replaceArray(
       this.structureTypes,
-      campaign.structureTypes.map((type) => this.createStructureGroupFromDetail(type)),
+      campaign.structureTypes.map((type) =>
+        this.createStructureGroupFromDetail({
+          ...type,
+          id: structureIds.get(type.name.trim().toLowerCase()) ?? type.id,
+        }),
+      ),
     );
     this.replaceArray(
       this.itemObjectiveTypes,
-      (campaign.itemObjectiveTypes ?? []).map((item) => this.createItemObjectiveGroupFromDetail(item)),
+      (campaign.itemObjectiveTypes ?? []).map((item) =>
+        this.createItemObjectiveGroupFromDetail({
+          ...item,
+          id: itemIds.get(item.name.trim().toLowerCase()) ?? item.id,
+        }),
+      ),
     );
     this.replaceArray(
       this.publicObjectiveTypes,
@@ -998,7 +1032,12 @@ export class CampaignSetupPage {
     );
     this.replaceArray(
       this.missions,
-      this.catalogMissionsFrom(campaign).map((mission) => this.createMissionGroupFromDetail(mission)),
+      this.catalogMissionsFrom(campaign).map((mission) =>
+        this.createMissionGroupFromDetail({
+          ...mission,
+          id: missionIds.get(mission.name.trim().toLowerCase()) ?? mission.id,
+        }),
+      ),
     );
     this.form.controls.playerCount.setValue(campaign.playerSlotCount);
     this.form.controls.roundCount.setValue(campaign.roundCount);
@@ -1989,13 +2028,13 @@ export class CampaignSetupPage {
       detail = await this.campaignsApi.create(payload);
     }
 
-    if (this.mapFile) {
-      detail = await this.campaignsApi.uploadMap(detail.id, this.mapFile, detail.revision);
-    }
-
-    if (this.pendingPresetMapId && !this.mapFile) {
+    if (this.pendingPresetMapId) {
       detail = await this.campaignsApi.applyPresetMap(detail.id, this.pendingPresetMapId, detail.revision);
       this.pendingPresetMapId = null;
+    }
+
+    if (this.mapFile) {
+      detail = await this.campaignsApi.uploadMap(detail.id, this.mapFile, detail.revision);
     }
 
     for (const [structureId, file] of this.structureImages) {
@@ -3955,6 +3994,43 @@ export class CampaignSetupPage {
 
       return next;
     });
+  }
+
+  private rememberCatalogFilesFrom(source: CampaignDetail): void {
+    const idFor = (
+      name: string,
+      groups: readonly { controls: { id: { value: string }; name: { value: string } } }[],
+    ): string | undefined =>
+      groups.find((item) => item.controls.name.value.trim().toLowerCase() === name.trim().toLowerCase())?.controls.id
+        .value;
+
+    this.rememberStoredFiles({
+      ...source,
+      factions: source.factions.map((faction) => ({
+        ...faction,
+        id: idFor(faction.name, this.factions.controls) ?? faction.id,
+      })),
+      structureTypes: source.structureTypes.map((type) => ({
+        ...type,
+        id: idFor(type.name, this.structureTypes.controls) ?? type.id,
+      })),
+      itemObjectiveTypes: (source.itemObjectiveTypes ?? []).map((type) => ({
+        ...type,
+        id: idFor(type.name, this.itemObjectiveTypes.controls) ?? type.id,
+      })),
+    });
+  }
+
+  private catalogIdByName(items: readonly { id: string; name: string }[]): Map<string, string> {
+    const ids = new Map<string, string>();
+    for (const item of items) {
+      const name = item.name.trim().toLowerCase();
+      if (name && !ids.has(name)) {
+        ids.set(name, item.id);
+      }
+    }
+
+    return ids;
   }
 
   private rememberStoredFiles(campaign: CampaignDetail): void {

@@ -950,7 +950,7 @@ public sealed class SetPublicObjectiveAwardCommand
 }
 
 /// <summary>
-/// Command for a manager to grant a still-available private objective.
+/// Command for a manager to grant a catalog private objective.
 /// </summary>
 public sealed class GrantPrivateObjectiveCommand
 {
@@ -972,7 +972,7 @@ public sealed class GrantPrivateObjectiveCommand
     /// <summary>Gets the player, faction, or ally-group identifier.</summary>
     public required Guid HolderId { get; init; }
 
-    /// <summary>Gets a specific catalog type, or null to grant a random still-available entry.</summary>
+    /// <summary>Gets a specific catalog type, or null to grant a random entry from that holder's pool.</summary>
     public Guid? TypeId { get; init; }
 }
 

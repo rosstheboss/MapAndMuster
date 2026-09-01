@@ -55,6 +55,31 @@ public sealed class CampaignPresetHandlerTests
     }
 
     [Fact]
+    public async Task SaveCopiesFactionFlagsAndCatalogLogos()
+    {
+        var campaigns = new PresetCampaignStore();
+        campaigns.AttachCatalogLogos();
+        var presets = new FakePresetStore();
+        var handler = new SaveCampaignPresetHandler(campaigns, presets, new FixedClock());
+        var result = await handler.HandleAsync(
+            new SaveCampaignPresetCommand
+            {
+                CampaignId = campaigns.Campaign.Id,
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+                Name = "Frontier War",
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var saved = Assert.Single(presets.Items);
+        Assert.Equal("flags/north.png", saved.Factions.Single(faction => faction.Name == "North").FlagImageStorageKey);
+        Assert.True(saved.Factions.Single(faction => faction.Name == "North").TintFlagImage);
+        Assert.Equal("structures/town.png", saved.StructureTypes.Single(type => type.Name == "Town").ImageStorageKey);
+        Assert.Equal("items/crown.png", saved.ItemObjectiveTypes.Single(type => type.Name == "Crown").ImageStorageKey);
+    }
+
+    [Fact]
     public async Task ApplyCopiesMapImageAndOverlayGraph()
     {
         var campaigns = new PresetCampaignStore();
@@ -87,6 +112,45 @@ public sealed class CampaignPresetHandlerTests
         Assert.True(result.Value!.HasMap);
         Assert.Equal(originalKey, campaigns.Campaign.MapStorageKey);
         Assert.Equal(originalGraph!.Territories[0].Name, campaigns.Campaign.MapGraph!.Territories[0].Name);
+    }
+
+    [Fact]
+    public async Task ApplyCopiesCatalogLogosOntoMatchingNames()
+    {
+        var campaigns = new PresetCampaignStore();
+        campaigns.AttachCatalogLogos();
+        var presets = new FakePresetStore();
+        var saved = await new SaveCampaignPresetHandler(campaigns, presets, new FixedClock()).HandleAsync(
+            new SaveCampaignPresetCommand
+            {
+                CampaignId = campaigns.Campaign.Id,
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+                Name = "Frontier War",
+            },
+            CancellationToken.None);
+        var northId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        campaigns.RetargetFactionsAndClearLogos(northId);
+
+        var result = await new ApplyCampaignPresetHandler(campaigns, presets, new FixedClock()).HandleAsync(
+            new ApplyCampaignPresetCommand
+            {
+                CampaignId = campaigns.Campaign.Id,
+                PresetId = saved.Value!.Id,
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+                Revision = campaigns.Campaign.Revision,
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var north = Assert.Single(campaigns.Campaign.Factions, faction => faction.Name == "North");
+        Assert.Equal(northId, north.Id);
+        Assert.Equal("flags/north.png", north.FlagImageStorageKey);
+        Assert.True(north.TintFlagImage);
+        Assert.True(result.Value!.Factions.Single(faction => faction.Name == "North").HasFlagImage);
+        Assert.Equal("structures/town.png", campaigns.Campaign.StructureTypes.Single(type => type.Name == "Town").ImageStorageKey);
+        Assert.Equal("items/crown.png", campaigns.Campaign.ItemObjectiveTypes.Single(type => type.Name == "Crown").ImageStorageKey);
     }
 
     [Fact]
@@ -240,6 +304,40 @@ public sealed class CampaignPresetHandlerTests
     }
 
     [Fact]
+    public async Task ExportWritesFactionFlagsAndCatalogLogos()
+    {
+        var campaigns = new PresetCampaignStore();
+        campaigns.AttachCatalogLogos();
+        var maps = new MemoryMapStorage();
+        maps.Files["maps/border.png"] = [7, 8, 9];
+        var assets = new MemoryAssetStorage();
+        assets.Files["flags/north.png"] = [1, 2, 3];
+        assets.Files["structures/town.png"] = [4, 5, 6];
+        assets.Files["items/crown.png"] = [10, 11, 12];
+        var codec = new RecordingPackageCodec();
+        var handler = new ExportCampaignPresetHandler(
+            campaigns,
+            new FakePresetStore(),
+            maps,
+            assets,
+            codec);
+        var result = await handler.HandleAsync(
+            new ExportCampaignPresetCommand
+            {
+                CampaignId = campaigns.Campaign.Id,
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new byte[] { 1, 2, 3 }, codec.WrittenFiles["flags/north.png"]);
+        Assert.Equal(new byte[] { 4, 5, 6 }, codec.WrittenFiles["structures/town.png"]);
+        Assert.Equal(new byte[] { 10, 11, 12 }, codec.WrittenFiles["items/crown.png"]);
+        Assert.Equal("flags/north.png", codec.WrittenCampaign?.Factions.Single(faction => faction.Name == "North").FlagImageStorageKey);
+    }
+
+    [Fact]
     public async Task ImportRejectsNonAdministrators()
     {
         var handler = new ImportCampaignPresetHandler(
@@ -304,6 +402,55 @@ public sealed class CampaignPresetHandlerTests
         Assert.Single(presets.Items);
         Assert.Equal("maps/saved.png", presets.Items[0].MapStorageKey);
         Assert.True(maps.Files.ContainsKey("maps/saved.png"));
+    }
+
+    [Fact]
+    public async Task ImportRemapsCatalogLogoKeys()
+    {
+        var campaigns = new PresetCampaignStore();
+        campaigns.AttachCatalogLogos();
+        var presets = new FakePresetStore();
+        var assets = new MemoryAssetStorage();
+        var codec = new RecordingPackageCodec
+        {
+            Contents = new CampaignPresetPackageContents
+            {
+                Name = "Frontier War",
+                Campaign = campaigns.Campaign,
+                Files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+                {
+                    ["maps/border.png"] = [11, 12, 13],
+                    ["flags/north.png"] = [1, 2, 3],
+                    ["structures/town.png"] = [4, 5, 6],
+                    ["items/crown.png"] = [7, 8, 9],
+                },
+            },
+        };
+        var handler = new ImportCampaignPresetHandler(
+            presets,
+            new MemoryMapStorage(),
+            assets,
+            new PassingImageProcessor(),
+            new PassingDocumentProcessor(),
+            codec,
+            new FixedClock());
+        var result = await handler.HandleAsync(
+            new ImportCampaignPresetCommand
+            {
+                UserId = Guid.NewGuid(),
+                IsAdministrator = true,
+                Content = [1, 2, 3],
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var imported = Assert.Single(presets.Items);
+        Assert.Equal("flags/saved.png", imported.Factions.Single(faction => faction.Name == "North").FlagImageStorageKey);
+        Assert.Equal("structures/saved.png", imported.StructureTypes.Single(type => type.Name == "Town").ImageStorageKey);
+        Assert.Equal("items/saved.png", imported.ItemObjectiveTypes.Single(type => type.Name == "Crown").ImageStorageKey);
+        Assert.True(assets.Files.ContainsKey("flags/saved.png"));
+        Assert.True(assets.Files.ContainsKey("structures/saved.png"));
+        Assert.True(assets.Files.ContainsKey("items/saved.png"));
     }
 
     [Fact]
@@ -531,6 +678,83 @@ file sealed class PresetCampaignStore : ICampaignStore
         Campaign = CloneCampaign(Campaign, "maps/other.png", new StoredMapGraph { Territories = [], Adjacencies = [] });
     }
 
+    public void AttachCatalogLogos()
+    {
+        Campaign = CloneCampaign(
+            Campaign,
+            Campaign.MapStorageKey,
+            Campaign.MapGraph,
+            factions:
+            [
+                new StoredFaction
+                {
+                    Id = Campaign.Factions[0].Id,
+                    Name = Campaign.Factions[0].Name,
+                    Color = Campaign.Factions[0].Color,
+                    Subfactions = Campaign.Factions[0].Subfactions,
+                    RequiresSubfaction = false,
+                    FlagImageStorageKey = "flags/north.png",
+                    TintFlagImage = true,
+                },
+                Campaign.Factions[1],
+            ],
+            structureTypes:
+            [
+                new StoredStructureType
+                {
+                    Id = Guid.Parse("55555555-5555-5555-5555-555555555555"),
+                    Name = "Town",
+                    BuiltinSymbol = null,
+                    ImageStorageKey = "structures/town.png",
+                    IsBuildable = true,
+                    IsPillageable = true,
+                    IsDestructible = true,
+                    Missions = [],
+                },
+            ],
+            itemObjectiveTypes:
+            [
+                new StoredItemObjectiveType
+                {
+                    Id = Guid.Parse("88888888-8888-8888-8888-888888888888"),
+                    Name = "Crown",
+                    IsHiddenUntilFound = true,
+                    Placement = "Random",
+                    AllowOnSpawn = false,
+                    ImageStorageKey = "items/crown.png",
+                },
+            ]);
+    }
+
+    public void RetargetFactionsAndClearLogos(Guid northId)
+    {
+        Campaign = CloneCampaign(
+            Campaign,
+            Campaign.MapStorageKey,
+            Campaign.MapGraph,
+            factions:
+            [
+                new StoredFaction
+                {
+                    Id = northId,
+                    Name = "North",
+                    Color = "#2563EB",
+                    Subfactions = [],
+                    RequiresSubfaction = false,
+                },
+                new StoredFaction
+                {
+                    Id = Guid.Parse("99999999-9999-9999-9999-999999999999"),
+                    Name = "South",
+                    Color = "#DC2626",
+                    Subfactions = [],
+                    RequiresSubfaction = false,
+                },
+            ],
+            structureTypes: [],
+            itemObjectiveTypes: []);
+    }
+
     public void RetargetPlains(Guid terrainId)
     {
         Campaign = CloneCampaign(
@@ -690,7 +914,10 @@ file sealed class PresetCampaignStore : ICampaignStore
         string? mapStorageKey,
         StoredMapGraph? mapGraph,
         int? revision = null,
-        IReadOnlyList<StoredTerrainType>? terrainTypes = null)
+        IReadOnlyList<StoredTerrainType>? terrainTypes = null,
+        IReadOnlyList<StoredFaction>? factions = null,
+        IReadOnlyList<StoredStructureType>? structureTypes = null,
+        IReadOnlyList<StoredItemObjectiveType>? itemObjectiveTypes = null)
     {
         return new StoredCampaign
         {
@@ -711,7 +938,7 @@ file sealed class PresetCampaignStore : ICampaignStore
             UpdatedUtc = campaign.UpdatedUtc,
             CreatedByUserId = campaign.CreatedByUserId,
             Memberships = campaign.Memberships,
-            Factions = campaign.Factions,
+            Factions = factions ?? campaign.Factions,
             AllyGroups = campaign.AllyGroups,
             Links = campaign.Links,
             TimeZoneId = campaign.TimeZoneId,
@@ -724,8 +951,8 @@ file sealed class PresetCampaignStore : ICampaignStore
             MapGraph = mapGraph,
             PlayState = campaign.PlayState,
             TerrainTypes = terrainTypes ?? campaign.TerrainTypes,
-            StructureTypes = campaign.StructureTypes,
-            ItemObjectiveTypes = campaign.ItemObjectiveTypes,
+            StructureTypes = structureTypes ?? campaign.StructureTypes,
+            ItemObjectiveTypes = itemObjectiveTypes ?? campaign.ItemObjectiveTypes,
             PublicObjectiveTypes = campaign.PublicObjectiveTypes,
             SpecialRules = campaign.SpecialRules,
             Missions = campaign.Missions,

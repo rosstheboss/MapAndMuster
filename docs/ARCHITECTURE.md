@@ -87,7 +87,8 @@ Modules may initially share a database and process. Keep public module interacti
 - Named campaign presets live in their own table with catalog JSON, settings JSON, overlay graph
   JSON, and a map storage key. Only administrators may save or overwrite a preset; managers and
   administrators may apply one. Applying a preset remaps overlay catalog identifiers onto the
-  destination campaign by catalog name. Preset map and catalog files count as references so campaign
+  destination campaign by catalog name and copies uploaded catalog files onto matching names. Preset
+  map and catalog files count as references so campaign
   file cleanup does not delete them while a preset still uses them.
 - Administrators may download a campaign or named preset as a `.mapandmuster-preset` ZIP (manifest,
   catalog, settings, overlay JSON, a visual overlay SVG, map image, and referenced catalog files) and

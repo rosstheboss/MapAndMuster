@@ -131,7 +131,7 @@ public sealed class SaveCampaignPresetHandler
 }
 
 /// <summary>
-/// Copies a saved preset's map image and overlay graph onto a campaign.
+/// Copies a saved preset's map, overlay graph, and catalog files onto a campaign.
 /// </summary>
 public sealed class ApplyCampaignPresetHandler
 {
@@ -153,7 +153,7 @@ public sealed class ApplyCampaignPresetHandler
     }
 
     /// <summary>
-    /// Replaces the campaign map with the preset's stored map when the caller may manage the campaign.
+    /// Copies the preset map, overlay, and catalog files when the caller may manage the campaign.
     /// </summary>
     public async Task<OperationResult<CampaignDetail>> HandleAsync(
         ApplyCampaignPresetCommand command,
@@ -181,7 +181,7 @@ public sealed class ApplyCampaignPresetHandler
                 "The campaign preset was not found.");
         }
 
-        var updated = CopyMap(campaign, preset, _clock.UtcNow);
+        var updated = CopyPreset(campaign, preset, _clock.UtcNow);
         var outcome = await _campaigns
             .UpdateAsync(updated, command.Revision, cancellationToken)
             .ConfigureAwait(false);
@@ -196,54 +196,59 @@ public sealed class ApplyCampaignPresetHandler
             CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow, isAdministrator: command.IsAdministrator));
     }
 
-    private static StoredCampaign CopyMap(StoredCampaign campaign, StoredCampaign preset, DateTimeOffset utcNow)
+    private static StoredCampaign CopyPreset(StoredCampaign campaign, StoredCampaign preset, DateTimeOffset utcNow)
     {
+        var withFiles = CampaignPresetCatalogFiles.CopyOnto(campaign, preset);
         return new StoredCampaign
         {
-            Id = campaign.Id,
-            Name = campaign.Name,
-            Description = campaign.Description,
-            PlayerSlotCount = campaign.PlayerSlotCount,
-            IsPrivate = campaign.IsPrivate,
-            IsPubliclyViewable = campaign.IsPubliclyViewable,
-            JoinPasswordHash = campaign.JoinPasswordHash,
-            CreatorIsParticipant = campaign.CreatorIsParticipant,
-            City = campaign.City,
-            Region = campaign.Region,
-            Country = campaign.Country,
-            MapStorageKey = preset.MapStorageKey,
+            Id = withFiles.Id,
+            Name = withFiles.Name,
+            Description = withFiles.Description,
+            PlayerSlotCount = withFiles.PlayerSlotCount,
+            IsPrivate = withFiles.IsPrivate,
+            IsPubliclyViewable = withFiles.IsPubliclyViewable,
+            JoinPasswordHash = withFiles.JoinPasswordHash,
+            CreatorIsParticipant = withFiles.CreatorIsParticipant,
+            City = withFiles.City,
+            Region = withFiles.Region,
+            Country = withFiles.Country,
+            MapStorageKey = string.IsNullOrWhiteSpace(preset.MapStorageKey)
+                ? campaign.MapStorageKey
+                : preset.MapStorageKey,
             Revision = campaign.Revision,
-            CreatedUtc = campaign.CreatedUtc,
+            CreatedUtc = withFiles.CreatedUtc,
             UpdatedUtc = utcNow,
-            CreatedByUserId = campaign.CreatedByUserId,
-            Memberships = campaign.Memberships,
-            Factions = campaign.Factions,
-            AllyGroups = campaign.AllyGroups,
-            Links = campaign.Links,
-            TimeZoneId = campaign.TimeZoneId,
-            StartsUtc = campaign.StartsUtc,
-            EndsUtc = campaign.EndsUtc,
-            ClosedUtc = campaign.ClosedUtc,
-            RoundCount = campaign.RoundCount,
-            RoundLengthAmount = campaign.RoundLengthAmount,
-            RoundLengthUnit = campaign.RoundLengthUnit,
-            Phases = campaign.Phases,
-            MapGraph = CampaignOverlayRemap.ForCampaign(preset.MapGraph, preset, campaign),
-            PlayState = campaign.PlayState,
-            TerrainTypes = campaign.TerrainTypes,
-            StructureTypes = campaign.StructureTypes,
-            ItemObjectiveTypes = campaign.ItemObjectiveTypes,
-            PublicObjectiveTypes = campaign.PublicObjectiveTypes,
-            SpecialRules = campaign.SpecialRules,
-            Missions = campaign.Missions,
-            ForceStatuses = campaign.ForceStatuses,
-            PrivateObjectiveTypes = campaign.PrivateObjectiveTypes,
-            BattleScoring = campaign.BattleScoring,
-            RankingObjectivePoints = campaign.RankingObjectivePoints,
-            SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
-            SplitForceSupplyPenaltyIsPercent = campaign.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = campaign.BattleReportRules,
-            ArmyEscalations = campaign.ArmyEscalations,
+            CreatedByUserId = withFiles.CreatedByUserId,
+            Memberships = withFiles.Memberships,
+            Factions = withFiles.Factions,
+            AllyGroups = withFiles.AllyGroups,
+            Links = withFiles.Links,
+            TimeZoneId = withFiles.TimeZoneId,
+            StartsUtc = withFiles.StartsUtc,
+            EndsUtc = withFiles.EndsUtc,
+            ClosedUtc = withFiles.ClosedUtc,
+            RoundCount = withFiles.RoundCount,
+            RoundLengthAmount = withFiles.RoundLengthAmount,
+            RoundLengthUnit = withFiles.RoundLengthUnit,
+            Phases = withFiles.Phases,
+            MapGraph = preset.MapGraph is null
+                ? campaign.MapGraph
+                : CampaignOverlayRemap.ForCampaign(preset.MapGraph, preset, withFiles),
+            PlayState = withFiles.PlayState,
+            TerrainTypes = withFiles.TerrainTypes,
+            StructureTypes = withFiles.StructureTypes,
+            ItemObjectiveTypes = withFiles.ItemObjectiveTypes,
+            PublicObjectiveTypes = withFiles.PublicObjectiveTypes,
+            SpecialRules = withFiles.SpecialRules,
+            Missions = withFiles.Missions,
+            ForceStatuses = withFiles.ForceStatuses,
+            PrivateObjectiveTypes = withFiles.PrivateObjectiveTypes,
+            BattleScoring = withFiles.BattleScoring,
+            RankingObjectivePoints = withFiles.RankingObjectivePoints,
+            SplitForceSupplyPenaltyPercent = withFiles.SplitForceSupplyPenaltyPercent,
+            SplitForceSupplyPenaltyIsPercent = withFiles.SplitForceSupplyPenaltyIsPercent,
+            BattleReportRules = withFiles.BattleReportRules,
+            ArmyEscalations = withFiles.ArmyEscalations,
         };
     }
 }

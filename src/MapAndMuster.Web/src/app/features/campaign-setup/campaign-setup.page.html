@@ -958,7 +958,10 @@
             <p class="muted">
               Catalog of private objectives for players, factions, and ally groups. Manual objectives stay secret until
               a manager approves a claim or the campaign closes. Automatic objectives score from map facts and become
-              public when completed. At start each player, faction, and ally group receives one available objective.
+              public when completed. At start each occupying player, faction, and ally group receives one secret
+              objective from that group's pool. A group with no configured objectives receives none. When a pool has
+              fewer objectives than holders, unique draws are given first and the pool is shuffled again so everyone
+              still receives one. Duplicate assignments are scored independently.
             </p>
             <div formArrayName="privateObjectiveTypes" class="stack">
               @for (item of privateObjectiveTypes.controls; track item; let index = $index) {

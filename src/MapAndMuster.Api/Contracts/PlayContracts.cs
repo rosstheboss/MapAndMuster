@@ -630,7 +630,7 @@ public sealed class GrantPrivateObjectiveRequest
     /// <summary>Gets the player, faction, or ally-group identifier.</summary>
     public required Guid HolderId { get; init; }
 
-    /// <summary>Gets a specific catalog type, or omit to grant a random still-available entry.</summary>
+    /// <summary>Gets a specific catalog type, or omit to grant a random entry from that holder's pool.</summary>
     public Guid? TypeId { get; init; }
 }
 
