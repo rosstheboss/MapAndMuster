@@ -67,6 +67,9 @@
   @if (error()) {
     <p class="error error-banner" role="alert">{{ error() }}</p>
   }
+  @if (pageNotice()) {
+    <p class="error-banner" role="status">{{ pageNotice() }}</p>
+  }
   @if (successMessage()) {
     <p class="success-banner" role="status">{{ successMessage() }}</p>
   }
@@ -92,6 +95,7 @@
         [initialScrollTop]="restoreChatScroll()"
         [unreadMentionCount]="board.unreadMentionCount ?? 0"
         [unreadPrivateCount]="board.unreadPrivateCount ?? 0"
+        [scrollToEntryId]="logScrollEntryId()"
         (expandedChange)="setSection('log', $event)"
         (channelChange)="onChatChannelChange($event)"
         (scrollChange)="onChatScrollChange($event)"
@@ -510,6 +514,7 @@
             <div class="map-board" #mapBoard>
               <app-campaign-map-view
                 [imageUrl]="src"
+                [campaignId]="campaign.id"
                 [territories]="graph().territories"
                 [adjacencies]="graph().adjacencies"
                 [selectedTerritoryIds]="selectedIds()"
@@ -519,9 +524,11 @@
                 [interactive]="true"
                 [factions]="campaign.factions"
                 [structures]="campaign.structureTypes"
+                [terrainTypes]="campaign.terrainTypes"
                 [structureImageUrl]="structureImageUrl"
                 [flagImageUrl]="flagImageUrl"
                 [forces]="mapForces()"
+                [battles]="mapBattles()"
                 [emphasizedForceIds]="focusedForceIds()"
                 [items]="mapItems()"
                 [colorMode]="highlightMode()"
@@ -1485,7 +1492,7 @@
                 >
                   {{ entry.group.name }}
                 </button>
-                <span> ({{ entry.players.length }})</span>
+                <span> ({{ entry.players.length === 1 ? '1 player' : entry.players.length + ' players' }})</span>
                 @if (entry.membersLabel) {
                   <span> - {{ entry.membersLabel }}</span>
                 }
@@ -1797,6 +1804,11 @@
                   @if (participantRoles(participant); as roles) {
                     <span class="muted"> · {{ roles }}</span>
                   }
+                  @if (canStaffMembers() && delinquencyEntryId(participant.userId); as entryId) {
+                    <button type="button" class="status-chip is-drafting" (click)="openDelinquencyLog(entryId)">
+                      May be kicked
+                    </button>
+                  }
                   @if (typeof participant.currentSupplyPoints === 'number') {
                     <span class="muted">
                       · Supply {{ participant.currentSupplyPoints }}
@@ -1860,8 +1872,8 @@
             <div class="actions">
               @if (campaign.status === 'Scheduled') {
                 <a class="button" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
+                <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'map']">Edit map</a>
               }
-              <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'map']">Edit map</a>
             </div>
           }
           @if (canDebug() && isDebugActive() && play(); as play) {

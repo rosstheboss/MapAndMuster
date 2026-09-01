@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { CampaignMapViewComponent, TERRITORY_HOVER_INTENT_MS } from './campaign-map-view.component';
+import { MAP_VIEW_ZOOM_STORAGE_PREFIX, writeStoredMapViewZoom } from '../../core/maps/map-view-preferences';
 
 const png =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -26,7 +27,10 @@ const territory = {
 };
 
 describe('CampaignMapViewComponent', () => {
+  const storedCampaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
   beforeEach(async () => {
+    localStorage.removeItem(MAP_VIEW_ZOOM_STORAGE_PREFIX + storedCampaignId);
     await TestBed.configureTestingModule({
       imports: [CampaignMapViewComponent],
       providers: [provideZonelessChangeDetection()],
@@ -207,6 +211,31 @@ describe('CampaignMapViewComponent', () => {
     view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
     fixture.detectChanges();
     expect(view.fullscreen()).toBe(false);
+  });
+
+  it('toggles Show names on N and names the shortcut on the control', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const label = [...compiled.querySelectorAll('label')].find((item) => item.textContent.includes('Show names'));
+    expect(label?.getAttribute('title')).toBe('Show names (N)');
+    expect(label?.querySelector('input')?.getAttribute('aria-keyshortcuts')).toBe('N');
+
+    const view = fixture.componentInstance as unknown as {
+      onDocumentKeydown: (event: KeyboardEvent) => void;
+      showNames: () => boolean;
+    };
+    expect(view.showNames()).toBe(false);
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'n' }));
+    fixture.detectChanges();
+    expect(view.showNames()).toBe(true);
+    expect(compiled.querySelector('.territory-name')?.textContent.trim()).toBe('Coast');
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'N' }));
+    fixture.detectChanges();
+    expect(view.showNames()).toBe(false);
   });
 
   it('recenters a fitted map when the viewport grows', () => {
@@ -459,6 +488,36 @@ describe('CampaignMapViewComponent', () => {
     view.onImageLoad({ target: image } as unknown as Event);
     expect(view.zoom()).toBe(2);
     expect(view.fitToPanel()).toBe(false);
+  });
+
+  it('restores a stored zoom for a campaign instead of fitting', () => {
+    writeStoredMapViewZoom(storedCampaignId, { fit: false, zoom: 2 });
+    globalThis.ResizeObserver = class {
+      observe(): void {
+        return;
+      }
+      disconnect(): void {
+        return;
+      }
+      unobserve(): void {
+        return;
+      }
+    };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('campaignId', storedCampaignId);
+    fixture.detectChanges();
+    const view = fixture.componentInstance as unknown as {
+      viewportSize: { set(value: { width: number; height: number }): void };
+      onImageLoad: (event: Event) => void;
+      zoom: () => number;
+      fitToPanel: () => boolean;
+    };
+    view.viewportSize.set({ width: 400, height: 300 });
+    const image = { naturalWidth: 1000, naturalHeight: 800 } as HTMLImageElement;
+    view.onImageLoad({ target: image } as unknown as Event);
+    expect(view.fitToPanel()).toBe(false);
+    expect(view.zoom()).toBe(2);
   });
 
   it('fits on F and zooms to actual size on 1', () => {
@@ -842,6 +901,14 @@ describe('CampaignMapViewComponent', () => {
 
     const coast = compiled.querySelector('.territory-hit[data-id="t1"]');
     expect(coast?.getAttribute('aria-label')).toBe('Coast');
+    expect(coast?.getAttribute('title')).toContain('Coast');
+    expect(coast?.getAttribute('title')).toContain('Owner: Neutral');
+    expect(coast?.getAttribute('title')).toContain('Terrain: None');
+    const coastRow = [...compiled.querySelectorAll<HTMLButtonElement>('.territory-directory-item')].find(
+      (item) => item.textContent.trim() === 'Coast',
+    );
+    expect(coastRow?.getAttribute('title')).toContain('Coast');
+    expect(coastRow?.getAttribute('title')).toContain('Owner: Neutral');
     const directory = [...compiled.querySelectorAll('.territory-directory-item')].map((item) =>
       item.textContent.trim(),
     );
@@ -857,6 +924,309 @@ describe('CampaignMapViewComponent', () => {
     fixture.detectChanges();
     expect(directoryPanel.open).toBe(false);
     expect(summary?.textContent).toContain('Territories');
+  });
+
+  it('shows owner, structure, and terrain marks in the Territories directory', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      {
+        ...squareTerritory('t1', 0.1, 0.1),
+        name: 'Coast',
+        terrainTypeId: 'plains',
+        structureTypeId: 'town',
+        ownerFactionId: 'north',
+      },
+    ]);
+    fixture.componentRef.setInput('terrainTypes', [{ id: 'plains', name: 'Plains', color: '#7CB342', missions: [] }]);
+    fixture.componentRef.setInput('structures', [
+      {
+        id: 'town',
+        name: 'Town',
+        builtinSymbol: 'Town',
+        hasImage: false,
+        hasPillagedImage: false,
+        isBuildable: false,
+        isPillageable: true,
+        isDestructible: true,
+        missions: [],
+      },
+    ]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+    ]);
+    fixture.detectChanges();
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector('.territory-directory-item');
+    expect(row?.querySelector('.owner-flag')).toBeTruthy();
+    expect(row?.querySelectorAll('app-map-symbol')).toHaveLength(2);
+    expect(row?.querySelector('.item-label')?.textContent.trim()).toBe('Coast');
+    expect(row?.getAttribute('title')).toContain('Owner: North');
+    expect(row?.getAttribute('title')).toContain('Town');
+    expect(row?.getAttribute('title')).toContain('Terrain: Plains');
+  });
+
+  it('shows a hover tooltip for a territory on the map', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      {
+        ...squareTerritory('t1', 0.1, 0.1),
+        name: 'Coast',
+        terrainTypeId: 'plains',
+        structureTypeId: 'town',
+        structureCondition: 'Pillaged',
+        ownerFactionId: 'north',
+      },
+    ]);
+    fixture.componentRef.setInput('terrainTypes', [{ id: 'plains', name: 'Plains', color: '#7CB342', missions: [] }]);
+    fixture.componentRef.setInput('structures', [
+      {
+        id: 'town',
+        name: 'Town',
+        builtinSymbol: 'Town',
+        hasImage: false,
+        hasPillagedImage: false,
+        isBuildable: false,
+        isPillageable: true,
+        isDestructible: true,
+        missions: [],
+      },
+    ]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+    ]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'f1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: true,
+        name: 'Ada · North',
+        label: 'Ada · North in Coast',
+      },
+    ]);
+    fixture.componentRef.setInput('battles', [
+      {
+        territoryId: 't1',
+        status: 'AwaitingResults',
+        participantForceIds: ['f1'],
+        winnerForceId: null,
+        isDraw: false,
+      },
+    ]);
+    fixture.componentRef.setInput('hoveredTerritoryId', 't1');
+    fixture.detectChanges();
+
+    const tip = (fixture.nativeElement as HTMLElement).querySelector('.territory-hover-tip');
+    expect(tip?.textContent).toContain('Coast');
+    expect(tip?.textContent).toContain('Owner: North');
+    expect(tip?.textContent).toContain('Town (pillaged)');
+    expect(tip?.textContent).toContain('Terrain: Plains');
+    expect(tip?.textContent).toContain('Ada · North');
+    expect(tip?.textContent).toContain('Battle');
+  });
+
+  it('pans to a territory selected from the directory without changing zoom', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [squareTerritory('t-far', 0.7, 0.6)]);
+    fixture.componentRef.setInput('interactive', true);
+    fixture.componentInstance.territorySelect.subscribe((event) => {
+      fixture.componentRef.setInput('selectedTerritoryIds', [event.id]);
+      fixture.detectChanges();
+    });
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+
+    const view = mapView(fixture.componentInstance);
+    const zoomBefore = view.zoom();
+    const root = fixture.nativeElement as HTMLElement;
+    const button = [...root.querySelectorAll('.territory-directory-item')].find(
+      (item) => item.textContent.trim() === 't-far',
+    ) as HTMLButtonElement | undefined;
+    expect(button).toBeTruthy();
+    button!.click();
+    fixture.detectChanges();
+
+    expect(view.zoom()).toBe(zoomBefore);
+    expect(view.fitToPanel()).toBe(false);
+    expect(view.panX()).toBeCloseTo(-600, 5);
+    expect(view.panY()).toBeCloseTo(-410, 5);
+  });
+
+  it('does not pan when a territory is selected on the map', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [squareTerritory('t-far', 0.7, 0.6)]);
+    fixture.componentRef.setInput('interactive', true);
+    fixture.componentInstance.territorySelect.subscribe((event) => {
+      fixture.componentRef.setInput('selectedTerritoryIds', [event.id]);
+      fixture.detectChanges();
+    });
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+
+    const view = mapView(fixture.componentInstance);
+    const svg = (fixture.nativeElement as HTMLElement).querySelector('svg')!;
+    Object.defineProperty(svg, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800 }),
+    });
+    svg.dispatchEvent(pointer('pointerdown', { button: 0, clientX: 800, clientY: 560 }));
+    fixture.detectChanges();
+
+    expect(view.panX()).toBe(-200);
+    expect(view.panY()).toBe(-200);
+  });
+
+  it('does not pan when map selection is applied after the event microtask', async () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [squareTerritory('t-far', 0.7, 0.6)]);
+    fixture.componentRef.setInput('interactive', true);
+    let selectedId: string | null = null;
+    fixture.componentInstance.territorySelect.subscribe((event) => {
+      selectedId = event.id;
+    });
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+
+    const view = mapView(fixture.componentInstance);
+    const svg = (fixture.nativeElement as HTMLElement).querySelector('svg')!;
+    Object.defineProperty(svg, 'getBoundingClientRect', {
+      value: () => ({ left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800 }),
+    });
+    svg.dispatchEvent(pointer('pointerdown', { button: 0, clientX: 800, clientY: 560 }));
+    await Promise.resolve();
+    fixture.componentRef.setInput('selectedTerritoryIds', [selectedId!]);
+    fixture.detectChanges();
+
+    expect(view.panX()).toBe(-200);
+    expect(view.panY()).toBe(-200);
+  });
+
+  it('pans to an off-map selection group and zooms out only enough to encapsulate it', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      squareTerritory('t1', 0.05, 0.05),
+      squareTerritory('t2', 0.75, 0.55),
+    ]);
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+    const view = mapView(fixture.componentInstance);
+    view.zoom.set(4);
+    view.panX.set(-200);
+    view.panY.set(-200);
+
+    fixture.componentRef.setInput('selectedTerritoryIds', ['t1', 't2']);
+    fixture.detectChanges();
+
+    const fit = Math.min(400 / 1000, 300 / 800);
+    expect(view.fitToPanel()).toBe(false);
+    expect(view.zoom()).toBeGreaterThan(fit);
+    expect(view.zoom()).toBeLessThan(4);
+    expect(view.panX()).not.toBe(-200);
+    expect(view.panY()).not.toBe(-200);
+  });
+
+  it('does not zoom out past Fit when framing a selection', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      {
+        ...squareTerritory('t-all', 0, 0),
+        polygon: [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 1, y: 1 },
+          { x: 0, y: 1 },
+        ],
+      },
+    ]);
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+    const view = mapView(fixture.componentInstance);
+    view.zoom.set(3);
+
+    fixture.componentRef.setInput('selectedTerritoryIds', ['t-all']);
+    fixture.detectChanges();
+
+    expect(view.fitToPanel()).toBe(true);
+    expect(view.panX()).toBe((400 - 1000 * Math.min(400 / 1000, 300 / 800)) / 2);
+  });
+
+  it('scrolls the territory directory inside the map column instead of growing it', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput(
+      'territories',
+      Array.from({ length: 24 }, (_, index) => ({
+        ...squareTerritory(`t${index + 1}`, 0.1, 0.1),
+        displayNumber: index + 1,
+        name: `Territory ${index + 1}`,
+      })),
+    );
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const directory = compiled.querySelector<HTMLDetailsElement>('.territory-directory');
+    const body = directory?.querySelector('.territory-directory-body');
+    expect(directory?.open).toBe(true);
+    expect(body).toBeTruthy();
+    expect(getComputedStyle(directory!).overflow).toBe('hidden');
+    expect(getComputedStyle(body!).overflow).toBe('auto');
+
+    const legend = compiled.querySelector<HTMLDetailsElement>('.map-legend');
+    expect(legend?.open).toBe(false);
+    legend?.querySelector('summary')?.click();
+    fixture.detectChanges();
+    expect(legend?.open).toBe(true);
+    expect(getComputedStyle(directory!).overflow).toBe('hidden');
+    expect(getComputedStyle(body!).overflow).toBe('auto');
+  });
+
+  it('keeps a collapsed Territories heading at the top of the map guide', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput(
+      'territories',
+      Array.from({ length: 8 }, (_, index) => ({
+        ...squareTerritory(`t${index + 1}`, 0.1, 0.1),
+        displayNumber: index + 1,
+        name: `Territory ${index + 1}`,
+      })),
+    );
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const guide = compiled.querySelector('.map-guide');
+    const directory = compiled.querySelector<HTMLDetailsElement>('.territory-directory');
+    expect(guide).toBeTruthy();
+    expect(getComputedStyle(guide!).display).toBe('flex');
+    expect(getComputedStyle(guide!).flexDirection).toBe('column');
+
+    directory!.open = false;
+    fixture.detectChanges();
+    expect(directory!.open).toBe(false);
+    expect(getComputedStyle(directory!).flexGrow).toBe('0');
   });
 
   it('selects a territory from the keyboard and from the directory list', () => {
@@ -893,7 +1263,7 @@ describe('CampaignMapViewComponent', () => {
     expect(selected).toHaveBeenCalledWith(expect.objectContaining({ id: 't1', additive: false }));
   });
 
-  it('draws a name or display number on the map when Show names is on', () => {
+  it('draws a name on the map when Show names is on, even when the polygon is small', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
     fixture.componentRef.setInput('territories', [
@@ -909,17 +1279,31 @@ describe('CampaignMapViewComponent', () => {
     expect(toggle).toBeTruthy();
     toggle!.click();
     fixture.detectChanges();
-    expect(compiled.querySelector('.territory-name')?.textContent.trim()).toBe('4');
+    expect(compiled.querySelector('.territory-name')?.textContent.trim()).toBe('Coast');
+  });
+
+  it('hides unnamed display numbers when they do not fit, and draws them when they do', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      { ...squareTerritory('t1', 0.1, 0.1), displayNumber: 4, name: null },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const toggle = [...compiled.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) =>
+      (input.closest('label')?.textContent ?? '').includes('Show names'),
+    );
+    toggle!.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('.territory-name')).toBeNull();
 
     const view = mapView(fixture.componentInstance);
     view.imageSize.set({ width: 1000, height: 800 });
     view.fitToPanel.set(false);
     view.zoom.set(1);
     fixture.detectChanges();
-    const label = compiled.querySelector('.territory-name');
-    const canvas = compiled.querySelector<HTMLElement>('.map-canvas');
-    expect(label?.textContent.trim()).toBe('Coast');
-    expect(canvas?.style.getPropertyValue('--map-scale')).toBe('1');
+    expect(compiled.querySelector('.territory-name')?.textContent.trim()).toBe('4');
   });
 
   it('hides the territory directory when the host supplies its own list', () => {
@@ -969,8 +1353,8 @@ function canvasTransform(root: HTMLElement): string {
 function mapView(component: CampaignMapViewComponent): {
   imageSize: { set(value: { width: number; height: number }): void };
   viewportSize: { set(value: { width: number; height: number }): void };
-  fitToPanel: { set(value: boolean): void };
-  zoom: { set(value: number): void };
+  fitToPanel: { set(value: boolean): void; (): boolean };
+  zoom: { set(value: number): void; (): number };
   panX: { set(value: number): void; (): number };
   panY: { set(value: number): void; (): number };
   repositionAfterViewportChange: () => void;
@@ -978,8 +1362,8 @@ function mapView(component: CampaignMapViewComponent): {
   return component as unknown as {
     imageSize: { set(value: { width: number; height: number }): void };
     viewportSize: { set(value: { width: number; height: number }): void };
-    fitToPanel: { set(value: boolean): void };
-    zoom: { set(value: number): void };
+    fitToPanel: { set(value: boolean): void; (): boolean };
+    zoom: { set(value: number): void; (): number };
     panX: { set(value: number): void; (): number };
     panY: { set(value: number): void; (): number };
     repositionAfterViewportChange: () => void;

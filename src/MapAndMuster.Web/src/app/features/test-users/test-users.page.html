@@ -13,13 +13,32 @@
   } @else if (users().length === 0) {
     <p>No test users are seeded in this environment.</p>
   } @else {
-    <ul class="plain-list">
-      @for (user of users(); track user.id) {
-        <li class="nested-row">
-          <span>{{ user.displayName }} ({{ user.username }})</span>
-          <button type="button" class="button-secondary" (click)="impersonate(user)">Test as this user</button>
-        </li>
-      }
-    </ul>
+    <label class="field">
+      Filter
+      <input
+        type="search"
+        [value]="filter()"
+        (input)="onFilter($event)"
+        autocomplete="off"
+        placeholder="Name or username"
+      />
+    </label>
+    @if (filteredUsers().length === 0) {
+      <p>No test users match that filter.</p>
+    } @else {
+      <ul class="plain-list test-user-list">
+        @for (user of filteredUsers(); track user.id) {
+          <li class="nested-row">
+            <span>
+              {{ user.displayName }} ({{ user.username }})
+              @if (isCurrentTestAccount(user)) {
+                <span class="current-chip">Currently testing</span>
+              }
+            </span>
+            <button type="button" class="button-secondary" (click)="impersonate(user)">Test as this user</button>
+          </li>
+        }
+      </ul>
+    }
   }
 </section>

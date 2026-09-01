@@ -2,7 +2,11 @@ import { expect, test } from '@playwright/test';
 
 test('unauthenticated visitors are sent to sign in', async ({ page }) => {
   await page.route('**/api/auth/me', async (route) => {
-    await route.fulfill({ status: 401, contentType: 'application/json', body: '{"code":"auth.unauthorized","message":"Sign in to continue."}' });
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: '{"code":"auth.unauthorized","message":"Sign in to continue."}',
+    });
   });
   await page.route('**/api/auth/external-providers', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
@@ -12,11 +16,11 @@ test('unauthenticated visitors are sent to sign in', async ({ page }) => {
   await expect(page.getByRole('banner').getByRole('img', { name: 'Map & Muster' })).toBeVisible();
   await expect(page.getByRole('contentinfo').getByRole('img', { name: 'Map & Muster' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Your Campaigns' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'All Campaigns' })).toBeVisible();
-    await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Sign in' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Your campaigns' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'All campaigns' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sign in' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByLabel('Email')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
 });
@@ -86,6 +90,14 @@ test('home shows the signed-in player and logout', async ({ page }) => {
   await page.route('**/api/notifications', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
+  await page.route('**/api/campaigns', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
   await page.route('**/api/news**', async (route) => {
     await route.fulfill({
       status: 200,
@@ -96,14 +108,17 @@ test('home shows the signed-in player and logout', async ({ page }) => {
 
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Needs your attention' })).toBeVisible();
+  await expect(page.getByText('You are not in a running campaign.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Join campaign' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Join the Discord server' })).toHaveAttribute(
     'href',
     'https://discord.gg/ATVt97DMnx',
   );
   await expect(page.getByText('No new notifications.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'News' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Your Campaigns' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'All Campaigns' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Your campaigns' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'All campaigns' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Profile' })).toBeVisible();
   await expect(page.getByText('You are signed in as')).toHaveCount(0);
   await page.getByRole('button', { name: 'Log out' }).click();

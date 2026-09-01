@@ -17,6 +17,7 @@ import { CampaignService } from '../../core/campaigns/campaign.service';
 import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import type { CampaignDetail, CampaignMission, MapGraphDetail } from '../../core/campaigns/campaign.models';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
+import { MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { isAdditiveModifier } from '../../core/maps/pointer';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
@@ -69,10 +70,16 @@ import {
   type MapGraph,
   type MapTerritory,
 } from '../../core/maps/map-graph.models';
+import { territoryHoverTooltip } from '../../core/maps/territory-tooltip';
 import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { ConfirmButtonComponent } from '../../shared/confirm-button/confirm-button.component';
+import {
+  TerritoryListItemComponent,
+  territoryListItemMarks,
+  type TerritoryListItemMarks,
+} from '../../shared/territory-list-item/territory-list-item';
 import { AppDialogComponent } from '../../shared/dialog/dialog.component';
-import { IconComponent } from '../../shared/icon/icon.component';
+import { IconComponent, type AppIconName } from '../../shared/icon/icon.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
@@ -88,6 +95,7 @@ export type { OverlayColorMode };
     CampaignMapViewComponent,
     IconComponent,
     MapSymbolComponent,
+    TerritoryListItemComponent,
     InstantDatePipe,
     ConfirmButtonComponent,
     AppDialogComponent,
@@ -111,7 +119,7 @@ export class MapEditorPage {
   protected readonly graph = signal<MapGraph>({ territories: [], adjacencies: [] });
   protected readonly drawing = signal<MapPoint[]>([]);
   protected readonly snapTarget = signal<MapPoint | null>(null);
-  protected readonly tool = signal<MapEditorTool>('draw');
+  protected readonly tool = signal<MapEditorTool>('select');
   protected readonly selectedIds = signal<string[]>([]);
   protected readonly hoveredTerritoryId = signal<string | null>(null);
   protected readonly hoveredAdjacencyId = signal<string | null>(null);
@@ -123,7 +131,7 @@ export class MapEditorPage {
   protected readonly showOverlay = signal(true);
   protected readonly showConnections = signal(true);
   protected readonly editorFieldsCollapsed = signal(false);
-  protected readonly territoryListCollapsed = signal(true);
+  protected readonly territoryListCollapsed = signal(false);
   protected readonly mapImageRevision = signal(0);
   protected readonly drawingActive = signal(false);
   protected readonly movePlacement = signal<'valid' | 'invalid' | null>(null);
@@ -133,7 +141,7 @@ export class MapEditorPage {
   protected readonly savePresetOpen = signal(false);
   private readonly svgFileInput = viewChild<ElementRef<HTMLInputElement>>('svgFile');
 
-  protected readonly mapTools: MapEditorTool[] = ['draw', 'erase', 'select', 'connect'];
+  protected readonly mapTools: MapEditorTool[] = ['select', 'draw', 'erase', 'connect'];
   protected readonly colorModes: OverlayColorMode[] = ['random', 'terrain', 'manual'];
 
   private revision = 0;
@@ -407,6 +415,19 @@ export class MapEditorPage {
         return 'Select';
       case 'connect':
         return 'Connect';
+    }
+  }
+
+  protected toolIcon(tool: MapEditorTool): AppIconName {
+    switch (tool) {
+      case 'draw':
+        return 'pencil';
+      case 'erase':
+        return 'eraser';
+      case 'select':
+        return 'cursor';
+      case 'connect':
+        return 'link';
     }
   }
 
@@ -1006,6 +1027,26 @@ export class MapEditorPage {
     return structureTypeById(this.campaign(), id)?.builtinSymbol ?? null;
   }
 
+  protected territoryListMarks(territory: MapTerritory): TerritoryListItemMarks {
+    const campaign = this.campaign();
+    return territoryListItemMarks(territory, {
+      factions: campaign?.factions ?? [],
+      terrainTypes: campaign?.terrainTypes ?? [],
+      structures: campaign?.structureTypes ?? [],
+      flagImageUrl: this.flagImageUrl,
+      structureImageUrl: this.structureImageUrl,
+    });
+  }
+
+  protected territoryListTooltip(territory: MapTerritory): string {
+    const campaign = this.campaign();
+    return territoryHoverTooltip(territory, {
+      factions: campaign?.factions ?? [],
+      terrainTypes: campaign?.terrainTypes ?? [],
+      structures: campaign?.structureTypes ?? [],
+    });
+  }
+
   protected labelFor(territory: MapTerritory): string {
     return territoryLabel(territory);
   }
@@ -1304,7 +1345,9 @@ export class MapEditorPage {
     try {
       const [campaign, graph] = await Promise.all([this.campaignsApi.get(id), this.campaignsApi.getMapGraph(id)]);
       if (campaign.status !== 'Scheduled') {
-        await this.router.navigate(['/campaigns', id, 'play']);
+        await this.router.navigate(['/campaigns', id, 'play'], {
+          queryParams: { notice: MAP_EDIT_CLOSED_QUERY },
+        });
         return;
       }
 

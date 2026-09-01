@@ -1,0 +1,29 @@
+<button
+  type="button"
+  class="territory-list-item list-button territory-directory-item"
+  [attr.data-territory-id]="territoryId()"
+  [class.is-selected]="selected()"
+  [class.is-active]="selected()"
+  [class.is-dirty]="dirty()"
+  [attr.aria-current]="selected() ? 'true' : null"
+  [attr.aria-label]="marks().label"
+  [attr.title]="tooltip() || null"
+  (click)="activate.emit($event)"
+>
+  @if (marks().ownerColor; as color) {
+    @if (marks().ownerLogoSrc; as src) {
+      <app-faction-logo [src]="src" [color]="color" [tint]="marks().ownerTint" [alt]="''" />
+    } @else {
+      <span class="owner-flag" [style.background]="color" aria-hidden="true"></span>
+    }
+  }
+  @if (marks().structureImageUrl; as src) {
+    <img class="structure-mark" [src]="src" alt="" />
+  } @else if (marks().structureSymbol; as symbol) {
+    <app-map-symbol kind="structure" [name]="symbol" [pillaged]="marks().structurePillaged" />
+  }
+  @if (marks().terrainSymbol; as symbol) {
+    <app-map-symbol kind="terrain" [name]="symbol" />
+  }
+  <span class="item-label">{{ marks().label }}</span>
+</button>

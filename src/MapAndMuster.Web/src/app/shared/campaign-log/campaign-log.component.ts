@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import type { ElementRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -9,6 +9,7 @@ import {
   campaignLogComposerSize,
   filterCampaignLog,
   filterChatRecipients,
+  formatLogTimeLabel,
   formatLogTimestamp,
   matchChatRecipient,
   mentionQuery,
@@ -45,6 +46,7 @@ export class CampaignLogComponent {
   readonly unreadPrivateCount = input(0);
   readonly initialChannelKey = input('Public:');
   readonly initialScrollTop = input<number | null>(null);
+  readonly scrollToEntryId = input<string | null>(null);
 
   readonly send = output<CampaignChatSend>();
   readonly downloadLog = output<CampaignLogExportRequest>();
@@ -61,6 +63,7 @@ export class CampaignLogComponent {
   protected readonly showPublicChat = signal(true);
   protected readonly showPrivateChat = signal(false);
   protected readonly showGameLog = signal(true);
+  protected readonly showDelinquency = signal(true);
   protected readonly exportOpen = signal(false);
   protected readonly exportPublicChat = signal(true);
   protected readonly exportGameLog = signal(true);
@@ -77,7 +80,13 @@ export class CampaignLogComponent {
     return listed.length > 0 ? listed : [{ kind: 'Public', targetId: null, label: 'Everyone' }];
   });
   protected readonly visibleEntries = computed(() =>
-    filterCampaignLog(this.entries(), this.showPublicChat(), this.showPrivateChat(), this.showGameLog()),
+    filterCampaignLog(
+      this.entries(),
+      this.showPublicChat(),
+      this.showPrivateChat(),
+      this.showGameLog(),
+      this.showDelinquency(),
+    ),
   );
   protected readonly recipientSuggestions = computed(() => {
     const query = this.recipientQuery();
@@ -140,6 +149,18 @@ export class CampaignLogComponent {
 
         element.scrollTop = element.scrollHeight;
       });
+    });
+    effect(() => {
+      const entryId = this.scrollToEntryId();
+      if (!entryId) {
+        return;
+      }
+
+      untracked(() => {
+        this.showDelinquency.set(true);
+        this.showGameLog.set(true);
+      });
+      queueMicrotask(() => this.scrollEntryIntoView(entryId));
     });
     effect(() => {
       this.draft();
@@ -219,6 +240,16 @@ export class CampaignLogComponent {
 
   protected formatTimestamp(value: string): string {
     return formatLogTimestamp(value, this.timeZoneId(), this.auth.currentUser()?.dateTimeDisplayFormat);
+  }
+
+  protected formatTimeLabel(value: string): string {
+    return formatLogTimeLabel(value, this.timeZoneId(), this.auth.currentUser()?.dateTimeDisplayFormat);
+  }
+
+  private scrollEntryIntoView(entryId: string): void {
+    const root = this.scroller()?.nativeElement;
+    const target = root?.querySelector<HTMLElement>(`#log-entry-${entryId}`);
+    target?.scrollIntoView({ block: 'center' });
   }
 
   protected parts(summary: string): { text: string; mention: boolean; username?: string | null }[] {

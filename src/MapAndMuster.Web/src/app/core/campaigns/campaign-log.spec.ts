@@ -1,8 +1,11 @@
 import {
   campaignLogComposerSize,
   filenameFromContentDisposition,
+  filterCampaignLog,
   filterChatRecipients,
+  formatLogTimeLabel,
   formatLogTimestamp,
+  latestDelinquencyEntryForUser,
   matchChatRecipient,
   mentionQuery,
   mergeCampaignLog,
@@ -17,6 +20,16 @@ describe('campaign log formatting', () => {
   it('formats a timestamp in the viewer time zone', () => {
     expect(formatLogTimestamp('2026-08-15T20:45:23-04:00', 'America/New_York')).toBe(
       '(August 15, 2026, 8:45:23 PM EDT)',
+    );
+  });
+
+  it('uses relative labels for recent log times', () => {
+    const now = new Date('2026-08-15T21:00:00-04:00');
+    expect(formatLogTimeLabel('2026-08-15T20:45:23-04:00', 'America/New_York', null, now)).toBe('14 minutes ago');
+    expect(formatLogTimeLabel('2026-08-15T20:59:50-04:00', 'America/New_York', null, now)).toBe('just now');
+    expect(formatLogTimeLabel('2026-08-15T19:00:00-04:00', 'America/New_York', null, now)).toBe('2 hours ago');
+    expect(formatLogTimeLabel('2026-08-14T20:45:23-04:00', 'America/New_York', null, now)).toBe(
+      '(August 14, 2026, 8:45:23 PM EDT)',
     );
   });
 
@@ -80,6 +93,56 @@ describe('campaign log formatting', () => {
     expect(campaignLogComposerSize(76, line, chrome)).toEqual({ height: 76, overflowY: 'hidden' });
     expect(campaignLogComposerSize(116, line, chrome)).toEqual({ height: 116, overflowY: 'hidden' });
     expect(campaignLogComposerSize(140, line, chrome)).toEqual({ height: 116, overflowY: 'auto' });
+  });
+
+  it('filters delinquency events separately from other game-log facts', () => {
+    const entries = [
+      {
+        id: 'start',
+        occurredUtc: '2026-08-15T20:45:23-04:00',
+        kind: 'CampaignStarted',
+        originator: 'Campaign',
+        summary: 'The campaign started.',
+        territoryId: null,
+        forceId: null,
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+      {
+        id: 'kick',
+        occurredUtc: '2026-08-15T20:46:23-04:00',
+        kind: 'DelinquencyThreshold',
+        originator: 'northplayer',
+        summary: 'may be kicked',
+        territoryId: null,
+        forceId: 'force-1',
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+    ];
+    expect(filterCampaignLog(entries, false, false, true, false).map((entry) => entry.id)).toEqual(['start']);
+    expect(filterCampaignLog(entries, false, false, false, true).map((entry) => entry.id)).toEqual(['kick']);
+  });
+
+  it('finds the latest delinquency log entry for a player', () => {
+    const entry = latestDelinquencyEntryForUser(
+      [
+        {
+          id: 'kick',
+          occurredUtc: '2026-08-15T20:46:23-04:00',
+          kind: 'DelinquencyThreshold',
+          originator: 'northplayer',
+          summary: 'may be kicked',
+          territoryId: null,
+          forceId: 'force-1',
+          battleId: null,
+          isSystemAdjustment: false,
+        },
+      ],
+      [{ id: 'force-1', controllerUserId: 'user-1' }],
+      'user-1',
+    );
+    expect(entry?.id).toBe('kick');
   });
 });
 

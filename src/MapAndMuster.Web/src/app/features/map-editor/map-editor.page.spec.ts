@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 
@@ -14,6 +14,7 @@ import type { MapTerritory } from '../../core/maps/map-graph.models';
 import { serializeMapSvg } from '../../core/maps/map-svg';
 import { STRUCTURE_TYPES } from '../../core/maps/structures';
 import { TERRAIN_TYPES } from '../../core/maps/terrain';
+import { MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
 import { MapEditorPage } from './map-editor.page';
 
 const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -146,6 +147,11 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Show Overlay');
     expect(compiled.textContent).toContain('Show Connections');
     expect(compiled.textContent).toContain('Show names');
+    expect(compiled.querySelector('label[title="Show names (N)"]')).toBeTruthy();
+    expect(compiled.textContent).toContain('Tools');
+    expect(compiled.textContent).toContain('Connections');
+    expect(compiled.textContent).toContain('Colors');
+    expect(compiled.textContent).toContain('File');
     expect(compiled.querySelector('.territory-directory')).toBeNull();
     expect(compiled.textContent).not.toContain('Draw on the overlay, not the image');
     expect(compiled.textContent).toContain('Download map');
@@ -204,13 +210,13 @@ describe('MapEditorPage', () => {
     expect(generate?.classList.contains('button')).toBe(false);
     const toolGroup = compiled.querySelector('[aria-label="Map tools"]');
     expect([...(toolGroup?.querySelectorAll('button') ?? [])].map((button) => button.textContent.trim())).toEqual([
+      'Select',
       'Draw',
       'Erase',
-      'Select',
       'Connect',
     ]);
-    expect(toolGroup?.querySelector('[aria-checked="true"]')?.textContent.trim()).toBe('Draw');
-    expect(toolGroup?.querySelector('.is-active')?.textContent.trim()).toBe('Draw');
+    expect(toolGroup?.querySelector('[aria-checked="true"]')?.textContent.trim()).toBe('Select');
+    expect(toolGroup?.querySelector('.is-active')?.textContent.trim()).toBe('Select');
     const colorGroup = compiled.querySelector('[aria-label="Overlay color mode"]');
     expect([...(colorGroup?.querySelectorAll('button') ?? [])].map((button) => button.textContent.trim())).toEqual([
       'Random Colors',
@@ -220,6 +226,52 @@ describe('MapEditorPage', () => {
     expect(colorGroup?.querySelector('[aria-checked="true"]')?.textContent.trim()).toBe('Manual Colors');
     generate?.click();
     fixture.detectChanges();
+    http.verify();
+  });
+
+  it('places the Territory editor below the map', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush(emptyGraph);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const column = compiled.querySelector('.map-column');
+    const map = column?.querySelector('.map-pane');
+    const editor = column?.querySelector('.territory-editor');
+    expect(map).toBeTruthy();
+    expect(editor).toBeTruthy();
+    expect(map && editor && map.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    http.verify();
+  });
+
+  it('shows owner, structure, and terrain marks on each territory list row', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        {
+          ...namedSquare('t1', 1, 'Northmarch', 0.1),
+          structureTypeId: 'town',
+          ownerFactionId: 'north',
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector('[data-territory-id="t1"]');
+    expect(row?.querySelector('.owner-flag')).toBeTruthy();
+    expect(row?.querySelectorAll('app-map-symbol')).toHaveLength(2);
+    expect(row?.querySelector('.item-label')?.textContent.trim()).toBe('Northmarch');
+    expect(row?.getAttribute('title')).toContain('Northmarch');
+    expect(row?.getAttribute('title')).toContain('Owner: North');
+    expect(row?.getAttribute('title')).toContain('Town');
+    expect(row?.getAttribute('title')).toContain('Terrain: Plains');
     http.verify();
   });
 
@@ -978,12 +1030,10 @@ describe('MapEditorPage', () => {
     const page = fixture.componentInstance as unknown as {
       onTerritorySelect: (event: { id: string; additive: boolean }) => void;
       setName: (value: string) => void;
-      toggleTerritoryList: () => void;
       isTerritoryFieldDirty: (key: string) => boolean;
       isTerritoryDirty: (id: string) => boolean;
     };
     page.onTerritorySelect({ id: 't1', additive: false });
-    page.toggleTerritoryList();
     fixture.detectChanges();
     expect(page.isTerritoryFieldDirty('name')).toBe(false);
 
@@ -1045,6 +1095,7 @@ describe('MapEditorPage', () => {
     };
     const compiled = fixture.nativeElement as HTMLElement;
 
+    page.onToolChange('draw');
     page.onTerritoryHover('t1');
     fixture.detectChanges();
     expect(page.hoveredTerritoryId()).toBeNull();
@@ -1343,6 +1394,7 @@ describe('MapEditorPage', () => {
     };
     const compiled = fixture.nativeElement as HTMLElement;
 
+    page.onToolChange('draw');
     page.onAdjacencySelect('ab');
     expect(page.selectedAdjacencyId()).toBeNull();
 
@@ -1435,7 +1487,10 @@ describe('MapEditorPage', () => {
 
     const editorToggle = compiled.querySelector<HTMLButtonElement>('.territory-editor .section-toggle');
     const listToggle = compiled.querySelector<HTMLButtonElement>('.side-pane-toggle');
-    expect(editorToggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(listToggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(compiled.querySelector('.territory-list')).toBeTruthy();
+    listToggle?.click();
+    fixture.detectChanges();
     expect(listToggle?.getAttribute('aria-expanded')).toBe('false');
     expect(compiled.querySelector('.territory-list')).toBeNull();
     listToggle?.click();
@@ -1483,8 +1538,6 @@ describe('MapEditorPage', () => {
       onTerritorySelect: (event: { id: string; additive: boolean }) => void;
     };
     const compiled = fixture.nativeElement as HTMLElement;
-    compiled.querySelector<HTMLButtonElement>('.side-pane-toggle')?.click();
-    fixture.detectChanges();
     expect(compiled.querySelector('.territory-list')).toBeTruthy();
 
     page.onToolChange('select');
@@ -1687,6 +1740,20 @@ describe('MapEditorPage', () => {
     expect(imported.ownerFactionId).toBe('north');
     expect(imported.spawnFactionId).toBe('north');
     expect(page.successMessage()).toBe('Imported 1 territories from the SVG file.');
+    http.verify();
+  });
+
+  it('redirects away from the editor when the campaign is no longer scheduled', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({ ...campaign, status: 'InProgress' });
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush(emptyGraph);
+    await fixture.whenStable();
+
+    expect(navigate).toHaveBeenCalledWith(['/campaigns', campaignId, 'play'], {
+      queryParams: { notice: MAP_EDIT_CLOSED_QUERY },
+    });
     http.verify();
   });
 });

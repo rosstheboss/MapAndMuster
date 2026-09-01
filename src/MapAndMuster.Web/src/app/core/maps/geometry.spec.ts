@@ -24,6 +24,7 @@ import {
   sharedBorderMidpoint,
   traceSharedBorder,
   translatePolygon,
+  unionPolygonBounds,
   type MapPoint,
 } from './geometry';
 import type { MapAdjacency, MapTerritory } from './map-graph.models';
@@ -31,6 +32,17 @@ import type { MapAdjacency, MapTerritory } from './map-graph.models';
 describe('map geometry', () => {
   const left = square(0.1, 0.1, 0.3);
   const right = square(0.4, 0.1, 0.3);
+
+  it('unions polygon bounds for a selection group', () => {
+    expect(unionPolygonBounds([])).toBeNull();
+    expect(unionPolygonBounds([[], []])).toBeNull();
+    expect(unionPolygonBounds([left, right])).toEqual({
+      minX: 0.1,
+      minY: 0.1,
+      maxX: 0.7,
+      maxY: 0.4,
+    });
+  });
 
   it('allows a shared border and supplies a midpoint', () => {
     expect(interiorsOverlap(left, right)).toBe(false);

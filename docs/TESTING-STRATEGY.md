@@ -50,6 +50,8 @@ Cover:
 - Public site chat on All Campaigns, including unknown `@` mentions, prohibited language, mutual blocks, isolation from campaign logs, administrator announcements with notifications, and rejection of seeded test accounts.
 - Public profile campaign lists that include shared or publicly viewable campaigns and omit hidden private campaigns the viewer does not share.
 - Home notification board empty and populated states, and administrator-only news edits.
+  Home's Needs your attention list is built from `GET /api/campaigns` (in-progress round,
+  countdown, commit, remaining setup) and sits above Notifications and News.
 - Manager add and kick of players (including private campaigns without the join password), promoting a
   player to campaign manager, adding a manager-only member, staff faction assignment, ending a
   campaign while keeping its final state, and administrator impersonation of seeded test accounts.
@@ -65,7 +67,8 @@ Use Angular's Vitest integration.
 Cover components/services for:
 
 - Order drafting from the map menu or force-panel **Save draft**, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed.
-- Campaign-page status bar (round/phase, throttled countdown live region, viewer commit chip, compact commitment count, Go to your orders). While a campaign is running, Actions, Chat, and Standings are open by default; other sections stay collapsed and the last set is stored in a per-campaign cookie. Staff tools are under collapsed Manage campaign. Battle, campaign, phase, and force-status enums use display labels. A hidden-relic notice and each battle reminder render once. The campaign log summary shows unread mention and private counts from `GET /log` without marking the log read on load.
+- Campaign-page status bar (round/phase, throttled countdown live region, viewer commit chip, compact commitment count, Go to your orders). While a campaign is running, Actions, Chat, and Standings are open by default; other sections stay collapsed and the last set is stored in a per-campaign cookie. Staff tools are under collapsed Manage campaign. Battle, campaign, phase, and force-status enums use display labels. A hidden-relic notice and each battle reminder render once. The campaign log summary shows unread mention and private counts from `GET /log` without marking the log read on load. Log timestamps sit after the entry text (relative when under 24 hours).
+- Create/edit campaign starts with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded; optional sections start collapsed. The sticky toolbar shows remaining required sections, nested mission groups have unique names, and Edit map is hidden after a campaign starts.
 - Countdown display without treating the browser clock as authoritative.
 - Map territory selection, force markers, polygon editing including Close Territory enclose and
   shared-border versus overlapping-interior checks, move drop validity, keyboard alternatives,
@@ -78,31 +81,56 @@ Cover components/services for:
   the same uniqueness and tint rules as faction flags.
   Full-screen map mode keeps the image inside the viewport: a fitted map recenters after the panel
   resizes, and a zoomed map clamps pan so it cannot sit off-screen.
+  Map zoom defaults to Fit and is restored from `localStorage` per campaign.
+  Selecting a territory or group from outside the map pans to center it without leaving image bounds,
+  and zooms out only when the current scale cannot encapsulate the selection, never past Fit.
   Territory hit polygons are named buttons; keyboard focus and Enter/Space select a territory, and a
   collapsible display-number-ordered directory is the accessible alternative on the campaign map
   (hidden in the map editor, which keeps its own list). Campaign territory details sit under the map
-  in the left column, not under the directory. Show-names labels stay screen-sized while zoomed and
-  use theme surface/text colors. Playwright axe includes map polygons; a Playwright test
-  tabs to a territory, presses Enter, and asserts the details panel updates.
-  The map editor does not show hover-placeholder copy above the map, and hovering or selecting a
-  territory does not change that field panel's height. The expanded Territories list stays within the
-  map column height, scrolls vertically, and scrolls the topmost selected territory into view.
+  in the left column, not under the directory. That details panel keeps a reserved height whether
+  empty or populated and scrolls overflow so hovering or selecting a territory does not grow the
+  campaign page or shrink the full-screen map. The campaign map Territories list stays within the
+  map column height, scrolls vertically, and shrinks when Map legend is expanded so the Map panel
+  does not grow. Show-names labels stay screen-sized while zoomed and
+  use theme surface/text colors. Named territories keep their full name at any size; unnamed display
+  numbers hide when they would not fit. N toggles Show names. Hovering a map territory or a
+  Territories row shows name, owner or Neutral, structure (with pillaged state), terrain, forces,
+  an open battle, and a retreating force after a loss or surrender.
+  Playwright axe includes map polygons; a Playwright test
+  tabs to a territory, presses Enter, and asserts the details panel updates without changing height.
+  The map editor does not show hover-placeholder copy, and hovering or selecting a
+  territory does not change that field panel's height. The Territory editor sits below the map.
+  The Territories list starts expanded, stays
+  within the map column height, scrolls vertically, and scrolls the topmost selected territory into
+  view. Mode tools are grouped separately from Connections, Colors, and File commands, with Select
+  first and selected by default, and the
+  active mode does not use the primary Save Map color. Campaign and map-editor Territories rows
+  show owner mark, optional structure, terrain type, then name. Edit map is hidden once a campaign is no
+  longer Scheduled; opening the editor anyway returns to the campaign page with a notice.
   Administrators can save as a preset from the map editor; the save-name lookup includes The Hunt in
   Estalia. Edit campaign exposes administrator Download Preset and Upload Preset for a portable
   package of catalog, overlay, and map image.   Map PNG downloads rasterize unselected overlay fills, spawn hatching, structure pins, and
   faction flags or logos (including faction-color tints when enabled), and omit adjacency arrows. Downloaded flags are twice the on-map marker
   size and structures are three times that size. Uploaded overlay SVG remaps terrain, structures,
   owners, and spawns onto the current campaign catalog by name when identifiers differ.
-- Permission-based navigation without relying on it as backend security.
+- Permission-based navigation without relying on it as backend security. Below 45 rem the primary
+  nav collapses behind a Menu button; Home and the theme toggle stay visible. Nav labels use
+  sentence case. The theme toggle names the action, not the current mode.
+- Registration and profile field rows, a Choose image file picker, visible fieldsets, and sticky
+  Save on profile.
 - Password fields include a show/hide toggle that restores `type=password`.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
-- Campaign log display, member chat including typable recipient autocomplete and public/private/game-log filters, live log refresh, chat send errors without the save success
+- Campaign log display, member chat including typable recipient autocomplete and public/private/game-log/delinquency filters, live log refresh, chat send errors without the save success
   banner, `@` mention autocomplete limited to current members, clickable originator and mention names, and manager or administrator download of public chat and/or game-log facts as text or CSV.
 - Public site chat on All Campaigns, including language filters, block toggles, administrator compose, and cookie-stored language preferences.
-- Participants panel names, factions, and Manager/Player/Admin roles, including manager add/search/kick and staff faction assignment.
-- Administrator test-users page and the impersonation banner with Return to admin.
+- Participants panel names, factions, and Manager/Player/Admin roles, including manager add/search/kick, staff faction assignment, and a May be kicked badge that opens the delinquency log entry.
+- Administrator test-users page (filter, Currently testing chip) and the impersonation banner with Return to admin.
 - Public profile campaign list, scores placeholder, and Back to the previous in-app screen.
-- Home notification board, including "No new notifications.", and paginated site news.
+- Home notification board, including "No new notifications.", Needs your attention from the
+  campaign list, empty join/create actions, and paginated site news.
+- Campaign cards show status, round, countdown, player count, role, remaining setup, commit
+  state, and Open while collapsed. Empty Your campaigns offers Join campaign. All campaigns
+  shows collapsed Site chat above the campaign list.
 - API error and concurrency-conflict recovery.
 
 ## End-to-end tests

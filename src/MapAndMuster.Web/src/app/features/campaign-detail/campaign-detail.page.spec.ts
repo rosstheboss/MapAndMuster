@@ -255,7 +255,13 @@ describe('CampaignDetailPage', () => {
         provideHttpClientTesting(),
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: { get: () => campaign.id } }, paramMap: of() },
+          useValue: {
+            snapshot: {
+              paramMap: { get: () => campaign.id },
+              queryParamMap: { get: () => null },
+            },
+            paramMap: of(),
+          },
         },
       ],
     }).compileComponents();
@@ -892,7 +898,7 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('Town (pillaged)');
     expect(compiled.textContent).toContain('Forces: northplayer · North');
     openSection(fixture, 'manage');
-    expect(compiled.textContent).toContain('Edit map');
+    expect(compiled.textContent).not.toContain('Edit map');
     expect(compiled.textContent).not.toContain('Edit campaign');
     http.verify();
   });
@@ -2203,6 +2209,60 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
+  it('keeps the territory details panel height stable when selecting a territory', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+      currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [
+        {
+          ...squareTerritory('t1', 'Coast', 0.1),
+          description:
+            'A long contested shoreline with supply caches, watchtowers, and overlapping claims that wrap the details text.',
+        },
+      ],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(playState());
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'map');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const meta = compiled.querySelector('.map-meta');
+    expect(meta).toBeTruthy();
+    const emptyStyle = getComputedStyle(meta!);
+    expect(emptyStyle.overflow).toBe('auto');
+    const emptyHeight = emptyStyle.height;
+    expect(compiled.textContent).toContain('Select a territory to see its details.');
+
+    const page = fixture.componentInstance as unknown as { hoveredTerritoryId: { set(id: string): void } };
+    page.hoveredTerritoryId.set('t1');
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('.map-meta h3')?.textContent).toContain('Coast');
+    const selectedStyle = getComputedStyle(meta!);
+    expect(selectedStyle.height).toBe(emptyHeight);
+    expect(selectedStyle.overflow).toBe('auto');
+    http.verify();
+  });
+
   it('shows a top five for each enabled public objective except allied relic control', async () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
@@ -2364,8 +2424,8 @@ describe('CampaignDetailPage', () => {
 
     const groups = [...panel.querySelectorAll(':scope > ul.plain-list > li')];
     expect(groups.map((group) => visibleText(group))).toEqual([
-      'Alpha League (1) - Midland (East) Bob (Midland, East)',
-      'Zeta Pact (2) - Apple, Zebra (Alpha, Zulu) Ada (Apple) Xavier (Zebra, Zulu)',
+      'Alpha League (1 player) - Midland (East) Bob (Midland, East)',
+      'Zeta Pact (2 players) - Apple, Zebra (Alpha, Zulu) Ada (Apple) Xavier (Zebra, Zulu)',
     ]);
 
     const firstPlayers = groups[0]?.querySelector('.ally-group-players');
@@ -2619,6 +2679,79 @@ describe('CampaignDetailPage', () => {
     const reminder = 'Bring a relic hunter.';
     expect(compiled.textContent.split(relic).length - 1).toBe(1);
     expect(compiled.textContent.split(reminder).length - 1).toBe(1);
+    http.verify();
+  });
+
+  it('shows a notice when the map editor cannot be opened', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as { pageNotice: { set(value: string | null): void } };
+    page.pageNotice.set('The map cannot be edited after a campaign has started.');
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'The map cannot be edited after a campaign has started.',
+    );
+    http.verify();
+  });
+
+  it('badges a delinquent player and links that badge to the log entry', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: false,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    const delinquencyLog = [
+      {
+        id: 'log-delinquency',
+        occurredUtc: '2026-08-14T12:00:00+00:00',
+        kind: 'DelinquencyThreshold',
+        originator: 'northplayer',
+        summary: "northplayer's force reached three missed-order offences and may be kicked.",
+        territoryId: null,
+        forceId: 'force-1',
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+    ];
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(playState({ log: delinquencyLog }));
+    flushLog(http, delinquencyLog);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    openSection(fixture, 'participants');
+    const compiled = fixture.nativeElement as HTMLElement;
+    const badge = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'May be kicked',
+    );
+    expect(badge).toBeTruthy();
+    badge!.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('#log-entry-log-delinquency')).toBeTruthy();
     http.verify();
   });
 });

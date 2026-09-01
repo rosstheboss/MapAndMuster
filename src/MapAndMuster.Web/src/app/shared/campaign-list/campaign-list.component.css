@@ -25,11 +25,37 @@
 
 .campaign-card {
   display: grid;
-  gap: 0.35rem;
+  gap: var(--space-2);
+}
+
+.campaign-card-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+
+.campaign-toggle {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.campaign-card-open {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+
+.campaign-card-facts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
 }
 
 .campaign-body {
-  padding-top: 0.35rem;
+  padding-top: var(--space-1);
 }
 
 .campaign-body p {

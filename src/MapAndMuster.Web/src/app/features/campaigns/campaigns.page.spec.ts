@@ -135,18 +135,34 @@ describe('CampaignsPage', () => {
       button.textContent.includes('Border War'),
     );
     expect(upcoming?.getAttribute('aria-expanded')).toBe('false');
-    expect(upcoming?.nextElementSibling).toBeNull();
+    expect(compiled.querySelector('.campaign-body')).toBeNull();
 
-    upcoming?.click();
-    fixture.detectChanges();
-    expect(upcoming?.getAttribute('aria-expanded')).toBe('true');
-    expect(compiled.textContent).toContain('1 of 8 players');
     expect(compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]')?.textContent).toContain(
       'Open',
     );
+    expect(compiled.textContent).toContain('1 of 8 players');
+    upcoming?.click();
+    fixture.detectChanges();
+    expect(upcoming?.getAttribute('aria-expanded')).toBe('true');
     expect(
       compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/edit"]')?.textContent,
     ).toContain('Edit');
+    http.verify();
+  });
+
+  it('offers Join campaign and Create a campaign when the list is empty', async () => {
+    const fixture = TestBed.createComponent(CampaignsPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/campaigns').flush([]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('You are not managing or participating in any campaigns yet.');
+    expect(compiled.querySelector('a[href="/campaigns/all"]')?.textContent).toContain('Join campaign');
+    expect([...compiled.querySelectorAll('a')].some((link) => link.textContent.trim() === 'Create a campaign')).toBe(
+      true,
+    );
     http.verify();
   });
 });

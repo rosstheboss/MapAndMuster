@@ -1,5 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { afterNextRender, Component, HostListener, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs';
 
 import { AuthService, readApiError } from './core/auth/auth.service';
 import { FormSubmitOverlayService } from './core/forms/form-submit-overlay.service';
@@ -29,8 +31,34 @@ export class App {
   protected readonly loggingOut = signal(false);
   protected readonly returning = signal(false);
   protected readonly navError = signal<string | null>(null);
+  protected readonly navOpen = signal(false);
+  protected readonly bannerCompact = signal(false);
+
+  constructor() {
+    afterNextRender(() => this.syncBannerCompact());
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.closeNav());
+  }
+
+  @HostListener('window:scroll')
+  protected onWindowScroll(): void {
+    this.syncBannerCompact();
+  }
+
+  protected toggleNav(): void {
+    this.navOpen.update((open) => !open);
+  }
+
+  protected closeNav(): void {
+    this.navOpen.set(false);
+  }
 
   protected async logout(): Promise<void> {
+    this.closeNav();
     this.loggingOut.set(true);
     this.navError.set(null);
     try {
@@ -53,5 +81,9 @@ export class App {
     } finally {
       this.returning.set(false);
     }
+  }
+
+  private syncBannerCompact(): void {
+    this.bannerCompact.set(window.scrollY > 48);
   }
 }

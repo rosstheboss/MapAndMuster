@@ -1,7 +1,28 @@
+:host {
+  display: block;
+  max-width: 40rem;
+}
+
+.test-user-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
 .nested-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+}
+
+.current-chip {
+  display: inline-block;
+  margin-left: 0.35rem;
+  font-weight: 700;
+  color: var(--color-text);
 }

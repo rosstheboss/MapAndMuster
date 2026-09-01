@@ -236,7 +236,8 @@ who is not yet attached as campaign manager only or as both manager and player. 
 member does not occupy a player slot. They may kick a non-manager player (which notifies them
 in-app and by email unless they are a test account), and assign another player's faction and
 subfaction from one dropdown that lists subfactions as
-`Faction Name - Subfaction Name`. Players may
+`Faction Name - Subfaction Name`. From the third missed-order offence onward, staff also see a
+**May be kicked** badge on that participant that opens the matching campaign-log entry. Players may
 still change their own faction until the campaign starts; after launch only staff assignment
 changes it. A kicked player's forces, drafts, and unresolved battles are removed, and carried
 items drop on the territory they occupied.
@@ -288,9 +289,11 @@ factions, and factions whose alliance was broken by Backstab, use their faction 
 browser stores that highlight mode, which panels were expanded or collapsed, standings sort,
 last chat recipient, and last chat scroll position in a per-campaign cookie (`cv-{campaignId}`,
 Path=/, Max-Age one year, SameSite=Lax), following the same pattern as the color-theme cookie.
+Map zoom (Fit vs a percent) is stored per campaign in `localStorage` under
+`map-view-zoom:{campaignId}`.
 Game state still refreshes from the server; only the viewer's layout is restored.
 
-Your Campaigns lists campaigns the user manages or plays in. All Campaigns lists upcoming
+Your campaigns lists campaigns the user manages or plays in. All campaigns lists upcoming
 campaigns plus publicly viewable active and completed campaigns, using the same grouping and
 sort: active by soonest end, upcoming by soonest start, completed by latest end. Listings show
 player slots occupied of maximum, name, description, filled location parts, proposed start and
@@ -310,7 +313,7 @@ session to correct orders, re-resolve the previous action while the following ph
 (or during the post-campaign grace), or override battle results. Upcoming
 and completed campaigns use the same page without live order controls. The campaign page includes
 a collapsible public log and member chat for upcoming, in-progress, and completed campaigns.
-Your Campaigns also offers Duplicate campaign on every listed campaign. Duplication copies the map overlay, factions, missions, ally
+Your campaigns also offers Duplicate campaign on every listed campaign. Duplication copies the map overlay, factions, missions, ally
 groups and their colors, special rules, public and private objectives, battle scoring, ranking public objectives, item-objective types (including flavor text and choices), links, visibility, location, and schedule template into a new campaign whose start is one
 week after the duplication instant in the campaign time zone. The duplicating user becomes the
 manager of the copy and occupies a player slot only when they were a player on the source.
@@ -326,13 +329,20 @@ user-uploaded catalog images. Built-in structure icons are application assets an
 Setup sections (details, schedule, visibility, ally groups, factions, subfactions, special
 rules, force statuses, terrain, structures, missions, item objectives, public objectives, private
 objectives, links, and map) can be expanded or collapsed. Section actions collapse
-with their section. Invalid sections expand automatically when save validation fails. Sections
-start expanded. Setup keeps Back to campaigns, Expand All, Collapse All, and Save or Create in a
+with their section. Invalid sections expand automatically when save validation fails. Create and
+edit start with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded;
+optional sections start collapsed. A wide-viewport section index lists every section and marks
+required ones that still need work, and the sticky toolbar shows how many required sections remain.
+Nested terrain and structure mission groups use unique names such as "Missions for Beach." Setup
+keeps Back to campaigns, Expand All, Collapse All, and Save or Create in a
 sticky toolbar. Edit campaign also includes Edit map, which opens the map editor without saving
-the current form.
+the current form. Edit map is offered only while the campaign is Scheduled. Opening the editor
+after a campaign has started returns to the campaign page with a message that the map can no longer
+be edited.
 
-The campaign page keeps Back to campaigns, Expand All, Collapse All, and (when allowed) Debug,
-Edit campaign, and Edit map in a sticky toolbar. Every panel except the status strip can be
+The campaign page keeps Back to campaigns, Expand All, Collapse All, and (when allowed) Debug
+in a sticky toolbar. Edit campaign and Edit map sit under Manage campaign and are offered only
+while the campaign is Scheduled. Every panel except the status strip can be
 expanded or collapsed. Status sits above the other panels and shows the current round and phase,
 lifecycle status, remaining phase time, and the phase-end timestamp. The live map, orders,
 battles, and schedule controls appear on this same page according to the viewer's role. The
@@ -584,9 +594,12 @@ allowance plus the round bonus, then from the player's temporary pool.
 
 ### Map overlay editor
 
-After campaign creation, the creating manager is taken to the map editor. Draw, Erase, Select, and
-Connect are an exclusive toolbar group; the active tool uses the same filled accent style as Save Map.
-Undo, redo, and Close Territory sit beside that group. There is no Cancel Drawing control; switching
+After campaign creation, the creating manager is taken to the map editor. Select, Draw, Erase, and
+Connect are an exclusive toolbar group with icons; Select is the default mode and is listed first.
+The active mode uses a glow highlight, not the
+Save Map accent. Command groups are labeled Tools, Edit, Connections, Colors, and File. Destructive
+commands use the danger confirm pattern. Undo, redo, and Close Territory sit in Edit. The Territories
+list starts expanded. There is no Cancel Drawing control; switching
 to Erase, another tool, or pressing Escape clears an in-progress drawing. Draw, connect, color, and
 save controls stay sticky at the top of the viewport while they fit; when the toolbar is taller
 than 40 percent of the viewport it scrolls inside itself. Territories are drawn as
@@ -606,14 +619,17 @@ subfaction. The spawn list disables factions whose special rules include `Underg
 because those forces have no fixed spawn. Factions that require a subfaction are listed as
 "Faction Name - Subfaction Name" rather than the parent name; map flags and colors use that
 subfaction's chosen color and logo when configured, otherwise the parent faction's logo and color. The collapsible
-Territory editor above the map keeps a fixed field area, tall enough for its three field rows
+Territory editor below the map keeps a fixed field area, tall enough for its three field rows
 without a scrollbar, while it is open so hover, selection, deselection, zoom, and drag on the map
 do not shift the map up or down the page. Fields are name
 and description on the first row, terrain, structure, structure condition, and overlay color on the
 second, and ownership, spawn, and delete on the third. Hovering a territory does not open those
 fields; a selection does. The Territories side panel is a narrow sliver with an expand control until opened, then
-grows horizontally to list territories. When expanded, that list scrolls and stops at the bottom of
-the map. Selecting a territory that is outside the visible list range scrolls to it; a
+grows horizontally to list territories. Each row shows the owning faction's mark (uploaded logo,
+tinted when that setting is on, otherwise a color flag), then an optional structure symbol of the
+same size when a structure is present, then the terrain-type symbol, then the territory name, inside
+a bordered list button. When expanded, that list scrolls and matches the height of the map column
+(map plus the Territory editor beneath it). Selecting a territory that is outside the visible list range scrolls to it; a
 multi-selection scrolls to the topmost selected name. Closing the list expands the map horizontally;
 map height stays the same. The editor map is taller than the campaign-page map.
 
@@ -712,21 +728,36 @@ until Random Colors or Color By Terrain is chosen again. Switching to Random Col
 Terrain recolors every territory. A new territory, or a terrain change while Color By Terrain is on,
 uses that mode's color. Remove Colors switches to Manual Colors and clears every overlay color.
 
-The map overlay starts fitted to the panel. Map panels are full width in their parent. On the
-campaign page, the Territories directory beside the map is collapsible, and selected-territory
-details sit under the map in that left column rather than spanning the directory. Zoom
+The map overlay starts fitted to the panel. Map panels are full width in their parent. Main page
+content and the footer share a 90 rem maximum width. The right-hand column of both the campaign map
+and the map editor is 22 rem; toolbar and directory controls wrap so that column does not scroll
+horizontally. On the
+campaign page, the Territories directory beside the map is collapsible. That heading stays at the
+top of the right-hand column when collapsed, and the list scrolls inside the map height when
+expanded. Directory rows use the same bordered layout as the map editor: owning faction mark,
+optional structure symbol, terrain-type symbol, then territory name. Selected-territory details sit under the map in that left column rather than spanning the
+directory. Zoom
 controls sit across the top of the map in this order: zoom percent field, +, -, Fit, 100%, and Full
 screen. Zoom is 10% to 800% of the map image's actual pixel size, in 10% steps. 100% shows the
 image at its native size and centers it. Fit scales the image to the view and recenters it.
-The F key fits the map; 1 (and 0) set 100 percent. M toggles full-screen map mode on the campaign
+The F key fits the map; 1 (and 0) set 100 percent. N toggles Show names. Zoom defaults to Fit. After the viewer changes
+zoom, that Fit-or-percent choice is restored the next time the same campaign's map opens. M toggles full-screen map mode on the campaign
 page and map editor while the map is shown; Escape exits full screen. Full-screen mode keeps the map
 inside the viewport: a fitted map recenters when the panel size changes, and a zoomed map clamps pan
-so the image cannot sit off-screen. The first time a map view
+so the image cannot sit off-screen. Selecting a territory or group from outside the map (the
+directory, campaign links, or the map editor list) pans to center that selection as far as image
+bounds allow. Zoom changes only when the current scale cannot show the whole selection, and never
+zooms out past Fit. The first time a map view
 opens, the panel shows a loading ellipsis and hides overlay markers until that image has loaded so
 they do not cluster in the corner. Hover, selection, and later map updates do not show it again. Drawing coordinates stay normalized to the full-size image. Snap distance, minimum draw spacing, and
 overlay stroke widths are measured in screen pixels so zooming in lets a manager trace fine coasts and
 province borders. Territory names drawn on the map stay a readable screen size at Fit zoom and use
-the current theme's surface and text colors. When the zoomed image is larger than the panel, it can be panned
+the current theme's surface and text colors. Show names (N) draws the full territory name even when
+the polygon is small, and hides a display number when that number would not fit. Hovering a territory
+on the map or a row in the Territories list shows a tooltip with the territory name, owner or Neutral,
+structure type and pillaged state when a structure is present (`Town` or `Town (pillaged)`), terrain
+type, forces in the territory, whether a battle is to be had there, and any force still there that
+lost or surrendered and is retreating. When the zoomed image is larger than the panel, it can be panned
 but not dragged past the image bounds. Hold a right-click (context-click) or middle-click and drag to
 pan without drawing, erasing, or selecting; the mouse wheel still zooms the same way it does with any
 tool. Left-click drag does not pan. On a touch screen, pinch with two fingers to zoom and drag with
@@ -746,9 +777,9 @@ is not marked dirty. Territory names and terrain symbols in the editor list use 
 color as other dark-background fields in dark mode.
 
 The instruction paragraph under the toolbar is omitted. Editable territory fields sit in a
-collapsible horizontal bar above the map and zoom controls. The territory list stays in the side
+collapsible horizontal bar below the map and zoom controls. The territory list stays in the side
 panel as a collapsible toolbar; when expanded it scrolls, and its max height matches the map, zoom
-controls, and territory-edit section combined so the list never extends below the map. Selecting a
+controls, and territory-edit section combined so the list never extends below that column. Selecting a
 territory that is outside the visible list range scrolls that row into view; a multi-selection
 scrolls to the topmost selected name. Zoom controls include Show Overlay (on by default) and
 Show Connections (on by default). Turning off Show Overlay hides the territory overlay, markers, and
@@ -772,7 +803,7 @@ parentheses, alphabetically, as `Subfaction: Territory`. Factions with no specif
 parenthetical. The campaign page Ally groups section lists groups alphabetically. Each group name is a map-focus
 control, followed by the current player count in parentheses, then its member factions in
 alphabetical order. Catalog subfactions for a faction appear in parentheses after that faction,
-also alphabetical: `Alpha League (1) - Midland (East)`. Players currently in the group appear as
+also alphabetical: `Alpha League (1 player) - Midland (East)`. Players currently in the group appear as
 nested bullets in display-name order, each with their chosen faction and subfaction when they have
 one: `Bob (Midland, East)`. Players who have not chosen a faction, non-player members, and
 backstabbed factions are omitted from the count and the nested list. Clicking a player, faction, or
@@ -865,7 +896,10 @@ offence. A voided ringer fight (neither report) is not an offence.
 
 Managers are not notified for the first two offences. From the third offence onward, and again
 on each later offence, every campaign manager is notified in-app and by email that the player
-is a possible kick. The player is not removed unless a manager kicks them.
+is a possible kick. The player is not removed unless a manager kicks them. On the campaign page,
+staff see a **May be kicked** badge on that player in Participants; the badge opens the matching
+campaign-log entry. The log has a Delinquency filter in addition to public chat, private chats,
+and the game log.
 
 ## Supply
 
@@ -981,8 +1015,11 @@ for upcoming, in-progress, and completed campaigns. The log loads independently 
 the campaign page, the same way All Campaigns loads public site chat separately from the campaign
 list: chat can appear while campaign metadata is still loading, and the reverse. Each entry is
 formatted as
-`(local-timestamp) originator: text`. Campaign-generated facts use the originator name
-`Campaign` and always belong to the public channel. Member chat uses the author's display name
+`originator: text` followed by a timestamp. Recent entries (under 24 hours) use a relative label
+with the absolute time in the `title` attribute; older entries show the absolute time. On small
+viewports the timestamp sits on a secondary line and the log uses the body font.
+Campaign-generated facts use the originator name `Campaign` and always belong to the public channel.
+Member chat uses the author's display name
 snapshotted when the message was posted. Chat originators and `@` mentions of current members
 link to that player's public profile. The log refreshes while the page is open. Sending chat
 is not a form save: it does not show the saving overlay or the success banner. Failed sends show

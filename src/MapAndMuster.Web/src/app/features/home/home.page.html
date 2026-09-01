@@ -4,6 +4,62 @@
     <a [href]="discordInviteUrl" target="_blank" rel="noopener noreferrer">Join the Discord server</a>
   </p>
   @if (auth.currentUser(); as user) {
+    <section class="panel stack" aria-labelledby="attention-heading">
+      <h2 id="attention-heading">Needs your attention</h2>
+      @if (campaignError()) {
+        <p class="error" role="alert">{{ campaignError() }}</p>
+      }
+      @if (campaignsLoading()) {
+        <p>Loading campaigns…</p>
+      } @else if (attentionCampaigns().length === 0) {
+        @if (campaigns().length === 0) {
+          <p>You are not in a running campaign.</p>
+          <div class="actions">
+            <a class="button" routerLink="/campaigns/all">Join campaign</a>
+            <a class="button-secondary" routerLink="/campaigns/new">Create a campaign</a>
+          </div>
+        } @else {
+          <p>None of your campaigns are in progress right now.</p>
+          <div class="actions">
+            <a class="button-secondary" routerLink="/campaigns">View your campaigns</a>
+          </div>
+        }
+      } @else {
+        <ul class="notice-list">
+          @for (campaign of attentionCampaigns(); track campaign.id) {
+            <li>
+              <a class="notice-item" [routerLink]="['/campaigns', campaign.id]">
+                <strong>{{ campaign.name }}</strong>
+                <span class="attention-meta">
+                  <span class="status-chip">{{ statusText(campaign.status) }}</span>
+                  @if (roundPhaseText(campaign); as roundPhase) {
+                    <span>{{ roundPhase }}</span>
+                  }
+                  @if (campaign.currentPhaseEndsUtc) {
+                    <span class="muted">
+                      Phase ends in
+                      <app-phase-countdown [endsUtc]="campaign.currentPhaseEndsUtc" />
+                    </span>
+                  }
+                  @if (remainingSetupLabel(campaign); as setup) {
+                    <span class="status-chip is-setup">{{ setup }}</span>
+                  }
+                  @if (commitLabel(campaign); as commit) {
+                    <span
+                      class="status-chip"
+                      [class.is-committed]="commit === 'Committed'"
+                      [class.is-drafting]="commit !== 'Committed'"
+                      >{{ commit }}</span
+                    >
+                  }
+                </span>
+              </a>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+
     <section class="panel stack" aria-labelledby="notice-heading">
       <h2 id="notice-heading">Notifications</h2>
       @if (noticeError()) {

@@ -34,52 +34,62 @@
       }
 
       <div class="field">
-        <label for="avatar">Change profile picture (optional)</label>
-        <input
-          id="avatar"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          (change)="onAvatarSelected($event)"
-          [disabled]="uploading()"
-        />
+        <span id="avatar-label">Change profile picture (optional)</span>
+        <div class="file-field">
+          <input
+            id="avatar"
+            class="file-field-input"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            aria-labelledby="avatar-label"
+            (change)="onAvatarSelected($event)"
+            [disabled]="uploading()"
+          />
+          <label for="avatar" class="button-secondary">Choose image</label>
+          <span class="file-field-name">{{ avatarFileName() ?? 'No file chosen' }}</span>
+        </div>
       </div>
       <div class="field" [class.invalid]="isInvalid('username')">
         <label for="username">Username <span class="required-marker" aria-hidden="true">*</span></label>
         <input id="username" formControlName="username" aria-required="true" />
         <p class="muted">You do not have to change your username to save other profile fields.</p>
       </div>
-      <div class="field" [class.invalid]="isInvalid('firstName')">
-        <label for="firstName">First name <span class="required-marker" aria-hidden="true">*</span></label>
-        <input id="firstName" formControlName="firstName" aria-required="true" />
+      <div class="field-row field-row-identity">
+        <div class="field" [class.invalid]="isInvalid('firstName')">
+          <label for="firstName">First name <span class="required-marker" aria-hidden="true">*</span></label>
+          <input id="firstName" formControlName="firstName" aria-required="true" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('middleInitial')">
+          <label for="middleInitial">Middle initial (optional)</label>
+          <input id="middleInitial" maxlength="1" formControlName="middleInitial" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('lastName')">
+          <label for="lastName">Last name <span class="required-marker" aria-hidden="true">*</span></label>
+          <input id="lastName" formControlName="lastName" aria-required="true" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('suffix')">
+          <label for="suffix">Suffix (optional)</label>
+          <select id="suffix" formControlName="suffix">
+            <option value="">None</option>
+            @for (suffix of suffixes; track suffix) {
+              <option [value]="suffix">{{ suffix }}</option>
+            }
+          </select>
+        </div>
       </div>
-      <div class="field" [class.invalid]="isInvalid('middleInitial')">
-        <label for="middleInitial">Middle initial (optional)</label>
-        <input id="middleInitial" maxlength="1" formControlName="middleInitial" />
-      </div>
-      <div class="field" [class.invalid]="isInvalid('lastName')">
-        <label for="lastName">Last name <span class="required-marker" aria-hidden="true">*</span></label>
-        <input id="lastName" formControlName="lastName" aria-required="true" />
-      </div>
-      <div class="field" [class.invalid]="isInvalid('suffix')">
-        <label for="suffix">Suffix (optional)</label>
-        <select id="suffix" formControlName="suffix">
-          <option value="">None</option>
-          @for (suffix of suffixes; track suffix) {
-            <option [value]="suffix">{{ suffix }}</option>
-          }
-        </select>
-      </div>
-      <div class="field" [class.invalid]="isInvalid('country')">
-        <label for="country">Country <span class="required-marker" aria-hidden="true">*</span></label>
-        <app-filterable-combobox inputId="country" formControlName="country" [options]="countries" />
-      </div>
-      <div class="field" [class.invalid]="isInvalid('region')">
-        <label for="region">State or province <span class="required-marker" aria-hidden="true">*</span></label>
-        <app-filterable-combobox inputId="region" formControlName="region" [options]="regionOptions()" />
-      </div>
-      <div class="field" [class.invalid]="isInvalid('city')">
-        <label for="city">City <span class="required-marker" aria-hidden="true">*</span></label>
-        <input id="city" formControlName="city" aria-required="true" />
+      <div class="field-row field-row-location">
+        <div class="field" [class.invalid]="isInvalid('country')">
+          <label for="country">Country <span class="required-marker" aria-hidden="true">*</span></label>
+          <app-filterable-combobox inputId="country" formControlName="country" [options]="countries" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('region')">
+          <label for="region">State or province <span class="required-marker" aria-hidden="true">*</span></label>
+          <app-filterable-combobox inputId="region" formControlName="region" [options]="regionOptions()" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('city')">
+          <label for="city">City <span class="required-marker" aria-hidden="true">*</span></label>
+          <input id="city" formControlName="city" aria-required="true" />
+        </div>
       </div>
       <div class="field" [class.invalid]="isInvalid('timeZoneId')">
         <label for="timeZoneId">Time zone <span class="required-marker" aria-hidden="true">*</span></label>
@@ -165,23 +175,30 @@
             />
           </app-password-input>
         </div>
-        <div class="field" [class.invalid]="isInvalid('newPassword')">
-          <label for="newPassword">New password</label>
-          <app-password-input>
-            <input id="newPassword" type="password" autocomplete="new-password" formControlName="newPassword" />
-          </app-password-input>
-        </div>
-        <div class="field" [class.invalid]="isInvalid('confirmPassword')">
-          <label for="confirmPassword">Confirm new password</label>
-          <app-password-input>
-            <input id="confirmPassword" type="password" autocomplete="new-password" formControlName="confirmPassword" />
-          </app-password-input>
+        <div class="field-row">
+          <div class="field" [class.invalid]="isInvalid('newPassword')">
+            <label for="newPassword">New password</label>
+            <app-password-input>
+              <input id="newPassword" type="password" autocomplete="new-password" formControlName="newPassword" />
+            </app-password-input>
+          </div>
+          <div class="field" [class.invalid]="isInvalid('confirmPassword')">
+            <label for="confirmPassword">Confirm new password</label>
+            <app-password-input>
+              <input
+                id="confirmPassword"
+                type="password"
+                autocomplete="new-password"
+                formControlName="confirmPassword"
+              />
+            </app-password-input>
+          </div>
         </div>
       </fieldset>
 
       <p class="muted">Created {{ createdUtc() | instantDate: timeZoneValue() : dateTimeFormatValue() }}</p>
       <p class="muted">Last edited {{ updatedUtc() | instantDate: timeZoneValue() : dateTimeFormatValue() }}</p>
-      <div class="actions">
+      <div class="actions form-sticky-actions">
         <button class="button" type="submit" [disabled]="saving()">Save changes</button>
       </div>
     </form>

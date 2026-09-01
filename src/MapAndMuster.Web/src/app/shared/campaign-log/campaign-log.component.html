@@ -29,6 +29,10 @@
       <input type="checkbox" [ngModel]="showGameLog()" (ngModelChange)="showGameLog.set($event)" />
       Game log
     </label>
+    <label>
+      <input type="checkbox" [ngModel]="showDelinquency()" (ngModelChange)="showDelinquency.set($event)" />
+      Delinquency
+    </label>
     @if (canExport()) {
       <button type="button" class="button-secondary log-download" (click)="openExportDialog()" [disabled]="exporting()">
         Download log
@@ -111,9 +115,8 @@
     } @else {
       <ol class="log-list">
         @for (entry of visibleEntries(); track entry.id) {
-          <li>
+          <li [id]="'log-entry-' + entry.id" [class.is-highlighted]="scrollToEntryId() === entry.id">
             <p>
-              <time [attr.datetime]="entry.occurredUtc">{{ formatTimestamp(entry.occurredUtc) }}</time>
               @if (entry.originatorUsername; as username) {
                 <a class="profile-link" [routerLink]="['/users', username]" [queryParams]="profileQuery()">{{
                   originatorText(entry)
@@ -135,6 +138,9 @@
                   {{ part.text }}
                 }
               }
+              <time class="log-time" [attr.datetime]="entry.occurredUtc" [title]="formatTimestamp(entry.occurredUtc)">{{
+                formatTimeLabel(entry.occurredUtc)
+              }}</time>
             </p>
           </li>
         }

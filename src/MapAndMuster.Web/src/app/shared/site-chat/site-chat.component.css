@@ -40,10 +40,27 @@
 
 .log-list p {
   margin: 0;
-  font-family: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', monospace;
+  font-family: inherit;
   font-size: 0.92rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.log-time {
+  display: block;
+  color: var(--color-muted);
+  font-size: 0.85em;
+}
+
+@media (width >= 45rem) {
+  .log-list p {
+    font-family: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', monospace;
+  }
+
+  .log-time {
+    display: inline;
+    margin-left: 0.45rem;
+  }
 }
 
 .profile-link {

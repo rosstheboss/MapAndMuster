@@ -103,12 +103,24 @@ describe('CampaignSetupPage', () => {
     expect(lines).toContain('Start date and time is not filled in.');
     expect(lines).toContain('Faction 1 name is not filled in.');
     expect(lines).toContain('Faction 2 name is not filled in.');
-    expect(lines).toContain('A campaign map image is required.');
+    expect(compiled.textContent).toContain('A campaign map image is required.');
     expect(compiled.textContent).toContain('up to 20 MB');
     const factionsToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
       button.textContent.trim().startsWith('Factions'),
     );
     expect(factionsToggle?.getAttribute('aria-expanded')).toBe('true');
+    const visibilityToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
+      button.textContent.trim().startsWith('Visibility'),
+    );
+    expect(visibilityToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(compiled.querySelector('.setup-index')).toBeTruthy();
+    expect(compiled.querySelector('.setup-index')?.textContent).toContain('Campaign details');
+    expect(compiled.textContent).toMatch(/required sections remaining/);
+    expect(
+      [...compiled.querySelectorAll('button.section-toggle')].some((button) =>
+        button.textContent.trim().startsWith('Missions for '),
+      ),
+    ).toBe(true);
     TestBed.inject(HttpTestingController).verify();
   });
 
@@ -198,10 +210,10 @@ describe('CampaignSetupPage', () => {
     const armyToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
       button.textContent.trim().startsWith('Round army size and free supply'),
     );
-    expect(armyToggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(armyToggle?.getAttribute('aria-expanded')).toBe('false');
     armyToggle?.click();
     fixture.detectChanges();
-    expect(armyToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(armyToggle?.getAttribute('aria-expanded')).toBe('true');
     expect(compiled.querySelector('#round-escalation-points-7')).toBeTruthy();
     expect(compiled.querySelector('#round-escalation-points-8')).toBeNull();
     expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-0')?.value).toBe('1000');

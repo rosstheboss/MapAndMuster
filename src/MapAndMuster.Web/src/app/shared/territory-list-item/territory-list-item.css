@@ -1,0 +1,52 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.territory-list-item {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--touch-min);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.territory-list-item.is-selected,
+.territory-list-item.is-active {
+  outline: 3px solid var(--color-glow, #f59e0b);
+  outline-offset: 2px;
+}
+
+.item-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
+app-faction-logo,
+app-map-symbol,
+.structure-mark,
+.owner-flag {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+}
+
+.structure-mark {
+  display: block;
+  object-fit: contain;
+}
+
+.owner-flag {
+  clip-path: polygon(0 0, 100% 20%, 70% 50%, 100% 80%, 0 100%);
+  box-shadow: 0 0 0 1px rgb(28 25 23 / 35%);
+}

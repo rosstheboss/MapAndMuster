@@ -11,15 +11,33 @@ recommendation touches a template that also carries logic, the logic is left alo
 - Status: in progress. Step 1 (`UI-C1`, `UI-H3`, `UI-H4`, `UI-M5`) is implemented. Step 2
   (`UI-C3`, `UI-C4`, `UI-M4`) is implemented (2026-08-30). Custom dialogs and confirm buttons.
   Campaign list items expose remaining-setup and commitment fields, and campaign-log last-read
-  is persisted on the server (2026-08-30). Card badges, Home dashboard UI, and chat unread
-  indicators still follow in later steps. Step 3 (`UI-C5`, `UI-H9`, `UI-H12`, Playwright axe)
+  is persisted on the server (2026-08-30). Step 3 (`UI-C5`, `UI-H9`, `UI-H12`, Playwright axe)
   is implemented (2026-08-30). Step 4 (`UI-C2`, `UI-M1`) is implemented (2026-08-30). Map
   territory hits are named buttons, the map has a legend and a territory directory, and axe no
   longer excludes map polygons. Step 5 (`UI-H1`, `UI-H2`, `UI-H13`, `UI-M2`, `UI-M3`,
   `UI-M11`, `UI-H7`, `UI-H10`) is implemented (2026-08-30). The campaign page has a sticky status
   bar, task-order sections, a last-commit dialog, and display names for enums. Expand/collapse
   choices stay in a per-campaign cookie (no sections API). Chat unread is a summary badge on
-  the log heading; marking last-read is unchanged.
+  the log heading; marking last-read is unchanged. Step 6 (`UI-H5`, `UI-M6`, `UI-M7`, `UI-M12`)
+  is implemented (2026-08-31). Collapsed campaign cards show status, round, countdown, player
+  count, role, remaining-setup, commit state, and Open. Empty Your campaigns / All campaigns /
+  Home offer join or create actions. Home has a Needs your attention dashboard from
+  `GET /api/campaigns`. All campaigns shows collapsed Site chat above the campaign list. Step 7
+  (`UI-H6`, `UI-H8`, `UI-M9`, `UI-M14`) is implemented (2026-08-31). Edit map is gated to
+  Scheduled campaigns and the editor bounce explains why. Create/edit campaign collapses
+  optional sections, adds a section index and remaining-required count, and uniquely names
+  nested mission groups. The map editor toolbar groups modes vs commands and expands the
+  Territories list. Participants show a May be kicked badge that opens the delinquency log
+  entry, and the log has a Delinquency filter. Step 8 (`UI-H11`, `UI-M8`, `UI-M13`) is
+  implemented (2026-08-31). Below 45 rem the primary nav collapses behind Menu while Home and
+  the theme toggle stay visible; the banner shrinks on small viewports and on scroll. Register
+  and profile use field rows, visible fieldsets, a Choose image control, and sticky Save on
+  profile. Test users has a filter, constrained rows, and a Currently testing mark. Campaign
+  membership on that page is out of scope (no API field). Step 9 (`UI-P1`–`UI-P9`) is
+  implemented (2026-08-31). The theme toggle labels the action; ally groups say N player(s);
+  log timestamps sit after the text with relative labels for recent entries; nav uses sentence
+  case; Test users has an icon; map zoom is remembered per campaign; hover lift is behind
+  `prefers-reduced-motion`.
 - Ranking: Critical, High, Medium, Polish.
 - Each item has a stable identifier (`UI-C1`, `UI-H4`, …) so work can be tracked and split.
 
@@ -456,6 +474,10 @@ This alone should cut the campaign page height by roughly 40% with no content re
 
 ## UI-H5 — Campaign cards show only a name
 
+**Status:** implemented (2026-08-31). Collapsed cards show a status chip, role, player count,
+round/phase, countdown, remaining-setup and commit chips, and **Open**. Disclosure keeps
+description, location, dates, and secondary actions.
+
 **Areas:** Navigation, Information hierarchy, Campaign workflow
 
 A collapsed campaign card renders the campaign name and nothing else. Status, round, phase,
@@ -476,6 +498,10 @@ in May.
 Keep the disclosure for description, location, dates, and the secondary actions.
 
 ## UI-H6 — "Edit map" is offered for in-progress campaigns and silently bounces
+
+**Status:** implemented (2026-08-31). **Edit map** is shown only while status is `Scheduled`.
+Opening `/map` after start redirects to the campaign page with "The map cannot be edited after a
+campaign has started."
 
 **Areas:** GM interface, Feedback, Error prevention
 
@@ -512,6 +538,11 @@ list and once as paragraphs.
 one reminder and `hiddenRelicNearby` renders each string exactly once.
 
 ## UI-H8 — The create-campaign page is one 26-viewport form
+
+**Status:** implemented (2026-08-31). Optional sections start collapsed; Campaign details,
+Schedule, Factions, Terrain types, and Campaign map start expanded. Wide viewports get a sticky
+section index with incomplete markers. The toolbar shows remaining required sections. Nested
+mission groups are named "Missions for {terrain or structure}."
 
 **Areas:** GM interface, Information hierarchy, Error prevention
 
@@ -570,6 +601,8 @@ campaign status, and use it wherever these appear. "Awaiting results". Add a Vit
 enum value so a new member cannot leak a raw name.
 
 ## UI-H11 — Mobile spends 38% of the screen on chrome before any content
+
+**Status:** implemented (2026-08-31).
 
 **Areas:** Responsive design, Navigation
 
@@ -671,8 +704,9 @@ Worth doing, but a user can complete their task without it.
 
 ## UI-M1 — The map has no legend and no territory labels
 
-**Status:** implemented (2026-08-30). Collapsible legend, Show names toggle (display number, or the
-name when it fits), and ownership fill opacity 0.5 / 0.62 / 0.7.
+**Status:** implemented (2026-08-30). Collapsible legend, Show names toggle (full name, or a
+display number only when it fits; N shortcut), and ownership fill opacity 0.5 / 0.62 / 0.7.
+Territory hover tips list owner, structure, terrain, forces, battle, and retreat (2026-08-31).
 
 **Areas:** Map usability, Information hierarchy
 
@@ -683,7 +717,7 @@ territory means hovering or selecting them one at a time and reading the details
 
 **Fix:** add a collapsible legend beside the map covering ownership tint, spawn hatching, force
 pins, your own force, in-battle state, structures, pillaged structures, and item objectives. Add
-a "Show names" toggle that draws the display number, or the name when it fits, at each territory
+a "Show names" toggle that draws the full name, or the display number when it still fits, at each territory
 centroid. Raise the ownership fill opacity so ownership is readable at Fit zoom.
 
 ## UI-M2 — Order entry is hard to scan and the confirm control is unlabelled
@@ -754,6 +788,11 @@ deliberate choice, not a side effect.
 
 ## UI-M6 — Empty states are dead ends
 
+**Status:** implemented (2026-08-31). Empty Your campaigns offers **Join campaign** (to All
+campaigns) and **Create a campaign**. Empty All campaigns offers **Create a campaign**. Home's
+Needs your attention empty state offers the same join/create pair, or a link to Your campaigns
+when the viewer has only scheduled or completed memberships.
+
 **Areas:** Empty states, Navigation
 
 - "Your campaigns" when empty says "You are not managing or participating in any campaigns yet"
@@ -769,6 +808,10 @@ join" and "Create a campaign" is secondary.
 
 ## UI-M7 — Home is not a dashboard
 
+**Status:** implemented (2026-08-31). Home opens with **Needs your attention**, listing each
+in-progress campaign from `GET /api/campaigns` with round/phase, countdown, remaining setup,
+and commit state, linking to that campaign. Notifications and News stay below it.
+
 **Areas:** Navigation, Information hierarchy, Campaign workflow
 
 Home contains only Notifications and News. A returning player has to remember which campaign is
@@ -781,6 +824,8 @@ to that campaign's Actions section. Keep Notifications and News below it. This u
 returned by `GET /api/campaigns`.
 
 ## UI-M8 — Registration and profile are undifferentiated walls of fields
+
+**Status:** implemented (2026-08-31).
 
 **Areas:** Visual design, Information hierarchy, Consistency
 
@@ -798,6 +843,10 @@ component with a visible file name and a "Choose image" button; on the long prof
 the Save button sticky at the bottom.
 
 ## UI-M9 — The map editor toolbar is 21 undifferentiated controls
+
+**Status:** implemented (2026-08-31). Modes are a labeled radio group with icons and a glow
+active state distinct from Save Map. Connections, Colors, and File are labeled groups.
+Destructive commands use danger confirm buttons. The Territories list starts expanded.
 
 **Areas:** GM interface, Visual design, Error prevention
 
@@ -845,6 +894,9 @@ form in its own bordered group so reporting is clearly a separate step from read
 
 ## UI-M12 — Site chat outranks the campaign list on "All campaigns"
 
+**Status:** superseded (2026-08-31). The campaign list keeps its `h2` and Site chat stays
+collapsed by default. Site chat is back above the list (user direction; matches `DOMAIN.md`).
+
 **Areas:** Information hierarchy, Navigation
 
 The page is titled "All campaigns" but opens with the Site chat panel and its composer. The
@@ -854,6 +906,9 @@ campaign list sits below it in an unlabelled panel with no heading of its own.
 list an `h2`.
 
 ## UI-M13 — The test users page does not scale
+
+**Status:** implemented (2026-08-31). Filter, constrained rows, and Currently testing. Campaign
+membership is omitted (no API field).
 
 **Areas:** Administrator experience, Visual design
 
@@ -866,6 +921,10 @@ filter box, and show whether each test account is currently a member of any camp
 the currently impersonated account.
 
 ## UI-M14 — Delinquency reaches the GM as one log line, not as decision support
+
+**Status:** implemented (2026-08-31). Staff see a **May be kicked** badge on Participants that
+opens the matching log entry. The campaign log has a Delinquency filter. Per-player offence
+counts remain out of scope (no API field).
 
 **Areas:** GM interface, Information hierarchy, Feedback
 
@@ -901,21 +960,29 @@ Low effort, low risk, improves finish.
 
 ## UI-P1 — The theme toggle labels the current state, not the action
 
+**Status:** implemented (2026-08-31).
+
 The button reads "Light mode" while light mode is active. Users commonly read a button label as
 what will happen when pressed. Use `aria-pressed` with a stable label, or label it with the
 action ("Switch to dark mode").
 
 ## UI-P2 — Duplicated identity in standings
 
+**Status:** implemented (2026-08-30).
+
 When `displayNameMode` is `Username`, the display name and the username link render side by side
 as "ada ada". Suppress the link when the two strings match.
 
 ## UI-P3 — Unexplained "(0)" on ally groups
 
+**Status:** implemented (2026-08-31).
+
 Ally groups render as `Northern Pact (0) - Ember Compact (Cinderguard, Forgewrights), Tidewatch
 League`. The number is unlabelled. Either label it or drop it.
 
 ## UI-P4 — Log entries lead with a 30-character timestamp
+
+**Status:** implemented (2026-08-31).
 
 Every line begins with `(August 22, 2026, 10:02:11 AM EDT)` before any content, so scanning the
 log by subject is impossible. Move the timestamp to the end of the line, or to a right-aligned
@@ -924,15 +991,21 @@ secondary column, and consider relative times for recent entries with the absolu
 
 ## UI-P5 — The banner takes 240 px on desktop before anything else
 
+**Status:** implemented (2026-08-31).
+
 Combined with the menubar and toolbar, 426 px — 47% of a 900 px viewport — sits above the page
 title. Consider a shorter banner crop, or shrinking it to a compact wordmark on scroll.
 
 ## UI-P6 — The "Test users" nav link has no icon
 
+**Status:** implemented (2026-08-31).
+
 Every other item in the primary nav pairs an `app-icon` with its label; the administrator link
 does not. Add one.
 
 ## UI-P7 — Mixed casing between navigation and page titles
+
+**Status:** implemented (2026-08-31).
 
 The nav uses "Your Campaigns" while the page heading is "Your campaigns". Both render in small
 caps so the difference is invisible today, but it will surface anywhere the raw string is used.
@@ -940,10 +1013,14 @@ Pick sentence case and apply it consistently.
 
 ## UI-P8 — The map does not fit on load
 
+**Status:** implemented (2026-08-31). Defaults to Fit; zoom is remembered per campaign.
+
 The map opens at 100% zoom, letterboxed with wide empty margins inside its panel. Default to
 Fit, and remember the user's zoom per campaign.
 
 ## UI-P9 — Guard the map hover animation behind `prefers-reduced-motion`
+
+**Status:** implemented (2026-08-31).
 
 Territory hover applies a lift transform. Wrap the transition in a
 `@media (prefers-reduced-motion: no-preference)` block.
@@ -980,17 +1057,23 @@ Grouped so that shared work lands before the items that depend on it.
 4. **Map accessibility.** `UI-C2`, then `UI-M1`. Done 2026-08-30.
 5. **Campaign page restructure.** `UI-H1`, `UI-H2`, `UI-H13`, `UI-M2`, `UI-M3`, `UI-M11`,
    `UI-H7`, `UI-H10`. Done 2026-08-30. `UI-H13` depends on the dialog work in step 2.
-6. **Entry points.** `UI-H5`, `UI-M6`, `UI-M7`, `UI-M12`.
-7. **Setup and editor.** `UI-H6`, `UI-H8`, `UI-M9`, `UI-M14`.
-8. **Responsive.** `UI-H11`, `UI-M8`, `UI-M13`.
-9. **Polish.** `UI-P1` through `UI-P9`.
+6. **Entry points.** `UI-H5`, `UI-M6`, `UI-M7`, `UI-M12`. Done 2026-08-31.
+7. **Setup and editor.** `UI-H6`, `UI-H8`, `UI-M9`, `UI-M14`. Done 2026-08-31.
+8. **Responsive.** `UI-H11`, `UI-M8`, `UI-M13`. Done 2026-08-31.
+9. **Polish.** `UI-P1` through `UI-P9`. Done 2026-08-31.
 
 # Constraints for whoever implements this
 
 - Custom dialogs and confirm buttons, not a component library. See DECISIONS-NEEDED item 20.
   Campaign list items expose `canChooseFaction`, `isCommitted`, and `currentPhaseKind`.
-  Campaign-log last-read is persisted (`GET /log` unread fields and `POST /log/read`). Card
-  badges, Home dashboard chrome, and chat unread indicators still follow in later UI steps.
+  Campaign-log last-read is persisted (`GET /log` unread fields and `POST /log/read`). Collapsed
+  campaign cards, Home's Needs your attention dashboard, and empty join/create actions are in
+  place (`UI-H5`, `UI-M6`, `UI-M7`). All campaigns shows collapsed Site chat above the campaign
+  list (`UI-M12` placement superseded). Edit map is Scheduled-only with a bounce notice;
+  create/edit campaign collapses optional sections (`UI-H6`, `UI-H8`). Map editor tools are
+  grouped; Participants show May be kicked (`UI-M9`, `UI-M14`). Mobile nav collapses behind
+  Menu; register/profile use field rows; test users has a filter (`UI-H11`, `UI-M8`, `UI-M13`).
+  Theme toggle labels the action; map zoom is remembered (`UI-P1`–`UI-P9`).
   Playwright axe scans login, campaign list, campaign detail, campaign setup, and the map
   editor, including named map polygons. The campaign map has a keyboard path: Tab/Enter/Space on
   territory hits and a companion territory directory.

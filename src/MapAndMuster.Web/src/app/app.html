@@ -1,6 +1,6 @@
 <div class="app-shell" [attr.inert]="submitOverlay.busy() || dialogs.hasOpen() ? '' : null">
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <header class="app-banner">
+  <header class="app-banner" [class.is-compact]="bannerCompact()">
     <a routerLink="/" class="app-brand">
       <img
         class="app-banner-image"
@@ -24,66 +24,83 @@
       <app-icon name="home" />
       Home
     </a>
-    <a
-      routerLink="/campaigns"
-      routerLinkActive="is-active"
-      #campaignsNav="routerLinkActive"
-      [routerLinkActiveOptions]="{ exact: true }"
-      [attr.aria-current]="campaignsNav.isActive ? 'page' : null"
-      class="nav-link"
+    <button
+      type="button"
+      class="nav-link nav-button nav-menu-toggle"
+      [attr.aria-expanded]="navOpen() ? 'true' : 'false'"
+      aria-controls="main-nav-cluster"
+      (click)="toggleNav()"
     >
-      <app-icon name="map" />
-      Your Campaigns
-    </a>
-    <a
-      routerLink="/campaigns/all"
-      routerLinkActive="is-active"
-      #allCampaignsNav="routerLinkActive"
-      [attr.aria-current]="allCampaignsNav.isActive ? 'page' : null"
-      class="nav-link"
-    >
-      <app-icon name="shield" />
-      All Campaigns
-    </a>
-    <a
-      routerLink="/profile"
-      routerLinkActive="is-active"
-      #profileNav="routerLinkActive"
-      [attr.aria-current]="profileNav.isActive ? 'page' : null"
-      class="nav-link"
-    >
-      <app-icon name="helm" />
-      Profile
-    </a>
-    @if (auth.currentUser(); as user) {
-      @if (user.isAdministrator) {
+      Menu
+    </button>
+    <div id="main-nav-cluster" class="nav-cluster" [class.is-open]="navOpen()">
+      <a
+        routerLink="/campaigns"
+        routerLinkActive="is-active"
+        #campaignsNav="routerLinkActive"
+        [routerLinkActiveOptions]="{ exact: true }"
+        [attr.aria-current]="campaignsNav.isActive ? 'page' : null"
+        class="nav-link"
+        (click)="closeNav()"
+      >
+        <app-icon name="map" />
+        Your campaigns
+      </a>
+      <a
+        routerLink="/campaigns/all"
+        routerLinkActive="is-active"
+        #allCampaignsNav="routerLinkActive"
+        [attr.aria-current]="allCampaignsNav.isActive ? 'page' : null"
+        class="nav-link"
+        (click)="closeNav()"
+      >
+        <app-icon name="shield" />
+        All campaigns
+      </a>
+      <a
+        routerLink="/profile"
+        routerLinkActive="is-active"
+        #profileNav="routerLinkActive"
+        [attr.aria-current]="profileNav.isActive ? 'page' : null"
+        class="nav-link"
+        (click)="closeNav()"
+      >
+        <app-icon name="helm" />
+        Profile
+      </a>
+      @if (auth.currentUser(); as user) {
+        @if (user.isAdministrator) {
+          <a
+            routerLink="/admin/test-users"
+            routerLinkActive="is-active"
+            #testUsersNav="routerLinkActive"
+            [attr.aria-current]="testUsersNav.isActive ? 'page' : null"
+            class="nav-link"
+            (click)="closeNav()"
+          >
+            <app-icon name="users" />
+            Test users
+          </a>
+        }
+        <span class="nav-user">{{ user.username }}</span>
+        <button type="button" class="nav-link nav-button" (click)="logout()" [disabled]="loggingOut()">
+          <app-icon name="logout" />
+          Log out
+        </button>
+      } @else {
         <a
-          routerLink="/admin/test-users"
+          routerLink="/login"
           routerLinkActive="is-active"
-          #testUsersNav="routerLinkActive"
-          [attr.aria-current]="testUsersNav.isActive ? 'page' : null"
+          #loginNav="routerLinkActive"
+          [attr.aria-current]="loginNav.isActive ? 'page' : null"
           class="nav-link"
+          (click)="closeNav()"
         >
-          Test users
+          <app-icon name="key" />
+          Sign in
         </a>
       }
-      <span class="nav-user">{{ user.username }}</span>
-      <button type="button" class="nav-link nav-button" (click)="logout()" [disabled]="loggingOut()">
-        <app-icon name="logout" />
-        Log out
-      </button>
-    } @else {
-      <a
-        routerLink="/login"
-        routerLinkActive="is-active"
-        #loginNav="routerLinkActive"
-        [attr.aria-current]="loginNav.isActive ? 'page' : null"
-        class="nav-link"
-      >
-        <app-icon name="key" />
-        Sign in
-      </a>
-    }
+    </div>
     <app-theme-toggle />
   </nav>
   @if (navError()) {

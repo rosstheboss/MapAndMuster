@@ -21,38 +21,42 @@
         <label for="username">Username <span class="required-marker" aria-hidden="true">*</span></label>
         <input id="username" formControlName="username" aria-required="true" />
       </div>
-      <div class="field" [class.invalid]="isInvalid('firstName')">
-        <label for="firstName">First name <span class="required-marker" aria-hidden="true">*</span></label>
-        <input id="firstName" formControlName="firstName" aria-required="true" />
+      <div class="field-row field-row-identity">
+        <div class="field" [class.invalid]="isInvalid('firstName')">
+          <label for="firstName">First name <span class="required-marker" aria-hidden="true">*</span></label>
+          <input id="firstName" formControlName="firstName" aria-required="true" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('middleInitial')">
+          <label for="middleInitial">Middle initial (optional)</label>
+          <input id="middleInitial" maxlength="1" formControlName="middleInitial" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('lastName')">
+          <label for="lastName">Last name <span class="required-marker" aria-hidden="true">*</span></label>
+          <input id="lastName" formControlName="lastName" aria-required="true" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('suffix')">
+          <label for="suffix">Suffix (optional)</label>
+          <select id="suffix" formControlName="suffix">
+            <option value="">None</option>
+            @for (suffix of suffixes; track suffix) {
+              <option [value]="suffix">{{ suffix }}</option>
+            }
+          </select>
+        </div>
       </div>
-      <div class="field" [class.invalid]="isInvalid('middleInitial')">
-        <label for="middleInitial">Middle initial (optional)</label>
-        <input id="middleInitial" maxlength="1" formControlName="middleInitial" />
-      </div>
-      <div class="field" [class.invalid]="isInvalid('lastName')">
-        <label for="lastName">Last name <span class="required-marker" aria-hidden="true">*</span></label>
-        <input id="lastName" formControlName="lastName" aria-required="true" />
-      </div>
-      <div class="field" [class.invalid]="isInvalid('suffix')">
-        <label for="suffix">Suffix (optional)</label>
-        <select id="suffix" formControlName="suffix">
-          <option value="">None</option>
-          @for (suffix of suffixes; track suffix) {
-            <option [value]="suffix">{{ suffix }}</option>
-          }
-        </select>
-      </div>
-      <div class="field" [class.invalid]="isInvalid('country')">
-        <label for="country">Country <span class="required-marker" aria-hidden="true">*</span></label>
-        <app-filterable-combobox inputId="country" formControlName="country" [options]="countries" />
-      </div>
-      <div class="field" [class.invalid]="isInvalid('region')">
-        <label for="region">State or province <span class="required-marker" aria-hidden="true">*</span></label>
-        <app-filterable-combobox inputId="region" formControlName="region" [options]="regionOptions()" />
-      </div>
-      <div class="field" [class.invalid]="isInvalid('city')">
-        <label for="city">City <span class="required-marker" aria-hidden="true">*</span></label>
-        <input id="city" formControlName="city" aria-required="true" />
+      <div class="field-row field-row-location">
+        <div class="field" [class.invalid]="isInvalid('country')">
+          <label for="country">Country <span class="required-marker" aria-hidden="true">*</span></label>
+          <app-filterable-combobox inputId="country" formControlName="country" [options]="countries" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('region')">
+          <label for="region">State or province <span class="required-marker" aria-hidden="true">*</span></label>
+          <app-filterable-combobox inputId="region" formControlName="region" [options]="regionOptions()" />
+        </div>
+        <div class="field" [class.invalid]="isInvalid('city')">
+          <label for="city">City <span class="required-marker" aria-hidden="true">*</span></label>
+          <input id="city" formControlName="city" aria-required="true" />
+        </div>
       </div>
       <div class="field" [class.invalid]="isInvalid('timeZoneId')">
         <label for="timeZoneId">Time zone <span class="required-marker" aria-hidden="true">*</span></label>

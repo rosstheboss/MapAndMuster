@@ -231,7 +231,7 @@ test('campaign list has no axe violations', async ({ page }) => {
 
   await page.goto('/campaigns');
   await expect(page.getByRole('heading', { level: 1, name: 'Your campaigns' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Your Campaigns' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('link', { name: 'Your campaigns' })).toHaveAttribute('aria-current', 'page');
   await expectNoAxeViolations(page);
 });
 
@@ -385,7 +385,22 @@ test('campaign map territories are keyboard selectable', async ({ page }) => {
         campaignId,
         revision: 2,
         canManage: true,
-        territories: [coast],
+        territories: [
+          coast,
+          ...Array.from({ length: 24 }, (_, index) => ({
+            ...coast,
+            id: `extra-${index}`,
+            displayNumber: index + 2,
+            name: `Ridge ${index + 1}`,
+            ownerFactionId: null,
+            polygon: [
+              { x: 0.55, y: 0.05 + index * 0.02 },
+              { x: 0.7, y: 0.05 + index * 0.02 },
+              { x: 0.7, y: 0.07 + index * 0.02 },
+              { x: 0.55, y: 0.07 + index * 0.02 },
+            ],
+          })),
+        ],
         adjacencies: [],
       }),
     });
@@ -401,14 +416,67 @@ test('campaign map territories are keyboard selectable', async ({ page }) => {
 
   await page.goto(`/campaigns/${campaignId}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Border War' })).toBeVisible();
-  await expect(page.locator('.map-meta')).toContainText('Select a territory to see its details.');
+  await page.getByRole('button', { name: 'Expand All' }).click();
+  const details = page.locator('.map-meta');
+  await expect(details).toContainText('Select a territory to see its details.');
+  await page.locator('.map-section').scrollIntoViewIfNeeded();
+  const scroller = page.locator('.territory-directory-body');
+  await expect
+    .poll(async () =>
+      scroller.evaluate((element) => ({
+        overflowY: getComputedStyle(element).overflowY,
+        canScroll: element.scrollHeight > element.clientHeight + 1,
+      })),
+    )
+    .toEqual({ overflowY: 'auto', canScroll: true });
+  const mapBody = page.locator('.map-body');
+  const mapBodyEmpty = await mapBody.boundingBox();
+  expect(mapBodyEmpty).toBeTruthy();
+
+  await page.locator('.map-legend').evaluate((element) => {
+    (element as HTMLDetailsElement).open = true;
+  });
+  await expect(page.getByText('Ownership tint')).toBeVisible();
+  const mapBodyWithLegend = await mapBody.boundingBox();
+  expect(mapBodyWithLegend?.height).toBeCloseTo(mapBodyEmpty!.height, 1);
+
+  await page.locator('.territory-directory').evaluate((element) => {
+    (element as HTMLDetailsElement).open = false;
+  });
+  const mapBodyDirectoryClosed = await mapBody.boundingBox();
+  expect(mapBodyDirectoryClosed?.height).toBeCloseTo(mapBodyEmpty!.height, 1);
+  await page.locator('.territory-directory').evaluate((element) => {
+    (element as HTMLDetailsElement).open = true;
+  });
+  const mapBodyDirectoryOpen = await mapBody.boundingBox();
+  expect(mapBodyDirectoryOpen?.height).toBeCloseTo(mapBodyEmpty!.height, 1);
+
+  const emptyBox = await details.boundingBox();
+  expect(emptyBox).toBeTruthy();
+
+  await page.getByRole('button', { name: 'Full screen' }).click();
+  await expect(page.getByRole('button', { name: 'Exit full screen' })).toBeVisible();
+  const fullscreenEmpty = await details.boundingBox();
+  const fullscreenEmptyViewport = await page.locator('.map-viewport').boundingBox();
+
   const hit = page.locator('.territory-hit[data-id="t1"]');
   await expect(hit).toHaveAttribute('role', 'button');
   await hit.focus();
   await expect(hit).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(page.locator('.map-meta')).toContainText('Coast');
-  await expect(page.locator('.map-meta')).not.toContainText('Select a territory to see its details.');
+  await expect(details).toContainText('Coast');
+  await expect(details).not.toContainText('Select a territory to see its details.');
+  const fullscreenSelected = await details.boundingBox();
+  const fullscreenSelectedViewport = await page.locator('.map-viewport').boundingBox();
+  expect(fullscreenSelected?.height).toBeCloseTo(fullscreenEmpty!.height, 1);
+  expect(fullscreenSelectedViewport?.height).toBeCloseTo(fullscreenEmptyViewport!.height, 1);
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible();
+  await expect(page.locator('app-campaign-map-view')).not.toHaveClass(/is-fullscreen/);
+  await expect
+    .poll(async () => Math.round((await details.boundingBox())?.height ?? 0))
+    .toBe(Math.round(emptyBox!.height));
 });
 
 test('campaign setup has no axe violations', async ({ page }) => {

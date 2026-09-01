@@ -25,9 +25,27 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 0.4rem var(--space-3);
+  padding: 0.35rem var(--space-3);
   background: var(--color-banner);
   color: #fff;
+}
+
+.app-banner-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 5.5rem;
+  height: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-banner-image {
+    transition: max-height 180ms ease;
+  }
+}
+
+.app-banner.is-compact .app-banner-image {
+  max-height: 2.75rem;
 }
 
 .app-brand {
@@ -37,13 +55,6 @@
   color: inherit;
   text-decoration: none;
   line-height: 0;
-}
-
-.app-banner-image {
-  display: block;
-  width: auto;
-  max-width: 100%;
-  height: auto;
 }
 
 .app-menubar {
@@ -100,6 +111,19 @@
   margin-left: auto;
 }
 
+.nav-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: inherit;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nav-menu-toggle {
+  display: none;
+}
+
 .nav-error {
   margin: 0;
   padding: var(--space-2) var(--space-4);
@@ -122,8 +146,8 @@
 .app-main {
   flex: 1;
 
-  /* Same desktop cap as the map editor; narrower viewports keep 100% width. */
-  width: min(100%, 90rem);
+  /* Same desktop cap on every page; narrower viewports keep 100% width. */
+  width: min(100%, var(--page-max-width));
   margin: 0 auto;
   padding: var(--space-4);
 }
@@ -137,7 +161,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem 1.25rem;
-  width: min(100%, 90rem);
+  width: min(100%, var(--page-max-width));
   margin: 0 auto;
   padding: var(--space-4) var(--space-4) 1.25rem;
   color: var(--color-muted);
@@ -183,9 +207,29 @@
   border-radius: 0.5rem;
 }
 
-@media (width <= 40rem) {
+@media (width <= 45rem) {
+  .app-banner-image {
+    max-height: 2.75rem;
+  }
+
+  .nav-menu-toggle {
+    display: inline-flex;
+  }
+
+  .nav-cluster {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    order: 10;
+  }
+
+  .nav-cluster.is-open {
+    display: flex;
+  }
+
   .nav-user {
     margin-left: 0;
-    width: 100%;
+    padding: 0.35rem var(--space-3);
   }
 }

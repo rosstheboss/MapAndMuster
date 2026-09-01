@@ -73,6 +73,7 @@ export class RegisterPage {
     initialValue: this.form.controls.country.value,
   });
   protected readonly regionOptions = computed(() => regionsForCountry(this.countryValue()));
+  protected readonly avatarFileName = signal<string | null>(null);
   protected avatar: File | null = null;
 
   constructor() {
@@ -86,6 +87,7 @@ export class RegisterPage {
   protected onAvatarSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     this.avatar = input.files?.[0] ?? null;
+    this.avatarFileName.set(this.avatar?.name ?? null);
   }
 
   protected startExternal(provider: string): void {

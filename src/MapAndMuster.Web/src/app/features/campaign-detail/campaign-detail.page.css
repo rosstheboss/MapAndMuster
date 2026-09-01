@@ -89,26 +89,6 @@
   margin: 0;
 }
 
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.5rem;
-  padding: 0.1rem 0.45rem;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.status-chip.is-committed {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-
-.status-chip.is-drafting {
-  color: var(--color-text);
-}
-
 .countdown-urgency-dirty {
   color: var(--color-dirty);
   font-weight: 700;
@@ -319,6 +299,11 @@
   width: 100%;
 }
 
+.map-view app-campaign-map-view {
+  --map-details-panel-height: 26rem;
+  --map-details-panel-gap: var(--space-3);
+}
+
 .map-board {
   position: relative;
 }
@@ -383,6 +368,16 @@
 
 .map-meta {
   min-width: 0;
+
+  /* Heading, description, and the labeled rows. Longer copy scrolls inside this box. */
+  height: var(--map-details-panel-height, 26rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  align-content: start;
+}
+
+app-campaign-map-view.is-fullscreen .map-meta {
+  height: 100%;
 }
 
 .map-meta h3 {

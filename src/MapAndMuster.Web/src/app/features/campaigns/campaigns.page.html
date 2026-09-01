@@ -13,7 +13,11 @@
   } @else if (campaigns().length === 0) {
     <div class="panel stack">
       <p>You are not managing or participating in any campaigns yet.</p>
-      <p class="muted">Create a campaign to set factions, player slots, and a map.</p>
+      <p class="muted">Join an upcoming campaign, or create one to set factions, player slots, and a map.</p>
+      <div class="actions">
+        <a class="button" routerLink="/campaigns/all">Join campaign</a>
+        <a class="button-secondary" routerLink="/campaigns/new">Create a campaign</a>
+      </div>
     </div>
   } @else {
     <app-campaign-list [campaigns]="campaigns()" [allowDuplicate]="true" (membershipChanged)="reload()" />

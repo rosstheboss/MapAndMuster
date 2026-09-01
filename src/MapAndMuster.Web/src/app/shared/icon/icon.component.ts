@@ -14,9 +14,14 @@ export type AppIconName =
   | 'shield'
   | 'sun'
   | 'sword'
+  | 'users'
   | 'eye'
   | 'eye-off'
-  | 'x';
+  | 'x'
+  | 'pencil'
+  | 'eraser'
+  | 'cursor'
+  | 'link';
 
 @Component({
   selector: 'app-icon',

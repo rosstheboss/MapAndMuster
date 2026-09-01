@@ -19,28 +19,59 @@
         <ul class="campaign-list">
           @for (campaign of group.campaigns; track campaign.id) {
             <li class="panel campaign-card">
-              <button
-                type="button"
-                class="section-toggle campaign-toggle"
-                [attr.aria-expanded]="isOpen(campaign.id)"
-                (click)="toggleCampaign(campaign.id)"
-              >
-                {{ campaign.name }}
-              </button>
+              <div class="campaign-card-summary">
+                <button
+                  type="button"
+                  class="section-toggle campaign-toggle"
+                  [attr.aria-expanded]="isOpen(campaign.id)"
+                  (click)="toggleCampaign(campaign.id)"
+                >
+                  {{ campaign.name }}
+                </button>
+                @if (canOpen(campaign)) {
+                  <a
+                    class="button campaign-card-open"
+                    [routerLink]="['/campaigns', campaign.id]"
+                    [attr.aria-label]="'Open ' + campaign.name"
+                    >Open</a
+                  >
+                } @else if (showJoinOnCard(campaign)) {
+                  <button type="button" class="button campaign-card-open" (click)="requestJoin(campaign)">Join</button>
+                }
+                <div class="campaign-card-facts">
+                  <span class="status-chip">{{ statusText(campaign.status) }}</span>
+                  @if (roleLabel(campaign); as role) {
+                    <span class="status-chip">{{ role }}</span>
+                  }
+                  <span>{{ playerCountText(campaign) }}</span>
+                  @if (roundPhaseText(campaign); as roundPhase) {
+                    <span>{{ roundPhase }}</span>
+                  }
+                  @if (campaign.status === 'InProgress' && campaign.currentPhaseEndsUtc) {
+                    <span class="muted">
+                      Phase ends in
+                      <app-phase-countdown [endsUtc]="campaign.currentPhaseEndsUtc" />
+                    </span>
+                  }
+                  @if (remainingSetupLabel(campaign); as setup) {
+                    <span class="status-chip is-setup">{{ setup }}</span>
+                  }
+                  @if (commitLabel(campaign); as commit) {
+                    <span
+                      class="status-chip"
+                      [class.is-committed]="commit === 'Committed'"
+                      [class.is-drafting]="commit !== 'Committed'"
+                      >{{ commit }}</span
+                    >
+                  }
+                </div>
+              </div>
               @if (isOpen(campaign.id)) {
                 <div class="campaign-body stack">
                   @if (campaign.description) {
                     <p>{{ campaign.description }}</p>
                   }
-                  <p>
-                    {{ campaign.occupiedPlayerSlots }} of {{ campaign.playerSlotCount }} players ·
-                    {{ campaign.isPrivate ? 'Private' : 'Public' }}
-                    @if (roleLabel(campaign); as role) {
-                      · {{ role }}
-                    }
-                    ·
-                    {{ statusText(campaign.status) }}
-                  </p>
+                  <p>{{ campaign.isPrivate ? 'Private' : 'Public' }}</p>
                   @if (locationText(campaign); as location) {
                     <p>{{ location }}</p>
                   }
@@ -49,25 +80,11 @@
                     {{ campaign.status === 'Completed' ? 'Finished' : 'Ends' }}
                     {{ campaign.endsUtc | instantDate: timeZoneId() }}
                   </p>
-                  @if (
-                    campaign.status === 'InProgress' && campaign.currentRound !== null && campaign.currentPhaseLabel
-                  ) {
-                    <p>Round {{ campaign.currentRound }} · {{ campaign.currentPhaseLabel }}</p>
-                    @if (campaign.currentPhaseEndsUtc) {
-                      <p class="muted">
-                        Phase ends in
-                        <app-phase-countdown [endsUtc]="campaign.currentPhaseEndsUtc" />
-                      </p>
-                    }
-                  }
                   <div class="choice-row">
-                    @if (campaign.canView || campaign.canPlay) {
-                      <a class="button" [routerLink]="['/campaigns', campaign.id]">Open</a>
-                    }
                     @if (campaign.canManage && campaign.status === 'Scheduled') {
                       <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit</a>
                     }
-                    @if (campaign.canJoin) {
+                    @if (campaign.canJoin && canOpen(campaign)) {
                       <button type="button" class="button" (click)="requestJoin(campaign)">Join</button>
                     }
                     @if (campaign.canLeave) {

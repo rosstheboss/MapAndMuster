@@ -27,7 +27,7 @@ describe('ThemeToggleComponent', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     const button = compiled.querySelector('button')!;
-    expect(button.textContent).toContain('Light mode');
+    expect(button.textContent).toContain('Switch to dark mode');
     expect(button.getAttribute('aria-label')).toBe('Switch to dark mode');
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(button.querySelector('svg circle')).toBeTruthy();
@@ -36,7 +36,7 @@ describe('ThemeToggleComponent', () => {
     fixture.detectChanges();
 
     expect(TestBed.inject(ThemeService).isDark()).toBe(true);
-    expect(button.textContent).toContain('Dark mode');
+    expect(button.textContent).toContain('Switch to light mode');
     expect(button.getAttribute('aria-label')).toBe('Switch to light mode');
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(button.querySelector('svg circle')).toBeNull();

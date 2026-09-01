@@ -1,4 +1,5 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
@@ -13,7 +14,7 @@ import { SiteChatComponent } from '../../shared/site-chat/site-chat.component';
 
 @Component({
   selector: 'app-all-campaigns-page',
-  imports: [CampaignListComponent, SiteChatComponent],
+  imports: [CampaignListComponent, SiteChatComponent, RouterLink],
   templateUrl: './all-campaigns.page.html',
   styleUrl: './all-campaigns.page.css',
 })
@@ -31,7 +32,7 @@ export class AllCampaignsPage {
   protected readonly chat = signal<SiteChatBoard | null>(null);
   protected readonly chatSending = signal(false);
   protected readonly chatError = signal<string | null>(null);
-  protected readonly chatExpanded = signal(true);
+  protected readonly chatExpanded = signal(false);
   protected readonly composeLanguage = signal<ChatLanguage>('English');
   protected readonly visibleLanguages = signal<ChatLanguage[]>([...CHAT_LANGUAGES]);
   private chatPollStarted = false;

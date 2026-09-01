@@ -249,6 +249,30 @@ const TOP_LEVEL_SECTION_IDS = [
   'map',
 ] as const;
 
+const DEFAULT_OPEN_SECTIONS = new Set(['details', 'schedule', 'factions', 'terrain', 'map']);
+
+const SETUP_INDEX_SECTIONS: readonly {
+  id: (typeof TOP_LEVEL_SECTION_IDS)[number];
+  label: string;
+  required: boolean;
+}[] = [
+  { id: 'details', label: 'Campaign details', required: true },
+  { id: 'schedule', label: 'Schedule', required: true },
+  { id: 'visibility', label: 'Visibility', required: false },
+  { id: 'specialRules', label: 'Faction special rules', required: false },
+  { id: 'forceStatuses', label: 'Force statuses', required: false },
+  { id: 'publicObjectives', label: 'Public objectives', required: false },
+  { id: 'privateObjectives', label: 'Private objectives', required: false },
+  { id: 'allies', label: 'Ally groups', required: false },
+  { id: 'factions', label: 'Factions', required: true },
+  { id: 'missions', label: 'Missions', required: false },
+  { id: 'terrain', label: 'Terrain types', required: true },
+  { id: 'structures', label: 'Structures', required: false },
+  { id: 'itemObjectives', label: 'Item objectives', required: false },
+  { id: 'links', label: 'Links', required: false },
+  { id: 'map', label: 'Campaign map', required: true },
+];
+
 @Component({
   selector: 'app-campaign-setup-page',
   imports: [
@@ -324,6 +348,17 @@ export class CampaignSetupPage {
     this.catalogTick();
     return this.form.dirty || this.hasPendingUploads();
   });
+  protected readonly incompleteSetupSections = computed(() => {
+    this.formTick();
+    this.pendingUploadsTick();
+    this.catalogTick();
+    return new Set(this.collectFailures().sections);
+  });
+  protected readonly requiredRemainingCount = computed(() => {
+    const incomplete = this.incompleteSetupSections();
+    return SETUP_INDEX_SECTIONS.filter((section) => section.required && incomplete.has(section.id)).length;
+  });
+  protected readonly setupIndexSections = SETUP_INDEX_SECTIONS;
 
   protected readonly timeZones = listTimeZones();
   protected readonly durationUnits = DURATION_UNITS;
@@ -609,11 +644,18 @@ export class CampaignSetupPage {
   }
 
   protected isOpen(id: string): boolean {
-    return this.sectionOpen()[id] !== false;
+    return this.sectionOpen()[id] ?? DEFAULT_OPEN_SECTIONS.has(id);
   }
 
   protected toggleSection(id: string): void {
-    this.sectionOpen.update((current) => ({ ...current, [id]: current[id] === false }));
+    this.sectionOpen.update((current) => ({ ...current, [id]: !this.isOpen(id) }));
+  }
+
+  protected jumpToSection(id: string): void {
+    this.expandSections([id]);
+    queueMicrotask(() => {
+      document.getElementById(`setup-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 
   protected discardUnsavedChanges(): void {

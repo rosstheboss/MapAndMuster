@@ -97,8 +97,9 @@ in an ADR or the relevant domain document and update tests.
     campaign (such as selecting a faction) show on the campaign card and as persisted backend
     notifications on Home. See `docs/UI-AUDIT-2026-08.md` (`UI-M6`, `UI-M7`). Campaign list
     items now expose `canChooseFaction`, `isCommitted`, and `currentPhaseKind`. Home already
-    derives "Choose your faction" from membership. Card and Home dashboard UI still follow in
-    the entry-points step; do not fake remaining setup only in the client.
+    derives "Choose your faction" from membership. Campaign cards and the Home dashboard use
+    those list fields (`UI-H5`, `UI-M6`, `UI-M7`); remaining setup is not inferred only in
+    the client.
 22. Resolved: the map is not editable after a campaign starts. See `UI-H6`.
 23. Resolved: during a running campaign, Actions, Chat, and Standings are expanded by default;
     afterwards persist that player's last open/closed set per campaign. Page order is Actions,
@@ -116,3 +117,6 @@ in an ADR or the relevant domain document and update tests.
     and by email. End campaign is available on the campaign page and Edit campaign. Staff may
     promote a player to campaign manager or add a user as manager-only or as manager and
     player. See `docs/DOMAIN.md`.
+25. Decide whether play/participant contracts should expose a per-force missed-order offence
+    count so Participants can show the running tally. `UI-M14` shipped a **May be kicked** badge
+    and a Delinquency log filter without that field.

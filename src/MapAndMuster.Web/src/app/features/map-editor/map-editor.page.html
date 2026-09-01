@@ -106,89 +106,154 @@
       @if (canManage()) {
         <div class="toolbar panel">
           <div class="tool-row">
-            <div class="tool-toggle-group" role="radiogroup" aria-label="Map tools">
-              @for (item of mapTools; track item) {
+            <div class="tool-cluster">
+              <p class="tool-cluster-label">Tools</p>
+              <div class="tool-toggle-group" role="radiogroup" aria-label="Map tools">
+                @for (item of mapTools; track item) {
+                  <button
+                    type="button"
+                    class="button-secondary tool-mode"
+                    role="radio"
+                    [attr.aria-checked]="tool() === item"
+                    [class.is-active]="tool() === item"
+                    (click)="onToolChange(item)"
+                  >
+                    <app-icon [name]="toolIcon(item)" />
+                    {{ toolLabel(item) }}
+                  </button>
+                }
+              </div>
+            </div>
+            <div class="tool-cluster">
+              <p class="tool-cluster-label">Edit</p>
+              <div class="tool-group">
+                <button type="button" class="button-secondary" (click)="undo()" [disabled]="!canUndo()">Undo</button>
+                <button type="button" class="button-secondary" (click)="redo()" [disabled]="!canRedoHistory()">
+                  Redo
+                </button>
                 <button
                   type="button"
                   class="button-secondary"
-                  role="radio"
-                  [attr.aria-checked]="tool() === item"
-                  [class.is-active]="tool() === item"
-                  (click)="onToolChange(item)"
+                  (click)="closePolygon()"
+                  [disabled]="drawing().length < 2"
                 >
-                  {{ toolLabel(item) }}
+                  Close Territory
                 </button>
-              }
-            </div>
-            <div class="tool-group">
-              <button type="button" class="button-secondary" (click)="undo()" [disabled]="!canUndo()">Undo</button>
-              <button type="button" class="button-secondary" (click)="redo()" [disabled]="!canRedoHistory()">
-                Redo
-              </button>
-              <button type="button" class="button-secondary" (click)="closePolygon()" [disabled]="drawing().length < 2">
-                Close Territory
-              </button>
+              </div>
             </div>
           </div>
-          <div class="tool-group">
-            <button type="button" class="button-secondary" (click)="generateConnections()">
-              Auto Generate Connections
-            </button>
-            <app-confirm-button
-              label="Clear Connections"
-              confirmLabel="Confirm clear connections"
-              (confirmed)="clearConnections()"
-            />
-          </div>
-          <div class="tool-row">
-            <div class="tool-toggle-group" role="radiogroup" aria-label="Overlay color mode">
-              @for (mode of colorModes; track mode) {
-                <button
-                  type="button"
-                  class="button-secondary"
-                  role="radio"
-                  [attr.aria-checked]="colorMode() === mode"
-                  [class.is-active]="colorMode() === mode"
-                  (click)="setColorMode(mode)"
-                >
-                  {{ colorModeLabel(mode) }}
-                </button>
-              }
-            </div>
+          <div class="tool-cluster">
+            <p class="tool-cluster-label">Connections</p>
             <div class="tool-group">
+              <button type="button" class="button-secondary" (click)="generateConnections()">
+                Auto Generate Connections
+              </button>
               <app-confirm-button
-                label="Remove Colors"
-                confirmLabel="Confirm remove colors"
-                (confirmed)="colorClear()"
+                appearance="button-danger"
+                label="Clear Connections"
+                confirmLabel="Confirm clear connections"
+                (confirmed)="clearConnections()"
               />
             </div>
           </div>
-          <div class="tool-group">
-            <button type="button" class="button" (click)="save()" [disabled]="saving() || !hasUnsavedEdits()">
-              Save Map
-            </button>
-            <button
-              type="button"
-              class="button-secondary"
-              (click)="discardUnsavedChanges()"
-              [disabled]="saving() || !hasUnsavedEdits()"
-            >
-              Clear Unsaved Changes
-            </button>
-            @if (saveStatus() === 'success') {
-              <app-icon class="save-status is-success" name="check" label="Map saved" />
-            } @else if (saveStatus() === 'failure') {
-              <app-icon class="save-status is-failure" name="x" label="Map save failed" />
-            }
-            @if (lastSavedAtUtc(); as savedAt) {
-              <p class="muted last-saved">Last saved {{ savedAt | instantDate: campaign()?.timeZoneId }}</p>
-            }
+          <div class="tool-row">
+            <div class="tool-cluster">
+              <p class="tool-cluster-label">Colors</p>
+              <div class="tool-toggle-group" role="radiogroup" aria-label="Overlay color mode">
+                @for (mode of colorModes; track mode) {
+                  <button
+                    type="button"
+                    class="button-secondary"
+                    role="radio"
+                    [attr.aria-checked]="colorMode() === mode"
+                    [class.is-active]="colorMode() === mode"
+                    (click)="setColorMode(mode)"
+                  >
+                    {{ colorModeLabel(mode) }}
+                  </button>
+                }
+              </div>
+              <div class="tool-group">
+                <app-confirm-button
+                  appearance="button-danger"
+                  label="Remove Colors"
+                  confirmLabel="Confirm remove colors"
+                  (confirmed)="colorClear()"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="tool-cluster">
+            <p class="tool-cluster-label">File</p>
+            <div class="tool-group">
+              <button type="button" class="button" (click)="save()" [disabled]="saving() || !hasUnsavedEdits()">
+                Save Map
+              </button>
+              <app-confirm-button
+                appearance="button-danger"
+                label="Clear Unsaved Changes"
+                confirmLabel="Confirm clear unsaved changes"
+                [disabled]="saving() || !hasUnsavedEdits()"
+                (confirmed)="discardUnsavedChanges()"
+              />
+              @if (saveStatus() === 'success') {
+                <app-icon class="save-status is-success" name="check" label="Map saved" />
+              } @else if (saveStatus() === 'failure') {
+                <app-icon class="save-status is-failure" name="x" label="Map save failed" />
+              }
+              @if (lastSavedAtUtc(); as savedAt) {
+                <p class="muted last-saved">Last saved {{ savedAt | instantDate: campaign()?.timeZoneId }}</p>
+              }
+            </div>
           </div>
         </div>
       }
 
       <div class="editor-layout" [class.is-list-collapsed]="territoryListCollapsed()">
         <div class="map-column">
+          <div class="map-pane">
+            <app-campaign-map-view
+              [imageUrl]="mapUrl"
+              [campaignId]="campaign()?.id ?? null"
+              [territories]="graph().territories"
+              [adjacencies]="graph().adjacencies"
+              [drawingPoints]="drawing()"
+              [snapTarget]="snapTarget()"
+              [selectedTerritoryIds]="selectedIds()"
+              [hoveredTerritoryId]="tool() === 'draw' ? null : hoveredTerritoryId()"
+              [hoveredAdjacencyId]="hoveredAdjacencyId()"
+              [selectedAdjacencyId]="selectedAdjacencyId()"
+              [adjacentTerritoryIds]="adjacentTerritoryIds()"
+              [showOverlay]="showOverlay()"
+              [showAdjacencies]="showOverlay() && showConnections()"
+              [showConnectionsToggle]="showConnections()"
+              [layerToggles]="true"
+              [showTerritoryDirectory]="false"
+              [focusSelectedTerritories]="true"
+              [adjacenciesInteractive]="tool() === 'select' || tool() === 'erase'"
+              [interactive]="true"
+              [moveTerritories]="tool() === 'select'"
+              [movePlacement]="movePlacement()"
+              [marqueeSelect]="tool() === 'select'"
+              [factions]="campaign()?.factions ?? []"
+              [structures]="campaign()?.structureTypes ?? []"
+              [terrainTypes]="campaign()?.terrainTypes ?? []"
+              [structureImageUrl]="structureImageUrl"
+              [flagImageUrl]="flagImageUrl"
+              (showOverlayChange)="setShowOverlay($event)"
+              (showConnectionsChange)="setShowConnections($event)"
+              (mapPoint)="onMapPoint($event)"
+              (mapHover)="onMapHover($event)"
+              (territoryHover)="onTerritoryHover($event)"
+              (adjacencyHover)="onAdjacencyHover($event)"
+              (territorySelect)="onTerritorySelect($event)"
+              (territoryMarquee)="onTerritoryMarquee($event)"
+              (adjacencySelect)="onAdjacencySelect($event)"
+              (backgroundSelect)="onBackground()"
+              (territoryMove)="onTerritoryMove($event)"
+              (territoryMoveEnd)="onTerritoryMoveEnd()"
+            />
+          </div>
           <div class="territory-editor panel">
             <button
               type="button"
@@ -538,47 +603,6 @@
               </div>
             }
           </div>
-          <div class="map-pane">
-            <app-campaign-map-view
-              [imageUrl]="mapUrl"
-              [territories]="graph().territories"
-              [adjacencies]="graph().adjacencies"
-              [drawingPoints]="drawing()"
-              [snapTarget]="snapTarget()"
-              [selectedTerritoryIds]="selectedIds()"
-              [hoveredTerritoryId]="tool() === 'draw' ? null : hoveredTerritoryId()"
-              [hoveredAdjacencyId]="hoveredAdjacencyId()"
-              [selectedAdjacencyId]="selectedAdjacencyId()"
-              [adjacentTerritoryIds]="adjacentTerritoryIds()"
-              [showOverlay]="showOverlay()"
-              [showAdjacencies]="showOverlay() && showConnections()"
-              [showConnectionsToggle]="showConnections()"
-              [layerToggles]="true"
-              [showTerritoryDirectory]="false"
-              [focusSelectedTerritories]="true"
-              [adjacenciesInteractive]="tool() === 'select' || tool() === 'erase'"
-              [interactive]="true"
-              [moveTerritories]="tool() === 'select'"
-              [movePlacement]="movePlacement()"
-              [marqueeSelect]="tool() === 'select'"
-              [factions]="campaign()?.factions ?? []"
-              [structures]="campaign()?.structureTypes ?? []"
-              [structureImageUrl]="structureImageUrl"
-              [flagImageUrl]="flagImageUrl"
-              (showOverlayChange)="setShowOverlay($event)"
-              (showConnectionsChange)="setShowConnections($event)"
-              (mapPoint)="onMapPoint($event)"
-              (mapHover)="onMapHover($event)"
-              (territoryHover)="onTerritoryHover($event)"
-              (adjacencyHover)="onAdjacencyHover($event)"
-              (territorySelect)="onTerritorySelect($event)"
-              (territoryMarquee)="onTerritoryMarquee($event)"
-              (adjacencySelect)="onAdjacencySelect($event)"
-              (backgroundSelect)="onBackground()"
-              (territoryMove)="onTerritoryMove($event)"
-              (territoryMoveEnd)="onTerritoryMoveEnd()"
-            />
-          </div>
         </div>
 
         <aside class="side-pane panel" [class.is-collapsed]="territoryListCollapsed()" aria-live="polite">
@@ -599,19 +623,14 @@
             <ul #territoryList class="plain-list territory-list" role="listbox" aria-label="Territories">
               @for (territory of sortedTerritories(); track territory.id) {
                 <li>
-                  <button
-                    type="button"
-                    class="list-button"
-                    [attr.data-territory-id]="territory.id"
-                    [class.is-active]="selectedIds().includes(territory.id)"
-                    [class.is-dirty]="isTerritoryDirty(territory.id)"
-                    (click)="onTerritorySelect({ id: territory.id, additive: isAdditiveClick($event) })"
-                  >
-                    @if (terrainSymbol(territory.terrainTypeId); as symbol) {
-                      <app-map-symbol kind="terrain" [name]="symbol" />
-                    }
-                    {{ labelFor(territory) }}
-                  </button>
+                  <app-territory-list-item
+                    [marks]="territoryListMarks(territory)"
+                    [territoryId]="territory.id"
+                    [selected]="selectedIds().includes(territory.id)"
+                    [dirty]="isTerritoryDirty(territory.id)"
+                    [tooltip]="territoryListTooltip(territory)"
+                    (activate)="onTerritorySelect({ id: territory.id, additive: isAdditiveClick($event) })"
+                  />
                 </li>
               } @empty {
                 <li class="muted">No territories yet.</li>

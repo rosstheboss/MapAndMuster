@@ -66,16 +66,20 @@ describe('CampaignListComponent', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.campaign-body')).toBeNull();
+    expect(compiled.textContent).toContain('Scheduled');
+    expect(compiled.textContent).toContain('Manager');
+    expect(compiled.textContent).toContain('1 of 8 players');
+    expect(compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]')?.textContent).toContain(
+      'Open',
+    );
+    expect(compiled.textContent).not.toContain('A contested frontier.');
+    expect(compiled.textContent).not.toContain('Halifax, Nova Scotia, Canada');
     const toggle = compiled.querySelector<HTMLButtonElement>('button.campaign-toggle');
     toggle?.click();
     fixture.detectChanges();
 
     expect(compiled.textContent).toContain('A contested frontier.');
-    expect(compiled.textContent).toContain('1 of 8 players');
     expect(compiled.textContent).toContain('Halifax, Nova Scotia, Canada');
-    expect(compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]')?.textContent).toContain(
-      'Open',
-    );
     expect(
       compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/edit"]')?.textContent,
     ).toContain('Edit');
@@ -287,6 +291,7 @@ describe('CampaignListComponent', () => {
         endsUtc: '2099-06-01T12:00:00+00:00',
         currentRound: 2,
         currentPhaseLabel: 'Action 1',
+        currentPhaseKind: 'Action',
         currentPhaseEndsUtc: '2099-05-02T12:00:00+00:00',
         canPlay: true,
       }),
@@ -295,14 +300,17 @@ describe('CampaignListComponent', () => {
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
-    compiled.querySelector<HTMLButtonElement>('button.campaign-toggle')?.click();
-    fixture.detectChanges();
-
     expect(compiled.querySelector('a[href="/campaigns/dddddddd-dddd-dddd-dddd-dddddddddddd"]')?.textContent).toContain(
       'Open',
     );
+    expect(compiled.textContent).toContain('In progress');
+    expect(compiled.textContent).toContain('Player');
+    expect(compiled.textContent).toContain('6 of 6 players');
     expect(compiled.textContent).toContain('Round 2 · Action 1');
     expect(compiled.textContent).toContain('Phase ends in');
+    expect(compiled.textContent).toContain('Not committed');
+    compiled.querySelector<HTMLButtonElement>('button.campaign-toggle')?.click();
+    fixture.detectChanges();
     const leave = [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Leave');
     expect(leave).toBeTruthy();
     leave!.click();
@@ -318,5 +326,71 @@ describe('CampaignListComponent', () => {
     request.flush(null, { status: 204, statusText: 'No Content' });
     await fixture.whenStable();
     http.verify();
+  });
+
+  it('keeps Open on the collapsed card and flags remaining faction setup', async () => {
+    const fixture = TestBed.createComponent(CampaignListComponent);
+    fixture.componentRef.setInput('campaigns', [
+      item({
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        name: 'Border War',
+        canManage: false,
+        isParticipant: true,
+        canView: true,
+        status: 'Scheduled',
+        startsUtc: '2099-01-05T12:00:00+00:00',
+        endsUtc: '2099-03-02T12:00:00+00:00',
+        canChooseFaction: true,
+      }),
+      item({
+        id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        name: 'Finished War',
+        isParticipant: true,
+        canView: true,
+        status: 'Completed',
+        startsUtc: '2097-01-01T12:00:00+00:00',
+        endsUtc: '2098-12-01T12:00:00+00:00',
+      }),
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.campaign-body')).toBeNull();
+    expect(compiled.textContent).toContain('Choose your faction');
+    expect(compiled.textContent).toContain('Completed');
+    expect(
+      compiled.querySelector('a[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]')?.getAttribute('aria-label'),
+    ).toBe('Open Border War');
+    expect(compiled.querySelector('a[href="/campaigns/dddddddd-dddd-dddd-dddd-dddddddddddd"]')?.textContent).toContain(
+      'Open',
+    );
+    expect(compiled.textContent).not.toContain('Round');
+  });
+
+  it('puts Join on the card when the campaign cannot be opened yet', async () => {
+    const fixture = TestBed.createComponent(CampaignListComponent);
+    fixture.componentRef.setInput('campaigns', [
+      item({
+        id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        name: 'Secret War',
+        isPrivate: true,
+        canJoin: true,
+        canView: false,
+        status: 'Scheduled',
+        startsUtc: '2099-02-01T12:00:00+00:00',
+        endsUtc: '2099-04-01T12:00:00+00:00',
+      }),
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('a.campaign-card-open')).toBeNull();
+    const join = compiled.querySelector<HTMLButtonElement>('button.campaign-card-open');
+    expect(join?.textContent.trim()).toBe('Join');
+    join?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('[role="dialog"]')?.textContent).toContain('Join Secret War');
   });
 });

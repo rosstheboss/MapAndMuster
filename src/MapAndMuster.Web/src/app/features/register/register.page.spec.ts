@@ -31,6 +31,9 @@ describe('RegisterPage', () => {
     expect(compiled.querySelector('#confirmPassword')).toBeTruthy();
     expect(compiled.querySelector('#suffix')).toBeTruthy();
     expect(compiled.querySelector('.required-marker')).toBeTruthy();
+    expect(compiled.querySelector('.field-row-identity')).toBeTruthy();
+    expect(compiled.querySelector('.field-row-location')).toBeTruthy();
+    expect(compiled.textContent).toContain('Choose image');
     expect(compiled.querySelector('a[href="/terms"]')?.textContent).toContain('Terms of Service');
     expect(compiled.querySelector('a[href="/privacy"]')?.textContent).toContain('Privacy');
 

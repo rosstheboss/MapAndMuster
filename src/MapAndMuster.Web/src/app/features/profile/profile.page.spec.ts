@@ -53,6 +53,10 @@ describe('ProfilePage', () => {
     expect(compiled.querySelector('#preferredChatLanguage')).toBeTruthy();
     expect(compiled.querySelector('#dateTimeDisplayFormat')).toBeTruthy();
     expect(compiled.querySelector('a[href="/users/ada"]')?.textContent.trim()).toBe('View public profile');
+    expect(compiled.querySelector('.field-row-identity')).toBeTruthy();
+    expect(compiled.querySelector('.field-row-location')).toBeTruthy();
+    expect(compiled.querySelector('.form-sticky-actions')).toBeTruthy();
+    expect(compiled.textContent).toContain('Choose image');
 
     const page = fixture.componentInstance as unknown as {
       form: {

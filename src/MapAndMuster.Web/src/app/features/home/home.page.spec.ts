@@ -6,7 +6,47 @@ import { provideRouter } from '@angular/router';
 
 import type { OwnProfile } from '../../core/auth/auth.models';
 import { AuthService } from '../../core/auth/auth.service';
+import type { CampaignListItem } from '../../core/campaigns/campaign.models';
 import { HomePage } from './home.page';
+
+function campaignItem(
+  overrides: Partial<CampaignListItem> & Pick<CampaignListItem, 'id' | 'name' | 'status' | 'startsUtc' | 'endsUtc'>,
+): CampaignListItem {
+  return {
+    description: null,
+    playerSlotCount: 8,
+    occupiedPlayerSlots: 4,
+    isPrivate: false,
+    isPubliclyViewable: true,
+    canManage: false,
+    isParticipant: true,
+    canView: true,
+    canJoin: false,
+    canLeave: false,
+    city: null,
+    region: null,
+    country: null,
+    currentRound: null,
+    currentPhaseLabel: null,
+    currentPhaseKind: null,
+    currentPhaseEndsUtc: null,
+    canPlay: false,
+    canChooseFaction: false,
+    isCommitted: false,
+    ...overrides,
+  };
+}
+
+function flushHomeBoard(
+  http: HttpTestingController,
+  options?: { campaigns?: CampaignListItem[]; notifications?: unknown[]; news?: unknown },
+): void {
+  http.expectOne('/api/notifications').flush(options?.notifications ?? []);
+  http
+    .expectOne((request) => request.url === '/api/news')
+    .flush(options?.news ?? { page: 1, totalPages: 0, article: null });
+  http.expectOne('/api/campaigns').flush(options?.campaigns ?? []);
+}
 
 const profile: OwnProfile = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -46,21 +86,24 @@ describe('HomePage', () => {
 
     const fixture = TestBed.createComponent(HomePage);
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/notifications').flush([]);
-    http.expectOne((request) => request.url === '/api/news').flush({ page: 1, totalPages: 0, article: null });
+    flushHomeBoard(http);
     await fixture.whenStable();
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).not.toContain('Edit profile');
     expect(compiled.textContent).not.toContain('View public profile');
+    expect(compiled.textContent).toContain('Needs your attention');
+    expect(compiled.textContent).toContain('You are not in a running campaign.');
+    expect(compiled.querySelector('a[href="/campaigns/all"]')?.textContent).toContain('Join campaign');
+    expect(compiled.querySelector('a[href="/campaigns/new"]')?.textContent).toContain('Create a campaign');
     expect(compiled.textContent).toContain('No new notifications.');
     expect(compiled.textContent).toContain('No news has been published yet.');
     const discord = compiled.querySelector<HTMLAnchorElement>('.discord-invite a');
     expect(discord?.getAttribute('href')).toBe('https://discord.gg/ATVt97DMnx');
     expect(discord?.textContent).toContain('Join the Discord server');
     const headings = [...compiled.querySelectorAll('h2')].map((node) => node.textContent.trim());
-    expect(headings).toEqual(['Notifications', 'News']);
+    expect(headings).toEqual(['Needs your attention', 'Notifications', 'News']);
     http.verify();
   });
 
@@ -70,21 +113,20 @@ describe('HomePage', () => {
 
     const fixture = TestBed.createComponent(HomePage);
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/notifications').flush([
-      {
-        id: 'orders-1',
-        kind: 'ActionRequired',
-        campaignId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        campaignName: 'Border War',
-        title: 'Orders needed',
-        body: 'Submit and commit orders.',
-        path: '/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        createdUtc: '2026-08-16T00:00:00+00:00',
-      },
-    ]);
-    http
-      .expectOne((request) => request.url === '/api/news')
-      .flush({
+    flushHomeBoard(http, {
+      notifications: [
+        {
+          id: 'orders-1',
+          kind: 'ActionRequired',
+          campaignId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          campaignName: 'Border War',
+          title: 'Orders needed',
+          body: 'Submit and commit orders.',
+          path: '/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          createdUtc: '2026-08-16T00:00:00+00:00',
+        },
+      ],
+      news: {
         page: 1,
         totalPages: 1,
         article: {
@@ -95,7 +137,8 @@ describe('HomePage', () => {
           publishedUtc: '2026-08-16T00:00:00+00:00',
           updatedUtc: '2026-08-16T00:00:00+00:00',
         },
-      });
+      },
+    });
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -103,6 +146,80 @@ describe('HomePage', () => {
     expect(compiled.textContent).toContain('Orders needed');
     expect(compiled.textContent).toContain('Border War');
     expect(compiled.textContent).toContain('Season opening');
+    http.verify();
+  });
+
+  it('lists in-progress campaigns above notifications', async () => {
+    const auth = TestBed.inject(AuthService);
+    auth.currentUser.set(profile);
+
+    const fixture = TestBed.createComponent(HomePage);
+    const http = TestBed.inject(HttpTestingController);
+    flushHomeBoard(http, {
+      campaigns: [
+        campaignItem({
+          id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          name: 'Current War',
+          status: 'InProgress',
+          startsUtc: '2098-01-01T12:00:00+00:00',
+          endsUtc: '2099-06-01T12:00:00+00:00',
+          currentRound: 3,
+          currentPhaseLabel: 'Action 1',
+          currentPhaseKind: 'Action',
+          currentPhaseEndsUtc: '2099-05-02T12:00:00+00:00',
+          canPlay: true,
+        }),
+        campaignItem({
+          id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+          name: 'Border War',
+          status: 'Scheduled',
+          startsUtc: '2099-01-05T12:00:00+00:00',
+          endsUtc: '2099-03-02T12:00:00+00:00',
+          canChooseFaction: true,
+        }),
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const attention = compiled.querySelector('#attention-heading')?.closest('section');
+    expect(attention?.textContent).toContain('Current War');
+    expect(attention?.textContent).toContain('Round 3 · Action 1');
+    expect(attention?.textContent).toContain('Phase ends in');
+    expect(attention?.textContent).toContain('Not committed');
+    expect(attention?.textContent).not.toContain('Border War');
+    expect(
+      compiled.querySelector('a.notice-item[href="/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]'),
+    ).toBeTruthy();
+    expect(compiled.textContent).not.toContain('You are not in a running campaign.');
+    http.verify();
+  });
+
+  it('points a player with only upcoming campaigns at Your campaigns', async () => {
+    const auth = TestBed.inject(AuthService);
+    auth.currentUser.set(profile);
+
+    const fixture = TestBed.createComponent(HomePage);
+    const http = TestBed.inject(HttpTestingController);
+    flushHomeBoard(http, {
+      campaigns: [
+        campaignItem({
+          id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+          name: 'Border War',
+          status: 'Scheduled',
+          startsUtc: '2099-01-05T12:00:00+00:00',
+          endsUtc: '2099-03-02T12:00:00+00:00',
+          canChooseFaction: true,
+        }),
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('None of your campaigns are in progress right now.');
+    expect(compiled.querySelector('a[href="/campaigns"]')?.textContent).toContain('View your campaigns');
     http.verify();
   });
 });

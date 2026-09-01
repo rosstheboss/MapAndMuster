@@ -48,10 +48,12 @@ import {
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import {
   CAMPAIGN_LOG_POLL_MS,
+  latestDelinquencyEntryForUser,
   mergeCampaignLog,
   type CampaignLogExportRequest,
   type CampaignLogSync,
 } from '../../core/campaigns/campaign-log';
+import { MAP_EDIT_CLOSED_MESSAGE, MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
 import { compareNames } from '../../core/campaigns/faction-presets';
 import {
   actionNumberAt,
@@ -208,6 +210,7 @@ export class CampaignDetailPage {
   protected readonly loading = signal(true);
   protected readonly chatLoading = signal(true);
   protected readonly error = signal<string | null>(null);
+  protected readonly pageNotice = signal<string | null>(null);
   protected readonly chatLoadError = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
   protected readonly campaign = signal<CampaignDetail | null>(null);
@@ -255,6 +258,7 @@ export class CampaignDetailPage {
   protected readonly debugDrafts = signal<Record<string, OrderDraft>>({});
   protected readonly mapAction = signal<MapActionFlow | null>(null);
   protected readonly mapFocus = signal<{ kind: 'player' | 'faction' | 'ally'; id: string } | null>(null);
+  protected readonly logScrollEntryId = signal<string | null>(null);
   protected readonly battleWinner = signal<Record<string, string>>({});
   protected readonly battleScores = signal<
     Partial<Record<string, { winnerScore: number | null; loserScore: number | null }>>
@@ -277,6 +281,7 @@ export class CampaignDetailPage {
       }
     });
     if (id) {
+      this.applyMapEditNotice();
       void this.load(id);
       void this.loadChat(id);
     } else {
@@ -445,10 +450,21 @@ export class CampaignDetailPage {
       subfaction: force.subfaction ?? null,
       isMine: force.isMine,
       inBattle: force.inBattle,
+      name: this.forceLabel(force),
       label: `${this.forceLabel(force)} in ${this.territoryName(force.territoryId)}`,
       heldItems: items
         .filter((item) => item.possessorForceId === force.id)
         .map((item) => this.toHeldMapItem(item, campaign)),
+    }));
+  });
+  protected readonly mapBattles = computed(() => {
+    return (this.play()?.battles ?? []).map((battle) => ({
+      territoryId: battle.territoryId,
+      status: battle.status,
+      participantForceIds: battle.participantForceIds,
+      winnerForceId: battle.winnerForceId,
+      isDraw: battle.isDraw,
+      isNoContest: battle.isNoContest,
     }));
   });
   protected readonly mapItems = computed((): MapItemMarker[] => {
@@ -558,6 +574,30 @@ export class CampaignDetailPage {
   protected setSection(id: CampaignSection, open: boolean): void {
     this.openSections.update((current) => ({ ...current, [id]: open }));
     this.persistViewPrefs();
+  }
+
+  protected delinquencyEntryId(userId: string): string | null {
+    return latestDelinquencyEntryForUser(this.logBoard()?.log ?? [], this.play()?.forces ?? [], userId)?.id ?? null;
+  }
+
+  protected openDelinquencyLog(entryId: string): void {
+    this.setSection('log', true);
+    this.logScrollEntryId.set(entryId);
+  }
+
+  private applyMapEditNotice(): void {
+    const notice = this.route.snapshot.queryParamMap.get('notice');
+    if (notice !== MAP_EDIT_CLOSED_QUERY) {
+      return;
+    }
+
+    this.pageNotice.set(MAP_EDIT_CLOSED_MESSAGE);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { notice: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
   }
 
   protected profileFrom(): { from: string } {
@@ -974,6 +1014,8 @@ export class CampaignDetailPage {
 
     this.mapFocus.set({ kind, id });
     this.selectedIds.set(this.territoriesForFocus({ kind, id }));
+    this.setSection('map', true);
+    this.scrollMapIntoView();
   }
 
   protected allyGroupIdByName(name: string | null | undefined): string | null {

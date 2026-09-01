@@ -45,8 +45,8 @@
 
 @media (width >= 720px) {
   .map-body {
-    grid-template-columns: minmax(0, 1fr) 13rem;
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr) var(--map-side-width);
+    align-items: stretch;
   }
 }
 
@@ -55,7 +55,7 @@
   height: 100%;
   align-items: stretch;
   overflow: hidden;
-  grid-template-columns: minmax(0, 1fr) minmax(10rem, 13rem);
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, var(--map-side-width));
   grid-template-rows: minmax(0, 1fr);
 }
 
@@ -70,9 +70,12 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
-.zoom-input {
+.zoom-input,
+.layer-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -85,11 +88,7 @@
 }
 
 .layer-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
   min-height: var(--touch-min);
-  font-weight: 600;
 }
 
 .territory.is-dimmed {
@@ -207,7 +206,13 @@
 }
 
 .territory-visual.is-hover-motion {
-  transition: transform 200ms ease-in-out;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .territory-visual.is-hover-motion {
+    transition: transform 200ms ease-in-out;
+  }
 }
 
 .territory-hit {
@@ -224,12 +229,6 @@
 .territory-hit:focus-visible {
   stroke: var(--color-glow);
   stroke-width: 0.012;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .territory-visual.is-hover-motion {
-    transition: none;
-  }
 }
 
 .territory.is-half-highlighted,
@@ -480,12 +479,28 @@
 }
 
 .map-guide {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
   min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
 }
 
-:host.is-fullscreen .map-guide {
+.territory-directory {
+  flex: none;
+}
+
+.territory-directory[open] {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.territory-directory-body {
+  flex: 1 1 0;
   min-height: 0;
   overflow: auto;
 }
@@ -502,6 +517,11 @@
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.territory-directory .plain-list {
+  display: grid;
+  gap: 0.35rem;
 }
 
 .map-legend li,
@@ -562,24 +582,4 @@
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
-}
-
-.territory-directory-item {
-  display: block;
-  width: 100%;
-  min-height: var(--touch-min);
-  padding: 0.2rem 0.4rem;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.territory-directory-item.is-selected,
-.territory-directory-item:focus-visible {
-  background: var(--color-hover, rgb(28 25 23 / 8%));
-  outline: 2px solid var(--color-glow);
-  outline-offset: -2px;
 }

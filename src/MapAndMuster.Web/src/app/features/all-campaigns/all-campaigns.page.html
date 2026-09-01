@@ -33,17 +33,23 @@
     />
   }
 
-  @if (loading()) {
-    <p>Loading campaigns…</p>
-  } @else if (campaigns().length === 0) {
-    <div class="panel stack">
-      <p>No campaigns are available to join or view right now.</p>
-      <p class="muted">
-        Upcoming campaigns appear here so you can join. Active and completed campaigns appear when they are publicly
-        viewable.
-      </p>
-    </div>
-  } @else {
-    <app-campaign-list [campaigns]="campaigns()" (membershipChanged)="reload()" />
-  }
+  <section class="stack" aria-labelledby="all-campaigns-list-heading">
+    <h2 id="all-campaigns-list-heading">Campaigns</h2>
+    @if (loading()) {
+      <p>Loading campaigns…</p>
+    } @else if (campaigns().length === 0) {
+      <div class="panel stack">
+        <p>No campaigns are available to join or view right now.</p>
+        <p class="muted">
+          Upcoming campaigns appear here so you can join. Active and completed campaigns appear when they are publicly
+          viewable.
+        </p>
+        <div class="actions">
+          <a class="button" routerLink="/campaigns/new">Create a campaign</a>
+        </div>
+      </div>
+    } @else {
+      <app-campaign-list [campaigns]="campaigns()" (membershipChanged)="reload()" />
+    }
+  </section>
 </section>

@@ -8,6 +8,7 @@ import { CHAT_LANGUAGES, type ChatLanguage } from '../../core/chat/chat-language
 import type { SiteChatMember, SiteChatMessage, SiteChatSend } from '../../core/chat/site-chat.models';
 import {
   campaignLogComposerSize,
+  formatLogTimeLabel,
   formatLogTimestamp,
   mentionQuery,
   splitLogMessage,
@@ -148,6 +149,10 @@ export class SiteChatComponent {
 
   protected formatTimestamp(value: string): string {
     return formatLogTimestamp(value, this.timeZoneId(), this.auth.currentUser()?.dateTimeDisplayFormat);
+  }
+
+  protected formatTimeLabel(value: string): string {
+    return formatLogTimeLabel(value, this.timeZoneId(), this.auth.currentUser()?.dateTimeDisplayFormat);
   }
 
   protected parts(summary: string): { text: string; mention: boolean; username?: string | null }[] {

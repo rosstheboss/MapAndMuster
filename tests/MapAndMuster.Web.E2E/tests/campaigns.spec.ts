@@ -39,9 +39,10 @@ test('signed-in players can open their campaigns and start setup', async ({ page
 
   await page.goto('/campaigns');
   await expect(page.getByRole('heading', { level: 1, name: 'Your campaigns' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Your Campaigns' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('link', { name: 'Create campaign' })).toBeVisible();
-  await page.getByRole('link', { name: 'Create campaign' }).click();
+  await expect(page.getByRole('link', { name: 'Your campaigns' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('link', { name: 'Create campaign', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Join campaign' })).toBeVisible();
+  await page.getByRole('link', { name: 'Create campaign', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Create campaign' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Back to campaigns' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Expand All' })).toBeVisible();
@@ -56,11 +57,15 @@ test('signed-in players can open their campaigns and start setup', async ({ page
   await page.getByRole('button', { name: 'Add preset', disabled: false }).click();
   await expect(page.getByLabel('Faction 1 name')).toHaveValue('Beastmen Brayherds');
   await expect(page.getByLabel('Faction 3 name')).toHaveValue('Daemons of Chaos');
-  await expect(page.getByLabel('Faction 3 subfaction 1')).toHaveValue('Khorne');
-  await expect(page.getByLabel('Faction 3 subfaction 2')).toHaveValue('Nurgle');
-  await expect(page.getByLabel('Faction 3 subfaction 3')).toHaveValue('Slaanesh');
-  await expect(page.getByLabel('Faction 3 subfaction 4')).toHaveValue('Tzeentch');
-  await expect(page.getByRole('checkbox', { name: 'Players who choose this faction must pick a subfaction' }).nth(2)).toBeChecked();
+  const daemons = page.locator('.nested-card').filter({ has: page.getByLabel('Faction 3 name') });
+  const daemonSubfactionNames = daemons.getByRole('group', { name: /Subfactions/ }).getByLabel('Name');
+  await expect(daemonSubfactionNames.nth(0)).toHaveValue('Khorne');
+  await expect(daemonSubfactionNames.nth(1)).toHaveValue('Nurgle');
+  await expect(daemonSubfactionNames.nth(2)).toHaveValue('Slaanesh');
+  await expect(daemonSubfactionNames.nth(3)).toHaveValue('Tzeentch');
+  await expect(
+    page.getByRole('checkbox', { name: 'Players who choose this faction must pick a subfaction' }).nth(2),
+  ).toBeChecked();
   await expect(page.getByLabel('Terrain 1 name')).toHaveValue('Beach');
   await page.getByRole('button', { name: 'Create campaign' }).click();
   await expect(page.getByRole('alert')).toContainText('Campaign name is not filled in.');
@@ -92,8 +97,15 @@ test('signed-in players can browse all campaigns', async ({ page }) => {
 
   await page.goto('/campaigns/all');
   await expect(page.getByRole('heading', { level: 1, name: 'All campaigns' })).toBeVisible();
-  await expect(page.getByText('Site chat')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Campaigns' })).toBeVisible();
   await expect(page.getByText('No campaigns are available to join or view right now.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Create a campaign' })).toBeVisible();
+  await expect(page.getByText('Site chat')).toBeVisible();
+  const campaignsBox = await page.getByRole('heading', { level: 2, name: 'Campaigns' }).boundingBox();
+  const chatBox = await page.getByText('Site chat').boundingBox();
+  expect(campaignsBox).toBeTruthy();
+  expect(chatBox).toBeTruthy();
+  expect(chatBox!.y).toBeLessThan(campaignsBox!.y);
 });
 
 test('managers can open the map editor after setup', async ({ page }) => {
@@ -137,8 +149,24 @@ test('managers can open the map editor after setup', async ({ page }) => {
         createdUtc: '2026-08-13T00:00:00+00:00',
         updatedUtc: '2026-08-13T00:00:00+00:00',
         factions: [
-          { id: '1', name: 'North', color: '#2563EB', subfactions: [], allyGroupName: null, requiresSubfaction: false, hasFlagImage: false },
-          { id: '2', name: 'South', color: '#DC2626', subfactions: [], allyGroupName: null, requiresSubfaction: false, hasFlagImage: false },
+          {
+            id: '1',
+            name: 'North',
+            color: '#2563EB',
+            subfactions: [],
+            allyGroupName: null,
+            requiresSubfaction: false,
+            hasFlagImage: false,
+          },
+          {
+            id: '2',
+            name: 'South',
+            color: '#DC2626',
+            subfactions: [],
+            allyGroupName: null,
+            requiresSubfaction: false,
+            hasFlagImage: false,
+          },
         ],
         allyGroups: [],
         links: [],
@@ -323,6 +351,7 @@ test('players can duplicate a campaign from Your campaigns', async ({ page }) =>
   });
 
   await page.goto('/campaigns');
+  await expect(page.getByRole('link', { name: 'Open Border War' })).toBeVisible();
   await page.getByRole('button', { name: 'Border War' }).click();
   await page.getByRole('button', { name: 'Duplicate campaign' }).click();
   await expect(page).toHaveURL(`/campaigns/${copyId}/edit`);
@@ -526,7 +555,7 @@ test('players can read and chat in the campaign log', async ({ page }) => {
   await expect(page.getByText('(August 15, 2026, 8:45:23 PM EDT)')).toBeVisible();
   await expect(page.getByText('Campaign:')).toBeVisible();
   await expect(page.getByText('North held in Coast.')).toBeVisible();
-  await expect(page.getByText('Phase ends in')).toBeVisible();
+  await expect(page.locator('.phase-timer')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Expand All' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Commit Actions' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Play' })).toHaveCount(0);

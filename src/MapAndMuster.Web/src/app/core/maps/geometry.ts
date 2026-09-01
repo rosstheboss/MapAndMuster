@@ -82,6 +82,34 @@ export function centroid(polygon: readonly MapPoint[]): MapPoint {
   return { x: x / polygon.length, y: y / polygon.length };
 }
 
+export interface AxisAlignedBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+export function unionPolygonBounds(polygons: readonly (readonly MapPoint[])[]): AxisAlignedBounds | null {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const polygon of polygons) {
+    for (const point of polygon) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+  }
+
+  if (!Number.isFinite(minX)) {
+    return null;
+  }
+
+  return { minX, minY, maxX, maxY };
+}
+
 /** A point inside the polygon, used so markers do not sit in a hole or on a neighbor. */
 export function interiorAnchor(polygon: readonly MapPoint[]): MapPoint {
   if (polygon.length === 0) {

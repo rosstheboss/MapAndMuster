@@ -12,6 +12,8 @@
   --space-5: 1.5rem;
   --space-6: 2rem;
   --touch-min: 44px;
+  --page-max-width: 90rem;
+  --map-side-width: 22rem;
   --font-display: 'Cinzel Variable', 'Palatino', 'Palatino Linotype', 'Book Antiqua', serif;
   --font-body: 'Source Serif 4 Variable', 'Palatino', 'Palatino Linotype', 'Book Antiqua', serif;
 }
@@ -302,6 +304,31 @@ app-password-input input {
   min-width: 0;
 }
 
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.status-chip.is-committed {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.status-chip.is-drafting {
+  color: var(--color-text);
+}
+
+.status-chip.is-setup {
+  border-color: var(--color-dirty);
+  color: var(--color-dirty);
+}
+
 .choice-row {
   display: flex;
   flex-wrap: wrap;
@@ -314,6 +341,77 @@ app-password-input input {
   gap: 0.4rem;
   min-height: var(--touch-min);
   font-weight: 500;
+}
+
+.field-row {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: 1fr;
+}
+
+@media (width >= 45rem) {
+  .field-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field-row-identity {
+    grid-template-columns: minmax(0, 1.4fr) minmax(4.5rem, 0.55fr) minmax(0, 1.4fr) minmax(6.5rem, 0.8fr);
+  }
+
+  .field-row-location {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+fieldset.field {
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  padding: var(--space-3);
+  background: var(--color-nested);
+}
+
+fieldset.field legend {
+  font-weight: 700;
+  padding: 0 var(--space-2);
+}
+
+fieldset.field > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-height: var(--touch-min);
+}
+
+.file-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.file-field-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.file-field-name {
+  color: var(--color-muted);
+}
+
+.form-sticky-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: var(--space-3) calc(var(--space-4) * -1) calc(var(--space-4) * -1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
 }
 
 .field.is-dirty,
@@ -365,4 +463,65 @@ h2.has-dirty {
     grid-template-columns: 1fr;
     gap: var(--space-1);
   }
+}
+
+app-campaign-map-view .map-toolbar > * {
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+app-campaign-map-view .map-toolbar .button-secondary,
+app-campaign-map-view .map-toolbar .layer-toggle,
+app-campaign-map-view .map-guide,
+app-map-editor-page .side-pane {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@media (width >= 720px) {
+  app-campaign-map-view:not(.is-fullscreen) .map-guide {
+    height: 0;
+    min-height: 100%;
+    overflow: hidden;
+  }
+}
+
+app-campaign-map-view.is-fullscreen .map-guide {
+  height: 100%;
+  overflow: hidden;
+}
+
+app-campaign-map-view .territory-directory[open]::details-content {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (width < 720px) {
+  app-campaign-map-view .territory-directory[open] {
+    flex: 0 1 auto;
+  }
+
+  app-campaign-map-view .territory-directory-body {
+    max-height: min(40vh, 18rem);
+  }
+}
+
+app-campaign-map-view .territory-hover-tip {
+  position: absolute;
+  z-index: 8;
+  max-width: min(18rem, calc(100% - 1rem));
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  white-space: pre-line;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  box-shadow: 0 0.25rem 0.75rem color-mix(in srgb, var(--color-text) 18%, transparent);
+  pointer-events: none;
 }

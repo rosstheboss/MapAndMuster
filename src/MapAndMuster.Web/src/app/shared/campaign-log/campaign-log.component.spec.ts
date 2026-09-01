@@ -39,7 +39,8 @@ describe('CampaignLogComponent', () => {
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('(August 15, 2026, 8:45:23 PM EDT)');
+    expect(compiled.querySelector('.log-list p time')?.textContent).toContain('(August 15, 2026, 8:45:23 PM EDT)');
+    expect(compiled.querySelector('.log-list p')?.lastElementChild?.tagName).toBe('TIME');
     expect(compiled.textContent).toContain('northplayer:');
     expect(compiled.querySelector('a[href^="/users/northplayer"]')?.textContent.trim()).toBe('northplayer:');
     expect(compiled.textContent).toContain('Hey, everybody! This is a message to all of you.');
@@ -278,5 +279,52 @@ describe('CampaignLogComponent', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('1 unread mention');
     expect(compiled.textContent).toContain('2 unread private');
+  });
+
+  it('can isolate delinquency events from the rest of the game log', () => {
+    const fixture = TestBed.createComponent(CampaignLogComponent);
+    fixture.componentRef.setInput('entries', [
+      {
+        id: 'log-start',
+        occurredUtc: '2026-08-15T20:45:23-04:00',
+        kind: 'CampaignStarted',
+        originator: 'Campaign',
+        summary: 'The campaign started.',
+        territoryId: null,
+        forceId: null,
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+      {
+        id: 'log-kick',
+        occurredUtc: '2026-08-15T20:46:23-04:00',
+        kind: 'DelinquencyThreshold',
+        originator: 'northplayer',
+        summary: "northplayer's force reached three missed-order offences and may be kicked.",
+        territoryId: null,
+        forceId: 'force-1',
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Delinquency');
+    expect(compiled.textContent).toContain('The campaign started.');
+    expect(compiled.textContent).toContain('may be kicked');
+
+    const page = fixture.componentInstance as unknown as {
+      showGameLog: { set(value: boolean): void };
+      showDelinquency: { set(value: boolean): void };
+    };
+    page.showGameLog.set(false);
+    fixture.detectChanges();
+    expect(compiled.textContent).not.toContain('The campaign started.');
+    expect(compiled.textContent).toContain('may be kicked');
+
+    page.showDelinquency.set(false);
+    fixture.detectChanges();
+    expect(compiled.textContent).not.toContain('may be kicked');
   });
 });

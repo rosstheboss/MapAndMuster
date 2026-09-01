@@ -13,6 +13,13 @@ import { PasswordInputComponent } from '../password-input/password-input.compone
 import { PhaseCountdownComponent } from '../phase-countdown/phase-countdown.component';
 import { InstantDatePipe } from '../time/instant-date.pipe';
 import { groupCampaigns } from './campaign-list.grouping';
+import {
+  campaignCanOpen,
+  campaignCommitLabel,
+  campaignPlayerCountText,
+  campaignRemainingSetupLabel,
+  campaignRoundPhaseText,
+} from './campaign-list.summary';
 
 @Component({
   selector: 'app-campaign-list',
@@ -97,6 +104,16 @@ export class CampaignListComponent {
     }
 
     return null;
+  }
+
+  protected readonly roundPhaseText = campaignRoundPhaseText;
+  protected readonly playerCountText = campaignPlayerCountText;
+  protected readonly commitLabel = campaignCommitLabel;
+  protected readonly remainingSetupLabel = campaignRemainingSetupLabel;
+  protected readonly canOpen = campaignCanOpen;
+
+  protected showJoinOnCard(campaign: CampaignListItem): boolean {
+    return campaign.canJoin && !this.canOpen(campaign);
   }
 
   protected requestJoin(campaign: CampaignListItem): void {

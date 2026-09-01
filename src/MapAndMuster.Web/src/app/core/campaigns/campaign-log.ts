@@ -46,19 +46,42 @@ export function mergeCampaignLog<T extends CampaignLogSync>(current: T, incoming
   };
 }
 
+export const DELINQUENCY_LOG_KIND = 'DelinquencyThreshold';
+
 export function filterCampaignLog(
   entries: readonly PlayLogEntry[],
   showPublicChat: boolean,
   showPrivateChat: boolean,
   showGameLog: boolean,
+  showDelinquency = true,
 ): PlayLogEntry[] {
   return entries.filter((entry) => {
     if (entry.kind === 'PlayerChat') {
       return entry.isPrivate ? showPrivateChat : showPublicChat;
     }
 
+    if (entry.kind === DELINQUENCY_LOG_KIND) {
+      return showDelinquency;
+    }
+
     return showGameLog;
   });
+}
+
+export function latestDelinquencyEntryForUser(
+  entries: readonly PlayLogEntry[],
+  forces: readonly { id: string; controllerUserId: string }[],
+  userId: string,
+): PlayLogEntry | null {
+  const forceIds = new Set(forces.filter((force) => force.controllerUserId === userId).map((force) => force.id));
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry.kind === DELINQUENCY_LOG_KIND && entry.forceId && forceIds.has(entry.forceId)) {
+      return entry;
+    }
+  }
+
+  return null;
 }
 
 export function campaignLogComposerSize(
@@ -83,6 +106,35 @@ export interface LogMessagePart {
 export function formatLogTimestamp(value: string, timeZone?: string | null, format?: string | null): string {
   const formatted = formatInstant(value, timeZone, format);
   return formatted ? `(${formatted})` : '';
+}
+
+export function formatLogTimeLabel(
+  value: string,
+  timeZone?: string | null,
+  format?: string | null,
+  now: Date = new Date(),
+): string {
+  const occurred = new Date(value);
+  if (!Number.isFinite(occurred.getTime())) {
+    return formatLogTimestamp(value, timeZone, format);
+  }
+
+  const deltaMs = now.getTime() - occurred.getTime();
+  if (deltaMs >= 0 && deltaMs < 24 * 60 * 60 * 1000) {
+    const minutes = Math.floor(deltaMs / 60_000);
+    if (minutes < 1) {
+      return 'just now';
+    }
+
+    if (minutes < 60) {
+      return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  }
+
+  return formatLogTimestamp(value, timeZone, format);
 }
 
 export function splitLogMessage(text: string, members: readonly CampaignLogMember[]): LogMessagePart[] {

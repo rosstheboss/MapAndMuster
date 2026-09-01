@@ -64,6 +64,7 @@ export class ProfilePage {
   protected readonly username = signal<string | null>(null);
   protected readonly hasAvatar = signal(false);
   protected readonly avatarCacheBust = signal(Date.now());
+  protected readonly avatarFileName = signal<string | null>(null);
   protected readonly countries = listCountries();
   protected readonly timeZones = listTimeZones();
   protected readonly suffixes = NAME_SUFFIXES;
@@ -221,6 +222,7 @@ export class ProfilePage {
       return;
     }
 
+    this.avatarFileName.set(file.name);
     this.uploading.set(true);
     this.errorMessages.set([]);
     this.successMessage.set(null);

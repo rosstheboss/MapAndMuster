@@ -33,7 +33,7 @@ describe('App', () => {
     expect(compiled.querySelector('.skip-link')?.textContent).toContain('Skip to content');
     const themeToggle = compiled.querySelector('app-theme-toggle button');
     expect(themeToggle?.getAttribute('aria-label')).toBe('Switch to dark mode');
-    expect(themeToggle?.textContent).toContain('Light mode');
+    expect(themeToggle?.textContent).toContain('Switch to dark mode');
     expect(themeToggle?.querySelector('svg circle')).toBeTruthy();
   });
 
@@ -44,11 +44,14 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     const nav = compiled.querySelector('nav[aria-label="Main"]');
     expect(nav?.textContent).toContain('Home');
-    expect(nav?.textContent).toContain('Your Campaigns');
-    expect(nav?.textContent).toContain('All Campaigns');
+    expect(nav?.textContent).toContain('Your campaigns');
+    expect(nav?.textContent).toContain('All campaigns');
     expect(nav?.textContent).toContain('Profile');
     expect(nav?.textContent).toContain('Sign in');
     expect(nav?.querySelector('app-theme-toggle')).toBeTruthy();
+    const menu = compiled.querySelector('.nav-menu-toggle');
+    expect(menu?.textContent).toContain('Menu');
+    expect(menu?.getAttribute('aria-expanded')).toBe('false');
     const footerLinks = [...compiled.querySelectorAll('.app-footer-links a')].map((node) => node.textContent.trim());
     expect(footerLinks).toContain('Privacy');
     expect(footerLinks).toContain('Terms');

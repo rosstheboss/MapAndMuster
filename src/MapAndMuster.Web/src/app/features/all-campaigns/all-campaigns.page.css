@@ -2,7 +2,8 @@
   display: block;
 }
 
-.page {
-  display: grid;
-  gap: var(--space-4);
+.button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
