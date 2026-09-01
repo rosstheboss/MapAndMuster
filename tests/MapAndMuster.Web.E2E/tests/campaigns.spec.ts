@@ -49,6 +49,7 @@ test('signed-in players can open their campaigns and start setup', async ({ page
   await expect(page.getByRole('button', { name: 'Collapse All' })).toBeVisible();
   await expect(page.getByLabel('Campaign name')).toBeVisible();
   await expect(page.getByLabel('City (optional)')).toBeVisible();
+  await page.locator('#setup-visibility').getByRole('button', { name: 'Visibility' }).click();
   await expect(page.getByRole('checkbox', { name: 'Publicly viewable' })).toBeChecked();
   await expect(page.getByLabel('Start date and time')).toBeVisible();
   await expect(page.getByLabel('Number of rounds')).toBeVisible();
@@ -57,6 +58,7 @@ test('signed-in players can open their campaigns and start setup', async ({ page
   await page.getByRole('button', { name: 'Add preset', disabled: false }).click();
   await expect(page.getByLabel('Faction 1 name')).toHaveValue('Beastmen Brayherds');
   await expect(page.getByLabel('Faction 3 name')).toHaveValue('Daemons of Chaos');
+  await page.getByRole('button', { name: 'Daemons of Chaos' }).click();
   const daemons = page.locator('.nested-card').filter({ has: page.getByLabel('Faction 3 name') });
   const daemonSubfactionNames = daemons.getByRole('group', { name: /Subfactions/ }).getByLabel('Name');
   await expect(daemonSubfactionNames.nth(0)).toHaveValue('Khorne');
@@ -64,7 +66,7 @@ test('signed-in players can open their campaigns and start setup', async ({ page
   await expect(daemonSubfactionNames.nth(2)).toHaveValue('Slaanesh');
   await expect(daemonSubfactionNames.nth(3)).toHaveValue('Tzeentch');
   await expect(
-    page.getByRole('checkbox', { name: 'Players who choose this faction must pick a subfaction' }).nth(2),
+    daemons.getByRole('checkbox', { name: 'Players who choose this faction must pick a subfaction' }),
   ).toBeChecked();
   await expect(page.getByLabel('Terrain 1 name')).toHaveValue('Beach');
   await page.getByRole('button', { name: 'Create campaign' }).click();

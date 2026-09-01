@@ -208,6 +208,7 @@ describe('CampaignMapViewComponent', () => {
     expect(view.fullscreen()).toBe(true);
     expect(compiled.classList.contains('is-fullscreen')).toBe(true);
     expect(compiled.textContent).toContain('Exit full screen');
+    expect(getComputedStyle(compiled.querySelector('.map-main')!).gridTemplateRows).toContain('28vh');
     view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
     fixture.detectChanges();
     expect(view.fullscreen()).toBe(false);

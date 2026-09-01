@@ -378,6 +378,8 @@
 
 app-campaign-map-view.is-fullscreen .map-meta {
   height: 100%;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .map-meta h3 {

@@ -62,7 +62,9 @@
 :host.is-fullscreen .map-main {
   min-height: 0;
   overflow: hidden;
-  grid-template-rows: minmax(0, 1fr) auto;
+
+  /* Reserved details row so selecting a territory does not shrink the map. */
+  grid-template-rows: minmax(0, 1fr) 28vh;
 }
 
 .map-toolbar {
@@ -120,9 +122,11 @@
   min-height: 0;
 }
 
-:host.is-fullscreen .map-main > :not(.map-viewport) {
-  max-height: 28vh;
-  overflow: auto;
+:host.is-fullscreen .map-details {
+  display: grid;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .map-viewport.is-panning,

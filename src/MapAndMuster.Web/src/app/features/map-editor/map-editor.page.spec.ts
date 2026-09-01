@@ -1488,7 +1488,10 @@ describe('MapEditorPage', () => {
     const editorToggle = compiled.querySelector<HTMLButtonElement>('.territory-editor .section-toggle');
     const listToggle = compiled.querySelector<HTMLButtonElement>('.side-pane-toggle');
     expect(listToggle?.getAttribute('aria-expanded')).toBe('true');
-    expect(compiled.querySelector('.territory-list')).toBeTruthy();
+    const territoryList = compiled.querySelector('.territory-list');
+    expect(territoryList).toBeTruthy();
+    expect(territoryList?.getAttribute('role')).toBeNull();
+    expect(territoryList?.querySelector(':scope > li button.territory-list-item')).toBeTruthy();
     listToggle?.click();
     fixture.detectChanges();
     expect(listToggle?.getAttribute('aria-expanded')).toBe('false');

@@ -2252,7 +2252,7 @@ describe('CampaignDetailPage', () => {
     const emptyHeight = emptyStyle.height;
     expect(compiled.textContent).toContain('Select a territory to see its details.');
 
-    const page = fixture.componentInstance as unknown as { hoveredTerritoryId: { set(id: string): void } };
+    const page = fixture.componentInstance as unknown as { hoveredTerritoryId: { set(id: string | null): void } };
     page.hoveredTerritoryId.set('t1');
     fixture.detectChanges();
 
@@ -2260,6 +2260,18 @@ describe('CampaignDetailPage', () => {
     const selectedStyle = getComputedStyle(meta!);
     expect(selectedStyle.height).toBe(emptyHeight);
     expect(selectedStyle.overflow).toBe('auto');
+
+    page.hoveredTerritoryId.set(null);
+    fixture.detectChanges();
+    compiled.querySelector<HTMLButtonElement>('button[title="Full screen (M)"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('app-campaign-map-view')?.classList.contains('is-fullscreen')).toBe(true);
+    expect(compiled.textContent).toContain('Select a territory to see its details.');
+    const fullscreenEmpty = getComputedStyle(meta!).height;
+    page.hoveredTerritoryId.set('t1');
+    fixture.detectChanges();
+    expect(compiled.querySelector('.map-meta h3')?.textContent).toContain('Coast');
+    expect(getComputedStyle(meta!).height).toBe(fullscreenEmpty);
     http.verify();
   });
 

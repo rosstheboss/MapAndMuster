@@ -620,7 +620,7 @@
             }
           </button>
           @if (!territoryListCollapsed()) {
-            <ul #territoryList class="plain-list territory-list" role="listbox" aria-label="Territories">
+            <ul #territoryList class="plain-list territory-list" aria-label="Territories">
               @for (territory of sortedTerritories(); track territory.id) {
                 <li>
                   <app-territory-list-item
