@@ -605,7 +605,18 @@ file sealed class FakePresetStore : ICampaignPresetStore
         CancellationToken cancellationToken)
     {
         return Task.FromResult(
-            Items.Any(item => item.Id != excludingPresetId && item.MapStorageKey == storageKey));
+            Items.Any(item =>
+                item.Id != excludingPresetId
+                && (item.MapStorageKey == storageKey
+                    || item.Factions.Any(faction =>
+                        faction.FlagImageStorageKey == storageKey
+                        || faction.SubfactionAppearances.Any(appearance => appearance.FlagImageStorageKey == storageKey))
+                    || item.StructureTypes.Any(type =>
+                        type.ImageStorageKey == storageKey || type.PillagedImageStorageKey == storageKey)
+                    || item.ItemObjectiveTypes.Any(type => type.ImageStorageKey == storageKey)
+                    || item.Missions.Any(mission => mission.FileStorageKey == storageKey)
+                    || item.TerrainTypes.SelectMany(type => type.Missions).Any(mission => mission.FileStorageKey == storageKey)
+                    || item.StructureTypes.SelectMany(type => type.Missions).Any(mission => mission.FileStorageKey == storageKey))));
     }
 
     private static CampaignPresetListItem ToListItem(StoredCampaign campaign)

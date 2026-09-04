@@ -13,6 +13,7 @@ public sealed class UploadStructureImageHandler
     private readonly ICampaignMapProcessor _processor;
     private readonly ICampaignAssetStorage _assets;
     private readonly IClock _clock;
+    private readonly ICampaignPresetStore? _presets;
 
     /// <summary>
     /// Initializes a new handler.
@@ -21,11 +22,13 @@ public sealed class UploadStructureImageHandler
     /// <param name="processor">The image processor.</param>
     /// <param name="assets">The asset storage.</param>
     /// <param name="clock">The clock.</param>
+    /// <param name="presets">The campaign-preset store used to keep shared logos.</param>
     public UploadStructureImageHandler(
         ICampaignStore campaigns,
         ICampaignMapProcessor processor,
         ICampaignAssetStorage assets,
-        IClock clock)
+        IClock clock,
+        ICampaignPresetStore? presets = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(processor);
@@ -35,6 +38,7 @@ public sealed class UploadStructureImageHandler
         _processor = processor;
         _assets = assets;
         _clock = clock;
+        _presets = presets;
     }
 
     /// <summary>
@@ -112,7 +116,8 @@ public sealed class UploadStructureImageHandler
                 _assets.DeleteAsync,
                 previousKey,
                 command.CampaignId,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                _presets).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
@@ -187,6 +192,7 @@ public sealed class UploadItemObjectiveImageHandler
     private readonly ICampaignMapProcessor _processor;
     private readonly ICampaignAssetStorage _assets;
     private readonly IClock _clock;
+    private readonly ICampaignPresetStore? _presets;
 
     /// <summary>
     /// Initializes a new handler.
@@ -195,7 +201,8 @@ public sealed class UploadItemObjectiveImageHandler
         ICampaignStore campaigns,
         ICampaignMapProcessor processor,
         ICampaignAssetStorage assets,
-        IClock clock)
+        IClock clock,
+        ICampaignPresetStore? presets = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(processor);
@@ -205,6 +212,7 @@ public sealed class UploadItemObjectiveImageHandler
         _processor = processor;
         _assets = assets;
         _clock = clock;
+        _presets = presets;
     }
 
     /// <summary>
@@ -283,7 +291,8 @@ public sealed class UploadItemObjectiveImageHandler
                 _assets.DeleteAsync,
                 previousKey,
                 command.CampaignId,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                _presets).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
@@ -347,6 +356,7 @@ public sealed class UploadFactionFlagHandler
     private readonly ICampaignMapProcessor _processor;
     private readonly ICampaignAssetStorage _assets;
     private readonly IClock _clock;
+    private readonly ICampaignPresetStore? _presets;
 
     /// <summary>
     /// Initializes a new handler.
@@ -355,11 +365,13 @@ public sealed class UploadFactionFlagHandler
     /// <param name="processor">The image processor.</param>
     /// <param name="assets">The asset storage.</param>
     /// <param name="clock">The clock.</param>
+    /// <param name="presets">The campaign-preset store used to keep shared logos.</param>
     public UploadFactionFlagHandler(
         ICampaignStore campaigns,
         ICampaignMapProcessor processor,
         ICampaignAssetStorage assets,
-        IClock clock)
+        IClock clock,
+        ICampaignPresetStore? presets = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(processor);
@@ -369,6 +381,7 @@ public sealed class UploadFactionFlagHandler
         _processor = processor;
         _assets = assets;
         _clock = clock;
+        _presets = presets;
     }
 
     /// <summary>
@@ -463,7 +476,8 @@ public sealed class UploadFactionFlagHandler
                 _assets.DeleteAsync,
                 previousKey,
                 command.CampaignId,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                _presets).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
@@ -543,6 +557,7 @@ public sealed class UploadMissionFileHandler
     private readonly ICampaignDocumentProcessor _processor;
     private readonly ICampaignAssetStorage _assets;
     private readonly IClock _clock;
+    private readonly ICampaignPresetStore? _presets;
 
     /// <summary>
     /// Initializes a new handler.
@@ -551,11 +566,13 @@ public sealed class UploadMissionFileHandler
     /// <param name="processor">The document processor.</param>
     /// <param name="assets">The asset storage.</param>
     /// <param name="clock">The clock.</param>
+    /// <param name="presets">The campaign-preset store used to keep shared files.</param>
     public UploadMissionFileHandler(
         ICampaignStore campaigns,
         ICampaignDocumentProcessor processor,
         ICampaignAssetStorage assets,
-        IClock clock)
+        IClock clock,
+        ICampaignPresetStore? presets = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(processor);
@@ -565,6 +582,7 @@ public sealed class UploadMissionFileHandler
         _processor = processor;
         _assets = assets;
         _clock = clock;
+        _presets = presets;
     }
 
     /// <summary>
@@ -628,7 +646,8 @@ public sealed class UploadMissionFileHandler
                 _assets.DeleteAsync,
                 previousKey,
                 command.CampaignId,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                _presets).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
@@ -931,4 +950,84 @@ public sealed class UploadMissionFileCommand
 
     /// <summary>Gets the declared length, if known.</summary>
     public long? Length { get; init; }
+}
+
+/// <summary>
+/// Which catalog image a saved campaign preset should return.
+/// </summary>
+public enum CampaignPresetAssetKind
+{
+    /// <summary>A faction or subfaction flag.</summary>
+    FactionFlag = 0,
+
+    /// <summary>An operational structure logo.</summary>
+    StructureImage = 1,
+
+    /// <summary>A pillaged structure logo.</summary>
+    StructurePillagedImage = 2,
+
+    /// <summary>An item-objective logo.</summary>
+    ItemObjectiveImage = 3,
+}
+
+/// <summary>
+/// Reads a stored catalog image from a named campaign preset.
+/// </summary>
+public sealed class GetCampaignPresetAssetHandler
+{
+    private readonly ICampaignPresetStore _presets;
+    private readonly ICampaignAssetStorage _assets;
+
+    /// <summary>Initializes a handler.</summary>
+    public GetCampaignPresetAssetHandler(ICampaignPresetStore presets, ICampaignAssetStorage assets)
+    {
+        ArgumentNullException.ThrowIfNull(presets);
+        ArgumentNullException.ThrowIfNull(assets);
+        _presets = presets;
+        _assets = assets;
+    }
+
+    /// <summary>
+    /// Returns a preset catalog image for any authenticated user who may list presets.
+    /// </summary>
+    public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
+        Guid presetId,
+        Guid catalogId,
+        CampaignPresetAssetKind kind,
+        CancellationToken cancellationToken,
+        string? subfactionName = null)
+    {
+        var preset = await _presets.FindByIdAsync(presetId, cancellationToken).ConfigureAwait(false);
+        if (preset is null)
+        {
+            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign preset was not found.");
+        }
+
+        string? storageKey = kind switch
+        {
+            CampaignPresetAssetKind.FactionFlag => ResolveFactionFlag(preset, catalogId, subfactionName),
+            CampaignPresetAssetKind.StructureImage =>
+                preset.StructureTypes.FirstOrDefault(type => type.Id == catalogId)?.ImageStorageKey,
+            CampaignPresetAssetKind.StructurePillagedImage =>
+                preset.StructureTypes.FirstOrDefault(type => type.Id == catalogId)?.PillagedImageStorageKey,
+            CampaignPresetAssetKind.ItemObjectiveImage =>
+                preset.ItemObjectiveTypes.FirstOrDefault(type => type.Id == catalogId)?.ImageStorageKey,
+            _ => null,
+        };
+        if (!CatalogFileBinder.IsUserUploadedFileKey(storageKey))
+        {
+            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The image was not found.");
+        }
+
+        var file = await _assets.OpenReadAsync(storageKey, cancellationToken).ConfigureAwait(false);
+        return file is null
+            ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The image was not found.")
+            : OperationResults.Success(file);
+    }
+
+    private static string? ResolveFactionFlag(StoredCampaign preset, Guid factionId, string? subfactionName)
+    {
+        var faction = preset.Factions.FirstOrDefault(item => item.Id == factionId);
+        return faction is null ? null : FactionAppearance.Resolve(faction, subfactionName).FlagImageStorageKey;
+    }
 }

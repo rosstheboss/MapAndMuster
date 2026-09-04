@@ -63,6 +63,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<GetItemObjectiveImageHandler>();
         services.AddScoped<UploadFactionFlagHandler>();
         services.AddScoped<GetFactionFlagHandler>();
+        services.AddScoped<GetCampaignPresetAssetHandler>();
         services.AddScoped<UploadMissionFileHandler>();
         services.AddScoped<GetMissionFileHandler>();
         services.AddScoped<GetCampaignPlayHandler>();

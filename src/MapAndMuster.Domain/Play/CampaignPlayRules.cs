@@ -25,7 +25,8 @@ public static class CampaignPlayRules
         IReadOnlyList<PrivateObjectiveTypePlayRules>? privateObjectiveTypes = null,
         IReadOnlyList<Guid>? factionIds = null,
         IReadOnlyList<Guid>? allyGroupIds = null,
-        SpecialRuleContext? specialRules = null)
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -91,7 +92,11 @@ public static class CampaignPlayRules
             factionIds ?? [],
             allyGroupIds ?? [],
             utcNow,
-            pickIndex ?? (static count => 0));
+            pickIndex ?? (static count => 0),
+            players
+                .Where(static item => item.FactionId.HasValue)
+                .ToDictionary(static item => item.UserId, static item => item.FactionId!.Value),
+            allyGroupByFaction);
 
         var started = new CampaignPlayState(
             windows,
@@ -1529,9 +1534,15 @@ public static class CampaignPlayRules
             resolved = resolved.With(structureDestructions: [.. resolved.StructureDestructions, .. destructions]);
         }
 
+        var works = StructureDestructionRules.DetectWork(map, resolvedMap, resolved.Forces, closeAt);
+        if (works.Count > 0)
+        {
+            resolved = resolved.With(structureWorks: [.. resolved.StructureWorks, .. works]);
+        }
+
         resolved = AssignOpeningMatches(resolved, resolvedMap, factionAllyGroups, choose);
         var snapshots = resolved.Snapshots.Where(item => item.WindowId != window.Id).Append(snapshot).ToArray();
-        resolved = ApplyActionStatuses(resolved.With(snapshots: snapshots), resolvedMap, window, forceStatuses, specialRules);
+        resolved = ApplyActionStatuses(resolved.With(snapshots: snapshots), resolvedMap, window, forceStatuses, specialRules, closeAt);
         var missing = submissions
             .Where(item => item.WindowId == window.Id && item.Source == OrderSource.DeadlineHold)
             .Select(item => item.ForceId);
@@ -1668,7 +1679,7 @@ public static class CampaignPlayRules
         }
 
         next = ApplyRetreats(next, map, window, closeAt, pickIndex ?? (static count => 0));
-        next = ApplyBattleStatuses(next, map, window, forceStatuses, specialRules);
+        next = ApplyBattleStatuses(next, map, window, forceStatuses, specialRules, closeAt);
         var claimedMap = ApplyOccupationClaims(next, map, allies, choose);
         return FinishWindow(next, claimedMap, window, closeAt, due, forceStatuses);
     }
@@ -2828,7 +2839,8 @@ public static class CampaignPlayRules
         PlayMap map,
         PhaseWindow window,
         IReadOnlyList<ForceStatusSetup>? statuses,
-        SpecialRuleContext? specialRules = null)
+        SpecialRuleContext? specialRules,
+        DateTimeOffset utcNow)
     {
         var catalog = statuses ?? [];
         if (catalog.Count == 0)
@@ -2841,7 +2853,16 @@ public static class CampaignPlayRules
             force => ForceStatusRules.FromAction(
                 state.LatestSubmission(window.Id, force.Id)?.Kind,
                 map.Territory(force.TerritoryId)?.IsWaterFeature == true));
-        return state.With(forces: ForceStatusRules.Apply(state.Forces, catalog, facts, specialRules));
+        var applied = ForceStatusRules.Apply(state.Forces, catalog, facts, specialRules);
+        var changes = DetectStatusChanges(
+            state.Forces,
+            applied,
+            catalog,
+            utcNow,
+            static (previous, next) => (next.Id, next.FactionId, (Guid?)next.ControllerUserId));
+        return state.With(
+            forces: applied,
+            forceStatusChanges: changes.Count == 0 ? state.ForceStatusChanges : [.. state.ForceStatusChanges, .. changes]);
     }
 
     private static CampaignPlayState ApplyBattleStatuses(
@@ -2849,7 +2870,8 @@ public static class CampaignPlayRules
         PlayMap map,
         PhaseWindow window,
         IReadOnlyList<ForceStatusSetup>? statuses,
-        SpecialRuleContext? specialRules = null)
+        SpecialRuleContext? specialRules,
+        DateTimeOffset utcNow)
     {
         var catalog = statuses ?? [];
         var rules = specialRules ?? SpecialRuleContext.None;
@@ -2881,7 +2903,14 @@ public static class CampaignPlayRules
         var applied = catalog.Count == 0
             ? state.Forces
             : ForceStatusRules.Apply(state.Forces, catalog, facts, rules);
+        var catalogChanges = DetectStatusChanges(
+            state.Forces,
+            applied,
+            catalog,
+            utcNow,
+            static (previous, next) => (next.Id, next.FactionId, (Guid?)next.ControllerUserId));
         var byId = applied.ToDictionary(static force => force.Id);
+        var inflictedActors = new Dictionary<Guid, CampaignForce>();
         foreach (var battle in battles.Where(static item =>
                      !item.IsDraw && !item.IsNoContest && item.WinnerForceId is not null))
         {
@@ -2906,10 +2935,73 @@ public static class CampaignPlayRules
                 }
 
                 byId[loser.Id] = loser.WithStatus(inflicted);
+                inflictedActors[loser.Id] = winner;
             }
         }
 
-        return state.With(forces: [.. applied.Select(force => byId[force.Id])]);
+        var final = applied.Select(force => byId[force.Id]).ToArray();
+        var inflictedChanges = DetectStatusChanges(
+            applied,
+            final,
+            catalog,
+            utcNow,
+            (previous, next) =>
+            {
+                if (inflictedActors.TryGetValue(next.Id, out var winner))
+                {
+                    return (winner.Id, winner.FactionId, (Guid?)winner.ControllerUserId);
+                }
+
+                return (next.Id, next.FactionId, (Guid?)next.ControllerUserId);
+            });
+        return state.With(
+            forces: final,
+            forceStatusChanges: catalogChanges.Count + inflictedChanges.Count == 0
+                ? state.ForceStatusChanges
+                : [.. state.ForceStatusChanges, .. catalogChanges, .. inflictedChanges]);
+    }
+
+    private static List<ForceStatusChangeFact> DetectStatusChanges(
+        IReadOnlyList<CampaignForce> before,
+        IReadOnlyList<CampaignForce> after,
+        IReadOnlyList<ForceStatusSetup> catalog,
+        DateTimeOffset utcNow,
+        Func<CampaignForce, CampaignForce, (Guid? ActorForceId, Guid ActorFactionId, Guid? ActorUserId)> actorFor)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(actorFor);
+        var byName = catalog.ToDictionary(static status => status.Name, static status => status.Id, StringComparer.OrdinalIgnoreCase);
+        var previousById = before.ToDictionary(static force => force.Id);
+        var facts = new List<ForceStatusChangeFact>();
+        foreach (var next in after.OrderBy(static force => force.Id))
+        {
+            if (!previousById.TryGetValue(next.Id, out var previous)
+                || string.Equals(previous.StatusName, next.StatusName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var actor = actorFor(previous, next);
+            facts.Add(new ForceStatusChangeFact(
+                Guid.NewGuid(),
+                next.Id,
+                next.FactionId,
+                next.ControllerUserId,
+                next.StatusName is { } name && byName.TryGetValue(name, out var statusId) ? statusId : null,
+                previous.StatusName,
+                next.StatusName,
+                actor.ActorForceId,
+                actor.ActorFactionId,
+                actor.ActorUserId,
+                utcNow,
+                previous.StatusName is { } previousName && byName.TryGetValue(previousName, out var previousId)
+                    ? previousId
+                    : null));
+        }
+
+        return facts;
     }
 
     private static IReadOnlyList<Guid> ForcesRequiredToRetreat(CampaignBattle battle)

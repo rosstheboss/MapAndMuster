@@ -37,7 +37,23 @@ internal static class CampaignPlayCatalog
                     : PrivateObjectiveAutomaticKind.None,
                 type.RequiredCount,
                 type.StructureTypeId,
-                type.TerritoryIds)),
+                type.TerritoryIds,
+                type.MatchesAnyStructureType,
+                type.ItemObjectiveTypeId,
+                type.MatchesAnyItemObjective,
+                Enum.TryParse<PrivateObjectiveTargetKind>(type.TargetKind, true, out var targetKind)
+                    ? targetKind
+                    : PrivateObjectiveTargetKind.None,
+                Enum.TryParse<PrivateObjectiveTargetSelection>(type.TargetSelection, true, out var targetSelection)
+                    ? targetSelection
+                    : PrivateObjectiveTargetSelection.Specific,
+                type.TargetId,
+                type.ForceStatusTypeIds,
+                Enum.TryParse<PrivateObjectiveStatusMatchKind>(type.StatusMatchKind, true, out var statusMatch)
+                    ? statusMatch
+                    : PrivateObjectiveStatusMatchKind.None,
+                type.PrerequisiteForceStatusTypeId,
+                type.PrerequisiteWasLost)),
         ];
     }
 
@@ -146,7 +162,17 @@ internal static class CampaignPlayCatalog
         var next = state;
         foreach (var player in campaign.Memberships.Where(static member => member.IsPlayer).OrderBy(static member => member.UserId))
         {
-            next = PrivateObjectiveRules.EnsurePlayerAssignment(next, types, player.UserId, utcNow, PickIndex);
+            next = PrivateObjectiveRules.EnsurePlayerAssignment(
+                next,
+                types,
+                player.UserId,
+                utcNow,
+                PickIndex,
+                FactionByPlayer(campaign),
+                AllyGroupByFaction(campaign),
+                [.. campaign.Memberships.Where(static member => member.IsPlayer).Select(static member => member.UserId)],
+                [.. campaign.Factions.Select(static faction => faction.Id)],
+                [.. campaign.AllyGroups.Select(static group => group.Id)]);
         }
 
         next = PrivateObjectiveRules.EvaluateAutomatic(
@@ -156,7 +182,8 @@ internal static class CampaignPlayCatalog
             FactionByPlayer(campaign),
             AllyGroupByFaction(campaign),
             next.BrokenAllyFactionIds.ToHashSet(),
-            utcNow);
+            utcNow,
+            map);
         var progress = next.Evaluate(campaign.StartsUtc, endsUtc, utcNow);
         if (progress.Status == CampaignStatus.Completed)
         {

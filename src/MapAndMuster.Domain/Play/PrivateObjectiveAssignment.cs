@@ -36,7 +36,8 @@ public sealed class PrivateObjectiveAssignment
         DateTimeOffset? claimedUtc = null,
         DateTimeOffset? revealedUtc = null,
         Guid? claimedByUserId = null,
-        Guid? approvedByUserId = null)
+        Guid? approvedByUserId = null,
+        Guid? resolvedTargetId = null)
     {
         Id = id;
         TypeId = typeId;
@@ -49,6 +50,7 @@ public sealed class PrivateObjectiveAssignment
         RevealedUtc = revealedUtc;
         ClaimedByUserId = claimedByUserId;
         ApprovedByUserId = approvedByUserId;
+        ResolvedTargetId = resolvedTargetId;
     }
 
     /// <summary>Gets the assignment identifier.</summary>
@@ -84,6 +86,9 @@ public sealed class PrivateObjectiveAssignment
     /// <summary>Gets the manager who approved a claim, or the system actor for automatic completion.</summary>
     public Guid? ApprovedByUserId { get; }
 
+    /// <summary>Gets the opponent chosen at assignment for a Random DefeatOpponent criterion.</summary>
+    public Guid? ResolvedTargetId { get; }
+
     /// <summary>Gets whether the assignment still counts as unclaimed for public counts.</summary>
     public bool IsUnclaimed => Status is PrivateObjectiveAssignmentStatus.Assigned or PrivateObjectiveAssignmentStatus.Claimed;
 
@@ -112,7 +117,8 @@ public sealed class PrivateObjectiveAssignment
             clearClaim ? null : claimedUtc ?? ClaimedUtc,
             revealedUtc ?? RevealedUtc,
             clearClaim ? null : claimedByUserId ?? ClaimedByUserId,
-            approvedByUserId ?? ApprovedByUserId);
+            approvedByUserId ?? ApprovedByUserId,
+            ResolvedTargetId);
     }
 }
 
@@ -157,4 +163,125 @@ public sealed class StructureDestructionFact
 
     /// <summary>Gets when the structure was destroyed, in UTC.</summary>
     public DateTimeOffset DestroyedUtc { get; }
+}
+
+/// <summary>
+/// An append-only record that a force gained or lost a named status.
+/// </summary>
+public sealed class ForceStatusChangeFact
+{
+    /// <summary>
+    /// Initializes a status-change fact.
+    /// </summary>
+    public ForceStatusChangeFact(
+        Guid id,
+        Guid forceId,
+        Guid factionId,
+        Guid controllerUserId,
+        Guid? statusTypeId,
+        string? previousStatusName,
+        string? nextStatusName,
+        Guid? actorForceId,
+        Guid? actorFactionId,
+        Guid? actorUserId,
+        DateTimeOffset occurredUtc,
+        Guid? previousStatusTypeId = null)
+    {
+        Id = id;
+        ForceId = forceId;
+        FactionId = factionId;
+        ControllerUserId = controllerUserId;
+        StatusTypeId = statusTypeId;
+        PreviousStatusName = previousStatusName;
+        NextStatusName = nextStatusName;
+        ActorForceId = actorForceId;
+        ActorFactionId = actorFactionId;
+        ActorUserId = actorUserId;
+        OccurredUtc = occurredUtc;
+        PreviousStatusTypeId = previousStatusTypeId;
+    }
+
+    /// <summary>Gets the fact identifier.</summary>
+    public Guid Id { get; }
+
+    /// <summary>Gets the force whose status changed.</summary>
+    public Guid ForceId { get; }
+
+    /// <summary>Gets the force's faction.</summary>
+    public Guid FactionId { get; }
+
+    /// <summary>Gets the player who controls the force.</summary>
+    public Guid ControllerUserId { get; }
+
+    /// <summary>Gets the catalog status gained, or null when the force returned to Normal.</summary>
+    public Guid? StatusTypeId { get; }
+
+    /// <summary>Gets the previous status name, or null for Normal.</summary>
+    public string? PreviousStatusName { get; }
+
+    /// <summary>Gets the previous catalog status, or null for Normal.</summary>
+    public Guid? PreviousStatusTypeId { get; }
+
+    /// <summary>Gets the next status name, or null for Normal.</summary>
+    public string? NextStatusName { get; }
+
+    /// <summary>Gets the force attributed as causing the change, when known.</summary>
+    public Guid? ActorForceId { get; }
+
+    /// <summary>Gets the faction attributed as causing the change, when known.</summary>
+    public Guid? ActorFactionId { get; }
+
+    /// <summary>Gets the player attributed as causing the change, when known.</summary>
+    public Guid? ActorUserId { get; }
+
+    /// <summary>Gets when the change was recorded, in UTC.</summary>
+    public DateTimeOffset OccurredUtc { get; }
+}
+
+/// <summary>
+/// An append-only record that a structure was built or repaired.
+/// </summary>
+public sealed class StructureWorkFact
+{
+    /// <summary>
+    /// Initializes a build or repair fact.
+    /// </summary>
+    public StructureWorkFact(
+        Guid id,
+        Guid territoryId,
+        Guid structureTypeId,
+        ActionKind kind,
+        Guid actorFactionId,
+        Guid actorUserId,
+        DateTimeOffset occurredUtc)
+    {
+        Id = id;
+        TerritoryId = territoryId;
+        StructureTypeId = structureTypeId;
+        Kind = kind;
+        ActorFactionId = actorFactionId;
+        ActorUserId = actorUserId;
+        OccurredUtc = occurredUtc;
+    }
+
+    /// <summary>Gets the fact identifier.</summary>
+    public Guid Id { get; }
+
+    /// <summary>Gets the territory.</summary>
+    public Guid TerritoryId { get; }
+
+    /// <summary>Gets the structure type.</summary>
+    public Guid StructureTypeId { get; }
+
+    /// <summary>Gets Build or Repair.</summary>
+    public ActionKind Kind { get; }
+
+    /// <summary>Gets the acting faction.</summary>
+    public Guid ActorFactionId { get; }
+
+    /// <summary>Gets the acting player.</summary>
+    public Guid ActorUserId { get; }
+
+    /// <summary>Gets when the work completed, in UTC.</summary>
+    public DateTimeOffset OccurredUtc { get; }
 }

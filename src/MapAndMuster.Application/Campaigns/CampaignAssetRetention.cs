@@ -12,7 +12,8 @@ internal static class CampaignAssetRetention
         Func<string, CancellationToken, Task> deleteAsync,
         string? storageKey,
         Guid excludingCampaignId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ICampaignPresetStore? presets = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(deleteAsync);
@@ -22,6 +23,12 @@ internal static class CampaignAssetRetention
         }
 
         if (await campaigns.IsStorageKeyInUseAsync(storageKey, excludingCampaignId, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        if (presets is not null
+            && await presets.IsStorageKeyInUseAsync(storageKey, excludingPresetId: null, cancellationToken).ConfigureAwait(false))
         {
             return;
         }

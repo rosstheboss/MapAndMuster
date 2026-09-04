@@ -1036,6 +1036,15 @@
                             <option value="ControlStructureType">Control a structure type</option>
                             <option value="PillageStructureType">Pillage a structure type</option>
                             <option value="DestroyStructureType">Destroy a structure type</option>
+                            <option value="BattleWinCount">Win a number of battles</option>
+                            <option value="BattleLossCount">Lose a number of battles</option>
+                            <option value="PlayerRetreatCount">Record player-chosen retreats</option>
+                            <option value="AdjacentToRelic">Occupy a territory adjacent to a relic</option>
+                            <option value="BuildStructureType">Build structures</option>
+                            <option value="RepairStructureType">Repair structures</option>
+                            <option value="ControlRelic">Control a relic</option>
+                            <option value="DefeatOpponent">Defeat an opponent in battle</option>
+                            <option value="ForceStatus">Gain or cause a force status</option>
                           </select>
                         </div>
                       }
@@ -1055,7 +1064,9 @@
                         @if (
                           item.controls.automaticKind.value === 'ControlStructureType' ||
                           item.controls.automaticKind.value === 'PillageStructureType' ||
-                          item.controls.automaticKind.value === 'DestroyStructureType'
+                          item.controls.automaticKind.value === 'DestroyStructureType' ||
+                          item.controls.automaticKind.value === 'BuildStructureType' ||
+                          item.controls.automaticKind.value === 'RepairStructureType'
                         ) {
                           <div class="field grow">
                             <label [attr.for]="'private-objective-structure-' + index">Structure type</label>
@@ -1069,6 +1080,15 @@
                                 }
                               }
                             </select>
+                            @if (
+                              item.controls.automaticKind.value === 'BuildStructureType' ||
+                              item.controls.automaticKind.value === 'RepairStructureType'
+                            ) {
+                              <label class="choice-row">
+                                <input type="checkbox" formControlName="matchesAnyStructureType" />
+                                Any structure type
+                              </label>
+                            }
                           </div>
                         }
                       </div>
@@ -1084,6 +1104,144 @@
                             Comma-separated territory identifiers from the saved map. Required count is how many of
                             those territories the holder must control.
                           </p>
+                        </div>
+                      }
+                      @if (
+                        item.controls.automaticKind.value === 'AdjacentToRelic' ||
+                        item.controls.automaticKind.value === 'ControlRelic'
+                      ) {
+                        <div class="field grow">
+                          <label class="choice-row">
+                            <input type="checkbox" formControlName="matchesAnyItemObjective" />
+                            Any relic
+                          </label>
+                          @if (!item.controls.matchesAnyItemObjective.value) {
+                            <label [attr.for]="'private-objective-relic-' + index">Relic</label>
+                            <select [id]="'private-objective-relic-' + index" formControlName="itemObjectiveTypeId">
+                              <option value="">Select a relic</option>
+                              @for (relic of itemObjectiveTypes.controls; track relic.controls.id.value) {
+                                @if (relic.controls.name.value.trim()) {
+                                  <option [value]="relic.controls.id.value">{{ relic.controls.name.value }}</option>
+                                }
+                              }
+                            </select>
+                          }
+                          @if (item.controls.automaticKind.value === 'AdjacentToRelic') {
+                            <p class="muted">
+                              The same territory as the relic counts. Other territories must share a direct map
+                              connection.
+                            </p>
+                          }
+                        </div>
+                      }
+                      @if (item.controls.automaticKind.value === 'DefeatOpponent') {
+                        <div class="nested-row">
+                          <div class="field">
+                            <label [attr.for]="'private-objective-target-kind-' + index">Opponent kind</label>
+                            <select [id]="'private-objective-target-kind-' + index" formControlName="targetKind">
+                              <option value="Player">Player</option>
+                              <option value="Faction">Faction</option>
+                              <option value="AllyGroup">Ally group</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label [attr.for]="'private-objective-target-selection-' + index">How to choose</label>
+                            <select
+                              [id]="'private-objective-target-selection-' + index"
+                              formControlName="targetSelection"
+                            >
+                              <option value="Any">Any opponent of that kind</option>
+                              <option value="Random">One random opponent, chosen at assignment</option>
+                              @if (item.controls.targetKind.value !== 'Player') {
+                                <option value="Specific">A specific opponent</option>
+                              }
+                            </select>
+                          </div>
+                          @if (
+                            item.controls.targetSelection.value === 'Specific' &&
+                            item.controls.targetKind.value === 'Faction'
+                          ) {
+                            <div class="field grow">
+                              <label [attr.for]="'private-objective-target-' + index">Faction</label>
+                              <select [id]="'private-objective-target-' + index" formControlName="targetId">
+                                <option value="">Select a faction</option>
+                                @for (faction of factions.controls; track faction.controls.id.value) {
+                                  @if (faction.controls.name.value.trim()) {
+                                    <option [value]="faction.controls.id.value">
+                                      {{ faction.controls.name.value }}
+                                    </option>
+                                  }
+                                }
+                              </select>
+                            </div>
+                          }
+                          @if (
+                            item.controls.targetSelection.value === 'Specific' &&
+                            item.controls.targetKind.value === 'AllyGroup'
+                          ) {
+                            <div class="field grow">
+                              <label [attr.for]="'private-objective-target-ally-' + index">Ally group</label>
+                              <select [id]="'private-objective-target-ally-' + index" formControlName="targetId">
+                                <option value="">Select an ally group</option>
+                                @for (group of allyGroups.controls; track group.controls.id.value) {
+                                  @if (group.controls.name.value.trim()) {
+                                    <option [value]="group.controls.id.value">{{ group.controls.name.value }}</option>
+                                  }
+                                }
+                              </select>
+                            </div>
+                          }
+                        </div>
+                      }
+                      @if (item.controls.automaticKind.value === 'ForceStatus') {
+                        <div class="stack">
+                          <div class="field">
+                            <label [attr.for]="'private-objective-status-match-' + index">Status match</label>
+                            <select [id]="'private-objective-status-match-' + index" formControlName="statusMatchKind">
+                              <option value="Gained">Holder gained a status</option>
+                              <option value="Caused">Holder caused another force to gain a status</option>
+                              <option value="GainedAfter">Holder gained a status after another status</option>
+                            </select>
+                          </div>
+                          <fieldset class="field">
+                            <legend>Matching statuses</legend>
+                            @for (status of forceStatuses.controls; track status.controls.id.value) {
+                              @if (status.controls.name.value.trim()) {
+                                <label class="choice-row">
+                                  <input
+                                    type="checkbox"
+                                    [checked]="item.controls.forceStatusTypeIds.value.includes(status.controls.id.value)"
+                                    (change)="togglePrivateObjectiveStatus(item, status.controls.id.value, $event)"
+                                  />
+                                  {{ status.controls.name.value }}
+                                </label>
+                              }
+                            }
+                          </fieldset>
+                          @if (item.controls.statusMatchKind.value === 'GainedAfter') {
+                            <div class="nested-row">
+                              <div class="field grow">
+                                <label [attr.for]="'private-objective-prerequisite-' + index">Prior status</label>
+                                <select
+                                  [id]="'private-objective-prerequisite-' + index"
+                                  formControlName="prerequisiteForceStatusTypeId"
+                                >
+                                  <option value="">Select a status</option>
+                                  @for (status of forceStatuses.controls; track status.controls.id.value) {
+                                    @if (status.controls.name.value.trim()) {
+                                      <option [value]="status.controls.id.value">
+                                        {{ status.controls.name.value }}
+                                      </option>
+                                    }
+                                  }
+                                </select>
+                              </div>
+                              <label class="choice-row">
+                                <input type="checkbox" formControlName="prerequisiteWasLost" />
+                                After losing that status
+                              </label>
+                            </div>
+                          }
                         </div>
                       }
                     }

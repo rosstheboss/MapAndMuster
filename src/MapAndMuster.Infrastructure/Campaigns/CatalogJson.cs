@@ -414,6 +414,16 @@ internal static class CatalogJson
             RequiredCount = type.RequiredCount,
             StructureTypeId = type.StructureTypeId,
             TerritoryIds = [.. type.TerritoryIds],
+            MatchesAnyStructureType = type.MatchesAnyStructureType,
+            ItemObjectiveTypeId = type.ItemObjectiveTypeId,
+            MatchesAnyItemObjective = type.MatchesAnyItemObjective,
+            TargetKind = type.TargetKind,
+            TargetSelection = type.TargetSelection,
+            TargetId = type.TargetId,
+            ForceStatusTypeIds = [.. type.ForceStatusTypeIds],
+            StatusMatchKind = type.StatusMatchKind,
+            PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
+            PrerequisiteWasLost = type.PrerequisiteWasLost,
         };
     }
 
@@ -509,6 +519,16 @@ internal static class CatalogJson
             RequiredCount = type.RequiredCount < 1 ? 1 : type.RequiredCount,
             StructureTypeId = type.StructureTypeId,
             TerritoryIds = type.TerritoryIds ?? [],
+            MatchesAnyStructureType = type.MatchesAnyStructureType,
+            ItemObjectiveTypeId = type.ItemObjectiveTypeId,
+            MatchesAnyItemObjective = type.MatchesAnyItemObjective,
+            TargetKind = string.IsNullOrWhiteSpace(type.TargetKind) ? "None" : type.TargetKind,
+            TargetSelection = string.IsNullOrWhiteSpace(type.TargetSelection) ? "Specific" : type.TargetSelection,
+            TargetId = type.TargetId,
+            ForceStatusTypeIds = type.ForceStatusTypeIds ?? [],
+            StatusMatchKind = string.IsNullOrWhiteSpace(type.StatusMatchKind) ? "None" : type.StatusMatchKind,
+            PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
+            PrerequisiteWasLost = type.PrerequisiteWasLost,
         };
     }
 
@@ -894,6 +914,26 @@ internal static class CatalogJson
         public Guid? StructureTypeId { get; set; }
 
         public List<Guid>? TerritoryIds { get; set; }
+
+        public bool MatchesAnyStructureType { get; set; }
+
+        public Guid? ItemObjectiveTypeId { get; set; }
+
+        public bool MatchesAnyItemObjective { get; set; }
+
+        public string TargetKind { get; set; } = "None";
+
+        public string TargetSelection { get; set; } = "Specific";
+
+        public Guid? TargetId { get; set; }
+
+        public List<Guid>? ForceStatusTypeIds { get; set; }
+
+        public string StatusMatchKind { get; set; } = "None";
+
+        public Guid? PrerequisiteForceStatusTypeId { get; set; }
+
+        public bool PrerequisiteWasLost { get; set; }
     }
 
     private sealed class FactionSpecialRulesDocument

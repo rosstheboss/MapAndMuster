@@ -1502,6 +1502,50 @@ public sealed class CampaignSetupRulesTests
     }
 
     [Fact]
+    public void AcceptsBuildAnyStructureTypePrivateObjectives()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            [
+                new StructureTypeInput { Name = "Town", BuiltinSymbol = "Town" },
+            ],
+            out var setup,
+            out _,
+            out var errors,
+            privateObjectiveTypes:
+            [
+                new PrivateObjectiveTypeInput
+                {
+                    Name = "Raise two works",
+                    CampaignPoints = 3,
+                    AllowedHolderKinds = ["Player"],
+                    ScoringKind = "Automatic",
+                    AutomaticKind = "BuildStructureType",
+                    RequiredCount = 2,
+                    MatchesAnyStructureType = true,
+                },
+            ]);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        var privateObjective = Assert.Single(setup!.PrivateObjectiveTypes);
+        Assert.Equal(PrivateObjectiveAutomaticKind.BuildStructureType, privateObjective.AutomaticKind);
+        Assert.True(privateObjective.MatchesAnyStructureType);
+        Assert.Null(privateObjective.StructureTypeId);
+    }
+
+    [Fact]
     public void AcceptsForceStatusesAndRejectsNormal()
     {
         var succeeded = CampaignSetupRules.TryCreate(

@@ -202,6 +202,23 @@ export class CampaignService {
     return `${flagPath}?v=${revision}`;
   }
 
+  presetFlagImageUrl(presetId: string, factionId: string, subfaction?: string | null): string {
+    const factionPath = `/api/campaign-presets/${encodeURIComponent(presetId)}/factions/${encodeURIComponent(factionId)}`;
+    const flagPath = subfaction?.trim()
+      ? `${factionPath}/subfactions/${encodeURIComponent(subfaction.trim())}/flag`
+      : `${factionPath}/flag`;
+    return flagPath;
+  }
+
+  presetStructureImageUrl(presetId: string, structureTypeId: string, pillaged = false): string {
+    const kind = pillaged ? 'pillaged-image' : 'image';
+    return `/api/campaign-presets/${encodeURIComponent(presetId)}/structures/${encodeURIComponent(structureTypeId)}/${kind}`;
+  }
+
+  presetItemObjectiveImageUrl(presetId: string, itemObjectiveTypeId: string): string {
+    return `/api/campaign-presets/${encodeURIComponent(presetId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image`;
+  }
+
   missionFileUrl(campaignId: string, missionId: string): string {
     return `/api/campaigns/${encodeURIComponent(campaignId)}/missions/${encodeURIComponent(missionId)}/file`;
   }

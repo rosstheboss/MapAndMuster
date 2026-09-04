@@ -1322,7 +1322,12 @@ public sealed class GrantPrivateObjectiveHandler
                         utcNow,
                         CampaignPlayCatalog.PickIndex,
                         out var next,
-                        out var error)
+                        out var error,
+                        CampaignPlayCatalog.FactionByPlayer(campaign),
+                        CampaignPlayCatalog.AllyGroupByFaction(campaign),
+                        [.. campaign.Memberships.Where(static member => member.IsPlayer).Select(static member => member.UserId)],
+                        [.. campaign.Factions.Select(static faction => faction.Id)],
+                        [.. campaign.AllyGroups.Select(static group => group.Id)])
                     || next is null)
                 {
                     return PlayMutation.Fail(error);

@@ -414,6 +414,16 @@ public static class CampaignMapper
                         RequiredCount = type.RequiredCount,
                         StructureTypeId = visible ? type.StructureTypeId : null,
                         TerritoryIds = visible ? type.TerritoryIds : [],
+                        MatchesAnyStructureType = visible && type.MatchesAnyStructureType,
+                        ItemObjectiveTypeId = visible ? type.ItemObjectiveTypeId : null,
+                        MatchesAnyItemObjective = visible && type.MatchesAnyItemObjective,
+                        TargetKind = visible ? type.TargetKind : nameof(PrivateObjectiveTargetKind.None),
+                        TargetSelection = visible ? type.TargetSelection : nameof(PrivateObjectiveTargetSelection.Specific),
+                        TargetId = visible ? type.TargetId : null,
+                        ForceStatusTypeIds = visible ? type.ForceStatusTypeIds : [],
+                        StatusMatchKind = visible ? type.StatusMatchKind : nameof(PrivateObjectiveStatusMatchKind.None),
+                        PrerequisiteForceStatusTypeId = visible ? type.PrerequisiteForceStatusTypeId : null,
+                        PrerequisiteWasLost = visible && type.PrerequisiteWasLost,
                     };
                 }),
         ];

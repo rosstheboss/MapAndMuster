@@ -20,7 +20,17 @@ public sealed class PrivateObjectiveTypePlayRules
         PrivateObjectiveAutomaticKind automaticKind,
         int requiredCount,
         Guid? structureTypeId,
-        IReadOnlyList<Guid> territoryIds)
+        IReadOnlyList<Guid> territoryIds,
+        bool matchesAnyStructureType = false,
+        Guid? itemObjectiveTypeId = null,
+        bool matchesAnyItemObjective = false,
+        PrivateObjectiveTargetKind targetKind = PrivateObjectiveTargetKind.None,
+        PrivateObjectiveTargetSelection targetSelection = PrivateObjectiveTargetSelection.Specific,
+        Guid? targetId = null,
+        IReadOnlyList<Guid>? forceStatusTypeIds = null,
+        PrivateObjectiveStatusMatchKind statusMatchKind = PrivateObjectiveStatusMatchKind.None,
+        Guid? prerequisiteForceStatusTypeId = null,
+        bool prerequisiteWasLost = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(allowedHolderKinds);
@@ -34,6 +44,16 @@ public sealed class PrivateObjectiveTypePlayRules
         RequiredCount = requiredCount;
         StructureTypeId = structureTypeId;
         TerritoryIds = territoryIds;
+        MatchesAnyStructureType = matchesAnyStructureType;
+        ItemObjectiveTypeId = itemObjectiveTypeId;
+        MatchesAnyItemObjective = matchesAnyItemObjective;
+        TargetKind = targetKind;
+        TargetSelection = targetSelection;
+        TargetId = targetId;
+        ForceStatusTypeIds = forceStatusTypeIds ?? [];
+        StatusMatchKind = statusMatchKind;
+        PrerequisiteForceStatusTypeId = prerequisiteForceStatusTypeId;
+        PrerequisiteWasLost = prerequisiteWasLost;
     }
 
     /// <summary>Gets the catalog identifier.</summary>
@@ -62,6 +82,36 @@ public sealed class PrivateObjectiveTypePlayRules
 
     /// <summary>Gets named territories for ControlNamedTerritories.</summary>
     public IReadOnlyList<Guid> TerritoryIds { get; }
+
+    /// <summary>Gets whether Build or Repair matches any structure type.</summary>
+    public bool MatchesAnyStructureType { get; }
+
+    /// <summary>Gets the item-objective type for relic criteria.</summary>
+    public Guid? ItemObjectiveTypeId { get; }
+
+    /// <summary>Gets whether relic criteria match any item objective.</summary>
+    public bool MatchesAnyItemObjective { get; }
+
+    /// <summary>Gets the opponent kind for DefeatOpponent.</summary>
+    public PrivateObjectiveTargetKind TargetKind { get; }
+
+    /// <summary>Gets how DefeatOpponent chooses its opponent.</summary>
+    public PrivateObjectiveTargetSelection TargetSelection { get; }
+
+    /// <summary>Gets the specific opponent identifier when selection is Specific.</summary>
+    public Guid? TargetId { get; }
+
+    /// <summary>Gets force-status catalog identifiers for ForceStatus criteria.</summary>
+    public IReadOnlyList<Guid> ForceStatusTypeIds { get; }
+
+    /// <summary>Gets how ForceStatus facts are matched.</summary>
+    public PrivateObjectiveStatusMatchKind StatusMatchKind { get; }
+
+    /// <summary>Gets the prior status for GainedAfter.</summary>
+    public Guid? PrerequisiteForceStatusTypeId { get; }
+
+    /// <summary>Gets whether GainedAfter waits for the prerequisite to have been lost.</summary>
+    public bool PrerequisiteWasLost { get; }
 
     /// <summary>Gets whether this catalog entry may be assigned to <paramref name="kind"/>.</summary>
     public bool Allows(PrivateObjectiveHolderKind kind)
@@ -95,7 +145,9 @@ public static class PrivateObjectiveRules
         IReadOnlyList<Guid> factionIds,
         IReadOnlyList<Guid> allyGroupIds,
         DateTimeOffset utcNow,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        IReadOnlyDictionary<Guid, Guid>? factionByPlayer = null,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null)
     {
         ArgumentNullException.ThrowIfNull(types);
         ArgumentNullException.ThrowIfNull(playerUserIds);
@@ -104,9 +156,42 @@ public static class PrivateObjectiveRules
         ArgumentNullException.ThrowIfNull(pickIndex);
 
         var assigned = new List<PrivateObjectiveAssignment>();
-        AssignGroup(assigned, types, PrivateObjectiveHolderKind.Player, playerUserIds, utcNow, pickIndex);
-        AssignGroup(assigned, types, PrivateObjectiveHolderKind.Faction, factionIds, utcNow, pickIndex);
-        AssignGroup(assigned, types, PrivateObjectiveHolderKind.AllyGroup, allyGroupIds, utcNow, pickIndex);
+        AssignGroup(
+            assigned,
+            types,
+            PrivateObjectiveHolderKind.Player,
+            playerUserIds,
+            utcNow,
+            pickIndex,
+            factionByPlayer,
+            allyGroupByFaction,
+            playerUserIds,
+            factionIds,
+            allyGroupIds);
+        AssignGroup(
+            assigned,
+            types,
+            PrivateObjectiveHolderKind.Faction,
+            factionIds,
+            utcNow,
+            pickIndex,
+            factionByPlayer,
+            allyGroupByFaction,
+            playerUserIds,
+            factionIds,
+            allyGroupIds);
+        AssignGroup(
+            assigned,
+            types,
+            PrivateObjectiveHolderKind.AllyGroup,
+            allyGroupIds,
+            utcNow,
+            pickIndex,
+            factionByPlayer,
+            allyGroupByFaction,
+            playerUserIds,
+            factionIds,
+            allyGroupIds);
         return assigned;
     }
 
@@ -119,7 +204,12 @@ public static class PrivateObjectiveRules
         IReadOnlyList<PrivateObjectiveTypePlayRules> types,
         Guid playerUserId,
         DateTimeOffset utcNow,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        IReadOnlyDictionary<Guid, Guid>? factionByPlayer = null,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null,
+        IReadOnlyList<Guid>? playerUserIds = null,
+        IReadOnlyList<Guid>? factionIds = null,
+        IReadOnlyList<Guid>? allyGroupIds = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(types);
@@ -139,7 +229,12 @@ public static class PrivateObjectiveRules
                 utcNow,
                 pickIndex,
                 out var next,
-                out _))
+                out _,
+                factionByPlayer,
+                allyGroupByFaction,
+                playerUserIds,
+                factionIds,
+                allyGroupIds))
         {
             return state;
         }
@@ -160,7 +255,12 @@ public static class PrivateObjectiveRules
         DateTimeOffset utcNow,
         Func<int, int> pickIndex,
         out CampaignPlayState next,
-        out DomainError? error)
+        out DomainError? error,
+        IReadOnlyDictionary<Guid, Guid>? factionByPlayer = null,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null,
+        IReadOnlyList<Guid>? playerUserIds = null,
+        IReadOnlyList<Guid>? factionIds = null,
+        IReadOnlyList<Guid>? allyGroupIds = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(types);
@@ -212,7 +312,17 @@ public static class PrivateObjectiveRules
             holderId,
             type.ScoringKind,
             PrivateObjectiveAssignmentStatus.Assigned,
-            utcNow);
+            utcNow,
+            resolvedTargetId: ResolveTarget(
+                type,
+                holderKind,
+                holderId,
+                pickIndex,
+                factionByPlayer,
+                allyGroupByFaction,
+                playerUserIds ?? [],
+                factionIds ?? [],
+                allyGroupIds ?? []));
         next = state.With(privateObjectives: [.. state.PrivateObjectives, assignment]);
         return true;
     }
@@ -341,7 +451,8 @@ public static class PrivateObjectiveRules
         IReadOnlyDictionary<Guid, Guid> factionByPlayer,
         IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
         IReadOnlySet<Guid> brokenAllyFactionIds,
-        DateTimeOffset utcNow)
+        DateTimeOffset utcNow,
+        PlayMap? map = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(types);
@@ -368,11 +479,12 @@ public static class PrivateObjectiveRules
             if (!IsAutomaticComplete(
                     assignment,
                     type,
+                    state,
                     territories,
-                    state.StructureDestructions,
                     factionByPlayer,
                     allyGroupByFaction,
-                    brokenAllyFactionIds))
+                    brokenAllyFactionIds,
+                    map))
             {
                 continue;
             }
@@ -514,7 +626,12 @@ public static class PrivateObjectiveRules
         PrivateObjectiveHolderKind holderKind,
         IReadOnlyList<Guid> holderIds,
         DateTimeOffset utcNow,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        IReadOnlyDictionary<Guid, Guid>? factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction,
+        IReadOnlyList<Guid> playerUserIds,
+        IReadOnlyList<Guid> factionIds,
+        IReadOnlyList<Guid> allyGroupIds)
     {
         var pool = PoolFor(types, holderKind);
         if (pool.Length == 0)
@@ -540,7 +657,17 @@ public static class PrivateObjectiveRules
                 holderId,
                 type.ScoringKind,
                 PrivateObjectiveAssignmentStatus.Assigned,
-                utcNow));
+                utcNow,
+                resolvedTargetId: ResolveTarget(
+                    type,
+                    holderKind,
+                    holderId,
+                    pickIndex,
+                    factionByPlayer,
+                    allyGroupByFaction,
+                    playerUserIds,
+                    factionIds,
+                    allyGroupIds)));
         }
     }
 
@@ -597,11 +724,12 @@ public static class PrivateObjectiveRules
     private static bool IsAutomaticComplete(
         PrivateObjectiveAssignment assignment,
         PrivateObjectiveTypePlayRules type,
+        CampaignPlayState state,
         IReadOnlyList<PrivateObjectiveTerritory> territories,
-        IReadOnlyList<StructureDestructionFact> destructions,
         IReadOnlyDictionary<Guid, Guid> factionByPlayer,
         IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
-        IReadOnlySet<Guid> brokenAllyFactionIds)
+        IReadOnlySet<Guid> brokenAllyFactionIds,
+        PlayMap? map)
     {
         var factionIds = HolderFactions(assignment, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds);
         if (factionIds.Count == 0 && assignment.HolderKind != PrivateObjectiveHolderKind.Player)
@@ -611,6 +739,7 @@ public static class PrivateObjectiveRules
 
         var owned = territories.Where(territory =>
             territory.OwnerFactionId is { } owner && factionIds.Contains(owner)).ToArray();
+        var holderForces = HolderForces(assignment, state.Forces, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds);
         return type.AutomaticKind switch
         {
             PrivateObjectiveAutomaticKind.ControlTerritoryCount => owned.Length >= type.RequiredCount,
@@ -618,19 +747,384 @@ public static class PrivateObjectiveRules
                 type.TerritoryIds.Count(id => owned.Any(territory => territory.TerritoryId == id)) >= type.RequiredCount,
             PrivateObjectiveAutomaticKind.ControlStructureType =>
                 owned.Count(territory =>
-                    territory.StructureTypeId == type.StructureTypeId
+                    StructureMatches(type, territory.StructureTypeId)
                     && territory.StructureCondition != StructureCondition.Destroyed) >= type.RequiredCount,
             PrivateObjectiveAutomaticKind.PillageStructureType =>
                 owned.Count(territory =>
-                    territory.StructureTypeId == type.StructureTypeId
+                    StructureMatches(type, territory.StructureTypeId)
                     && territory.StructureCondition == StructureCondition.Pillaged) >= type.RequiredCount,
             PrivateObjectiveAutomaticKind.DestroyStructureType =>
-                destructions.Count(fact =>
-                    fact.StructureTypeId == type.StructureTypeId
+                state.StructureDestructions.Count(fact =>
+                    StructureMatches(type, fact.StructureTypeId)
                     && AttributionMatches(assignment, fact, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds))
+                    >= type.RequiredCount,
+            PrivateObjectiveAutomaticKind.BattleWinCount =>
+                CountBattles(state, holderForces, won: true) >= type.RequiredCount,
+            PrivateObjectiveAutomaticKind.BattleLossCount =>
+                CountBattles(state, holderForces, won: false) >= type.RequiredCount,
+            PrivateObjectiveAutomaticKind.PlayerRetreatCount =>
+                state.Retreats.Count(retreat =>
+                    !retreat.IsDefault
+                    && !retreat.IsStaffCorrection
+                    && holderForces.Any(force => force.Id == retreat.ForceId)) >= type.RequiredCount,
+            PrivateObjectiveAutomaticKind.AdjacentToRelic =>
+                RelicAdjacent(type, state, owned, map, holderForces),
+            PrivateObjectiveAutomaticKind.BuildStructureType =>
+                CountStructureWork(assignment, type, state, ActionKind.Build, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)
+                    >= type.RequiredCount,
+            PrivateObjectiveAutomaticKind.RepairStructureType =>
+                CountStructureWork(assignment, type, state, ActionKind.Repair, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)
+                    >= type.RequiredCount,
+            PrivateObjectiveAutomaticKind.ControlRelic =>
+                RelicControlled(type, state, holderForces),
+            PrivateObjectiveAutomaticKind.DefeatOpponent =>
+                CountDefeats(assignment, type, state, holderForces, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)
+                    >= type.RequiredCount,
+            PrivateObjectiveAutomaticKind.ForceStatus =>
+                CountStatusMatches(assignment, type, state, holderForces, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)
                     >= type.RequiredCount,
             _ => false,
         };
+    }
+
+    private static List<CampaignForce> HolderForces(
+        PrivateObjectiveAssignment assignment,
+        IReadOnlyList<CampaignForce> forces,
+        IReadOnlyDictionary<Guid, Guid> factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
+        IReadOnlySet<Guid> brokenAllyFactionIds)
+    {
+        return assignment.HolderKind switch
+        {
+            PrivateObjectiveHolderKind.Player => [.. forces.Where(force => force.ControllerUserId == assignment.HolderId)],
+            PrivateObjectiveHolderKind.Faction => [.. forces.Where(force => force.FactionId == assignment.HolderId)],
+            PrivateObjectiveHolderKind.AllyGroup =>
+            [
+                .. forces.Where(force =>
+                    allyGroupByFaction.GetValueOrDefault(force.FactionId) == assignment.HolderId
+                    && !brokenAllyFactionIds.Contains(force.FactionId)),
+            ],
+            _ => [],
+        };
+    }
+
+    private static bool StructureMatches(PrivateObjectiveTypePlayRules type, Guid? structureTypeId)
+    {
+        if (type.MatchesAnyStructureType)
+        {
+            return structureTypeId is not null;
+        }
+
+        return type.StructureTypeId is { } id && structureTypeId == id;
+    }
+
+    private static int CountBattles(CampaignPlayState state, IReadOnlyList<CampaignForce> holderForces, bool won)
+    {
+        var forceIds = holderForces.Select(static force => force.Id).ToHashSet();
+        return state.Battles.Count(battle =>
+            battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved
+            && !battle.IsDraw
+            && !battle.IsNoContest
+            && battle.WinnerForceId is { } winner
+            && (won ? forceIds.Contains(winner) : battle.ParticipantForceIds.Any(forceIds.Contains) && !forceIds.Contains(winner)));
+    }
+
+    private static int CountStructureWork(
+        PrivateObjectiveAssignment assignment,
+        PrivateObjectiveTypePlayRules type,
+        CampaignPlayState state,
+        ActionKind kind,
+        IReadOnlyDictionary<Guid, Guid> factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
+        IReadOnlySet<Guid> brokenAllyFactionIds)
+    {
+        return state.StructureWorks.Count(fact =>
+            fact.Kind == kind
+            && StructureMatches(type, fact.StructureTypeId)
+            && AttributionMatchesWork(assignment, fact, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds));
+    }
+
+    private static bool RelicMatches(PrivateObjectiveTypePlayRules type, CampaignItemObjective item)
+    {
+        if (item.IsDestroyed)
+        {
+            return false;
+        }
+
+        if (type.MatchesAnyItemObjective || type.ItemObjectiveTypeId is null)
+        {
+            return true;
+        }
+
+        return item.TypeId == type.ItemObjectiveTypeId;
+    }
+
+    private static bool RelicControlled(
+        PrivateObjectiveTypePlayRules type,
+        CampaignPlayState state,
+        IReadOnlyList<CampaignForce> holderForces)
+    {
+        var forceIds = holderForces.Select(static force => force.Id).ToHashSet();
+        return state.ItemObjectives.Any(item =>
+            RelicMatches(type, item) && item.PossessorForceId is { } possessor && forceIds.Contains(possessor));
+    }
+
+    private static bool RelicAdjacent(
+        PrivateObjectiveTypePlayRules type,
+        CampaignPlayState state,
+        IReadOnlyList<PrivateObjectiveTerritory> owned,
+        PlayMap? map,
+        IReadOnlyList<CampaignForce> holderForces)
+    {
+        var occupied = holderForces.Select(static force => force.TerritoryId).ToHashSet();
+        occupied.UnionWith(owned.Select(static territory => territory.TerritoryId));
+        foreach (var item in state.ItemObjectives.Where(item => RelicMatches(type, item)))
+        {
+            Guid? relicTerritory = item.PossessorForceId is { } possessor
+                && state.Forces.FirstOrDefault(force => force.Id == possessor) is { } carrier
+                    ? carrier.TerritoryId
+                    : item.TerritoryId;
+            if (relicTerritory is not { } territoryId)
+            {
+                continue;
+            }
+
+            if (occupied.Contains(territoryId))
+            {
+                return true;
+            }
+
+            if (map is not null && occupied.Any(id => map.AreAdjacent(id, territoryId)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int CountDefeats(
+        PrivateObjectiveAssignment assignment,
+        PrivateObjectiveTypePlayRules type,
+        CampaignPlayState state,
+        IReadOnlyList<CampaignForce> holderForces,
+        IReadOnlyDictionary<Guid, Guid> factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
+        IReadOnlySet<Guid> brokenAllyFactionIds)
+    {
+        var forceIds = holderForces.Select(static force => force.Id).ToHashSet();
+        var count = 0;
+        foreach (var battle in state.Battles.Where(battle =>
+                     battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved
+                     && !battle.IsDraw
+                     && !battle.IsNoContest
+                     && battle.WinnerForceId is { } winner
+                     && forceIds.Contains(winner)))
+        {
+            if (battle.ParticipantForceIds.Any(id =>
+                    !forceIds.Contains(id)
+                    && OpponentMatches(
+                        assignment,
+                        type,
+                        state.Forces.FirstOrDefault(force => force.Id == id),
+                        factionByPlayer,
+                        allyGroupByFaction,
+                        brokenAllyFactionIds)))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static bool OpponentMatches(
+        PrivateObjectiveAssignment assignment,
+        PrivateObjectiveTypePlayRules type,
+        CampaignForce? opponent,
+        IReadOnlyDictionary<Guid, Guid> factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
+        IReadOnlySet<Guid> brokenAllyFactionIds)
+    {
+        if (opponent is null)
+        {
+            return false;
+        }
+
+        var targetId = type.TargetSelection == PrivateObjectiveTargetSelection.Random
+            ? assignment.ResolvedTargetId
+            : type.TargetId;
+        if (type.TargetSelection == PrivateObjectiveTargetSelection.Any)
+        {
+            return type.TargetKind switch
+            {
+                PrivateObjectiveTargetKind.Player => true,
+                PrivateObjectiveTargetKind.Faction => true,
+                PrivateObjectiveTargetKind.AllyGroup =>
+                    allyGroupByFaction.GetValueOrDefault(opponent.FactionId) is not null
+                    && !brokenAllyFactionIds.Contains(opponent.FactionId),
+                _ => true,
+            };
+        }
+
+        if (targetId is not { } id)
+        {
+            return false;
+        }
+
+        return type.TargetKind switch
+        {
+            PrivateObjectiveTargetKind.Player => opponent.ControllerUserId == id,
+            PrivateObjectiveTargetKind.Faction => opponent.FactionId == id,
+            PrivateObjectiveTargetKind.AllyGroup =>
+                allyGroupByFaction.GetValueOrDefault(opponent.FactionId) == id
+                && !brokenAllyFactionIds.Contains(opponent.FactionId),
+            _ => false,
+        };
+    }
+
+    private static int CountStatusMatches(
+        PrivateObjectiveAssignment assignment,
+        PrivateObjectiveTypePlayRules type,
+        CampaignPlayState state,
+        IReadOnlyList<CampaignForce> holderForces,
+        IReadOnlyDictionary<Guid, Guid> factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
+        IReadOnlySet<Guid> brokenAllyFactionIds)
+    {
+        var holderForceIds = holderForces.Select(static force => force.Id).ToHashSet();
+        var statusIds = type.ForceStatusTypeIds.ToHashSet();
+        if (statusIds.Count == 0)
+        {
+            return 0;
+        }
+
+        var facts = state.ForceStatusChanges.OrderBy(static item => item.OccurredUtc).ToArray();
+        return type.StatusMatchKind switch
+        {
+            PrivateObjectiveStatusMatchKind.Gained => facts.Count(fact =>
+                holderForceIds.Contains(fact.ForceId)
+                && fact.StatusTypeId is { } status
+                && statusIds.Contains(status)),
+            PrivateObjectiveStatusMatchKind.Caused => facts.Count(fact =>
+                !holderForceIds.Contains(fact.ForceId)
+                && ActorMatches(assignment, fact, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)
+                && fact.StatusTypeId is { } status
+                && statusIds.Contains(status)),
+            PrivateObjectiveStatusMatchKind.GainedAfter => CountGainedAfter(facts, holderForceIds, type, statusIds),
+            _ => 0,
+        };
+    }
+
+    private static int CountGainedAfter(
+        IReadOnlyList<ForceStatusChangeFact> facts,
+        IReadOnlySet<Guid> holderForceIds,
+        PrivateObjectiveTypePlayRules type,
+        HashSet<Guid> statusIds)
+    {
+        var count = 0;
+        foreach (var forceId in holderForceIds)
+        {
+            var seenPrerequisite = false;
+            foreach (var fact in facts.Where(item => item.ForceId == forceId))
+            {
+                if (type.PrerequisiteForceStatusTypeId is { } prerequisite)
+                {
+                    if (type.PrerequisiteWasLost)
+                    {
+                        if (fact.PreviousStatusTypeId == prerequisite && fact.StatusTypeId != prerequisite)
+                        {
+                            seenPrerequisite = true;
+                        }
+                    }
+                    else if (fact.StatusTypeId == prerequisite)
+                    {
+                        seenPrerequisite = true;
+                    }
+                }
+
+                if (seenPrerequisite
+                    && fact.StatusTypeId is { } status
+                    && statusIds.Contains(status)
+                    && fact.StatusTypeId != type.PrerequisiteForceStatusTypeId)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    private static bool ActorMatches(
+        PrivateObjectiveAssignment assignment,
+        ForceStatusChangeFact fact,
+        IReadOnlyDictionary<Guid, Guid> factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
+        IReadOnlySet<Guid> brokenAllyFactionIds)
+    {
+        return assignment.HolderKind switch
+        {
+            PrivateObjectiveHolderKind.Player => fact.ActorUserId == assignment.HolderId,
+            PrivateObjectiveHolderKind.Faction => fact.ActorFactionId == assignment.HolderId,
+            PrivateObjectiveHolderKind.AllyGroup =>
+                fact.ActorFactionId is { } faction
+                && allyGroupByFaction.GetValueOrDefault(faction) == assignment.HolderId
+                && !brokenAllyFactionIds.Contains(faction),
+            _ => false,
+        };
+    }
+
+    private static Guid? ResolveTarget(
+        PrivateObjectiveTypePlayRules type,
+        PrivateObjectiveHolderKind holderKind,
+        Guid holderId,
+        Func<int, int> pickIndex,
+        IReadOnlyDictionary<Guid, Guid>? factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction,
+        IReadOnlyList<Guid> playerUserIds,
+        IReadOnlyList<Guid> factionIds,
+        IReadOnlyList<Guid> allyGroupIds)
+    {
+        if (type.AutomaticKind != PrivateObjectiveAutomaticKind.DefeatOpponent)
+        {
+            return type.TargetId;
+        }
+
+        if (type.TargetSelection == PrivateObjectiveTargetSelection.Specific)
+        {
+            return type.TargetId;
+        }
+
+        if (type.TargetSelection != PrivateObjectiveTargetSelection.Random)
+        {
+            return null;
+        }
+
+        var excludedPlayer = holderKind == PrivateObjectiveHolderKind.Player ? holderId : (Guid?)null;
+        var excludedFaction = holderKind == PrivateObjectiveHolderKind.Faction
+            ? holderId
+            : holderKind == PrivateObjectiveHolderKind.Player && factionByPlayer is not null
+                ? factionByPlayer.GetValueOrDefault(holderId)
+                : (Guid?)null;
+        var excludedAlly = holderKind == PrivateObjectiveHolderKind.AllyGroup
+            ? holderId
+            : excludedFaction is { } faction && allyGroupByFaction is not null
+                ? allyGroupByFaction.GetValueOrDefault(faction)
+                : null;
+        var pool = type.TargetKind switch
+        {
+            PrivateObjectiveTargetKind.Player => playerUserIds.Where(id => id != excludedPlayer).ToArray(),
+            PrivateObjectiveTargetKind.Faction => factionIds.Where(id => id != excludedFaction).ToArray(),
+            PrivateObjectiveTargetKind.AllyGroup => allyGroupIds.Where(id => id != excludedAlly).ToArray(),
+            _ => [],
+        };
+        if (pool.Length == 0)
+        {
+            return null;
+        }
+
+        return pool[pickIndex(pool.Length)];
     }
 
     private static HashSet<Guid> HolderFactions(
@@ -658,6 +1152,24 @@ public static class PrivateObjectiveRules
     private static bool AttributionMatches(
         PrivateObjectiveAssignment assignment,
         StructureDestructionFact fact,
+        IReadOnlyDictionary<Guid, Guid> factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
+        IReadOnlySet<Guid> brokenAllyFactionIds)
+    {
+        return assignment.HolderKind switch
+        {
+            PrivateObjectiveHolderKind.Player => fact.ActorUserId == assignment.HolderId,
+            PrivateObjectiveHolderKind.Faction => fact.ActorFactionId == assignment.HolderId,
+            PrivateObjectiveHolderKind.AllyGroup =>
+                allyGroupByFaction.GetValueOrDefault(fact.ActorFactionId) == assignment.HolderId
+                && !brokenAllyFactionIds.Contains(fact.ActorFactionId),
+            _ => false,
+        };
+    }
+
+    private static bool AttributionMatchesWork(
+        PrivateObjectiveAssignment assignment,
+        StructureWorkFact fact,
         IReadOnlyDictionary<Guid, Guid> factionByPlayer,
         IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
         IReadOnlySet<Guid> brokenAllyFactionIds)

@@ -374,6 +374,7 @@ public sealed class UploadCampaignMapHandler
     private readonly ICampaignMapProcessor _processor;
     private readonly ICampaignMapStorage _maps;
     private readonly IClock _clock;
+    private readonly ICampaignPresetStore? _presets;
 
     /// <summary>
     /// Initializes a new handler.
@@ -382,11 +383,13 @@ public sealed class UploadCampaignMapHandler
     /// <param name="processor">The map processor.</param>
     /// <param name="maps">The map storage.</param>
     /// <param name="clock">The clock.</param>
+    /// <param name="presets">The campaign-preset store used to keep shared maps.</param>
     public UploadCampaignMapHandler(
         ICampaignStore campaigns,
         ICampaignMapProcessor processor,
         ICampaignMapStorage maps,
-        IClock clock)
+        IClock clock,
+        ICampaignPresetStore? presets = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(processor);
@@ -396,6 +399,7 @@ public sealed class UploadCampaignMapHandler
         _processor = processor;
         _maps = maps;
         _clock = clock;
+        _presets = presets;
     }
 
     /// <summary>
@@ -458,7 +462,8 @@ public sealed class UploadCampaignMapHandler
                 _maps.DeleteAsync,
                 previousKey,
                 command.CampaignId,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                _presets).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));

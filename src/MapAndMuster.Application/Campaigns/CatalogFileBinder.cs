@@ -226,6 +226,16 @@ internal static class CatalogFileBinder
                 RequiredCount = type.RequiredCount,
                 StructureTypeId = type.StructureTypeId,
                 TerritoryIds = type.TerritoryIds,
+                MatchesAnyStructureType = type.MatchesAnyStructureType,
+                ItemObjectiveTypeId = type.ItemObjectiveTypeId,
+                MatchesAnyItemObjective = type.MatchesAnyItemObjective,
+                TargetKind = type.TargetKind.ToString(),
+                TargetSelection = type.TargetSelection.ToString(),
+                TargetId = type.TargetId,
+                ForceStatusTypeIds = type.ForceStatusTypeIds,
+                StatusMatchKind = type.StatusMatchKind.ToString(),
+                PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
+                PrerequisiteWasLost = type.PrerequisiteWasLost,
             }),
         ];
     }

@@ -404,5 +404,6 @@ Use `ASPNETCORE_ENVIRONMENT=Development` or supply Production/Staging variables 
 It does not deploy.
 
 `.github/workflows/nightly.yml` runs around 02:00 America/Indiana/Indianapolis (06:00 UTC
-during EDT) and on `workflow_dispatch`. It reuses `ci.yml` and adds NuGet/npm audits. It
-does not deploy.
+during EDT) and on `workflow_dispatch`. It reuses `ci.yml` and adds NuGet/npm audits.
+`npm audit` retries registry advisory timeouts; high and critical findings still fail
+the job. It does not deploy.

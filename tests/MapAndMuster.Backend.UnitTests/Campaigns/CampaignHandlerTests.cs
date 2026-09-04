@@ -66,6 +66,65 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task CreateMintsNewAllyGroupAndFactionIds()
+    {
+        var store = new FakeCampaignStore();
+        var handler = new CreateCampaignHandler(store, new FakeClock(), new FakeSecretHasher());
+        var allyId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01");
+        var factionId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb01");
+        var command = ValidCreateCommand();
+        command = new CreateCampaignCommand
+        {
+            UserId = command.UserId,
+            Name = command.Name,
+            Description = command.Description,
+            PlayerCount = command.PlayerCount,
+            IsPrivate = command.IsPrivate,
+            IsPubliclyViewable = command.IsPubliclyViewable,
+            CreatorIsParticipant = command.CreatorIsParticipant,
+            Factions =
+            [
+                new FactionInput { Id = factionId, Name = "North", Color = "#2563EB", AllyGroupId = allyId },
+                new FactionInput { Name = "South", Color = "#DC2626", AllyGroupId = allyId },
+                new FactionInput { Name = "East", Color = "#CA8A04" },
+            ],
+            AllyGroups =
+            [
+                new AllyGroupInput { Id = allyId, Name = "Pact", Color = "#4B5563" },
+            ],
+            Links = command.Links,
+            Schedule = command.Schedule,
+            PrivateObjectiveTypes =
+            [
+                new PrivateObjectiveTypeInput
+                {
+                    Name = "Defeat the north",
+                    CampaignPoints = 3,
+                    AllowedHolderKinds = ["Player"],
+                    ScoringKind = "Automatic",
+                    AutomaticKind = "DefeatOpponent",
+                    TargetKind = "Faction",
+                    TargetSelection = "Specific",
+                    TargetId = factionId,
+                },
+            ],
+        };
+
+        var result = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Message);
+        Assert.NotNull(store.Added);
+        var storedAlly = Assert.Single(store.Added.AllyGroups);
+        Assert.NotEqual(allyId, storedAlly.Id);
+        Assert.Equal("Pact", storedAlly.Name);
+        Assert.All(store.Added.Factions, faction => Assert.NotEqual(factionId, faction.Id));
+        var north = Assert.Single(store.Added.Factions, faction => faction.Name == "North");
+        Assert.Equal("Pact", north.AllyGroupName);
+        var objective = Assert.Single(store.Added.PrivateObjectiveTypes);
+        Assert.Equal(north.Id, objective.TargetId);
+    }
+
+    [Fact]
     public async Task GetReturnsNotFoundForNonMembers()
     {
         var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
@@ -1482,6 +1541,54 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task UpdateKeepsALogoStillReferencedByAPreset()
+    {
+        var campaign = WithStructures(
+            StoredCampaignFor(UserId),
+            [
+                new StoredStructureType
+                {
+                    Id = TownStructureId,
+                    Name = "Town",
+                    BuiltinSymbol = "Town",
+                    ImageStorageKey = "structures/keep.png",
+                    IsBuildable = false,
+                    IsPillageable = true,
+                    IsDestructible = true,
+                    Missions = [],
+                },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var assets = new FakeAssetStorage();
+        var presets = new FakePresetStore { UsedStorageKeys = ["structures/keep.png"] };
+        var handler = new UpdateCampaignHandler(store, new FakeClock(), new FakeSecretHasher(), assets, presets);
+
+        var result = await handler.HandleAsync(
+            new UpdateCampaignCommand
+            {
+                UserId = UserId,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+                Name = campaign.Name,
+                Description = campaign.Description,
+                PlayerCount = campaign.PlayerSlotCount,
+                IsPrivate = false,
+                IsPubliclyViewable = true,
+                CreatorIsParticipant = true,
+                Factions =
+                [
+                    new FactionInput { Id = NorthFactionId, Name = "North", Color = "#2563EB" },
+                    new FactionInput { Id = SouthFactionId, Name = "South", Color = "#DC2626" },
+                ],
+                Schedule = ValidSchedule(),
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.DoesNotContain("structures/keep.png", assets.DeletedKeys);
+    }
+
+    [Fact]
     public async Task UploadMapDeletesThePreviousMapFile()
     {
         var campaign = StoredCampaignFor(UserId);
@@ -2501,6 +2608,39 @@ public sealed class CampaignHandlerTests
                 Content = [1, 2, 3],
                 FileExtension = ".png",
             });
+        }
+    }
+
+    private sealed class FakePresetStore : ICampaignPresetStore
+    {
+        public HashSet<string> UsedStorageKeys { get; init; } = new(StringComparer.Ordinal);
+
+        public Task<IReadOnlyList<CampaignPresetListItem>> ListAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<CampaignPresetListItem>>([]);
+        }
+
+        public Task<StoredCampaign?> FindByIdAsync(Guid presetId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<StoredCampaign?>(null);
+        }
+
+        public Task<CampaignPresetListItem> UpsertFromCampaignAsync(
+            string name,
+            StoredCampaign campaign,
+            Guid createdByUserId,
+            DateTimeOffset utcNow,
+            CancellationToken cancellationToken)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<bool> IsStorageKeyInUseAsync(
+            string storageKey,
+            Guid? excludingPresetId,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(UsedStorageKeys.Contains(storageKey));
         }
     }
 }

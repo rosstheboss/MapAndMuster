@@ -276,6 +276,16 @@ export interface CampaignPrivateObjectiveType {
   requiredCount?: number;
   structureTypeId?: string | null;
   territoryIds?: string[];
+  matchesAnyStructureType?: boolean;
+  itemObjectiveTypeId?: string | null;
+  matchesAnyItemObjective?: boolean;
+  targetKind?: string | null;
+  targetSelection?: string | null;
+  targetId?: string | null;
+  forceStatusTypeIds?: string[];
+  statusMatchKind?: string | null;
+  prerequisiteForceStatusTypeId?: string | null;
+  prerequisiteWasLost?: boolean;
 }
 
 export interface PrivateObjectiveAssignment {
@@ -531,6 +541,16 @@ export interface SavePrivateObjectiveTypePayload {
   requiredCount?: number;
   structureTypeId?: string | null;
   territoryIds?: string[];
+  matchesAnyStructureType?: boolean;
+  itemObjectiveTypeId?: string | null;
+  matchesAnyItemObjective?: boolean;
+  targetKind?: string | null;
+  targetSelection?: string | null;
+  targetId?: string | null;
+  forceStatusTypeIds?: string[];
+  statusMatchKind?: string | null;
+  prerequisiteForceStatusTypeId?: string | null;
+  prerequisiteWasLost?: boolean;
 }
 
 export interface SaveMissionPayload {

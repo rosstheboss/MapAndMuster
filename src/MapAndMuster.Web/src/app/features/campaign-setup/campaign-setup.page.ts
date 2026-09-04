@@ -216,7 +216,17 @@ type PrivateObjectiveGroup = FormGroup<{
   automaticKind: FormControl<string>;
   requiredCount: FormControl<number>;
   structureTypeId: FormControl<string>;
+  matchesAnyStructureType: FormControl<boolean>;
   territoryIds: FormControl<string>;
+  itemObjectiveTypeId: FormControl<string>;
+  matchesAnyItemObjective: FormControl<boolean>;
+  targetKind: FormControl<string>;
+  targetSelection: FormControl<string>;
+  targetId: FormControl<string>;
+  forceStatusTypeIds: FormControl<string[]>;
+  statusMatchKind: FormControl<string>;
+  prerequisiteForceStatusTypeId: FormControl<string>;
+  prerequisiteWasLost: FormControl<boolean>;
 }>;
 type PhaseGroup = FormGroup<{
   kind: FormControl<string>;
@@ -336,6 +346,9 @@ export class CampaignSetupPage {
   private readonly storedFlagImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedMissionFiles = signal<ReadonlySet<string>>(new Set());
   private pendingPresetMapId: string | null = null;
+  private pendingPresetFactionIds = new Map<string, string>();
+  private pendingPresetStructureIds = new Map<string, string>();
+  private pendingPresetItemIds = new Map<string, string>();
   private presetsLoaded = false;
   private hydrating = false;
   private loadedDetail: CampaignDetail | null = null;
@@ -926,15 +939,20 @@ export class CampaignSetupPage {
         this.form.controls.name.setValue(preset.name);
       }
 
-      this.applyCatalogFromDetail(preset);
-      this.rememberCatalogFilesFrom(preset);
       if (this.isEdit() && this.campaignId()) {
+        this.applyCatalogFromDetail(preset);
+        this.rememberCatalogFilesFrom(preset);
         const detail = await this.campaignsApi.applyPresetMap(this.campaignId()!, presetId, this.revision);
         this.revision = detail.revision;
         this.hasExistingMap.set(detail.hasMap);
         this.setStoredMapPreview(detail.id, detail.revision, detail.hasMap);
       } else {
         this.pendingPresetMapId = presetId;
+        this.pendingPresetFactionIds.clear();
+        this.pendingPresetStructureIds.clear();
+        this.pendingPresetItemIds.clear();
+        this.applyCatalogFromDetail(preset);
+        this.rememberCatalogFilesFrom(preset);
         this.bumpPendingUploads();
       }
     } catch (error: unknown) {
@@ -958,6 +976,12 @@ export class CampaignSetupPage {
     const missionIds = this.catalogIdByName(
       this.missions.controls.map((item) => ({ id: item.controls.id.value, name: item.controls.name.value })),
     );
+    const allyIds = this.catalogIdByName(
+      this.allyGroups.controls.map((item) => ({ id: item.controls.id.value, name: item.controls.name.value })),
+    );
+    const forceStatusIds = this.catalogIdByName(
+      this.forceStatuses.controls.map((item) => ({ id: item.controls.id.value, name: item.controls.name.value })),
+    );
     this.replaceArray(
       this.specialRules,
       (campaign.specialRules ?? []).map((rule) =>
@@ -967,31 +991,50 @@ export class CampaignSetupPage {
     this.replaceArray(
       this.forceStatuses,
       (campaign.forceStatuses ?? []).map((status) =>
-        this.createForceStatusGroup(status.id, status.name, status.effects, status.enableTrigger, status.clearTrigger),
+        this.createForceStatusGroup(
+          forceStatusIds.get(status.name.trim().toLowerCase()) ?? this.newId(),
+          status.name,
+          status.effects,
+          status.enableTrigger,
+          status.clearTrigger,
+        ),
       ),
     );
     this.bumpCatalog();
     this.replaceArray(
-      this.factions,
-      campaign.factions.map((faction) =>
-        this.createFactionGroup(faction.name, this.allyGroupIdFor(campaign, faction), faction.subfactions, {
-          id: factionIds.get(faction.name.trim().toLowerCase()) ?? faction.id,
-          color: faction.color,
-          requiresSubfaction: faction.requiresSubfaction,
-          appearances: (faction.subfactionAppearances ?? []).map((appearance) => ({
-            ...appearance,
-            flagSource: appearance.hasFlagImage ? 'image' : appearance.flagSource,
-          })),
-          hasFlagImage: faction.hasFlagImage,
-          tintFlagImage: faction.tintFlagImage,
-          specialRuleIds: faction.specialRuleIds ?? [],
-          subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
-        }),
+      this.allyGroups,
+      campaign.allyGroups.map((group) =>
+        this.createAllyGroup(allyIds.get(group.name.trim().toLowerCase()) ?? this.newId(), group.name, group.color),
       ),
     );
+    const appliedFactionIds = new Map<string, string>();
     this.replaceArray(
-      this.allyGroups,
-      campaign.allyGroups.map((group) => this.createAllyGroup(group.id, group.name, group.color)),
+      this.factions,
+      campaign.factions.map((faction) => {
+        const appliedId = factionIds.get(faction.name.trim().toLowerCase()) ?? this.newId();
+        appliedFactionIds.set(faction.id, appliedId);
+        if (this.pendingPresetMapId) {
+          this.pendingPresetFactionIds.set(appliedId, faction.id);
+        }
+        return this.createFactionGroup(
+          faction.name,
+          this.allyGroupIdFor({ allyGroups: this.allyGroups.getRawValue() }, faction),
+          faction.subfactions,
+          {
+            id: appliedId,
+            color: faction.color,
+            requiresSubfaction: faction.requiresSubfaction,
+            appearances: (faction.subfactionAppearances ?? []).map((appearance) => ({
+              ...appearance,
+              flagSource: appearance.hasFlagImage ? 'image' : appearance.flagSource,
+            })),
+            hasFlagImage: faction.hasFlagImage,
+            tintFlagImage: faction.tintFlagImage,
+            specialRuleIds: faction.specialRuleIds ?? [],
+            subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
+          },
+        );
+      }),
     );
     this.replaceArray(
       this.terrainTypes,
@@ -1004,31 +1047,78 @@ export class CampaignSetupPage {
           )
         : this.createDefaultTerrainGroups(),
     );
+    const appliedStructureIds = new Map<string, string>();
     this.replaceArray(
       this.structureTypes,
-      campaign.structureTypes.map((type) =>
-        this.createStructureGroupFromDetail({
+      campaign.structureTypes.map((type) => {
+        const appliedId = structureIds.get(type.name.trim().toLowerCase()) ?? type.id;
+        appliedStructureIds.set(type.id, appliedId);
+        if (this.pendingPresetMapId) {
+          this.pendingPresetStructureIds.set(appliedId, type.id);
+        }
+        return this.createStructureGroupFromDetail({
           ...type,
-          id: structureIds.get(type.name.trim().toLowerCase()) ?? type.id,
-        }),
-      ),
+          id: appliedId,
+        });
+      }),
     );
+    const appliedItemIds = new Map<string, string>();
     this.replaceArray(
       this.itemObjectiveTypes,
-      (campaign.itemObjectiveTypes ?? []).map((item) =>
-        this.createItemObjectiveGroupFromDetail({
+      (campaign.itemObjectiveTypes ?? []).map((item) => {
+        const appliedId = itemIds.get(item.name.trim().toLowerCase()) ?? item.id;
+        appliedItemIds.set(item.id, appliedId);
+        if (this.pendingPresetMapId) {
+          this.pendingPresetItemIds.set(appliedId, item.id);
+        }
+        return this.createItemObjectiveGroupFromDetail({
           ...item,
-          id: itemIds.get(item.name.trim().toLowerCase()) ?? item.id,
-        }),
-      ),
+          id: appliedId,
+        });
+      }),
     );
     this.replaceArray(
       this.publicObjectiveTypes,
       (campaign.publicObjectiveTypes ?? []).map((item) => this.createPublicObjectiveGroup(item, item.id)),
     );
+    const appliedForceStatusIds = new Map<string, string>();
+    for (const status of campaign.forceStatuses ?? []) {
+      const appliedId =
+        this.forceStatuses.controls.find(
+          (item) => item.controls.name.value.trim().toLowerCase() === status.name.trim().toLowerCase(),
+        )?.controls.id.value ?? status.id;
+      appliedForceStatusIds.set(status.id, appliedId);
+    }
     this.replaceArray(
       this.privateObjectiveTypes,
-      (campaign.privateObjectiveTypes ?? []).map((item) => this.createPrivateObjectiveGroup(item, item.id)),
+      (campaign.privateObjectiveTypes ?? []).map((item) =>
+        this.createPrivateObjectiveGroup(
+          {
+            ...item,
+            structureTypeId: this.remapCatalogId(item.structureTypeId, appliedStructureIds),
+            itemObjectiveTypeId: this.remapCatalogId(item.itemObjectiveTypeId, appliedItemIds),
+            targetId:
+              item.targetKind === 'Faction'
+                ? this.remapCatalogId(item.targetId, appliedFactionIds)
+                : item.targetKind === 'AllyGroup'
+                  ? (this.allyGroups.controls.find(
+                      (group) =>
+                        group.controls.name.value.trim().toLowerCase() ===
+                        (campaign.allyGroups
+                          .find((source) => source.id === item.targetId)
+                          ?.name.trim()
+                          .toLowerCase() ?? ''),
+                    )?.controls.id.value ?? item.targetId)
+                  : item.targetId,
+            forceStatusTypeIds: (item.forceStatusTypeIds ?? []).map((id) => appliedForceStatusIds.get(id) ?? id),
+            prerequisiteForceStatusTypeId: this.remapCatalogId(
+              item.prerequisiteForceStatusTypeId,
+              appliedForceStatusIds,
+            ),
+          },
+          item.id,
+        ),
+      ),
     );
     this.replaceArray(
       this.missions,
@@ -1417,6 +1507,14 @@ export class CampaignSetupPage {
     this.privateObjectiveTypes.removeAt(index);
   }
 
+  protected togglePrivateObjectiveStatus(item: PrivateObjectiveGroup, statusId: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const current = item.controls.forceStatusTypeIds.value;
+    item.controls.forceStatusTypeIds.setValue(
+      checked ? [...current.filter((id) => id !== statusId), statusId] : current.filter((id) => id !== statusId),
+    );
+  }
+
   protected addItemChoice(item: ItemObjectiveGroup): void {
     if (item.controls.choices.length >= 10) {
       return;
@@ -1759,22 +1857,26 @@ export class CampaignSetupPage {
   }
 
   protected factionFlagUrl(flagKey: string): string | null {
-    const campaignId = this.campaignId();
-    if (!campaignId || !this.hasStoredFlagImage(flagKey)) {
+    if (!this.hasStoredFlagImage(flagKey)) {
       return null;
     }
 
     const separator = flagKey.indexOf('::');
-    if (separator >= 0) {
-      return this.campaignsApi.flagImageUrl(
-        campaignId,
-        flagKey.slice(0, separator),
-        this.revision,
-        flagKey.slice(separator + 2),
-      );
+    const formFactionId = separator >= 0 ? flagKey.slice(0, separator) : flagKey;
+    const subfaction = separator >= 0 ? flagKey.slice(separator + 2) : null;
+    if (this.pendingPresetMapId) {
+      const presetFactionId = this.pendingPresetFactionIds.get(formFactionId);
+      if (presetFactionId) {
+        return this.campaignsApi.presetFlagImageUrl(this.pendingPresetMapId, presetFactionId, subfaction);
+      }
     }
 
-    return this.campaignsApi.flagImageUrl(campaignId, flagKey, this.revision);
+    const campaignId = this.campaignId();
+    if (!campaignId) {
+      return null;
+    }
+
+    return this.campaignsApi.flagImageUrl(campaignId, formFactionId, this.revision, subfaction);
   }
 
   protected onMissionFileSelected(missionId: string, event: Event): void {
@@ -1818,8 +1920,19 @@ export class CampaignSetupPage {
   }
 
   protected structureImageUrl(structureId: string): string | null {
+    if (!this.hasStoredStructureImage(structureId)) {
+      return null;
+    }
+
+    if (this.pendingPresetMapId) {
+      const presetId = this.pendingPresetStructureIds.get(structureId);
+      if (presetId) {
+        return this.campaignsApi.presetStructureImageUrl(this.pendingPresetMapId, presetId);
+      }
+    }
+
     const campaignId = this.campaignId();
-    if (!campaignId || !this.hasStoredStructureImage(structureId)) {
+    if (!campaignId) {
       return null;
     }
 
@@ -1827,8 +1940,19 @@ export class CampaignSetupPage {
   }
 
   protected structurePillagedImageUrl(structureId: string): string | null {
+    if (!this.hasStoredPillagedImage(structureId)) {
+      return null;
+    }
+
+    if (this.pendingPresetMapId) {
+      const presetId = this.pendingPresetStructureIds.get(structureId);
+      if (presetId) {
+        return this.campaignsApi.presetStructureImageUrl(this.pendingPresetMapId, presetId, true);
+      }
+    }
+
     const campaignId = this.campaignId();
-    if (!campaignId || !this.hasStoredPillagedImage(structureId)) {
+    if (!campaignId) {
       return null;
     }
 
@@ -1840,8 +1964,19 @@ export class CampaignSetupPage {
   }
 
   protected itemObjectiveImageUrl(itemId: string): string | null {
+    if (!this.hasStoredItemObjectiveImage(itemId)) {
+      return null;
+    }
+
+    if (this.pendingPresetMapId) {
+      const presetId = this.pendingPresetItemIds.get(itemId);
+      if (presetId) {
+        return this.campaignsApi.presetItemObjectiveImageUrl(this.pendingPresetMapId, presetId);
+      }
+    }
+
     const campaignId = this.campaignId();
-    if (!campaignId || !this.hasStoredItemObjectiveImage(itemId)) {
+    if (!campaignId) {
       return null;
     }
 
@@ -2031,6 +2166,9 @@ export class CampaignSetupPage {
     if (this.pendingPresetMapId) {
       detail = await this.campaignsApi.applyPresetMap(detail.id, this.pendingPresetMapId, detail.revision);
       this.pendingPresetMapId = null;
+      this.pendingPresetFactionIds.clear();
+      this.pendingPresetStructureIds.clear();
+      this.pendingPresetItemIds.clear();
     }
 
     if (this.mapFile) {
@@ -2043,7 +2181,12 @@ export class CampaignSetupPage {
         continue;
       }
 
-      detail = await this.campaignsApi.uploadStructureImage(detail.id, structureId, file, detail.revision);
+      detail = await this.campaignsApi.uploadStructureImage(
+        detail.id,
+        this.catalogIdOnServer(structureId, this.structureTypes.controls, detail.structureTypes),
+        file,
+        detail.revision,
+      );
     }
 
     for (const [structureId, file] of this.structurePillagedImages) {
@@ -2052,7 +2195,13 @@ export class CampaignSetupPage {
         continue;
       }
 
-      detail = await this.campaignsApi.uploadStructureImage(detail.id, structureId, file, detail.revision, true);
+      detail = await this.campaignsApi.uploadStructureImage(
+        detail.id,
+        this.catalogIdOnServer(structureId, this.structureTypes.controls, detail.structureTypes),
+        file,
+        detail.revision,
+        true,
+      );
     }
 
     for (const [itemId, file] of this.itemObjectiveImages) {
@@ -2061,7 +2210,12 @@ export class CampaignSetupPage {
         continue;
       }
 
-      detail = await this.campaignsApi.uploadItemObjectiveImage(detail.id, itemId, file, detail.revision);
+      detail = await this.campaignsApi.uploadItemObjectiveImage(
+        detail.id,
+        this.catalogIdOnServer(itemId, this.itemObjectiveTypes.controls, detail.itemObjectiveTypes ?? []),
+        file,
+        detail.revision,
+      );
     }
 
     for (const [factionId, file] of this.flagImages) {
@@ -2077,7 +2231,13 @@ export class CampaignSetupPage {
           continue;
         }
 
-        detail = await this.campaignsApi.uploadFlagImage(detail.id, id, file, detail.revision, name);
+        detail = await this.campaignsApi.uploadFlagImage(
+          detail.id,
+          this.catalogIdOnServer(id, this.factions.controls, detail.factions),
+          file,
+          detail.revision,
+          name,
+        );
         continue;
       }
 
@@ -2086,7 +2246,12 @@ export class CampaignSetupPage {
         continue;
       }
 
-      detail = await this.campaignsApi.uploadFlagImage(detail.id, factionId, file, detail.revision);
+      detail = await this.campaignsApi.uploadFlagImage(
+        detail.id,
+        this.catalogIdOnServer(factionId, this.factions.controls, detail.factions),
+        file,
+        detail.revision,
+      );
     }
 
     for (const [missionId, file] of this.missionFiles) {
@@ -2697,7 +2862,17 @@ export class CampaignSetupPage {
       automaticKind: [type?.automaticKind ?? 'None'],
       requiredCount: [type?.requiredCount ?? 1, [minValue(1), maxValue(999)]],
       structureTypeId: [type?.structureTypeId ?? ''],
+      matchesAnyStructureType: [type?.matchesAnyStructureType === true],
       territoryIds: [(type?.territoryIds ?? []).join(', ')],
+      itemObjectiveTypeId: [type?.itemObjectiveTypeId ?? ''],
+      matchesAnyItemObjective: [type?.matchesAnyItemObjective !== false && !type?.itemObjectiveTypeId],
+      targetKind: [type?.targetKind ?? 'Faction'],
+      targetSelection: [type?.targetSelection ?? 'Any'],
+      targetId: [type?.targetId ?? ''],
+      forceStatusTypeIds: [(type?.forceStatusTypeIds ?? []).concat()],
+      statusMatchKind: [type?.statusMatchKind ?? 'Gained'],
+      prerequisiteForceStatusTypeId: [type?.prerequisiteForceStatusTypeId ?? ''],
+      prerequisiteWasLost: [type?.prerequisiteWasLost === true],
     });
   }
 
@@ -2847,6 +3022,9 @@ export class CampaignSetupPage {
     this.mapFile = null;
     this.mapFileName.set(null);
     this.pendingPresetMapId = null;
+    this.pendingPresetFactionIds.clear();
+    this.pendingPresetStructureIds.clear();
+    this.pendingPresetItemIds.clear();
     this.structureImages.clear();
     this.structurePillagedImages.clear();
     this.itemObjectiveImages.clear();
@@ -3272,10 +3450,20 @@ export class CampaignSetupPage {
         automaticKind: type.scoringKind === 'Automatic' ? type.automaticKind : 'None',
         requiredCount: Number(type.requiredCount) || 1,
         structureTypeId: type.structureTypeId.trim() || null,
+        matchesAnyStructureType: type.matchesAnyStructureType,
         territoryIds: type.territoryIds
           .split(/[\s,]+/)
           .map((value) => value.trim())
           .filter((value) => value.length > 0),
+        itemObjectiveTypeId: type.itemObjectiveTypeId.trim() || null,
+        matchesAnyItemObjective: type.matchesAnyItemObjective,
+        targetKind: type.targetKind || null,
+        targetSelection: type.targetSelection || null,
+        targetId: type.targetId.trim() || null,
+        forceStatusTypeIds: type.forceStatusTypeIds,
+        statusMatchKind: type.statusMatchKind || null,
+        prerequisiteForceStatusTypeId: type.prerequisiteForceStatusTypeId.trim() || null,
+        prerequisiteWasLost: type.prerequisiteWasLost,
       }));
     const publicObjectiveTypes = value.publicObjectiveTypes
       .filter((type) => type.name.trim().length > 0)
@@ -4031,6 +4219,30 @@ export class CampaignSetupPage {
     }
 
     return ids;
+  }
+
+  private remapCatalogId(sourceId: string | null | undefined, appliedIds: ReadonlyMap<string, string>): string | null {
+    if (!sourceId) {
+      return sourceId ?? null;
+    }
+
+    return appliedIds.get(sourceId) ?? sourceId;
+  }
+
+  private catalogIdOnServer(
+    formId: string,
+    formItems: readonly { controls: { id: { value: string }; name: { value: string } } }[],
+    serverItems: readonly { id: string; name: string }[],
+  ): string {
+    const name = formItems
+      .find((item) => item.controls.id.value === formId)
+      ?.controls.name.value.trim()
+      .toLowerCase();
+    if (!name) {
+      return formId;
+    }
+
+    return serverItems.find((item) => item.name.trim().toLowerCase() === name)?.id ?? formId;
   }
 
   private rememberStoredFiles(campaign: CampaignDetail): void {

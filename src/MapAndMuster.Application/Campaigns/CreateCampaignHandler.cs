@@ -118,6 +118,7 @@ public sealed class UpdateCampaignHandler
     private readonly IClock _clock;
     private readonly ISecretHasher _secrets;
     private readonly ICampaignAssetStorage _assets;
+    private readonly ICampaignPresetStore? _presets;
 
     /// <summary>
     /// Initializes a new handler.
@@ -126,7 +127,13 @@ public sealed class UpdateCampaignHandler
     /// <param name="clock">The clock.</param>
     /// <param name="secrets">The secret hasher.</param>
     /// <param name="assets">The catalog file storage.</param>
-    public UpdateCampaignHandler(ICampaignStore campaigns, IClock clock, ISecretHasher secrets, ICampaignAssetStorage assets)
+    /// <param name="presets">The campaign-preset store used to keep shared logos.</param>
+    public UpdateCampaignHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        ISecretHasher secrets,
+        ICampaignAssetStorage assets,
+        ICampaignPresetStore? presets = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -136,6 +143,7 @@ public sealed class UpdateCampaignHandler
         _clock = clock;
         _secrets = secrets;
         _assets = assets;
+        _presets = presets;
     }
 
     /// <summary>
@@ -294,7 +302,8 @@ public sealed class UpdateCampaignHandler
                 _assets.DeleteAsync,
                 key,
                 existing.Id,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                _presets).ConfigureAwait(false);
         }
 
         return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
@@ -323,14 +332,84 @@ internal static class CampaignPersistenceFactory
         IReadOnlyList<StoredItemObjectiveType>? previousItemObjectiveTypes = null,
         IReadOnlyList<StoredMission>? previousMissions = null)
     {
+        var mintNewCatalogIds = previousFactions is null;
+        var allyIdMap = new Dictionary<Guid, Guid>();
         var allyGroups = setup.AllyGroups
-            .Select(group => new StoredAllyGroup
+            .Select(group =>
             {
-                Id = group.Id,
-                Name = group.Name,
-                Color = group.Color,
+                var id = mintNewCatalogIds ? Guid.NewGuid() : group.Id;
+                if (mintNewCatalogIds)
+                {
+                    allyIdMap[group.Id] = id;
+                }
+
+                return new StoredAllyGroup
+                {
+                    Id = id,
+                    Name = group.Name,
+                    Color = group.Color,
+                };
             })
             .ToArray();
+
+        var factions = CatalogFileBinder.BindFactions(setup.Factions, previousFactions);
+        var factionIdMap = new Dictionary<Guid, Guid>();
+        if (mintNewCatalogIds)
+        {
+            factions =
+            [
+                .. factions.Select(faction =>
+                {
+                    var id = Guid.NewGuid();
+                    factionIdMap[faction.Id] = id;
+                    return new StoredFaction
+                    {
+                        Id = id,
+                        Name = faction.Name,
+                        Color = faction.Color,
+                        Subfactions = faction.Subfactions,
+                        SubfactionAppearances = faction.SubfactionAppearances,
+                        AllyGroupName = faction.AllyGroupName,
+                        RequiresSubfaction = faction.RequiresSubfaction,
+                        FlagImageStorageKey = faction.FlagImageStorageKey,
+                        TintFlagImage = faction.TintFlagImage,
+                        SpecialRuleIds = faction.SpecialRuleIds,
+                        SubfactionSpecialRules = faction.SubfactionSpecialRules,
+                    };
+                }),
+            ];
+        }
+
+        var privateObjectiveTypes = CatalogFileBinder.BindPrivateObjectives(setup.PrivateObjectiveTypes);
+        if (mintNewCatalogIds)
+        {
+            privateObjectiveTypes =
+            [
+                .. privateObjectiveTypes.Select(type => new StoredPrivateObjectiveType
+                {
+                    Id = type.Id,
+                    Name = type.Name,
+                    Description = type.Description,
+                    CampaignPoints = type.CampaignPoints,
+                    AllowedHolderKinds = type.AllowedHolderKinds,
+                    ScoringKind = type.ScoringKind,
+                    AutomaticKind = type.AutomaticKind,
+                    RequiredCount = type.RequiredCount,
+                    StructureTypeId = type.StructureTypeId,
+                    TerritoryIds = type.TerritoryIds,
+                    MatchesAnyStructureType = type.MatchesAnyStructureType,
+                    ItemObjectiveTypeId = type.ItemObjectiveTypeId,
+                    MatchesAnyItemObjective = type.MatchesAnyItemObjective,
+                    TargetKind = type.TargetKind,
+                    TargetSelection = type.TargetSelection,
+                    TargetId = RemapDefeatTarget(type, factionIdMap, allyIdMap),
+                    ForceStatusTypeIds = type.ForceStatusTypeIds,
+                    StatusMatchKind = type.StatusMatchKind,
+                    PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
+                    PrerequisiteWasLost = type.PrerequisiteWasLost,
+                }),
+            ];
+        }
 
         return new StoredCampaign
         {
@@ -359,7 +438,7 @@ internal static class CampaignPersistenceFactory
                     IsPlayer = setup.CreatorIsParticipant,
                 },
             ],
-            Factions = CatalogFileBinder.BindFactions(setup.Factions, previousFactions),
+            Factions = factions,
             AllyGroups = allyGroups,
             Links =
             [
@@ -399,7 +478,7 @@ internal static class CampaignPersistenceFactory
                         .Concat(previousTerrainTypes?.SelectMany(static type => type.Missions) ?? [])
                         .Concat(previousStructureTypes?.SelectMany(static type => type.Missions) ?? []))),
             ForceStatuses = CatalogFileBinder.BindForceStatuses(setup.ForceStatuses),
-            PrivateObjectiveTypes = CatalogFileBinder.BindPrivateObjectives(setup.PrivateObjectiveTypes),
+            PrivateObjectiveTypes = privateObjectiveTypes,
             BattleScoring = setup.BattleScoring,
             RankingObjectivePoints = setup.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = setup.SplitForceSupplyPenaltyPercent,
@@ -407,5 +486,30 @@ internal static class CampaignPersistenceFactory
             BattleReportRules = setup.BattleReportRules,
             ArmyEscalations = setup.Schedule.ArmyEscalations,
         };
+    }
+
+    private static Guid? RemapDefeatTarget(
+        StoredPrivateObjectiveType type,
+        Dictionary<Guid, Guid> factionIdMap,
+        Dictionary<Guid, Guid> allyIdMap)
+    {
+        if (type.TargetId is not { } targetId)
+        {
+            return null;
+        }
+
+        if (string.Equals(type.TargetKind, nameof(PrivateObjectiveTargetKind.Faction), StringComparison.Ordinal)
+            && factionIdMap.TryGetValue(targetId, out var factionId))
+        {
+            return factionId;
+        }
+
+        if (string.Equals(type.TargetKind, nameof(PrivateObjectiveTargetKind.AllyGroup), StringComparison.Ordinal)
+            && allyIdMap.TryGetValue(targetId, out var allyId))
+        {
+            return allyId;
+        }
+
+        return targetId;
     }
 }

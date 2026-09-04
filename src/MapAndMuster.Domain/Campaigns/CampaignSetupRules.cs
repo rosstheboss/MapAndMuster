@@ -369,7 +369,20 @@ public static class CampaignSetupRules
         var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, collected);
         var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, collected);
         var structureTypeIds = parsedStructures.Select(static type => type.Id).ToHashSet();
-        var parsedPrivate = ParsePrivateObjectiveTypes(privateObjectiveTypes, usedIds, structureTypeIds, collected);
+        var knownItemObjectiveTypeIds = (itemObjectiveTypes ?? [])
+            .Select(static item => item.Id)
+            .OfType<Guid>()
+            .Where(static id => id != Guid.Empty)
+            .ToHashSet();
+        var parsedPrivate = ParsePrivateObjectiveTypes(
+            privateObjectiveTypes,
+            usedIds,
+            structureTypeIds,
+            knownItemObjectiveTypeIds,
+            parsedForceStatuses.Select(static status => status.Id).ToHashSet(),
+            parsedFactions.Select(static faction => faction.Id).ToHashSet(),
+            parsedGroups.Select(static group => group.Id).ToHashSet(),
+            collected);
         var privateObjectiveIds = parsedPrivate.Select(static type => type.Id).ToHashSet();
         var parsedItems = ParseItemObjectiveTypes(
             itemObjectiveTypes,
@@ -2478,6 +2491,10 @@ public static class CampaignSetupRules
         IReadOnlyList<PrivateObjectiveTypeInput>? privateObjectiveTypes,
         HashSet<Guid> usedIds,
         HashSet<Guid> knownStructureTypeIds,
+        HashSet<Guid> knownItemObjectiveTypeIds,
+        HashSet<Guid> knownForceStatusTypeIds,
+        HashSet<Guid> knownFactionIds,
+        HashSet<Guid> knownAllyGroupIds,
         List<DomainError> errors)
     {
         var supplied = privateObjectiveTypes ?? [];
@@ -2549,12 +2566,22 @@ public static class CampaignSetupRules
                 requiredCount = 1;
             }
 
+            var matchesAnyStructureType = input.MatchesAnyStructureType
+                && automaticKind is PrivateObjectiveAutomaticKind.BuildStructureType
+                    or PrivateObjectiveAutomaticKind.RepairStructureType;
             var structureTypeId = input.StructureTypeId;
-            if (automaticKind is PrivateObjectiveAutomaticKind.ControlStructureType
+            var requiresStructure = automaticKind is PrivateObjectiveAutomaticKind.ControlStructureType
                 or PrivateObjectiveAutomaticKind.PillageStructureType
-                or PrivateObjectiveAutomaticKind.DestroyStructureType)
+                or PrivateObjectiveAutomaticKind.DestroyStructureType
+                or PrivateObjectiveAutomaticKind.BuildStructureType
+                or PrivateObjectiveAutomaticKind.RepairStructureType;
+            if (requiresStructure)
             {
-                if (structureTypeId is not { } structureId || !knownStructureTypeIds.Contains(structureId))
+                if (matchesAnyStructureType)
+                {
+                    structureTypeId = null;
+                }
+                else if (structureTypeId is not { } structureId || !knownStructureTypeIds.Contains(structureId))
                 {
                     errors.Add(new DomainError(
                         $"privateObjectiveTypes[{index}].structureTypeId.invalid",
@@ -2566,6 +2593,7 @@ public static class CampaignSetupRules
             else
             {
                 structureTypeId = null;
+                matchesAnyStructureType = false;
             }
 
             var territoryIds = (input.TerritoryIds ?? [])
@@ -2578,6 +2606,109 @@ public static class CampaignSetupRules
                     $"privateObjectiveTypes[{index}].territoryIds.invalid",
                     $"Private objective {index + 1} must list at least one territory.",
                     $"privateObjectiveTypes[{index}].territoryIds"));
+            }
+
+            var matchesAnyItemObjective = false;
+            Guid? itemObjectiveTypeId = null;
+            if (automaticKind is PrivateObjectiveAutomaticKind.AdjacentToRelic or PrivateObjectiveAutomaticKind.ControlRelic)
+            {
+                matchesAnyItemObjective = input.MatchesAnyItemObjective || input.ItemObjectiveTypeId is null;
+                if (!matchesAnyItemObjective)
+                {
+                    if (input.ItemObjectiveTypeId is not { } itemId || !knownItemObjectiveTypeIds.Contains(itemId))
+                    {
+                        errors.Add(new DomainError(
+                            $"privateObjectiveTypes[{index}].itemObjectiveTypeId.invalid",
+                            $"Private objective {index + 1} must name an item objective from this campaign, or match any relic.",
+                            $"privateObjectiveTypes[{index}].itemObjectiveTypeId"));
+                    }
+                    else
+                    {
+                        itemObjectiveTypeId = itemId;
+                    }
+                }
+            }
+
+            var targetKind = PrivateObjectiveTargetKind.None;
+            var targetSelection = PrivateObjectiveTargetSelection.Specific;
+            Guid? targetId = null;
+            if (automaticKind == PrivateObjectiveAutomaticKind.DefeatOpponent)
+            {
+                if (!TryParseTargetKind(input.TargetKind, index, errors, out targetKind)
+                    || !TryParseTargetSelection(input.TargetSelection, index, errors, out targetSelection))
+                {
+                    targetKind = PrivateObjectiveTargetKind.None;
+                }
+                else if (targetSelection == PrivateObjectiveTargetSelection.Specific)
+                {
+                    if (input.TargetId is not { } chosen || chosen == Guid.Empty)
+                    {
+                        errors.Add(new DomainError(
+                            $"privateObjectiveTypes[{index}].targetId.invalid",
+                            $"Private objective {index + 1} must name the opponent to defeat.",
+                            $"privateObjectiveTypes[{index}].targetId"));
+                    }
+                    else if (targetKind == PrivateObjectiveTargetKind.Faction && !knownFactionIds.Contains(chosen))
+                    {
+                        errors.Add(new DomainError(
+                            $"privateObjectiveTypes[{index}].targetId.invalid",
+                            $"Private objective {index + 1} must name a faction from this campaign.",
+                            $"privateObjectiveTypes[{index}].targetId"));
+                    }
+                    else if (targetKind == PrivateObjectiveTargetKind.AllyGroup && !knownAllyGroupIds.Contains(chosen))
+                    {
+                        errors.Add(new DomainError(
+                            $"privateObjectiveTypes[{index}].targetId.invalid",
+                            $"Private objective {index + 1} must name an ally group from this campaign.",
+                            $"privateObjectiveTypes[{index}].targetId"));
+                    }
+                    else
+                    {
+                        targetId = chosen;
+                    }
+                }
+            }
+
+            var statusMatchKind = PrivateObjectiveStatusMatchKind.None;
+            Guid[] forceStatusTypeIds = [];
+            Guid? prerequisiteForceStatusTypeId = null;
+            var prerequisiteWasLost = false;
+            if (automaticKind == PrivateObjectiveAutomaticKind.ForceStatus)
+            {
+                if (!TryParseStatusMatchKind(input.StatusMatchKind, index, errors, out statusMatchKind))
+                {
+                    statusMatchKind = PrivateObjectiveStatusMatchKind.None;
+                }
+
+                forceStatusTypeIds = (input.ForceStatusTypeIds ?? [])
+                    .Where(static id => id != Guid.Empty)
+                    .Distinct()
+                    .ToArray();
+                if (forceStatusTypeIds.Length == 0 || forceStatusTypeIds.Any(id => !knownForceStatusTypeIds.Contains(id)))
+                {
+                    errors.Add(new DomainError(
+                        $"privateObjectiveTypes[{index}].forceStatusTypeIds.invalid",
+                        $"Private objective {index + 1} must name at least one force status from this campaign.",
+                        $"privateObjectiveTypes[{index}].forceStatusTypeIds"));
+                    forceStatusTypeIds = [];
+                }
+
+                if (statusMatchKind == PrivateObjectiveStatusMatchKind.GainedAfter)
+                {
+                    if (input.PrerequisiteForceStatusTypeId is not { } prerequisite
+                        || !knownForceStatusTypeIds.Contains(prerequisite))
+                    {
+                        errors.Add(new DomainError(
+                            $"privateObjectiveTypes[{index}].prerequisiteForceStatusTypeId.invalid",
+                            $"Private objective {index + 1} must name the prior force status.",
+                            $"privateObjectiveTypes[{index}].prerequisiteForceStatusTypeId"));
+                    }
+                    else
+                    {
+                        prerequisiteForceStatusTypeId = prerequisite;
+                        prerequisiteWasLost = input.PrerequisiteWasLost;
+                    }
+                }
             }
 
             parsed.Add(new PrivateObjectiveTypeSetup(
@@ -2594,7 +2725,17 @@ public static class CampaignSetupRules
                 automaticKind,
                 requiredCount,
                 structureTypeId,
-                territoryIds));
+                territoryIds,
+                matchesAnyStructureType,
+                itemObjectiveTypeId,
+                matchesAnyItemObjective,
+                targetKind,
+                targetSelection,
+                targetId,
+                forceStatusTypeIds,
+                statusMatchKind,
+                prerequisiteForceStatusTypeId,
+                prerequisiteWasLost));
         }
 
         return parsed;
@@ -2686,6 +2827,73 @@ public static class CampaignSetupRules
             $"Private objective {index + 1} needs an automatic criterion.",
             $"privateObjectiveTypes[{index}].automaticKind"));
         kind = PrivateObjectiveAutomaticKind.None;
+        return false;
+    }
+
+    private static bool TryParseTargetKind(
+        string? raw,
+        int index,
+        List<DomainError> errors,
+        out PrivateObjectiveTargetKind kind)
+    {
+        if (Enum.TryParse(raw, ignoreCase: true, out kind)
+            && Enum.IsDefined(kind)
+            && kind != PrivateObjectiveTargetKind.None)
+        {
+            return true;
+        }
+
+        errors.Add(new DomainError(
+            $"privateObjectiveTypes[{index}].targetKind.invalid",
+            $"Private objective {index + 1} must name a player, faction, or ally group to defeat.",
+            $"privateObjectiveTypes[{index}].targetKind"));
+        kind = PrivateObjectiveTargetKind.None;
+        return false;
+    }
+
+    private static bool TryParseTargetSelection(
+        string? raw,
+        int index,
+        List<DomainError> errors,
+        out PrivateObjectiveTargetSelection selection)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            selection = PrivateObjectiveTargetSelection.Specific;
+            return true;
+        }
+
+        if (Enum.TryParse(raw.Trim(), ignoreCase: true, out selection) && Enum.IsDefined(selection))
+        {
+            return true;
+        }
+
+        errors.Add(new DomainError(
+            $"privateObjectiveTypes[{index}].targetSelection.invalid",
+            $"Private objective {index + 1} opponent selection must be Specific, Any, or Random.",
+            $"privateObjectiveTypes[{index}].targetSelection"));
+        selection = PrivateObjectiveTargetSelection.Specific;
+        return false;
+    }
+
+    private static bool TryParseStatusMatchKind(
+        string? raw,
+        int index,
+        List<DomainError> errors,
+        out PrivateObjectiveStatusMatchKind kind)
+    {
+        if (Enum.TryParse(raw, ignoreCase: true, out kind)
+            && Enum.IsDefined(kind)
+            && kind != PrivateObjectiveStatusMatchKind.None)
+        {
+            return true;
+        }
+
+        errors.Add(new DomainError(
+            $"privateObjectiveTypes[{index}].statusMatchKind.invalid",
+            $"Private objective {index + 1} must choose gained, caused, or gained-after status matching.",
+            $"privateObjectiveTypes[{index}].statusMatchKind"));
+        kind = PrivateObjectiveStatusMatchKind.None;
         return false;
     }
 

@@ -537,6 +537,36 @@ public sealed class PrivateObjectiveTypeRequest
 
     /// <summary>Gets named territories for ControlNamedTerritories.</summary>
     public IReadOnlyList<Guid>? TerritoryIds { get; init; }
+
+    /// <summary>Gets whether Build or Repair matches any structure type.</summary>
+    public bool MatchesAnyStructureType { get; init; }
+
+    /// <summary>Gets the item-objective type for relic criteria.</summary>
+    public Guid? ItemObjectiveTypeId { get; init; }
+
+    /// <summary>Gets whether relic criteria match any item objective.</summary>
+    public bool MatchesAnyItemObjective { get; init; }
+
+    /// <summary>Gets Player, Faction, or AllyGroup for DefeatOpponent.</summary>
+    public string? TargetKind { get; init; }
+
+    /// <summary>Gets Specific, Any, or Random for DefeatOpponent.</summary>
+    public string? TargetSelection { get; init; }
+
+    /// <summary>Gets the specific opponent identifier when selection is Specific.</summary>
+    public Guid? TargetId { get; init; }
+
+    /// <summary>Gets force-status catalog identifiers for ForceStatus criteria.</summary>
+    public IReadOnlyList<Guid>? ForceStatusTypeIds { get; init; }
+
+    /// <summary>Gets Gained, Caused, or GainedAfter for ForceStatus criteria.</summary>
+    public string? StatusMatchKind { get; init; }
+
+    /// <summary>Gets the prior status for GainedAfter.</summary>
+    public Guid? PrerequisiteForceStatusTypeId { get; init; }
+
+    /// <summary>Gets whether GainedAfter waits for the prerequisite to have been lost.</summary>
+    public bool PrerequisiteWasLost { get; init; }
 }
 
 /// <summary>
@@ -1437,6 +1467,36 @@ public sealed class PrivateObjectiveTypeResponse
 
     /// <summary>Gets named territories when the viewer may see them.</summary>
     public IReadOnlyList<Guid> TerritoryIds { get; init; } = [];
+
+    /// <summary>Gets whether Build or Repair matches any structure type.</summary>
+    public bool MatchesAnyStructureType { get; init; }
+
+    /// <summary>Gets the item-objective type for relic criteria.</summary>
+    public Guid? ItemObjectiveTypeId { get; init; }
+
+    /// <summary>Gets whether relic criteria match any item objective.</summary>
+    public bool MatchesAnyItemObjective { get; init; }
+
+    /// <summary>Gets Player, Faction, or AllyGroup for DefeatOpponent.</summary>
+    public string TargetKind { get; init; } = "None";
+
+    /// <summary>Gets Specific, Any, or Random for DefeatOpponent.</summary>
+    public string TargetSelection { get; init; } = "Specific";
+
+    /// <summary>Gets the specific opponent identifier when selection is Specific.</summary>
+    public Guid? TargetId { get; init; }
+
+    /// <summary>Gets force-status catalog identifiers for ForceStatus criteria.</summary>
+    public IReadOnlyList<Guid> ForceStatusTypeIds { get; init; } = [];
+
+    /// <summary>Gets Gained, Caused, or GainedAfter for ForceStatus criteria.</summary>
+    public string StatusMatchKind { get; init; } = "None";
+
+    /// <summary>Gets the prior status for GainedAfter.</summary>
+    public Guid? PrerequisiteForceStatusTypeId { get; init; }
+
+    /// <summary>Gets whether GainedAfter waits for the prerequisite to have been lost.</summary>
+    public bool PrerequisiteWasLost { get; init; }
 }
 
 /// <summary>
@@ -2053,6 +2113,16 @@ public static class CampaignResponses
                     RequiredCount = type.RequiredCount,
                     StructureTypeId = type.StructureTypeId,
                     TerritoryIds = type.TerritoryIds,
+                    MatchesAnyStructureType = type.MatchesAnyStructureType,
+                    ItemObjectiveTypeId = type.ItemObjectiveTypeId,
+                    MatchesAnyItemObjective = type.MatchesAnyItemObjective,
+                    TargetKind = type.TargetKind,
+                    TargetSelection = type.TargetSelection,
+                    TargetId = type.TargetId,
+                    ForceStatusTypeIds = type.ForceStatusTypeIds,
+                    StatusMatchKind = type.StatusMatchKind,
+                    PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
+                    PrerequisiteWasLost = type.PrerequisiteWasLost,
                 }),
             ],
             PrivateObjectives =
@@ -2573,6 +2643,16 @@ public static class CampaignResponses
                 RequiredCount = type.RequiredCount,
                 StructureTypeId = type.StructureTypeId,
                 TerritoryIds = type.TerritoryIds,
+                MatchesAnyStructureType = type.MatchesAnyStructureType,
+                ItemObjectiveTypeId = type.ItemObjectiveTypeId,
+                MatchesAnyItemObjective = type.MatchesAnyItemObjective,
+                TargetKind = type.TargetKind,
+                TargetSelection = type.TargetSelection,
+                TargetId = type.TargetId,
+                ForceStatusTypeIds = type.ForceStatusTypeIds,
+                StatusMatchKind = type.StatusMatchKind,
+                PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
+                PrerequisiteWasLost = type.PrerequisiteWasLost,
             })
             .ToArray();
     }

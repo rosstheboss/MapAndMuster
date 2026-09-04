@@ -135,6 +135,26 @@ public static class CampaignEndpoints
             .WithName("GetCampaignPreset")
             .Produces<CampaignDetailResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+        presets.MapGet("/{presetId:guid}/factions/{factionId:guid}/flag", GetPresetFactionFlagAsync)
+            .WithName("GetCampaignPresetFactionFlag")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+        presets.MapGet("/{presetId:guid}/factions/{factionId:guid}/subfactions/{subfactionName}/flag", GetPresetSubfactionFlagAsync)
+            .WithName("GetCampaignPresetSubfactionFlag")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+        presets.MapGet("/{presetId:guid}/structures/{structureTypeId:guid}/image", GetPresetStructureImageAsync)
+            .WithName("GetCampaignPresetStructureImage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+        presets.MapGet("/{presetId:guid}/structures/{structureTypeId:guid}/pillaged-image", GetPresetStructurePillagedImageAsync)
+            .WithName("GetCampaignPresetStructurePillagedImage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+        presets.MapGet("/{presetId:guid}/item-objectives/{itemObjectiveTypeId:guid}/image", GetPresetItemObjectiveImageAsync)
+            .WithName("GetCampaignPresetItemObjectiveImage")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
         presets.MapGet("/{presetId:guid}/package", ExportNamedPresetPackageAsync)
             .WithName("ExportNamedCampaignPresetPackage")
             .Produces(StatusCodes.Status200OK)
@@ -1102,6 +1122,101 @@ public static class CampaignEndpoints
         }
 
         return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
+    private static Task<IResult> GetPresetFactionFlagAsync(
+        Guid presetId,
+        Guid factionId,
+        ClaimsPrincipal principal,
+        GetCampaignPresetAssetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return GetPresetAssetAsync(presetId, factionId, CampaignPresetAssetKind.FactionFlag, principal, handler, cancellationToken);
+    }
+
+    private static Task<IResult> GetPresetSubfactionFlagAsync(
+        Guid presetId,
+        Guid factionId,
+        string subfactionName,
+        ClaimsPrincipal principal,
+        GetCampaignPresetAssetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return GetPresetAssetAsync(
+            presetId,
+            factionId,
+            CampaignPresetAssetKind.FactionFlag,
+            principal,
+            handler,
+            cancellationToken,
+            subfactionName);
+    }
+
+    private static Task<IResult> GetPresetStructureImageAsync(
+        Guid presetId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        GetCampaignPresetAssetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return GetPresetAssetAsync(presetId, structureTypeId, CampaignPresetAssetKind.StructureImage, principal, handler, cancellationToken);
+    }
+
+    private static Task<IResult> GetPresetStructurePillagedImageAsync(
+        Guid presetId,
+        Guid structureTypeId,
+        ClaimsPrincipal principal,
+        GetCampaignPresetAssetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return GetPresetAssetAsync(
+            presetId,
+            structureTypeId,
+            CampaignPresetAssetKind.StructurePillagedImage,
+            principal,
+            handler,
+            cancellationToken);
+    }
+
+    private static Task<IResult> GetPresetItemObjectiveImageAsync(
+        Guid presetId,
+        Guid itemObjectiveTypeId,
+        ClaimsPrincipal principal,
+        GetCampaignPresetAssetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return GetPresetAssetAsync(
+            presetId,
+            itemObjectiveTypeId,
+            CampaignPresetAssetKind.ItemObjectiveImage,
+            principal,
+            handler,
+            cancellationToken);
+    }
+
+    private static async Task<IResult> GetPresetAssetAsync(
+        Guid presetId,
+        Guid catalogId,
+        CampaignPresetAssetKind kind,
+        ClaimsPrincipal principal,
+        GetCampaignPresetAssetHandler handler,
+        CancellationToken cancellationToken,
+        string? subfactionName = null)
+    {
+        if (principal.GetUserId() is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler
+            .HandleAsync(presetId, catalogId, kind, cancellationToken, subfactionName)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.File(result.Value.Content, result.Value.ContentType);
     }
 
     private static async Task<IResult> SavePresetAsync(

@@ -56,6 +56,63 @@ public static class StructureDestructionRules
 
         return facts;
     }
+
+    /// <summary>
+    /// Records successful Build and Repair actions by comparing map snapshots.
+    /// </summary>
+    public static IReadOnlyList<StructureWorkFact> DetectWork(
+        PlayMap before,
+        PlayMap after,
+        IReadOnlyList<CampaignForce> forces,
+        DateTimeOffset utcNow)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+        ArgumentNullException.ThrowIfNull(forces);
+        var facts = new List<StructureWorkFact>();
+        foreach (var current in after.Territories.OrderBy(static territory => territory.Id))
+        {
+            var previous = before.Territory(current.Id);
+            var actor = forces
+                .Where(force => force.TerritoryId == current.Id)
+                .OrderBy(static force => force.Id)
+                .FirstOrDefault();
+            if (actor is null)
+            {
+                continue;
+            }
+
+            if (current.StructureTypeId is { } built
+                && (previous is null || previous.StructureTypeId is null)
+                && current.StructureCondition == StructureCondition.Operational)
+            {
+                facts.Add(new StructureWorkFact(
+                    Guid.NewGuid(),
+                    current.Id,
+                    built,
+                    ActionKind.Build,
+                    actor.FactionId,
+                    actor.ControllerUserId,
+                    utcNow));
+            }
+
+            if (current.StructureTypeId is { } repaired
+                && previous?.StructureCondition == StructureCondition.Pillaged
+                && current.StructureCondition == StructureCondition.Operational)
+            {
+                facts.Add(new StructureWorkFact(
+                    Guid.NewGuid(),
+                    current.Id,
+                    repaired,
+                    ActionKind.Repair,
+                    actor.FactionId,
+                    actor.ControllerUserId,
+                    utcNow));
+            }
+        }
+
+        return facts;
+    }
 }
 
 /// <summary>

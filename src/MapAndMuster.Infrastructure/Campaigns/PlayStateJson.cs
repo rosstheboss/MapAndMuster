@@ -241,6 +241,7 @@ internal static class PlayStateJson
                 RevealedUtc = item.RevealedUtc,
                 ClaimedByUserId = item.ClaimedByUserId,
                 ApprovedByUserId = item.ApprovedByUserId,
+                ResolvedTargetId = item.ResolvedTargetId,
             })],
             StructureDestructions = [.. state.StructureDestructions.Select(static item => new StructureDestructionDocument
             {
@@ -250,6 +251,31 @@ internal static class PlayStateJson
                 ActorFactionId = item.ActorFactionId,
                 ActorUserId = item.ActorUserId,
                 DestroyedUtc = item.DestroyedUtc,
+            })],
+            StructureWorks = [.. state.StructureWorks.Select(static item => new StructureWorkDocument
+            {
+                Id = item.Id,
+                TerritoryId = item.TerritoryId,
+                StructureTypeId = item.StructureTypeId,
+                Kind = item.Kind.ToString(),
+                ActorFactionId = item.ActorFactionId,
+                ActorUserId = item.ActorUserId,
+                OccurredUtc = item.OccurredUtc,
+            })],
+            ForceStatusChanges = [.. state.ForceStatusChanges.Select(static item => new ForceStatusChangeDocument
+            {
+                Id = item.Id,
+                ForceId = item.ForceId,
+                FactionId = item.FactionId,
+                ControllerUserId = item.ControllerUserId,
+                StatusTypeId = item.StatusTypeId,
+                PreviousStatusName = item.PreviousStatusName,
+                PreviousStatusTypeId = item.PreviousStatusTypeId,
+                NextStatusName = item.NextStatusName,
+                ActorForceId = item.ActorForceId,
+                ActorFactionId = item.ActorFactionId,
+                ActorUserId = item.ActorUserId,
+                OccurredUtc = item.OccurredUtc,
             })],
             PlayerSupplies = [.. state.PlayerSupplies.Select(static item => new PlayerSupplyDocument
             {
@@ -392,7 +418,8 @@ internal static class PlayStateJson
                 item.ClaimedUtc,
                 item.RevealedUtc,
                 item.ClaimedByUserId,
-                item.ApprovedByUserId))],
+                item.ApprovedByUserId,
+                item.ResolvedTargetId))],
             [.. (document.StructureDestructions ?? []).Select(static item => new StructureDestructionFact(
                 item.Id,
                 item.TerritoryId,
@@ -408,7 +435,28 @@ internal static class PlayStateJson
                 Math.Max(0, item.OffenceCount)))],
             [.. (document.BrokenAllySubfactions ?? []).Select(static item => new BrokenAllySubfaction(
                 item.FactionId,
-                item.Subfaction))]);
+                item.Subfaction))],
+            [.. (document.ForceStatusChanges ?? []).Select(static item => new ForceStatusChangeFact(
+                item.Id,
+                item.ForceId,
+                item.FactionId,
+                item.ControllerUserId,
+                item.StatusTypeId,
+                item.PreviousStatusName,
+                item.NextStatusName,
+                item.ActorForceId,
+                item.ActorFactionId,
+                item.ActorUserId,
+                item.OccurredUtc,
+                item.PreviousStatusTypeId))],
+            [.. (document.StructureWorks ?? []).Select(static item => new StructureWorkFact(
+                item.Id,
+                item.TerritoryId,
+                item.StructureTypeId,
+                Enum.Parse<ActionKind>(item.Kind, true),
+                item.ActorFactionId,
+                item.ActorUserId,
+                item.OccurredUtc))]);
     }
 
     private static IReadOnlyList<ActionWindowSnapshot> ToSnapshots(PlayDocument document)
@@ -549,6 +597,8 @@ internal static class PlayStateJson
         public List<PublicObjectiveAwardDocument>? PublicObjectiveAwards { get; set; }
         public List<PrivateObjectiveDocument>? PrivateObjectives { get; set; }
         public List<StructureDestructionDocument>? StructureDestructions { get; set; }
+        public List<StructureWorkDocument>? StructureWorks { get; set; }
+        public List<ForceStatusChangeDocument>? ForceStatusChanges { get; set; }
         public List<PlayerSupplyDocument>? PlayerSupplies { get; set; }
         public List<DelinquencyDocument>? Delinquencies { get; set; }
     }
@@ -803,6 +853,7 @@ internal static class PlayStateJson
         public DateTimeOffset? RevealedUtc { get; set; }
         public Guid? ClaimedByUserId { get; set; }
         public Guid? ApprovedByUserId { get; set; }
+        public Guid? ResolvedTargetId { get; set; }
     }
 
     private sealed class StructureDestructionDocument
@@ -813,5 +864,32 @@ internal static class PlayStateJson
         public Guid ActorFactionId { get; set; }
         public Guid ActorUserId { get; set; }
         public DateTimeOffset DestroyedUtc { get; set; }
+    }
+
+    private sealed class StructureWorkDocument
+    {
+        public Guid Id { get; set; }
+        public Guid TerritoryId { get; set; }
+        public Guid StructureTypeId { get; set; }
+        public string Kind { get; set; } = "";
+        public Guid ActorFactionId { get; set; }
+        public Guid ActorUserId { get; set; }
+        public DateTimeOffset OccurredUtc { get; set; }
+    }
+
+    private sealed class ForceStatusChangeDocument
+    {
+        public Guid Id { get; set; }
+        public Guid ForceId { get; set; }
+        public Guid FactionId { get; set; }
+        public Guid ControllerUserId { get; set; }
+        public Guid? StatusTypeId { get; set; }
+        public string? PreviousStatusName { get; set; }
+        public Guid? PreviousStatusTypeId { get; set; }
+        public string? NextStatusName { get; set; }
+        public Guid? ActorForceId { get; set; }
+        public Guid? ActorFactionId { get; set; }
+        public Guid? ActorUserId { get; set; }
+        public DateTimeOffset OccurredUtc { get; set; }
     }
 }

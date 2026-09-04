@@ -64,7 +64,8 @@ internal static class CampaignPlayPipeline
             CampaignPlayCatalog.PrivateTypes(campaign),
             [.. campaign.Factions.Select(static faction => faction.Id)],
             [.. campaign.AllyGroups.Select(static group => group.Id)],
-            CampaignPlayCatalog.SpecialRules(campaign));
+            CampaignPlayCatalog.SpecialRules(campaign),
+            CampaignPlayCatalog.AllyGroupByFaction(campaign));
         var schedule = CampaignMapper.ToSchedule(campaign);
         var advanced = CampaignPlayRules.Advance(
             seeded.State,

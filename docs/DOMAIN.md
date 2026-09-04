@@ -141,9 +141,16 @@ does not change movement or adjacency by itself.
 Named public objectives live in their own setup section (name, optional description, and points).
 Private objectives are a separate optional catalog (at most 50). Each private objective has a
 name, optional description, campaign points, one or more holder kinds (player, faction, and/or
-ally group), and either Manual or Automatic scoring. Automatic objectives name a map criterion:
-control a number of territories, control listed territories, or control, pillage, or destroy a
-number of a chosen structure type. At launch, occupying players, factions, and ally groups each
+ally group), and either Manual or Automatic scoring. Automatic objectives name a criterion:
+control a number of territories; control listed territories; control, pillage, or destroy a
+number of a chosen structure type; win or lose a number of finalized battles; record a number of
+player-chosen retreats (orders submitted by a player; delinquency defaults and staff corrections
+do not count); occupy the same territory as a relic or a territory with a direct map connection
+to it (any relic, or a named catalog item); build or repair a number of structures of a chosen
+type, or of any type; control a relic (any, or a named catalog item); defeat an opponent in
+battle (any, one random opponent chosen at assignment, or a specific faction or ally group);
+or gain a force status a number of times, cause another force to gain a status, or gain a status
+after gaining or losing another status. At launch, occupying players, factions, and ally groups each
 receive one secret objective from that holder kind's pool. A holder kind with no configured
 objectives receives none. Assignments in a pool are unique until that pool is exhausted; remaining
 holders then receive duplicates from a newly shuffled copy of the same pool, repeating until
@@ -962,12 +969,20 @@ approves the claim to reveal it publicly and add its points, or denies it so the
 claim again later. Holders may instead keep a manual objective until the campaign completes, at
 which point remaining assignments become public and their points count. Automatic private
 objectives are scored from live map facts after action resolution: currently controlled
-territories, currently controlled or pillaged structures of a configured type, or a cumulative
+territories, currently controlled or pillaged structures of a configured type, a cumulative
 count of destroyed structures of a configured type attributed to the holder's faction, player,
-or remaining ally group. When an automatic criterion is met, the objective is revealed, its
+or remaining ally group, finalized battle wins and losses, player-chosen retreats, occupying a
+territory that is the same as or directly adjacent to a relic, completed Build or Repair work
+of a configured structure type or any type, controlling a relic, defeating a configured opponent
+in battle, and force-status facts (gained, caused, or gained after another status). When an
+automatic criterion is met, the objective is revealed, its
 points are added, and the public log records that the holder scored. Destroyed structures are
 removed from the map, so destroy criteria use append-only destruction facts rather than current
-holdings.
+holdings. Build and Repair criteria use append-only work facts. Force-status criteria use
+append-only status-change facts. Hidden relics still score adjacency and control on the server.
+A random DefeatOpponent target is chosen when the assignment is created and excludes the holder's
+own player, faction, or remaining ally group. Same-territory occupancy counts as adjacent to a
+relic; other territories must share a direct overlay connection.
 
 Item objectives are named catalog items (none, one, or many). Launch placement is Random or
 Placed. Hidden-until-found items are omitted from player play payloads, including location and

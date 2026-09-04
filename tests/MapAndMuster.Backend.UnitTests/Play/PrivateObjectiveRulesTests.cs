@@ -453,6 +453,243 @@ public sealed class PrivateObjectiveRulesTests
             campaignCompleted: false));
     }
 
+    [Fact]
+    public void BattleWinsCompleteFromFinalizedVictories()
+    {
+        var type = Automatic("Win two", PrivateObjectiveAutomaticKind.BattleWinCount, requiredCount: 2);
+        var player = Guid.NewGuid();
+        var winner = new CampaignForce(Guid.NewGuid(), player, Guid.NewGuid(), Guid.NewGuid(), false);
+        var loser = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), false);
+        var assignment = Assigned(type, PrivateObjectiveHolderKind.Player, player);
+        var now = DateTimeOffset.UtcNow;
+        var state = CampaignPlayState.Empty.With(
+            forces: [winner, loser],
+            battles:
+            [
+                Battle(winner.Id, loser.Id, now),
+                Battle(winner.Id, loser.Id, now.AddHours(1)),
+            ],
+            privateObjectives: [assignment]);
+
+        var next = Evaluate(state, type, []);
+
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Revealed, next.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void PlayerChosenRetreatsIgnoreDefaultAndStaffRetreats()
+    {
+        var type = Automatic("Retreat twice", PrivateObjectiveAutomaticKind.PlayerRetreatCount, requiredCount: 2);
+        var player = Guid.NewGuid();
+        var force = new CampaignForce(Guid.NewGuid(), player, Guid.NewGuid(), Guid.NewGuid(), false);
+        var assignment = Assigned(type, PrivateObjectiveHolderKind.Player, player);
+        var now = DateTimeOffset.UtcNow;
+        var incomplete = CampaignPlayState.Empty.With(
+            forces: [force],
+            retreats:
+            [
+                new RetreatOrder(Guid.NewGuid(), Guid.NewGuid(), force.Id, Guid.NewGuid(), isDefault: false, now),
+                new RetreatOrder(Guid.NewGuid(), Guid.NewGuid(), force.Id, Guid.NewGuid(), isDefault: true, now),
+                new RetreatOrder(
+                    Guid.NewGuid(),
+                    Guid.NewGuid(),
+                    force.Id,
+                    Guid.NewGuid(),
+                    isDefault: false,
+                    now,
+                    isStaffCorrection: true),
+            ],
+            privateObjectives: [assignment]);
+
+        Assert.Equal(
+            PrivateObjectiveAssignmentStatus.Assigned,
+            Evaluate(incomplete, type, []).PrivateObjectives[0].Status);
+
+        var complete = incomplete.With(
+            retreats:
+            [
+                .. incomplete.Retreats,
+                new RetreatOrder(Guid.NewGuid(), Guid.NewGuid(), force.Id, Guid.NewGuid(), isDefault: false, now),
+            ]);
+
+        Assert.Equal(
+            PrivateObjectiveAssignmentStatus.Revealed,
+            Evaluate(complete, type, []).PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void RelicAdjacencyCountsTheSameTerritoryAndDirectNeighbors()
+    {
+        var relicType = Guid.NewGuid();
+        var type = Automatic(
+            "Near the crown",
+            PrivateObjectiveAutomaticKind.AdjacentToRelic,
+            itemObjectiveTypeId: relicType);
+        var player = Guid.NewGuid();
+        var home = Guid.NewGuid();
+        var neighbor = Guid.NewGuid();
+        var far = Guid.NewGuid();
+        var force = new CampaignForce(Guid.NewGuid(), player, Guid.NewGuid(), home, false);
+        var relic = new CampaignItemObjective(
+            Guid.NewGuid(),
+            relicType,
+            "Crown",
+            neighbor,
+            possessorForceId: null,
+            isRevealed: true,
+            neighbor,
+            wasHiddenUntilFound: false);
+        var map = new PlayMap(
+            [
+                new PlayTerritory(home, 1, null, null, null, null, StructureCondition.Operational),
+                new PlayTerritory(neighbor, 2, null, null, null, null, StructureCondition.Operational),
+                new PlayTerritory(far, 3, null, null, null, null, StructureCondition.Operational),
+            ],
+            [(home, neighbor)]);
+        var assignment = Assigned(type, PrivateObjectiveHolderKind.Player, player);
+        var state = CampaignPlayState.Empty.With(
+            forces: [force],
+            itemObjectives: [relic],
+            privateObjectives: [assignment]);
+
+        var next = Evaluate(
+            state,
+            type,
+            [new PrivateObjectiveTerritory(home, force.FactionId, null, StructureCondition.Operational)],
+            map: map);
+
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Revealed, next.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void BuildAnyStructureTypeCompletesFromWorkFacts()
+    {
+        var type = Automatic(
+            "Build two",
+            PrivateObjectiveAutomaticKind.BuildStructureType,
+            requiredCount: 2,
+            matchesAnyStructureType: true);
+        var player = Guid.NewGuid();
+        var faction = Guid.NewGuid();
+        var assignment = Assigned(type, PrivateObjectiveHolderKind.Player, player);
+        var now = DateTimeOffset.UtcNow;
+        var state = CampaignPlayState.Empty.With(
+            structureWorks:
+            [
+                new StructureWorkFact(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), ActionKind.Build, faction, player, now),
+                new StructureWorkFact(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), ActionKind.Build, faction, player, now),
+            ],
+            privateObjectives: [assignment]);
+
+        var next = Evaluate(state, type, []);
+
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Revealed, next.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void DefeatRandomOpponentResolvesAtAssignmentAndScoresThatOpponent()
+    {
+        var north = Guid.NewGuid();
+        var south = Guid.NewGuid();
+        var type = Automatic(
+            "Defeat a rival",
+            PrivateObjectiveAutomaticKind.DefeatOpponent,
+            targetKind: PrivateObjectiveTargetKind.Faction,
+            targetSelection: PrivateObjectiveTargetSelection.Random);
+        var player = Guid.NewGuid();
+        var winner = new CampaignForce(Guid.NewGuid(), player, north, Guid.NewGuid(), false);
+        var loser = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), south, Guid.NewGuid(), false);
+        var seeded = PrivateObjectiveRules.SeedInitial(
+            [type],
+            [player],
+            [north, south],
+            [],
+            DateTimeOffset.UtcNow,
+            static _ => 0,
+            new Dictionary<Guid, Guid> { [player] = north });
+        var assignment = Assert.Single(seeded, item => item.HolderKind == PrivateObjectiveHolderKind.Player);
+        Assert.Equal(south, assignment.ResolvedTargetId);
+        var state = CampaignPlayState.Empty.With(
+            forces: [winner, loser],
+            battles: [Battle(winner.Id, loser.Id, DateTimeOffset.UtcNow)],
+            privateObjectives: [assignment]);
+
+        var next = Evaluate(
+            state,
+            type,
+            [],
+            factionByPlayer: new Dictionary<Guid, Guid> { [player] = north, [loser.ControllerUserId] = south });
+
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Revealed, next.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void ForceStatusGainedAfterALostPrerequisiteCompletes()
+    {
+        var shaken = Guid.NewGuid();
+        var inspired = Guid.NewGuid();
+        var type = Automatic(
+            "Recover",
+            PrivateObjectiveAutomaticKind.ForceStatus,
+            forceStatusTypeIds: [inspired],
+            statusMatchKind: PrivateObjectiveStatusMatchKind.GainedAfter,
+            prerequisiteForceStatusTypeId: shaken,
+            prerequisiteWasLost: true);
+        var player = Guid.NewGuid();
+        var force = new CampaignForce(Guid.NewGuid(), player, Guid.NewGuid(), Guid.NewGuid(), false);
+        var assignment = Assigned(type, PrivateObjectiveHolderKind.Player, player);
+        var now = DateTimeOffset.UtcNow;
+        var state = CampaignPlayState.Empty.With(
+            forces: [force],
+            forceStatusChanges:
+            [
+                new ForceStatusChangeFact(
+                    Guid.NewGuid(),
+                    force.Id,
+                    force.FactionId,
+                    player,
+                    shaken,
+                    previousStatusName: null,
+                    "Shaken",
+                    force.Id,
+                    force.FactionId,
+                    player,
+                    now,
+                    previousStatusTypeId: null),
+                new ForceStatusChangeFact(
+                    Guid.NewGuid(),
+                    force.Id,
+                    force.FactionId,
+                    player,
+                    statusTypeId: null,
+                    "Shaken",
+                    nextStatusName: null,
+                    force.Id,
+                    force.FactionId,
+                    player,
+                    now.AddMinutes(1),
+                    shaken),
+                new ForceStatusChangeFact(
+                    Guid.NewGuid(),
+                    force.Id,
+                    force.FactionId,
+                    player,
+                    inspired,
+                    previousStatusName: null,
+                    "Inspired",
+                    force.Id,
+                    force.FactionId,
+                    player,
+                    now.AddMinutes(2),
+                    previousStatusTypeId: null),
+            ],
+            privateObjectives: [assignment]);
+
+        var next = Evaluate(state, type, []);
+
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Revealed, next.PrivateObjectives[0].Status);
+    }
+
     private static PrivateObjectiveTypePlayRules Manual(string name, params PrivateObjectiveHolderKind[] kinds)
     {
         return Manual(name, Guid.NewGuid(), kinds);
@@ -470,5 +707,89 @@ public sealed class PrivateObjectiveRulesTests
             requiredCount: 1,
             structureTypeId: null,
             []);
+    }
+
+    private static PrivateObjectiveTypePlayRules Automatic(
+        string name,
+        PrivateObjectiveAutomaticKind kind,
+        int requiredCount = 1,
+        Guid? structureTypeId = null,
+        bool matchesAnyStructureType = false,
+        Guid? itemObjectiveTypeId = null,
+        PrivateObjectiveTargetKind targetKind = PrivateObjectiveTargetKind.None,
+        PrivateObjectiveTargetSelection targetSelection = PrivateObjectiveTargetSelection.Specific,
+        IReadOnlyList<Guid>? forceStatusTypeIds = null,
+        PrivateObjectiveStatusMatchKind statusMatchKind = PrivateObjectiveStatusMatchKind.None,
+        Guid? prerequisiteForceStatusTypeId = null,
+        bool prerequisiteWasLost = false)
+    {
+        return new PrivateObjectiveTypePlayRules(
+            Guid.NewGuid(),
+            name,
+            4,
+            [PrivateObjectiveHolderKind.Player],
+            PrivateObjectiveScoringKind.Automatic,
+            kind,
+            requiredCount,
+            structureTypeId,
+            [],
+            matchesAnyStructureType,
+            itemObjectiveTypeId,
+            matchesAnyItemObjective: itemObjectiveTypeId is null
+                && kind is PrivateObjectiveAutomaticKind.AdjacentToRelic or PrivateObjectiveAutomaticKind.ControlRelic,
+            targetKind,
+            targetSelection,
+            targetId: null,
+            forceStatusTypeIds,
+            statusMatchKind,
+            prerequisiteForceStatusTypeId,
+            prerequisiteWasLost);
+    }
+
+    private static PrivateObjectiveAssignment Assigned(
+        PrivateObjectiveTypePlayRules type,
+        PrivateObjectiveHolderKind holderKind,
+        Guid holderId)
+    {
+        return new PrivateObjectiveAssignment(
+            Guid.NewGuid(),
+            type.Id,
+            holderKind,
+            holderId,
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            DateTimeOffset.UtcNow);
+    }
+
+    private static CampaignBattle Battle(Guid winnerForceId, Guid loserForceId, DateTimeOffset createdUtc)
+    {
+        return new CampaignBattle(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            BattleStatus.Finalized,
+            [winnerForceId, loserForceId],
+            winnerForceId,
+            isDraw: false,
+            createdUtc);
+    }
+
+    private static CampaignPlayState Evaluate(
+        CampaignPlayState state,
+        PrivateObjectiveTypePlayRules type,
+        IReadOnlyList<PrivateObjectiveTerritory> territories,
+        IReadOnlyDictionary<Guid, Guid>? factionByPlayer = null,
+        PlayMap? map = null)
+    {
+        return PrivateObjectiveRules.EvaluateAutomatic(
+            state,
+            [type],
+            territories,
+            factionByPlayer ?? new Dictionary<Guid, Guid>(),
+            new Dictionary<Guid, Guid?>(),
+            new HashSet<Guid>(),
+            DateTimeOffset.UtcNow,
+            map);
     }
 }
