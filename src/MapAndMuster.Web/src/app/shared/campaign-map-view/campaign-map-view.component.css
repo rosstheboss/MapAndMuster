@@ -208,14 +208,23 @@
   pointer-events: none;
 }
 
-.territory-visual {
+.territory-visual,
+.territory-markers,
+.drawing-path,
+.drawing-vertex,
+.snap-target,
+.adjacency,
+.adjacency-line,
+.adjacency-head,
+.adjacency-hit,
+.adjacency-hit-head,
+.adjacency-visual {
   pointer-events: none;
 }
 
 .territory-markers {
   position: absolute;
   inset: 0;
-  pointer-events: none;
 }
 
 .marker-decode {
@@ -429,38 +438,24 @@
   stroke: var(--color-accent);
   stroke-linejoin: round;
   stroke-linecap: round;
-  pointer-events: none;
 }
 
 .drawing-vertex {
   fill: var(--color-accent);
   stroke: #fff;
-  pointer-events: none;
 }
 
 .snap-target {
   fill: rgb(245 158 11 / 35%);
   stroke: #f59e0b;
-  pointer-events: none;
-}
-
-.adjacency {
-  pointer-events: none;
 }
 
 .adjacency-line {
   stroke: #1c1917;
-  pointer-events: none;
 }
 
 .adjacency-head {
   fill: #1c1917;
-  pointer-events: none;
-}
-
-.adjacency-hit,
-.adjacency-hit-head {
-  pointer-events: none;
 }
 
 .adjacency.is-interactive .adjacency-hit {
@@ -475,10 +470,6 @@
   stroke: none;
   cursor: pointer;
   pointer-events: fill;
-}
-
-.adjacency-visual {
-  pointer-events: none;
 }
 
 .territory-name {

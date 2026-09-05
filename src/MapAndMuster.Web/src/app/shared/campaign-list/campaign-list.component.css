@@ -3,13 +3,6 @@
   gap: var(--space-4);
 }
 
-.button,
-.button-secondary {
-  display: inline-flex;
-  align-items: center;
-  text-decoration: none;
-}
-
 .campaign-group h2 {
   margin: 0;
   font-size: 1.15rem;
@@ -61,31 +54,6 @@
 .campaign-body p {
   margin: 0;
   color: var(--color-muted);
-}
-
-.section-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-height: var(--touch-min);
-  padding: 0.15rem 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
-
-.section-toggle::after {
-  content: '▾';
-  font-weight: 400;
-}
-
-.section-toggle[aria-expanded='false']::after {
-  content: '▸';
 }
 
 .choice-row {

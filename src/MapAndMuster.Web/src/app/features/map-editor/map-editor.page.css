@@ -34,18 +34,19 @@
   color: #dc2626;
 }
 
-.tool-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  align-items: center;
-}
-
+.tool-row,
 .tool-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
   align-items: center;
+}
+
+.tool-row {
+  gap: 0.55rem;
+}
+
+.tool-group {
+  gap: 0.4rem;
 }
 
 .tool-toggle-group {
@@ -180,21 +181,22 @@
   }
 }
 
-.selected-territory-names {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.85rem;
+.selected-territory-names,
+.connection-list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+.selected-territory-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+}
+
 .connection-list {
   display: grid;
   gap: 0.35rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 .connection-list li {
@@ -203,31 +205,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.45rem;
-}
-
-.section-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-height: var(--touch-min);
-  padding: 0.15rem 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
-
-.section-toggle::after {
-  content: '▾';
-  font-weight: 400;
-}
-
-.section-toggle[aria-expanded='false']::after {
-  content: '▸';
 }
 
 .side-pane {

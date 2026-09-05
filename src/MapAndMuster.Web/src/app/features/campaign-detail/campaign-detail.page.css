@@ -2,63 +2,20 @@
   display: block;
 }
 
-.button,
-.button-secondary {
-  display: inline-flex;
-  align-items: center;
-  text-decoration: none;
-}
-
-.setup-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: grid;
-  gap: var(--space-3);
-  padding-bottom: var(--space-3);
-  margin-bottom: var(--space-3);
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.setup-toolbar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  align-items: center;
-}
-
-.section-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-height: var(--touch-min);
-  padding: 0.15rem 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
-
-.section-toggle::after {
-  content: '▾';
-  font-weight: 400;
-}
-
-.section-toggle[aria-expanded='false']::after {
-  content: '▸';
-}
-
 .status-panel {
   display: grid;
   gap: 0.35rem;
 }
 
-.status-panel p {
+.status-panel p,
+.commitment-summary,
+.manage-campaign-note,
+.claimed-private-objectives,
+.summary-force > p,
+.builder-options,
+.battle-header p,
+.battle-matchup,
+.map-meta h3 {
   margin: 0;
 }
 
@@ -122,10 +79,6 @@
   cursor: not-allowed;
 }
 
-.commitment-summary {
-  margin: 0;
-}
-
 .commitment-roster {
   display: grid;
   gap: var(--space-2);
@@ -143,11 +96,8 @@
   background: var(--color-nested);
 }
 
-.manage-campaign-note {
-  margin: 0;
-}
-
-.battle-card {
+.battle-card,
+.battle-report {
   display: grid;
   gap: var(--space-3);
   padding: var(--space-3);
@@ -160,24 +110,9 @@
   gap: var(--space-2);
 }
 
-.battle-header p,
-.battle-matchup {
-  margin: 0;
-}
-
 .battle-supply-summary {
   display: grid;
   gap: var(--space-2);
-}
-
-@media (width >= 40rem) {
-  .battle-supply-summary {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.claimed-private-objectives {
-  margin: 0;
 }
 
 .claimed-private-objectives summary {
@@ -231,10 +166,6 @@
   gap: var(--space-2);
 }
 
-.summary-force > p {
-  margin: 0;
-}
-
 .supply-points-label {
   font-weight: 600;
   margin-right: 0.35rem;
@@ -253,6 +184,7 @@
 }
 
 @media (width >= 40rem) {
+  .battle-supply-summary,
   .battle-sides {
     grid-template-columns: 1fr 1fr;
   }
@@ -282,14 +214,6 @@
   text-align: left;
   vertical-align: top;
   border-bottom: 1px solid var(--color-border);
-}
-
-.battle-report {
-  display: grid;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: 0.35rem;
 }
 
 .log-unread {
@@ -332,24 +256,6 @@
   cursor: pointer;
 }
 
-.territory-link:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-  text-decoration: none;
-}
-
-.territory-link.is-selected {
-  background: var(--color-dirty-bg);
-  outline: 3px solid var(--color-glow);
-  outline-offset: 2px;
-  border-radius: 0.35rem;
-  text-decoration: none;
-}
-
-.map-section {
-  scroll-margin-top: 5.5rem;
-}
-
 .map-focus-button {
   display: inline;
   min-height: var(--touch-min);
@@ -363,9 +269,23 @@
   cursor: pointer;
 }
 
+.territory-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  text-decoration: none;
+}
+
 .map-focus-button:disabled {
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+.territory-link.is-selected {
+  background: var(--color-dirty-bg);
+  outline: 3px solid var(--color-glow);
+  outline-offset: 2px;
+  border-radius: 0.35rem;
+  text-decoration: none;
 }
 
 .map-focus-button.is-map-focused {
@@ -373,6 +293,10 @@
   outline: 3px solid var(--color-glow);
   outline-offset: 2px;
   border-radius: 0.35rem;
+}
+
+.map-section {
+  scroll-margin-top: 5.5rem;
 }
 
 .faction-swatch {
@@ -425,7 +349,8 @@
   background: var(--color-hover, rgb(28 25 23 / 8%));
 }
 
-.force-draft-row {
+.force-draft-row,
+.award-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
@@ -460,8 +385,6 @@
 
 .map-meta {
   min-width: 0;
-
-  /* Heading, description, and the labeled rows. Longer copy scrolls inside this box. */
   height: var(--map-details-panel-height, 26rem);
   overflow: auto;
   overscroll-behavior: contain;
@@ -472,10 +395,6 @@ app-campaign-map-view.is-fullscreen .map-meta {
   height: 100%;
   min-height: 0;
   max-height: 100%;
-}
-
-.map-meta h3 {
-  margin: 0;
 }
 
 .map-heading {
@@ -633,33 +552,10 @@ app-faction-logo.faction-list-logo {
   margin-left: 0.4rem;
 }
 
-.award-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  align-items: end;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
 fieldset {
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   padding: var(--space-3);
-}
-
-.builder-options {
-  margin: 0;
 }
 
 .army-list-preview {
