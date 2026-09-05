@@ -283,6 +283,59 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task GetPlaySucceedsWhenAConcurrentAdvanceWinsThePersist()
+    {
+        var campaign = WithCopied(StoredCampaignFor(UserId), startsUtc: Now.AddHours(-1), endsUtc: Now.AddDays(40));
+        var store = new FakeCampaignStore { Existing = campaign, PlayUpdateConflictsRemaining = 1 };
+        var viewed = await new GetCampaignPlayHandler(store, new FakeClock(), new FakeAccounts())
+            .HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+
+        Assert.True(viewed.IsSuccess);
+        Assert.NotNull(viewed.Value);
+    }
+
+    [Fact]
+    public async Task CommitRetriesWhenAConcurrentPlayUpdateChangesTheRevision()
+    {
+        var campaign = PlayableInProgressCampaign();
+        var store = new FakeCampaignStore { Existing = campaign };
+        var accounts = new FakeAccounts();
+        var clock = new FakeClock();
+        var get = new GetCampaignPlayHandler(store, clock, accounts);
+        var seeded = await get.HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+        Assert.True(seeded.IsSuccess);
+        Assert.NotNull(seeded.Value);
+        var force = Assert.Single(seeded.Value.Forces);
+        var draft = await new SaveOrderDraftHandler(store, clock, accounts).HandleAsync(
+            new SaveOrderDraftCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = seeded.Value.Revision,
+                ForceId = force.Id,
+                Kind = "Hold",
+            },
+            CancellationToken.None);
+        Assert.True(draft.IsSuccess);
+        Assert.NotNull(draft.Value);
+        store.PlayUpdateConflictsRemaining = 1;
+        var committed = await new CommitOrdersHandler(store, clock, accounts).HandleAsync(
+            new PlayCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = draft.Value.Revision,
+            },
+            CancellationToken.None);
+
+        Assert.True(committed.IsSuccess);
+        Assert.NotNull(committed.Value);
+        Assert.NotEqual("concurrency.conflict", committed.ErrorCode);
+    }
+
+    [Fact]
     public async Task MemberCanPostChatOnAnUpcomingCampaign()
     {
         var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
@@ -1209,7 +1262,8 @@ public sealed class CampaignHandlerTests
         var handler = new EndCampaignHandler(
             store,
             new FakeClock(),
-            new CampaignNotificationPublisher(notices, new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()));
+            new CampaignNotificationPublisher(notices, new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()),
+            new FakeAccounts());
 
         var forbidden = await handler.HandleAsync(
             new EndCampaignCommand
@@ -1242,6 +1296,10 @@ public sealed class CampaignHandlerTests
         Assert.All(notices.Added, notice => Assert.Equal(NotificationKind.CampaignEnded, notice.Kind));
         Assert.Contains(notices.Added, notice => notice.UserId == OtherUserId);
         Assert.Contains(notices.Added, notice => notice.UserId == UserId);
+        Assert.Contains(store.Updated.PlayState!.Log, entry => entry.Kind == PlayLogKind.CampaignClosed);
+        var summary = Assert.Single(store.Updated.PlayState.Log, entry => entry.Kind == PlayLogKind.CampaignEnded);
+        Assert.Contains("Final scores", summary.Message, StringComparison.Ordinal);
+        Assert.Contains("Item objectives", summary.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1252,7 +1310,8 @@ public sealed class CampaignHandlerTests
         var handler = new EndCampaignHandler(
             store,
             new FakeClock(),
-            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()));
+            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()),
+            new FakeAccounts());
 
         var ended = await handler.HandleAsync(
             new EndCampaignCommand
@@ -1277,7 +1336,8 @@ public sealed class CampaignHandlerTests
         var handler = new EndCampaignHandler(
             store,
             new FakeClock(),
-            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()));
+            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()),
+            new FakeAccounts());
 
         var ended = await handler.HandleAsync(
             new EndCampaignCommand
@@ -1367,7 +1427,8 @@ public sealed class CampaignHandlerTests
         var handler = new EndCampaignHandler(
             store,
             new FakeClock(),
-            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()));
+            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()),
+            new FakeAccounts());
 
         var ended = await handler.HandleAsync(
             new EndCampaignCommand
@@ -2056,6 +2117,69 @@ public sealed class CampaignHandlerTests
         };
     }
 
+    private static StoredCampaign PlayableInProgressCampaign()
+    {
+        var northSpawn = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var southSpawn = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var midland = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var plainsId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var graph = new StoredMapGraph
+        {
+            Territories =
+            [
+                SquareTerritory(northSpawn, 1, 0.05, 0.05, 0.2, NorthFactionId, plainsId),
+                SquareTerritory(midland, 2, 0.30, 0.05, 0.2, null, plainsId),
+                SquareTerritory(southSpawn, 3, 0.55, 0.05, 0.2, SouthFactionId, plainsId),
+            ],
+            Adjacencies =
+            [
+                new AdjacencyDetail
+                {
+                    Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01"),
+                    TerritoryAId = northSpawn,
+                    TerritoryBId = midland,
+                    Origin = "Manual",
+                    MarkerX = 0.27,
+                    MarkerY = 0.15,
+                },
+                new AdjacencyDetail
+                {
+                    Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02"),
+                    TerritoryAId = midland,
+                    TerritoryBId = southSpawn,
+                    Origin = "Manual",
+                    MarkerX = 0.52,
+                    MarkerY = 0.15,
+                },
+            ],
+        };
+        return WithCopied(
+            StoredCampaignFor(UserId),
+            memberships:
+            [
+                new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                },
+            ],
+            startsUtc: Now.AddHours(-1),
+            endsUtc: Now.AddDays(40),
+            mapGraph: graph,
+            terrainTypes:
+            [
+                new StoredTerrainType
+                {
+                    Id = plainsId,
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [],
+                },
+            ]);
+    }
+
     private static StoredCampaign WithCopied(
         StoredCampaign campaign,
         IReadOnlyList<StoredCampaignMembership>? memberships = null,
@@ -2069,7 +2193,8 @@ public sealed class CampaignHandlerTests
         StoredMapGraph? mapGraph = null,
         IReadOnlyList<StoredTerrainType>? terrainTypes = null,
         IReadOnlyList<StoredItemObjectiveType>? itemObjectiveTypes = null,
-        MapAndMuster.Domain.Play.CampaignPlayState? playState = null)
+        MapAndMuster.Domain.Play.CampaignPlayState? playState = null,
+        int? revision = null)
     {
         return new StoredCampaign
         {
@@ -2085,7 +2210,7 @@ public sealed class CampaignHandlerTests
             Region = campaign.Region,
             Country = campaign.Country,
             MapStorageKey = campaign.MapStorageKey,
-            Revision = campaign.Revision,
+            Revision = revision ?? campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
             CreatedByUserId = campaign.CreatedByUserId,
@@ -2177,6 +2302,11 @@ public sealed class CampaignHandlerTests
         public Task<bool> MarkReadAsync(Guid notificationId, Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken)
         {
             return Task.FromResult(true);
+        }
+
+        public Task<int> MarkAllReadAsync(Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(0);
         }
     }
 
@@ -2472,6 +2602,8 @@ public sealed class CampaignHandlerTests
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });
         }
 
+        public int PlayUpdateConflictsRemaining { get; set; }
+
         public Task<UpdateStoredCampaignOutcome> UpdatePlayStateAsync(
             Guid campaignId,
             MapAndMuster.Domain.Play.CampaignPlayState playState,
@@ -2492,8 +2624,14 @@ public sealed class CampaignHandlerTests
                 });
             }
 
-            if (Existing.Revision != expectedRevision)
+            if (Existing.Revision != expectedRevision || PlayUpdateConflictsRemaining > 0)
             {
+                if (PlayUpdateConflictsRemaining > 0)
+                {
+                    PlayUpdateConflictsRemaining--;
+                    Existing = WithCopied(Existing, revision: expectedRevision + 1);
+                }
+
                 return Task.FromResult(new UpdateStoredCampaignOutcome
                 {
                     IsSuccess = false,

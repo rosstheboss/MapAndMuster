@@ -93,6 +93,7 @@ if (ForwardedHeadersHosting.ShouldEnable(app.Configuration, app.Environment))
 }
 
 app.UseCampaignCorrelationId();
+app.UseCampaignCancelledRequests();
 
 if (app.Environment.IsDevelopment())
 {

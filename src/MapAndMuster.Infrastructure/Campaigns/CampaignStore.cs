@@ -116,7 +116,7 @@ public sealed class CampaignStore : ICampaignStore
             campaign.ForceStatuses,
             campaign.SplitForceSupplyPenaltyPercent,
             campaign.SplitForceSupplyPenaltyIsPercent,
-            campaign.BattleReportRules,
+            campaign.StandardBattleResultQuestions,
             campaign.ArmyEscalations,
             campaign.Missions,
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules));
@@ -531,7 +531,7 @@ public sealed class CampaignStore : ICampaignStore
                 campaign.ForceStatuses,
                 campaign.SplitForceSupplyPenaltyPercent,
                 campaign.SplitForceSupplyPenaltyIsPercent,
-                campaign.BattleReportRules,
+                campaign.StandardBattleResultQuestions,
                 campaign.ArmyEscalations,
                 campaign.Missions,
                 campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules)),
@@ -687,7 +687,7 @@ public sealed class CampaignStore : ICampaignStore
 
     private static StoredCampaign ToStored(CampaignRecord record)
     {
-        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
         return new StoredCampaign
         {
             Id = record.Id,
@@ -719,7 +719,7 @@ public sealed class CampaignStore : ICampaignStore
             RankingObjectivePoints = RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = BattleReportRules,
+            StandardBattleResultQuestions = StandardBattleResultQuestions,
             ArmyEscalations = ArmyEscalations,
             Missions = Missions,
             Memberships =

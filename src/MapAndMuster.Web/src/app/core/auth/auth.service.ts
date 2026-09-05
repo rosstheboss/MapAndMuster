@@ -234,6 +234,14 @@ export function readApiError(error: unknown, fallback: string): string {
   return messages.join('\n');
 }
 
+export function isConcurrencyConflict(error: unknown): boolean {
+  if (!(error instanceof HttpErrorResponse) || !error.error || typeof error.error !== 'object') {
+    return false;
+  }
+
+  return (error.error as ErrorResponse).code === 'concurrency.conflict';
+}
+
 export function readApiErrorMessages(error: unknown, fallback: string): string[] {
   if (error instanceof HttpErrorResponse && error.error && typeof error.error === 'object') {
     const body = error.error as ErrorResponse;

@@ -248,7 +248,9 @@ who is not yet attached as campaign manager only or as both manager and player. 
 member does not occupy a player slot. They may kick a non-manager player (which notifies them
 in-app and by email unless they are a test account), and assign another player's faction and
 subfaction from one dropdown that lists subfactions as
-`Faction Name - Subfaction Name`. From the third missed-order offence onward, staff also see a
+`Faction Name - Subfaction Name`. Choosing a value in that dropdown saves it. Player-managers
+can be assigned a faction the same way; kick and promote stay limited to non-manager players.
+From the third missed-order offence onward, staff also see a
 **May be kicked** badge on that participant that opens the matching campaign-log entry. Players may
 still change their own faction until the campaign starts; after launch only staff assignment
 changes it. A kicked player's forces, drafts, and unresolved battles are removed, and carried
@@ -258,9 +260,9 @@ Once a campaign is in progress or completed, near the bottom of the campaign pag
 panel lists every player occupying a slot. Upcoming campaigns omit this panel. Default order is
 highest total to lowest, then display name. Columns are display name
 (with currently held visible item-objective logos), faction logo, alliance group, Structures
-captured, Battles Won, Public Objectives, Private Objectives, Other, and Total. The five point
+captured, Battle points, Public Objectives, Private Objectives, Other, and Total. The five point
 columns sum to Total. The table sorts by any of those columns. Structure points are the current
-holdings (destroyed structures do not count). Battles Won is cumulative campaign points from
+holdings (destroyed structures do not count). Battle points are cumulative campaign points from
 resolved battles: by default the score differential (winner minus loser, times a multiplier,
 clamped to a configured range, default 0 to 10) with draw participants each receiving configured
 draw points (default 1). When differential scoring is off, a win awards configured win points
@@ -274,16 +276,20 @@ structures. Running public objectives add configured campaign points for each cu
 territory, and for each revealed relic currently held by another player of the same faction or
 a current (not backstabbed) ally. Relics the scoring player holds stay in Other. A named,
 ranking, or running objective configured at 0 campaign points is ignored.
-The panel also shows a top five for each enabled ranking objective and for points per territory
-when that running objective is configured above 0. Allied relic control is scored in Public
-Objectives but is not shown as a top five. Private Objectives is the
+The panel also shows a top five for each enabled public objective that is not an item objective:
+ranking objectives, points per territory when that running objective is configured above 0, and
+named catalog public objectives. Allied relic control is scored in Public Objectives but is not
+shown as a top five. Each list has at most five rows. Tied players at first, second, or third
+are listed individually when they still fit in five rows. A tied group that would push the list
+past five is shown as "X players tied with Y", where X is how many players share that value and
+Y is the value. Private Objectives is the
 total of revealed or completed private-objective points that apply to that player: a
 player-scoped award counts only for that player; a faction award counts for every current
 player of that faction; an ally-group award counts for every current player whose faction is
 still in that group. Each assignment is scored on its own, including duplicate catalog types.
 Manual private objectives enter this column after a manager approves a
-claim, or when the campaign is completed while the objective is still held. Automatic private
-objectives enter it when their map criterion is met. Other is currently held visible
+claim. Automatic private objectives enter it when their map criterion is met.
+Unclaimed private objectives do not score when the campaign ends. Other is currently held visible
 item-objective points. Destroyed items contribute nothing. Hidden items are omitted from
 unauthorized standings and logos so the columns still add up for that viewer; the holder and
 staff in an active debug session see their own hidden items.
@@ -294,7 +300,9 @@ progress of unrevealed private objectives are returned only to authorized holder
 members of the faction or ally group) and to campaign managers or administrators. Revealed or
 completed private objectives are listed publicly, and their points are included in the Private
 Objectives total. When the campaign is completed, remaining assigned private objectives become
-publicly visible; still-unapproved manual objectives then count in standings.
+publicly visible for review, but still-unclaimed manual objectives do not add points.
+Holders may still claim during the settlement window after play ends and before a manager
+closes the campaign; automatic criteria continue to score if they are met in that window.
 
 While a campaign is in progress, the map toolbar offers a display-only highlight mode for the
 current viewer: configured overlay colors, faction colors, or alliance colors (unaligned
@@ -402,11 +410,12 @@ and battle windows; a window cannot be shortened below the duration already in e
 window. Added rounds use the original phase template and make the campaign longer.
 
 Each action window and battle phase has an "End phase early if able to resolve" checkbox,
-default on. When it is on, unused time from a window that closes early is added to the next
-window. When it is off, the window stays open until its deadline even if nothing remains to
-resolve, so a manager can still inject a ringer battle during a battle phase. Simultaneous-action
-resolution runs immediately when an action window closes; any wall-clock pause before the next
-window opens is taken from that next window.
+default on. When it is on, a window that can resolve closes immediately and the next window
+opens with that next window's duration already in effect, not leftover time from the window
+that just ended. Later windows keep their scheduled start and end times so the campaign does
+not finish early. When the checkbox is off, the window stays open until its deadline even if
+nothing remains to resolve, so a manager can still inject a ringer battle during a battle
+phase. Simultaneous-action resolution runs immediately when an action window closes.
 
 ## Role and actor model
 
@@ -430,12 +439,15 @@ When staff act for another party, record:
 5. `Resolved`: resulting map/battle state is committed once.
 6. `Reopened`: staff correction creates a new revision and a new controlled editing window.
 
-The final required commitment closes an open window atomically. A player may commit only after every required force has a saved draft. Before that instant, a player
+The final required commitment closes an open window atomically. A player may commit only after every required force that is not in battle has a saved draft. Before that instant, a player
 may uncommit a committed order back to draft. At the deadline, the latest valid draft is
 submitted. Missing slots become `Hold`. After the window closes, orders resolve and cannot be
-returned to draft. Each force requires an action; same-player forces that occupy one territory
+returned to draft. Loading or mutating play state advances every overdue window in one pass, so a
+campaign that sat idle past several deadlines catches up without a reload. Each force requires an action unless it is already in battle; same-player forces that occupy one territory
 rejoin into one surviving force and therefore one later action. Only users/forces that owe an
-order participate in the early-close calculation.
+order participate in the early-close calculation. If every remaining force is in battle, nobody
+owes an action and the window closes early when that setting is on. An action window with no
+forces at all waits for the deadline.
 
 Players pick a faction, and a required subfaction when the faction demands one, before they
 receive a starting force. On the campaign page, faction assignment (a player's own choice or a
@@ -487,7 +499,9 @@ Player-submittable actions in an open action window are listed in this order:
   that owner may repair.
 - `Split`: create a second force in an eligible adjacent territory; maximum two per player in
   the supplied rules.
-- `Backstab`: terminate an alliance relationship. If the acting force occupies a former ally's
+- `Backstab`: terminate an alliance relationship. It is only available when the acting force
+  shares a territory with an allied force, or occupies an allied faction's territory that has no
+  allied force present. If the acting force occupies a former ally's
   territory and no former-ally force (and no other remaining ally of that former ally) is there,
   the force claims that territory and auto-pillages the structure when it is pillageable;
   auto-pillage never destroys. If the backstab forces a battle instead, there is no auto-pillage;
@@ -495,7 +509,8 @@ Player-submittable actions in an open action window are listed in this order:
 
 Battle-phase and system actions:
 
-- `Retreat`: move a losing/withdrawing force to an eligible territory or spawn fallback. Players
+- `Retreat`: move a losing/withdrawing force to an open (unoccupied) Neutral territory, a
+  territory the force owns, or a territory owned by a current ally, otherwise to spawn. Players
   submit retreat after a battle, not during an action window, except as part of surrender.
   `ArtOfWar` may retreat into any non-enemy-spawn territory and may capture it.
 - `Surrender`: while a force is engaged, during an action or battle window, commit to leaving
@@ -504,7 +519,8 @@ Battle-phase and system actions:
 - `Battle`: automatic system action created by resolution; players do not submit it directly.
 
 Battle overrides incompatible orders. If Action 1 puts a force in battle, later action slots for
-that force become Battle.
+that force become Battle. That force does not submit an action until the battle is resolved;
+Surrender is offered on the battle, not as a required action-list item.
 
 ## Battle lifecycle
 
@@ -514,8 +530,7 @@ Players may report a battle during the Battle phase or earlier while an Action w
 open if they are already in that battle. One player reports both sides. The report includes
 victory points, army size in points, how many supply-costing units they fielded (special, rare,
 and similar; each unit spends one supply point), differential battle points from VP, bonus
-battle points from the mission, whether they killed the enemy general, whether they destroyed
-the enemy supply line, and any extra mission questions the campaign manager configured
+battle points from the mission, and any mission result questions the campaign manager configured
 (true/false or a battle-point amount, each awarding battle points and/or campaign points).
 A force with Prepared for Battle may declare Extra Black Powder (spending one extra supply
 point). A force with Magical Supply may declare leftover unused composition supply used as
@@ -527,8 +542,14 @@ supply amounts for Characters, Core, Special, Rare, and similar categories. Spec
 mercenary, and allied units default to one supply point each; the player may correct those
 amounts. If the text cannot be parsed, the player is told to enter supply points manually.
 Automatic parsing is only implemented for Warhammer: The Old World.
-Basic campaign configuration can always ask for general kills and supply-line destruction and
-sets the campaign points those facts award (both on and 1 campaign point by default). The
+The campaign manager can keep a reusable catalog of standard battle-result questions (prompt,
+true/false or battle-point amount, standard battle points, and standard campaign points) and
+attach those questions to any number of catalog missions, including all missions at once.
+Attaching from the catalog copies prompt and kind from the catalog item; that mission may
+override battle points and campaign points. Unique per-mission questions remain available.
+Old campaigns that stored always-on general-kill and supply-line questions keep asking them
+because those flags migrate into catalog questions attached to every mission. New campaigns
+start with an empty catalog. The
 application spends reported supply-costing units first from that force's territory/structure
 allowance plus the round bonus, then from the player's temporary pool.
 
@@ -544,9 +565,13 @@ allowance plus the round bonus, then from the player's temporary pool.
 - Winner is the higher total battle points (differential + bonus + answered question BP). A
   true battle-point tie is not a loss: both forces must retreat. Otherwise only the loser
   retreats, dropping a carried item objective for the winner to pick up.
-- Players submit retreat after the result is committed, by the end of the Battle phase. A
-  missing retreat uses the safest unoccupied owned territory after other submitted retreats,
-  then any unoccupied territory, then the spawn fallback. If two or more enemy forces would
+- Players submit retreat after the result is committed, by the end of the Battle phase. Eligible
+  destinations are open (unoccupied) Neutral territories, territories the force owns, and
+  territories owned by a current ally. The current battlefield and enemy spawns are never
+  eligible, and a force cannot retreat onto a hex occupied by an enemy. Friendly occupation of
+  owned or allied land is allowed (rejoin). `ArtOfWar` may also enter any other non-enemy-spawn
+  territory and may capture it. A missing retreat, or a force with no remaining eligible
+  destination, is assigned to that force's spawn. If two or more enemy forces would
   occupy the same territory after retreat, the strongest stays and the others are sent to the
   next safest eligible destination. Strongest is most current campaign points, then most
   territories, then most structures, then most supply including remaining temporary supply;
@@ -576,8 +601,13 @@ allowance plus the round bonus, then from the player's temporary pool.
   remaining uncontested occupant claims, or remaining opponents start a new battle.
 - A battle phase ends early when its "End phase early if able to resolve" checkbox is on and
   every engagement is finalized and every required retreat is recorded, and also when that
-  checkbox is on and no battles remain for anyone to report. Unused time is added to the next
-  window. When the checkbox is off, the window stays open until its deadline.
+  checkbox is on and no battles remain for anyone to report. The next window then runs for its
+  own duration rather than leftover time from the battle phase. When the checkbox is off, the
+  window stays open until its deadline. The battle-phase commitment count is unique players who
+  have a force in a battle this window. A player with two forces in two battles is one of that
+  total and is not committed until every one of their battles has an agreed result or a
+  manager/administrator entered or confirmed the result on a participant's behalf, and any
+  required retreat is recorded.
 
 ## Territory and structures
 
@@ -688,8 +718,10 @@ ally owns, or when a force backstabbed its opponent. An ally standing on allied 
 and may use an attack/defend mission; winning does not transfer ownership. Otherwise they are
 used only if no normal mission exists, and attacker/defender roles are then assigned at random.
 Role priority is backstab, then structure owner, then Hold/Retreat versus Move/Split.
-then Hold/Retreat versus Move/Split. Chosen missions appear on the campaign Battles panel with a
-link or file download when present. Attacker/defender missions may grant a signed army-point number
+Chosen missions appear on the campaign Battles panel with the mission name, attacker/defender or
+pitched-combatant roles, army and supply points for each reporting force, and a link or file
+download that opens in a new tab when present. If the mission has no URL or uploaded file, the
+panel says "See Campaign Manager for Mission details." Attacker/defender missions may grant a signed army-point number
 or percent change and a signed raw supply-point change to one side; after apply, army points are
 never below 500 and supply points are never below 1. Mission names are unique across the campaign.
 Unassigned catalog missions are kept. Mission attachments are an http/https URL or a stored PDF/Word
@@ -916,30 +948,37 @@ and the game log.
 
 ## Supply
 
-- Normal supply is calculated per force from spawn and connected owned or allied territory.
+- Normal supply is calculated per force from the owned or allied chain that force can reach.
+  Traversal starts at the force's territory when that land is spawn or otherwise in the supply
+  network; a force standing off the network still draws from adjacent owned or allied land.
   Each terrain type and each operational owned or allied structure grants configured supply
   points (default 1) when the force is connected to it. Allied land and structures count as if
   owned for supply and for defense, not for structure campaign-point holdings. Pillaging or
   destroying a structure awards that structure's configured temporary supply points to the
-  acting player.
+  acting player. Two forces that can both reach the same holdings each have access to that
+  chain; map supply is not spent from a shared pool.
 - Connected allied territory may participate when alliance rules permit (same ally group,
   not backstabbed).
-- Temporary supply is a persistent, consumable **player** pool. The earning player may assign
-  remaining points to any of their forces. Each spent point applies to exactly one force: a
-  force that uses a point does not leave that same point available to another of the player's
-  forces. Remaining temporary supply is added to the displayed current total as the maximum one
-  force can spend if it is assigned the entire remaining pool.
-- Split forces each receive the same territory/structure map supply after the split-force
+- Temporary supply is a persistent, consumable **player** pool shown separately as spendable
+  supply. The earning player may assign remaining points to any of their forces. Each spent
+  point applies to exactly one force: if two forces spend 2 and 1 from a pool of 3, the pool
+  is empty. Remaining temporary supply is not added into each force's chain total.
+- Split forces each receive the map supply of the chain they can reach after the split-force
   penalty, with a minimum of 1 map supply each. The round's free supply points are granted in
   full to every one of that player's forces. Temporary points are not duplicated. The Hunt in
   Estalia split penalty default is a raw value of 1 and is the application default. The penalty
   may instead be a percentage of map supply (0–100). Catalogs stored before this toggle keep
   the legacy 25 percent when the flag is absent.
-- Current supply shown on the Participants list is one force's allowance (map after split
-  penalty, plus round free supply) plus remaining temporary supply. A battle to resolve shows
-  each force's army-point cap for that game (round maximum, raised 25 percent per extra allied
-  player then split and rounded up to 10), standard supply after the split-force penalty and
-  round free-supply bonus, and the controlling player's remaining temporary pool separately.
+- Current chain supply shown under each of the viewer's forces in Summary, on the Participants
+  list as the maximum one force can spend from its chain plus remaining spendable supply, and
+  on battles to resolve is that force's allowance (map after split penalty, plus round free
+  supply) plus remaining temporary supply. Hovering or expanding the amount lists every source:
+  connected territories and their terrain, operational structures, allied holdings, special-rule
+  bonuses, round free supply, remaining temporary supply, and the split-force penalty. A battle
+  to resolve also shows each side's army-point cap for that game
+  (round maximum, raised 25 percent per extra allied player then split and rounded up to 10),
+  standard supply after the split-force penalty and round free-supply bonus, the controlling
+  player's remaining temporary pool, and the round's free-character allowance.
 - When a battle result reports supply-costing units, spend is taken first from that force's
   allowance and then from the player's temporary pool.
 - Round configuration stores one army-escalation row per round: max army points (10–100000), free
@@ -961,13 +1000,14 @@ Named public objectives are a campaign catalog. A manager or administrator award
 them during play; each change appends a public log fact.
 
 Private objectives are a campaign catalog assigned to a player, a faction, or an ally group.
-Unrevealed text and criteria are omitted from unauthorized payloads. Everyone who can view the
-campaign may see how many assigned private objectives each player, faction, and ally group still
-has unclaimed. Manual private objectives are claimed by an authorized holder (the player, or any
+Unrevealed text and criteria are omitted from unauthorized payloads. The campaign page lists the
+viewer's own private objectives at the top of Private objectives and reiterates still-unclaimed
+ones in Summary. Other players' claimed or revealed private objectives appear in a collapsed
+subpanel ordered by faction name. Unclaimed private objectives for other holders are not listed.
+Manual private objectives are claimed by an authorized holder (the player, or any
 player in that faction or ally group) who reveals them to a manager. A manager or administrator
 approves the claim to reveal it publicly and add its points, or denies it so the holder may
-claim again later. Holders may instead keep a manual objective until the campaign completes, at
-which point remaining assignments become public and their points count. Automatic private
+claim again later. Unclaimed manual objectives do not score at campaign end. Automatic private
 objectives are scored from live map facts after action resolution: currently controlled
 territories, currently controlled or pillaged structures of a configured type, a cumulative
 count of destroyed structures of a configured type attributed to the holder's faction, player,
@@ -1016,7 +1056,7 @@ that snapshot. Players whose force location, battle state, occupied or targeted 
 current-phase order legality changed are notified in-app and by email. Their committed current-phase
 orders return to draft when still legal, or are nullified when no longer legal so they must enter a
 new order. Standings-only changes do not uncommit anyone. If a battle-result override requires a
-retreat, that retreat is assigned automatically (safest destination, same as a missing retreat) and
+retreat, that retreat is assigned automatically to spawn (same as a missing retreat) and
 does not increment delinquency. Keep a current-phase battle report when the same participants still
 fight in the same territory; otherwise keep it in history but do not apply it to a new engagement.
 
@@ -1059,13 +1099,14 @@ game log. Game-log facts always go to the public channel. A campaign manager or 
 may download public chat and/or game-log facts as one text or CSV file at any time, including
 before launch, during play, and after the campaign ends. That file is the same payload a later
 outbound sender would use. Private chats are omitted from the download even when the caller can
-see them on screen. The log records campaign start,
+see them on screen. The log records campaign start, campaign end with final scores and remaining revealed item
+objectives (a later manager score or item adjustment appends an updated final snapshot),
 manager extensions of remaining phases or rounds, resolved
 actions after an action window closes (including Hold for every force), attempted actions that
 were invalid or conflicted and became Hold, battles created or finalized, manager battle-result
 overrides, debug enter/exit and debug order corrections, player retreats, automatic force rejoins when the same player's forces occupy one
 territory, and automatic substitutions: missing orders become Hold, deadline-submitted drafts,
-missing retreats using the spawn fallback, no-result forced retreats, ringer battles (including
+missing retreats assigned to spawn, no-result forced retreats, ringer battles (including
 voided neither-report fights), and delinquency notices from the third offence onward.
 Unresolved secret orders, including drafts and unrevealed commitments, are never written to or
 returned in the log. A player may uncommit a committed draft only while the action window is
@@ -1123,12 +1164,13 @@ commit orders, submit a battle result, or record a retreat. From the third delin
 onward, campaign managers are notified that a player is a possible kick. Email copies never include hidden
 orders, relics, private chat text, or site-chat bodies; they tell the recipient to sign in and
 open the campaign or All Campaigns. Seeded test accounts never receive email. The home page lists
-items that need attention, then site news. When none remain, it shows "No new notifications."
+campaigns that need attention, then notifications (five per page, dismissable, with dismiss all),
+then site news. When none remain, it shows "No new notifications."
 Profile editing and the public profile live on their own pages. The profile includes a default
 site-chat compose language and a date-and-time display format.
 
 ## News
 
-Administrators publish site-wide news as markdown articles. The home news board shows one article
-per page, newest first, with a scrollbar when an article is long. Markdown is HTML-encoded and
+Administrators publish site-wide news as markdown articles. The home news board shows the two
+newest articles, then pages of two, newest first, with a scrollbar when an article is long. Markdown is HTML-encoded and
 then a conservative subset is rendered; user-provided HTML is not executed.

@@ -32,6 +32,36 @@ public sealed class ActionResolutionTests
     }
 
     [Fact]
+    public void EligibleActionsOmitBackstabUnlessSharingWithAnAllyOrOnEmptyAlliedLand()
+    {
+        var north = new CampaignForce(Guid.NewGuid(), PlayerOne, North, NorthSpawn, false);
+        var south = new CampaignForce(Guid.NewGuid(), PlayerTwo, South, SouthSpawn, false);
+        var elsewhere = ActionResolution.EligibleActions(
+            State([north, south], []),
+            Map(midlandOwner: South),
+            north,
+            AlliedGroups());
+        Assert.DoesNotContain(ActionKind.Backstab, elsewhere);
+
+        var coLocatedNorth = north.With(territoryId: Midland);
+        var coLocatedSouth = south.With(territoryId: Midland);
+        var shared = ActionResolution.EligibleActions(
+            State([coLocatedNorth, coLocatedSouth], []),
+            Map(midlandOwner: South),
+            coLocatedNorth,
+            AlliedGroups());
+        Assert.Contains(ActionKind.Backstab, shared);
+
+        var stealing = north.With(territoryId: Midland);
+        var emptyAllied = ActionResolution.EligibleActions(
+            State([stealing, south], []),
+            Map(midlandOwner: South),
+            stealing,
+            AlliedGroups());
+        Assert.Contains(ActionKind.Backstab, emptyAllied);
+    }
+
+    [Fact]
     public void EligibleActionsIncludeBuildAndRepairWhenThoseSlotsApply()
     {
         var emptyForce = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
@@ -207,8 +237,11 @@ public sealed class ActionResolutionTests
     [Fact]
     public void BackstabBreaksTheAlliance()
     {
-        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, NorthSpawn, false);
-        var resolved = Resolve(State(force, Submit(force.Id, ActionKind.Backstab)), Map(), AlliedGroups());
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var resolved = Resolve(
+            State(force, Submit(force.Id, ActionKind.Backstab)),
+            Map(midlandOwner: South),
+            AlliedGroups());
         Assert.Contains(North, resolved.State.BrokenAllyFactionIds);
     }
 

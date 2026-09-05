@@ -1,6 +1,7 @@
 using MapAndMuster.Application.News;
 using MapAndMuster.Application.Notifications;
 using MapAndMuster.Application.Ports;
+using MapAndMuster.Domain.News;
 using Microsoft.EntityFrameworkCore;
 
 namespace MapAndMuster.Infrastructure.Persistence;
@@ -99,6 +100,26 @@ public sealed class UserNotificationStore : IUserNotificationStore
         return true;
     }
 
+    /// <inheritdoc />
+    public async Task<int> MarkAllReadAsync(Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        var records = await _dbContext.UserNotifications
+            .Where(item => item.UserId == userId && item.ReadUtc == null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var record in records)
+        {
+            record.ReadUtc = utcNow;
+        }
+
+        if (records.Count > 0)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return records.Count;
+    }
+
     private static UserNotification Map(UserNotificationRecord record)
     {
         return new UserNotification
@@ -138,30 +159,30 @@ public sealed class NewsStore : INewsStore
     public async Task<NewsPage> GetPageAsync(int page, CancellationToken cancellationToken)
     {
         var total = await _dbContext.NewsArticles.CountAsync(cancellationToken).ConfigureAwait(false);
-        var totalPages = total == 0 ? 0 : total;
+        var pageSize = NewsArticleRules.HomePageSize;
+        var totalPages = total == 0 ? 0 : (int)Math.Ceiling(total / (double)pageSize);
         var normalized = page < 1 ? 1 : page;
         if (totalPages > 0 && normalized > totalPages)
         {
             normalized = totalPages;
         }
 
-        NewsArticleRecord? record = null;
-        if (total > 0)
-        {
-            record = await _dbContext.NewsArticles
+        IReadOnlyList<NewsArticleRecord> records = total == 0
+            ? []
+            : await _dbContext.NewsArticles
                 .AsNoTracking()
                 .OrderByDescending(item => item.PublishedUtc)
                 .ThenByDescending(item => item.Id)
-                .Skip(normalized - 1)
-                .FirstOrDefaultAsync(cancellationToken)
+                .Skip((normalized - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
-        }
 
         return new NewsPage
         {
             Page = total == 0 ? 1 : normalized,
             TotalPages = totalPages,
-            Article = record is null ? null : Map(record),
+            Articles = [.. records.Select(Map)],
         };
     }
 

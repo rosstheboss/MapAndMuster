@@ -75,6 +75,7 @@ export class CampaignLogComponent {
   private sawSending = false;
   private appliedInitialChannel = false;
   private restoredScroll = false;
+  private stickToBottom = true;
   protected readonly availableChannels = computed(() => {
     const listed = this.channels();
     return listed.length > 0 ? listed : [{ kind: 'Public', targetId: null, label: 'Everyone' }];
@@ -143,11 +144,14 @@ export class CampaignLogComponent {
           const initial = this.initialScrollTop();
           if (initial !== null) {
             element.scrollTop = initial;
+            this.stickToBottom = this.isNearBottom(element);
             return;
           }
         }
 
-        element.scrollTop = element.scrollHeight;
+        if (this.stickToBottom) {
+          element.scrollTop = element.scrollHeight;
+        }
       });
     });
     effect(() => {
@@ -197,7 +201,9 @@ export class CampaignLogComponent {
   }
 
   protected onScroll(event: Event): void {
-    this.scrollChange.emit((event.currentTarget as HTMLElement).scrollTop);
+    const element = event.currentTarget as HTMLElement;
+    this.stickToBottom = this.isNearBottom(element);
+    this.scrollChange.emit(element.scrollTop);
   }
 
   protected originatorText(entry: PlayLogEntry): string {
@@ -244,6 +250,10 @@ export class CampaignLogComponent {
 
   protected formatTimeLabel(value: string): string {
     return formatLogTimeLabel(value, this.timeZoneId(), this.auth.currentUser()?.dateTimeDisplayFormat);
+  }
+
+  private isNearBottom(element: HTMLElement): boolean {
+    return element.scrollHeight - element.scrollTop - element.clientHeight <= 48;
   }
 
   private scrollEntryIntoView(entryId: string): void {

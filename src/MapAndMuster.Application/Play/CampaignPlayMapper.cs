@@ -104,16 +104,7 @@ internal static class CampaignPlayMapper
             }
         }
 
-        var commitments = currentActionId is { } commitWindow
-            ? play.RequiredOrderPlayers(commitWindow)
-                .Select(userId => new PlayCommitmentDetail
-                {
-                    UserId = userId,
-                    Username = names.GetValueOrDefault(userId),
-                    IsCommitted = play.Commitments.Any(item => item.WindowId == commitWindow && item.UserId == userId),
-                })
-                .ToArray()
-            : [];
+        var commitments = CommitmentsFor(play, window, names);
 
         var battles = play.Battles
             .Where(battle => battle.Status is BattleStatus.Pending or BattleStatus.AwaitingResults or BattleStatus.Disputed
@@ -152,7 +143,8 @@ internal static class CampaignPlayMapper
             HasMap = CampaignMapper.HasMapData(campaign),
             FactionId = membership?.FactionId,
             CanChooseFaction = CampaignMapper.CanChooseFaction(membership, progress.Status),
-            IsCommitted = CampaignMapper.ViewerIsCommitted(campaign, viewerUserId),
+            IsCommitted = ViewerIsCommitted(play, window, viewerUserId),
+            ViewerSupply = ToViewerSupply(play, map, campaign, viewerUserId, membership?.IsPlayer == true, window),
             RoundCount = campaign.RoundCount,
             MinRoundCount = Math.Max(progress.CurrentRound ?? CampaignSetupRules.MinRoundCount, CampaignSetupRules.MinRoundCount),
             RemainingWindows = remaining,
@@ -194,7 +186,7 @@ internal static class CampaignPlayMapper
                             TargetTerritoryId = hop.TargetTerritoryId,
                         })]
                         : [],
-                    AvailableActions = force.ControllerUserId == viewerUserId || staffView
+                    AvailableActions = (force.ControllerUserId == viewerUserId || staffView) && !force.InBattle
                         ? [.. ActionResolution.EligibleActions(play, map, force, allyGroups, specialRules).Select(static kind => kind.ToString())]
                         : [],
                     Subfaction = force.Subfaction,
@@ -204,6 +196,9 @@ internal static class CampaignPlayMapper
                     CanUseMagicalSupply = specialRules.Has(force, SpecialRuleEffectKeys.MagicalSupply),
                     HiddenRelicNearby = FactionSpecialRulePolicies.HiddenRelicAdjacent(map, force, play.ItemObjectives, specialRules),
                     BattleReminders = BattleRemindersFor(campaign, force, specialRules),
+                    Supply = force.ControllerUserId == viewerUserId || staffView
+                        ? ToForceSupply(play, map, campaign, force, window)
+                        : null,
                 }),
             ],
             MyDrafts = currentActionId is { } draftWindow
@@ -237,7 +232,69 @@ internal static class CampaignPlayMapper
                     .Where(member => member.IsPlayer && member.FactionId is null)
                     .Select(member => names.GetValueOrDefault(member.UserId) ?? member.UserId.ToString()),
             ],
+            MapTerritories =
+            [
+                .. map.Territories.Select(static territory => new PlayMapTerritoryDetail
+                {
+                    Id = territory.Id,
+                    OwnerFactionId = territory.OwnerFactionId,
+                    StructureTypeId = territory.StructureTypeId,
+                    StructureCondition = territory.StructureCondition.ToString(),
+                }),
+            ],
         };
+    }
+
+    private static IReadOnlyList<PlayCommitmentDetail> CommitmentsFor(
+        CampaignPlayState play,
+        PhaseWindow? window,
+        IReadOnlyDictionary<Guid, string> names)
+    {
+        if (window is { Kind: RoundPhaseKind.Action, Status: PhaseWindowStatus.Open })
+        {
+            return
+            [
+                .. play.RequiredOrderPlayers(window.Id)
+                    .Select(userId => new PlayCommitmentDetail
+                    {
+                        UserId = userId,
+                        Username = names.GetValueOrDefault(userId),
+                        IsCommitted = play.Commitments.Any(item => item.WindowId == window.Id && item.UserId == userId),
+                    }),
+            ];
+        }
+
+        if (window is { Kind: RoundPhaseKind.Battle, Status: PhaseWindowStatus.Open })
+        {
+            return
+            [
+                .. play.RequiredBattlePlayers(window.Id)
+                    .Select(userId => new PlayCommitmentDetail
+                    {
+                        UserId = userId,
+                        Username = names.GetValueOrDefault(userId),
+                        IsCommitted = play.HasCompletedBattleDuties(window.Id, userId),
+                    }),
+            ];
+        }
+
+        return [];
+    }
+
+    private static bool ViewerIsCommitted(CampaignPlayState play, PhaseWindow? window, Guid viewerUserId)
+    {
+        if (window is { Kind: RoundPhaseKind.Action, Status: PhaseWindowStatus.Open })
+        {
+            return play.Commitments.Any(item => item.WindowId == window.Id && item.UserId == viewerUserId);
+        }
+
+        if (window is { Kind: RoundPhaseKind.Battle, Status: PhaseWindowStatus.Open }
+            && play.RequiredBattlePlayers(window.Id).Contains(viewerUserId))
+        {
+            return play.HasCompletedBattleDuties(window.Id, viewerUserId);
+        }
+
+        return false;
     }
 
     private static IReadOnlyList<PlayDraftDetail> DebugDraftsFor(CampaignPlayState play, bool staffView)
@@ -323,15 +380,19 @@ internal static class CampaignPlayMapper
         var round = play.CurrentWindow()?.RoundNumber
             ?? (play.Windows.Count > 0 ? play.Windows[^1].RoundNumber : 1);
         var catalog = CampaignPlayCatalog.Supply(campaign);
-        var questions = CampaignPlayCatalog.MissionQuestions(campaign, battle.TerritoryId, battle.MissionId);
         var allies = campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName);
         var reportingForces = battle.ReportingForceIds
             .Select(forceId => play.Forces.FirstOrDefault(force => force.Id == forceId))
             .OfType<CampaignForce>()
             .ToArray();
         var sides = BattleMatchRules.Sides(reportingForces, allies, play.BrokenAllyFactionIds);
-        var mission = battle.MissionId is { } missionId
-            ? CampaignPlayCatalog.FindMission(campaign, missionId)
+        var assignment = ResolveMissingMission(play, map, campaign, battle, allies);
+        var missionId = battle.MissionId ?? assignment?.MissionId;
+        var attackerForceId = battle.AttackerForceId ?? assignment?.AttackerForceId;
+        var defenderForceId = battle.DefenderForceId ?? assignment?.DefenderForceId;
+        var questions = CampaignPlayCatalog.MissionQuestions(campaign, battle.TerritoryId, missionId);
+        var mission = missionId is { } resolvedMissionId
+            ? CampaignPlayCatalog.FindMission(campaign, resolvedMissionId)
             : null;
         var missionSetup = mission is null ? null : CampaignPlayCatalog.ToMissionSetup(mission);
         var forceSupplies = battle.ParticipantForceIds
@@ -339,22 +400,25 @@ internal static class CampaignPlayMapper
             .OfType<CampaignForce>()
             .Select(force =>
             {
-                var snapshot = SupplyRules.ForPlayer(play, map, catalog, force.ControllerUserId, round);
+                var snapshot = SupplyRules.ForForce(play, map, catalog, force, round);
+                var temporary = play.PlayerSupplies
+                    .FirstOrDefault(item => item.UserId == force.ControllerUserId)
+                    ?.TemporarySupplyPoints ?? 0;
                 var sideCount = sides.FirstOrDefault(side => side.Any(member => member.Id == force.Id))?.Count ?? 1;
                 var alliedArmy = AlliedArmyPointRules.ForceArmyPoints(snapshot.MaxArmyPoints, sideCount);
                 var armyAdvantaged = missionSetup is not null
                     && MissionAdvantageRules.IsAdvantagedSide(
                         force.Id,
                         missionSetup.ArmyPointsAdvantageSide,
-                        battle.AttackerForceId,
-                        battle.DefenderForceId,
+                        attackerForceId,
+                        defenderForceId,
                         sides);
                 var supplyAdvantaged = missionSetup is not null
                     && MissionAdvantageRules.IsAdvantagedSide(
                         force.Id,
                         missionSetup.SupplyPointsAdvantageSide,
-                        battle.AttackerForceId,
-                        battle.DefenderForceId,
+                        attackerForceId,
+                        defenderForceId,
                         sides);
                 var mapSupply = missionSetup is null
                     ? snapshot.MapSupplyPoints
@@ -362,16 +426,42 @@ internal static class CampaignPlayMapper
                 var allowance = missionSetup is null
                     ? snapshot.ForceAllowancePoints
                     : MissionAdvantageRules.ApplySupplyPoints(snapshot.ForceAllowancePoints, missionSetup, supplyAdvantaged);
-                var current = missionSetup is null
-                    ? snapshot.CurrentSupplyPoints
-                    : MissionAdvantageRules.ApplySupplyPoints(snapshot.CurrentSupplyPoints, missionSetup, supplyAdvantaged);
+                var current = allowance + temporary;
+                var contributions = ToContributions(snapshot, campaign);
+                if (temporary != 0)
+                {
+                    contributions =
+                    [
+                        .. contributions,
+                        new SupplyContributionDetail
+                        {
+                            Kind = nameof(SupplyContributionKind.Temporary),
+                            Label = "Temporary supply",
+                            Points = temporary,
+                        },
+                    ];
+                }
+                if (missionSetup is not null && mapSupply != snapshot.MapSupplyPoints)
+                {
+                    contributions =
+                    [
+                        .. contributions,
+                        new SupplyContributionDetail
+                        {
+                            Kind = nameof(SupplyContributionKind.MissionAdvantage),
+                            Label = "Mission supply advantage",
+                            Points = mapSupply - snapshot.MapSupplyPoints,
+                        },
+                    ];
+                }
+
                 return new PlayBattleForceSupplyDetail
                 {
                     ForceId = force.Id,
                     UserId = force.ControllerUserId,
                     ForceAllowancePoints = allowance,
                     CurrentSupplyPoints = current,
-                    TemporarySupplyPoints = snapshot.TemporarySupplyPoints,
+                    TemporarySupplyPoints = temporary,
                     MapSupplyPoints = mapSupply,
                     RoundFreeSupplyPoints = snapshot.RoundFreeSupplyPoints,
                     SplitPenaltyPoints = snapshot.SplitPenaltyPoints,
@@ -381,6 +471,7 @@ internal static class CampaignPlayMapper
                         : MissionAdvantageRules.ApplyArmyPoints(alliedArmy, missionSetup, armyAdvantaged),
                     FreeCharacterCount = snapshot.FreeCharacterCount,
                     IsSplit = snapshot.IsSplit,
+                    Contributions = contributions,
                 };
             })
             .ToArray();
@@ -407,7 +498,13 @@ internal static class CampaignPlayMapper
             NeedsRetreat = needsRetreat,
             CanSurrender = canSurrender,
             RetreatTargets = (needsRetreat || canSurrender) && myForce is not null
-                ? CampaignPlayRules.EligibleRetreats(map, myForce, CampaignPlayCatalog.SpecialRules(campaign))
+                ? CampaignPlayRules.EligibleRetreats(
+                    map,
+                    myForce,
+                    CampaignPlayCatalog.SpecialRules(campaign),
+                    play.Forces,
+                    campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName),
+                    play.BrokenAllyFactionIds)
                 : [],
             ResultQuestions =
             [
@@ -426,9 +523,48 @@ internal static class CampaignPlayMapper
                 && battle.Status is BattleStatus.AwaitingResults or BattleStatus.Disputed
                 && play.BattleSubmissions.Any(item => item.BattleId == battle.Id && item.AcceptedSubmissionId is null),
             Mission = mission is null ? null : CampaignMapper.ToMission(mission),
-            AttackerForceId = battle.AttackerForceId,
-            DefenderForceId = battle.DefenderForceId,
+            AttackerForceId = attackerForceId,
+            DefenderForceId = defenderForceId,
         };
+    }
+
+    private static BattleMissionAssignment? ResolveMissingMission(
+        CampaignPlayState play,
+        PlayMap map,
+        StoredCampaign campaign,
+        CampaignBattle battle,
+        IReadOnlyDictionary<Guid, string?> allies)
+    {
+        if (battle.MissionId is not null)
+        {
+            return null;
+        }
+
+        var present = battle.ParticipantForceIds
+            .Select(forceId => play.Forces.FirstOrDefault(force => force.Id == forceId))
+            .OfType<CampaignForce>()
+            .ToArray();
+        if (present.Length == 0)
+        {
+            return null;
+        }
+
+        var lastAction = play.Windows.LastOrDefault(item =>
+            item.Kind == RoundPhaseKind.Action && item.Status == PhaseWindowStatus.Resolved);
+        var arrivalKinds = present.ToDictionary(
+            static force => force.Id,
+            force => lastAction is null
+                ? ActionKind.Hold
+                : play.LatestSubmission(lastAction.Id, force.Id)?.Kind ?? ActionKind.Hold);
+        return BattleMissionRules.Choose(
+            map.Territory(battle.TerritoryId),
+            present,
+            arrivalKinds,
+            allies,
+            play.BrokenAllyFactionIds,
+            CampaignPlayCatalog.TerrainSetups(campaign),
+            CampaignPlayCatalog.StructureSetups(campaign),
+            static _ => 0);
     }
 
     private static PlayBattleSubmissionDetail? ToSubmission(BattleResultSubmission? submission)
@@ -451,8 +587,6 @@ internal static class CampaignPlayMapper
                         ArmyPoints = report.ArmyPoints,
                         DifferentialBattlePoints = report.DifferentialBattlePoints,
                         BonusBattlePoints = report.BonusBattlePoints,
-                        KilledEnemyGeneral = report.KilledEnemyGeneral,
-                        DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
                         SupplyCostingUnitCount = report.SupplyCostingUnitCount,
                         UsedExtraBlackPowder = report.UsedExtraBlackPowder,
                         MagicalSupplyRerolls = report.MagicalSupplyRerolls,
@@ -630,6 +764,8 @@ internal static class CampaignPlayMapper
                 RoundFreeSupplyPoints = supply?.RoundFreeSupplyPoints,
                 MaxArmyPoints = supply?.MaxArmyPoints,
                 FreeCharacterCount = supply?.FreeCharacterCount,
+                SplitPenaltyPoints = supply?.SplitPenaltyPoints,
+                Contributions = supply is null ? [] : ToContributions(supply, campaign),
             });
         }
 
@@ -789,7 +925,7 @@ internal static class CampaignPlayMapper
             PlayLogKind.BattleMatchAdvanced =>
                 $"The next pairing in {territory} is {participants}.",
             PlayLogKind.DefaultRetreat =>
-                $"A missing retreat for {actor} used the spawn fallback at {target}.",
+                $"A missing retreat for {actor} was assigned to {target}.",
             PlayLogKind.UnresolvedBattleHeldOpen =>
                 $"Battle in {territory} stayed open for a manager because no results were submitted.",
             PlayLogKind.NoResultForcedRetreat =>
@@ -804,6 +940,8 @@ internal static class CampaignPlayMapper
                 actor == "A force"
                     ? "A manager ended the campaign."
                     : $"{actor} ended the campaign.",
+            PlayLogKind.CampaignEnded =>
+                entry.Message ?? "The campaign ended.",
             PlayLogKind.CampaignStarted =>
                 "The campaign started.",
             PlayLogKind.ScheduleExtended =>
@@ -904,5 +1042,132 @@ internal static class CampaignPlayMapper
                     && !string.IsNullOrWhiteSpace(rule.Text))
                 .Select(static rule => $"{rule.Name}: {rule.Text}"),
         ];
+    }
+
+    private static PlayerSupplyViewDetail ToForceSupply(
+        CampaignPlayState play,
+        PlayMap map,
+        StoredCampaign campaign,
+        CampaignForce force,
+        PhaseWindow? window)
+    {
+        var round = window?.RoundNumber
+            ?? (play.Windows.Count > 0 ? play.Windows[^1].RoundNumber : 1);
+        var snapshot = SupplyRules.ForForce(play, map, CampaignPlayCatalog.Supply(campaign), force, round);
+        return new PlayerSupplyViewDetail
+        {
+            CurrentSupplyPoints = snapshot.ForceAllowancePoints,
+            TemporarySupplyPoints = 0,
+            MapSupplyPoints = snapshot.MapSupplyPoints,
+            RoundFreeSupplyPoints = snapshot.RoundFreeSupplyPoints,
+            SplitPenaltyPoints = snapshot.SplitPenaltyPoints,
+            ForceAllowancePoints = snapshot.ForceAllowancePoints,
+            Contributions = ToContributions(snapshot, campaign),
+        };
+    }
+
+    private static PlayerSupplyViewDetail? ToViewerSupply(
+        CampaignPlayState play,
+        PlayMap map,
+        StoredCampaign campaign,
+        Guid viewerUserId,
+        bool isPlayer,
+        PhaseWindow? window)
+    {
+        if (!isPlayer || play.Forces.Count == 0)
+        {
+            return null;
+        }
+
+        var round = window?.RoundNumber
+            ?? (play.Windows.Count > 0 ? play.Windows[^1].RoundNumber : 1);
+        var snapshot = SupplyRules.ForPlayer(play, map, CampaignPlayCatalog.Supply(campaign), viewerUserId, round);
+        return new PlayerSupplyViewDetail
+        {
+            CurrentSupplyPoints = snapshot.CurrentSupplyPoints,
+            TemporarySupplyPoints = snapshot.TemporarySupplyPoints,
+            MapSupplyPoints = snapshot.MapSupplyPoints,
+            RoundFreeSupplyPoints = snapshot.RoundFreeSupplyPoints,
+            SplitPenaltyPoints = snapshot.SplitPenaltyPoints,
+            ForceAllowancePoints = snapshot.ForceAllowancePoints,
+            Contributions = ToContributions(snapshot, campaign),
+        };
+    }
+
+    private static IReadOnlyList<SupplyContributionDetail> ToContributions(
+        PlayerSupplySnapshot snapshot,
+        StoredCampaign campaign)
+    {
+        var territories = campaign.MapGraph?.Territories.ToDictionary(static item => item.Id) ?? [];
+        var terrains = campaign.TerrainTypes.ToDictionary(static item => item.Id);
+        var specialNames = campaign.SpecialRules
+            .Where(static rule => !string.IsNullOrWhiteSpace(rule.EffectKey))
+            .GroupBy(static rule => rule.EffectKey!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First().Name, StringComparer.OrdinalIgnoreCase);
+        return
+        [
+            .. snapshot.Contributions.Select(item =>
+            {
+                territories.TryGetValue(item.TerritoryId ?? Guid.Empty, out var territory);
+                var place = TerritoryPlace(territory, item.TerritoryId);
+                var label = item.Kind switch
+                {
+                    SupplyContributionKind.TerritoryTerrain => TerrainLabel(place, territory, terrains),
+                    SupplyContributionKind.TerritoryStructure => StructureLabel(place, item.SourceName),
+                    SupplyContributionKind.SpecialRule => SpecialLabel(item.SourceName, place, specialNames),
+                    _ => item.SourceName,
+                };
+                if (item.IsAllied && item.Kind is SupplyContributionKind.TerritoryTerrain or SupplyContributionKind.TerritoryStructure)
+                {
+                    label = $"Allied {label}";
+                }
+
+                return new SupplyContributionDetail
+                {
+                    Kind = item.Kind.ToString(),
+                    TerritoryId = item.TerritoryId,
+                    Label = label,
+                    Points = item.Points,
+                    IsAllied = item.IsAllied,
+                };
+            }),
+        ];
+    }
+
+    private static string TerritoryPlace(Maps.TerritoryDetail? territory, Guid? territoryId)
+    {
+        if (territory is not null)
+        {
+            return string.IsNullOrWhiteSpace(territory.Name) ? $"Territory {territory.DisplayNumber}" : territory.Name;
+        }
+
+        return "Unknown territory";
+    }
+
+    private static string TerrainLabel(
+        string place,
+        Maps.TerritoryDetail? territory,
+        Dictionary<Guid, StoredTerrainType> terrains)
+    {
+        if (territory is not null && terrains.TryGetValue(territory.TerrainTypeId, out var terrain))
+        {
+            return $"{place} terrain ({terrain.Name})";
+        }
+
+        return $"{place} terrain";
+    }
+
+    private static string StructureLabel(string place, string sourceName)
+    {
+        return string.IsNullOrWhiteSpace(sourceName) ? place : $"{place} {sourceName}";
+    }
+
+    private static string SpecialLabel(
+        string sourceName,
+        string place,
+        IReadOnlyDictionary<string, string> specialNames)
+    {
+        var rule = specialNames.GetValueOrDefault(sourceName) ?? sourceName;
+        return $"{rule} ({place})";
     }
 }

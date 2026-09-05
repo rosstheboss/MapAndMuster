@@ -30,18 +30,21 @@ public sealed class NewsArticle
 }
 
 /// <summary>
-/// One article page for the home news board.
+/// One page of news articles for the home board.
 /// </summary>
 public sealed class NewsPage
 {
     /// <summary>Gets the 1-based page number.</summary>
     public required int Page { get; init; }
 
-    /// <summary>Gets the total article count.</summary>
+    /// <summary>Gets how many pages of articles exist.</summary>
     public required int TotalPages { get; init; }
 
-    /// <summary>Gets the article on this page, when any exist.</summary>
-    public NewsArticle? Article { get; init; }
+    /// <summary>Gets the articles on this page, newest first.</summary>
+    public required IReadOnlyList<NewsArticle> Articles { get; init; }
+
+    /// <summary>Gets the newest article on this page, when any exist.</summary>
+    public NewsArticle? Article => Articles.Count > 0 ? Articles[0] : null;
 }
 
 /// <summary>

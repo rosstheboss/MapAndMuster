@@ -29,7 +29,7 @@ internal static class CatalogJson
         IReadOnlyList<StoredForceStatus>? forceStatuses = null,
         int splitForceSupplyPenaltyPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue,
         bool splitForceSupplyPenaltyIsPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent,
-        BattleReportRulesSetup? battleReportRules = null,
+        IReadOnlyList<StoredStandardBattleResultQuestion>? standardBattleResultQuestions = null,
         IReadOnlyList<RoundArmyEscalationSetup>? armyEscalations = null,
         IReadOnlyList<StoredMission>? missions = null,
         IReadOnlyDictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>? subfactionSpecialRules = null)
@@ -38,7 +38,6 @@ internal static class CatalogJson
         ArgumentNullException.ThrowIfNull(structureTypes);
         var scoring = battleScoring ?? BattleScoringSetup.Default;
         var ranking = rankingObjectivePoints ?? GeneralPublicObjectivePoints.None;
-        var reportRules = battleReportRules ?? BattleReportRulesSetup.Default;
         return JsonSerializer.Serialize(
             new CatalogDocument
             {
@@ -76,10 +75,7 @@ internal static class CatalogJson
                 AlliedRelicControlCampaignPoints = ranking.AlliedRelicControlPoints,
                 SplitForceSupplyPenaltyPercent = splitForceSupplyPenaltyPercent,
                 SplitForceSupplyPenaltyIsPercent = splitForceSupplyPenaltyIsPercent,
-                AlwaysAskGeneralKill = reportRules.AlwaysAskGeneralKill,
-                AlwaysAskSupplyLineDestroyed = reportRules.AlwaysAskSupplyLineDestroyed,
-                GeneralKillCampaignPoints = reportRules.GeneralKillCampaignPoints,
-                SupplyLineDestroyedCampaignPoints = reportRules.SupplyLineDestroyedCampaignPoints,
+                StandardBattleResultQuestions = [.. (standardBattleResultQuestions ?? []).Select(ToDocument)],
                 ArmyEscalations = [.. (armyEscalations ?? []).Select(ToDocument)],
                 Missions = [.. (missions ?? []).Select(ToDocument)],
             },
@@ -100,7 +96,7 @@ internal static class CatalogJson
         IReadOnlyList<StoredForceStatus> ForceStatuses,
         int SplitForceSupplyPenaltyPercent,
         bool SplitForceSupplyPenaltyIsPercent,
-        BattleReportRulesSetup BattleReportRules,
+        IReadOnlyList<StoredStandardBattleResultQuestion> StandardBattleResultQuestions,
         IReadOnlyList<RoundArmyEscalationSetup> ArmyEscalations,
         IReadOnlyList<StoredMission> Missions)
         Deserialize(string? json)
@@ -158,11 +154,7 @@ internal static class CatalogJson
             [.. (document.ForceStatuses ?? []).Select(FromDocument)],
             ReadSplitForcePenaltyValue(document),
             ReadSplitForcePenaltyIsPercent(document),
-            new BattleReportRulesSetup(
-                document.AlwaysAskGeneralKill ?? HuntInEstaliaDefaults.AlwaysAskGeneralKill,
-                document.AlwaysAskSupplyLineDestroyed ?? HuntInEstaliaDefaults.AlwaysAskSupplyLineDestroyed,
-                document.GeneralKillCampaignPoints ?? HuntInEstaliaDefaults.GeneralKillCampaignPoints,
-                document.SupplyLineDestroyedCampaignPoints ?? HuntInEstaliaDefaults.SupplyLineDestroyedCampaignPoints),
+            ReadStandardBattleResultQuestions(document, catalogMissions),
             ArmyEscalationsFrom(document),
             catalogMissions);
     }
@@ -181,11 +173,11 @@ internal static class CatalogJson
         IReadOnlyList<StoredForceStatus>,
         int,
         bool,
-        BattleReportRulesSetup,
+        IReadOnlyList<StoredStandardBattleResultQuestion>,
         IReadOnlyList<RoundArmyEscalationSetup>,
         IReadOnlyList<StoredMission>) EmptyCatalog()
     {
-        return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue, HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent, BattleReportRulesSetup.Default, [], []);
+        return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue, HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent, [], [], []);
     }
 
     private static int ReadSplitForcePenaltyValue(CatalogDocument document)
@@ -600,6 +592,19 @@ internal static class CatalogJson
             Kind = question.Kind,
             BattlePoints = question.BattlePoints,
             CampaignPoints = question.CampaignPoints,
+            StandardQuestionId = question.StandardQuestionId,
+        };
+    }
+
+    private static StandardQuestionDocument ToDocument(StoredStandardBattleResultQuestion question)
+    {
+        return new StandardQuestionDocument
+        {
+            Id = question.Id,
+            Prompt = question.Prompt,
+            Kind = question.Kind,
+            BattlePoints = question.BattlePoints,
+            CampaignPoints = question.CampaignPoints,
         };
     }
 
@@ -614,7 +619,107 @@ internal static class CatalogJson
                 : question.Kind,
             BattlePoints = Math.Max(0, question.BattlePoints),
             CampaignPoints = Math.Max(0, question.CampaignPoints),
+            StandardQuestionId = question.StandardQuestionId is { } catalogId && catalogId != Guid.Empty
+                ? catalogId
+                : null,
         };
+    }
+
+    private static StoredStandardBattleResultQuestion FromDocument(StandardQuestionDocument question)
+    {
+        return new StoredStandardBattleResultQuestion
+        {
+            Id = question.Id == Guid.Empty ? Guid.NewGuid() : question.Id,
+            Prompt = question.Prompt,
+            Kind = string.IsNullOrWhiteSpace(question.Kind)
+                ? nameof(MissionResultQuestionKind.Boolean)
+                : question.Kind,
+            BattlePoints = Math.Max(0, question.BattlePoints),
+            CampaignPoints = Math.Max(0, question.CampaignPoints),
+        };
+    }
+
+    private static readonly Guid LegacyGeneralKillQuestionId = Guid.Parse("6b1f3c8e-9d24-4a11-8f70-a1b2c3d4e5f6");
+    private static readonly Guid LegacySupplyLineQuestionId = Guid.Parse("7c2e4d9f-0e35-4b22-9a81-b2c3d4e5f607");
+
+    private static List<StoredStandardBattleResultQuestion> ReadStandardBattleResultQuestions(
+        CatalogDocument document,
+        IReadOnlyList<StoredMission> missions)
+    {
+        if (document.StandardBattleResultQuestions is not null)
+        {
+            return [.. document.StandardBattleResultQuestions.Select(FromDocument)];
+        }
+
+        var catalog = new List<StoredStandardBattleResultQuestion>();
+        if (document.AlwaysAskGeneralKill != false)
+        {
+            catalog.Add(new StoredStandardBattleResultQuestion
+            {
+                Id = LegacyGeneralKillQuestionId,
+                Prompt = "Killed the enemy general",
+                Kind = nameof(MissionResultQuestionKind.Boolean),
+                BattlePoints = 0,
+                CampaignPoints = Math.Max(0, document.GeneralKillCampaignPoints ?? 1),
+            });
+        }
+
+        if (document.AlwaysAskSupplyLineDestroyed != false)
+        {
+            catalog.Add(new StoredStandardBattleResultQuestion
+            {
+                Id = LegacySupplyLineQuestionId,
+                Prompt = "Destroyed the enemy supply line",
+                Kind = nameof(MissionResultQuestionKind.Boolean),
+                BattlePoints = 0,
+                CampaignPoints = Math.Max(0, document.SupplyLineDestroyedCampaignPoints ?? 1),
+            });
+        }
+
+        if (catalog.Count == 0)
+        {
+            return [];
+        }
+
+        foreach (var mission in missions)
+        {
+            var questions = mission.ResultQuestions.ToList();
+            foreach (var standard in catalog)
+            {
+                if (questions.Any(question =>
+                    question.StandardQuestionId == standard.Id
+                    || string.Equals(question.Prompt, standard.Prompt, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                questions.Add(new StoredMissionResultQuestion
+                {
+                    Id = DeterministicQuestionId(mission.Id, standard.Id),
+                    Prompt = standard.Prompt,
+                    Kind = standard.Kind,
+                    BattlePoints = standard.BattlePoints,
+                    CampaignPoints = standard.CampaignPoints,
+                    StandardQuestionId = standard.Id,
+                });
+            }
+
+            mission.ResultQuestions = questions;
+        }
+
+        return catalog;
+    }
+
+    private static Guid DeterministicQuestionId(Guid missionId, Guid catalogId)
+    {
+        var left = missionId.ToByteArray();
+        var right = catalogId.ToByteArray();
+        for (var index = 0; index < left.Length; index++)
+        {
+            left[index] ^= right[index];
+        }
+
+        return new Guid(left);
     }
 
     private static IReadOnlyList<RoundArmyEscalationSetup> ArmyEscalationsFrom(CatalogDocument document)
@@ -683,6 +788,8 @@ internal static class CatalogJson
         public int? GeneralKillCampaignPoints { get; set; }
 
         public int? SupplyLineDestroyedCampaignPoints { get; set; }
+
+        public List<StandardQuestionDocument>? StandardBattleResultQuestions { get; set; }
 
         public List<ArmyEscalationDocument>? ArmyEscalations { get; set; }
 
@@ -822,6 +929,21 @@ internal static class CatalogJson
     }
 
     private sealed class MissionQuestionDocument
+    {
+        public Guid Id { get; set; }
+
+        public string Prompt { get; set; } = string.Empty;
+
+        public string Kind { get; set; } = nameof(MissionResultQuestionKind.Boolean);
+
+        public int BattlePoints { get; set; }
+
+        public int CampaignPoints { get; set; }
+
+        public Guid? StandardQuestionId { get; set; }
+    }
+
+    private sealed class StandardQuestionDocument
     {
         public Guid Id { get; set; }
 

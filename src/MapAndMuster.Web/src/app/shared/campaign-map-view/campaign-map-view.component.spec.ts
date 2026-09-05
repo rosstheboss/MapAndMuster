@@ -110,6 +110,118 @@ describe('CampaignMapViewComponent', () => {
     expect(pin?.getAttribute('aria-label')).toBe('North force in Coast');
   });
 
+  it('selects a territory when clicking its force, flag, or structure marker', () => {
+    const owned = { ...territory, ownerFactionId: 'north', structureTypeId: 'town' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('interactive', true);
+    fixture.componentRef.setInput('structures', [
+      {
+        id: 'town',
+        name: 'Town',
+        builtinSymbol: 'Town',
+        hasImage: false,
+        hasPillagedImage: false,
+        isBuildable: false,
+        isPillageable: true,
+        isDestructible: true,
+        missions: [],
+      },
+    ]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+    ]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'North force in Coast',
+      },
+    ]);
+    const selected = vi.fn();
+    fixture.componentInstance.territorySelect.subscribe(selected);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const pin = compiled.querySelector('.force-pin')!;
+    pin.dispatchEvent(pointer('pointerdown', { button: 0, clientX: 20, clientY: 20 }));
+    expect(selected).toHaveBeenCalledWith(expect.objectContaining({ id: 't1', additive: false }));
+
+    selected.mockClear();
+    compiled
+      .querySelector('.faction-flag')!
+      .dispatchEvent(pointer('pointerdown', { button: 0, clientX: 20, clientY: 20 }));
+    expect(selected).toHaveBeenCalledWith(expect.objectContaining({ id: 't1', additive: false }));
+
+    selected.mockClear();
+    compiled
+      .querySelector('.structure-pin')!
+      .dispatchEvent(pointer('pointerdown', { button: 0, clientX: 20, clientY: 20 }));
+    expect(selected).toHaveBeenCalledWith(expect.objectContaining({ id: 't1', additive: false }));
+  });
+
+  it('keeps territory hover when the pointer moves from the polygon onto a marker', () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(CampaignMapViewComponent);
+      fixture.componentRef.setInput('imageUrl', png);
+      fixture.componentRef.setInput('territories', [territory]);
+      fixture.componentRef.setInput('interactive', true);
+      fixture.componentRef.setInput('factions', [
+        {
+          id: 'north',
+          name: 'North',
+          color: '#2563EB',
+          subfactions: [],
+          allyGroupName: null,
+          requiresSubfaction: false,
+          hasFlagImage: false,
+        },
+      ]);
+      fixture.componentRef.setInput('forces', [
+        {
+          id: 'force-1',
+          territoryId: 't1',
+          factionId: 'north',
+          isMine: true,
+          inBattle: false,
+          label: 'North force in Coast',
+        },
+      ]);
+      const hover = vi.fn();
+      fixture.componentInstance.territoryHover.subscribe(hover);
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      const hit = compiled.querySelector('.territory-hit[data-id="t1"]')!;
+      const pin = compiled.querySelector('.force-pin')!;
+      const svg = compiled.querySelector('svg')!;
+      hit.dispatchEvent(pointer('pointerenter', { bubbles: false }));
+      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS);
+      expect(hover).toHaveBeenCalledWith('t1');
+
+      hover.mockClear();
+      hit.dispatchEvent(pointer('pointerleave', { bubbles: false, relatedTarget: pin }));
+      svg.dispatchEvent(pointer('pointerleave', { bubbles: false, relatedTarget: pin }));
+      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS);
+      expect(hover).not.toHaveBeenCalledWith(null);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('shows a loading status until the map image finishes loading', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
@@ -376,6 +488,201 @@ describe('CampaignMapViewComponent', () => {
     expect(flag?.classList.contains('has-image')).toBe(true);
     expect(flag?.classList.contains('is-tinted')).toBe(false);
     expect(flag?.querySelector('img')?.getAttribute('src')).toBe(png);
+  });
+
+  it('falls back to the color flag when an uploaded logo fails to load', () => {
+    const owned = { ...territory, ownerFactionId: 'f1' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'f1',
+        name: 'North',
+        color: '#DC2626',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+      },
+    ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
+    fixture.detectChanges();
+
+    const image = (fixture.nativeElement as HTMLElement).querySelector('.faction-flag img');
+    expect(image).toBeTruthy();
+    image!.dispatchEvent(new Event('error'));
+    fixture.detectChanges();
+
+    const flag = (fixture.nativeElement as HTMLElement).querySelector('.faction-flag');
+    expect(flag?.querySelector('img')).toBeNull();
+    expect(flag?.classList.contains('has-image')).toBe(false);
+  });
+
+  it('keeps an ownership flag on a territory that has no occupying force', () => {
+    const owned = { ...territory, ownerFactionId: 'f1' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'f1',
+        name: 'North',
+        color: '#DC2626',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+      },
+    ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 'elsewhere',
+        factionId: 'f1',
+        isMine: true,
+        inBattle: false,
+        label: 'North force elsewhere',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const flag = compiled.querySelector('.faction-flag');
+    expect(flag).toBeTruthy();
+    const image = flag?.querySelector('img');
+    expect(image?.getAttribute('src')).toBe(png);
+    fixture.componentRef.setInput('hoveredTerritoryId', 't1');
+    fixture.detectChanges();
+    expect(compiled.querySelector('.faction-flag img')).toBe(image);
+    expect(compiled.querySelector('.force-pin')).toBeNull();
+  });
+
+  it('keeps ownership logos mounted when the map zooms', () => {
+    const owned = { ...territory, ownerFactionId: 'f1' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'f1',
+        name: 'North',
+        color: '#DC2626',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+      },
+    ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
+    fixture.detectChanges();
+    const view = fixture.componentInstance as unknown as {
+      imageSize: { set(value: { width: number; height: number }): void };
+      viewportSize: { set(value: { width: number; height: number }): void };
+      fitToPanel: { set(value: boolean): void };
+      zoom: { set(value: number): void };
+    };
+    view.imageSize.set({ width: 1000, height: 800 });
+    view.viewportSize.set({ width: 400, height: 300 });
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const image = compiled.querySelector('.faction-flag img');
+    expect(image).toBeTruthy();
+    view.fitToPanel.set(false);
+    view.zoom.set(1);
+    fixture.detectChanges();
+    const layoutsAt = () =>
+      (
+        fixture.componentInstance as unknown as { territoryLayouts: () => { flag: { width: number } | null }[] }
+      ).territoryLayouts();
+    const widthAtOne = layoutsAt()[0]?.flag?.width ?? 0;
+    expect(widthAtOne).toBeGreaterThan(0);
+    view.zoom.set(2);
+    fixture.detectChanges();
+    expect(compiled.querySelector('.faction-flag img')).toBe(image);
+    expect((layoutsAt()[0]?.flag?.width ?? 0) * 2).toBeCloseTo(widthAtOne, 5);
+  });
+
+  it('keeps tinted ownership logos decoded when the map zooms', () => {
+    const owned = { ...territory, ownerFactionId: 'f1' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'f1',
+        name: 'North',
+        color: '#DC2626',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+        tintFlagImage: true,
+      },
+    ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
+    fixture.detectChanges();
+    const view = fixture.componentInstance as unknown as {
+      imageSize: { set(value: { width: number; height: number }): void };
+      viewportSize: { set(value: { width: number; height: number }): void };
+      fitToPanel: { set(value: boolean): void };
+      zoom: { set(value: number): void };
+    };
+    view.imageSize.set({ width: 1000, height: 800 });
+    view.viewportSize.set({ width: 400, height: 300 });
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const image = compiled.querySelector('.marker-decode');
+    expect(image).toBeTruthy();
+    expect(compiled.querySelector('.faction-flag img')).toBeNull();
+    view.fitToPanel.set(false);
+    view.zoom.set(2);
+    fixture.detectChanges();
+    expect(compiled.querySelector('.marker-decode')).toBe(image);
+  });
+
+  it('keeps structure logos in place when the pointer hovers a territory', () => {
+    const owned = { ...territory, ownerFactionId: 'f1', structureTypeId: 'town' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('structures', [
+      {
+        id: 'town',
+        name: 'Town',
+        builtinSymbol: 'Town',
+        hasImage: false,
+        hasPillagedImage: false,
+        isBuildable: false,
+        isPillageable: true,
+        isDestructible: true,
+        missions: [],
+      },
+    ]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'f1',
+        name: 'North',
+        color: '#DC2626',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+      },
+    ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const flag = compiled.querySelector('.faction-flag img');
+    const structure = compiled.querySelector('.structure-pin app-map-symbol');
+    expect(flag).toBeTruthy();
+    expect(structure).toBeTruthy();
+    fixture.componentRef.setInput('hoveredTerritoryId', 't1');
+    fixture.detectChanges();
+    expect(compiled.querySelector('.faction-flag img')).toBe(flag);
+    expect(compiled.querySelector('.structure-pin app-map-symbol')).toBe(structure);
   });
 
   it('shows carried item objectives on the possessing force instead of a ground pin', () => {

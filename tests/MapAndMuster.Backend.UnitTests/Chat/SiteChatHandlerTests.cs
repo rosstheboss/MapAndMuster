@@ -216,6 +216,11 @@ public sealed class SiteChatHandlerTests
         {
             return Task.FromResult(true);
         }
+
+        public Task<int> MarkAllReadAsync(Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(0);
+        }
     }
 
     private sealed class FakeChatStore : ISiteChatStore

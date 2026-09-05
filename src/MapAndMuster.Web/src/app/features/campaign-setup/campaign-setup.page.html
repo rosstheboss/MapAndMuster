@@ -855,36 +855,6 @@
                     Subtracted from map supply when a player has more than one force. The default is a raw value of 1.
                   </p>
                 </div>
-                <label class="choice-row">
-                  <input type="checkbox" formControlName="alwaysAskGeneralKill" />
-                  Always ask whether the enemy general was slain
-                </label>
-                <div class="field">
-                  <label for="generalKillCampaignPoints">Campaign points for slaying the enemy general</label>
-                  <input
-                    id="generalKillCampaignPoints"
-                    type="number"
-                    min="0"
-                    max="999"
-                    formControlName="generalKillCampaignPoints"
-                  />
-                </div>
-                <label class="choice-row">
-                  <input type="checkbox" formControlName="alwaysAskSupplyLineDestroyed" />
-                  Always ask whether the enemy supply line was destroyed
-                </label>
-                <div class="field">
-                  <label for="supplyLineDestroyedCampaignPoints"
-                    >Campaign points for destroying the enemy supply line</label
-                  >
-                  <input
-                    id="supplyLineDestroyedCampaignPoints"
-                    type="number"
-                    min="0"
-                    max="999"
-                    formControlName="supplyLineDestroyedCampaignPoints"
-                  />
-                </div>
               </div>
             </div>
             <div formArrayName="publicObjectiveTypes" class="stack">
@@ -1210,7 +1180,9 @@
                                 <label class="choice-row">
                                   <input
                                     type="checkbox"
-                                    [checked]="item.controls.forceStatusTypeIds.value.includes(status.controls.id.value)"
+                                    [checked]="
+                                      item.controls.forceStatusTypeIds.value.includes(status.controls.id.value)
+                                    "
                                     (change)="togglePrivateObjectiveStatus(item, status.controls.id.value, $event)"
                                   />
                                   {{ status.controls.name.value }}
@@ -1727,6 +1699,108 @@
           </div>
         </fieldset>
 
+        <fieldset id="setup-standardBattleResultQuestions" class="field setup-section">
+          <legend>
+            <button
+              type="button"
+              class="section-toggle"
+              [class.has-dirty]="sectionHeaderDirty('standardBattleResultQuestions')"
+              [attr.aria-expanded]="isOpen('standardBattleResultQuestions')"
+              (click)="toggleSection('standardBattleResultQuestions')"
+            >
+              Standard battle result questions (optional)
+            </button>
+          </legend>
+          <div [hidden]="!isOpen('standardBattleResultQuestions')">
+            <p class="muted">
+              Reusable questions you can add to any catalog mission. Unique questions still live on the mission. Prompt
+              and kind stay with the catalog; a mission can override battle and campaign points. Up to 80.
+            </p>
+            <div formArrayName="standardBattleResultQuestions" class="stack">
+              @for (question of standardBattleResultQuestions.controls; track question; let index = $index) {
+                <div class="nested-card stack" [formGroupName]="index">
+                  <button
+                    type="button"
+                    class="section-toggle nested-toggle"
+                    [class.has-dirty]="sectionHeaderDirty('standard-question-' + index)"
+                    [attr.aria-expanded]="isOpen('standard-question-' + index)"
+                    (click)="toggleSection('standard-question-' + index)"
+                  >
+                    {{ itemLabel(question.controls.prompt.value, 'Standard question ' + (index + 1)) }}
+                  </button>
+                  <div [hidden]="!isOpen('standard-question-' + index)">
+                    <div class="field">
+                      <label [attr.for]="'standard-question-prompt-' + index">Question</label>
+                      <input
+                        [id]="'standard-question-prompt-' + index"
+                        formControlName="prompt"
+                        maxlength="240"
+                        (input)="onStandardQuestionEdited(index)"
+                      />
+                    </div>
+                    <div class="nested-row">
+                      <div class="field">
+                        <label [attr.for]="'standard-question-kind-' + index">Kind</label>
+                        <select
+                          [id]="'standard-question-kind-' + index"
+                          formControlName="kind"
+                          (change)="onStandardQuestionEdited(index)"
+                        >
+                          <option value="Boolean">True / false</option>
+                          <option value="BattlePoints">Battle points amount</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label [attr.for]="'standard-question-bp-' + index">Battle points</label>
+                        <input
+                          [id]="'standard-question-bp-' + index"
+                          type="number"
+                          min="0"
+                          max="999"
+                          formControlName="battlePoints"
+                        />
+                      </div>
+                      <div class="field">
+                        <label [attr.for]="'standard-question-cp-' + index">Campaign points</label>
+                        <input
+                          [id]="'standard-question-cp-' + index"
+                          type="number"
+                          min="0"
+                          max="999"
+                          formControlName="campaignPoints"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        class="button-secondary"
+                        (click)="addStandardQuestionToAllMissions(question.controls.id.value)"
+                        [disabled]="missions.length === 0"
+                      >
+                        Add to all missions
+                      </button>
+                      <button
+                        type="button"
+                        class="button-secondary"
+                        (click)="removeStandardBattleResultQuestion(index)"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+            <button
+              type="button"
+              class="button-secondary"
+              (click)="addStandardBattleResultQuestion()"
+              [disabled]="standardBattleResultQuestions.length >= 80"
+            >
+              Add standard question
+            </button>
+          </div>
+        </fieldset>
+
         <fieldset id="setup-missions" class="field setup-section">
           <legend>
             <button
@@ -1788,32 +1862,62 @@
                     <div class="field" formArrayName="resultQuestions">
                       <p class="subsection-heading">Result questions</p>
                       <p class="muted">
-                        Extra questions asked when this mission is reported. True/false questions award the configured
-                        points when the answer is yes. Battle-point questions take a reported amount.
+                        Extra questions asked when this mission is reported. Add a standard catalog question to reuse
+                        its prompt and kind, then override battle or campaign points if needed. Unique questions are
+                        written here.
                       </p>
+                      @if (unusedStandardQuestions(mission).length > 0) {
+                        <div class="field">
+                          <label [attr.for]="'catalog-question-add-standard-' + index">Add a standard question</label>
+                          <select
+                            [id]="'catalog-question-add-standard-' + index"
+                            (change)="onAddStandardQuestionSelected(mission, $event)"
+                          >
+                            <option value="">Select a standard question</option>
+                            @for (standard of unusedStandardQuestions(mission); track standard.controls.id.value) {
+                              <option [value]="standard.controls.id.value">
+                                {{ standard.controls.prompt.value }}
+                              </option>
+                            }
+                          </select>
+                        </div>
+                      }
                       @for (question of questionsOf(mission).controls; track question; let questionIndex = $index) {
                         <div class="nested-card stack" [formGroupName]="questionIndex">
-                          <div class="field">
-                            <label [attr.for]="'catalog-question-prompt-' + index + '-' + questionIndex"
-                              >Question</label
-                            >
-                            <input
-                              [id]="'catalog-question-prompt-' + index + '-' + questionIndex"
-                              formControlName="prompt"
-                              maxlength="240"
-                            />
-                          </div>
-                          <div class="nested-row">
+                          @if (isLinkedStandardQuestion(question)) {
+                            <p>{{ question.controls.prompt.value }}</p>
+                            <p class="muted">
+                              {{
+                                question.controls.kind.value === 'BattlePoints'
+                                  ? 'Battle points amount from the catalog. Override points below for this mission.'
+                                  : 'True/false from the catalog. Override points below for this mission.'
+                              }}
+                            </p>
+                          } @else {
                             <div class="field">
-                              <label [attr.for]="'catalog-question-kind-' + index + '-' + questionIndex">Kind</label>
-                              <select
-                                [id]="'catalog-question-kind-' + index + '-' + questionIndex"
-                                formControlName="kind"
+                              <label [attr.for]="'catalog-question-prompt-' + index + '-' + questionIndex"
+                                >Question</label
                               >
-                                <option value="Boolean">True / false</option>
-                                <option value="BattlePoints">Battle points amount</option>
-                              </select>
+                              <input
+                                [id]="'catalog-question-prompt-' + index + '-' + questionIndex"
+                                formControlName="prompt"
+                                maxlength="240"
+                              />
                             </div>
+                          }
+                          <div class="nested-row">
+                            @if (!isLinkedStandardQuestion(question)) {
+                              <div class="field">
+                                <label [attr.for]="'catalog-question-kind-' + index + '-' + questionIndex">Kind</label>
+                                <select
+                                  [id]="'catalog-question-kind-' + index + '-' + questionIndex"
+                                  formControlName="kind"
+                                >
+                                  <option value="Boolean">True / false</option>
+                                  <option value="BattlePoints">Battle points amount</option>
+                                </select>
+                              </div>
+                            }
                             <div class="field">
                               <label [attr.for]="'catalog-question-bp-' + index + '-' + questionIndex"
                                 >Battle points</label
@@ -1849,7 +1953,7 @@
                         </div>
                       }
                       <button type="button" class="button-secondary" (click)="addMissionQuestion(mission)">
-                        Add result question
+                        Add unique result question
                       </button>
                     </div>
                     <label class="choice-row">

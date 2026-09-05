@@ -86,8 +86,13 @@ public sealed class FactionSpecialRulePoliciesTests
             false,
             null);
 
+        var withoutArt = CampaignPlayRules.EligibleRetreats(map, cathay);
+        Assert.Contains(Via, withoutArt);
+        Assert.DoesNotContain(Dest, withoutArt);
+
         var retreats = CampaignPlayRules.EligibleRetreats(map, cathay, art);
         Assert.Contains(Dest, retreats);
+        Assert.DoesNotContain(EnemySpawn, retreats);
         Assert.Equal([Via], CampaignPlayRules.EligibleMoves(map, tomb, [item], relic));
         Assert.Equal([Via], FactionSpecialRulePolicies.RelicPursuitTargets(map, tomb, [item], relic));
     }
@@ -129,7 +134,7 @@ public sealed class FactionSpecialRulePoliciesTests
             [
                 new PlayTerritory(Origin, 1, Bretonnia, Bretonnia, null, null, StructureCondition.Operational),
                 new PlayTerritory(Via, 2, null, null, null, null, StructureCondition.Operational),
-                new PlayTerritory(Dest, 3, null, null, null, null, StructureCondition.Operational),
+                new PlayTerritory(Dest, 3, ChaosDwarfs, null, null, null, StructureCondition.Operational),
                 new PlayTerritory(EnemySpawn, 4, ChaosDwarfs, ChaosDwarfs, null, null, StructureCondition.Operational),
             ],
             [(Origin, Via), (Via, Dest), (Origin, EnemySpawn)]);

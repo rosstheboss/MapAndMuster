@@ -501,38 +501,6 @@ public static class PrivateObjectiveRules
     }
 
     /// <summary>
-    /// Makes remaining assignments public when the campaign completes. Points then count without a mid-campaign claim.
-    /// </summary>
-    public static CampaignPlayState RevealRemainingAtCompletion(
-        CampaignPlayState state,
-        IReadOnlyDictionary<Guid, string> names,
-        DateTimeOffset utcNow)
-    {
-        ArgumentNullException.ThrowIfNull(state);
-        ArgumentNullException.ThrowIfNull(names);
-        var next = state.PrivateObjectives.ToList();
-        var log = new List<PlayLogEntry>();
-        var changed = false;
-        for (var index = 0; index < next.Count; index++)
-        {
-            var assignment = next[index];
-            if (assignment.Status == PrivateObjectiveAssignmentStatus.Revealed)
-            {
-                continue;
-            }
-
-            var revealed = assignment.With(
-                status: PrivateObjectiveAssignmentStatus.Revealed,
-                revealedUtc: utcNow);
-            next[index] = revealed;
-            log.Add(RevealLog(revealed, utcNow, actorUserId: null, names.GetValueOrDefault(assignment.TypeId)));
-            changed = true;
-        }
-
-        return changed ? state.With(privateObjectives: next).AppendLog([.. log]) : state;
-    }
-
-    /// <summary>
     /// Public unclaimed counts grouped by holder.
     /// </summary>
     public static IReadOnlyList<(PrivateObjectiveHolderKind HolderKind, Guid HolderId, int Count)> UnclaimedCounts(
@@ -551,25 +519,22 @@ public static class PrivateObjectiveRules
     }
 
     /// <summary>
-    /// Campaign points from revealed private objectives that apply to a player.
-    /// When <paramref name="campaignCompleted"/> is true, remaining held assignments also count.
+    /// Campaign points from revealed or approved private objectives that apply to a player.
+    /// Unclaimed assignments never count, including after the campaign ends.
     /// </summary>
     public static int PointsForPlayer(
         IReadOnlyList<PrivateObjectiveAssignment> assignments,
         IReadOnlyDictionary<Guid, int> pointsByType,
         Guid playerUserId,
         Guid? factionId,
-        Guid? allyGroupId,
-        bool campaignCompleted)
+        Guid? allyGroupId)
     {
         ArgumentNullException.ThrowIfNull(assignments);
         ArgumentNullException.ThrowIfNull(pointsByType);
         var total = 0;
         foreach (var assignment in assignments)
         {
-            var counts = assignment.CountsDuringPlay
-                || (campaignCompleted && assignment.Status != PrivateObjectiveAssignmentStatus.Revealed);
-            if (!counts)
+            if (!assignment.CountsDuringPlay)
             {
                 continue;
             }

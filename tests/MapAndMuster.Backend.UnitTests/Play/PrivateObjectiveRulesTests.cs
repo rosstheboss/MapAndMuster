@@ -153,15 +153,13 @@ public sealed class PrivateObjectiveRulesTests
             points,
             first,
             factionId: null,
-            allyGroupId: null,
-            campaignCompleted: false));
+            allyGroupId: null));
         Assert.Equal(0, PrivateObjectiveRules.PointsForPlayer(
             afterFirst.PrivateObjectives,
             points,
             second,
             factionId: null,
-            allyGroupId: null,
-            campaignCompleted: false));
+            allyGroupId: null));
 
         Assert.True(PrivateObjectiveRules.TryApprove(afterFirst, secondAssignment.Id, second, now, names, out var afterBoth, out _));
         Assert.Equal(5, PrivateObjectiveRules.PointsForPlayer(
@@ -169,15 +167,13 @@ public sealed class PrivateObjectiveRulesTests
             points,
             first,
             factionId: null,
-            allyGroupId: null,
-            campaignCompleted: false));
+            allyGroupId: null));
         Assert.Equal(5, PrivateObjectiveRules.PointsForPlayer(
             afterBoth.PrivateObjectives,
             points,
             second,
             factionId: null,
-            allyGroupId: null,
-            campaignCompleted: false));
+            allyGroupId: null));
     }
 
     [Fact]
@@ -289,8 +285,7 @@ public sealed class PrivateObjectiveRulesTests
             new Dictionary<Guid, int> { [type.Id] = 5 },
             player,
             factionId: null,
-            allyGroupId: null,
-            campaignCompleted: false));
+            allyGroupId: null));
 
         Assert.True(PrivateObjectiveRules.TryApprove(
             claimed,
@@ -305,10 +300,42 @@ public sealed class PrivateObjectiveRulesTests
             new Dictionary<Guid, int> { [type.Id] = 5 },
             player,
             factionId: null,
-            allyGroupId: null,
-            campaignCompleted: false));
+            allyGroupId: null));
         Assert.Contains(revealed.Log, entry => entry.Kind == PlayLogKind.PrivateObjectiveRevealed);
         Assert.Empty(PrivateObjectiveRules.UnclaimedCounts(revealed.PrivateObjectives));
+    }
+
+    [Fact]
+    public void UnclaimedAssignmentsDoNotScoreAfterTheCampaignEnds()
+    {
+        var type = Manual(
+            "Keep the secret",
+            Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            PrivateObjectiveHolderKind.Faction);
+        var faction = Guid.NewGuid();
+        var player = Guid.NewGuid();
+        var assignment = new PrivateObjectiveAssignment(
+            Guid.NewGuid(),
+            type.Id,
+            PrivateObjectiveHolderKind.Faction,
+            faction,
+            PrivateObjectiveScoringKind.Manual,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            DateTimeOffset.UtcNow);
+        var points = new Dictionary<Guid, int> { [type.Id] = 5 };
+
+        Assert.Equal(0, PrivateObjectiveRules.PointsForPlayer(
+            [assignment],
+            points,
+            player,
+            faction,
+            allyGroupId: null));
+        Assert.Equal(5, PrivateObjectiveRules.PointsForPlayer(
+            [assignment.With(status: PrivateObjectiveAssignmentStatus.Revealed, revealedUtc: DateTimeOffset.UtcNow)],
+            points,
+            player,
+            faction,
+            allyGroupId: null));
     }
 
     [Fact]
@@ -354,8 +381,7 @@ public sealed class PrivateObjectiveRulesTests
             new Dictionary<Guid, int> { [type.Id] = 4 },
             player,
             faction,
-            allyGroupId: null,
-            campaignCompleted: false));
+            allyGroupId: null));
     }
 
     [Fact]
@@ -407,15 +433,13 @@ public sealed class PrivateObjectiveRulesTests
             new Dictionary<Guid, int> { [type.Id] = 4 },
             northPlayer,
             north,
-            allyGroupId: null,
-            campaignCompleted: false));
+            allyGroupId: null));
         Assert.Equal(0, PrivateObjectiveRules.PointsForPlayer(
             next.PrivateObjectives,
             new Dictionary<Guid, int> { [type.Id] = 4 },
             southPlayer,
             south,
-            allyGroupId: null,
-            campaignCompleted: false));
+            allyGroupId: null));
     }
 
     [Fact]
@@ -451,6 +475,13 @@ public sealed class PrivateObjectiveRulesTests
             viewerAllyGroupId: null,
             staffView: true,
             campaignCompleted: false));
+        Assert.True(PrivateObjectiveRules.CanViewDetails(
+            assignment,
+            Guid.NewGuid(),
+            viewerFactionId: null,
+            viewerAllyGroupId: null,
+            staffView: false,
+            campaignCompleted: true));
     }
 
     [Fact]

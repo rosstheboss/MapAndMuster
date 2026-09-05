@@ -23,6 +23,9 @@ public static class HomeBoardEndpoints
         notices.MapGet("", ListNotificationsAsync)
             .WithName("ListNotifications")
             .Produces<IReadOnlyList<HomeAttentionItemResponse>>();
+        notices.MapPost("/read-all", MarkAllReadAsync)
+            .WithName("MarkAllNotificationsRead")
+            .Produces(StatusCodes.Status204NoContent);
         notices.MapPost("/{notificationId:guid}/read", MarkReadAsync)
             .WithName("MarkNotificationRead")
             .Produces(StatusCodes.Status204NoContent)
@@ -81,6 +84,21 @@ public static class HomeBoardEndpoints
         }
 
         var result = await handler.HandleAsync(notificationId, userId.Value, cancellationToken).ConfigureAwait(false);
+        return result.IsSuccess ? Results.NoContent() : IdentityHttp.Problem(result);
+    }
+
+    private static async Task<IResult> MarkAllReadAsync(
+        ClaimsPrincipal principal,
+        MarkAllNotificationsReadHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(userId.Value, cancellationToken).ConfigureAwait(false);
         return result.IsSuccess ? Results.NoContent() : IdentityHttp.Problem(result);
     }
 

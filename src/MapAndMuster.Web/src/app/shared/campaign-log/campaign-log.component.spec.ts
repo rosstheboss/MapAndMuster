@@ -327,4 +327,66 @@ describe('CampaignLogComponent', () => {
     fixture.detectChanges();
     expect(compiled.textContent).not.toContain('may be kicked');
   });
+
+  it('keeps the scroll position when the log refreshes after the viewer scrolls up', async () => {
+    const fixture = TestBed.createComponent(CampaignLogComponent);
+    const firstEntries = [
+      {
+        id: 'log-1',
+        occurredUtc: '2026-08-15T20:45:23-04:00',
+        kind: 'CampaignStarted',
+        originator: 'Campaign',
+        originatorUsername: null,
+        summary: 'The campaign started.',
+        territoryId: null,
+        forceId: null,
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+      {
+        id: 'log-2',
+        occurredUtc: '2026-08-15T20:46:23-04:00',
+        kind: 'PlayerChat',
+        originator: 'northplayer',
+        originatorUsername: 'northplayer',
+        summary: 'Hello from the north.',
+        territoryId: null,
+        forceId: null,
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+    ];
+    fixture.componentRef.setInput('members', [{ userId: '1', username: 'northplayer', displayName: 'northplayer' }]);
+    fixture.componentRef.setInput('entries', firstEntries);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const scroller = (fixture.nativeElement as HTMLElement).querySelector('.log-scroll') as HTMLElement;
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => 400 });
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 100 });
+    scroller.scrollTop = 0;
+    scroller.dispatchEvent(new Event('scroll'));
+
+    fixture.componentRef.setInput('entries', [
+      ...firstEntries,
+      {
+        id: 'log-3',
+        occurredUtc: '2026-08-15T20:47:23-04:00',
+        kind: 'PlayerChat',
+        originator: 'northplayer',
+        originatorUsername: 'northplayer',
+        summary: 'A later message.',
+        territoryId: null,
+        forceId: null,
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((resolve) => queueMicrotask(() => resolve(undefined)));
+
+    expect(scroller.scrollTop).toBe(0);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('A later message.');
+  });
 });

@@ -84,10 +84,7 @@ public sealed class CreateCampaignHandler
                 command.ForceStatuses,
                 command.SplitForceSupplyPenaltyPercent,
                 command.SplitForceSupplyPenaltyIsPercent,
-                command.AlwaysAskGeneralKill,
-                command.AlwaysAskSupplyLineDestroyed,
-                command.GeneralKillCampaignPoints,
-                command.SupplyLineDestroyedCampaignPoints,
+                command.StandardBattleResultQuestions,
                 command.Missions))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
@@ -222,10 +219,7 @@ public sealed class UpdateCampaignHandler
                 command.ForceStatuses,
                 command.SplitForceSupplyPenaltyPercent,
                 command.SplitForceSupplyPenaltyIsPercent,
-                command.AlwaysAskGeneralKill,
-                command.AlwaysAskSupplyLineDestroyed,
-                command.GeneralKillCampaignPoints,
-                command.SupplyLineDestroyedCampaignPoints,
+                command.StandardBattleResultQuestions,
                 command.Missions))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
@@ -483,7 +477,7 @@ internal static class CampaignPersistenceFactory
             RankingObjectivePoints = setup.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = setup.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = setup.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = setup.BattleReportRules,
+            StandardBattleResultQuestions = CatalogFileBinder.BindStandardBattleResultQuestions(setup.StandardBattleResultQuestions),
             ArmyEscalations = setup.Schedule.ArmyEscalations,
         };
     }

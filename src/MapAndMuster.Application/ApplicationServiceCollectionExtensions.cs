@@ -92,6 +92,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<CampaignNotificationPublisher>();
         services.AddScoped<GetHomeBoardHandler>();
         services.AddScoped<MarkNotificationReadHandler>();
+        services.AddScoped<MarkAllNotificationsReadHandler>();
         services.AddScoped<GetNewsPageHandler>();
         services.AddScoped<SaveNewsArticleHandler>();
         services.AddScoped<DeleteNewsArticleHandler>();

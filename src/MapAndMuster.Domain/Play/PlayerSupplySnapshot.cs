@@ -12,6 +12,7 @@ namespace MapAndMuster.Domain.Play;
 /// <param name="MaxArmyPoints">Configured maximum army points for the current round.</param>
 /// <param name="FreeCharacterCount">Free characters whose base cost does not count against supply this round.</param>
 /// <param name="IsSplit">Whether the player currently has more than one force.</param>
+/// <param name="Contributions">Per-source lines that sum to the displayed current total.</param>
 public sealed record PlayerSupplySnapshot(
     Guid UserId,
     int MapSupplyPoints,
@@ -21,7 +22,8 @@ public sealed record PlayerSupplySnapshot(
     int CurrentSupplyPoints,
     int MaxArmyPoints,
     int FreeCharacterCount,
-    bool IsSplit)
+    bool IsSplit,
+    IReadOnlyList<SupplyContribution> Contributions)
 {
     /// <summary>
     /// Map supply after the split-force penalty (minimum 1 when split and map supply is positive), plus round free supply.

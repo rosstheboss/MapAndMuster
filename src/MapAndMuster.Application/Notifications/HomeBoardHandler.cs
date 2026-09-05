@@ -65,7 +65,7 @@ public sealed class GetHomeBoardHandler
 
                 items.Add(new HomeAttentionItem
                 {
-                    Id = notice.Id.ToString("N"),
+                    Id = notice.Id.ToString("D"),
                     Kind = notice.Kind,
                     CampaignId = notice.CampaignId,
                     CampaignName = notice.CampaignName,
@@ -245,5 +245,34 @@ public sealed class MarkNotificationReadHandler
         return marked
             ? OperationResult.Success()
             : OperationResult.Failure("notification.not_found", "The notification was not found.");
+    }
+}
+
+/// <summary>
+/// Marks every stored notice as read for the caller.
+/// </summary>
+public sealed class MarkAllNotificationsReadHandler
+{
+    private readonly IUserNotificationStore _notifications;
+    private readonly IClock _clock;
+
+    /// <summary>
+    /// Initializes a handler.
+    /// </summary>
+    public MarkAllNotificationsReadHandler(IUserNotificationStore notifications, IClock clock)
+    {
+        ArgumentNullException.ThrowIfNull(notifications);
+        ArgumentNullException.ThrowIfNull(clock);
+        _notifications = notifications;
+        _clock = clock;
+    }
+
+    /// <summary>
+    /// Marks all unread stored notices for the caller as read.
+    /// </summary>
+    public async Task<OperationResult> HandleAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await _notifications.MarkAllReadAsync(userId, _clock.UtcNow, cancellationToken).ConfigureAwait(false);
+        return OperationResult.Success();
     }
 }

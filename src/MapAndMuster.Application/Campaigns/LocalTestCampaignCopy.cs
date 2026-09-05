@@ -212,7 +212,7 @@ public static class LocalTestCampaignCopy
             RankingObjectivePoints = duplicated.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = duplicated.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = duplicated.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = duplicated.BattleReportRules,
+            StandardBattleResultQuestions = duplicated.StandardBattleResultQuestions,
             ArmyEscalations = duplicated.ArmyEscalations,
         };
     }

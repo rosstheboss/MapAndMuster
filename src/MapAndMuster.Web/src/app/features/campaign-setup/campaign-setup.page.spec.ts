@@ -892,6 +892,169 @@ describe('CampaignSetupPage', () => {
     expect(page.catalogMissionNames()).toContain('Meeting engagement');
     TestBed.inject(HttpTestingController).verify();
   });
+
+  it('adds a standard battle result question to every catalog mission', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      addStandardBattleResultQuestion: () => void;
+      addCatalogMission: () => void;
+      addStandardQuestionToAllMissions: (id: string) => void;
+      addMissionQuestion: (mission: { controls: { resultQuestions: unknown } }) => void;
+      standardBattleResultQuestions: {
+        at: (index: number) => {
+          controls: {
+            id: { value: string };
+            prompt: { setValue: (value: string) => void };
+            campaignPoints: { setValue: (value: number) => void };
+          };
+        };
+      };
+      missions: {
+        at: (index: number) => {
+          controls: {
+            name: { setValue: (value: string) => void };
+            resultQuestions: {
+              length: number;
+              at: (index: number) => {
+                controls: {
+                  prompt: { value: string };
+                  campaignPoints: { value: number; setValue: (value: number) => void };
+                  standardQuestionId: { value: string };
+                };
+              };
+            };
+          };
+        };
+      };
+    };
+
+    page.addStandardBattleResultQuestion();
+    page.standardBattleResultQuestions.at(0).controls.prompt.setValue('Killed the enemy general');
+    page.standardBattleResultQuestions.at(0).controls.campaignPoints.setValue(1);
+    page.addCatalogMission();
+    page.addCatalogMission();
+    page.missions.at(0).controls.name.setValue('Meeting engagement');
+    page.missions.at(1).controls.name.setValue('Hold the line');
+    page.addStandardQuestionToAllMissions(page.standardBattleResultQuestions.at(0).controls.id.value);
+    page.missions.at(0).controls.resultQuestions.at(0).controls.campaignPoints.setValue(5);
+    page.addMissionQuestion(page.missions.at(0));
+
+    expect(page.missions.at(0).controls.resultQuestions.length).toBe(2);
+    expect(page.missions.at(1).controls.resultQuestions.length).toBe(1);
+    expect(page.missions.at(0).controls.resultQuestions.at(0).controls.prompt.value).toBe('Killed the enemy general');
+    expect(page.missions.at(0).controls.resultQuestions.at(0).controls.campaignPoints.value).toBe(5);
+    expect(page.missions.at(0).controls.resultQuestions.at(0).controls.standardQuestionId.value).toBe(
+      page.standardBattleResultQuestions.at(0).controls.id.value,
+    );
+    expect(page.missions.at(1).controls.resultQuestions.at(0).controls.standardQuestionId.value).toBe(
+      page.standardBattleResultQuestions.at(0).controls.id.value,
+    );
+    expect(page.missions.at(0).controls.resultQuestions.at(1).controls.standardQuestionId.value).toBe('');
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('remaps saved-preset catalog ids and previews logos before create', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      campaignPresetId: { setValue: (value: string) => void };
+      applySelectedCampaignPreset: () => void;
+      allyGroups: {
+        at: (index: number) => { controls: { id: { value: string }; name: { value: string } } };
+        length: number;
+      };
+      structureTypes: {
+        controls: readonly { controls: { id: { value: string }; name: { value: string } } }[];
+      };
+      privateObjectiveTypes: {
+        at: (index: number) => { controls: { structureTypeId: { value: string } } };
+      };
+      factions: {
+        at: (index: number) => { controls: { id: { value: string } } };
+      };
+      hasStoredFlagImage: (factionId: string) => boolean;
+      factionFlagUrl: (factionId: string) => string | null;
+    };
+    const townId = page.structureTypes.controls.find((item) => item.controls.name.value === 'Town')?.controls.id.value;
+    expect(townId).toBeTruthy();
+
+    page.campaignPresetId.setValue('saved:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
+    page.applySelectedCampaignPreset();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/campaign-presets/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb').flush({
+      ...scheduledEditCampaign('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'),
+      name: 'The Hunt in Estalia',
+      factions: [
+        {
+          id: 'preset-north',
+          name: 'North',
+          color: '#2563EB',
+          subfactions: [],
+          allyGroupName: 'Pact',
+          requiresSubfaction: false,
+          hasFlagImage: true,
+        },
+        {
+          id: 'preset-south',
+          name: 'South',
+          color: '#DC2626',
+          subfactions: [],
+          allyGroupName: 'Pact',
+          requiresSubfaction: false,
+          hasFlagImage: false,
+        },
+      ],
+      allyGroups: [{ id: 'preset-pact', name: 'Pact', color: '#4B5563' }],
+      structureTypes: [
+        {
+          id: 'preset-town',
+          name: 'Town',
+          builtinSymbol: 'Town',
+          hasImage: true,
+          hasPillagedImage: false,
+          isBuildable: true,
+          isPillageable: true,
+          isDestructible: true,
+          missions: [],
+        },
+      ],
+      privateObjectiveTypes: [
+        {
+          id: 'preset-po',
+          name: 'Hold two towns',
+          campaignPoints: 3,
+          allowedHolderKinds: ['Player'],
+          scoringKind: 'Automatic',
+          automaticKind: 'ControlStructureType',
+          requiredCount: 2,
+          structureTypeId: 'preset-town',
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(page.allyGroups.length).toBe(1);
+    expect(page.allyGroups.at(0).controls.name.value).toBe('Pact');
+    expect(page.allyGroups.at(0).controls.id.value).not.toBe('preset-pact');
+    expect(page.structureTypes.controls.find((item) => item.controls.name.value === 'Town')?.controls.id.value).toBe(
+      townId,
+    );
+    expect(page.privateObjectiveTypes.at(0).controls.structureTypeId.value).toBe(townId);
+    const northId = page.factions.at(0).controls.id.value;
+    expect(northId).not.toBe('preset-north');
+    expect(page.hasStoredFlagImage(northId)).toBe(true);
+    expect(page.factionFlagUrl(northId)).toBe(
+      '/api/campaign-presets/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/factions/preset-north/flag',
+    );
+    http.verify();
+  });
 });
 
 describe('CampaignSetupPage edit', () => {
@@ -1230,106 +1393,6 @@ describe('CampaignSetupPage edit', () => {
 
     expect(page.factions.at(0).controls.id.value).toBe('1');
     expect(page.hasStoredFlagImage('1')).toBe(true);
-    http.verify();
-  });
-
-  it('remaps saved-preset catalog ids and previews logos before create', async () => {
-    const fixture = TestBed.createComponent(CampaignSetupPage);
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const page = fixture.componentInstance as unknown as {
-      campaignPresetId: { setValue: (value: string) => void };
-      applySelectedCampaignPreset: () => void;
-      allyGroups: {
-        at: (index: number) => { controls: { id: { value: string }; name: { value: string } } };
-        length: number;
-      };
-      structureTypes: {
-        controls: readonly { controls: { id: { value: string }; name: { value: string } } }[];
-      };
-      privateObjectiveTypes: {
-        at: (index: number) => { controls: { structureTypeId: { value: string } } };
-      };
-      factions: {
-        at: (index: number) => { controls: { id: { value: string } } };
-      };
-      hasStoredFlagImage: (factionId: string) => boolean;
-      factionFlagUrl: (factionId: string) => string | null;
-    };
-    const townId = page.structureTypes.controls.find((item) => item.controls.name.value === 'Town')?.controls.id.value;
-    expect(townId).toBeTruthy();
-
-    page.campaignPresetId.setValue('saved:bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
-    page.applySelectedCampaignPreset();
-
-    const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/campaign-presets/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb').flush({
-      ...scheduledEditCampaign('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'),
-      name: 'The Hunt in Estalia',
-      factions: [
-        {
-          id: 'preset-north',
-          name: 'North',
-          color: '#2563EB',
-          subfactions: [],
-          allyGroupName: 'Pact',
-          requiresSubfaction: false,
-          hasFlagImage: true,
-        },
-        {
-          id: 'preset-south',
-          name: 'South',
-          color: '#DC2626',
-          subfactions: [],
-          allyGroupName: 'Pact',
-          requiresSubfaction: false,
-          hasFlagImage: false,
-        },
-      ],
-      allyGroups: [{ id: 'preset-pact', name: 'Pact', color: '#4B5563' }],
-      structureTypes: [
-        {
-          id: 'preset-town',
-          name: 'Town',
-          builtinSymbol: 'Town',
-          hasImage: true,
-          hasPillagedImage: false,
-          isBuildable: true,
-          isPillageable: true,
-          isDestructible: true,
-          missions: [],
-        },
-      ],
-      privateObjectiveTypes: [
-        {
-          id: 'preset-po',
-          name: 'Hold two towns',
-          campaignPoints: 3,
-          allowedHolderKinds: ['Player'],
-          scoringKind: 'Automatic',
-          automaticKind: 'ControlStructureType',
-          requiredCount: 2,
-          structureTypeId: 'preset-town',
-        },
-      ],
-    });
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    expect(page.allyGroups.length).toBe(1);
-    expect(page.allyGroups.at(0).controls.name.value).toBe('Pact');
-    expect(page.allyGroups.at(0).controls.id.value).not.toBe('preset-pact');
-    expect(page.structureTypes.controls.find((item) => item.controls.name.value === 'Town')?.controls.id.value).toBe(
-      townId,
-    );
-    expect(page.privateObjectiveTypes.at(0).controls.structureTypeId.value).toBe(townId);
-    const northId = page.factions.at(0).controls.id.value;
-    expect(northId).not.toBe('preset-north');
-    expect(page.hasStoredFlagImage(northId)).toBe(true);
-    expect(page.factionFlagUrl(northId)).toBe(
-      '/api/campaign-presets/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/factions/preset-north/flag',
-    );
     http.verify();
   });
 

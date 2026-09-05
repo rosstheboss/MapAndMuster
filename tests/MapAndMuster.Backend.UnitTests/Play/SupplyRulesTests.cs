@@ -11,6 +11,8 @@ public sealed class SupplyRulesTests
     private static readonly Guid Adjacent = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid Terrain = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid Keep = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    private static readonly Guid Isolated = Guid.Parse("66666666-6666-6666-6666-666666666666");
+    private static readonly Guid Neutral = Guid.Parse("77777777-7777-7777-7777-777777777777");
 
     [Fact]
     public void MapSupplyAddsOwnedConnectedTerrainAndOperationalStructures()
@@ -25,6 +27,22 @@ public sealed class SupplyRulesTests
         Assert.Equal(4, snapshot.CurrentSupplyPoints);
         Assert.Equal(500, snapshot.MaxArmyPoints);
         Assert.False(snapshot.IsSplit);
+        Assert.Contains(
+            snapshot.Contributions,
+            item => item.Kind == SupplyContributionKind.TerritoryTerrain
+                && item.TerritoryId == Spawn
+                && item.Points == 1
+                && !item.IsAllied);
+        Assert.Contains(
+            snapshot.Contributions,
+            item => item.Kind == SupplyContributionKind.TerritoryStructure
+                && item.TerritoryId == Adjacent
+                && item.Points == 1
+                && item.SourceName == "Keep"
+                && !item.IsAllied);
+        Assert.Contains(
+            snapshot.Contributions,
+            item => item.Kind == SupplyContributionKind.RoundFree && item.Points == 1);
     }
 
     [Fact]
@@ -60,6 +78,16 @@ public sealed class SupplyRulesTests
         var snapshot = SupplyRules.ForPlayer(state, map, catalog, Player, roundNumber: 1);
 
         Assert.Equal(3, snapshot.MapSupplyPoints);
+        Assert.Contains(
+            snapshot.Contributions,
+            item => item.Kind == SupplyContributionKind.TerritoryTerrain
+                && item.TerritoryId == Adjacent
+                && item.IsAllied);
+        Assert.Contains(
+            snapshot.Contributions,
+            item => item.Kind == SupplyContributionKind.TerritoryStructure
+                && item.TerritoryId == Adjacent
+                && item.IsAllied);
     }
 
     [Fact]
@@ -75,6 +103,9 @@ public sealed class SupplyRulesTests
         Assert.Equal(1, snapshot.SplitPenaltyPoints);
         Assert.Equal(3, snapshot.ForceAllowancePoints);
         Assert.Equal(3, snapshot.CurrentSupplyPoints);
+        Assert.Contains(
+            snapshot.Contributions,
+            item => item.Kind == SupplyContributionKind.SplitPenalty && item.Points == -1);
     }
 
     [Fact]
@@ -136,6 +167,9 @@ public sealed class SupplyRulesTests
         Assert.Equal(1, snapshot.TemporarySupplyPoints);
         Assert.Equal(snapshot.ForceAllowancePoints + snapshot.TemporarySupplyPoints, snapshot.CurrentSupplyPoints);
         Assert.Equal(snapshot.MapSupplyPoints + snapshot.RoundFreeSupplyPoints - snapshot.SplitPenaltyPoints, snapshot.ForceAllowancePoints);
+        Assert.Contains(
+            snapshot.Contributions,
+            item => item.Kind == SupplyContributionKind.Temporary && item.Points == 1);
     }
 
     [Fact]
@@ -167,6 +201,85 @@ public sealed class SupplyRulesTests
 
         Assert.Equal(3, recurring);
         Assert.Equal(2, temporary);
+    }
+
+    [Fact]
+    public void ForceMapSupplyUsesOnlyTheConnectedChainThatForceCanReach()
+    {
+        var spawnForce = new CampaignForce(Guid.Parse("00000000-0000-0000-0000-000000000001"), Player, Faction, Spawn, false);
+        var isolatedForce = new CampaignForce(Guid.Parse("00000000-0000-0000-0000-000000000002"), Player, Faction, Isolated, false);
+        var state = new CampaignPlayState(
+            [],
+            [spawnForce, isolatedForce],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []);
+        var map = new PlayMap(
+            [
+                new PlayTerritory(Spawn, 1, Faction, Faction, null, null, StructureCondition.Operational, terrainTypeId: Terrain),
+                new PlayTerritory(
+                    Adjacent,
+                    2,
+                    Faction,
+                    null,
+                    Keep,
+                    "Keep",
+                    StructureCondition.Operational,
+                    isPillageable: true,
+                    isDestructible: true,
+                    terrainTypeId: Terrain),
+                new PlayTerritory(Isolated, 3, Faction, null, null, null, StructureCondition.Operational, terrainTypeId: Terrain),
+            ],
+            [(Spawn, Adjacent)],
+            [new StructureTypePlayRules(Keep, "Keep", true, true, true, 1, 1, 1)]);
+
+        var spawnSupply = SupplyRules.ForForce(state, map, Catalog(), spawnForce, roundNumber: 1);
+        var isolatedSupply = SupplyRules.ForForce(state, map, Catalog(), isolatedForce, roundNumber: 1);
+
+        Assert.Equal(3, spawnSupply.MapSupplyPoints);
+        Assert.Equal(1, isolatedSupply.MapSupplyPoints);
+        Assert.Equal(0, spawnSupply.TemporarySupplyPoints);
+        Assert.DoesNotContain(spawnSupply.Contributions, item => item.Kind == SupplyContributionKind.Temporary);
+        Assert.DoesNotContain(
+            isolatedSupply.Contributions,
+            item => item.TerritoryId == Adjacent || item.TerritoryId == Spawn);
+    }
+
+    [Fact]
+    public void ForceAdjacentToASupplyLineDrawsFromThatChain()
+    {
+        var force = new CampaignForce(Guid.Parse("00000000-0000-0000-0000-000000000001"), Player, Faction, Neutral, false);
+        var state = new CampaignPlayState([], [force], [], [], [], [], [], [], [], [], [], []);
+        var map = new PlayMap(
+            [
+                new PlayTerritory(Spawn, 1, Faction, Faction, null, null, StructureCondition.Operational, terrainTypeId: Terrain),
+                new PlayTerritory(
+                    Adjacent,
+                    2,
+                    Faction,
+                    null,
+                    Keep,
+                    "Keep",
+                    StructureCondition.Operational,
+                    isPillageable: true,
+                    isDestructible: true,
+                    terrainTypeId: Terrain),
+                new PlayTerritory(Neutral, 3, null, null, null, null, StructureCondition.Operational, terrainTypeId: Terrain),
+            ],
+            [(Spawn, Adjacent), (Adjacent, Neutral)],
+            [new StructureTypePlayRules(Keep, "Keep", true, true, true, 1, 1, 1)]);
+
+        var snapshot = SupplyRules.ForForce(state, map, Catalog(), force, roundNumber: 1);
+
+        Assert.Equal(3, snapshot.MapSupplyPoints);
+        Assert.DoesNotContain(snapshot.Contributions, item => item.TerritoryId == Neutral);
     }
 
     private static CampaignPlayState EmptyState(int forceCount, Guid? territoryId = null)

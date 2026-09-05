@@ -194,6 +194,22 @@ internal static class CatalogFileBinder
         ];
     }
 
+    public static IReadOnlyList<StoredStandardBattleResultQuestion> BindStandardBattleResultQuestions(
+        IReadOnlyList<StandardBattleResultQuestionSetup> incoming)
+    {
+        return
+        [
+            .. incoming.Select(static question => new StoredStandardBattleResultQuestion
+            {
+                Id = question.Id,
+                Prompt = question.Prompt,
+                Kind = question.Kind.ToString(),
+                BattlePoints = question.BattlePoints,
+                CampaignPoints = question.CampaignPoints,
+            }),
+        ];
+    }
+
     public static IReadOnlyList<StoredForceStatus> BindForceStatuses(IReadOnlyList<ForceStatusSetup> incoming)
     {
         return
@@ -402,6 +418,7 @@ internal static class CatalogFileBinder
                             Kind = question.Kind.ToString(),
                             BattlePoints = question.BattlePoints,
                             CampaignPoints = question.CampaignPoints,
+                            StandardQuestionId = question.StandardQuestionId,
                         }),
                     ],
                     IsAttackerDefender = mission.IsAttackerDefender,

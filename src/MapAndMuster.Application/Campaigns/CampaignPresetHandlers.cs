@@ -247,7 +247,7 @@ public sealed class ApplyCampaignPresetHandler
             RankingObjectivePoints = withFiles.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = withFiles.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = withFiles.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = withFiles.BattleReportRules,
+            StandardBattleResultQuestions = withFiles.StandardBattleResultQuestions,
             ArmyEscalations = withFiles.ArmyEscalations,
         };
     }

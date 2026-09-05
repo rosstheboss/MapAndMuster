@@ -152,8 +152,7 @@ internal static class CampaignPlayCatalog
         StoredCampaign campaign,
         CampaignPlayState state,
         PlayMap map,
-        DateTimeOffset utcNow,
-        DateTimeOffset endsUtc)
+        DateTimeOffset utcNow)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(state);
@@ -184,12 +183,6 @@ internal static class CampaignPlayCatalog
             next.BrokenAllyFactionIds.ToHashSet(),
             utcNow,
             map);
-        var progress = next.Evaluate(campaign.StartsUtc, endsUtc, utcNow);
-        if (progress.Status == CampaignStatus.Completed)
-        {
-            next = PrivateObjectiveRules.RevealRemainingAtCompletion(next, PrivateNames(campaign), utcNow);
-        }
-
         return next;
     }
 
@@ -259,26 +252,21 @@ internal static class CampaignPlayCatalog
             return [];
         }
 
-        var questions = new List<MissionResultQuestionSetup>();
-        var terrain = campaign.TerrainTypes.FirstOrDefault(type => type.Id == territory.TerrainTypeId);
-        if (terrain is not null)
-        {
-            questions.AddRange(terrain.Missions.SelectMany(static mission => mission.ResultQuestions).Select(ToQuestion));
-        }
-
         var structureId = campaign.PlayState?.Structures
             .FirstOrDefault(item => item.TerritoryId == territoryId)
             ?.StructureTypeId
             ?? territory.StructureTypeId;
-        var structure = structureId is { } id
-            ? campaign.StructureTypes.FirstOrDefault(type => type.Id == id)
-            : null;
-        if (structure is not null)
-        {
-            questions.AddRange(structure.Missions.SelectMany(static mission => mission.ResultQuestions).Select(ToQuestion));
-        }
-
-        return questions;
+        var playTerritory = new PlayTerritory(
+            territory.Id,
+            territory.DisplayNumber,
+            territory.OwnerFactionId,
+            territory.SpawnFactionId,
+            structureId,
+            null,
+            StructureCondition.Operational,
+            terrainTypeId: territory.TerrainTypeId);
+        var pool = BattleMissionRules.PoolFor(playTerritory, TerrainSetups(campaign), StructureSetups(campaign));
+        return pool.Count == 0 ? [] : pool[0].ResultQuestions;
     }
 
     public static StoredMission? FindMission(StoredCampaign campaign, Guid missionId)
@@ -404,8 +392,6 @@ internal static class CampaignPlayCatalog
                     report.ArmyPoints,
                     report.DifferentialBattlePoints,
                     report.BonusBattlePoints,
-                    report.KilledEnemyGeneral,
-                    report.DestroyedEnemySupplyLine,
                     [
                         .. (report.Answers ?? []).Select(static answer => new BattleQuestionAnswer(
                             answer.QuestionId,
@@ -459,7 +445,7 @@ internal static class CampaignPlayCatalog
                 }
 
                 extras[force.ControllerUserId] = extras.GetValueOrDefault(force.ControllerUserId)
-                    + BattleResultRules.ExtraCampaignPoints(report, campaign.BattleReportRules, questions);
+                    + BattleResultRules.ExtraCampaignPoints(report, questions);
             }
         }
 
@@ -476,6 +462,7 @@ internal static class CampaignPlayCatalog
             string.IsNullOrWhiteSpace(question.Prompt) ? "Question" : question.Prompt,
             kind,
             Math.Max(0, question.BattlePoints),
-            Math.Max(0, question.CampaignPoints));
+            Math.Max(0, question.CampaignPoints),
+            question.StandardQuestionId);
     }
 }

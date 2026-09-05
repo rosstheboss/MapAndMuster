@@ -21,4 +21,9 @@ public interface IUserNotificationStore
     /// Marks a notice read when it belongs to the user.
     /// </summary>
     Task<bool> MarkReadAsync(Guid notificationId, Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Marks every unread notice for the user as read.
+    /// </summary>
+    Task<int> MarkAllReadAsync(Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken);
 }

@@ -85,6 +85,9 @@ public sealed class SaveCampaignRequest
     /// <summary>Gets reusable special rules. Omitted or empty means none.</summary>
     public IReadOnlyList<SpecialRuleRequest>? SpecialRules { get; init; }
 
+    /// <summary>Gets reusable battle-result questions. Omitted or empty means none.</summary>
+    public IReadOnlyList<StandardBattleResultQuestionRequest>? StandardBattleResultQuestions { get; init; }
+
     /// <summary>Gets reusable missions. Omitted means nested terrain and structure missions only.</summary>
     public IReadOnlyList<MissionRequest>? Missions { get; init; }
 
@@ -138,18 +141,6 @@ public sealed class SaveCampaignRequest
 
     /// <summary>Gets whether the split-force supply penalty is a percent of map supply. The default is a raw amount.</summary>
     public bool? SplitForceSupplyPenaltyIsPercent { get; init; }
-
-    /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
-    public bool? AlwaysAskGeneralKill { get; init; }
-
-    /// <summary>Gets whether every battle report asks if the enemy supply line was destroyed.</summary>
-    public bool? AlwaysAskSupplyLineDestroyed { get; init; }
-
-    /// <summary>Gets campaign points awarded for a slain enemy general.</summary>
-    public int? GeneralKillCampaignPoints { get; init; }
-
-    /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
-    public int? SupplyLineDestroyedCampaignPoints { get; init; }
 
     /// <summary>Gets per-round army size, free supply, and free characters.</summary>
     public IReadOnlyList<RoundArmyEscalationRequest>? RoundEscalations { get; init; }
@@ -623,7 +614,7 @@ public sealed class MissionResultQuestionRequest
     public Guid? Id { get; init; }
 
     /// <summary>Gets the question text.</summary>
-    public required string Prompt { get; init; }
+    public string? Prompt { get; init; }
 
     /// <summary>Gets Boolean or BattlePoints.</summary>
     public string? Kind { get; init; }
@@ -632,6 +623,30 @@ public sealed class MissionResultQuestionRequest
     public int? BattlePoints { get; init; }
 
     /// <summary>Gets campaign points awarded when the question is scored.</summary>
+    public int? CampaignPoints { get; init; }
+
+    /// <summary>Gets the catalog question this mission question copies, when present.</summary>
+    public Guid? StandardQuestionId { get; init; }
+}
+
+/// <summary>
+/// A reusable battle-result question in the campaign catalog.
+/// </summary>
+public sealed class StandardBattleResultQuestionRequest
+{
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Gets the question text.</summary>
+    public required string Prompt { get; init; }
+
+    /// <summary>Gets Boolean or BattlePoints.</summary>
+    public string? Kind { get; init; }
+
+    /// <summary>Gets standard battle points awarded when a boolean is true.</summary>
+    public int? BattlePoints { get; init; }
+
+    /// <summary>Gets standard campaign points awarded when the question is scored.</summary>
     public int? CampaignPoints { get; init; }
 }
 
@@ -790,6 +805,9 @@ public sealed class CampaignDetailResponse
     /// <summary>Gets reusable special rules. Empty means none.</summary>
     public IReadOnlyList<SpecialRuleResponse> SpecialRules { get; init; } = [];
 
+    /// <summary>Gets reusable battle-result questions. Empty means none.</summary>
+    public IReadOnlyList<StandardBattleResultQuestionResponse> StandardBattleResultQuestions { get; init; } = [];
+
     /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
     public IReadOnlyList<MissionResponse> Missions { get; init; } = [];
 
@@ -849,18 +867,6 @@ public sealed class CampaignDetailResponse
 
     /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
     public bool SplitForceSupplyPenaltyIsPercent { get; init; }
-
-    /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
-    public bool AlwaysAskGeneralKill { get; init; }
-
-    /// <summary>Gets whether every battle report asks if the enemy supply line was destroyed.</summary>
-    public bool AlwaysAskSupplyLineDestroyed { get; init; }
-
-    /// <summary>Gets campaign points awarded for a slain enemy general.</summary>
-    public int GeneralKillCampaignPoints { get; init; }
-
-    /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
-    public int SupplyLineDestroyedCampaignPoints { get; init; }
 
     /// <summary>Gets per-round army size, free supply, and free characters.</summary>
     public IReadOnlyList<RoundArmyEscalationResponse> RoundEscalations { get; init; } = [];
@@ -1050,6 +1056,60 @@ public sealed class CampaignParticipantResponse
 
     /// <summary>Gets free characters whose base cost does not count against supply this round.</summary>
     public int? FreeCharacterCount { get; init; }
+
+    /// <summary>Gets supply subtracted because the player currently has split forces.</summary>
+    public int? SplitPenaltyPoints { get; init; }
+
+    /// <summary>Gets per-source lines that sum to the displayed current total.</summary>
+    public IReadOnlyList<SupplyContributionResponse> Contributions { get; init; } = [];
+}
+
+/// <summary>
+/// One line in a player's current supply total.
+/// </summary>
+public sealed class SupplyContributionResponse
+{
+    /// <summary>Gets the source category name.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the related territory, when the source is a holding or location bonus.</summary>
+    public Guid? TerritoryId { get; init; }
+
+    /// <summary>Gets the player-visible label.</summary>
+    public required string Label { get; init; }
+
+    /// <summary>Gets signed points this source adds. Penalties are negative.</summary>
+    public required int Points { get; init; }
+
+    /// <summary>Gets whether the holding belongs to an ally rather than the player.</summary>
+    public bool IsAllied { get; init; }
+}
+
+/// <summary>
+/// Current spendable supply for one player, including a per-source breakdown.
+/// </summary>
+public sealed class PlayerSupplyViewResponse
+{
+    /// <summary>Gets the maximum one force can spend if assigned the remaining temporary pool.</summary>
+    public required int CurrentSupplyPoints { get; init; }
+
+    /// <summary>Gets remaining player-pool temporary supply.</summary>
+    public required int TemporarySupplyPoints { get; init; }
+
+    /// <summary>Gets map supply from connected territories and operational structures.</summary>
+    public required int MapSupplyPoints { get; init; }
+
+    /// <summary>Gets free supply granted this round.</summary>
+    public required int RoundFreeSupplyPoints { get; init; }
+
+    /// <summary>Gets supply subtracted because the player currently has split forces.</summary>
+    public required int SplitPenaltyPoints { get; init; }
+
+    /// <summary>Gets map-plus-round supply after the split penalty, excluding temporary points.</summary>
+    public required int ForceAllowancePoints { get; init; }
+
+    /// <summary>Gets per-source lines that sum to the displayed current total.</summary>
+    public IReadOnlyList<SupplyContributionResponse> Contributions { get; init; } = [];
 }
 
 /// <summary>
@@ -1561,8 +1621,11 @@ public sealed class PrivateObjectiveUnclaimedCountResponse
 /// </summary>
 public sealed class PublicObjectiveLeaderboardResponse
 {
-    /// <summary>Gets the ranking objective kind.</summary>
+    /// <summary>Gets the ranking objective kind, or NamedPublicObjective for a catalog award.</summary>
     public required string Kind { get; init; }
+
+    /// <summary>Gets the heading shown on the campaign page.</summary>
+    public string Title { get; init; } = string.Empty;
 
     /// <summary>Gets campaign points awarded to each current first-place player.</summary>
     public required int AwardPoints { get; init; }
@@ -1596,6 +1659,9 @@ public sealed class PublicObjectiveLeaderResponse
 
     /// <summary>Gets whether this player currently receives the objective's campaign points.</summary>
     public required bool AwardsPoints { get; init; }
+
+    /// <summary>Gets how many players this row summarizes, or 0 for an individual player.</summary>
+    public int TiedPlayerCount { get; init; }
 }
 
 /// <summary>
@@ -1739,6 +1805,30 @@ public sealed class MissionResultQuestionResponse
     public int BattlePoints { get; init; }
 
     /// <summary>Gets campaign points awarded when the question is scored.</summary>
+    public int CampaignPoints { get; init; }
+
+    /// <summary>Gets the catalog question this mission question copies, when present.</summary>
+    public Guid? StandardQuestionId { get; init; }
+}
+
+/// <summary>
+/// A reusable battle-result question in the campaign catalog.
+/// </summary>
+public sealed class StandardBattleResultQuestionResponse
+{
+    /// <summary>Gets the question identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the question text.</summary>
+    public required string Prompt { get; init; }
+
+    /// <summary>Gets Boolean or BattlePoints.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets standard battle points awarded when a boolean is true.</summary>
+    public int BattlePoints { get; init; }
+
+    /// <summary>Gets standard campaign points awarded when the question is scored.</summary>
     public int CampaignPoints { get; init; }
 }
 
@@ -2087,6 +2177,17 @@ public static class CampaignResponses
                     EffectKey = rule.EffectKey,
                 }),
             ],
+            StandardBattleResultQuestions =
+            [
+                .. detail.StandardBattleResultQuestions.Select(static question => new StandardBattleResultQuestionResponse
+                {
+                    Id = question.Id,
+                    Prompt = question.Prompt,
+                    Kind = question.Kind,
+                    BattlePoints = question.BattlePoints,
+                    CampaignPoints = question.CampaignPoints,
+                }),
+            ],
             Missions = [.. detail.Missions.Select(FromMission)],
             ForceStatuses =
             [
@@ -2167,10 +2268,6 @@ public static class CampaignResponses
             AlliedRelicControlCampaignPoints = detail.AlliedRelicControlCampaignPoints,
             SplitForceSupplyPenaltyPercent = detail.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = detail.SplitForceSupplyPenaltyIsPercent,
-            AlwaysAskGeneralKill = detail.AlwaysAskGeneralKill,
-            AlwaysAskSupplyLineDestroyed = detail.AlwaysAskSupplyLineDestroyed,
-            GeneralKillCampaignPoints = detail.GeneralKillCampaignPoints,
-            SupplyLineDestroyedCampaignPoints = detail.SupplyLineDestroyedCampaignPoints,
             RoundEscalations =
             [
                 .. detail.RoundEscalations.Select(static row => new RoundArmyEscalationResponse
@@ -2254,6 +2351,8 @@ public static class CampaignResponses
                     RoundFreeSupplyPoints = participant.RoundFreeSupplyPoints,
                     MaxArmyPoints = participant.MaxArmyPoints,
                     FreeCharacterCount = participant.FreeCharacterCount,
+                    SplitPenaltyPoints = participant.SplitPenaltyPoints,
+                    Contributions = FromContributions(participant.Contributions),
                 }),
             ],
             MentionableMembers =
@@ -2608,6 +2707,24 @@ public static class CampaignResponses
     }
 
     /// <summary>
+    /// Maps HTTP standard battle-result question requests onto domain inputs.
+    /// </summary>
+    public static IReadOnlyList<StandardBattleResultQuestionInput>? ToStandardBattleResultQuestionInputs(
+        IReadOnlyList<StandardBattleResultQuestionRequest>? questions)
+    {
+        return questions?
+            .Select(static question => new StandardBattleResultQuestionInput
+            {
+                Id = question.Id,
+                Prompt = question.Prompt,
+                Kind = question.Kind,
+                BattlePoints = question.BattlePoints,
+                CampaignPoints = question.CampaignPoints,
+            })
+            .ToArray();
+    }
+
+    /// <summary>
     /// Maps HTTP force-status requests onto domain inputs.
     /// </summary>
     public static IReadOnlyList<ForceStatusInput>? ToForceStatusInputs(IReadOnlyList<ForceStatusRequest>? statuses)
@@ -2718,6 +2835,7 @@ public static class CampaignResponses
         return new PublicObjectiveLeaderboardResponse
         {
             Kind = board.Kind,
+            Title = board.Title,
             AwardPoints = board.AwardPoints,
             Leaders =
             [
@@ -2730,6 +2848,7 @@ public static class CampaignResponses
                     Metric = leader.Metric,
                     TieBreakMetric = leader.TieBreakMetric,
                     AwardsPoints = leader.AwardsPoints,
+                    TiedPlayerCount = leader.TiedPlayerCount,
                 }),
             ],
         };
@@ -2752,6 +2871,7 @@ public static class CampaignResponses
                         Kind = question.Kind,
                         BattlePoints = question.BattlePoints,
                         CampaignPoints = question.CampaignPoints,
+                        StandardQuestionId = question.StandardQuestionId,
                     })
                     .ToArray(),
                 IsAttackerDefender = mission.IsAttackerDefender,
@@ -2785,6 +2905,7 @@ public static class CampaignResponses
                     Kind = question.Kind,
                     BattlePoints = question.BattlePoints,
                     CampaignPoints = question.CampaignPoints,
+                    StandardQuestionId = question.StandardQuestionId,
                 }),
             ],
             IsAttackerDefender = mission.IsAttackerDefender,
@@ -2796,6 +2917,38 @@ public static class CampaignResponses
             SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
             SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
         };
+    }
+
+    internal static PlayerSupplyViewResponse? FromSupply(PlayerSupplyViewDetail? supply)
+    {
+        return supply is null
+            ? null
+            : new PlayerSupplyViewResponse
+            {
+                CurrentSupplyPoints = supply.CurrentSupplyPoints,
+                TemporarySupplyPoints = supply.TemporarySupplyPoints,
+                MapSupplyPoints = supply.MapSupplyPoints,
+                RoundFreeSupplyPoints = supply.RoundFreeSupplyPoints,
+                SplitPenaltyPoints = supply.SplitPenaltyPoints,
+                ForceAllowancePoints = supply.ForceAllowancePoints,
+                Contributions = FromContributions(supply.Contributions),
+            };
+    }
+
+    internal static IReadOnlyList<SupplyContributionResponse> FromContributions(
+        IReadOnlyList<SupplyContributionDetail> contributions)
+    {
+        return
+        [
+            .. contributions.Select(static item => new SupplyContributionResponse
+            {
+                Kind = item.Kind,
+                TerritoryId = item.TerritoryId,
+                Label = item.Label,
+                Points = item.Points,
+                IsAllied = item.IsAllied,
+            }),
+        ];
     }
 
     /// <summary>

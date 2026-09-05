@@ -37,6 +37,9 @@ HTTP endpoints, request validation, authentication, permission policies, OpenAPI
 rate limiting, health checks, dependency injection, process startup, and hosted background work
 (email outbox). There is no separate Worker process; see `docs/adr/0003-production-hosting-stack.md`.
 
+Client-aborted requests (navigation, image replacement, or debugger pauses) cancel in-flight
+database work. The host treats that cancellation as a closed request, not a 500.
+
 It depends on Application and Infrastructure. Endpoints do not contain domain logic.
 
 ### MapAndMuster.Web
@@ -65,6 +68,10 @@ Modules may initially share a database and process. Keep public module interacti
 - PostgreSQL is authoritative.
 - Use EF Core migrations committed to source control.
 - Use optimistic concurrency tokens and a campaign revision for state-changing commands.
+  GET play may persist an automatic phase advance; if another write wins that persist, GET
+  returns the current campaign instead of a concurrency conflict. Play mutations retry a few
+  times on a revision conflict. A commit that still races a closing window then returns the
+  current play state so the client can show the next phase instead of asking the player to reload.
 - Store timestamps as UTC instants.
 - Store current state in normal relational tables and immutable history in audit/revision tables.
 - Public site chat and site-chat blocks live in their own tables, never on campaign play-log JSON.

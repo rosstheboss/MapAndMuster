@@ -71,6 +71,11 @@ internal static class CampaignPointStandingsMapper
             StructurePoints = campaign.StructureTypes.ToDictionary(static type => type.Id, static type => type.CampaignPoints),
             ItemPoints = campaign.ItemObjectiveTypes.ToDictionary(static type => type.Id, static type => type.CampaignPoints),
             PublicObjectivePoints = campaign.PublicObjectiveTypes.ToDictionary(static type => type.Id, static type => type.CampaignPoints),
+            NamedPublicObjectives =
+            [
+                .. campaign.PublicObjectiveTypes.Select(static type =>
+                    new CampaignNamedPublicObjective(type.Id, type.Name, type.CampaignPoints)),
+            ],
             BattleScoring = campaign.BattleScoring,
             RankingObjectivePoints = campaign.RankingObjectivePoints,
             Battles = play.Battles,
@@ -81,7 +86,6 @@ internal static class CampaignPointStandingsMapper
             PrivateObjectivePoints = campaign.PrivateObjectiveTypes.ToDictionary(static type => type.Id, static type => type.CampaignPoints),
             AllyGroupByFaction = CampaignPlayCatalog.AllyGroupByFaction(campaign),
             BrokenAllyFactionIds = play.BrokenAllyFactionIds.ToHashSet(),
-            CampaignCompleted = CampaignLifecycle.Progress(campaign, utcNow).Status == MapAndMuster.Domain.Campaigns.CampaignStatus.Completed,
             ExtraBattleReportPoints = CampaignPlayCatalog.ExtraBattleReportPoints(campaign),
         });
 
@@ -144,6 +148,7 @@ internal static class CampaignPointStandingsMapper
                 .. calculated.Leaderboards.Select(board => new PublicObjectiveLeaderboardDetail
                 {
                     Kind = board.Kind,
+                    Title = board.Title,
                     AwardPoints = board.AwardPoints,
                     Leaders =
                     [
@@ -159,6 +164,7 @@ internal static class CampaignPointStandingsMapper
                                 Metric = leader.Metric,
                                 TieBreakMetric = leader.TieBreakMetric,
                                 AwardsPoints = leader.AwardsPoints,
+                                TiedPlayerCount = leader.TiedPlayerCount,
                             };
                         }),
                     ],

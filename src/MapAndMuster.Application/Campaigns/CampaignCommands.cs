@@ -118,17 +118,8 @@ public sealed class CreateCampaignCommand
     /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
     public bool? SplitForceSupplyPenaltyIsPercent { get; init; }
 
-    /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
-    public bool? AlwaysAskGeneralKill { get; init; }
-
-    /// <summary>Gets whether every battle report asks if the enemy supply line was destroyed.</summary>
-    public bool? AlwaysAskSupplyLineDestroyed { get; init; }
-
-    /// <summary>Gets campaign points awarded for a slain enemy general.</summary>
-    public int? GeneralKillCampaignPoints { get; init; }
-
-    /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
-    public int? SupplyLineDestroyedCampaignPoints { get; init; }
+    /// <summary>Gets reusable battle-result questions. Omitted or empty means none.</summary>
+    public IReadOnlyList<StandardBattleResultQuestionInput>? StandardBattleResultQuestions { get; init; }
 
     /// <summary>Gets reusable missions. Omitted means nested terrain and structure missions only.</summary>
     public IReadOnlyList<MissionInput>? Missions { get; init; }
@@ -256,17 +247,8 @@ public sealed class UpdateCampaignCommand
     /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
     public bool? SplitForceSupplyPenaltyIsPercent { get; init; }
 
-    /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
-    public bool? AlwaysAskGeneralKill { get; init; }
-
-    /// <summary>Gets whether every battle report asks if the enemy supply line was destroyed.</summary>
-    public bool? AlwaysAskSupplyLineDestroyed { get; init; }
-
-    /// <summary>Gets campaign points awarded for a slain enemy general.</summary>
-    public int? GeneralKillCampaignPoints { get; init; }
-
-    /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
-    public int? SupplyLineDestroyedCampaignPoints { get; init; }
+    /// <summary>Gets reusable battle-result questions. Omitted or empty means none.</summary>
+    public IReadOnlyList<StandardBattleResultQuestionInput>? StandardBattleResultQuestions { get; init; }
 
     /// <summary>Gets reusable missions. Omitted means nested terrain and structure missions only.</summary>
     public IReadOnlyList<MissionInput>? Missions { get; init; }

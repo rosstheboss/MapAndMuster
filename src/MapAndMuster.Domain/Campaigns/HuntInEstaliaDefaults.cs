@@ -32,18 +32,6 @@ public static class HuntInEstaliaDefaults
     /// <summary>Allied army-point shares round up to this increment.</summary>
     public const int AlliedArmyPointsRoundTo = 10;
 
-    /// <summary>Whether battle reports always ask if the enemy general was slain.</summary>
-    public const bool AlwaysAskGeneralKill = true;
-
-    /// <summary>Whether battle reports always ask if the enemy supply line was destroyed.</summary>
-    public const bool AlwaysAskSupplyLineDestroyed = true;
-
-    /// <summary>Campaign points awarded when a report records a slain enemy general.</summary>
-    public const int GeneralKillCampaignPoints = 1;
-
-    /// <summary>Campaign points awarded when a report records a destroyed enemy supply line.</summary>
-    public const int SupplyLineDestroyedCampaignPoints = 1;
-
     private static readonly (int MaxArmyPoints, int FreeSupplyPoints, int FreeCharacterCount)[] Template =
     [
         (500, 1, 1),

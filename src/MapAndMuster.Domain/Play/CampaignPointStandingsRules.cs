@@ -8,7 +8,9 @@ namespace MapAndMuster.Domain.Play;
 /// Ranking public objectives award their configured points to every player currently tied for first.
 /// Running public objectives add points per owned territory and per revealed relic held by an ally
 /// or faction-mate other than the scoring player. Named public objectives with 0 campaign points are ignored.
-/// Leaderboards cover ranking objectives and points per territory; allied relic control is omitted.
+/// Leaderboards cover each enabled public objective that is not an item objective;
+/// allied relic control is omitted. At most five rows are listed; a tied group that would
+/// exceed five becomes a summary of how many players share that value.
 /// Hidden item-objective points are included only when those items are supplied in
 /// <see cref="CampaignPointScoringState.VisibleItems"/>.
 /// </summary>
@@ -241,8 +243,7 @@ public static class CampaignPointStandingsRules
                 player.FactionId,
                 player.FactionId is { } playerFaction
                     ? state.AllyGroupByFaction.GetValueOrDefault(playerFaction)
-                    : null,
-                state.CampaignCompleted);
+                    : null);
 
             standings.Add(new CampaignPointStanding(
                 player.UserId,
@@ -262,33 +263,39 @@ public static class CampaignPointStandingsRules
                 .. Leaderboard(
                     GeneralPublicObjectiveKinds.MostTerritories,
                     ranking.MostTerritories,
+                    "Most territories",
                     state.Players,
                     territoryCountByPlayer,
                     _ => 0),
                 .. Leaderboard(
                     GeneralPublicObjectiveKinds.LongestTerritoryChain,
                     ranking.LongestTerritoryChain,
+                    "Longest territory chain",
                     state.Players,
                     chainByPlayer,
                     _ => 0),
                 .. Leaderboard(
                     GeneralPublicObjectiveKinds.MostBattlesWon,
                     ranking.MostBattlesWon,
+                    "Most battles won",
                     state.Players,
                     winsByPlayer,
                     playerId => drawsByPlayer.GetValueOrDefault(playerId)),
                 .. Leaderboard(
                     GeneralPublicObjectiveKinds.MostStructurePoints,
                     ranking.MostStructurePoints,
+                    "Most structure points",
                     state.Players,
                     structurePointsByPlayer,
                     _ => 0),
                 .. Leaderboard(
                     GeneralPublicObjectiveKinds.PointsPerTerritory,
                     ranking.PointsPerTerritory,
+                    "Campaign points per territory",
                     state.Players,
                     territoryCountByPlayer,
                     _ => 0),
+                .. NamedPublicObjectiveLeaderboards(state, activeAwards),
             ],
         };
     }
@@ -373,9 +380,43 @@ public static class CampaignPointStandingsRules
         return leaders;
     }
 
+    private static IEnumerable<PublicObjectiveLeaderboard> NamedPublicObjectiveLeaderboards(
+        CampaignPointScoringState state,
+        HashSet<(Guid PlayerId, Guid ObjectiveId)> activeAwards)
+    {
+        foreach (var named in state.NamedPublicObjectives)
+        {
+            if (named.CampaignPoints <= 0)
+            {
+                continue;
+            }
+
+            var held = new Dictionary<Guid, int>();
+            foreach (var player in state.Players)
+            {
+                if (activeAwards.Contains((player.UserId, named.Id)))
+                {
+                    held[player.UserId] = 1;
+                }
+            }
+
+            foreach (var board in Leaderboard(
+                GeneralPublicObjectiveKinds.Named,
+                named.CampaignPoints,
+                named.Name,
+                state.Players,
+                held,
+                _ => 0))
+            {
+                yield return board;
+            }
+        }
+    }
+
     private static IEnumerable<PublicObjectiveLeaderboard> Leaderboard(
         string kind,
         int awardPoints,
+        string title,
         IReadOnlyList<CampaignPointPlayer> players,
         IReadOnlyDictionary<Guid, int> primary,
         Func<Guid, int> secondary)
@@ -395,38 +436,55 @@ public static class CampaignPointStandingsRules
             .ThenByDescending(row => row.Secondary)
             .ThenBy(row => row.UserId)
             .ToArray();
-        if (ordered.Length == 0)
-        {
-            yield break;
-        }
-
         var entries = new List<PublicObjectiveLeader>();
-        var previous = (Primary: int.MinValue, Secondary: int.MinValue);
-        var rank = 0;
+        var remaining = LeaderboardSize;
+        var seen = 0;
         var index = 0;
-        foreach (var (UserId, Primary, Secondary) in ordered)
+        while (index < ordered.Length && remaining > 0)
         {
-            index++;
-            if (Primary != previous.Primary || Secondary != previous.Secondary)
+            var current = ordered[index];
+            var groupEnd = index + 1;
+            while (groupEnd < ordered.Length
+                && ordered[groupEnd].Primary == current.Primary
+                && ordered[groupEnd].Secondary == current.Secondary)
             {
-                rank = index;
-                previous = (Primary, Secondary);
+                groupEnd++;
             }
 
-            if (rank > LeaderboardSize)
+            var groupSize = groupEnd - index;
+            var rank = seen + 1;
+            if (groupSize <= remaining)
             {
-                break;
+                for (var member = index; member < groupEnd; member++)
+                {
+                    var row = ordered[member];
+                    entries.Add(new PublicObjectiveLeader(
+                        row.UserId,
+                        rank,
+                        row.Primary,
+                        row.Secondary,
+                        rank == 1));
+                }
+
+                remaining -= groupSize;
+            }
+            else
+            {
+                entries.Add(new PublicObjectiveLeader(
+                    Guid.Empty,
+                    rank,
+                    current.Primary,
+                    current.Secondary,
+                    rank == 1,
+                    groupSize));
+                remaining = 0;
             }
 
-            entries.Add(new PublicObjectiveLeader(
-                UserId,
-                rank,
-                Primary,
-                Secondary,
-                rank == 1));
+            seen += groupSize;
+            index = groupEnd;
         }
 
-        yield return new PublicObjectiveLeaderboard(kind, awardPoints, entries);
+        yield return new PublicObjectiveLeaderboard(kind, awardPoints, entries, title);
     }
 }
 
@@ -449,6 +507,9 @@ public static class GeneralPublicObjectiveKinds
 
     /// <summary>Configured campaign points for each currently owned territory.</summary>
     public const string PointsPerTerritory = "PointsPerTerritory";
+
+    /// <summary>A named catalog public objective currently awarded to one or more players.</summary>
+    public const string Named = "NamedPublicObjective";
 }
 
 /// <summary>
@@ -460,8 +521,9 @@ public sealed class CampaignPointStandingsResult
     public required IReadOnlyList<CampaignPointStanding> Standings { get; init; }
 
     /// <summary>
-    /// Gets enabled ranking objectives and points-per-territory with a current top five.
-    /// Allied relic control is scored but never listed here.
+    /// Gets enabled public objectives that are not item objectives, each with a current top five.
+    /// Allied relic control is scored but never listed here. A tied group that would push a board
+    /// past five rows is summarized instead of listing every tied player.
     /// </summary>
     public required IReadOnlyList<PublicObjectiveLeaderboard> Leaderboards { get; init; }
 }
@@ -469,13 +531,15 @@ public sealed class CampaignPointStandingsResult
 /// <summary>
 /// Current leaders for one ranking public objective.
 /// </summary>
-/// <param name="Kind">The ranking objective kind.</param>
+/// <param name="Kind">The ranking objective kind, or <see cref="GeneralPublicObjectiveKinds.Named"/>.</param>
 /// <param name="AwardPoints">Campaign points awarded to each current first-place player.</param>
-/// <param name="Leaders">Players currently in the top five.</param>
+/// <param name="Leaders">Players currently in the top five, or a trailing tie summary.</param>
+/// <param name="Title">Display name for the leaderboard heading.</param>
 public sealed record PublicObjectiveLeaderboard(
     string Kind,
     int AwardPoints,
-    IReadOnlyList<PublicObjectiveLeader> Leaders);
+    IReadOnlyList<PublicObjectiveLeader> Leaders,
+    string Title = "");
 
 /// <summary>
 /// One player on a ranking public-objective leaderboard.
@@ -485,12 +549,14 @@ public sealed record PublicObjectiveLeaderboard(
 /// <param name="Metric">Primary metric (territories, chain length, or wins).</param>
 /// <param name="TieBreakMetric">Secondary metric used only for most battles won (draws).</param>
 /// <param name="AwardsPoints">Whether this player currently receives the objective's campaign points.</param>
+/// <param name="TiedPlayerCount">When greater than zero, this row summarizes that many tied players and <see cref="UserId"/> is empty.</param>
 public sealed record PublicObjectiveLeader(
     Guid UserId,
     int Rank,
     int Metric,
     int TieBreakMetric,
-    bool AwardsPoints);
+    bool AwardsPoints,
+    int TiedPlayerCount = 0);
 
 /// <summary>
 /// Inputs needed to calculate current campaign-point standings.
@@ -514,6 +580,9 @@ public sealed class CampaignPointScoringState
 
     /// <summary>Gets campaign points for each named public objective. Zero means the objective is ignored.</summary>
     public required IReadOnlyDictionary<Guid, int> PublicObjectivePoints { get; init; }
+
+    /// <summary>Gets named catalog public objectives in setup order, used for per-objective leaderboards.</summary>
+    public IReadOnlyList<CampaignNamedPublicObjective> NamedPublicObjectives { get; init; } = [];
 
     /// <summary>Gets conversion from resolved battles into campaign points.</summary>
     public required BattleScoringSetup BattleScoring { get; init; }
@@ -547,9 +616,6 @@ public sealed class CampaignPointScoringState
     /// <summary>Gets factions that left their ally group through Backstab.</summary>
     public IReadOnlySet<Guid> BrokenAllyFactionIds { get; init; } = new HashSet<Guid>();
 
-    /// <summary>Gets whether the campaign is completed, so remaining private objectives count.</summary>
-    public bool CampaignCompleted { get; init; }
-
     /// <summary>
     /// Gets extra campaign points from slain generals, destroyed supply lines, and scored mission questions.
     /// </summary>
@@ -563,6 +629,14 @@ public sealed class CampaignPointScoringState
 /// <param name="UserId">The player's user identifier.</param>
 /// <param name="FactionId">The chosen faction, when one is selected.</param>
 public readonly record struct CampaignPointPlayer(Guid UserId, Guid? FactionId);
+
+/// <summary>
+/// A named catalog public objective included on standings leaderboards.
+/// </summary>
+/// <param name="Id">The catalog identifier.</param>
+/// <param name="Name">The display name.</param>
+/// <param name="CampaignPoints">Configured campaign points. Zero ignores the objective.</param>
+public readonly record struct CampaignNamedPublicObjective(Guid Id, string Name, int CampaignPoints);
 
 /// <summary>
 /// Current capture facts for one territory.

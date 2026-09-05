@@ -1,26 +1,24 @@
 namespace MapAndMuster.Domain.Campaigns;
 
 /// <summary>
-/// A campaign-manager-written question asked when reporting a mission result.
+/// A campaign-manager-written reusable battle-result question with standard point values.
 /// </summary>
-public sealed class MissionResultQuestionSetup
+public sealed class StandardBattleResultQuestionSetup
 {
     /// <summary>
-    /// Initializes a mission result question.
+    /// Initializes a standard battle-result question.
     /// </summary>
     /// <param name="id">The question identifier.</param>
     /// <param name="prompt">The question text.</param>
     /// <param name="kind">Whether the answer is true/false or a battle-point amount.</param>
-    /// <param name="battlePoints">Battle points awarded when the boolean is true, or ignored for amount questions.</param>
-    /// <param name="campaignPoints">Campaign points awarded when the boolean is true or when an amount is reported.</param>
-    /// <param name="standardQuestionId">The catalog question this mission question copies, when added from the catalog.</param>
-    public MissionResultQuestionSetup(
+    /// <param name="battlePoints">Standard battle points awarded when a boolean is true, or ignored for amount questions.</param>
+    /// <param name="campaignPoints">Standard campaign points awarded when the question is scored.</param>
+    public StandardBattleResultQuestionSetup(
         Guid id,
         string prompt,
         MissionResultQuestionKind kind,
         int battlePoints,
-        int campaignPoints,
-        Guid? standardQuestionId = null)
+        int campaignPoints)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
         ArgumentOutOfRangeException.ThrowIfNegative(battlePoints);
@@ -30,7 +28,6 @@ public sealed class MissionResultQuestionSetup
         Kind = kind;
         BattlePoints = battlePoints;
         CampaignPoints = campaignPoints;
-        StandardQuestionId = standardQuestionId;
     }
 
     /// <summary>Gets the question identifier.</summary>
@@ -43,13 +40,10 @@ public sealed class MissionResultQuestionSetup
     public MissionResultQuestionKind Kind { get; }
 
     /// <summary>
-    /// Gets battle points awarded when a boolean answer is true. Amount questions use the reported value instead.
+    /// Gets standard battle points awarded when a boolean answer is true. Amount questions use the reported value instead.
     /// </summary>
     public int BattlePoints { get; }
 
-    /// <summary>Gets campaign points awarded when the question is scored.</summary>
+    /// <summary>Gets standard campaign points awarded when the question is scored.</summary>
     public int CampaignPoints { get; }
-
-    /// <summary>Gets the catalog question this mission question copies, or null when it is unique to the mission.</summary>
-    public Guid? StandardQuestionId { get; }
 }

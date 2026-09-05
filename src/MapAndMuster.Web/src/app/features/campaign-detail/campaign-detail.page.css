@@ -155,6 +155,98 @@
   border-radius: 0.4rem;
 }
 
+.battle-header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.battle-header p,
+.battle-matchup {
+  margin: 0;
+}
+
+.battle-supply-summary {
+  display: grid;
+  gap: var(--space-2);
+}
+
+@media (width >= 40rem) {
+  .battle-supply-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.claimed-private-objectives {
+  margin: 0;
+}
+
+.claimed-private-objectives summary {
+  cursor: pointer;
+}
+
+.claimed-private-objectives .stack {
+  margin-top: 0.5rem;
+}
+
+.supply-points {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.supply-points summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  list-style: none;
+}
+
+.supply-points summary::-webkit-details-marker,
+.supply-points summary::marker {
+  display: none;
+  content: none;
+}
+
+.supply-points summary::before {
+  content: '\25B8';
+  color: var(--color-muted);
+  font-size: 0.85em;
+}
+
+.supply-points[open] summary::before {
+  content: '\25BE';
+}
+
+.summary-forces {
+  display: grid;
+  gap: var(--space-3);
+  padding-left: 0;
+  list-style: none;
+}
+
+.summary-force {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.summary-force > p {
+  margin: 0;
+}
+
+.supply-points-label {
+  font-weight: 600;
+  margin-right: 0.35rem;
+}
+
+.supply-breakdown {
+  margin: 0.35rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
 .battle-sides {
   display: grid;
   gap: var(--space-3);
@@ -469,7 +561,20 @@ app-campaign-map-view.is-fullscreen .map-meta {
 
 .leaderboards {
   display: grid;
+  grid-template-columns: 1fr;
   gap: var(--space-4);
+}
+
+@media (width >= 44rem) {
+  .leaderboards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width >= 70rem) {
+  .leaderboards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .leaderboard ol {

@@ -61,6 +61,9 @@ public static class CampaignSetupRules
     /// <summary>Maximum number of reusable special rules.</summary>
     public const int MaxSpecialRuleCount = 80;
 
+    /// <summary>Maximum number of reusable battle-result questions.</summary>
+    public const int MaxStandardBattleResultQuestionCount = 80;
+
     /// <summary>Maximum number of configured force statuses.</summary>
     public const int MaxForceStatusCount = 20;
 
@@ -244,10 +247,7 @@ public static class CampaignSetupRules
     /// <param name="forceStatuses">Force-status inputs other than Normal. Omitted or empty means none.</param>
     /// <param name="splitForceSupplyPenaltyPercent">Supply subtracted from map supply when a player has split forces.</param>
     /// <param name="splitForceSupplyPenaltyIsPercent">Whether the split-force penalty is a percent of map supply. The default is a raw amount.</param>
-    /// <param name="alwaysAskGeneralKill">Whether every battle report asks if the enemy general was slain.</param>
-    /// <param name="alwaysAskSupplyLineDestroyed">Whether every battle report asks if the enemy supply line was destroyed.</param>
-    /// <param name="generalKillCampaignPoints">Campaign points awarded for a slain enemy general.</param>
-    /// <param name="supplyLineDestroyedCampaignPoints">Campaign points awarded for destroying the enemy supply line.</param>
+    /// <param name="standardBattleResultQuestions">Reusable battle-result question inputs. Omitted or empty means none.</param>
     /// <param name="missions">Reusable mission catalog inputs. Omitted means nested terrain and structure missions only.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
@@ -299,10 +299,7 @@ public static class CampaignSetupRules
         IReadOnlyList<ForceStatusInput>? forceStatuses = null,
         int? splitForceSupplyPenaltyPercent = null,
         bool? splitForceSupplyPenaltyIsPercent = null,
-        bool? alwaysAskGeneralKill = null,
-        bool? alwaysAskSupplyLineDestroyed = null,
-        int? generalKillCampaignPoints = null,
-        int? supplyLineDestroyedCampaignPoints = null,
+        IReadOnlyList<StandardBattleResultQuestionInput>? standardBattleResultQuestions = null,
         IReadOnlyList<MissionInput>? missions = null)
     {
         var collected = new List<DomainError>();
@@ -352,6 +349,7 @@ public static class CampaignSetupRules
         var parsedGroups = ParseAllyGroups(allyGroups, usedIds, collected);
         var missionIndex = new MissionIndex();
         var parsedSpecialRules = ParseSpecialRules(specialRules, usedIds, collected);
+        var parsedStandardQuestions = ParseStandardBattleResultQuestions(standardBattleResultQuestions, usedIds, collected);
         var parsedForceStatuses = ParseForceStatuses(forceStatuses, usedIds, collected);
         var specialRuleIds = parsedSpecialRules.Select(static rule => rule.Id).ToHashSet();
         var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, specialRuleIds, collected);
@@ -365,9 +363,10 @@ public static class CampaignSetupRules
             "Mission catalog",
             requireAtLeastOne: false,
             collected,
-            maxCount: MaxMissionCatalogCount);
-        var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, collected);
-        var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, collected);
+            maxCount: MaxMissionCatalogCount,
+            standardQuestions: parsedStandardQuestions);
+        var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, parsedStandardQuestions, collected);
+        var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, parsedStandardQuestions, collected);
         var structureTypeIds = parsedStructures.Select(static type => type.Id).ToHashSet();
         var knownItemObjectiveTypeIds = (itemObjectiveTypes ?? [])
             .Select(static item => item.Id)
@@ -443,12 +442,7 @@ public static class CampaignSetupRules
             parsedForceStatuses,
             parsedSplitForce,
             splitForceSupplyPenaltyIsPercent ?? HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent,
-            ParseBattleReportRules(
-                alwaysAskGeneralKill,
-                alwaysAskSupplyLineDestroyed,
-                generalKillCampaignPoints,
-                supplyLineDestroyedCampaignPoints,
-                collected),
+            parsedStandardQuestions,
             [.. missionIndex.ById.Values]);
         errors = collected;
         return true;
@@ -878,6 +872,7 @@ public static class CampaignSetupRules
         IReadOnlyList<TerrainTypeInput>? terrainTypes,
         HashSet<Guid> usedIds,
         MissionIndex missions,
+        IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
         List<DomainError> errors)
     {
         var supplied = terrainTypes is null || terrainTypes.Count == 0
@@ -928,7 +923,8 @@ public static class CampaignSetupRules
                 $"terrainTypes[{index}].missions",
                 $"Terrain type {index + 1}",
                 requireAtLeastOne: true,
-                errors);
+                errors,
+                standardQuestions: standardQuestions);
             if (name is null || color is null)
             {
                 continue;
@@ -963,6 +959,7 @@ public static class CampaignSetupRules
         IReadOnlyList<StructureTypeInput>? structureTypes,
         HashSet<Guid> usedIds,
         MissionIndex missions,
+        IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
         List<DomainError> errors)
     {
         var supplied = structureTypes is null
@@ -1005,7 +1002,8 @@ public static class CampaignSetupRules
                 $"structureTypes[{index}].missions",
                 $"Structure {index + 1}",
                 requireAtLeastOne: false,
-                errors);
+                errors,
+                standardQuestions: standardQuestions);
             if (name is null)
             {
                 continue;
@@ -1469,28 +1467,75 @@ public static class CampaignSetupRules
         return value.Value;
     }
 
-    private static BattleReportRulesSetup ParseBattleReportRules(
-        bool? alwaysAskGeneralKill,
-        bool? alwaysAskSupplyLineDestroyed,
-        int? generalKillCampaignPoints,
-        int? supplyLineDestroyedCampaignPoints,
+    private static List<StandardBattleResultQuestionSetup> ParseStandardBattleResultQuestions(
+        IReadOnlyList<StandardBattleResultQuestionInput>? questions,
+        HashSet<Guid> usedIds,
         List<DomainError> errors)
     {
-        return new BattleReportRulesSetup(
-            alwaysAskGeneralKill ?? HuntInEstaliaDefaults.AlwaysAskGeneralKill,
-            alwaysAskSupplyLineDestroyed ?? HuntInEstaliaDefaults.AlwaysAskSupplyLineDestroyed,
-            ParseCampaignPoints(
-                generalKillCampaignPoints,
-                "generalKillCampaignPoints",
-                "General-kill campaign points",
-                errors,
-                HuntInEstaliaDefaults.GeneralKillCampaignPoints),
-            ParseCampaignPoints(
-                supplyLineDestroyedCampaignPoints,
-                "supplyLineDestroyedCampaignPoints",
-                "Supply-line campaign points",
-                errors,
-                HuntInEstaliaDefaults.SupplyLineDestroyedCampaignPoints));
+        var supplied = questions ?? [];
+        var parsed = new List<StandardBattleResultQuestionSetup>();
+        if (supplied.Count > MaxStandardBattleResultQuestionCount)
+        {
+            errors.Add(new DomainError(
+                "standardBattleResultQuestions.invalid",
+                $"At most {MaxStandardBattleResultQuestionCount} standard battle result questions are allowed.",
+                "standardBattleResultQuestions"));
+            return parsed;
+        }
+
+        var seenPrompts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var prompt = ParseRequiredName(
+                input.Prompt,
+                $"standardBattleResultQuestions[{index}].prompt",
+                $"Standard battle result question {index + 1}",
+                minLength: 1,
+                CatalogTextMaxLength,
+                errors);
+            if (prompt is null)
+            {
+                continue;
+            }
+
+            if (!seenPrompts.Add(prompt))
+            {
+                errors.Add(new DomainError(
+                    "standardBattleResultQuestions.duplicate",
+                    "Standard battle result question names must be unique.",
+                    $"standardBattleResultQuestions[{index}].prompt"));
+                continue;
+            }
+
+            if (!TryParseQuestionKind(
+                    input.Kind,
+                    index,
+                    "standardBattleResultQuestions",
+                    "Standard battle result question",
+                    errors,
+                    out var kind))
+            {
+                continue;
+            }
+
+            parsed.Add(new StandardBattleResultQuestionSetup(
+                ResolveId(input.Id, usedIds, $"standardBattleResultQuestions[{index}].id", errors),
+                prompt,
+                kind,
+                ParseCampaignPoints(
+                    input.BattlePoints,
+                    $"standardBattleResultQuestions[{index}].battlePoints",
+                    $"Standard battle result question {index + 1} battle points",
+                    errors),
+                ParseCampaignPoints(
+                    input.CampaignPoints,
+                    $"standardBattleResultQuestions[{index}].campaignPoints",
+                    $"Standard battle result question {index + 1} campaign points",
+                    errors)));
+        }
+
+        return parsed;
     }
 
     private static IReadOnlyList<RoundArmyEscalationSetup> ParseArmyEscalations(
@@ -1583,10 +1628,14 @@ public static class CampaignSetupRules
         HashSet<Guid> usedIds,
         string field,
         string ownerLabel,
+        IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
         List<DomainError> errors)
     {
         var supplied = inputs?
-            .Where(static question => !string.IsNullOrWhiteSpace(question.Prompt) || question.Id is not null)
+            .Where(static question =>
+                !string.IsNullOrWhiteSpace(question.Prompt)
+                || question.Id is not null
+                || question.StandardQuestionId is not null)
             .ToArray() ?? [];
         if (supplied.Length == 0)
         {
@@ -1602,18 +1651,43 @@ public static class CampaignSetupRules
             return [];
         }
 
+        var catalog = standardQuestions.ToDictionary(static question => question.Id);
         var parsed = new List<MissionResultQuestionSetup>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenCatalogIds = new HashSet<Guid>();
         for (var index = 0; index < supplied.Length; index++)
         {
             var input = supplied[index];
-            var prompt = ParseRequiredName(
-                input.Prompt,
-                $"{field}[{index}].prompt",
-                $"{ownerLabel} question {index + 1}",
-                minLength: 1,
-                CatalogTextMaxLength,
-                errors);
+            StandardBattleResultQuestionSetup? catalogQuestion = null;
+            if (input.StandardQuestionId is { } catalogId && catalogId != Guid.Empty)
+            {
+                if (!catalog.TryGetValue(catalogId, out catalogQuestion))
+                {
+                    errors.Add(new DomainError(
+                        "missions.questions.standard.missing",
+                        $"{ownerLabel} question {index + 1} is not in the standard battle result catalog.",
+                        $"{field}[{index}].standardQuestionId"));
+                    continue;
+                }
+
+                if (!seenCatalogIds.Add(catalogId))
+                {
+                    errors.Add(new DomainError(
+                        "missions.questions.standard.duplicate",
+                        $"{ownerLabel} already includes that standard battle result question.",
+                        $"{field}[{index}].standardQuestionId"));
+                    continue;
+                }
+            }
+
+            var prompt = catalogQuestion?.Prompt
+                ?? ParseRequiredName(
+                    input.Prompt,
+                    $"{field}[{index}].prompt",
+                    $"{ownerLabel} question {index + 1}",
+                    minLength: 1,
+                    CatalogTextMaxLength,
+                    errors);
             if (prompt is null)
             {
                 continue;
@@ -1628,7 +1702,12 @@ public static class CampaignSetupRules
                 continue;
             }
 
-            if (!TryParseQuestionKind(input.Kind, index, field, ownerLabel, errors, out var kind))
+            MissionResultQuestionKind kind;
+            if (catalogQuestion is not null)
+            {
+                kind = catalogQuestion.Kind;
+            }
+            else if (!TryParseQuestionKind(input.Kind, index, field, ownerLabel, errors, out kind))
             {
                 continue;
             }
@@ -1638,15 +1717,16 @@ public static class CampaignSetupRules
                 prompt,
                 kind,
                 ParseCampaignPoints(
-                    input.BattlePoints,
+                    input.BattlePoints ?? catalogQuestion?.BattlePoints,
                     $"{field}[{index}].battlePoints",
                     $"{ownerLabel} question {index + 1} battle points",
                     errors),
                 ParseCampaignPoints(
-                    input.CampaignPoints,
+                    input.CampaignPoints ?? catalogQuestion?.CampaignPoints,
                     $"{field}[{index}].campaignPoints",
                     $"{ownerLabel} question {index + 1} campaign points",
-                    errors)));
+                    errors),
+                catalogQuestion?.Id));
         }
 
         return parsed;
@@ -1729,7 +1809,8 @@ public static class CampaignSetupRules
         string ownerLabel,
         bool requireAtLeastOne,
         List<DomainError> errors,
-        int? maxCount = null)
+        int? maxCount = null,
+        IReadOnlyList<StandardBattleResultQuestionSetup>? standardQuestions = null)
     {
         var supplied = missions?
             .Where(static mission =>
@@ -1809,6 +1890,7 @@ public static class CampaignSetupRules
                 usedIds,
                 $"{field}[{missionIndex}].resultQuestions",
                 $"{ownerLabel} mission {missionIndex + 1}",
+                standardQuestions ?? [],
                 errors);
             var created = new MissionSetup(
                 id,

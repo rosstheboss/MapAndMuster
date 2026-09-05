@@ -128,7 +128,7 @@ internal static class CampaignLifecycle
                 StructureCondition = play.StructureCondition.ToString(),
                 OverlayColor = territory.OverlayColor,
                 OwnerFactionId = play.OwnerFactionId,
-                OwnerSubfaction = territory.OwnerSubfaction,
+                OwnerSubfaction = play.OwnerFactionId == territory.OwnerFactionId ? territory.OwnerSubfaction : null,
                 SpawnFactionId = territory.SpawnFactionId,
                 SpawnSubfaction = territory.SpawnSubfaction,
             };
@@ -137,6 +137,7 @@ internal static class CampaignLifecycle
         {
             Territories = territories,
             Adjacencies = graph.Adjacencies,
+            ItemObjectivePlacements = graph.ItemObjectivePlacements,
         };
     }
 

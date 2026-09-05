@@ -128,8 +128,6 @@ internal static class PlayStateJson
                     ArmyPoints = report.ArmyPoints,
                     DifferentialBattlePoints = report.DifferentialBattlePoints,
                     BonusBattlePoints = report.BonusBattlePoints,
-                    KilledEnemyGeneral = report.KilledEnemyGeneral,
-                    DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
                     SupplyCostingUnitCount = report.SupplyCostingUnitCount,
                     ArmyListText = report.ArmyListText,
                     ArmyListGameSystem = report.ArmyListGameSystem,
@@ -508,8 +506,6 @@ internal static class PlayStateJson
             Math.Max(0, report.ArmyPoints),
             Math.Max(0, report.DifferentialBattlePoints),
             Math.Max(0, report.BonusBattlePoints),
-            report.KilledEnemyGeneral,
-            report.DestroyedEnemySupplyLine,
             [
                 .. (report.Answers ?? []).Select(static answer => new BattleQuestionAnswer(
                     answer.QuestionId,

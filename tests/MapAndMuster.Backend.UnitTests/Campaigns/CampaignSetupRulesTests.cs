@@ -1624,6 +1624,161 @@ public sealed class CampaignSetupRulesTests
             CampaignSetupRules.UniqueNameKey("the hunt in estalia"));
     }
 
+    [Fact]
+    public void AcceptsStandardBattleResultQuestionsWithMissionOverrides()
+    {
+        var catalogId = Guid.NewGuid();
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out var setup,
+            out _,
+            out var errors,
+            standardBattleResultQuestions:
+            [
+                new StandardBattleResultQuestionInput
+                {
+                    Id = catalogId,
+                    Prompt = "Killed the enemy general",
+                    Kind = nameof(MissionResultQuestionKind.Boolean),
+                    BattlePoints = 0,
+                    CampaignPoints = 1,
+                },
+            ],
+            missions:
+            [
+                new MissionInput
+                {
+                    Name = "Pitched Battle",
+                    ResultQuestions =
+                    [
+                        new MissionResultQuestionInput
+                        {
+                            StandardQuestionId = catalogId,
+                            BattlePoints = 2,
+                            CampaignPoints = 5,
+                        },
+                        new MissionResultQuestionInput
+                        {
+                            Prompt = "Held the shrine?",
+                            Kind = nameof(MissionResultQuestionKind.Boolean),
+                            BattlePoints = 2,
+                            CampaignPoints = 3,
+                        },
+                    ],
+                },
+            ]);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        var catalog = Assert.Single(setup.StandardBattleResultQuestions);
+        Assert.Equal(catalogId, catalog.Id);
+        Assert.Equal("Killed the enemy general", catalog.Prompt);
+        Assert.Equal(1, catalog.CampaignPoints);
+        var mission = Assert.Single(setup.Missions, item => item.Name == "Pitched Battle");
+        Assert.Equal(2, mission.ResultQuestions.Count);
+        var linked = Assert.Single(mission.ResultQuestions, question => question.StandardQuestionId == catalogId);
+        Assert.Equal("Killed the enemy general", linked.Prompt);
+        Assert.Equal(MissionResultQuestionKind.Boolean, linked.Kind);
+        Assert.Equal(2, linked.BattlePoints);
+        Assert.Equal(5, linked.CampaignPoints);
+        var unique = Assert.Single(mission.ResultQuestions, question => question.StandardQuestionId is null);
+        Assert.Equal("Held the shrine?", unique.Prompt);
+        Assert.Equal(3, unique.CampaignPoints);
+    }
+
+    [Fact]
+    public void RejectsMissingAndDuplicateStandardBattleResultQuestionLinks()
+    {
+        var catalogId = Guid.NewGuid();
+        var missing = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var missingErrors,
+            missions:
+            [
+                new MissionInput
+                {
+                    Name = "Pitched Battle",
+                    ResultQuestions =
+                    [
+                        new MissionResultQuestionInput { StandardQuestionId = catalogId },
+                    ],
+                },
+            ]);
+        Assert.False(missing);
+        Assert.Contains(missingErrors, error => error.Code == "missions.questions.standard.missing");
+
+        var duplicate = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var duplicateErrors,
+            standardBattleResultQuestions:
+            [
+                new StandardBattleResultQuestionInput
+                {
+                    Id = catalogId,
+                    Prompt = "Killed the enemy general",
+                    Kind = nameof(MissionResultQuestionKind.Boolean),
+                    CampaignPoints = 1,
+                },
+            ],
+            missions:
+            [
+                new MissionInput
+                {
+                    Name = "Pitched Battle",
+                    ResultQuestions =
+                    [
+                        new MissionResultQuestionInput { StandardQuestionId = catalogId },
+                        new MissionResultQuestionInput { StandardQuestionId = catalogId },
+                    ],
+                },
+            ]);
+        Assert.False(duplicate);
+        Assert.Contains(duplicateErrors, error => error.Code == "missions.questions.standard.duplicate");
+    }
+
     private static IReadOnlyList<FactionInput> TwoFactions()
     {
         return

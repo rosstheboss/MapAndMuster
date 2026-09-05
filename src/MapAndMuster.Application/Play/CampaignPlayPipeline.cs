@@ -17,7 +17,8 @@ internal static class CampaignPlayPipeline
         Guid campaignId,
         Guid userId,
         bool isAdministrator,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IUserAccountStore? accounts = null)
     {
         var campaign = await campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
         if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
@@ -78,7 +79,15 @@ internal static class CampaignPlayPipeline
             CampaignPlayCatalog.TerrainSetups(campaign),
             CampaignPlayCatalog.StructureSetups(campaign),
             CampaignPlayCatalog.SpecialRules(campaign));
-        var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, advanced.Map, utcNow, advanced.PreserveSchedule ? campaign.EndsUtc : advanced.EndsUtc);
+        var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, advanced.Map, utcNow);
+        effected = await CampaignCompletionLog.SyncAsync(
+                campaign,
+                effected,
+                utcNow,
+                accounts,
+                revised: false,
+                cancellationToken)
+            .ConfigureAwait(false);
         var nextGraph = campaign.MapGraph is null || advanced.PreserveMap
             ? campaign.MapGraph
             : CampaignLifecycle.ApplyOwnership(campaign.MapGraph, advanced.Map);
@@ -123,6 +132,22 @@ internal static class CampaignPlayPipeline
             cancellationToken).ConfigureAwait(false);
         if (!outcome.IsSuccess || outcome.Campaign is null)
         {
+            if (outcome.ErrorCode == ErrorCodes.ConcurrencyConflict)
+            {
+                var current = await campaigns.FindByIdAsync(loaded.Campaign.Id, cancellationToken).ConfigureAwait(false);
+                if (current is not null)
+                {
+                    return new PlayLoad
+                    {
+                        IsSuccess = true,
+                        Campaign = current,
+                        Previous = loaded.Previous,
+                        OriginalRevision = current.Revision,
+                        Changed = false,
+                    };
+                }
+            }
+
             return PlayLoad.Fail(
                 outcome.ErrorCode ?? ErrorCodes.ConcurrencyConflict,
                 outcome.Message ?? "The campaign could not be updated.");
@@ -148,9 +173,10 @@ internal static class CampaignPlayPipeline
         int expectedRevision,
         Func<CampaignPlayState, PlayMap, StoredCampaign, DateTimeOffset, PlayMutation> mutate,
         CancellationToken cancellationToken,
-        CampaignNotificationPublisher? notifications = null)
+        CampaignNotificationPublisher? notifications = null,
+        bool allowWhenClosed = false)
     {
-        var loaded = await LoadAsync(campaigns, clock, campaignId, userId, isAdministrator, cancellationToken)
+        var loaded = await LoadAsync(campaigns, clock, campaignId, userId, isAdministrator, cancellationToken, accounts)
             .ConfigureAwait(false);
         if (!loaded.IsSuccess || loaded.Campaign is null)
         {
@@ -159,7 +185,7 @@ internal static class CampaignPlayPipeline
                 loaded.Message ?? "The campaign was not found.");
         }
 
-        if (loaded.Campaign.ClosedUtc is not null)
+        if (loaded.Campaign.ClosedUtc is not null && !allowWhenClosed)
         {
             return OperationResults.Failure<CampaignPlayDetail>(
                 "play.ended",
@@ -174,77 +200,114 @@ internal static class CampaignPlayPipeline
                 "Only players and managers can play this campaign.");
         }
 
-        if (loaded.OriginalRevision != expectedRevision && loaded.Campaign.Revision != expectedRevision)
+        OperationResult<CampaignPlayDetail>? lastConflict = null;
+        const int maxAttempts = 3;
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
-            return OperationResults.Failure<CampaignPlayDetail>(
-                ErrorCodes.ConcurrencyConflict,
-                "The campaign was changed by another request. Reload and try again.");
-        }
+            if (attempt > 0)
+            {
+                loaded = await LoadAsync(campaigns, clock, campaignId, userId, isAdministrator, cancellationToken, accounts)
+                    .ConfigureAwait(false);
+                if (!loaded.IsSuccess || loaded.Campaign is null)
+                {
+                    return OperationResults.Failure<CampaignPlayDetail>(
+                        loaded.ErrorCode ?? ErrorCodes.CampaignNotFound,
+                        loaded.Message ?? "The campaign was not found.");
+                }
 
-        var campaign = loaded.Campaign;
-        var map = CampaignLifecycle.ToPlayMap(campaign);
-        var mutation = mutate(campaign.PlayState ?? CampaignPlayState.Empty, map, campaign, clock.UtcNow);
-        if (!mutation.IsSuccess)
-        {
-            return OperationResults.Failure<CampaignPlayDetail>(
-                mutation.Error?.Code ?? ErrorCodes.ValidationFailed,
-                mutation.Error?.Message ?? "The play command was invalid.");
-        }
+                if (loaded.Campaign.ClosedUtc is not null && !allowWhenClosed)
+                {
+                    return OperationResults.Failure<CampaignPlayDetail>(
+                        "play.ended",
+                        "This campaign has ended.");
+                }
+            }
 
-        var workingMap = mutation.PreserveMap ? map : mutation.Map;
-        var advanced = CampaignPlayRules.Advance(
-            mutation.State,
-            workingMap,
-            CampaignMapper.ToSchedule(campaign),
-            AllyGroups(campaign),
-            clock.UtcNow,
-            ForceStatuses(campaign),
-            CampaignPlayCatalog.PickIndex,
-            CampaignPlayCatalog.TerrainSetups(campaign),
-            CampaignPlayCatalog.StructureSetups(campaign),
-            CampaignPlayCatalog.SpecialRules(campaign));
-        var playMap = advanced.PreserveMap ? workingMap : advanced.Map;
-        var endsUtc = mutation.PreserveSchedule && advanced.PreserveSchedule
-            ? campaign.EndsUtc
-            : advanced.EndsUtc == default ? campaign.EndsUtc : advanced.EndsUtc;
-        var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, playMap, clock.UtcNow, endsUtc);
-        var nextGraph = campaign.MapGraph is null || (mutation.PreserveMap && advanced.PreserveMap)
-            ? campaign.MapGraph
-            : CampaignLifecycle.ApplyOwnership(campaign.MapGraph, playMap);
-        var next = Clone(
-            campaign,
-            effected,
-            nextGraph,
-            endsUtc,
-            mutation.PreserveSchedule && advanced.PreserveSchedule || advanced.RoundCount == 0
-                ? campaign.RoundCount
-                : advanced.RoundCount,
-            clock.UtcNow);
-        var outcome = await campaigns.UpdatePlayStateAsync(
-            next.Id,
-            next.PlayState!,
-            next.MapGraph,
-            next.EndsUtc,
-            next.RoundCount,
-            expectedRevision,
-            next.UpdatedUtc,
-            cancellationToken).ConfigureAwait(false);
-        if (!outcome.IsSuccess || outcome.Campaign is null)
-        {
-            return OperationResults.Failure<CampaignPlayDetail>(
-                outcome.ErrorCode ?? ErrorCodes.ConcurrencyConflict,
-                outcome.Message ?? "The campaign could not be updated.");
-        }
+            var campaign = loaded.Campaign;
+            var map = CampaignLifecycle.ToPlayMap(campaign);
+            var mutation = mutate(campaign.PlayState ?? CampaignPlayState.Empty, map, campaign, clock.UtcNow);
+            if (!mutation.IsSuccess)
+            {
+                return OperationResults.Failure<CampaignPlayDetail>(
+                    mutation.Error?.Code ?? ErrorCodes.ValidationFailed,
+                    mutation.Error?.Message ?? "The play command was invalid.");
+            }
 
-        if (notifications is not null && loaded.Previous is not null)
-        {
-            await notifications.PublishPlayAdvanceAsync(loaded.Previous, outcome.Campaign, cancellationToken)
+            var workingMap = mutation.PreserveMap ? map : mutation.Map;
+            var advanced = CampaignPlayRules.Advance(
+                mutation.State,
+                workingMap,
+                CampaignMapper.ToSchedule(campaign),
+                AllyGroups(campaign),
+                clock.UtcNow,
+                ForceStatuses(campaign),
+                CampaignPlayCatalog.PickIndex,
+                CampaignPlayCatalog.TerrainSetups(campaign),
+                CampaignPlayCatalog.StructureSetups(campaign),
+                CampaignPlayCatalog.SpecialRules(campaign));
+            var playMap = advanced.PreserveMap ? workingMap : advanced.Map;
+            var endsUtc = mutation.PreserveSchedule && advanced.PreserveSchedule
+                ? campaign.EndsUtc
+                : advanced.EndsUtc == default ? campaign.EndsUtc : advanced.EndsUtc;
+            var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, playMap, clock.UtcNow);
+            effected = await CampaignCompletionLog.SyncAsync(
+                    campaign,
+                    effected,
+                    clock.UtcNow,
+                    accounts,
+                    revised: true,
+                    cancellationToken)
                 .ConfigureAwait(false);
+            var nextGraph = campaign.MapGraph is null || (mutation.PreserveMap && advanced.PreserveMap)
+                ? campaign.MapGraph
+                : CampaignLifecycle.ApplyOwnership(campaign.MapGraph, playMap);
+            var next = Clone(
+                campaign,
+                effected,
+                nextGraph,
+                endsUtc,
+                mutation.PreserveSchedule && advanced.PreserveSchedule || advanced.RoundCount == 0
+                    ? campaign.RoundCount
+                    : advanced.RoundCount,
+                clock.UtcNow);
+            var outcome = await campaigns.UpdatePlayStateAsync(
+                next.Id,
+                next.PlayState!,
+                next.MapGraph,
+                next.EndsUtc,
+                next.RoundCount,
+                attempt == 0 ? expectedRevision : loaded.OriginalRevision,
+                next.UpdatedUtc,
+                cancellationToken).ConfigureAwait(false);
+            if (outcome.IsSuccess && outcome.Campaign is not null)
+            {
+                if (notifications is not null && loaded.Previous is not null)
+                {
+                    await notifications.PublishPlayAdvanceAsync(loaded.Previous, outcome.Campaign, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                return OperationResults.Success(
+                    await CampaignPlayMapper.ToDetailAsync(
+                            outcome.Campaign, userId, clock.UtcNow, accounts, cancellationToken, isAdministrator)
+                        .ConfigureAwait(false));
+            }
+
+            if (outcome.ErrorCode != ErrorCodes.ConcurrencyConflict)
+            {
+                return OperationResults.Failure<CampaignPlayDetail>(
+                    outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
+                    outcome.Message ?? "The campaign could not be updated.");
+            }
+
+            lastConflict = OperationResults.Failure<CampaignPlayDetail>(
+                ErrorCodes.ConcurrencyConflict,
+                outcome.Message ?? "The campaign was changed by another request. Reload and try again.");
         }
 
-        return OperationResults.Success(
-            await CampaignPlayMapper.ToDetailAsync(outcome.Campaign, userId, clock.UtcNow, accounts, cancellationToken, isAdministrator)
-                .ConfigureAwait(false));
+        return lastConflict ?? OperationResults.Failure<CampaignPlayDetail>(
+            ErrorCodes.ConcurrencyConflict,
+            "The campaign was changed by another request. Reload and try again.");
     }
 
     public static IReadOnlyDictionary<Guid, string?> AllyGroups(StoredCampaign campaign)
@@ -321,7 +384,7 @@ internal static class CampaignPlayPipeline
             RankingObjectivePoints = existing.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = existing.BattleReportRules,
+            StandardBattleResultQuestions = existing.StandardBattleResultQuestions,
             ArmyEscalations = existing.ArmyEscalations,
             PlayState = play,
         };

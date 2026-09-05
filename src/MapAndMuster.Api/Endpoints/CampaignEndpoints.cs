@@ -565,6 +565,8 @@ public static class CampaignEndpoints
                     ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
                     PublicObjectiveTypes = CampaignResponses.ToPublicObjectiveTypeInputs(request.PublicObjectiveTypes),
                     SpecialRules = CampaignResponses.ToSpecialRuleInputs(request.SpecialRules),
+                    StandardBattleResultQuestions = CampaignResponses.ToStandardBattleResultQuestionInputs(
+                        request.StandardBattleResultQuestions),
                     Missions = CampaignResponses.ToMissionInputs(request.Missions),
                     ForceStatuses = CampaignResponses.ToForceStatusInputs(request.ForceStatuses),
                     PrivateObjectiveTypes = CampaignResponses.ToPrivateObjectiveTypeInputs(request.PrivateObjectiveTypes),
@@ -583,10 +585,6 @@ public static class CampaignEndpoints
                     AlliedRelicControlCampaignPoints = request.AlliedRelicControlCampaignPoints,
                     SplitForceSupplyPenaltyPercent = request.SplitForceSupplyPenaltyPercent,
                     SplitForceSupplyPenaltyIsPercent = request.SplitForceSupplyPenaltyIsPercent,
-                    AlwaysAskGeneralKill = request.AlwaysAskGeneralKill,
-                    AlwaysAskSupplyLineDestroyed = request.AlwaysAskSupplyLineDestroyed,
-                    GeneralKillCampaignPoints = request.GeneralKillCampaignPoints,
-                    SupplyLineDestroyedCampaignPoints = request.SupplyLineDestroyedCampaignPoints,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -977,6 +975,8 @@ public static class CampaignEndpoints
                     ItemObjectiveTypes = CampaignResponses.ToItemObjectiveTypeInputs(request.ItemObjectiveTypes),
                     PublicObjectiveTypes = CampaignResponses.ToPublicObjectiveTypeInputs(request.PublicObjectiveTypes),
                     SpecialRules = CampaignResponses.ToSpecialRuleInputs(request.SpecialRules),
+                    StandardBattleResultQuestions = CampaignResponses.ToStandardBattleResultQuestionInputs(
+                        request.StandardBattleResultQuestions),
                     Missions = CampaignResponses.ToMissionInputs(request.Missions),
                     ForceStatuses = CampaignResponses.ToForceStatusInputs(request.ForceStatuses),
                     PrivateObjectiveTypes = CampaignResponses.ToPrivateObjectiveTypeInputs(request.PrivateObjectiveTypes),
@@ -995,10 +995,6 @@ public static class CampaignEndpoints
                     AlliedRelicControlCampaignPoints = request.AlliedRelicControlCampaignPoints,
                     SplitForceSupplyPenaltyPercent = request.SplitForceSupplyPenaltyPercent,
                     SplitForceSupplyPenaltyIsPercent = request.SplitForceSupplyPenaltyIsPercent,
-                    AlwaysAskGeneralKill = request.AlwaysAskGeneralKill,
-                    AlwaysAskSupplyLineDestroyed = request.AlwaysAskSupplyLineDestroyed,
-                    GeneralKillCampaignPoints = request.GeneralKillCampaignPoints,
-                    SupplyLineDestroyedCampaignPoints = request.SupplyLineDestroyedCampaignPoints,
                 },
                 cancellationToken)
             .ConfigureAwait(false);

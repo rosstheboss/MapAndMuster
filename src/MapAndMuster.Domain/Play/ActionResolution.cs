@@ -274,6 +274,7 @@ public static class ActionResolution
     /// <summary>
     /// Player-submittable actions available for a force in an open action window, in documented order:
     /// Hold, Move, Build, Pillage, Repair, Split, then Backstab.
+    /// Kinds that are not legal for the force's current territory are omitted.
     /// </summary>
     public static IReadOnlyList<ActionKind> EligibleActions(
         CampaignPlayState state,
@@ -289,6 +290,7 @@ public static class ActionResolution
         var rules = specialRules ?? SpecialRuleContext.None;
         if (force.InBattle)
         {
+            // Surrender is committed from the battle panel, not as a required action-list item.
             return [ActionKind.Surrender];
         }
 
@@ -319,7 +321,7 @@ public static class ActionResolution
             kinds.Add(ActionKind.Split);
         }
 
-        if (IsValidBackstab(force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
+        if (IsValidBackstab(state, map, force, factionAllyGroups, rules))
         {
             kinds.Add(ActionKind.Backstab);
         }
@@ -428,7 +430,7 @@ public static class ActionResolution
         }
 
         if (kind == ActionKind.Backstab
-            && !IsValidBackstab(force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
+            && !IsValidBackstab(state, map, force, factionAllyGroups, rules))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
@@ -583,20 +585,51 @@ public static class ActionResolution
     }
 
     internal static bool IsValidBackstab(
+        CampaignPlayState state,
+        PlayMap map,
+        CampaignForce force,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        SpecialRuleContext? specialRules = null)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(force);
+        ArgumentNullException.ThrowIfNull(factionAllyGroups);
+        var rules = specialRules ?? SpecialRuleContext.None;
+        var broken = state.BrokenAllyFactionIds;
+        var brokenSubfactions = state.BrokenAllySubfactions;
+        if (!HasAllianceToBreak(force, factionAllyGroups, broken, rules, brokenSubfactions))
+        {
+            return false;
+        }
+
+        var othersHere = state.Forces
+            .Where(other => other.Id != force.Id && other.TerritoryId == force.TerritoryId)
+            .ToArray();
+        if (othersHere.Any(other =>
+            FactionSpecialRulePolicies.AreAllies(force, other, factionAllyGroups, broken, brokenSubfactions, rules)))
+        {
+            return true;
+        }
+
+        var territory = map.Territory(force.TerritoryId);
+        return territory?.OwnerFactionId is { } owner
+            && AreAllies(force.FactionId, owner, factionAllyGroups, broken);
+    }
+
+    private static bool HasAllianceToBreak(
         CampaignForce force,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyList<Guid> broken,
-        SpecialRuleContext? specialRules = null,
-        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null)
+        SpecialRuleContext rules,
+        IReadOnlyList<BrokenAllySubfaction> brokenSubfactions)
     {
-        var rules = specialRules ?? SpecialRuleContext.None;
         if (rules.Has(force, SpecialRuleEffectKeys.DividedWeStand)
             && !string.IsNullOrWhiteSpace(force.Subfaction))
         {
-            var alreadyBroken = (brokenSubfactions ?? []).Any(item =>
+            return !brokenSubfactions.Any(item =>
                 item.FactionId == force.FactionId
                 && string.Equals(item.Subfaction, force.Subfaction, StringComparison.OrdinalIgnoreCase));
-            return !alreadyBroken;
         }
 
         if (broken.Contains(force.FactionId))

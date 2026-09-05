@@ -159,6 +159,9 @@ public sealed class CampaignDetail
     /// <summary>Gets reusable special rules. Empty means none.</summary>
     public IReadOnlyList<SpecialRuleDetail> SpecialRules { get; init; } = [];
 
+    /// <summary>Gets reusable battle-result questions. Empty means none.</summary>
+    public IReadOnlyList<StandardBattleResultQuestionDetail> StandardBattleResultQuestions { get; init; } = [];
+
     /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
     public IReadOnlyList<MissionDetail> Missions { get; init; } = [];
 
@@ -220,18 +223,6 @@ public sealed class CampaignDetail
     /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
     public bool SplitForceSupplyPenaltyIsPercent { get; init; } =
         MapAndMuster.Domain.Campaigns.HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent;
-
-    /// <summary>Gets whether every battle report asks if the enemy general was slain.</summary>
-    public bool AlwaysAskGeneralKill { get; init; } = true;
-
-    /// <summary>Gets whether every battle report asks if the enemy supply line was destroyed.</summary>
-    public bool AlwaysAskSupplyLineDestroyed { get; init; } = true;
-
-    /// <summary>Gets campaign points awarded for a slain enemy general.</summary>
-    public int GeneralKillCampaignPoints { get; init; } = 1;
-
-    /// <summary>Gets campaign points awarded for destroying the enemy supply line.</summary>
-    public int SupplyLineDestroyedCampaignPoints { get; init; } = 1;
 
     /// <summary>Gets per-round army size, free supply, and free-character allowances.</summary>
     public IReadOnlyList<RoundArmyEscalationDetail> RoundEscalations { get; init; } = [];
@@ -421,6 +412,60 @@ public sealed class CampaignParticipantDetail
 
     /// <summary>Gets free characters whose base cost does not count against supply this round.</summary>
     public int? FreeCharacterCount { get; init; }
+
+    /// <summary>Gets supply subtracted because the player currently has split forces.</summary>
+    public int? SplitPenaltyPoints { get; init; }
+
+    /// <summary>Gets per-source lines that sum to the displayed current total.</summary>
+    public IReadOnlyList<SupplyContributionDetail> Contributions { get; init; } = [];
+}
+
+/// <summary>
+/// One line in a player's current supply total.
+/// </summary>
+public sealed class SupplyContributionDetail
+{
+    /// <summary>Gets the source category name.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the related territory, when the source is a holding or location bonus.</summary>
+    public Guid? TerritoryId { get; init; }
+
+    /// <summary>Gets the player-visible label.</summary>
+    public required string Label { get; init; }
+
+    /// <summary>Gets signed points this source adds. Penalties are negative.</summary>
+    public required int Points { get; init; }
+
+    /// <summary>Gets whether the holding belongs to an ally rather than the player.</summary>
+    public bool IsAllied { get; init; }
+}
+
+/// <summary>
+/// Current spendable supply for one player, including a per-source breakdown.
+/// </summary>
+public sealed class PlayerSupplyViewDetail
+{
+    /// <summary>Gets the maximum one force can spend if assigned the remaining temporary pool.</summary>
+    public required int CurrentSupplyPoints { get; init; }
+
+    /// <summary>Gets remaining player-pool temporary supply.</summary>
+    public required int TemporarySupplyPoints { get; init; }
+
+    /// <summary>Gets map supply from connected territories and operational structures.</summary>
+    public required int MapSupplyPoints { get; init; }
+
+    /// <summary>Gets free supply granted this round.</summary>
+    public required int RoundFreeSupplyPoints { get; init; }
+
+    /// <summary>Gets supply subtracted because the player currently has split forces.</summary>
+    public required int SplitPenaltyPoints { get; init; }
+
+    /// <summary>Gets map-plus-round supply after the split penalty, excluding temporary points.</summary>
+    public required int ForceAllowancePoints { get; init; }
+
+    /// <summary>Gets per-source lines that sum to the displayed current total.</summary>
+    public IReadOnlyList<SupplyContributionDetail> Contributions { get; init; } = [];
 }
 
 /// <summary>
@@ -689,6 +734,9 @@ public sealed class StoredCampaign
     /// <summary>Gets reusable special rules. Empty means none.</summary>
     public IReadOnlyList<StoredSpecialRule> SpecialRules { get; init; } = [];
 
+    /// <summary>Gets reusable battle-result questions. Empty means none.</summary>
+    public IReadOnlyList<StoredStandardBattleResultQuestion> StandardBattleResultQuestions { get; init; } = [];
+
     /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
     public IReadOnlyList<StoredMission> Missions { get; init; } = [];
 
@@ -713,10 +761,6 @@ public sealed class StoredCampaign
     /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
     public bool SplitForceSupplyPenaltyIsPercent { get; init; } =
         MapAndMuster.Domain.Campaigns.HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent;
-
-    /// <summary>Gets always-asked battle-report questions and their campaign points.</summary>
-    public MapAndMuster.Domain.Campaigns.BattleReportRulesSetup BattleReportRules { get; init; } =
-        MapAndMuster.Domain.Campaigns.BattleReportRulesSetup.Default;
 
     /// <summary>Gets per-round army size, free supply, and free-character allowances.</summary>
     public IReadOnlyList<MapAndMuster.Domain.Campaigns.RoundArmyEscalationSetup> ArmyEscalations { get; init; } = [];
@@ -1044,6 +1088,27 @@ public sealed class SpecialRuleDetail
 }
 
 /// <summary>
+/// A reusable battle-result question with standard point values.
+/// </summary>
+public sealed class StandardBattleResultQuestionDetail
+{
+    /// <summary>Gets the question identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the question text.</summary>
+    public required string Prompt { get; init; }
+
+    /// <summary>Gets Boolean or BattlePoints.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets standard battle points awarded when a boolean is true.</summary>
+    public int BattlePoints { get; init; }
+
+    /// <summary>Gets standard campaign points awarded when the question is scored.</summary>
+    public int CampaignPoints { get; init; }
+}
+
+/// <summary>
 /// A configured force status other than Normal.
 /// </summary>
 public sealed class ForceStatusDetail
@@ -1285,8 +1350,11 @@ public sealed class HeldItemObjectiveDetail
 /// </summary>
 public sealed class PublicObjectiveLeaderboardDetail
 {
-    /// <summary>Gets the ranking objective kind.</summary>
+    /// <summary>Gets the ranking objective kind, or NamedPublicObjective for a catalog award.</summary>
     public required string Kind { get; init; }
+
+    /// <summary>Gets the heading shown on the campaign page.</summary>
+    public string Title { get; init; } = string.Empty;
 
     /// <summary>Gets campaign points awarded to each current first-place player.</summary>
     public required int AwardPoints { get; init; }
@@ -1320,6 +1388,9 @@ public sealed class PublicObjectiveLeaderDetail
 
     /// <summary>Gets whether this player currently receives the objective's campaign points.</summary>
     public required bool AwardsPoints { get; init; }
+
+    /// <summary>Gets how many players this row summarizes, or 0 for an individual player.</summary>
+    public int TiedPlayerCount { get; init; }
 }
 
 /// <summary>
@@ -1389,6 +1460,9 @@ public sealed class MissionResultQuestionDetail
 
     /// <summary>Gets campaign points awarded when the question is scored.</summary>
     public int CampaignPoints { get; init; }
+
+    /// <summary>Gets the catalog question this mission question copies, when present.</summary>
+    public Guid? StandardQuestionId { get; init; }
 }
 
 /// <summary>
@@ -1581,6 +1655,27 @@ public sealed class StoredSpecialRule
 }
 
 /// <summary>
+/// A persisted reusable battle-result question.
+/// </summary>
+public sealed class StoredStandardBattleResultQuestion
+{
+    /// <summary>Gets the question identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the question text.</summary>
+    public required string Prompt { get; init; }
+
+    /// <summary>Gets Boolean or BattlePoints.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets standard battle points awarded when a boolean is true.</summary>
+    public int BattlePoints { get; init; }
+
+    /// <summary>Gets standard campaign points awarded when the question is scored.</summary>
+    public int CampaignPoints { get; init; }
+}
+
+/// <summary>
 /// A persisted force status other than Normal.
 /// </summary>
 public sealed class StoredForceStatus
@@ -1706,7 +1801,7 @@ public sealed class StoredMission
     public string? FileName { get; init; }
 
     /// <summary>Gets questions asked when reporting this mission's battle result.</summary>
-    public IReadOnlyList<StoredMissionResultQuestion> ResultQuestions { get; init; } = [];
+    public IReadOnlyList<StoredMissionResultQuestion> ResultQuestions { get; set; } = [];
 
     /// <summary>Gets whether this mission is used for attacker/defender engagements.</summary>
     public bool IsAttackerDefender { get; init; }
@@ -1752,4 +1847,7 @@ public sealed class StoredMissionResultQuestion
 
     /// <summary>Gets campaign points awarded when the question is scored.</summary>
     public int CampaignPoints { get; init; }
+
+    /// <summary>Gets the catalog question this mission question copies, when present.</summary>
+    public Guid? StandardQuestionId { get; init; }
 }

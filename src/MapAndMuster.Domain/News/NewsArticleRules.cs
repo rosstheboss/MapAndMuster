@@ -18,6 +18,9 @@ public static class NewsArticleRules
     /// <summary>Maximum markdown body length after trimming.</summary>
     public const int BodyMaxLength = 20_000;
 
+    /// <summary>How many newest articles the home news board shows on one page.</summary>
+    public const int HomePageSize = 2;
+
     /// <summary>
     /// Validates title and markdown body.
     /// </summary>

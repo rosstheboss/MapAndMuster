@@ -298,6 +298,82 @@ public sealed class CampaignPlayState
     }
 
     /// <summary>
+    /// Unique players who have a reporting force in a battle this window. Completed players
+    /// stay in the list so the commitment denominator does not shrink.
+    /// </summary>
+    public IReadOnlyList<Guid> RequiredBattlePlayers(Guid windowId)
+    {
+        var userIds = new List<Guid>();
+        foreach (var battle in Battles.Where(battle => battle.BattleWindowId == windowId))
+        {
+            foreach (var forceId in battle.ReportingForceIds)
+            {
+                AddController(forceId, userIds);
+            }
+
+            if (battle.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved)
+            {
+                continue;
+            }
+
+            foreach (var forceId in CampaignPlayRules.ForcesRequiredToRetreat(battle))
+            {
+                AddController(forceId, userIds);
+            }
+        }
+
+        return [.. userIds.Distinct()];
+    }
+
+    /// <summary>
+    /// Whether the player has finished every battle they are in: each result is submitted or
+    /// staff-resolved, and every required retreat is recorded.
+    /// </summary>
+    public bool HasCompletedBattleDuties(Guid windowId, Guid userId)
+    {
+        foreach (var battle in Battles.Where(battle => battle.BattleWindowId == windowId))
+        {
+            var forceIds = Forces
+                .Where(force => force.ControllerUserId == userId)
+                .Select(static force => force.Id)
+                .ToHashSet();
+            if (battle.Status is BattleStatus.AwaitingResults or BattleStatus.Disputed
+                && battle.ReportingForceIds.Any(forceIds.Contains)
+                && LatestBattleSubmission(battle.Id, userId) is null)
+            {
+                return false;
+            }
+
+            if (battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved)
+            {
+                foreach (var forceId in CampaignPlayRules.ForcesRequiredToRetreat(battle))
+                {
+                    if (!forceIds.Contains(forceId))
+                    {
+                        continue;
+                    }
+
+                    if (!Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == forceId))
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private void AddController(Guid forceId, List<Guid> userIds)
+    {
+        var force = Forces.FirstOrDefault(item => item.Id == forceId);
+        if (force is not null && !userIds.Contains(force.ControllerUserId))
+        {
+            userIds.Add(force.ControllerUserId);
+        }
+    }
+
+    /// <summary>
     /// Latest battle submission for a user, if any.
     /// </summary>
     public BattleResultSubmission? LatestBattleSubmission(Guid battleId, Guid userId)

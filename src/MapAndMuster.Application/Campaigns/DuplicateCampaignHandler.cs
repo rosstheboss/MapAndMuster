@@ -140,7 +140,7 @@ public sealed class DuplicateCampaignHandler
             RankingObjectivePoints = source.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = source.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = source.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = source.BattleReportRules,
+            StandardBattleResultQuestions = source.StandardBattleResultQuestions,
             ArmyEscalations = source.ArmyEscalations,
         };
 

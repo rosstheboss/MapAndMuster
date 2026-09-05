@@ -311,10 +311,7 @@ public sealed class CampaignEndpointTests
         Assert.NotNull(created);
         Assert.Equal(1, created.SplitForceSupplyPenaltyPercent);
         Assert.False(created.SplitForceSupplyPenaltyIsPercent);
-        Assert.True(created.AlwaysAskGeneralKill);
-        Assert.True(created.AlwaysAskSupplyLineDestroyed);
-        Assert.Equal(1, created.GeneralKillCampaignPoints);
-        Assert.Equal(1, created.SupplyLineDestroyedCampaignPoints);
+        Assert.Empty(created.StandardBattleResultQuestions);
         Assert.Equal(8, created.RoundEscalations.Count);
         Assert.All(
             created.RoundEscalations,
@@ -331,6 +328,76 @@ public sealed class CampaignEndpointTests
             Assert.Equal(1, type.PillageSupplyPoints);
             Assert.Equal(1, type.DestroySupplyPoints);
         });
+    }
+
+    [Fact]
+    public async Task CreatedCampaignRoundTripsStandardBattleResultQuestions()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("gm");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        var catalogId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var body = ValidCampaignBody("Question War");
+        using var createdResponse = await client.PostAsJsonAsync(
+            "/api/campaigns",
+            new SaveCampaignRequest
+            {
+                Name = body.Name,
+                Description = body.Description,
+                PlayerCount = body.PlayerCount,
+                IsPrivate = body.IsPrivate,
+                IsPubliclyViewable = body.IsPubliclyViewable,
+                JoinPassword = body.JoinPassword,
+                CreatorIsParticipant = body.CreatorIsParticipant,
+                Factions = body.Factions,
+                TimeZoneId = body.TimeZoneId,
+                StartsAtLocal = body.StartsAtLocal,
+                RoundCount = body.RoundCount,
+                RoundLengthAmount = body.RoundLengthAmount,
+                RoundLengthUnit = body.RoundLengthUnit,
+                Phases = body.Phases,
+                StandardBattleResultQuestions =
+                [
+                    new StandardBattleResultQuestionRequest
+                    {
+                        Id = catalogId,
+                        Prompt = "Killed the enemy general",
+                        Kind = "Boolean",
+                        BattlePoints = 0,
+                        CampaignPoints = 1,
+                    },
+                ],
+                Missions =
+                [
+                    new MissionRequest
+                    {
+                        Name = "Pitched Battle",
+                        ResultQuestions =
+                        [
+                            new MissionResultQuestionRequest
+                            {
+                                StandardQuestionId = catalogId,
+                                Prompt = "Killed the enemy general",
+                                Kind = "Boolean",
+                                BattlePoints = 2,
+                                CampaignPoints = 5,
+                            },
+                        ],
+                    },
+                ],
+            });
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        var catalog = Assert.Single(created.StandardBattleResultQuestions);
+        Assert.Equal(catalogId, catalog.Id);
+        Assert.Equal("Killed the enemy general", catalog.Prompt);
+        var mission = Assert.Single(created.Missions, item => item.Name == "Pitched Battle");
+        var question = Assert.Single(mission.ResultQuestions);
+        Assert.Equal(catalogId, question.StandardQuestionId);
+        Assert.Equal(2, question.BattlePoints);
+        Assert.Equal(5, question.CampaignPoints);
     }
 
     [Fact]

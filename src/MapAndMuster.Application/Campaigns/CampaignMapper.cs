@@ -210,10 +210,17 @@ public static class CampaignMapper
             AlliedRelicControlCampaignPoints = campaign.RankingObjectivePoints.AlliedRelicControlPoints,
             SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = campaign.SplitForceSupplyPenaltyIsPercent,
-            AlwaysAskGeneralKill = campaign.BattleReportRules.AlwaysAskGeneralKill,
-            AlwaysAskSupplyLineDestroyed = campaign.BattleReportRules.AlwaysAskSupplyLineDestroyed,
-            GeneralKillCampaignPoints = campaign.BattleReportRules.GeneralKillCampaignPoints,
-            SupplyLineDestroyedCampaignPoints = campaign.BattleReportRules.SupplyLineDestroyedCampaignPoints,
+            StandardBattleResultQuestions =
+            [
+                .. campaign.StandardBattleResultQuestions.Select(static question => new StandardBattleResultQuestionDetail
+                {
+                    Id = question.Id,
+                    Prompt = question.Prompt,
+                    Kind = question.Kind,
+                    BattlePoints = question.BattlePoints,
+                    CampaignPoints = question.CampaignPoints,
+                }),
+            ],
             RoundEscalations =
             [
                 .. schedule.ArmyEscalations.Select(static row => new RoundArmyEscalationDetail
@@ -619,6 +626,7 @@ public static class CampaignMapper
                     Kind = question.Kind,
                     BattlePoints = question.BattlePoints,
                     CampaignPoints = question.CampaignPoints,
+                    StandardQuestionId = question.StandardQuestionId,
                 }),
             ],
             IsAttackerDefender = mission.IsAttackerDefender,

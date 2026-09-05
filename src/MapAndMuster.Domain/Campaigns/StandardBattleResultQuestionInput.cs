@@ -1,9 +1,9 @@
 namespace MapAndMuster.Domain.Campaigns;
 
 /// <summary>
-/// User-supplied mission result question.
+/// User-supplied reusable battle-result question for campaign setup.
 /// </summary>
-public sealed class MissionResultQuestionInput
+public sealed class StandardBattleResultQuestionInput
 {
     /// <summary>Gets the client-assigned identifier, when present.</summary>
     public Guid? Id { get; init; }
@@ -14,14 +14,9 @@ public sealed class MissionResultQuestionInput
     /// <summary>Gets Boolean or BattlePoints.</summary>
     public string? Kind { get; init; }
 
-    /// <summary>Gets battle points awarded when a boolean answer is true.</summary>
+    /// <summary>Gets standard battle points awarded when a boolean is true.</summary>
     public int? BattlePoints { get; init; }
 
-    /// <summary>Gets campaign points awarded when the question is scored.</summary>
+    /// <summary>Gets standard campaign points awarded when the question is scored.</summary>
     public int? CampaignPoints { get; init; }
-
-    /// <summary>
-    /// Gets the standard catalog question this mission question copies, when added from the catalog.
-    /// </summary>
-    public Guid? StandardQuestionId { get; init; }
 }

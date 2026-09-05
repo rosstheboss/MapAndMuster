@@ -6,6 +6,7 @@ using MapAndMuster.Application.News;
 using MapAndMuster.Application.Notifications;
 using MapAndMuster.Application.Ports;
 using MapAndMuster.Domain.Identity;
+using MapAndMuster.Domain.News;
 using MapAndMuster.Domain.Play;
 
 namespace MapAndMuster.Backend.UnitTests.News;
@@ -50,6 +51,35 @@ public sealed class NewsHandlersTests
         Assert.Equal("Season opening", result.Value.Title);
         Assert.Contains("<p>", result.Value.BodyHtml, StringComparison.Ordinal);
         Assert.Equal(1, (await new GetNewsPageHandler(store).HandleAsync(1, CancellationToken.None)).Value!.TotalPages);
+        Assert.Single((await new GetNewsPageHandler(store).HandleAsync(1, CancellationToken.None)).Value!.Articles);
+    }
+
+    [Fact]
+    public async Task NewsPagesTwoArticlesAtATime()
+    {
+        var store = new FakeNewsStore();
+        var handler = new SaveNewsArticleHandler(store, new FixedClock());
+        for (var index = 1; index <= 3; index++)
+        {
+            var result = await handler.HandleAsync(
+                new SaveNewsArticleCommand
+                {
+                    UserId = Guid.NewGuid(),
+                    IsAdministrator = true,
+                    Title = $"Bulletin {index}",
+                    BodyMarkdown = $"Body {index}.",
+                },
+                CancellationToken.None);
+            Assert.True(result.IsSuccess);
+        }
+
+        var first = await new GetNewsPageHandler(store).HandleAsync(1, CancellationToken.None);
+        Assert.True(first.IsSuccess);
+        Assert.Equal(2, first.Value!.TotalPages);
+        Assert.Equal(2, first.Value.Articles.Count);
+        var second = await new GetNewsPageHandler(store).HandleAsync(2, CancellationToken.None);
+        Assert.True(second.IsSuccess);
+        Assert.Single(second.Value!.Articles);
     }
 }
 
@@ -71,6 +101,44 @@ public sealed class HomeBoardHandlerTests
         Assert.NotNull(result.Value);
         Assert.Empty(result.Value);
     }
+
+    [Fact]
+    public async Task StoredNoticeIdsUseDashedGuidFormat()
+    {
+        var accounts = new FakeProfileStore();
+        var noticeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var store = new FakeNoticeStore();
+        store.Unread.Add(new UserNotification
+        {
+            Id = noticeId,
+            UserId = accounts.User.Id,
+            Kind = "CampaignChat",
+            Title = "New mention",
+            Body = "You were mentioned.",
+            Path = "/campaigns/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            CreatedUtc = new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero),
+            DedupeKey = "chat:1",
+        });
+        var handler = new GetHomeBoardHandler(store, new EmptyCampaignStore(), accounts, new FixedClock());
+
+        var result = await handler.HandleAsync(accounts.User.Id, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var item = Assert.Single(result.Value!);
+        Assert.Equal(noticeId.ToString("D"), item.Id);
+    }
+
+    [Fact]
+    public async Task MarkAllReadMarksStoredNotices()
+    {
+        var store = new FakeNoticeStore();
+        var handler = new MarkAllNotificationsReadHandler(store, new FixedClock());
+
+        var result = await handler.HandleAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, store.MarkAllCalls);
+    }
 }
 
 file sealed class FixedClock : IClock
@@ -85,17 +153,25 @@ file sealed class FakeNewsStore : INewsStore
     public Task<NewsPage> GetPageAsync(int page, CancellationToken cancellationToken)
     {
         var total = _articles.Count;
+        var pageSize = NewsArticleRules.HomePageSize;
+        var totalPages = total == 0 ? 0 : (int)Math.Ceiling(total / (double)pageSize);
         var normalized = page < 1 ? 1 : page;
-        var article = _articles
+        if (totalPages > 0 && normalized > totalPages)
+        {
+            normalized = totalPages;
+        }
+
+        var articles = _articles
             .OrderByDescending(item => item.PublishedUtc)
             .ThenByDescending(item => item.Id)
-            .Skip(Math.Max(0, normalized - 1))
-            .FirstOrDefault();
+            .Skip(Math.Max(0, (normalized - 1) * pageSize))
+            .Take(pageSize)
+            .ToArray();
         return Task.FromResult(new NewsPage
         {
             Page = total == 0 ? 1 : normalized,
-            TotalPages = total,
-            Article = article,
+            TotalPages = totalPages,
+            Articles = articles,
         });
     }
 
@@ -123,6 +199,10 @@ file sealed class FakeNewsStore : INewsStore
 
 file sealed class FakeNoticeStore : IUserNotificationStore
 {
+    public List<UserNotification> Unread { get; } = [];
+
+    public int MarkAllCalls { get; private set; }
+
     public Task<bool> TryAddAsync(NewUserNotification notification, DateTimeOffset utcNow, CancellationToken cancellationToken)
     {
         return Task.FromResult(true);
@@ -130,12 +210,18 @@ file sealed class FakeNoticeStore : IUserNotificationStore
 
     public Task<IReadOnlyList<UserNotification>> ListUnreadAsync(Guid userId, CancellationToken cancellationToken)
     {
-        return Task.FromResult<IReadOnlyList<UserNotification>>([]);
+        return Task.FromResult<IReadOnlyList<UserNotification>>([.. Unread]);
     }
 
     public Task<bool> MarkReadAsync(Guid notificationId, Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken)
     {
         return Task.FromResult(false);
+    }
+
+    public Task<int> MarkAllReadAsync(Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        MarkAllCalls++;
+        return Task.FromResult(Unread.Count);
     }
 }
 

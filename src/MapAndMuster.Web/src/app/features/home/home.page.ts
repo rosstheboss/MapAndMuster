@@ -6,7 +6,12 @@ import { AuthService, readApiError } from '../../core/auth/auth.service';
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import { statusLabel } from '../../core/campaigns/campaign-schedule';
-import { HomeBoardService, type HomeAttentionItem, type NewsPage } from '../../core/home/home-board.service';
+import {
+  HomeBoardService,
+  storedNotificationRouteId,
+  type HomeAttentionItem,
+  type NewsPage,
+} from '../../core/home/home-board.service';
 import {
   campaignAttentionItems,
   campaignCommitLabel,
@@ -30,6 +35,7 @@ export class HomePage {
   protected readonly discordInviteUrl = 'https://discord.gg/ATVt97DMnx';
 
   protected readonly notifications = signal<HomeAttentionItem[]>([]);
+  protected readonly notificationPage = signal(1);
   protected readonly campaigns = signal<CampaignListItem[]>([]);
   protected readonly news = signal<NewsPage | null>(null);
   protected readonly newsError = signal<string | null>(null);
@@ -38,10 +44,28 @@ export class HomePage {
   protected readonly campaignsLoading = signal(true);
   protected readonly editingNews = signal(false);
   protected readonly creatingNews = signal(false);
+  protected readonly editingNewsId = signal<string | null>(null);
   protected readonly newsTitle = signal('');
   protected readonly newsBody = signal('');
   protected readonly newsSaving = signal(false);
   protected readonly attentionCampaigns = computed(() => campaignAttentionItems(this.campaigns()));
+  protected readonly noticePageSize = 5;
+  protected readonly noticePageCount = computed(() =>
+    Math.max(1, Math.ceil(this.notifications().length / this.noticePageSize)),
+  );
+  protected readonly visibleNotifications = computed(() => {
+    const page = Math.min(this.notificationPage(), this.noticePageCount());
+    const start = (page - 1) * this.noticePageSize;
+    return this.notifications().slice(start, start + this.noticePageSize);
+  });
+  protected readonly newsArticles = computed(() => {
+    const page = this.news();
+    if (!page) {
+      return [];
+    }
+
+    return page.articles ?? (page.article ? [page.article] : []);
+  });
   protected readonly statusText = statusLabel;
   protected readonly roundPhaseText = campaignRoundPhaseText;
   protected readonly commitLabel = campaignCommitLabel;
@@ -52,13 +76,39 @@ export class HomePage {
   }
 
   protected async openNotice(item: HomeAttentionItem): Promise<void> {
+    await this.dismissNotice(item);
+    await this.router.navigateByUrl(item.path);
+  }
+
+  protected async dismissNotice(item: HomeAttentionItem): Promise<void> {
     try {
       await this.board.markRead(item.id);
     } catch {
-      // Live attention items are not stored notices; still open the campaign.
+      // Live attention items are not stored notices.
     }
 
-    await this.router.navigateByUrl(item.path);
+    this.notifications.update((items) => items.filter((notice) => notice.id !== item.id));
+    if (this.notificationPage() > this.noticePageCount()) {
+      this.notificationPage.set(this.noticePageCount());
+    }
+  }
+
+  protected async dismissAllNotices(): Promise<void> {
+    const ids = this.notifications().map((item) => item.id);
+    try {
+      await this.board.markAllRead(ids);
+      this.noticeError.set(null);
+    } catch (error: unknown) {
+      this.noticeError.set(readApiError(error, 'Unable to dismiss notifications.'));
+      return;
+    }
+
+    this.notifications.update((items) => items.filter((item) => storedNotificationRouteId(item.id) === null));
+    this.notificationPage.set(1);
+  }
+
+  protected setNotificationPage(page: number): void {
+    this.notificationPage.set(Math.min(this.noticePageCount(), Math.max(1, page)));
   }
 
   protected async loadNews(page: number): Promise<void> {
@@ -70,16 +120,17 @@ export class HomePage {
     }
   }
 
-  protected startNewsEdit(): void {
-    const article = this.news()?.article;
+  protected startNewsEdit(article: { id: string; title: string; bodyMarkdown: string }): void {
     this.creatingNews.set(false);
-    this.newsTitle.set(article?.title ?? '');
-    this.newsBody.set(article?.bodyMarkdown ?? '');
+    this.editingNewsId.set(article.id);
+    this.newsTitle.set(article.title);
+    this.newsBody.set(article.bodyMarkdown);
     this.editingNews.set(true);
   }
 
   protected startNewsCreate(): void {
     this.creatingNews.set(true);
+    this.editingNewsId.set(null);
     this.newsTitle.set('');
     this.newsBody.set('');
     this.editingNews.set(true);
@@ -87,6 +138,7 @@ export class HomePage {
 
   protected cancelNewsEdit(): void {
     this.editingNews.set(false);
+    this.editingNewsId.set(null);
   }
 
   protected async saveNews(): Promise<void> {
@@ -94,14 +146,15 @@ export class HomePage {
     this.newsError.set(null);
     try {
       const payload = { title: this.newsTitle().trim(), bodyMarkdown: this.newsBody().trim() };
-      const current = this.news()?.article;
-      if (!this.creatingNews() && current) {
-        await this.board.updateNews(current.id, payload);
+      const currentId = this.editingNewsId();
+      if (!this.creatingNews() && currentId) {
+        await this.board.updateNews(currentId, payload);
       } else {
         await this.board.createNews(payload);
       }
 
       this.editingNews.set(false);
+      this.editingNewsId.set(null);
       await this.loadNews(1);
     } catch (error: unknown) {
       this.newsError.set(readApiError(error, 'Unable to save the news article.'));
@@ -110,17 +163,13 @@ export class HomePage {
     }
   }
 
-  protected async deleteNews(): Promise<void> {
-    const article = this.news()?.article;
-    if (!article) {
-      return;
-    }
-
+  protected async deleteNews(articleId: string): Promise<void> {
     this.newsSaving.set(true);
     try {
-      await this.board.deleteNews(article.id);
+      await this.board.deleteNews(articleId);
       this.editingNews.set(false);
-      await this.loadNews(1);
+      this.editingNewsId.set(null);
+      await this.loadNews(this.news()?.page ?? 1);
     } catch (error: unknown) {
       this.newsError.set(readApiError(error, 'Unable to delete the news article.'));
     } finally {
@@ -135,6 +184,7 @@ export class HomePage {
   private async loadNotifications(): Promise<void> {
     try {
       this.notifications.set(await this.board.listNotifications());
+      this.notificationPage.set(1);
       this.noticeError.set(null);
     } catch (error: unknown) {
       this.noticeError.set(readApiError(error, 'Unable to load notifications.'));

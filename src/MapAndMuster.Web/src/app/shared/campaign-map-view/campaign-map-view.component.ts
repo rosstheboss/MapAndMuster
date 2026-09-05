@@ -178,6 +178,7 @@ export class CampaignMapViewComponent {
   protected readonly tooltipX = signal(12);
   protected readonly tooltipY = signal(12);
   protected readonly imageReady = signal(false);
+  private readonly failedFlagUrls = signal<ReadonlySet<string>>(new Set());
   protected readonly marqueeBox = signal<{ left: number; top: number; width: number; height: number } | null>(null);
   private movingTerritory = false;
   private moveOrigin: MapPoint | null = null;
@@ -212,11 +213,11 @@ export class CampaignMapViewComponent {
     });
   }
 
-  protected readonly overlayTerritories = computed(() => {
+  protected readonly territoryLayouts = computed(() => {
     const image = this.imageSize();
-    const scale = Math.max(this.currentScale(), Number.EPSILON);
-    const maxWidth = MARKER_MAX_PX / (image.width * scale);
-    const maxHeight = MARKER_MAX_PX / (image.height * scale);
+    const scale = this.currentScale();
+    const maxWidth = MARKER_MAX_PX / Math.max(image.width * scale, 1);
+    const maxHeight = MARKER_MAX_PX / Math.max(image.height * scale, 1);
     return this.territories().map((territory) => {
       const center = interiorAnchor(territory.polygon);
       const structure = this.structures().find((item) => item.id === territory.structureTypeId) ?? null;
@@ -224,7 +225,8 @@ export class CampaignMapViewComponent {
       const pillaged = territory.structureCondition === 'Pillaged';
       const owner = this.factions().find((faction) => faction.id === territory.ownerFactionId) ?? null;
       const appearance = resolveFactionAppearance(owner, territory.ownerSubfaction);
-      const selected = this.isSelected(territory.id);
+      const flagUrl =
+        owner && appearance.hasFlagImage ? this.flagImageUrl()(owner.id, territory.ownerSubfaction) : null;
       const structureFit =
         structure && !destroyed ? fitSquareInPolygon(territory.polygon, center, maxWidth, maxHeight) : null;
       const flagPreferred = structureFit ? { x: structureFit.x + structureFit.width * 0.7, y: structureFit.y } : center;
@@ -274,20 +276,8 @@ export class CampaignMapViewComponent {
         avoided.push(fit);
         return { item, fit };
       });
-      const fill = this.territoryFill(territory, owner, appearance.color);
-      const spawnFaction = this.factions().find((faction) => faction.id === territory.spawnFactionId) ?? null;
-      const spawnColor = spawnFaction
-        ? resolveFactionAppearance(spawnFaction, territory.spawnSubfaction).color
-        : '#78716c';
-      const isSpawn = !!territory.spawnFactionId;
-      const stripeColor = fill === 'transparent' ? spawnColor : fill;
-      const hovered = territory.id === this.hoveredTerritoryId();
-      const lifted = hovered && !selected && !this.marqueeBox();
-      const hoverLift = -this.screenToMap(HOVER_LIFT_SCREEN_PX);
-      const glowSource = isSpawn ? stripeColor : fill;
       return {
         territory,
-        points: polygonPointsAttribute(territory.polygon),
         center,
         structureFit,
         flag:
@@ -295,7 +285,7 @@ export class CampaignMapViewComponent {
             ? {
                 ...flagFit,
                 color: appearance.color,
-                image: appearance.hasFlagImage ? this.flagImageUrl()(owner.id, territory.ownerSubfaction) : null,
+                image: flagUrl && !this.failedFlagUrls().has(flagUrl) ? flagUrl : null,
                 tint: appearance.tint,
               }
             : null,
@@ -309,6 +299,32 @@ export class CampaignMapViewComponent {
               ? this.structureImageUrl()(structure.id, false)
               : null
           : null,
+        mapLabel: overlayNameLabel(territory, image, 1),
+      };
+    });
+  });
+
+  protected readonly overlayTerritories = computed(() => {
+    const layouts = this.territoryLayouts();
+    const hoverLift = -this.screenToMap(HOVER_LIFT_SCREEN_PX);
+    return layouts.map((layout) => {
+      const territory = layout.territory;
+      const owner = this.factions().find((faction) => faction.id === territory.ownerFactionId) ?? null;
+      const appearance = resolveFactionAppearance(owner, territory.ownerSubfaction);
+      const selected = this.isSelected(territory.id);
+      const fill = this.territoryFill(territory, owner, appearance.color);
+      const spawnFaction = this.factions().find((faction) => faction.id === territory.spawnFactionId) ?? null;
+      const spawnColor = spawnFaction
+        ? resolveFactionAppearance(spawnFaction, territory.spawnSubfaction).color
+        : '#78716c';
+      const isSpawn = !!territory.spawnFactionId;
+      const stripeColor = fill === 'transparent' ? spawnColor : fill;
+      const hovered = territory.id === this.hoveredTerritoryId();
+      const lifted = hovered && !selected && !this.marqueeBox();
+      const glowSource = isSpawn ? stripeColor : fill;
+      return {
+        ...layout,
+        points: polygonPointsAttribute(territory.polygon),
         selected,
         halfHighlighted: !selected && this.isHalfHighlighted(territory.id),
         dimmed:
@@ -331,7 +347,6 @@ export class CampaignMapViewComponent {
         ),
         glowColor: glowSource === 'transparent' ? 'var(--color-glow)' : glowSource,
         accessibleName: territoryLabel(territory),
-        mapLabel: overlayNameLabel(territory, image, scale),
         tooltip: this.territoryTooltip(territory),
       };
     });
@@ -479,6 +494,18 @@ export class CampaignMapViewComponent {
     return flag.image ? 'transparent' : flag.color;
   }
 
+  protected onFlagImageError(url: string | null): void {
+    if (!url) {
+      return;
+    }
+
+    this.failedFlagUrls.update((current) => {
+      const next = new Set(current);
+      next.add(url);
+      return next;
+    });
+  }
+
   protected maskUrl(src: string): string {
     return `url(${JSON.stringify(src)})`;
   }
@@ -617,12 +644,15 @@ export class CampaignMapViewComponent {
       return;
     }
 
-    const target = event.target as SVGElement | HTMLElement;
-    const kind = target.dataset['kind'];
-    const id = target.dataset['id'];
+    const { kind, id } = this.pointerTarget(event);
     if (kind === 'adjacency' && id && this.adjacenciesInteractive()) {
       this.adjacencySelect.emit(id);
       event.preventDefault();
+      return;
+    }
+
+    if (kind === 'territory' && id) {
+      this.selectTerritoryFromPointer(event, id);
       return;
     }
 
@@ -631,17 +661,9 @@ export class CampaignMapViewComponent {
       return;
     }
 
-    const territoryId = kind === 'territory' && id ? id : this.territoryIdAt(point);
+    const territoryId = this.territoryIdAt(point);
     if (territoryId) {
-      const additive = isAdditiveModifier(event);
-      this.activateTerritory(territoryId, additive, event.clientX, event.clientY);
-      this.mapPoint.emit(point);
-      if (!additive && this.moveTerritories()) {
-        this.movingTerritory = true;
-        this.moveOrigin = point;
-        (event.currentTarget as HTMLElement | SVGElement).setPointerCapture(event.pointerId);
-      }
-
+      this.selectTerritoryFromPointer(event, territoryId, point);
       return;
     }
 
@@ -720,7 +742,11 @@ export class CampaignMapViewComponent {
     this.showNames.update((value) => !value);
   }
 
-  protected onTerritoryLeave(id: string): void {
+  protected onTerritoryLeave(id: string, event?: PointerEvent): void {
+    if (this.pointerRemainsOnTerritory(event, id)) {
+      return;
+    }
+
     if (this.hoverIntentId === id) {
       this.clearHoverIntentTimer();
       this.hoverIntentId = undefined;
@@ -744,7 +770,11 @@ export class CampaignMapViewComponent {
     }
   }
 
-  protected clearHovers(): void {
+  protected clearHovers(event?: PointerEvent): void {
+    if (this.pointerRemainsOnTerritoryMarker(event)) {
+      return;
+    }
+
     this.clearHoverIntentTimer();
     this.hoverIntentId = undefined;
     if (!this.panning()) {
@@ -782,6 +812,17 @@ export class CampaignMapViewComponent {
 
   protected isHoverMotion(id: string): boolean {
     return this.hoverMotionIds().has(id);
+  }
+
+  protected markerLiftTransform(id: string): string {
+    const selected = this.isSelected(id);
+    const lifted = id === this.hoveredTerritoryId() && !selected && !this.marqueeBox();
+    if (!lifted) {
+      return '';
+    }
+
+    const lift = -this.screenToMap(HOVER_LIFT_SCREEN_PX) * this.imageSize().height;
+    return `translateY(${lift}px)`;
   }
 
   private playHoverMotion(id: string): void {
@@ -986,6 +1027,48 @@ export class CampaignMapViewComponent {
     }
 
     this.territorySelect.emit({ id, additive, clientX, clientY });
+  }
+
+  private selectTerritoryFromPointer(event: PointerEvent, id: string, knownPoint?: MapPoint): void {
+    const additive = isAdditiveModifier(event);
+    this.activateTerritory(id, additive, event.clientX, event.clientY);
+    event.stopPropagation();
+    const point = knownPoint ?? this.pointFromEvent(event);
+    if (!point) {
+      return;
+    }
+
+    this.mapPoint.emit(point);
+    if (!additive && this.moveTerritories()) {
+      this.movingTerritory = true;
+      this.moveOrigin = point;
+      (event.currentTarget as HTMLElement | SVGElement).setPointerCapture(event.pointerId);
+    }
+  }
+
+  private pointerTarget(event: PointerEvent): { kind?: string; id?: string } {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return {};
+    }
+
+    const host = target.closest<HTMLElement | SVGElement>('[data-kind]');
+    return { kind: host?.dataset['kind'], id: host?.dataset['id'] };
+  }
+
+  private pointerRemainsOnTerritory(event: PointerEvent | undefined, id: string): boolean {
+    const related = event?.relatedTarget;
+    if (!(related instanceof Element)) {
+      return false;
+    }
+
+    const host = related.closest<HTMLElement | SVGElement>('[data-id]');
+    return host?.dataset['id'] === id;
+  }
+
+  private pointerRemainsOnTerritoryMarker(event: PointerEvent | undefined): boolean {
+    const related = event?.relatedTarget;
+    return related instanceof Element && !!related.closest('.territory-markers, .territory-hit');
   }
 
   private isSelected(territoryId: string): boolean {

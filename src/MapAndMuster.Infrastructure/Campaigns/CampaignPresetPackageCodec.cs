@@ -74,7 +74,7 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
                         campaign.ForceStatuses,
                         campaign.SplitForceSupplyPenaltyPercent,
                         campaign.SplitForceSupplyPenaltyIsPercent,
-                        campaign.BattleReportRules,
+                        campaign.StandardBattleResultQuestions,
                         campaign.ArmyEscalations,
                         campaign.Missions,
                         campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules))));
@@ -225,7 +225,7 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
                     RankingObjectivePoints = campaign.RankingObjectivePoints,
                     SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
                     SplitForceSupplyPenaltyIsPercent = campaign.SplitForceSupplyPenaltyIsPercent,
-                    BattleReportRules = campaign.BattleReportRules,
+                    StandardBattleResultQuestions = campaign.StandardBattleResultQuestions,
                     ArmyEscalations = campaign.ArmyEscalations,
                 };
             }
@@ -253,7 +253,7 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
         var catalogJson = Encoding.UTF8.GetString(catalogBytes);
         var settingsJson = Encoding.UTF8.GetString(settingsBytes);
         var overlayJson = overlayBytes is null ? null : Encoding.UTF8.GetString(overlayBytes);
-        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(catalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions) = CatalogJson.Deserialize(catalogJson);
         var settings = CampaignPresetSettingsJson.Deserialize(settingsJson);
         var created = DateTimeOffset.UnixEpoch;
         return new StoredCampaign
@@ -313,7 +313,7 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
             RankingObjectivePoints = RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = BattleReportRules,
+            StandardBattleResultQuestions = StandardBattleResultQuestions,
             ArmyEscalations = ArmyEscalations,
             Missions = Missions,
         };

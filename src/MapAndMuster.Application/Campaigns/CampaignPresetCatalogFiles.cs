@@ -61,7 +61,7 @@ internal static class CampaignPresetCatalogFiles
             RankingObjectivePoints = campaign.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = campaign.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = campaign.BattleReportRules,
+            StandardBattleResultQuestions = campaign.StandardBattleResultQuestions,
             ArmyEscalations = campaign.ArmyEscalations,
         };
     }

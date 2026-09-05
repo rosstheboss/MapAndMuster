@@ -102,6 +102,14 @@ type MissionQuestionGroup = FormGroup<{
   kind: FormControl<string>;
   battlePoints: FormControl<number>;
   campaignPoints: FormControl<number>;
+  standardQuestionId: FormControl<string>;
+}>;
+type StandardBattleResultQuestionGroup = FormGroup<{
+  id: FormControl<string>;
+  prompt: FormControl<string>;
+  kind: FormControl<string>;
+  battlePoints: FormControl<number>;
+  campaignPoints: FormControl<number>;
 }>;
 type MissionGroup = FormGroup<{
   id: FormControl<string>;
@@ -251,6 +259,7 @@ const TOP_LEVEL_SECTION_IDS = [
   'privateObjectives',
   'allies',
   'factions',
+  'standardBattleResultQuestions',
   'missions',
   'terrain',
   'structures',
@@ -275,6 +284,7 @@ const SETUP_INDEX_SECTIONS: readonly {
   { id: 'privateObjectives', label: 'Private objectives', required: false },
   { id: 'allies', label: 'Ally groups', required: false },
   { id: 'factions', label: 'Factions', required: true },
+  { id: 'standardBattleResultQuestions', label: 'Standard battle result questions', required: false },
   { id: 'missions', label: 'Missions', required: false },
   { id: 'terrain', label: 'Terrain types', required: true },
   { id: 'structures', label: 'Structures', required: false },
@@ -437,6 +447,7 @@ export class CampaignSetupPage {
     structureTypes: this.formBuilder.array<StructureGroup>(this.createDefaultStructureGroups()),
     itemObjectiveTypes: this.formBuilder.array<ItemObjectiveGroup>([]),
     specialRules: this.formBuilder.array<SpecialRuleGroup>([]),
+    standardBattleResultQuestions: this.formBuilder.array<StandardBattleResultQuestionGroup>([]),
     missions: this.formBuilder.array<MissionGroup>([]),
     forceStatuses: this.formBuilder.array<ForceStatusGroup>([]),
     privateObjectiveTypes: this.formBuilder.array<PrivateObjectiveGroup>([]),
@@ -456,10 +467,6 @@ export class CampaignSetupPage {
     alliedRelicControlCampaignPoints: [0, [minValue(0), maxValue(999)]],
     splitForceSupplyPenaltyPercent: [HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_VALUE, [minValue(0), maxValue(100)]],
     splitForceSupplyPenaltyIsPercent: [HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_IS_PERCENT],
-    alwaysAskGeneralKill: [true],
-    alwaysAskSupplyLineDestroyed: [true],
-    generalKillCampaignPoints: [1, [minValue(0), maxValue(999)]],
-    supplyLineDestroyedCampaignPoints: [1, [minValue(0), maxValue(999)]],
     roundEscalations: this.formBuilder.array<RoundEscalationGroup>(
       defaultArmyEscalations(8).map((row) => this.createRoundEscalationGroup(row)),
     ),
@@ -550,6 +557,10 @@ export class CampaignSetupPage {
     return this.form.controls.specialRules;
   }
 
+  protected get standardBattleResultQuestions(): FormArray<StandardBattleResultQuestionGroup> {
+    return this.form.controls.standardBattleResultQuestions;
+  }
+
   protected get missions(): FormArray<MissionGroup> {
     return this.form.controls.missions;
   }
@@ -632,6 +643,105 @@ export class CampaignSetupPage {
     }
 
     mission.controls.resultQuestions.push(this.createMissionQuestionGroup());
+  }
+
+  protected unusedStandardQuestions(mission: MissionGroup): StandardBattleResultQuestionGroup[] {
+    const used = new Set(
+      mission.controls.resultQuestions.controls
+        .map((question) => question.controls.standardQuestionId.value)
+        .filter((id) => id.length > 0),
+    );
+    return this.standardBattleResultQuestions.controls.filter(
+      (question) => question.controls.prompt.value.trim().length > 0 && !used.has(question.controls.id.value),
+    );
+  }
+
+  protected onAddStandardQuestionSelected(mission: MissionGroup, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const id = select.value;
+    select.value = '';
+    if (!id) {
+      return;
+    }
+
+    this.addStandardQuestionToMission(mission, id);
+  }
+
+  protected addStandardQuestionToMission(mission: MissionGroup, standardId: string): void {
+    if (mission.controls.resultQuestions.length >= 20) {
+      return;
+    }
+
+    const standard = this.standardBattleResultQuestions.controls.find(
+      (question) => question.controls.id.value === standardId,
+    );
+    if (
+      !standard ||
+      this.unusedStandardQuestions(mission).every((question) => question.controls.id.value !== standardId)
+    ) {
+      return;
+    }
+
+    mission.controls.resultQuestions.push(
+      this.createMissionQuestionGroup(
+        undefined,
+        standard.controls.prompt.value,
+        standard.controls.kind.value,
+        Number(standard.controls.battlePoints.value) || 0,
+        Number(standard.controls.campaignPoints.value) || 0,
+        standardId,
+      ),
+    );
+  }
+
+  protected addStandardQuestionToAllMissions(standardId: string): void {
+    for (const mission of this.missions.controls) {
+      if (!mission.controls.name.value.trim()) {
+        continue;
+      }
+
+      this.addStandardQuestionToMission(mission, standardId);
+    }
+  }
+
+  protected addStandardBattleResultQuestion(): void {
+    if (this.standardBattleResultQuestions.length >= 80) {
+      return;
+    }
+
+    this.standardBattleResultQuestions.push(this.createStandardBattleResultQuestionGroup());
+  }
+
+  protected removeStandardBattleResultQuestion(index: number): void {
+    const id = this.standardBattleResultQuestions.at(index).controls.id.value;
+    this.standardBattleResultQuestions.removeAt(index);
+    for (const mission of this.missions.controls) {
+      const questions = mission.controls.resultQuestions;
+      for (let questionIndex = questions.length - 1; questionIndex >= 0; questionIndex -= 1) {
+        if (questions.at(questionIndex).controls.standardQuestionId.value === id) {
+          questions.removeAt(questionIndex);
+        }
+      }
+    }
+  }
+
+  protected onStandardQuestionEdited(index: number): void {
+    const standard = this.standardBattleResultQuestions.at(index);
+    const id = standard.controls.id.value;
+    for (const mission of this.missions.controls) {
+      for (const question of mission.controls.resultQuestions.controls) {
+        if (question.controls.standardQuestionId.value !== id) {
+          continue;
+        }
+
+        question.controls.prompt.setValue(standard.controls.prompt.value);
+        question.controls.kind.setValue(standard.controls.kind.value);
+      }
+    }
+  }
+
+  protected isLinkedStandardQuestion(question: MissionQuestionGroup): boolean {
+    return question.controls.standardQuestionId.value.length > 0;
   }
 
   protected removeMissionQuestion(mission: MissionGroup, index: number): void {
@@ -880,6 +990,7 @@ export class CampaignSetupPage {
         this.createSpecialRuleGroup(undefined, rule.name, rule.description, rule.effectKey),
       ),
     );
+    this.replaceArray(this.standardBattleResultQuestions, []);
     this.replaceArray(
       this.forceStatuses,
       copy.forceStatuses.map((status) =>
@@ -988,6 +1099,7 @@ export class CampaignSetupPage {
         this.createSpecialRuleGroup(rule.id, rule.name, rule.text, rule.effectKey ?? undefined),
       ),
     );
+    this.applyStandardBattleResultQuestions(campaign);
     this.replaceArray(
       this.forceStatuses,
       (campaign.forceStatuses ?? []).map((status) =>
@@ -1147,10 +1259,7 @@ export class CampaignSetupPage {
     this.form.controls.pointsPerTerritoryCampaignPoints.setValue(campaign.pointsPerTerritoryCampaignPoints ?? 0);
     this.form.controls.alliedRelicControlCampaignPoints.setValue(campaign.alliedRelicControlCampaignPoints ?? 0);
     this.applySplitForcePenalty(campaign);
-    this.form.controls.alwaysAskGeneralKill.setValue(campaign.alwaysAskGeneralKill !== false);
-    this.form.controls.alwaysAskSupplyLineDestroyed.setValue(campaign.alwaysAskSupplyLineDestroyed !== false);
-    this.form.controls.generalKillCampaignPoints.setValue(campaign.generalKillCampaignPoints ?? 1);
-    this.form.controls.supplyLineDestroyedCampaignPoints.setValue(campaign.supplyLineDestroyedCampaignPoints ?? 1);
+    this.applyStandardBattleResultQuestions(campaign);
     this.applyRoundEscalations(campaign.roundEscalations, campaign.roundCount);
     this.replaceArray(
       this.phases,
@@ -1176,10 +1285,7 @@ export class CampaignSetupPage {
     this.form.controls.allowNegativeDifferential.setValue(false);
     this.form.controls.splitForceSupplyPenaltyPercent.setValue(HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_VALUE);
     this.form.controls.splitForceSupplyPenaltyIsPercent.setValue(HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_IS_PERCENT);
-    this.form.controls.alwaysAskGeneralKill.setValue(true);
-    this.form.controls.alwaysAskSupplyLineDestroyed.setValue(true);
-    this.form.controls.generalKillCampaignPoints.setValue(1);
-    this.form.controls.supplyLineDestroyedCampaignPoints.setValue(1);
+    this.replaceArray(this.standardBattleResultQuestions, []);
     this.replaceArray(
       this.roundEscalations,
       huntInEstaliaArmyEscalations(Number(this.form.controls.roundCount.value) || 8).map((row) =>
@@ -2400,10 +2506,7 @@ export class CampaignSetupPage {
       this.form.controls.pointsPerTerritoryCampaignPoints.setValue(campaign.pointsPerTerritoryCampaignPoints ?? 0);
       this.form.controls.alliedRelicControlCampaignPoints.setValue(campaign.alliedRelicControlCampaignPoints ?? 0);
       this.applySplitForcePenalty(campaign);
-      this.form.controls.alwaysAskGeneralKill.setValue(campaign.alwaysAskGeneralKill !== false);
-      this.form.controls.alwaysAskSupplyLineDestroyed.setValue(campaign.alwaysAskSupplyLineDestroyed !== false);
-      this.form.controls.generalKillCampaignPoints.setValue(campaign.generalKillCampaignPoints ?? 1);
-      this.form.controls.supplyLineDestroyedCampaignPoints.setValue(campaign.supplyLineDestroyedCampaignPoints ?? 1);
+      this.applyStandardBattleResultQuestions(campaign);
       this.applyRoundEscalations(campaign.roundEscalations, campaign.roundCount);
       this.replaceArray(
         this.phases,
@@ -2583,6 +2686,7 @@ export class CampaignSetupPage {
     kind = 'Boolean',
     battlePoints = 0,
     campaignPoints = 0,
+    standardQuestionId = '',
   ): MissionQuestionGroup {
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
@@ -2590,7 +2694,39 @@ export class CampaignSetupPage {
       kind: [kind],
       battlePoints: [battlePoints, [minValue(0), maxValue(999)]],
       campaignPoints: [campaignPoints, [minValue(0), maxValue(999)]],
+      standardQuestionId: [standardQuestionId],
     });
+  }
+
+  private createStandardBattleResultQuestionGroup(
+    id?: string,
+    prompt = '',
+    kind = 'Boolean',
+    battlePoints = 0,
+    campaignPoints = 0,
+  ): StandardBattleResultQuestionGroup {
+    return this.formBuilder.nonNullable.group({
+      id: [id ?? this.newId()],
+      prompt: [prompt, maxLength(240)],
+      kind: [kind],
+      battlePoints: [battlePoints, [minValue(0), maxValue(999)]],
+      campaignPoints: [campaignPoints, [minValue(0), maxValue(999)]],
+    });
+  }
+
+  private applyStandardBattleResultQuestions(campaign: CampaignDetail): void {
+    this.replaceArray(
+      this.standardBattleResultQuestions,
+      (campaign.standardBattleResultQuestions ?? []).map((question) =>
+        this.createStandardBattleResultQuestionGroup(
+          question.id,
+          question.prompt,
+          question.kind,
+          question.battlePoints,
+          question.campaignPoints,
+        ),
+      ),
+    );
   }
 
   private applyRoundEscalations(
@@ -2747,6 +2883,7 @@ export class CampaignSetupPage {
           question.kind,
           question.battlePoints,
           question.campaignPoints,
+          question.standardQuestionId ?? '',
         ),
       ),
     );
@@ -3115,10 +3252,6 @@ export class CampaignSetupPage {
             this.form.controls.mostStructurePointsCampaignPoints,
             this.form.controls.pointsPerTerritoryCampaignPoints,
             this.form.controls.alliedRelicControlCampaignPoints,
-            this.form.controls.alwaysAskGeneralKill,
-            this.form.controls.alwaysAskSupplyLineDestroyed,
-            this.form.controls.generalKillCampaignPoints,
-            this.form.controls.supplyLineDestroyedCampaignPoints,
           ])
         );
       case 'privateObjectives':
@@ -3127,6 +3260,8 @@ export class CampaignSetupPage {
         return this.allyGroups.dirty || this.factions.controls.some((faction) => faction.controls.allyGroupId.dirty);
       case 'factions':
         return this.factions.dirty || this.flagImages.size > 0;
+      case 'standardBattleResultQuestions':
+        return this.standardBattleResultQuestions.dirty;
       case 'missions':
         return this.missions.dirty || this.missions.controls.some((mission) => this.missionGroupHasPending(mission));
       case 'terrain':
@@ -3160,6 +3295,8 @@ export class CampaignSetupPage {
     switch (prefix) {
       case 'special-rule':
         return this.arrayControlDirty(this.specialRules, index);
+      case 'standard-question':
+        return this.arrayControlDirty(this.standardBattleResultQuestions, index);
       case 'force-status':
         return this.arrayControlDirty(this.forceStatuses, index);
       case 'public-objective':
@@ -3492,6 +3629,15 @@ export class CampaignSetupPage {
       structureTypes,
       itemObjectiveTypes,
       specialRules,
+      standardBattleResultQuestions: value.standardBattleResultQuestions
+        .filter((question) => question.prompt.trim().length > 0)
+        .map((question) => ({
+          id: question.id,
+          prompt: question.prompt.trim(),
+          kind: question.kind,
+          battlePoints: Number(question.battlePoints) || 0,
+          campaignPoints: Number(question.campaignPoints) || 0,
+        })),
       missions: this.mergedMissionPayloads(value),
       forceStatuses,
       privateObjectiveTypes,
@@ -3511,10 +3657,6 @@ export class CampaignSetupPage {
       alliedRelicControlCampaignPoints: Number(value.alliedRelicControlCampaignPoints) || 0,
       splitForceSupplyPenaltyPercent: Number(value.splitForceSupplyPenaltyPercent) || 0,
       splitForceSupplyPenaltyIsPercent: Boolean(value.splitForceSupplyPenaltyIsPercent),
-      alwaysAskGeneralKill: Boolean(value.alwaysAskGeneralKill),
-      alwaysAskSupplyLineDestroyed: Boolean(value.alwaysAskSupplyLineDestroyed),
-      generalKillCampaignPoints: Number(value.generalKillCampaignPoints) || 0,
-      supplyLineDestroyedCampaignPoints: Number(value.supplyLineDestroyedCampaignPoints) || 0,
       roundEscalations: value.roundEscalations.map((row) => ({
         roundNumber: Number(row.roundNumber),
         maxArmyPoints: Number(row.maxArmyPoints) || 0,
@@ -3540,7 +3682,14 @@ export class CampaignSetupPage {
     name: string;
     url: string;
     clearFile: boolean;
-    resultQuestions: { id: string; prompt: string; kind: string; battlePoints: number; campaignPoints: number }[];
+    resultQuestions: {
+      id: string;
+      prompt: string;
+      kind: string;
+      battlePoints: number;
+      campaignPoints: number;
+      standardQuestionId?: string;
+    }[];
     isAttackerDefender?: boolean;
     hasArmyPointsAdvantage?: boolean;
     armyPointsAdvantageSide?: string;
@@ -3557,13 +3706,14 @@ export class CampaignSetupPage {
       url: hasPendingFile ? null : mission.url.trim() || null,
       clearFile: hasPendingFile ? false : mission.clearFile,
       resultQuestions: mission.resultQuestions
-        .filter((question) => question.prompt.trim().length > 0)
+        .filter((question) => question.prompt.trim().length > 0 || (question.standardQuestionId ?? '').length > 0)
         .map((question) => ({
           id: question.id,
           prompt: question.prompt.trim(),
           kind: question.kind,
           battlePoints: Number(question.battlePoints) || 0,
           campaignPoints: Number(question.campaignPoints) || 0,
+          standardQuestionId: (question.standardQuestionId ?? '').length > 0 ? question.standardQuestionId : null,
         })),
       isAttackerDefender: Boolean(mission.isAttackerDefender),
       hasArmyPointsAdvantage: Boolean(mission.hasArmyPointsAdvantage),
@@ -3581,7 +3731,14 @@ export class CampaignSetupPage {
     name: string;
     url: string;
     clearFile: boolean;
-    resultQuestions: { id: string; prompt: string; kind: string; battlePoints: number; campaignPoints: number }[];
+    resultQuestions: {
+      id: string;
+      prompt: string;
+      kind: string;
+      battlePoints: number;
+      campaignPoints: number;
+      standardQuestionId?: string;
+    }[];
   }): SaveMissionPayload {
     const catalogById = this.missions.controls.find((item) => item.controls.id.value === mission.id);
     if (catalogById) {
@@ -3923,6 +4080,33 @@ export class CampaignSetupPage {
       }
 
       usedSpecialRuleNames.add(key);
+    });
+
+    const usedStandardQuestionPrompts = new Set<string>();
+    this.standardBattleResultQuestions.controls.forEach((question, index) => {
+      const prompt = question.controls.prompt.value.trim();
+      if (!prompt) {
+        return;
+      }
+
+      const promptMessage = describeControlError(
+        question.controls.prompt,
+        `Standard battle result question ${index + 1}`,
+      );
+      if (promptMessage) {
+        failures.push(promptMessage);
+        sections.add('standardBattleResultQuestions');
+        sections.add(`standard-question-${index}`);
+      }
+
+      const key = prompt.toLowerCase();
+      if (usedStandardQuestionPrompts.has(key)) {
+        failures.push(`Standard battle result question ${index + 1} name must be unique.`);
+        sections.add('standardBattleResultQuestions');
+        sections.add(`standard-question-${index}`);
+      }
+
+      usedStandardQuestionPrompts.add(key);
     });
 
     const usedForceStatusNames = new Set<string>();

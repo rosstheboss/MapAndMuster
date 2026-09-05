@@ -673,7 +673,7 @@ file sealed class FakePresetStore : ICampaignPresetStore
             RankingObjectivePoints = campaign.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = campaign.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = campaign.BattleReportRules,
+            StandardBattleResultQuestions = campaign.StandardBattleResultQuestions,
             ArmyEscalations = campaign.ArmyEscalations,
             Missions = campaign.Missions,
         };
@@ -890,7 +890,7 @@ file sealed class PresetCampaignStore : ICampaignStore
             StructureTypes = [],
             SplitForceSupplyPenaltyPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue,
             SplitForceSupplyPenaltyIsPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = BattleReportRulesSetup.Default,
+            StandardBattleResultQuestions = [],
             ArmyEscalations = HuntInEstaliaDefaults.ArmyEscalations(8),
         };
     }
@@ -973,7 +973,7 @@ file sealed class PresetCampaignStore : ICampaignStore
             RankingObjectivePoints = campaign.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = campaign.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = campaign.BattleReportRules,
+            StandardBattleResultQuestions = campaign.StandardBattleResultQuestions,
             ArmyEscalations = campaign.ArmyEscalations,
         };
     }

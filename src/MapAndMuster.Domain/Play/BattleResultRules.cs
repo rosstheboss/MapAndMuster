@@ -92,27 +92,15 @@ public static class BattleResultRules
     }
 
     /// <summary>
-    /// Extra campaign points from general kills, supply-line destruction, and scored mission questions.
+    /// Extra campaign points from scored mission questions.
     /// </summary>
     public static int ExtraCampaignPoints(
         BattleParticipantReport report,
-        BattleReportRulesSetup rules,
         IReadOnlyList<MissionResultQuestionSetup> questions)
     {
         ArgumentNullException.ThrowIfNull(report);
-        ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(questions);
         var total = 0;
-        if (report.KilledEnemyGeneral)
-        {
-            total += rules.GeneralKillCampaignPoints;
-        }
-
-        if (report.DestroyedEnemySupplyLine)
-        {
-            total += rules.SupplyLineDestroyedCampaignPoints;
-        }
-
         foreach (var question in questions)
         {
             var answer = report.Answers.FirstOrDefault(item => item.QuestionId == question.Id);
@@ -151,8 +139,6 @@ public static class BattleResultRules
                 report.ArmyPoints,
                 report.DifferentialBattlePoints,
                 report.BonusBattlePoints,
-                report.KilledEnemyGeneral,
-                report.DestroyedEnemySupplyLine,
                 [
                     .. report.Answers.Select(answer =>
                     {
@@ -238,8 +224,6 @@ public static class BattleResultRules
             || left.ArmyPoints != right.ArmyPoints
             || left.DifferentialBattlePoints != right.DifferentialBattlePoints
             || left.BonusBattlePoints != right.BonusBattlePoints
-            || left.KilledEnemyGeneral != right.KilledEnemyGeneral
-            || left.DestroyedEnemySupplyLine != right.DestroyedEnemySupplyLine
             || left.SupplyCostingUnitCount != right.SupplyCostingUnitCount
             || left.UsedExtraBlackPowder != right.UsedExtraBlackPowder
             || left.MagicalSupplyRerolls != right.MagicalSupplyRerolls

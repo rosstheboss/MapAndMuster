@@ -55,7 +55,7 @@ public sealed class BattleResultRulesTests
     }
 
     [Fact]
-    public void ExtraCampaignPointsIncludeGeneralKillAndBooleanQuestions()
+    public void ExtraCampaignPointsIncludeBooleanQuestions()
     {
         var question = new MissionResultQuestionSetup(Question, "Held the shrine?", MissionResultQuestionKind.Boolean, 2, 3);
         var report = new BattleParticipantReport(
@@ -64,15 +64,9 @@ public sealed class BattleResultRulesTests
             1500,
             4,
             1,
-            killedEnemyGeneral: true,
-            destroyedEnemySupplyLine: true,
             [new BattleQuestionAnswer(Question, true, null)]);
 
-        Assert.Equal(
-            HuntInEstaliaDefaults.GeneralKillCampaignPoints
-            + HuntInEstaliaDefaults.SupplyLineDestroyedCampaignPoints
-            + 3,
-            BattleResultRules.ExtraCampaignPoints(report, BattleReportRulesSetup.Default, [question]));
+        Assert.Equal(3, BattleResultRules.ExtraCampaignPoints(report, [question]));
     }
 
     [Fact]
@@ -139,8 +133,6 @@ public sealed class BattleResultRulesTests
             1000,
             differential,
             bonus,
-            false,
-            false,
             [],
             supplyCostingUnitCount,
             usedExtraBlackPowder: usedExtraBlackPowder,

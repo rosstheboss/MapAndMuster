@@ -46,7 +46,14 @@ public sealed class GetCampaignPlayHandler
         bool isAdministrator,
         CancellationToken cancellationToken)
     {
-        var loaded = await CampaignPlayPipeline.LoadAsync(_campaigns, _clock, campaignId, userId, isAdministrator, cancellationToken)
+        var loaded = await CampaignPlayPipeline.LoadAsync(
+            _campaigns,
+            _clock,
+            campaignId,
+            userId,
+            isAdministrator,
+            cancellationToken,
+            _accounts)
             .ConfigureAwait(false);
         if (!loaded.IsSuccess || loaded.Campaign is null)
         {
@@ -170,10 +177,10 @@ public sealed class CommitOrdersHandler
     }
 
     /// <summary>Commits drafts.</summary>
-    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(PlayCommand command, CancellationToken cancellationToken)
+    public async Task<OperationResult<CampaignPlayDetail>> HandleAsync(PlayCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        return CampaignPlayPipeline.MutateAsync(
+        var result = await CampaignPlayPipeline.MutateAsync(
             _campaigns,
             _clock,
             _accounts,
@@ -192,7 +199,10 @@ public sealed class CommitOrdersHandler
                     out var outcome,
                     out var error,
                     CampaignPlayPipeline.ForceStatuses(campaign),
-                    CampaignPlayCatalog.SpecialRules(campaign)))
+                    CampaignPlayCatalog.SpecialRules(campaign),
+                    CampaignPlayCatalog.TerrainSetups(campaign),
+                    CampaignPlayCatalog.StructureSetups(campaign),
+                    CampaignPlayCatalog.PickIndex))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -200,7 +210,19 @@ public sealed class CommitOrdersHandler
                 return PlayMutation.FromOutcome(outcome!);
             },
             cancellationToken,
-            _notifications);
+            _notifications).ConfigureAwait(false);
+        if (result.IsSuccess
+            || (result.ErrorCode != ErrorCodes.ConcurrencyConflict
+                && result.ErrorCode != "order.already_committed"
+                && result.ErrorCode != "order.window.closed"))
+        {
+            return result;
+        }
+
+        var current = await new GetCampaignPlayHandler(_campaigns, _clock, _accounts, _notifications)
+            .HandleAsync(command.CampaignId, command.UserId, command.IsAdministrator, cancellationToken)
+            .ConfigureAwait(false);
+        return current.IsSuccess ? current : result;
     }
 }
 
@@ -310,6 +332,7 @@ public sealed class SubmitBattleResultHandler
                     return PlayMutation.Fail(reportError);
                 }
 
+                var battle = state.Battles.FirstOrDefault(item => item.Id == command.BattleId);
                 if (!CampaignPlayRules.TrySubmitBattleResult(
                     state,
                     command.UserId,
@@ -323,7 +346,10 @@ public sealed class SubmitBattleResultHandler
                     command.LoserScore,
                     CampaignPlayPipeline.ForceStatuses(campaign),
                     reports,
-                    CampaignPlayCatalog.MissionQuestions(campaign, state.Battles.FirstOrDefault(item => item.Id == command.BattleId)?.TerritoryId ?? Guid.Empty),
+                    CampaignPlayCatalog.MissionQuestions(
+                        campaign,
+                        battle?.TerritoryId ?? Guid.Empty,
+                        battle?.MissionId),
                     isStaff,
                     map,
                     CampaignPlayCatalog.Supply(campaign),
@@ -470,6 +496,7 @@ public sealed class ResolveBattleHandler
                     return PlayMutation.Fail(reportError);
                 }
 
+                var battle = state.Battles.FirstOrDefault(item => item.Id == command.BattleId);
                 if (!CampaignPlayRules.TryResolveBattle(
                     state,
                     command.UserId,
@@ -483,7 +510,10 @@ public sealed class ResolveBattleHandler
                     command.LoserScore,
                     CampaignPlayPipeline.ForceStatuses(campaign),
                     reports,
-                    CampaignPlayCatalog.MissionQuestions(campaign, state.Battles.FirstOrDefault(item => item.Id == command.BattleId)?.TerritoryId ?? Guid.Empty),
+                    CampaignPlayCatalog.MissionQuestions(
+                        campaign,
+                        battle?.TerritoryId ?? Guid.Empty,
+                        battle?.MissionId),
                     map,
                     CampaignPlayCatalog.Supply(campaign),
                     CampaignPlayPipeline.AllyGroups(campaign),
@@ -544,7 +574,9 @@ public sealed class SubmitRetreatHandler
                     utcNow,
                     out var outcome,
                     out var error,
-                    CampaignPlayPipeline.ForceStatuses(campaign)))
+                    CampaignPlayPipeline.ForceStatuses(campaign),
+                    CampaignPlayCatalog.SpecialRules(campaign),
+                    CampaignPlayPipeline.AllyGroups(campaign)))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -607,7 +639,8 @@ public sealed class SubmitSurrenderHandler
                     out var error,
                     CampaignPlayPipeline.ForceStatuses(campaign),
                     CampaignPlayPipeline.AllyGroups(campaign),
-                    campaign.BattleScoring))
+                    campaign.BattleScoring,
+                    CampaignPlayCatalog.SpecialRules(campaign)))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -935,7 +968,7 @@ public sealed class ChooseFactionHandler
             RankingObjectivePoints = existing.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = existing.BattleReportRules,
+            StandardBattleResultQuestions = existing.StandardBattleResultQuestions,
             ArmyEscalations = existing.ArmyEscalations,
             PlayState = play,
         };
@@ -1251,7 +1284,8 @@ public sealed class SetPublicObjectiveAwardHandler
                 return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
             },
             cancellationToken,
-            _notifications);
+            _notifications,
+            allowWhenClosed: true);
     }
 }
 
@@ -1336,7 +1370,8 @@ public sealed class GrantPrivateObjectiveHandler
                 return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
             },
             cancellationToken,
-            _notifications);
+            _notifications,
+            allowWhenClosed: true);
     }
 }
 
@@ -1492,7 +1527,8 @@ public sealed class ModeratePrivateObjectiveHandler
                 return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);
             },
             cancellationToken,
-            _notifications);
+            _notifications,
+            allowWhenClosed: true);
     }
 }
 

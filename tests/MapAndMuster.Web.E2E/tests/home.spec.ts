@@ -102,7 +102,7 @@ test('home shows the signed-in player and logout', async ({ page }) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ page: 1, totalPages: 0, article: null }),
+      body: JSON.stringify({ page: 1, totalPages: 0, articles: [], article: null }),
     });
   });
 

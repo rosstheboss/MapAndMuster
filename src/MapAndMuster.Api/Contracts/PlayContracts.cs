@@ -79,6 +79,9 @@ public sealed class CampaignPlayResponse
     /// <summary>Gets whether the viewer is committed in the open action window.</summary>
     public required bool IsCommitted { get; init; }
 
+    /// <summary>Gets the viewer's current supply, when the viewer is a player with a force.</summary>
+    public PlayerSupplyViewResponse? ViewerSupply { get; init; }
+
     /// <summary>Gets the round count.</summary>
     public required int RoundCount { get; init; }
 
@@ -150,6 +153,25 @@ public sealed class CampaignPlayResponse
 
     /// <summary>Gets players who still need a faction.</summary>
     public required IReadOnlyList<string> PlayersMissingFaction { get; init; }
+
+    /// <summary>Gets current play-map ownership used to paint flags after resolution.</summary>
+    public IReadOnlyList<PlayMapTerritoryResponse> MapTerritories { get; init; } = [];
+}
+
+/// <summary>Current ownership and structure for a play-map territory.</summary>
+public sealed class PlayMapTerritoryResponse
+{
+    /// <summary>Gets the territory identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the owning faction, or null when Neutral.</summary>
+    public Guid? OwnerFactionId { get; init; }
+
+    /// <summary>Gets the structure type when one is present.</summary>
+    public Guid? StructureTypeId { get; init; }
+
+    /// <summary>Gets the structure condition name.</summary>
+    public string? StructureCondition { get; init; }
 }
 
 /// <summary>A remaining phase window.</summary>
@@ -233,6 +255,9 @@ public sealed class PlayForceResponse
 
     /// <summary>Gets tabletop or campaign reminders from assigned special rules.</summary>
     public IReadOnlyList<string> BattleReminders { get; init; } = [];
+
+    /// <summary>Gets this force's connected-chain supply when the viewer may see it.</summary>
+    public PlayerSupplyViewResponse? Supply { get; init; }
 }
 
 /// <summary>A two-territory Move hop.</summary>
@@ -488,12 +513,6 @@ public sealed class BattleParticipantReportResponse
     /// <summary>Gets optional per-category supply amounts.</summary>
     public IReadOnlyList<ArmyListSupplyCategoryResponse> SupplyCategories { get; init; } = [];
 
-    /// <summary>Gets whether the reporter killed the opponent's general.</summary>
-    public bool KilledEnemyGeneral { get; init; }
-
-    /// <summary>Gets whether the reporter destroyed the enemy supply line.</summary>
-    public bool DestroyedEnemySupplyLine { get; init; }
-
     /// <summary>Gets answers to extra mission questions.</summary>
     public IReadOnlyList<BattleQuestionAnswerResponse> Answers { get; init; } = [];
 }
@@ -565,6 +584,9 @@ public sealed class PlayBattleForceSupplyResponse
 
     /// <summary>Gets whether the controlling player currently has split forces.</summary>
     public bool IsSplit { get; init; }
+
+    /// <summary>Gets per-source lines that sum to the displayed current total.</summary>
+    public IReadOnlyList<SupplyContributionResponse> Contributions { get; init; } = [];
 }
 
 /// <summary>Request to save a draft order.</summary>
@@ -733,12 +755,6 @@ public sealed class BattleParticipantReportRequest
 
     /// <summary>Gets optional per-category supply amounts.</summary>
     public IReadOnlyList<ArmyListSupplyCategoryRequest>? SupplyCategories { get; init; }
-
-    /// <summary>Gets whether the reporter killed the opponent's general.</summary>
-    public bool KilledEnemyGeneral { get; init; }
-
-    /// <summary>Gets whether the reporter destroyed the enemy supply line.</summary>
-    public bool DestroyedEnemySupplyLine { get; init; }
 
     /// <summary>Gets answers to extra mission questions.</summary>
     public IReadOnlyList<BattleQuestionAnswerRequest>? Answers { get; init; }
@@ -982,6 +998,7 @@ public static class PlayResponses
             FactionId = detail.FactionId,
             CanChooseFaction = detail.CanChooseFaction,
             IsCommitted = detail.IsCommitted,
+            ViewerSupply = CampaignResponses.FromSupply(detail.ViewerSupply),
             RoundCount = detail.RoundCount,
             MinRoundCount = detail.MinRoundCount,
             RemainingWindows =
@@ -1192,6 +1209,7 @@ public static class PlayResponses
                     CanUseMagicalSupply = force.CanUseMagicalSupply,
                     HiddenRelicNearby = force.HiddenRelicNearby,
                     BattleReminders = force.BattleReminders,
+                    Supply = CampaignResponses.FromSupply(force.Supply),
                 }),
             ],
             MyDrafts =
@@ -1289,6 +1307,7 @@ public static class PlayResponses
                             AlliedArmyPoints = item.AlliedArmyPoints,
                             FreeCharacterCount = item.FreeCharacterCount,
                             IsSplit = item.IsSplit,
+                            Contributions = CampaignResponses.FromContributions(item.Contributions),
                         }),
                     ],
                     CanStaffConfirm = battle.CanStaffConfirm,
@@ -1302,6 +1321,16 @@ public static class PlayResponses
                 .. detail.Log.Select(FromLogEntry),
             ],
             PlayersMissingFaction = detail.PlayersMissingFaction,
+            MapTerritories =
+            [
+                .. detail.MapTerritories.Select(static territory => new PlayMapTerritoryResponse
+                {
+                    Id = territory.Id,
+                    OwnerFactionId = territory.OwnerFactionId,
+                    StructureTypeId = territory.StructureTypeId,
+                    StructureCondition = territory.StructureCondition,
+                }),
+            ],
         };
     }
 
@@ -1365,8 +1394,6 @@ public static class PlayResponses
                                 CostsSupply = category.CostsSupply,
                             }),
                         ],
-                        KilledEnemyGeneral = report.KilledEnemyGeneral,
-                        DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
                         Answers =
                         [
                             .. report.Answers.Select(static answer => new BattleQuestionAnswerResponse
@@ -1410,8 +1437,6 @@ public static class PlayResponses
                         CostsSupply = category.CostsSupply,
                     })
                     .ToArray(),
-                KilledEnemyGeneral = report.KilledEnemyGeneral,
-                DestroyedEnemySupplyLine = report.DestroyedEnemySupplyLine,
                 Answers = report.Answers?
                     .Select(static answer => new BattleQuestionAnswerInput
                     {

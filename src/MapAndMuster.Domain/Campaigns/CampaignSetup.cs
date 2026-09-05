@@ -32,7 +32,7 @@ public sealed class CampaignSetup
     /// <param name="forceStatuses">Configured force statuses other than Normal. Empty means none.</param>
     /// <param name="splitForceSupplyPenaltyPercent">Supply subtracted from map supply when a player has split forces. Percent or raw, depending on <paramref name="splitForceSupplyPenaltyIsPercent"/>.</param>
     /// <param name="splitForceSupplyPenaltyIsPercent">Whether the split-force penalty is a percent of map supply. The default is a raw amount.</param>
-    /// <param name="battleReportRules">Always-asked battle-report questions and their campaign points.</param>
+    /// <param name="standardBattleResultQuestions">Reusable battle-result questions. Empty means none.</param>
     /// <param name="missions">Reusable missions. Empty means only nested terrain and structure missions.</param>
     public CampaignSetup(
         string name,
@@ -59,7 +59,7 @@ public sealed class CampaignSetup
         IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
         int? splitForceSupplyPenaltyPercent = null,
         bool splitForceSupplyPenaltyIsPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent,
-        BattleReportRulesSetup? battleReportRules = null,
+        IReadOnlyList<StandardBattleResultQuestionSetup>? standardBattleResultQuestions = null,
         IReadOnlyList<MissionSetup>? missions = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -95,7 +95,7 @@ public sealed class CampaignSetup
         SplitForceSupplyPenaltyPercent = splitForceSupplyPenaltyPercent
             ?? HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue;
         SplitForceSupplyPenaltyIsPercent = splitForceSupplyPenaltyIsPercent;
-        BattleReportRules = battleReportRules ?? BattleReportRulesSetup.Default;
+        StandardBattleResultQuestions = standardBattleResultQuestions ?? [];
         Missions = missions ?? [];
     }
 
@@ -168,8 +168,8 @@ public sealed class CampaignSetup
     /// <summary>Gets whether the split-force supply penalty is a percent of map supply.</summary>
     public bool SplitForceSupplyPenaltyIsPercent { get; }
 
-    /// <summary>Gets always-asked battle-report questions and their campaign points.</summary>
-    public BattleReportRulesSetup BattleReportRules { get; }
+    /// <summary>Gets reusable battle-result questions. Empty means none.</summary>
+    public IReadOnlyList<StandardBattleResultQuestionSetup> StandardBattleResultQuestions { get; }
 
     /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
     public IReadOnlyList<MissionSetup> Missions { get; }

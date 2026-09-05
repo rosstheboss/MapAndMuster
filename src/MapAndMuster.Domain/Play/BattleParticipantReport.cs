@@ -14,8 +14,6 @@ public sealed class BattleParticipantReport
         int armyPoints,
         int differentialBattlePoints,
         int bonusBattlePoints,
-        bool killedEnemyGeneral,
-        bool destroyedEnemySupplyLine,
         IReadOnlyList<BattleQuestionAnswer> answers,
         int supplyCostingUnitCount = 0,
         string? armyListText = null,
@@ -37,8 +35,6 @@ public sealed class BattleParticipantReport
         ArmyPoints = armyPoints;
         DifferentialBattlePoints = differentialBattlePoints;
         BonusBattlePoints = bonusBattlePoints;
-        KilledEnemyGeneral = killedEnemyGeneral;
-        DestroyedEnemySupplyLine = destroyedEnemySupplyLine;
         Answers = answers;
         SupplyCostingUnitCount = supplyCostingUnitCount;
         ArmyListText = armyListText;
@@ -63,12 +59,6 @@ public sealed class BattleParticipantReport
 
     /// <summary>Gets bonus battle points from the mission.</summary>
     public int BonusBattlePoints { get; }
-
-    /// <summary>Gets whether the reporter killed the opponent's general.</summary>
-    public bool KilledEnemyGeneral { get; }
-
-    /// <summary>Gets whether the reporter destroyed the enemy supply line.</summary>
-    public bool DestroyedEnemySupplyLine { get; }
 
     /// <summary>Gets answers to the mission's extra questions.</summary>
     public IReadOnlyList<BattleQuestionAnswer> Answers { get; }

@@ -136,12 +136,6 @@ public sealed class BattleParticipantReportInput
     /// <summary>Gets optional per-category supply amounts.</summary>
     public IReadOnlyList<ArmyListSupplyCategoryInput>? SupplyCategories { get; init; }
 
-    /// <summary>Gets whether the reporter killed the opponent's general.</summary>
-    public bool KilledEnemyGeneral { get; init; }
-
-    /// <summary>Gets whether the reporter destroyed the enemy supply line.</summary>
-    public bool DestroyedEnemySupplyLine { get; init; }
-
     /// <summary>Gets answers to extra mission questions.</summary>
     public IReadOnlyList<BattleQuestionAnswerInput>? Answers { get; init; }
 }
@@ -391,6 +385,9 @@ public sealed class CampaignPlayDetail
     /// <summary>Gets whether the viewer is committed in the open action window.</summary>
     public required bool IsCommitted { get; init; }
 
+    /// <summary>Gets the viewer's current supply, when the viewer is a player with a force.</summary>
+    public Campaigns.PlayerSupplyViewDetail? ViewerSupply { get; init; }
+
     /// <summary>Gets the round count.</summary>
     public required int RoundCount { get; init; }
 
@@ -462,6 +459,25 @@ public sealed class CampaignPlayDetail
 
     /// <summary>Gets players who still need a faction.</summary>
     public required IReadOnlyList<string> PlayersMissingFaction { get; init; }
+
+    /// <summary>Gets current play-map ownership used to paint flags after resolution.</summary>
+    public IReadOnlyList<PlayMapTerritoryDetail> MapTerritories { get; init; } = [];
+}
+
+/// <summary>Current ownership and structure for a play-map territory.</summary>
+public sealed class PlayMapTerritoryDetail
+{
+    /// <summary>Gets the territory identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the owning faction, or null when Neutral.</summary>
+    public Guid? OwnerFactionId { get; init; }
+
+    /// <summary>Gets the structure type when one is present.</summary>
+    public Guid? StructureTypeId { get; init; }
+
+    /// <summary>Gets the structure condition name.</summary>
+    public string? StructureCondition { get; init; }
 }
 
 /// <summary>A visible item objective on the map or carried by a force.</summary>
@@ -591,6 +607,9 @@ public sealed class PlayForceDetail
 
     /// <summary>Gets tabletop or campaign reminders from assigned special rules.</summary>
     public IReadOnlyList<string> BattleReminders { get; init; } = [];
+
+    /// <summary>Gets this force's connected-chain supply when the viewer may see it.</summary>
+    public Campaigns.PlayerSupplyViewDetail? Supply { get; init; }
 }
 
 /// <summary>A two-territory Move hop.</summary>
@@ -800,12 +819,6 @@ public sealed class BattleParticipantReportDetail
     /// <summary>Gets optional per-category supply amounts.</summary>
     public IReadOnlyList<ArmyListSupplyCategoryDetail> SupplyCategories { get; init; } = [];
 
-    /// <summary>Gets whether the reporter killed the opponent's general.</summary>
-    public bool KilledEnemyGeneral { get; init; }
-
-    /// <summary>Gets whether the reporter destroyed the enemy supply line.</summary>
-    public bool DestroyedEnemySupplyLine { get; init; }
-
     /// <summary>Gets answers to extra mission questions.</summary>
     public IReadOnlyList<BattleQuestionAnswerDetail> Answers { get; init; } = [];
 }
@@ -877,6 +890,9 @@ public sealed class PlayBattleForceSupplyDetail
 
     /// <summary>Gets whether the controlling player currently has split forces.</summary>
     public bool IsSplit { get; init; }
+
+    /// <summary>Gets per-source lines that sum to the displayed current total.</summary>
+    public IReadOnlyList<Campaigns.SupplyContributionDetail> Contributions { get; init; } = [];
 }
 
 /// <summary>A public resolved-action or battle fact. Unrevealed orders are never included.</summary>

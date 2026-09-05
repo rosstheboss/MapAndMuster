@@ -118,7 +118,7 @@
             [attr.aria-expanded]="isOpen('faction')"
             (click)="toggleSection('faction')"
           >
-            {{ campaign.factionId ? 'Your faction' : 'Choose your faction' }}
+            {{ campaign.factionId ? 'Summary' : 'Choose your faction' }}
           </button>
         </h2>
         @if (isOpen('faction')) {
@@ -158,6 +158,7 @@
             </p>
           }
           <button type="submit" class="button">Save faction</button>
+          <ng-container *ngTemplateOutlet="summarySupply" />
         }
       </form>
     } @else if (campaign.isParticipant && chosenFaction(); as faction) {
@@ -169,7 +170,7 @@
             [attr.aria-expanded]="isOpen('faction')"
             (click)="toggleSection('faction')"
           >
-            Your faction
+            Summary
           </button>
         </h2>
         @if (isOpen('faction')) {
@@ -179,7 +180,31 @@
               · {{ campaign.subfaction }}
             }
           </p>
-          @if (showSpawnLocation() && spawnLocation(); as spawn) {
+          @if (myForces().length > 0) {
+            <ul class="plain-list summary-forces">
+              @for (force of myForces(); track force.id) {
+                <li class="summary-force">
+                  <p>
+                    {{ forceLabel(force) }}
+                    ·
+                    <button
+                      type="button"
+                      class="territory-link"
+                      [class.is-selected]="selectedIds().includes(force.territoryId)"
+                      [disabled]="!!mapAction()"
+                      [attr.aria-label]="'Show ' + territoryName(force.territoryId) + ' on the map'"
+                      (click)="selectTerritoryOnMap(force.territoryId)"
+                    >
+                      {{ territoryName(force.territoryId) }}
+                    </button>
+                  </p>
+                  @if (force.supply; as supply) {
+                    <ng-container *ngTemplateOutlet="supplyPoints; context: { $implicit: supply, caption: 'Supply' }" />
+                  }
+                </li>
+              }
+            </ul>
+          } @else if (showSpawnLocation() && spawnLocation(); as spawn) {
             <p>
               Spawn location is at
               <button
@@ -194,6 +219,7 @@
               </button>
             </p>
           }
+          <ng-container *ngTemplateOutlet="summarySupply" />
         }
       </div>
     }
@@ -239,7 +265,7 @@
           @if (isOpen('orders')) {
             <p>
               Choose an action for each of your forces from the map or the list below. Commit is available after every
-              force has a saved draft. Missing drafts become Hold if time runs out.
+              force that is not in battle has a saved draft. Missing drafts become Hold if time runs out.
             </p>
             @if (commitmentSummary(); as summary) {
               <p class="commitment-summary">{{ summary.text }}</p>
@@ -292,7 +318,7 @@
                   </ul>
                 }
                 @if (draftKindsFor(force).length === 0) {
-                  <p class="muted">This force is in battle and cannot submit an action.</p>
+                  <p class="muted">This force is in battle and does not need an action until the battle is resolved.</p>
                 } @else {
                   <div class="force-draft-row">
                     <div class="field grow">
@@ -692,7 +718,7 @@
     </div>
 
     @if ((isBattlePhase() || hasOpenBattles()) && play(); as play) {
-      <div class="panel stack">
+      <div class="panel stack" #battlesBlock>
         <h2>
           <button
             type="button"
@@ -709,37 +735,92 @@
           }
           @for (battle of play.battles; track battle.id) {
             <article class="battle-card">
-              <h3>
-                <button
-                  type="button"
-                  class="territory-link"
-                  [class.is-selected]="selectedIds().includes(battle.territoryId)"
-                  [disabled]="!!mapAction()"
-                  [attr.aria-label]="'Show ' + territoryName(battle.territoryId) + ' on the map'"
-                  (click)="selectTerritoryOnMap(battle.territoryId)"
-                >
-                  {{ territoryName(battle.territoryId) }}
-                </button>
-                · {{ battleStatusLabel(battle.status) }}
-              </h3>
-              @if (battle.mission; as mission) {
+              <header class="battle-header">
+                <h3>
+                  <button
+                    type="button"
+                    class="territory-link"
+                    [class.is-selected]="selectedIds().includes(battle.territoryId)"
+                    [disabled]="!!mapAction()"
+                    [attr.aria-label]="'Show ' + territoryName(battle.territoryId) + ' on the map'"
+                    (click)="selectTerritoryOnMap(battle.territoryId)"
+                  >
+                    {{ territoryName(battle.territoryId) }}
+                  </button>
+                  · {{ battleStatusLabel(battle.status) }}
+                </h3>
+                <p class="battle-matchup">{{ battleMatchup(battle) }}</p>
+                @if (battleTerritory(battle); as territory) {
+                  <p>
+                    Terrain: {{ terrainName(territory.terrainTypeId) }}
+                    · Structure:
+                    {{ territory.structureTypeId ? structureName(territory.structureTypeId) : 'None' }}
+                  </p>
+                }
                 <p>
-                  Mission:
-                  @if (mission.url) {
-                    <a [href]="mission.url" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
-                  } @else if (missionFileUrl(mission); as href) {
-                    <a [href]="href" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
-                  } @else {
-                    {{ mission.name }}
+                  {{ battleMissionKind(battle) }}
+                  @for (combatant of battleCombatants(battle); track combatant.forceId) {
+                    @if (combatant.role !== 'Combatant') {
+                      · {{ combatant.role }}: {{ forceLabelById(combatant.forceId) }}
+                    }
                   }
                 </p>
-              }
+                @if (battle.mission; as mission) {
+                  <p>
+                    Mission:
+                    @if (mission.url) {
+                      <a [href]="mission.url" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
+                    } @else if (missionFileUrl(mission); as href) {
+                      <a [href]="href" rel="noopener noreferrer" target="_blank">{{ mission.name }}</a>
+                    } @else {
+                      {{ mission.name }}
+                    }
+                    @if (mission.url && missionFileUrl(mission); as href) {
+                      ·
+                      <a [href]="href" rel="noopener noreferrer" target="_blank">{{
+                        mission.fileName ?? 'Download mission'
+                      }}</a>
+                    }
+                    @if (!missionHasAttachment(mission)) {
+                      · See Campaign Manager for Mission details.
+                    }
+                  </p>
+                } @else {
+                  <p>Mission: See Campaign Manager for Mission details.</p>
+                }
+                <p>
+                  @for (combatant of battleCombatants(battle); track combatant.forceId; let first = $first) {
+                    @if (combatant.supply; as supply) {
+                      <span>
+                        @if (!first) {
+                          ·
+                        }
+                        {{ combatant.role }} army points:
+                        {{ supply.alliedArmyPoints ?? supply.roundMaxArmyPoints ?? 0 }}
+                        · Free characters: {{ supply.freeCharacterCount ?? 0 }}
+                      </span>
+                    }
+                  }
+                </p>
+                <div class="battle-supply-summary">
+                  @for (combatant of battleCombatants(battle); track combatant.forceId) {
+                    @if (combatant.supply; as supply) {
+                      <ng-container
+                        *ngTemplateOutlet="
+                          supplyPoints;
+                          context: { $implicit: supply, caption: combatant.role + ' supply' }
+                        "
+                      />
+                    }
+                  }
+                </div>
+              </header>
               <div class="battle-sides">
-                <div class="battle-side">
-                  <span class="status-chip battle-role">Attacker</span>
-                  @if (battle.attackerForceId) {
-                    <p>{{ forceLabelById(battle.attackerForceId) }}</p>
-                    @if (supplyFor(battle, battle.attackerForceId); as supply) {
+                @for (combatant of battleCombatants(battle); track combatant.forceId) {
+                  <div class="battle-side">
+                    <span class="status-chip battle-role">{{ combatant.role }}</span>
+                    <p>{{ forceLabelById(combatant.forceId) }}</p>
+                    @if (combatant.supply; as supply) {
                       <table class="battle-supply">
                         <caption class="sr-only">
                           Supply for
@@ -771,50 +852,8 @@
                         </tbody>
                       </table>
                     }
-                  } @else {
-                    <p class="muted">Not assigned</p>
-                  }
-                </div>
-                <div class="battle-side">
-                  <span class="status-chip battle-role">Defender</span>
-                  @if (battle.defenderForceId) {
-                    <p>{{ forceLabelById(battle.defenderForceId) }}</p>
-                    @if (supplyFor(battle, battle.defenderForceId); as supply) {
-                      <table class="battle-supply">
-                        <caption class="sr-only">
-                          Supply for
-                          {{
-                            forceLabelById(supply.forceId)
-                          }}
-                        </caption>
-                        <tbody>
-                          <tr>
-                            <th scope="row">Army points this battle</th>
-                            <td>{{ supply.alliedArmyPoints ?? supply.roundMaxArmyPoints ?? 0 }}</td>
-                          </tr>
-                          <tr>
-                            <th scope="row">Standard supply</th>
-                            <td>
-                              {{ supply.forceAllowancePoints }}
-                              <span class="muted">({{ standardSupplyBreakdown(supply) }})</span>
-                            </td>
-                          </tr>
-                          <tr>
-                            <th scope="row">Temporary supply</th>
-                            <td>
-                              {{ supply.temporarySupplyPoints }}
-                              @if (supply.isSplit) {
-                                <span class="muted">· split-force penalty applied</span>
-                              }
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    }
-                  } @else {
-                    <p class="muted">Not assigned</p>
-                  }
-                </div>
+                  </div>
+                }
               </div>
               @if (canReportBattle(battle)) {
                 <div class="battle-report">
@@ -1009,28 +1048,6 @@
                           />
                         </div>
                       </div>
-                      @if (campaign.alwaysAskGeneralKill !== false) {
-                        <label class="choice-row">
-                          <input
-                            type="checkbox"
-                            [ngModel]="battleReportFlag(battle.id, forceId, 'killedEnemyGeneral')"
-                            (ngModelChange)="onBattleReportFlag(battle.id, forceId, 'killedEnemyGeneral', $event)"
-                            [name]="'general-' + battle.id + '-' + forceId"
-                          />
-                          Killed the enemy general
-                        </label>
-                      }
-                      @if (campaign.alwaysAskSupplyLineDestroyed !== false) {
-                        <label class="choice-row">
-                          <input
-                            type="checkbox"
-                            [ngModel]="battleReportFlag(battle.id, forceId, 'destroyedEnemySupplyLine')"
-                            (ngModelChange)="onBattleReportFlag(battle.id, forceId, 'destroyedEnemySupplyLine', $event)"
-                            [name]="'supply-line-' + battle.id + '-' + forceId"
-                          />
-                          Destroyed the enemy supply line
-                        </label>
-                      }
                       @for (question of battle.resultQuestions ?? []; track question.id) {
                         @if (question.kind === 'Boolean') {
                           <label class="choice-row">
@@ -1098,7 +1115,7 @@
                   }}</label>
                   <select
                     [id]="'retreat-' + battle.id"
-                    [ngModel]="retreatTargetId(battle.id)"
+                    [ngModel]="retreatTarget()[battle.id] || ''"
                     (ngModelChange)="onRetreatTarget(battle.id, $event)"
                     [name]="'retreat-' + battle.id"
                   >
@@ -1165,7 +1182,7 @@
                       <button type="button" (click)="sortBy('territory')">Territories and structures</button>
                     </th>
                     <th scope="col" [attr.aria-sort]="sortDirection('battles')">
-                      <button type="button" (click)="sortBy('battles')">Battles Won</button>
+                      <button type="button" (click)="sortBy('battles')">Battle points</button>
                     </th>
                     <th scope="col" [attr.aria-sort]="sortDirection('public')">
                       <button type="button" (click)="sortBy('public')">Public Objectives</button>
@@ -1274,25 +1291,29 @@
           }
           @if (leaderboards().length > 0) {
             <div class="leaderboards">
-              @for (board of leaderboards(); track board.kind) {
+              @for (board of leaderboards(); track board.kind + ':' + (board.title ?? '')) {
                 <section class="leaderboard">
-                  <h3>{{ leaderboardTitle(board.kind) }} ({{ board.awardPoints }} CP)</h3>
+                  <h3>{{ leaderboardHeading(board) }}</h3>
                   <ol>
-                    @for (leader of board.leaders; track leader.userId) {
+                    @for (leader of board.leaders; track leader.tiedPlayerCount ? $index : leader.userId) {
                       <li>
-                        <span class="leader-rank">{{ leader.rank }}.</span>
-                        <a
-                          class="profile-link"
-                          [routerLink]="['/users', leader.username]"
-                          [queryParams]="profileFrom()"
-                          >{{ leader.displayName }}</a
-                        >
-                        <span class="muted">
-                          {{ leaderboardMetric(board.kind, leader) }}
-                          @if (leader.awardsPoints) {
-                            · leading
-                          }
-                        </span>
+                        @if (leader.tiedPlayerCount) {
+                          <span>{{ leader.tiedPlayerCount }} players tied with {{ leader.metric }}</span>
+                        } @else {
+                          <span class="leader-rank">{{ leader.rank }}.</span>
+                          <a
+                            class="profile-link"
+                            [routerLink]="['/users', leader.username]"
+                            [queryParams]="profileFrom()"
+                            >{{ leader.displayName }}</a
+                          >
+                          <span class="muted">
+                            {{ leaderboardMetric(board.kind, leader) }}
+                            @if (leader.awardsPoints) {
+                              · leading
+                            }
+                          </span>
+                        }
                       </li>
                     }
                   </ol>
@@ -1625,7 +1646,7 @@
     }
 
     @if (
-      play() && (unclaimedPrivateCounts().length > 0 || visiblePrivateObjectives().length > 0 || campaign.canManage)
+      play() && (myPrivateObjectives().length > 0 || othersClaimedPrivateObjectives().length > 0 || campaign.canManage)
     ) {
       <div class="panel stack">
         <h2>
@@ -1639,45 +1660,26 @@
           </button>
         </h2>
         @if (isOpen('privateObjectives')) {
-          @if (unclaimedPrivateCounts().length > 0) {
-            <p class="muted">Unclaimed private objectives (public counts only):</p>
-            <ul>
-              @for (row of unclaimedPrivateCounts(); track row.holderKind + row.holderId) {
-                <li>{{ row.holderName }}: {{ row.count }}</li>
-              }
-            </ul>
-          }
-          @if (visiblePrivateObjectives().length > 0) {
+          @if (myPrivateObjectives().length > 0) {
             <ul class="stack">
-              @for (assignment of visiblePrivateObjectives(); track assignment.id) {
+              @for (assignment of myPrivateObjectives(); track assignment.id) {
                 <li>
-                  <strong>{{ assignment.name || 'Private objective' }}</strong>
-                  <span class="muted"> · {{ assignment.status }}</span>
-                  @if (assignment.description) {
-                    <p>{{ assignment.description }}</p>
-                  }
-                  @if (assignment.canClaim) {
-                    <button type="button" class="button" (click)="claimPrivateObjective(assignment.id)">
-                      Claim for manager review
-                    </button>
-                  }
-                  @if (assignment.canModerate) {
-                    <div class="choice-row">
-                      <button type="button" class="button" (click)="moderatePrivateObjective(assignment.id, true)">
-                        Approve points
-                      </button>
-                      <button
-                        type="button"
-                        class="button-secondary"
-                        (click)="moderatePrivateObjective(assignment.id, false)"
-                      >
-                        Deny claim
-                      </button>
-                    </div>
-                  }
+                  <ng-container *ngTemplateOutlet="privateObjectiveItem; context: { $implicit: assignment }" />
                 </li>
               }
             </ul>
+          }
+          @if (othersClaimedPrivateObjectives().length > 0) {
+            <details class="claimed-private-objectives">
+              <summary>Claimed private objectives</summary>
+              <ul class="stack">
+                @for (assignment of othersClaimedPrivateObjectives(); track assignment.id) {
+                  <li>
+                    <ng-container *ngTemplateOutlet="privateObjectiveItem; context: { $implicit: assignment }" />
+                  </li>
+                }
+              </ul>
+            </details>
           }
           @if (campaign.canManage) {
             <div class="award-row">
@@ -1818,7 +1820,7 @@
                     </span>
                   }
                 </div>
-                @if (canStaffMembers() && participant.isPlayer && !participant.isGameMaster) {
+                @if (canStaffMembers() && participant.isPlayer) {
                   <div class="nested-row">
                     <div class="field grow">
                       <label [attr.for]="'staff-faction-' + participant.userId">Assign faction</label>
@@ -1835,14 +1837,16 @@
                       </select>
                     </div>
                     <button type="button" class="button-secondary" (click)="assignFaction(participant)">Assign</button>
-                    <button type="button" class="button-secondary" (click)="promoteMember(participant)">
-                      Make campaign manager
-                    </button>
-                    <app-confirm-button
-                      label="Remove player"
-                      confirmLabel="Confirm remove"
-                      (confirmed)="kickMember(participant)"
-                    />
+                    @if (!participant.isGameMaster) {
+                      <button type="button" class="button-secondary" (click)="promoteMember(participant)">
+                        Make campaign manager
+                      </button>
+                      <app-confirm-button
+                        label="Remove player"
+                        confirmLabel="Confirm remove"
+                        (confirmed)="kickMember(participant)"
+                      />
+                    }
                   </div>
                 }
               </li>
@@ -2229,5 +2233,78 @@
         </button>
       </div>
     </app-dialog>
+
+    <ng-template #summarySupply>
+      @if (myForces().length === 0 || !anyForceHasChainSupply()) {
+        @if (viewerSupplyView(); as supply) {
+          <ng-container
+            *ngTemplateOutlet="supplyPoints; context: { $implicit: chainSupplyView(supply), caption: 'Supply' }"
+          />
+        }
+      }
+      @if (spendableSupplyView(); as spendable) {
+        <ng-container
+          *ngTemplateOutlet="supplyPoints; context: { $implicit: spendable, caption: 'Spendable supply' }"
+        />
+        <p class="muted">Your forces share this pool. Each point can be spent by only one force.</p>
+      }
+      @if (myUnclaimedPrivateObjectives().length > 0) {
+        <div class="stack">
+          <p>Your unclaimed private objectives</p>
+          <ul class="stack">
+            @for (assignment of myUnclaimedPrivateObjectives(); track assignment.id) {
+              <li>
+                <ng-container *ngTemplateOutlet="privateObjectiveItem; context: { $implicit: assignment }" />
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </ng-template>
+    <ng-template #privateObjectiveItem let-assignment>
+      <strong>{{ assignment.name || 'Private objective' }}</strong>
+      <span class="muted"> · {{ assignment.status }}</span>
+      @if (!isViewerPrivateAssignment(assignment)) {
+        <span class="muted"> · {{ privateObjectiveHolderCaption(assignment) }}</span>
+      }
+      @if (assignment.description) {
+        <p>{{ assignment.description }}</p>
+      }
+      @if (assignment.canClaim) {
+        <button type="button" class="button" (click)="claimPrivateObjective(assignment.id)">
+          Claim for manager review
+        </button>
+      }
+      @if (assignment.canModerate) {
+        <div class="choice-row">
+          <button type="button" class="button" (click)="moderatePrivateObjective(assignment.id, true)">
+            Approve points
+          </button>
+          <button type="button" class="button-secondary" (click)="moderatePrivateObjective(assignment.id, false)">
+            Deny claim
+          </button>
+        </div>
+      }
+    </ng-template>
+    <ng-template #supplyPoints let-supply let-caption="caption">
+      <details class="supply-points">
+        <summary [title]="supplyTooltip(supply)">
+          <span class="supply-points-label">{{ caption }}</span>
+          <strong>{{ supply.currentSupplyPoints }}</strong>
+          @if ((supply.temporarySupplyPoints ?? 0) > 0) {
+            <span class="muted">({{ supply.temporarySupplyPoints }} temporary)</span>
+          }
+        </summary>
+        @if (supplyRows(supply).length === 0) {
+          <p class="muted">No supply sources.</p>
+        } @else {
+          <ul class="supply-breakdown">
+            @for (row of supplyRows(supply); track row.label + ':' + row.points) {
+              <li>{{ row.label }}: {{ formatSupplyPoints(row.points) }}</li>
+            }
+          </ul>
+        }
+      </details>
+    </ng-template>
   }
 </section>

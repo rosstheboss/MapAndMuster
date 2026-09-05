@@ -5,7 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
 import { PUBLIC_RUNTIME_CONFIG } from '../config/public-runtime-config';
-import { AuthService, readApiError, readApiErrorMessages } from './auth.service';
+import { AuthService, readApiError, readApiErrorMessages, isConcurrencyConflict } from './auth.service';
 
 describe('AuthService', () => {
   beforeEach(() => {
@@ -77,6 +77,20 @@ describe('AuthService', () => {
       error: { code: 'auth.invalid_credentials', message: 'Email or password is incorrect.' },
     });
     expect(readApiError(error, 'fallback')).toBe('Email or password is incorrect.');
+  });
+
+  it('detects a concurrency conflict', () => {
+    const error = new HttpErrorResponse({
+      status: 409,
+      error: {
+        code: 'concurrency.conflict',
+        message: 'The campaign was changed by another request. Reload and try again.',
+      },
+    });
+    expect(isConcurrencyConflict(error)).toBe(true);
+    expect(isConcurrencyConflict(new HttpErrorResponse({ status: 400, error: { code: 'order.window.closed' } }))).toBe(
+      false,
+    );
   });
 
   it('keeps each API field error as its own message', () => {

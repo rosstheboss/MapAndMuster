@@ -125,7 +125,7 @@ public enum PlayLogKind
     /// <summary>A player submitted a retreat after a loss.</summary>
     PlayerRetreat = 9,
 
-    /// <summary>A missing retreat used the spawn fallback.</summary>
+    /// <summary>A missing retreat was assigned to the force's spawn.</summary>
     DefaultRetreat = 10,
 
     /// <summary>A battle stayed open because resolution could not finish.</summary>
@@ -173,7 +173,7 @@ public enum PlayLogKind
     /// <summary>A manager revoked a public objective from a player.</summary>
     PublicObjectiveRevoked = 25,
 
-    /// <summary>A private objective was revealed after approval, automatic completion, or campaign end.</summary>
+    /// <summary>A private objective was revealed after approval or automatic completion.</summary>
     PrivateObjectiveRevealed = 26,
 
     /// <summary>A held item objective was destroyed by a resolved choice.</summary>
@@ -202,6 +202,9 @@ public enum PlayLogKind
 
     /// <summary>A manager or administrator closed the campaign while preserving its final state.</summary>
     CampaignClosed = 35,
+
+    /// <summary>A snapshot of final scores and remaining item objectives after the campaign ended.</summary>
+    CampaignEnded = 36,
 }
 
 /// <summary>

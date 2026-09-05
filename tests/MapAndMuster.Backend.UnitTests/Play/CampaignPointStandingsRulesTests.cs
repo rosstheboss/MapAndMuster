@@ -316,6 +316,126 @@ public sealed class CampaignPointStandingsRulesTests
     }
 
     [Fact]
+    public void CapsATiedLeaderboardGroupThatWouldExceedFiveRows()
+    {
+        var players = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToArray();
+        var factions = players.Select(_ => Guid.NewGuid()).ToArray();
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players: [.. players.Select((userId, index) => new CampaignPointPlayer(userId, factions[index]))],
+            territories:
+            [
+                .. players.Select((_, index) =>
+                    new CampaignPointTerritory(Guid.NewGuid(), factions[index], null, StructureCondition.Operational)),
+            ],
+            ranking: new GeneralPublicObjectivePoints(5, 0, 0)));
+
+        var board = Assert.Single(result.Leaderboards);
+        var summary = Assert.Single(board.Leaders);
+        Assert.Equal(Guid.Empty, summary.UserId);
+        Assert.Equal(6, summary.TiedPlayerCount);
+        Assert.Equal(1, summary.Metric);
+        Assert.Equal(1, summary.Rank);
+        Assert.True(summary.AwardsPoints);
+    }
+
+    [Fact]
+    public void ListsTiedLeadersIndividuallyWhenTheyStillFitInFiveRows()
+    {
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var third = Guid.NewGuid();
+        var north = Guid.NewGuid();
+        var south = Guid.NewGuid();
+        var east = Guid.NewGuid();
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players:
+            [
+                new CampaignPointPlayer(first, north),
+                new CampaignPointPlayer(second, south),
+                new CampaignPointPlayer(third, east),
+            ],
+            territories:
+            [
+                new CampaignPointTerritory(Guid.NewGuid(), north, null, StructureCondition.Operational),
+                new CampaignPointTerritory(Guid.NewGuid(), north, null, StructureCondition.Operational),
+                new CampaignPointTerritory(Guid.NewGuid(), south, null, StructureCondition.Operational),
+                new CampaignPointTerritory(Guid.NewGuid(), south, null, StructureCondition.Operational),
+                new CampaignPointTerritory(Guid.NewGuid(), east, null, StructureCondition.Operational),
+            ],
+            ranking: new GeneralPublicObjectivePoints(4, 0, 0)));
+
+        var board = Assert.Single(result.Leaderboards);
+        Assert.Equal(3, board.Leaders.Count);
+        Assert.All(board.Leaders, leader => Assert.Equal(0, leader.TiedPlayerCount));
+        Assert.Equal(2, board.Leaders.Count(leader => leader.Rank == 1));
+        Assert.Equal(3, board.Leaders.Single(leader => leader.UserId == third).Rank);
+    }
+
+    [Fact]
+    public void SummarizesOverflowingFifthPlaceTiesAfterListingHigherRanks()
+    {
+        var players = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToArray();
+        var factions = players.Select(_ => Guid.NewGuid()).ToArray();
+        var territories = new List<CampaignPointTerritory>
+        {
+            new(Guid.NewGuid(), factions[0], null, StructureCondition.Operational),
+            new(Guid.NewGuid(), factions[0], null, StructureCondition.Operational),
+            new(Guid.NewGuid(), factions[0], null, StructureCondition.Operational),
+            new(Guid.NewGuid(), factions[0], null, StructureCondition.Operational),
+            new(Guid.NewGuid(), factions[1], null, StructureCondition.Operational),
+            new(Guid.NewGuid(), factions[1], null, StructureCondition.Operational),
+            new(Guid.NewGuid(), factions[1], null, StructureCondition.Operational),
+        };
+        for (var index = 2; index < 6; index++)
+        {
+            territories.Add(new CampaignPointTerritory(Guid.NewGuid(), factions[index], null, StructureCondition.Operational));
+            territories.Add(new CampaignPointTerritory(Guid.NewGuid(), factions[index], null, StructureCondition.Operational));
+        }
+
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players: [.. players.Select((userId, index) => new CampaignPointPlayer(userId, factions[index]))],
+            territories: territories,
+            ranking: new GeneralPublicObjectivePoints(3, 0, 0)));
+
+        var board = Assert.Single(result.Leaderboards);
+        Assert.Equal(3, board.Leaders.Count);
+        Assert.Equal(players[0], board.Leaders[0].UserId);
+        Assert.Equal(4, board.Leaders[0].Metric);
+        Assert.Equal(4, board.Leaders[2].TiedPlayerCount);
+        Assert.Equal(2, board.Leaders[2].Metric);
+        Assert.Equal(3, board.Leaders[2].Rank);
+    }
+
+    [Fact]
+    public void ListsANamedPublicObjectiveLeaderboardOfCurrentHolders()
+    {
+        var holder = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        var objective = Guid.NewGuid();
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players:
+            [
+                new CampaignPointPlayer(holder, Guid.NewGuid()),
+                new CampaignPointPlayer(other, Guid.NewGuid()),
+            ],
+            publicPoints: new Dictionary<Guid, int> { [objective] = 6 },
+            awards:
+            [
+                new PublicObjectiveAward(Guid.NewGuid(), objective, holder, true, Guid.NewGuid(), DateTimeOffset.UtcNow),
+            ],
+            namedPublicObjectives: [new CampaignNamedPublicObjective(objective, "First to Magritta", 6)]));
+
+        var board = Assert.Single(result.Leaderboards);
+        Assert.Equal(GeneralPublicObjectiveKinds.Named, board.Kind);
+        Assert.Equal("First to Magritta", board.Title);
+        Assert.Equal(6, board.AwardPoints);
+        var leader = Assert.Single(board.Leaders);
+        Assert.Equal(holder, leader.UserId);
+        Assert.Equal(1, leader.Metric);
+        Assert.True(leader.AwardsPoints);
+    }
+
+    [Fact]
     public void IgnoresAlliedRelicsAfterBackstab()
     {
         var player = Guid.NewGuid();
@@ -358,7 +478,8 @@ public sealed class CampaignPointStandingsRulesTests
         GeneralPublicObjectivePoints? ranking = null,
         IReadOnlyDictionary<Guid, int>? structurePoints = null,
         IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null,
-        IReadOnlySet<Guid>? brokenAllyFactionIds = null)
+        IReadOnlySet<Guid>? brokenAllyFactionIds = null,
+        IReadOnlyList<CampaignNamedPublicObjective>? namedPublicObjectives = null)
     {
         return new CampaignPointScoringState
         {
@@ -368,6 +489,7 @@ public sealed class CampaignPointStandingsRulesTests
             StructurePoints = structurePoints ?? new Dictionary<Guid, int>(),
             ItemPoints = itemPoints ?? new Dictionary<Guid, int>(),
             PublicObjectivePoints = publicPoints ?? new Dictionary<Guid, int>(),
+            NamedPublicObjectives = namedPublicObjectives ?? [],
             BattleScoring = battleScoring ?? BattleScoringSetup.Straight(0),
             RankingObjectivePoints = ranking ?? GeneralPublicObjectivePoints.None,
             Battles = battles ?? [],

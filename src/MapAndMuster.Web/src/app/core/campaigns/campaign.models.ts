@@ -76,6 +76,7 @@ export interface CampaignDetail {
   itemObjectiveTypes?: CampaignItemObjectiveType[];
   publicObjectiveTypes?: CampaignPublicObjectiveType[];
   specialRules?: CampaignSpecialRule[];
+  standardBattleResultQuestions?: StandardBattleResultQuestion[];
   missions?: CampaignMission[];
   forceStatuses?: CampaignForceStatus[];
   privateObjectiveTypes?: CampaignPrivateObjectiveType[];
@@ -96,10 +97,6 @@ export interface CampaignDetail {
   alliedRelicControlCampaignPoints?: number;
   splitForceSupplyPenaltyPercent?: number;
   splitForceSupplyPenaltyIsPercent?: boolean;
-  alwaysAskGeneralKill?: boolean;
-  alwaysAskSupplyLineDestroyed?: boolean;
-  generalKillCampaignPoints?: number;
-  supplyLineDestroyedCampaignPoints?: number;
   roundEscalations?: RoundArmyEscalation[];
   standings?: CampaignPointStanding[];
   publicObjectiveLeaderboards?: PublicObjectiveLeaderboard[];
@@ -180,6 +177,15 @@ export interface CampaignMission {
 }
 
 export interface MissionResultQuestion {
+  id: string;
+  prompt: string;
+  kind: string;
+  battlePoints: number;
+  campaignPoints: number;
+  standardQuestionId?: string | null;
+}
+
+export interface StandardBattleResultQuestion {
   id: string;
   prompt: string;
   kind: string;
@@ -330,6 +336,7 @@ export interface CampaignPointStanding {
 
 export interface PublicObjectiveLeaderboard {
   kind: string;
+  title?: string;
   awardPoints: number;
   leaders: PublicObjectiveLeader[];
 }
@@ -342,6 +349,7 @@ export interface PublicObjectiveLeader {
   metric: number;
   tieBreakMetric: number;
   awardsPoints: boolean;
+  tiedPlayerCount?: number;
 }
 
 export interface HeldItemObjective {
@@ -386,6 +394,7 @@ export interface SaveCampaignPayload {
   itemObjectiveTypes: SaveItemObjectiveTypePayload[];
   publicObjectiveTypes?: SavePublicObjectiveTypePayload[];
   specialRules?: SaveSpecialRulePayload[];
+  standardBattleResultQuestions?: SaveStandardBattleResultQuestionPayload[];
   missions?: SaveMissionPayload[];
   forceStatuses?: SaveForceStatusPayload[];
   privateObjectiveTypes?: SavePrivateObjectiveTypePayload[];
@@ -404,10 +413,6 @@ export interface SaveCampaignPayload {
   alliedRelicControlCampaignPoints?: number;
   splitForceSupplyPenaltyPercent?: number;
   splitForceSupplyPenaltyIsPercent?: boolean;
-  alwaysAskGeneralKill?: boolean;
-  alwaysAskSupplyLineDestroyed?: boolean;
-  generalKillCampaignPoints?: number;
-  supplyLineDestroyedCampaignPoints?: number;
   roundEscalations?: RoundArmyEscalation[];
 }
 
@@ -522,6 +527,14 @@ export interface SaveSpecialRulePayload {
   effectKey?: string | null;
 }
 
+export interface SaveStandardBattleResultQuestionPayload {
+  id?: string;
+  prompt: string;
+  kind?: string;
+  battlePoints?: number;
+  campaignPoints?: number;
+}
+
 export interface SaveForceStatusPayload {
   id?: string;
   name: string;
@@ -575,6 +588,7 @@ export interface SaveMissionResultQuestionPayload {
   kind?: string;
   battlePoints?: number;
   campaignPoints?: number;
+  standardQuestionId?: string | null;
 }
 
 export interface MapGraphDetail {
@@ -653,6 +667,7 @@ export interface CampaignPlayDetail {
   factionId: string | null;
   canChooseFaction: boolean;
   isCommitted: boolean;
+  viewerSupply?: PlayerSupplyView | null;
   roundCount: number;
   minRoundCount: number;
   remainingWindows: PlayWindow[];
@@ -676,6 +691,14 @@ export interface CampaignPlayDetail {
   battles: PlayBattle[];
   log: PlayLogEntry[];
   playersMissingFaction: string[];
+  mapTerritories?: PlayMapTerritory[];
+}
+
+export interface PlayMapTerritory {
+  id: string;
+  ownerFactionId: string | null;
+  structureTypeId?: string | null;
+  structureCondition?: string | null;
 }
 
 export interface PlayWindow {
@@ -707,6 +730,7 @@ export interface PlayForce {
   canUseMagicalSupply?: boolean;
   hiddenRelicNearby?: boolean;
   battleReminders?: string[];
+  supply?: PlayerSupplyView | null;
 }
 
 export interface PlayMoveHop {
@@ -796,6 +820,25 @@ export interface PlayBattleForceSupply {
   alliedArmyPoints?: number;
   freeCharacterCount?: number;
   isSplit?: boolean;
+  contributions?: SupplyContribution[];
+}
+
+export interface SupplyContribution {
+  kind: string;
+  territoryId?: string | null;
+  label: string;
+  points: number;
+  isAllied?: boolean;
+}
+
+export interface PlayerSupplyView {
+  currentSupplyPoints: number;
+  temporarySupplyPoints: number;
+  mapSupplyPoints: number;
+  roundFreeSupplyPoints: number;
+  splitPenaltyPoints: number;
+  forceAllowancePoints: number;
+  contributions?: SupplyContribution[];
 }
 
 export interface PlayBattleSubmission {
@@ -820,8 +863,6 @@ export interface BattleParticipantReport {
   armyListGameSystem?: string | null;
   armyListBuilder?: string | null;
   supplyCategories?: ArmyListSupplyCategory[];
-  killedEnemyGeneral: boolean;
-  destroyedEnemySupplyLine: boolean;
   answers: BattleQuestionAnswer[];
 }
 
@@ -906,6 +947,8 @@ export interface CampaignParticipant {
   roundFreeSupplyPoints?: number | null;
   maxArmyPoints?: number | null;
   freeCharacterCount?: number | null;
+  splitPenaltyPoints?: number | null;
+  contributions?: SupplyContribution[];
 }
 
 export interface UserSearchHit {

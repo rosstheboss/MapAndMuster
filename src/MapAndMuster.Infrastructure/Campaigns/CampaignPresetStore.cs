@@ -97,7 +97,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
             campaign.ForceStatuses,
             campaign.SplitForceSupplyPenaltyPercent,
             campaign.SplitForceSupplyPenaltyIsPercent,
-            campaign.BattleReportRules,
+            campaign.StandardBattleResultQuestions,
             campaign.ArmyEscalations,
             campaign.Missions,
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules));
@@ -139,7 +139,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
 
     private static StoredCampaign ToStored(CampaignPresetRecord record)
     {
-        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, BattleReportRules, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
         var settings = CampaignPresetSettingsJson.Deserialize(record.SettingsJson);
         var created = record.CreatedUtc;
         return new StoredCampaign
@@ -199,7 +199,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
             RankingObjectivePoints = RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = BattleReportRules,
+            StandardBattleResultQuestions = StandardBattleResultQuestions,
             ArmyEscalations = ArmyEscalations,
             Missions = Missions,
         };

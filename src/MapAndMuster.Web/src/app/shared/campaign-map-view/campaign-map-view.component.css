@@ -212,12 +212,28 @@
   pointer-events: none;
 }
 
-.territory-visual.is-hover-motion {
+.territory-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.marker-decode {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+.territory-visual.is-hover-motion,
+.territory-markers.is-hover-motion {
   transition: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .territory-visual.is-hover-motion {
+  .territory-visual.is-hover-motion,
+  .territory-markers.is-hover-motion {
     transition: transform 200ms ease-in-out;
   }
 }
@@ -265,12 +281,14 @@
 
 .structure-pin,
 .force-pin,
-.item-pin {
+.item-pin,
+.faction-flag {
   position: absolute;
   z-index: 1;
   display: grid;
   place-items: center;
-  pointer-events: none;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .force-pin {
@@ -278,7 +296,6 @@
   overflow: visible;
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
-  pointer-events: auto;
 }
 
 .force-pin.is-mine {
@@ -351,13 +368,11 @@
 .structure-pin img,
 .faction-flag img {
   object-fit: contain;
+  backface-visibility: hidden;
 }
 
 .faction-flag {
-  position: absolute;
-  z-index: 1;
   clip-path: polygon(0 0, 100% 20%, 70% 50%, 100% 80%, 0 100%);
-  pointer-events: none;
   box-shadow: 0 0 0 1px rgb(28 25 23 / 35%);
 }
 
@@ -371,6 +386,7 @@
 }
 
 .faction-flag.has-image.is-tinted {
+  transform: translateZ(0);
   background: var(--faction-color, currentColor);
   /* stylelint-disable property-no-vendor-prefix -- Chromium still applies HTML masks through -webkit-mask-* */
   -webkit-mask-image: var(--logo-mask);
@@ -479,7 +495,8 @@
   border: 1px solid var(--color-border);
   border-radius: 0.25rem;
   box-shadow: 0 0 0 1px var(--color-bg);
-  pointer-events: none;
+  cursor: pointer;
+  pointer-events: auto;
   white-space: nowrap;
 }
 

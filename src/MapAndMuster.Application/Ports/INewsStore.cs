@@ -8,7 +8,7 @@ namespace MapAndMuster.Application.Ports;
 public interface INewsStore
 {
     /// <summary>
-    /// Returns one published article page. Page 1 is the newest article.
+    /// Returns one published article page. Page 1 is the newest articles.
     /// </summary>
     Task<NewsPage> GetPageAsync(int page, CancellationToken cancellationToken);
 

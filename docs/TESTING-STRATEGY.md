@@ -52,7 +52,8 @@ Cover:
 - Public campaign-log chat on an upcoming campaign, including outsider rejection, unknown `@` mentions, and private-channel omission from unauthorized payloads.
 - Public site chat on All Campaigns, including unknown `@` mentions, prohibited language, mutual blocks, isolation from campaign logs, administrator announcements with notifications, and rejection of seeded test accounts.
 - Public profile campaign lists that include shared or publicly viewable campaigns and omit hidden private campaigns the viewer does not share.
-- Home notification board empty and populated states, and administrator-only news edits.
+- Home notification board empty and populated states, dismiss and dismiss-all, five notices per
+  page, two news articles per page, and administrator-only news edits.
   Home's Needs your attention list is built from `GET /api/campaigns` (in-progress round,
   countdown, commit, remaining setup) and sits above Notifications and News.
 - Manager add and kick of players (including private campaigns without the join password), promoting a
@@ -132,8 +133,9 @@ Cover components/services for:
 - Participants panel names, factions, and Manager/Player/Admin roles, including manager add/search/kick, staff faction assignment, and a May be kicked badge that opens the delinquency log entry.
 - Administrator test-users page (filter, Currently testing chip) and the impersonation banner with Return to admin.
 - Public profile campaign list, scores placeholder, and Back to the previous in-app screen.
-- Home notification board, including "No new notifications.", Needs your attention from the
-  campaign list, empty join/create actions, and paginated site news.
+- Home notification board, including "No new notifications.", dismiss and dismiss all, five
+  notices per page, Needs your attention from the campaign list, empty join/create actions, and
+  two news articles per page.
 - Campaign cards show status, round, countdown, player count, role, remaining setup, commit
   state, and Open while collapsed. Empty Your campaigns offers Join campaign. All campaigns
   shows collapsed Site chat above the campaign list.

@@ -61,7 +61,12 @@
     </section>
 
     <section class="panel stack" aria-labelledby="notice-heading">
-      <h2 id="notice-heading">Notifications</h2>
+      <div class="panel-heading-row">
+        <h2 id="notice-heading">Notifications</h2>
+        @if (notifications().length > 0) {
+          <button type="button" class="button-secondary" (click)="dismissAllNotices()">Dismiss all</button>
+        }
+      </div>
       @if (noticeError()) {
         <p class="error" role="alert">{{ noticeError() }}</p>
       }
@@ -69,8 +74,8 @@
         <p>No new notifications.</p>
       } @else {
         <ul class="notice-list">
-          @for (item of notifications(); track item.id) {
-            <li>
+          @for (item of visibleNotifications(); track item.id) {
+            <li class="notice-row">
               <button type="button" class="notice-item" (click)="openNotice(item)">
                 <strong>{{ item.title }}</strong>
                 @if (item.campaignName) {
@@ -78,9 +83,31 @@
                 }
                 <span>{{ item.body }}</span>
               </button>
+              <button type="button" class="button-secondary" (click)="dismissNotice(item)">Dismiss</button>
             </li>
           }
         </ul>
+        @if (noticePageCount() > 1) {
+          <div class="actions">
+            <button
+              type="button"
+              class="button-secondary"
+              [disabled]="notificationPage() <= 1"
+              (click)="setNotificationPage(notificationPage() - 1)"
+            >
+              Previous
+            </button>
+            <span class="muted">Page {{ notificationPage() }} of {{ noticePageCount() }}</span>
+            <button
+              type="button"
+              class="button-secondary"
+              [disabled]="notificationPage() >= noticePageCount()"
+              (click)="setNotificationPage(notificationPage() + 1)"
+            >
+              Next
+            </button>
+          </div>
+        }
       }
     </section>
 
@@ -92,12 +119,6 @@
       @if (user.isAdministrator) {
         <div class="actions">
           <button type="button" class="button-secondary" (click)="startNewsCreate()">New article</button>
-          @if (news()?.article) {
-            <button type="button" class="button-secondary" (click)="startNewsEdit()">Edit article</button>
-            <button type="button" class="button-secondary" (click)="deleteNews()" [disabled]="newsSaving()">
-              Delete article
-            </button>
-          }
         </div>
       }
       @if (editingNews()) {
@@ -121,12 +142,27 @@
             <button type="button" class="button-secondary" (click)="cancelNewsEdit()">Cancel</button>
           </div>
         </form>
-      } @else if (news()?.article; as article) {
-        <article class="news-article">
-          <h3>{{ article.title }}</h3>
-          <p class="muted">{{ article.publishedUtc | instantDate: user.timeZoneId }}</p>
-          <div class="news-body" [innerHTML]="article.bodyHtml"></div>
-        </article>
+      } @else if (newsArticles().length > 0) {
+        @for (article of newsArticles(); track article.id) {
+          <article class="news-article">
+            <h3>{{ article.title }}</h3>
+            <p class="muted">{{ article.publishedUtc | instantDate: user.timeZoneId }}</p>
+            <div class="news-body" [innerHTML]="article.bodyHtml"></div>
+            @if (user.isAdministrator) {
+              <div class="actions">
+                <button type="button" class="button-secondary" (click)="startNewsEdit(article)">Edit article</button>
+                <button
+                  type="button"
+                  class="button-secondary"
+                  (click)="deleteNews(article.id)"
+                  [disabled]="newsSaving()"
+                >
+                  Delete article
+                </button>
+              </div>
+            }
+          </article>
+        }
         @if ((news()?.totalPages ?? 0) > 1) {
           <div class="actions">
             <button
@@ -137,7 +173,7 @@
             >
               Previous
             </button>
-            <span class="muted">Article {{ news()?.page }} of {{ news()?.totalPages }}</span>
+            <span class="muted">Page {{ news()?.page }} of {{ news()?.totalPages }}</span>
             <button
               type="button"
               class="button-secondary"

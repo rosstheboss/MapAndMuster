@@ -3,13 +3,15 @@ using MapAndMuster.Domain.Campaigns;
 namespace MapAndMuster.Domain.Play;
 
 /// <summary>
-/// Calculates per-player supply from the connected map graph, round bonuses, split penalty, and a
-/// player-owned temporary pool that can be spent on any of that player's forces (one point per force).
+/// Calculates per-force map supply from the connected owned or allied chain that force can reach,
+/// plus round bonuses, the split-force penalty, and a player-owned temporary pool that any of that
+/// player's forces may spend (each point applies to exactly one force).
 /// </summary>
 public static class SupplyRules
 {
     /// <summary>
-    /// Returns the current spendable supply snapshot for one player.
+    /// Returns the current spendable supply snapshot for one player: the best-connected force's
+    /// chain plus the shared temporary pool.
     /// </summary>
     public static PlayerSupplySnapshot ForPlayer(
         CampaignPlayState state,
@@ -21,37 +23,37 @@ public static class SupplyRules
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(catalog);
-        var forceCount = state.Forces.Count(force => force.ControllerUserId == userId);
-        var isSplit = forceCount > 1;
-        var mapSupply = MapSupply(state, map, catalog, userId);
-        var escalation = EscalationFor(catalog.ArmyEscalations, roundNumber);
-        var mapAfterPenalty = isSplit
-            ? Math.Max(
-                HuntInEstaliaDefaults.SplitForceMinimumMapSupply,
-                mapSupply - SplitPenalty(
-                    mapSupply,
-                    catalog.SplitForceSupplyPenaltyPercent,
-                    catalog.SplitForceSupplyPenaltyIsPercent))
-            : mapSupply;
-        if (isSplit && mapSupply <= 0)
+        var forces = state.Forces.Where(force => force.ControllerUserId == userId).ToArray();
+        var temporary = state.PlayerSupplies.FirstOrDefault(item => item.UserId == userId)?.TemporarySupplyPoints ?? 0;
+        if (forces.Length == 0)
         {
-            mapAfterPenalty = 0;
+            return BuildSnapshot(state, map, catalog, userId, roundNumber, originTerritoryId: null, temporary);
         }
 
-        var splitPenalty = mapSupply - mapAfterPenalty;
-        var allowance = mapAfterPenalty + escalation.FreeSupplyPoints;
-        var temporary = state.PlayerSupplies.FirstOrDefault(item => item.UserId == userId)?.TemporarySupplyPoints ?? 0;
-        var current = allowance + temporary;
-        return new PlayerSupplySnapshot(
-            userId,
-            mapSupply,
-            escalation.FreeSupplyPoints,
-            splitPenalty,
-            temporary,
-            current,
-            escalation.MaxArmyPoints,
-            escalation.FreeCharacterCount,
-            isSplit);
+        var best = forces
+            .Select(force => ForForce(state, map, catalog, force, roundNumber))
+            .OrderByDescending(static item => item.ForceAllowancePoints)
+            .ThenByDescending(static item => item.MapSupplyPoints)
+            .First();
+        return WithTemporary(best, temporary);
+    }
+
+    /// <summary>
+    /// Returns map, round, and split-penalty supply for one force from the owned or allied chain
+    /// that force can reach. Temporary points are omitted; they belong to the shared player pool.
+    /// </summary>
+    public static PlayerSupplySnapshot ForForce(
+        CampaignPlayState state,
+        PlayMap map,
+        SupplyCatalog catalog,
+        CampaignForce force,
+        int roundNumber)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(force);
+        return BuildSnapshot(state, map, catalog, force.ControllerUserId, roundNumber, force.TerritoryId, temporary: 0);
     }
 
     /// <summary>
@@ -259,7 +261,7 @@ public static class SupplyRules
         ArgumentNullException.ThrowIfNull(occupiedAfterSubmittedRetreats);
         var eligible = CampaignPlayRules.EligibleRetreats(map, force);
         var spawn = map.SpawnFor(force.FactionId);
-        var connected = ConnectedTerritoryIds(map, catalog, force.FactionId);
+        var connected = ConnectedTerritoryIds(map, catalog, force.FactionId, originTerritoryId: null);
         PlayTerritory? best = null;
         var bestRank = int.MaxValue;
         foreach (var id in eligible)
@@ -297,6 +299,100 @@ public static class SupplyRules
         return (int)Math.Floor(baseSupply * (value / 100m));
     }
 
+    private static PlayerSupplySnapshot BuildSnapshot(
+        CampaignPlayState state,
+        PlayMap map,
+        SupplyCatalog catalog,
+        Guid userId,
+        int roundNumber,
+        Guid? originTerritoryId,
+        int temporary)
+    {
+        var forceCount = state.Forces.Count(force => force.ControllerUserId == userId);
+        var isSplit = forceCount > 1;
+        var contributions = new List<SupplyContribution>();
+        var mapSupply = MapSupply(state, map, catalog, userId, originTerritoryId, contributions);
+        var escalation = EscalationFor(catalog.ArmyEscalations, roundNumber);
+        var mapAfterPenalty = isSplit
+            ? Math.Max(
+                HuntInEstaliaDefaults.SplitForceMinimumMapSupply,
+                mapSupply - SplitPenalty(
+                    mapSupply,
+                    catalog.SplitForceSupplyPenaltyPercent,
+                    catalog.SplitForceSupplyPenaltyIsPercent))
+            : mapSupply;
+        if (isSplit && mapSupply <= 0)
+        {
+            mapAfterPenalty = 0;
+        }
+
+        var splitPenalty = mapSupply - mapAfterPenalty;
+        var allowance = mapAfterPenalty + escalation.FreeSupplyPoints;
+        if (escalation.FreeSupplyPoints != 0)
+        {
+            contributions.Add(
+                new SupplyContribution(
+                    SupplyContributionKind.RoundFree,
+                    null,
+                    escalation.FreeSupplyPoints,
+                    "Round free supply",
+                    IsAllied: false));
+        }
+
+        if (splitPenalty != 0)
+        {
+            contributions.Add(
+                new SupplyContribution(
+                    SupplyContributionKind.SplitPenalty,
+                    null,
+                    -splitPenalty,
+                    "Split-force penalty",
+                    IsAllied: false));
+        }
+
+        return WithTemporary(
+            new PlayerSupplySnapshot(
+                userId,
+                mapSupply,
+                escalation.FreeSupplyPoints,
+                splitPenalty,
+                0,
+                allowance,
+                escalation.MaxArmyPoints,
+                escalation.FreeCharacterCount,
+                isSplit,
+                contributions),
+            temporary);
+    }
+
+    private static PlayerSupplySnapshot WithTemporary(PlayerSupplySnapshot snapshot, int temporary)
+    {
+        if (temporary == 0)
+        {
+            return snapshot with
+            {
+                TemporarySupplyPoints = 0,
+                CurrentSupplyPoints = snapshot.ForceAllowancePoints,
+            };
+        }
+
+        return snapshot with
+        {
+            TemporarySupplyPoints = temporary,
+            CurrentSupplyPoints = snapshot.ForceAllowancePoints + temporary,
+            Contributions =
+            [
+                .. snapshot.Contributions,
+                new SupplyContribution(
+                    SupplyContributionKind.Temporary,
+                    null,
+                    temporary,
+                    "Temporary supply",
+                    IsAllied: false),
+            ],
+        };
+    }
+
     private static RoundArmyEscalationSetup EscalationFor(
         IReadOnlyList<RoundArmyEscalationSetup> rows,
         int roundNumber)
@@ -309,14 +405,20 @@ public static class SupplyRules
         return rows.FirstOrDefault(row => row.RoundNumber == roundNumber) ?? rows[^1];
     }
 
-    private static int MapSupply(CampaignPlayState state, PlayMap map, SupplyCatalog catalog, Guid userId)
+    private static int MapSupply(
+        CampaignPlayState state,
+        PlayMap map,
+        SupplyCatalog catalog,
+        Guid userId,
+        Guid? originTerritoryId,
+        List<SupplyContribution> contributions)
     {
         if (!catalog.FactionByPlayer.TryGetValue(userId, out var factionId))
         {
             return 0;
         }
 
-        var connected = ConnectedTerritoryIds(map, catalog, factionId);
+        var connected = ConnectedTerritoryIds(map, catalog, factionId, originTerritoryId);
         var total = 0;
         foreach (var territoryId in connected)
         {
@@ -333,28 +435,50 @@ public static class SupplyRules
                 continue;
             }
 
+            var isAllied = territory.OwnerFactionId is { } holding && holding != factionId;
             if (territory.TerrainTypeId is { } terrainId
-                && catalog.TerrainSupplyByType.TryGetValue(terrainId, out var terrainSupply))
+                && catalog.TerrainSupplyByType.TryGetValue(terrainId, out var terrainSupply)
+                && terrainSupply != 0)
             {
                 total += terrainSupply;
+                contributions.Add(
+                    new SupplyContribution(
+                        SupplyContributionKind.TerritoryTerrain,
+                        territory.Id,
+                        terrainSupply,
+                        "Terrain",
+                        isAllied));
             }
 
             if (territory.StructureTypeId is { } structureId
                 && territory.StructureCondition == StructureCondition.Operational
-                && catalog.Structures.TryGetValue(structureId, out var structure))
+                && catalog.Structures.TryGetValue(structureId, out var structure)
+                && structure.SupplyPoints != 0)
             {
                 total += structure.SupplyPoints;
+                contributions.Add(
+                    new SupplyContribution(
+                        SupplyContributionKind.TerritoryStructure,
+                        territory.Id,
+                        structure.SupplyPoints,
+                        territory.StructureName ?? "Structure",
+                        isAllied));
             }
 
-            total += ExtraMapSupply(territory, factionId, catalog, userId);
+            total += ExtraMapSupply(territory, factionId, catalog, userId, contributions);
         }
 
-        total += PathIndependentSupply(map, catalog, factionId, userId, connected);
+        total += PathIndependentSupply(map, catalog, factionId, userId, connected, contributions);
         _ = state;
         return total;
     }
 
-    private static int ExtraMapSupply(PlayTerritory territory, Guid factionId, SupplyCatalog catalog, Guid userId)
+    private static int ExtraMapSupply(
+        PlayTerritory territory,
+        Guid factionId,
+        SupplyCatalog catalog,
+        Guid userId,
+        List<SupplyContribution> contributions)
     {
         var subfaction = catalog.SubfactionByPlayer.GetValueOrDefault(userId);
         var rules = catalog.SpecialRules;
@@ -365,7 +489,7 @@ public static class SupplyRules
             && territory.StructureCondition == StructureCondition.Operational
             && StructureKinds.IsTownOrCity(name))
         {
-            extra += 1;
+            extra += AddSpecial(contributions, territory.Id, 1, SpecialRuleEffectKeys.Slavers);
         }
 
         if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.SpawningPools)
@@ -374,13 +498,17 @@ public static class SupplyRules
             if (territory.IsWaterFeature && !StructureKinds.IsSettlement(name)
                 && (territory.StructureTypeId is null || territory.StructureCondition != StructureCondition.Operational))
             {
-                extra += HuntInEstaliaDefaults.SupplyPoints;
+                extra += AddSpecial(
+                    contributions,
+                    territory.Id,
+                    HuntInEstaliaDefaults.SupplyPoints,
+                    SpecialRuleEffectKeys.SpawningPools);
             }
 
             if (territory.StructureCondition == StructureCondition.Operational
                 && (StructureKinds.IsSupplyDepot(name) || StructureKinds.IsFortification(name)))
             {
-                extra += 1;
+                extra += AddSpecial(contributions, territory.Id, 1, SpecialRuleEffectKeys.SpawningPools);
             }
         }
 
@@ -388,7 +516,11 @@ public static class SupplyRules
             && territory.OwnerFactionId == factionId
             && (territory.StructureTypeId is null || territory.StructureCondition == StructureCondition.Pillaged))
         {
-            extra += HuntInEstaliaDefaults.SupplyPoints;
+            extra += AddSpecial(
+                contributions,
+                territory.Id,
+                HuntInEstaliaDefaults.SupplyPoints,
+                SpecialRuleEffectKeys.GreenTide);
         }
 
         return extra;
@@ -399,7 +531,8 @@ public static class SupplyRules
         SupplyCatalog catalog,
         Guid factionId,
         Guid userId,
-        HashSet<Guid> connected)
+        HashSet<Guid> connected,
+        List<SupplyContribution> contributions)
     {
         var subfaction = catalog.SubfactionByPlayer.GetValueOrDefault(userId);
         var rules = catalog.SpecialRules;
@@ -417,7 +550,11 @@ public static class SupplyRules
                 && !StructureKinds.IsSettlement(territory.StructureName)
                 && (territory.StructureTypeId is null || territory.StructureCondition != StructureCondition.Operational))
             {
-                extra += HuntInEstaliaDefaults.SupplyPoints;
+                extra += AddSpecial(
+                    contributions,
+                    territory.Id,
+                    HuntInEstaliaDefaults.SupplyPoints,
+                    SpecialRuleEffectKeys.SpawningPools);
             }
 
             if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.DefendersOfTheHomeland)
@@ -425,25 +562,54 @@ public static class SupplyRules
                 && territory.StructureCondition == StructureCondition.Operational
                 && StructureKinds.IsTownOrCity(territory.StructureName))
             {
-                extra += HuntInEstaliaDefaults.SupplyPoints;
+                extra += AddSpecial(
+                    contributions,
+                    territory.Id,
+                    HuntInEstaliaDefaults.SupplyPoints,
+                    SpecialRuleEffectKeys.DefendersOfTheHomeland);
             }
         }
 
         return extra;
     }
 
-    private static HashSet<Guid> ConnectedTerritoryIds(PlayMap map, SupplyCatalog catalog, Guid factionId)
+    private static int AddSpecial(
+        List<SupplyContribution> contributions,
+        Guid territoryId,
+        int points,
+        string sourceName)
     {
-        var spawn = map.SpawnFor(factionId);
-        var connected = new HashSet<Guid>();
-        if (spawn is null)
+        if (points == 0)
         {
-            return connected;
+            return 0;
         }
 
+        contributions.Add(
+            new SupplyContribution(
+                SupplyContributionKind.SpecialRule,
+                territoryId,
+                points,
+                sourceName,
+                IsAllied: false));
+        return points;
+    }
+
+    private static HashSet<Guid> ConnectedTerritoryIds(
+        PlayMap map,
+        SupplyCatalog catalog,
+        Guid factionId,
+        Guid? originTerritoryId)
+    {
+        var connected = new HashSet<Guid>();
         var queue = new Queue<Guid>();
-        queue.Enqueue(spawn.Id);
-        connected.Add(spawn.Id);
+        foreach (var start in SupplyOrigins(map, catalog, factionId, originTerritoryId))
+        {
+            if (connected.Add(start))
+            {
+                queue.Enqueue(start);
+            }
+        }
+
         while (queue.Count > 0)
         {
             var current = queue.Dequeue();
@@ -466,6 +632,55 @@ public static class SupplyRules
         }
 
         return connected;
+    }
+
+    private static IEnumerable<Guid> SupplyOrigins(
+        PlayMap map,
+        SupplyCatalog catalog,
+        Guid factionId,
+        Guid? originTerritoryId)
+    {
+        if (originTerritoryId is not { } origin)
+        {
+            var spawn = map.SpawnFor(factionId);
+            if (spawn is not null)
+            {
+                yield return spawn.Id;
+            }
+
+            yield break;
+        }
+
+        var territory = map.Territory(origin);
+        if (territory is null)
+        {
+            yield break;
+        }
+
+        if (IsSupplyOrigin(map, catalog, factionId, territory))
+        {
+            yield return origin;
+            yield break;
+        }
+
+        foreach (var neighborId in map.Neighbors(origin))
+        {
+            var neighbor = map.Territory(neighborId);
+            if (neighbor is not null && IsSupplyOrigin(map, catalog, factionId, neighbor))
+            {
+                yield return neighborId;
+            }
+        }
+    }
+
+    private static bool IsSupplyOrigin(
+        PlayMap map,
+        SupplyCatalog catalog,
+        Guid factionId,
+        PlayTerritory territory)
+    {
+        var spawn = map.SpawnFor(factionId);
+        return (spawn is not null && territory.Id == spawn.Id) || InSupplyNetwork(territory, factionId, catalog);
     }
 
     private static bool InSupplyNetwork(PlayTerritory territory, Guid factionId, SupplyCatalog catalog)

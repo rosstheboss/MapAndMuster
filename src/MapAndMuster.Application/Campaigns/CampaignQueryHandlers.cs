@@ -285,6 +285,7 @@ public sealed class EndCampaignHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly CampaignNotificationPublisher _notifications;
+    private readonly IUserAccountStore _accounts;
 
     /// <summary>
     /// Initializes a new handler.
@@ -292,14 +293,17 @@ public sealed class EndCampaignHandler
     public EndCampaignHandler(
         ICampaignStore campaigns,
         IClock clock,
-        CampaignNotificationPublisher notifications)
+        CampaignNotificationPublisher notifications,
+        IUserAccountStore accounts)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(notifications);
+        ArgumentNullException.ThrowIfNull(accounts);
         _campaigns = campaigns;
         _clock = clock;
         _notifications = notifications;
+        _accounts = accounts;
     }
 
     /// <summary>
@@ -334,20 +338,28 @@ public sealed class EndCampaignHandler
         }
 
         var utcNow = _clock.UtcNow;
-        var play = campaign.PlayState is null
-            ? null
-            : campaign.PlayState.AppendLog(new PlayLogEntry(
-                Guid.NewGuid(),
+        var closedEntry = new PlayLogEntry(
+            Guid.NewGuid(),
+            utcNow,
+            PlayLogKind.CampaignClosed,
+            null,
+            null,
+            command.UserId,
+            null,
+            null,
+            null,
+            null,
+            []);
+        var play = (campaign.PlayState ?? CampaignPlayState.Empty).AppendLog(closedEntry);
+        var provisional = CampaignMapClone.CloneWithClosed(campaign, utcNow, utcNow, play);
+        play = await CampaignCompletionLog.SyncAsync(
+                provisional,
+                play,
                 utcNow,
-                PlayLogKind.CampaignClosed,
-                null,
-                null,
-                command.UserId,
-                null,
-                null,
-                null,
-                null,
-                []));
+                _accounts,
+                revised: false,
+                cancellationToken)
+            .ConfigureAwait(false);
         var updated = CampaignMapClone.CloneWithClosed(campaign, utcNow, utcNow, play);
         var outcome = await _campaigns
             .UpdateAsync(updated, command.ExpectedRevision ?? campaign.Revision, cancellationToken)
@@ -573,7 +585,7 @@ internal static class CampaignMapClone
             RankingObjectivePoints = existing.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = existing.BattleReportRules,
+            StandardBattleResultQuestions = existing.StandardBattleResultQuestions,
             ArmyEscalations = existing.ArmyEscalations,
             PlayState = existing.PlayState,
         };
@@ -629,7 +641,7 @@ internal static class CampaignMapClone
             RankingObjectivePoints = existing.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = existing.BattleReportRules,
+            StandardBattleResultQuestions = existing.StandardBattleResultQuestions,
             ArmyEscalations = existing.ArmyEscalations,
             PlayState = existing.PlayState,
         };
@@ -683,7 +695,7 @@ internal static class CampaignMapClone
             RankingObjectivePoints = existing.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = existing.BattleReportRules,
+            StandardBattleResultQuestions = existing.StandardBattleResultQuestions,
             ArmyEscalations = existing.ArmyEscalations,
             PlayState = existing.PlayState,
         };
@@ -738,7 +750,7 @@ internal static class CampaignMapClone
             RankingObjectivePoints = existing.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = existing.BattleReportRules,
+            StandardBattleResultQuestions = existing.StandardBattleResultQuestions,
             ArmyEscalations = existing.ArmyEscalations,
             PlayState = playState ?? existing.PlayState,
         };
@@ -794,7 +806,7 @@ internal static class CampaignMapClone
             RankingObjectivePoints = existing.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = existing.BattleReportRules,
+            StandardBattleResultQuestions = existing.StandardBattleResultQuestions,
             ArmyEscalations = existing.ArmyEscalations,
             PlayState = play,
         };
@@ -850,7 +862,7 @@ internal static class CampaignMapClone
             RankingObjectivePoints = existing.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = existing.SplitForceSupplyPenaltyIsPercent,
-            BattleReportRules = existing.BattleReportRules,
+            StandardBattleResultQuestions = existing.StandardBattleResultQuestions,
             ArmyEscalations = existing.ArmyEscalations,
             PlayState = playState ?? existing.PlayState,
         };

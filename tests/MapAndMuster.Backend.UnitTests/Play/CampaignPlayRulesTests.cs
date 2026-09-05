@@ -12,6 +12,7 @@ public sealed class CampaignPlayRulesTests
     private static readonly Guid Midland = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid PlayerOne = Guid.Parse("44444444-4444-4444-4444-444444444444");
     private static readonly Guid PlayerTwo = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    private static readonly Guid East = Guid.Parse("66666666-6666-6666-6666-666666666666");
 
     [Fact]
     public void SeedPlacesForcesAndSpawnFlags()
@@ -34,7 +35,9 @@ public sealed class CampaignPlayRulesTests
         Assert.Contains(seeded.State.Log, item => item.Kind == PlayLogKind.CampaignStarted);
         var northForce = seeded.State.Forces.Single(force => force.FactionId == North);
         Assert.Equal([Midland], CampaignPlayRules.EligibleMoves(seeded.Map, northForce));
-        Assert.Contains(NorthSpawn, CampaignPlayRules.EligibleRetreats(seeded.Map, northForce));
+        var retreats = CampaignPlayRules.EligibleRetreats(seeded.Map, northForce, occupyingForces: seeded.State.Forces);
+        Assert.Contains(Midland, retreats);
+        Assert.DoesNotContain(NorthSpawn, retreats);
     }
 
     [Fact]
@@ -92,6 +95,7 @@ public sealed class CampaignPlayRulesTests
         Assert.Equal(PhaseWindowStatus.Resolved, closed.State.Windows[1].Status);
         Assert.Equal(PhaseWindowStatus.Open, closed.State.Windows[2].Status);
         Assert.Equal(schedule.StartsUtc.AddMinutes(1), closed.State.Windows[2].StartsUtc);
+        Assert.Equal(schedule.StartsUtc.AddMinutes(7), closed.State.Windows[2].EndsUtc);
         Assert.Equal(2, closed.State.Log.Count(item => item.Kind == PlayLogKind.ResolvedAction && item.ActionKind == ActionKind.Hold));
         _ = window;
         _ = battle;
@@ -202,6 +206,16 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
+    public void AdvanceCatchesUpOverdueWindowsInOneCall()
+    {
+        var (state, map, schedule) = Seeded();
+        var advanced = CampaignPlayRules.Advance(state, map, schedule, AllyGroups(), schedule.EndsUtc);
+        Assert.NotEqual(PhaseWindowStatus.Open, advanced.State.Windows[0].Status);
+        Assert.True(advanced.State.Windows.Count(window => window.Status == PhaseWindowStatus.Resolved) >= 2);
+        Assert.Contains(advanced.State.Log, item => item.Kind == PlayLogKind.MissingOrderHold);
+    }
+
+    [Fact]
     public void InvalidMoveBecomesHoldAndSpawnIsForbidden()
     {
         var (state, map, schedule) = Seeded();
@@ -231,6 +245,55 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
+    public void LastRequiredCommitClosesActionWindowWhileOtherForcesRemainInBattle()
+    {
+        var (state, map, schedule) = Seeded();
+        var southForce = state.Forces.Single(force => force.FactionId == South);
+        state = state.With(forces: [.. state.Forces.Select(force =>
+            force.Id == southForce.Id ? force.With(inBattle: true) : force)]);
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state, PlayerOne, northForce.Id, ActionKind.Hold, null, null, map, schedule.StartsUtc, out state, out _));
+        Assert.True(CampaignPlayRules.TryCommit(state, map, PlayerOne, AllyGroups(), schedule.StartsUtc, out var closed, out _));
+        Assert.Equal(PhaseWindowStatus.Resolved, closed!.State.Windows[0].Status);
+        Assert.True(closed.State.Forces.Single(force => force.Id == southForce.Id).InBattle);
+    }
+
+    [Fact]
+    public void AdvanceClosesActionWindowWhenEveryForceIsInBattle()
+    {
+        var (state, map, schedule) = Seeded(twoActionWindows: true);
+        state = ForceBattle(state, map, schedule);
+        var current = state.CurrentWindow();
+        Assert.NotNull(current);
+        Assert.Equal(RoundPhaseKind.Action, current.Kind);
+        Assert.True(state.Forces.All(force => force.InBattle));
+        var advanced = CampaignPlayRules.Advance(
+            state,
+            map,
+            schedule,
+            AllyGroups(),
+            current.StartsUtc.AddMinutes(1));
+        Assert.Equal(RoundPhaseKind.Battle, advanced.State.CurrentWindow()!.Kind);
+        Assert.Equal(PhaseWindowStatus.Open, advanced.State.CurrentWindow()!.Status);
+    }
+
+    [Fact]
+    public void AdvanceDoesNotCloseAnEmptyActionWindowBeforeTheDeadline()
+    {
+        var (state, map, schedule) = Seeded();
+        state = state.With(forces: []);
+        var advanced = CampaignPlayRules.Advance(
+            state,
+            map,
+            schedule,
+            AllyGroups(),
+            schedule.StartsUtc.AddMinutes(1));
+        Assert.Equal(RoundPhaseKind.Action, advanced.State.CurrentWindow()!.Kind);
+        Assert.Equal(PhaseWindowStatus.Open, advanced.State.CurrentWindow()!.Status);
+    }
+
+    [Fact]
     public void EnemyArrivalCreatesBattleAndMatchingResultsFinalize()
     {
         var (state, map, schedule) = Seeded();
@@ -250,10 +313,11 @@ public sealed class CampaignPlayRulesTests
         Assert.Contains(closed.State.Log, item => item.Kind == PlayLogKind.BattleCreated && item.BattleId == battle.Id);
         Assert.True(closed.State.Forces.All(force => force.InBattle));
 
+        var now = DuringOpenBattle(closed.State);
         Assert.True(CampaignPlayRules.TrySubmitBattleResult(
-            closed.State, PlayerOne, battle.Id, northForce.Id, false, schedule.StartsUtc.AddMinutes(7), out var oneResult, out _));
+            closed.State, PlayerOne, battle.Id, northForce.Id, false, now, out var oneResult, out _));
         Assert.True(CampaignPlayRules.TryAcceptBattleResult(
-            oneResult!.State, PlayerTwo, battle.Id, schedule.StartsUtc.AddMinutes(7), out var accepted, out _));
+            oneResult!.State, PlayerTwo, battle.Id, now, out var accepted, out _));
         Assert.Equal(BattleStatus.Finalized, accepted!.State.Battles[0].Status);
         Assert.Equal(northForce.Id, accepted.State.Battles[0].WinnerForceId);
         Assert.Equal(PhaseWindowStatus.Open, accepted.State.Windows[1].Status);
@@ -265,10 +329,11 @@ public sealed class CampaignPlayRulesTests
         var (state, map, schedule) = Seeded();
         state = ForceBattle(state, map, schedule);
         var battle = state.Battles[0];
+        var now = DuringOpenBattle(state);
         Assert.True(CampaignPlayRules.TrySubmitBattleResult(
-            state, PlayerOne, battle.Id, null, true, schedule.StartsUtc.AddMinutes(7), out var oneResult, out _));
+            state, PlayerOne, battle.Id, null, true, now, out var oneResult, out _));
         Assert.True(CampaignPlayRules.TryAcceptBattleResult(
-            oneResult!.State, PlayerTwo, battle.Id, schedule.StartsUtc.AddMinutes(7), out var accepted, out _));
+            oneResult!.State, PlayerTwo, battle.Id, now, out var accepted, out _));
         Assert.Equal(BattleStatus.Finalized, accepted!.State.Battles[0].Status);
         Assert.True(accepted.State.Battles[0].IsDraw);
         Assert.Equal(PhaseWindowStatus.Open, accepted.State.Windows[1].Status);
@@ -281,7 +346,7 @@ public sealed class CampaignPlayRulesTests
             PlayerOne,
             battle.Id,
             NorthSpawn,
-            schedule.StartsUtc.AddMinutes(7),
+            now,
             out var afterNorth,
             out _));
         Assert.True(CampaignPlayRules.TrySubmitRetreat(
@@ -290,7 +355,7 @@ public sealed class CampaignPlayRulesTests
             PlayerTwo,
             battle.Id,
             SouthSpawn,
-            schedule.StartsUtc.AddMinutes(7),
+            now,
             out var retreated,
             out _));
         Assert.Equal(PhaseWindowStatus.Resolved, retreated!.State.Windows[1].Status);
@@ -305,10 +370,11 @@ public sealed class CampaignPlayRulesTests
         var battle = state.Battles[0];
         var northForce = state.Forces.Single(force => force.FactionId == North);
         var southForce = state.Forces.Single(force => force.FactionId == South);
+        var now = DuringOpenBattle(state);
         Assert.True(CampaignPlayRules.TrySubmitBattleResult(
-            state, PlayerOne, battle.Id, northForce.Id, false, schedule.StartsUtc.AddMinutes(7), out var one, out _));
+            state, PlayerOne, battle.Id, northForce.Id, false, now, out var one, out _));
         Assert.True(CampaignPlayRules.TrySubmitBattleResult(
-            one!.State, PlayerTwo, battle.Id, southForce.Id, false, schedule.StartsUtc.AddMinutes(7), out var two, out _));
+            one!.State, PlayerTwo, battle.Id, southForce.Id, false, now, out var two, out _));
         Assert.Equal(BattleStatus.Disputed, two!.State.Battles[0].Status);
         Assert.Contains(two.State.Log, item => item.Kind == PlayLogKind.BattleDisputed);
         Assert.Contains(Guid.Empty, two.NotifyManagerUserIds);
@@ -321,17 +387,18 @@ public sealed class CampaignPlayRulesTests
         state = ForceBattle(state, map, schedule);
         var battle = state.Battles[0];
         var northForce = state.Forces.Single(force => force.FactionId == North);
+        var now = DuringOpenBattle(state);
         Assert.True(CampaignPlayRules.TrySubmitBattleResult(
-            state, PlayerOne, battle.Id, northForce.Id, false, schedule.StartsUtc.AddMinutes(7), out var one, out _));
+            state, PlayerOne, battle.Id, northForce.Id, false, now, out var one, out _));
         Assert.True(CampaignPlayRules.TryAcceptBattleResult(
-            one!.State, PlayerTwo, battle.Id, schedule.StartsUtc.AddMinutes(7), out var accepted, out _));
+            one!.State, PlayerTwo, battle.Id, now, out var accepted, out _));
         Assert.True(CampaignPlayRules.TrySubmitRetreat(
             accepted!.State,
             accepted.PreserveMap ? map : accepted.Map,
             PlayerTwo,
             battle.Id,
             SouthSpawn,
-            schedule.StartsUtc.AddMinutes(7),
+            now,
             out var retreated,
             out _));
 
@@ -340,6 +407,322 @@ public sealed class CampaignPlayRulesTests
         Assert.DoesNotContain(retreated.State.Forces, force => force.InBattle);
         Assert.Contains(retreated.State.Log, item => item.Kind == PlayLogKind.PlayerRetreat);
         Assert.Contains(retreated.State.Log, item => item.Kind == PlayLogKind.BattleFinalized);
+    }
+
+    [Fact]
+    public void LastCommitAssignsBattleMissionFromCatalog()
+    {
+        var plains = Guid.NewGuid();
+        var missionId = Guid.NewGuid();
+        var terrain = new TerrainTypeSetup(
+            plains,
+            "Plains",
+            "#AABBCC",
+            [
+                new MissionSetup(
+                    missionId,
+                    "Meeting",
+                    null,
+                    false,
+                    [
+                        new MissionResultQuestionSetup(
+                            Guid.NewGuid(),
+                            "Held the centre",
+                            MissionResultQuestionKind.Boolean,
+                            0,
+                            1),
+                    ]),
+            ]);
+        var map = new PlayMap(
+            [
+                new PlayTerritory(
+                    NorthSpawn,
+                    1,
+                    North,
+                    North,
+                    null,
+                    null,
+                    StructureCondition.Operational,
+                    terrainTypeId: plains),
+                new PlayTerritory(
+                    Midland,
+                    2,
+                    null,
+                    null,
+                    null,
+                    null,
+                    StructureCondition.Operational,
+                    terrainTypeId: plains),
+                new PlayTerritory(
+                    SouthSpawn,
+                    3,
+                    South,
+                    South,
+                    null,
+                    null,
+                    StructureCondition.Operational,
+                    terrainTypeId: plains),
+            ],
+            [(NorthSpawn, Midland), (Midland, SouthSpawn), (NorthSpawn, SouthSpawn)]);
+        var (state, seededMap, schedule) = Seeded(map: map);
+        map = seededMap;
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var southForce = state.Forces.Single(force => force.FactionId == South);
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state, PlayerOne, northForce.Id, ActionKind.Move, Midland, null, map, schedule.StartsUtc, out var northDraft, out _));
+        Assert.True(CampaignPlayRules.TryCommit(northDraft!, map, PlayerOne, AllyGroups(), schedule.StartsUtc, out var afterNorth, out _));
+        state = afterNorth!.State;
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state, PlayerTwo, southForce.Id, ActionKind.Move, Midland, null, map, schedule.StartsUtc, out var southDraft, out _));
+        Assert.True(CampaignPlayRules.TryCommit(
+            southDraft!,
+            map,
+            PlayerTwo,
+            AllyGroups(),
+            schedule.StartsUtc,
+            out var closed,
+            out _,
+            terrainTypes: [terrain],
+            pickIndex: static _ => 0));
+
+        var battle = Assert.Single(closed!.State.Battles);
+        Assert.Equal(missionId, battle.MissionId);
+    }
+
+    [Fact]
+    public void BattlePhaseRequiresReportingPlayersUntilResultsAreIn()
+    {
+        var (state, map, schedule) = Seeded();
+        state = ForceBattle(state, map, schedule);
+        var window = state.CurrentWindow();
+        Assert.NotNull(window);
+        Assert.Equal(RoundPhaseKind.Battle, window.Kind);
+        var required = state.RequiredBattlePlayers(window.Id);
+        Assert.Equal(2, required.Count);
+        Assert.Contains(PlayerOne, required);
+        Assert.Contains(PlayerTwo, required);
+        Assert.False(state.HasCompletedBattleDuties(window.Id, PlayerOne));
+        Assert.False(state.HasCompletedBattleDuties(window.Id, PlayerTwo));
+    }
+
+    [Fact]
+    public void BattlePhaseCountsUniquePlayersAcrossTwoBattles()
+    {
+        var playerThree = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        var west = Guid.Parse("88888888-8888-8888-8888-888888888888");
+        var westFaction = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        var windowId = Guid.NewGuid();
+        var now = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+        var window = new PhaseWindow(
+            windowId,
+            1,
+            2,
+            RoundPhaseKind.Battle,
+            4,
+            DurationUnit.Minutes,
+            now,
+            now.AddHours(1),
+            PhaseWindowStatus.Open);
+        var forceA1 = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, true);
+        var forceA2 = new CampaignForce(Guid.NewGuid(), PlayerOne, North, west, true);
+        var forceB = new CampaignForce(Guid.NewGuid(), PlayerTwo, South, Midland, true);
+        var forceC = new CampaignForce(Guid.NewGuid(), playerThree, westFaction, west, true);
+        var battle1 = new CampaignBattle(
+            Guid.NewGuid(),
+            Midland,
+            Guid.NewGuid(),
+            windowId,
+            BattleStatus.AwaitingResults,
+            [forceA1.Id, forceB.Id],
+            null,
+            false,
+            now);
+        var battle2 = new CampaignBattle(
+            Guid.NewGuid(),
+            west,
+            Guid.NewGuid(),
+            windowId,
+            BattleStatus.AwaitingResults,
+            [forceA2.Id, forceC.Id],
+            null,
+            false,
+            now);
+        var state = CampaignPlayState.Empty.With(
+            windows: [window],
+            forces: [forceA1, forceA2, forceB, forceC],
+            battles: [battle1, battle2]);
+
+        var required = state.RequiredBattlePlayers(windowId);
+        Assert.Equal(3, required.Count);
+        Assert.Contains(PlayerOne, required);
+        Assert.Contains(PlayerTwo, required);
+        Assert.Contains(playerThree, required);
+        Assert.False(state.HasCompletedBattleDuties(windowId, PlayerOne));
+        Assert.False(state.HasCompletedBattleDuties(windowId, PlayerTwo));
+        Assert.False(state.HasCompletedBattleDuties(windowId, playerThree));
+
+        var submittedOne = new BattleResultSubmission(
+            Guid.NewGuid(),
+            battle1.Id,
+            PlayerOne,
+            forceA1.Id,
+            false,
+            null,
+            now);
+        var acceptedOne = new BattleResultSubmission(
+            Guid.NewGuid(),
+            battle1.Id,
+            PlayerTwo,
+            forceA1.Id,
+            false,
+            submittedOne.Id,
+            now);
+        var afterFirst = state.With(
+            battles:
+            [
+                battle1.With(status: BattleStatus.Finalized, winnerForceId: forceA1.Id, winnerScore: 10, loserScore: 0, assignScores: true),
+                battle2,
+            ],
+            battleSubmissions: [submittedOne, acceptedOne],
+            retreats: [new RetreatOrder(Guid.NewGuid(), battle1.Id, forceB.Id, SouthSpawn, false, now)]);
+
+        Assert.Equal(3, afterFirst.RequiredBattlePlayers(windowId).Count);
+        Assert.False(afterFirst.HasCompletedBattleDuties(windowId, PlayerOne));
+        Assert.True(afterFirst.HasCompletedBattleDuties(windowId, PlayerTwo));
+        Assert.False(afterFirst.HasCompletedBattleDuties(windowId, playerThree));
+
+        var afterSecond = afterFirst.With(
+            battles:
+            [
+                afterFirst.Battles.Single(item => item.Id == battle1.Id),
+                battle2.With(status: BattleStatus.GMResolved, winnerForceId: forceA2.Id, winnerScore: 8, loserScore: 2, assignScores: true),
+            ],
+            retreats:
+            [
+                afterFirst.Retreats.Single(),
+                new RetreatOrder(Guid.NewGuid(), battle2.Id, forceC.Id, west, false, now),
+            ]);
+
+        Assert.Equal(3, afterSecond.RequiredBattlePlayers(windowId).Count);
+        Assert.True(afterSecond.HasCompletedBattleDuties(windowId, PlayerOne));
+        Assert.True(afterSecond.HasCompletedBattleDuties(windowId, PlayerTwo));
+        Assert.True(afterSecond.HasCompletedBattleDuties(windowId, playerThree));
+    }
+
+    [Fact]
+    public void StandardRetreatAcceptsANonAdjacentOwnedTerritory()
+    {
+        var map = CreateMapWithEast(adjacentToMidland: false);
+        var (state, seededMap, schedule) = Seeded(map: map);
+        map = seededMap;
+        state = ForceBattle(state, map, schedule);
+        var battle = state.Battles[0];
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var now = DuringOpenBattle(state);
+        Assert.True(CampaignPlayRules.TrySubmitBattleResult(
+            state, PlayerOne, battle.Id, northForce.Id, false, now, out var one, out _));
+        Assert.True(CampaignPlayRules.TryAcceptBattleResult(
+            one!.State, PlayerTwo, battle.Id, now, out var accepted, out _));
+        var retreatMap = accepted!.PreserveMap ? map : accepted.Map;
+        Assert.True(CampaignPlayRules.TrySubmitRetreat(
+            accepted.State,
+            retreatMap,
+            PlayerTwo,
+            battle.Id,
+            East,
+            now,
+            out var retreated,
+            out _));
+        Assert.Equal(East, retreated!.State.Forces.Single(force => force.FactionId == South).TerritoryId);
+    }
+
+    [Fact]
+    public void ArtOfWarRetreatAcceptsAnEnemyOwnedTerritory()
+    {
+        var map = CreateMapWithEast(adjacentToMidland: false, eastOwner: North);
+        var (state, seededMap, schedule) = Seeded(map: map);
+        map = seededMap;
+        state = ForceBattle(state, map, schedule);
+        var battle = state.Battles[0];
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var now = DuringOpenBattle(state);
+        Assert.True(CampaignPlayRules.TrySubmitBattleResult(
+            state, PlayerOne, battle.Id, northForce.Id, false, now, out var one, out _));
+        Assert.True(CampaignPlayRules.TryAcceptBattleResult(
+            one!.State, PlayerTwo, battle.Id, now, out var accepted, out _));
+        var retreatMap = accepted!.PreserveMap ? map : accepted.Map;
+        Assert.False(CampaignPlayRules.TrySubmitRetreat(
+            accepted.State,
+            retreatMap,
+            PlayerTwo,
+            battle.Id,
+            East,
+            now,
+            out _,
+            out var invalid));
+        Assert.Equal("retreat.target.invalid", invalid!.Code);
+        Assert.True(CampaignPlayRules.TrySubmitRetreat(
+            accepted.State,
+            retreatMap,
+            PlayerTwo,
+            battle.Id,
+            East,
+            now,
+            out var retreated,
+            out _,
+            specialRules: ArtOfWarFor(South)));
+        Assert.Equal(East, retreated!.State.Forces.Single(force => force.FactionId == South).TerritoryId);
+    }
+
+    [Fact]
+    public void StandardRetreatIncludesAlliedAndOpenNeutralTerritories()
+    {
+        var map = CreateMapWithEast(adjacentToMidland: false);
+        var (state, seededMap, _) = Seeded(map: map);
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var allies = new Dictionary<Guid, string?>
+        {
+            [North] = "League",
+            [South] = "League",
+        };
+        var retreats = CampaignPlayRules.EligibleRetreats(
+            seededMap,
+            northForce,
+            occupyingForces: state.Forces,
+            factionAllyGroups: allies);
+        Assert.Contains(Midland, retreats);
+        Assert.Contains(East, retreats);
+        Assert.DoesNotContain(SouthSpawn, retreats);
+        Assert.DoesNotContain(NorthSpawn, retreats);
+    }
+
+    [Fact]
+    public void MissingRetreatGoesToSpawn()
+    {
+        var map = CreateMapWithEast(adjacentToMidland: true);
+        var (state, seededMap, schedule) = Seeded(map: map);
+        map = seededMap;
+        state = ForceBattle(state, map, schedule);
+        var battle = state.Battles[0];
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var now = DuringOpenBattle(state);
+        Assert.True(CampaignPlayRules.TrySubmitBattleResult(
+            state, PlayerOne, battle.Id, northForce.Id, false, now, out var one, out _));
+        Assert.True(CampaignPlayRules.TryAcceptBattleResult(
+            one!.State, PlayerTwo, battle.Id, now, out var accepted, out _));
+        var retreatMap = accepted!.PreserveMap ? map : accepted.Map;
+        var battleWindow = accepted.State.Windows.First(window =>
+            window.Kind == RoundPhaseKind.Battle && window.Status == PhaseWindowStatus.Open);
+        var advanced = CampaignPlayRules.Advance(
+            accepted.State,
+            retreatMap,
+            schedule,
+            AllyGroups(),
+            battleWindow.EndsUtc);
+        Assert.Equal(SouthSpawn, advanced.State.Forces.Single(force => force.FactionId == South).TerritoryId);
+        Assert.Contains(
+            advanced.State.Log,
+            item => item.Kind == PlayLogKind.DefaultRetreat && item.TargetTerritoryId == SouthSpawn);
     }
 
     [Fact]
@@ -395,7 +778,7 @@ public sealed class CampaignPlayRulesTests
         var (state, map, schedule) = Seeded();
         state = ForceBattle(state, map, schedule);
         var southForce = state.Forces.Single(force => force.FactionId == South);
-        var now = schedule.StartsUtc.AddMinutes(7);
+        var now = DuringOpenBattle(state);
         Assert.True(CampaignPlayRules.TryEnterDebug(state, PlayerOne, now, out state, out _));
         Assert.True(CampaignPlayRules.TryDebugCorrectOrder(
             state!,
@@ -429,7 +812,7 @@ public sealed class CampaignPlayRulesTests
         state = ForceBattle(state, map, schedule);
         var battle = state.Battles[0];
         var northForce = state.Forces.Single(force => force.FactionId == North);
-        var now = schedule.StartsUtc.AddMinutes(7);
+        var now = DuringOpenBattle(state);
         Assert.False(CampaignPlayRules.TryResolveBattle(
             state, PlayerOne, battle.Id, northForce.Id, false, now, out _, out var required));
         Assert.Equal("debug.required", required!.Code);
@@ -452,7 +835,7 @@ public sealed class CampaignPlayRulesTests
         var battle = state.Battles[0];
         var northForce = state.Forces.Single(force => force.FactionId == North);
         var southForce = state.Forces.Single(force => force.FactionId == South);
-        var now = schedule.StartsUtc.AddMinutes(7);
+        var now = DuringOpenBattle(state);
 
         Assert.True(CampaignPlayRules.TrySubmitSurrender(
             state,
@@ -621,7 +1004,7 @@ public sealed class CampaignPlayRulesTests
                 eastForce,
             ],
             battles: [battle]);
-        var now = schedule.StartsUtc.AddMinutes(7);
+        var now = DuringOpenBattle(state);
         var groups = new Dictionary<Guid, string?>
         {
             [North] = null,
@@ -738,6 +1121,51 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
+    public void DraftRejectsBackstabWhenNotSharingWithAnAllyOrOnEmptyAlliedLand()
+    {
+        var (state, map, schedule) = Seeded();
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var now = schedule.StartsUtc;
+        var allies = new Dictionary<Guid, string?>
+        {
+            [North] = "Coalition",
+            [South] = "Coalition",
+        };
+
+        Assert.False(CampaignPlayRules.TrySaveDraft(
+            state,
+            PlayerOne,
+            northForce.Id,
+            ActionKind.Backstab,
+            null,
+            null,
+            map,
+            allies,
+            null,
+            now,
+            out _,
+            out var remoteError));
+        Assert.Equal("order.backstab.invalid", remoteError!.Code);
+
+        var relocated = northForce.With(territoryId: Midland);
+        state = state.With(forces: [relocated, .. state.Forces.Where(force => force.Id != northForce.Id)]);
+        map = CreateMap(ownerMidland: South);
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state,
+            PlayerOne,
+            relocated.Id,
+            ActionKind.Backstab,
+            null,
+            null,
+            map,
+            allies,
+            null,
+            now,
+            out _,
+            out _));
+    }
+
+    [Fact]
     public void DraftAcceptsPillageOfAnUnownedStructure()
     {
         var (state, map, schedule) = Seeded();
@@ -771,6 +1199,13 @@ public sealed class CampaignPlayRulesTests
             state, PlayerTwo, southForce.Id, ActionKind.Move, Midland, null, map, schedule.StartsUtc, out var southDraft, out _));
         Assert.True(CampaignPlayRules.TryCommit(southDraft!, map, PlayerTwo, AllyGroups(), schedule.StartsUtc, out var closed, out _));
         return closed!.State;
+    }
+
+    private static DateTimeOffset DuringOpenBattle(CampaignPlayState state)
+    {
+        var window = state.CurrentWindow()
+            ?? state.Windows.First(item => item.Kind == RoundPhaseKind.Battle && item.Status == PhaseWindowStatus.Open);
+        return window.StartsUtc.AddMinutes(1);
     }
 
     [Fact]
@@ -1130,6 +1565,91 @@ public sealed class CampaignPlayRulesTests
         Assert.All(advanced.State.Forces, force => Assert.Equal("Well Rested", force.StatusName));
     }
 
+    [Fact]
+    public void BattleSupplySpendUsesTheReportingForceChainThenTheSharedTemporaryPool()
+    {
+        var isolated = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        var keepLand = Guid.Parse("12121212-1212-1212-1212-121212121212");
+        var terrain = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        var keep = Guid.Parse("88888888-8888-8888-8888-888888888888");
+        var map = new PlayMap(
+            [
+                new PlayTerritory(NorthSpawn, 1, North, North, null, null, StructureCondition.Operational, terrainTypeId: terrain),
+                new PlayTerritory(Midland, 2, null, null, null, null, StructureCondition.Operational),
+                new PlayTerritory(SouthSpawn, 3, South, South, null, null, StructureCondition.Operational),
+                new PlayTerritory(
+                    keepLand,
+                    4,
+                    North,
+                    null,
+                    keep,
+                    "Keep",
+                    StructureCondition.Operational,
+                    isPillageable: true,
+                    isDestructible: true,
+                    terrainTypeId: terrain),
+                new PlayTerritory(isolated, 5, North, null, null, null, StructureCondition.Operational, terrainTypeId: terrain),
+            ],
+            [(NorthSpawn, Midland), (Midland, SouthSpawn), (NorthSpawn, SouthSpawn), (NorthSpawn, keepLand)],
+            [new StructureTypePlayRules(keep, "Keep", true, true, true, 1, 1, 1)]);
+        var (state, _, schedule) = Seeded(map: map);
+        state = ForceBattle(state, map, schedule);
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var southForce = state.Forces.Single(force => force.FactionId == South);
+        var connectedForce = new CampaignForce(Guid.NewGuid(), PlayerOne, North, NorthSpawn, false);
+        var catalog = new SupplyCatalog(
+            new Dictionary<Guid, int> { [terrain] = 1 },
+            new Dictionary<Guid, StructureSupplyRules> { [keep] = new(1, 1, 1) },
+            HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue,
+            HuntInEstaliaDefaults.ArmyEscalations(8),
+            new Dictionary<Guid, Guid> { [PlayerOne] = North, [PlayerTwo] = South },
+            AllyGroups(),
+            new HashSet<Guid>());
+        state = state.With(
+            forces:
+            [
+                northForce.With(territoryId: isolated, inBattle: true),
+                connectedForce,
+                southForce.With(territoryId: isolated, inBattle: true),
+            ],
+            playerSupplies: [new PlayerSupplyBalance(PlayerOne, 3)]);
+        var battle = state.Battles[0];
+        var now = DuringOpenBattle(state);
+        var reports = new BattleParticipantReport[]
+        {
+            new(northForce.Id, 10, 1000, 5, 0, [], supplyCostingUnitCount: 5),
+            new(southForce.Id, 10, 1000, 0, 0, []),
+        };
+
+        Assert.True(CampaignPlayRules.TrySubmitBattleResult(
+            state,
+            PlayerOne,
+            battle.Id,
+            northForce.Id,
+            false,
+            now,
+            out var submitted,
+            out _,
+            reports: reports,
+            map: map,
+            catalog: catalog));
+        Assert.True(CampaignPlayRules.TryAcceptBattleResult(
+            submitted!.State,
+            PlayerTwo,
+            battle.Id,
+            now,
+            out var accepted,
+            out _,
+            map: map,
+            catalog: catalog));
+
+        // Isolated chain allowance is 2; 5 costing units consume the whole shared pool of 3.
+        // Charging the connected sibling's chain instead would leave 1 temporary point.
+        Assert.Equal(
+            0,
+            accepted!.State.PlayerSupplies.FirstOrDefault(item => item.UserId == PlayerOne)?.TemporarySupplyPoints ?? 0);
+    }
+
     private static (CampaignPlayState State, PlayMap Map) CompleteWithHolds(
         CampaignPlayState state,
         PlayMap map)
@@ -1193,10 +1713,11 @@ public sealed class CampaignPlayRulesTests
 
     private static (CampaignPlayState State, PlayMap Map, CampaignSchedule Schedule) Seeded(
         int roundCount = 3,
-        bool twoActionWindows = false)
+        bool twoActionWindows = false,
+        PlayMap? map = null)
     {
         var schedule = CreateSchedule(roundCount, twoActionWindows);
-        var map = CreateMap(ownerMidland: null);
+        map ??= CreateMap(ownerMidland: null);
         var seeded = CampaignPlayRules.Seed(
             CampaignPlayState.Empty,
             map,
@@ -1204,6 +1725,30 @@ public sealed class CampaignPlayRulesTests
             [new PlayerFactionAssignment(PlayerOne, North), new PlayerFactionAssignment(PlayerTwo, South)],
             schedule.StartsUtc);
         return (seeded.State, seeded.Map, schedule);
+    }
+
+    private static PlayMap CreateMapWithEast(bool adjacentToMidland, Guid? eastOwner = null)
+    {
+        var territories = new[]
+        {
+            new PlayTerritory(NorthSpawn, 1, North, North, null, null, StructureCondition.Operational),
+            new PlayTerritory(Midland, 2, null, null, null, null, StructureCondition.Operational),
+            new PlayTerritory(SouthSpawn, 3, South, South, null, null, StructureCondition.Operational),
+            new PlayTerritory(East, 4, eastOwner ?? South, null, null, null, StructureCondition.Operational),
+        };
+        (Guid, Guid)[] edges = adjacentToMidland
+            ? [(NorthSpawn, Midland), (Midland, SouthSpawn), (NorthSpawn, SouthSpawn), (Midland, East)]
+            : [(NorthSpawn, Midland), (Midland, SouthSpawn), (NorthSpawn, SouthSpawn), (SouthSpawn, East)];
+        return new PlayMap(territories, edges);
+    }
+
+    private static SpecialRuleContext ArtOfWarFor(Guid factionId)
+    {
+        var ruleId = Guid.NewGuid();
+        return new SpecialRuleContext(
+            [new SpecialRuleSetup(ruleId, "Art of War", "Rule text.", SpecialRuleEffectKeys.ArtOfWar)],
+            new Dictionary<Guid, IReadOnlyList<Guid>> { [factionId] = [ruleId] },
+            new Dictionary<(Guid, string), IReadOnlyList<Guid>>());
     }
 
     private static Dictionary<Guid, string?> AllyGroups()
