@@ -21,6 +21,7 @@ public static class CampaignCatalogDefaults
                 Color = entry.OverlayColor,
                 Missions = [new MissionInput { Name = DefaultMissionName(entry.Label) }],
                 IsWaterFeature = TerrainCatalog.IsWaterFeature(entry.Type),
+                SupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
             }),
         ];
     }
@@ -43,6 +44,9 @@ public static class CampaignCatalogDefaults
                     IsBuildable = IsBuildable,
                     IsPillageable = IsPillageable,
                     IsDestructible = IsDestructible,
+                    SupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
+                    PillageSupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
+                    DestroySupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
                 };
             }),
         ];

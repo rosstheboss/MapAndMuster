@@ -952,7 +952,8 @@ and the game log.
   Traversal starts at the force's territory when that land is spawn or otherwise in the supply
   network; a force standing off the network still draws from adjacent owned or allied land.
   Each terrain type and each operational owned or allied structure grants configured supply
-  points (default 1) when the force is connected to it. Allied land and structures count as if
+  points (default 1 for new catalog rows; omitted or invalid values are stored as 0) when the
+  force is connected to it. Allied land and structures count as if
   owned for supply and for defense, not for structure campaign-point holdings. Pillaging or
   destroying a structure awards that structure's configured temporary supply points to the
   acting player. Two forces that can both reach the same holdings each have access to that

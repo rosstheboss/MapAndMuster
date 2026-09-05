@@ -2812,7 +2812,7 @@ export class CampaignSetupPage {
       color: [type.color, required],
       campaignPoints: [type.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
       isWaterFeature: [type.isWaterFeature === true],
-      supplyPoints: [type.supplyPoints ?? HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS, [minValue(0), maxValue(999)]],
+      supplyPoints: [type.supplyPoints ?? 0, [minValue(0), maxValue(999)]],
       missions: this.formBuilder.array<MissionGroup>(missions),
     });
   }
@@ -2864,9 +2864,9 @@ export class CampaignSetupPage {
       type.campaignPoints ?? 0,
     );
     group.patchValue({
-      supplyPoints: type.supplyPoints ?? HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
-      pillageSupplyPoints: type.pillageSupplyPoints ?? HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
-      destroySupplyPoints: type.destroySupplyPoints ?? HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
+      supplyPoints: type.supplyPoints ?? 0,
+      pillageSupplyPoints: type.pillageSupplyPoints ?? 0,
+      destroySupplyPoints: type.destroySupplyPoints ?? 0,
     });
     return group;
   }
@@ -3503,7 +3503,7 @@ export class CampaignSetupPage {
       color: type.color,
       campaignPoints: 0,
       isWaterFeature: type.isWaterFeature,
-      supplyPoints: Number(type.supplyPoints) || HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
+      supplyPoints: this.catalogSupplyPoints(type.supplyPoints),
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toAttachedMissionPayload(mission)),
@@ -3518,9 +3518,9 @@ export class CampaignSetupPage {
       isPillageable: type.isPillageable,
       isDestructible: type.isDestructible,
       campaignPoints: Number(type.campaignPoints) || 0,
-      supplyPoints: Number(type.supplyPoints) || HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
-      pillageSupplyPoints: Number(type.pillageSupplyPoints) || HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
-      destroySupplyPoints: Number(type.destroySupplyPoints) || HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
+      supplyPoints: this.catalogSupplyPoints(type.supplyPoints),
+      pillageSupplyPoints: this.catalogSupplyPoints(type.pillageSupplyPoints),
+      destroySupplyPoints: this.catalogSupplyPoints(type.destroySupplyPoints),
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toAttachedMissionPayload(mission)),
@@ -4468,6 +4468,11 @@ export class CampaignSetupPage {
     }
 
     this.bumpPendingUploads();
+  }
+
+  private catalogSupplyPoints(value: unknown): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 && parsed <= 999 ? parsed : 0;
   }
 
   private revealErrors(messages: readonly string[]): void {

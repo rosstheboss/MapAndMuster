@@ -651,7 +651,10 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector<HTMLInputElement>('#round-escalation-characters-6')?.value).toBe('2');
     expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-7')?.value).toBe('3000');
     expect(compiled.querySelector<HTMLInputElement>('#terrain-supply-0')?.value).toBe('1');
-    expect(compiled.querySelector('#structure-supply-0')).toBeTruthy();
+    expect(compiled.querySelector<HTMLInputElement>('#terrain-supply-0')?.min).toBe('0');
+    expect(compiled.querySelector<HTMLInputElement>('#structure-supply-0')?.min).toBe('0');
+    expect(compiled.querySelector<HTMLInputElement>('#structure-pillage-supply-0')?.min).toBe('0');
+    expect(compiled.querySelector<HTMLInputElement>('#structure-destroy-supply-0')?.min).toBe('0');
     clickNamedButton(compiled, 'Add public objective');
     await fixture.whenStable();
     fixture.detectChanges();
@@ -1561,6 +1564,132 @@ describe('CampaignSetupPage edit', () => {
     expect(compiled.querySelector('.save-status.is-failure')).toBeTruthy();
     expect(compiled.querySelector('[aria-label="Campaign save failed"]')).toBeTruthy();
     expect(compiled.textContent).toContain('Last saved');
+    http.verify();
+  });
+
+  it('saves terrain and structure supply points of zero', async () => {
+    HTMLElement.prototype.scrollIntoView = () => undefined;
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    const campaign = scheduledEditCampaign(campaignId);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      ...campaign,
+      terrainTypes: [{ ...campaign.terrainTypes[0], supplyPoints: 1 }],
+      structureTypes: [
+        {
+          id: 'structure-1',
+          name: 'Town',
+          builtinSymbol: 'Town',
+          hasImage: false,
+          hasPillagedImage: false,
+          isBuildable: false,
+          isPillageable: true,
+          isDestructible: true,
+          missions: [],
+          supplyPoints: 1,
+          pillageSupplyPoints: 1,
+          destroySupplyPoints: 1,
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      terrainTypes: { at: (index: number) => { controls: { supplyPoints: { setValue(value: number): void } } } };
+      structureTypes: {
+        at: (index: number) => {
+          controls: {
+            supplyPoints: { setValue(value: number): void };
+            pillageSupplyPoints: { setValue(value: number): void };
+            destroySupplyPoints: { setValue(value: number): void };
+          };
+        };
+      };
+      save: () => Promise<void>;
+    };
+    page.terrainTypes.at(0).controls.supplyPoints.setValue(0);
+    page.structureTypes.at(0).controls.supplyPoints.setValue(0);
+    page.structureTypes.at(0).controls.pillageSupplyPoints.setValue(0);
+    page.structureTypes.at(0).controls.destroySupplyPoints.setValue(0);
+    fixture.detectChanges();
+
+    const saving = page.save();
+    const put = http.expectOne(`/api/campaigns/${campaignId}`);
+    expect(put.request.method).toBe('PUT');
+    const body = put.request.body as {
+      terrainTypes: { supplyPoints: number }[];
+      structureTypes: { supplyPoints: number; pillageSupplyPoints: number; destroySupplyPoints: number }[];
+    };
+    expect(body.terrainTypes[0].supplyPoints).toBe(0);
+    expect(body.structureTypes[0].supplyPoints).toBe(0);
+    expect(body.structureTypes[0].pillageSupplyPoints).toBe(0);
+    expect(body.structureTypes[0].destroySupplyPoints).toBe(0);
+    put.flush({ ...campaign, revision: 3 });
+    await saving;
+    http.verify();
+  });
+
+  it('defaults empty and invalid terrain and structure supply points to zero', async () => {
+    HTMLElement.prototype.scrollIntoView = () => undefined;
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    const campaign = scheduledEditCampaign(campaignId);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      ...campaign,
+      terrainTypes: [{ ...campaign.terrainTypes[0], supplyPoints: 1 }],
+      structureTypes: [
+        {
+          id: 'structure-1',
+          name: 'Town',
+          builtinSymbol: 'Town',
+          hasImage: false,
+          hasPillagedImage: false,
+          isBuildable: false,
+          isPillageable: true,
+          isDestructible: true,
+          missions: [],
+          supplyPoints: 1,
+          pillageSupplyPoints: 1,
+          destroySupplyPoints: 1,
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      terrainTypes: { at: (index: number) => { controls: { supplyPoints: { setValue(value: number | null): void } } } };
+      structureTypes: {
+        at: (index: number) => {
+          controls: {
+            supplyPoints: { setValue(value: number | null): void };
+            pillageSupplyPoints: { setValue(value: number | null): void };
+            destroySupplyPoints: { setValue(value: number | null): void };
+          };
+        };
+      };
+      save: () => Promise<void>;
+    };
+    page.terrainTypes.at(0).controls.supplyPoints.setValue(null);
+    page.structureTypes.at(0).controls.supplyPoints.setValue(Number.NaN);
+    page.structureTypes.at(0).controls.pillageSupplyPoints.setValue(null);
+    page.structureTypes.at(0).controls.destroySupplyPoints.setValue(Number.NaN);
+    fixture.detectChanges();
+
+    const saving = page.save();
+    const put = http.expectOne(`/api/campaigns/${campaignId}`);
+    expect(put.request.method).toBe('PUT');
+    const body = put.request.body as {
+      terrainTypes: { supplyPoints: number }[];
+      structureTypes: { supplyPoints: number; pillageSupplyPoints: number; destroySupplyPoints: number }[];
+    };
+    expect(body.terrainTypes[0].supplyPoints).toBe(0);
+    expect(body.structureTypes[0].supplyPoints).toBe(0);
+    expect(body.structureTypes[0].pillageSupplyPoints).toBe(0);
+    expect(body.structureTypes[0].destroySupplyPoints).toBe(0);
+    put.flush({ ...campaign, revision: 3 });
+    await saving;
     http.verify();
   });
 

@@ -144,5 +144,9 @@ public sealed class CampaignPresetPackageCodecTests
         Assert.Equal(
             "structures/town.png",
             unpacked.Value.Campaign.StructureTypes.Single(type => type.Name == "Town").ImageStorageKey);
+        var town = unpacked.Value.Campaign.StructureTypes.Single(type => type.Name == "Town");
+        Assert.Equal(0, town.SupplyPoints);
+        Assert.Equal(0, town.PillageSupplyPoints);
+        Assert.Equal(0, town.DestroySupplyPoints);
     }
 }

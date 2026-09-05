@@ -1393,6 +1393,100 @@ public sealed class CampaignSetupRulesTests
     }
 
     [Fact]
+    public void AcceptsZeroSupplyPointsOnTerrainAndStructures()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            [
+                new TerrainTypeInput
+                {
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [new MissionInput { Name = "Plains control" }],
+                    SupplyPoints = 0,
+                },
+            ],
+            [
+                new StructureTypeInput
+                {
+                    Name = "Town",
+                    BuiltinSymbol = "Town",
+                    SupplyPoints = 0,
+                    PillageSupplyPoints = 0,
+                    DestroySupplyPoints = 0,
+                },
+            ],
+            out var setup,
+            out _,
+            out var errors);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        Assert.Equal(0, setup.TerrainTypes[0].SupplyPoints);
+        Assert.Equal(0, setup.StructureTypes[0].SupplyPoints);
+        Assert.Equal(0, setup.StructureTypes[0].PillageSupplyPoints);
+        Assert.Equal(0, setup.StructureTypes[0].DestroySupplyPoints);
+    }
+
+    [Fact]
+    public void DefaultsOmittedAndInvalidCatalogSupplyPointsToZero()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            [
+                new TerrainTypeInput
+                {
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [new MissionInput { Name = "Plains control" }],
+                    SupplyPoints = -1,
+                },
+            ],
+            [
+                new StructureTypeInput
+                {
+                    Name = "Town",
+                    BuiltinSymbol = "Town",
+                    SupplyPoints = 1000,
+                    PillageSupplyPoints = null,
+                    DestroySupplyPoints = -4,
+                },
+            ],
+            out var setup,
+            out _,
+            out var errors);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        Assert.Equal(0, setup.TerrainTypes[0].SupplyPoints);
+        Assert.Equal(0, setup.StructureTypes[0].SupplyPoints);
+        Assert.Equal(0, setup.StructureTypes[0].PillageSupplyPoints);
+        Assert.Equal(0, setup.StructureTypes[0].DestroySupplyPoints);
+    }
+
+    [Fact]
     public void RejectsASplitForcePenaltyOutsideZeroToOneHundred()
     {
         var succeeded = CampaignSetupRules.TryCreate(

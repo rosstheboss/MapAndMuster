@@ -945,11 +945,7 @@ public static class CampaignSetupRules
                 color,
                 missionsForType,
                 input.IsWaterFeature ?? TerrainCatalog.IsWaterFeature(name),
-                ParseSupplyPoints(
-                    input.SupplyPoints,
-                    $"terrainTypes[{index}].supplyPoints",
-                    $"Terrain type {index + 1} supply points",
-                    errors)));
+                ParseCatalogSupplyPoints(input.SupplyPoints)));
         }
 
         return parsed;
@@ -1034,21 +1030,9 @@ public static class CampaignSetupRules
                     $"structureTypes[{index}].campaignPoints",
                     $"Structure {index + 1} campaign points",
                     errors),
-                ParseSupplyPoints(
-                    input.SupplyPoints,
-                    $"structureTypes[{index}].supplyPoints",
-                    $"Structure {index + 1} supply points",
-                    errors),
-                ParseSupplyPoints(
-                    input.PillageSupplyPoints,
-                    $"structureTypes[{index}].pillageSupplyPoints",
-                    $"Structure {index + 1} pillage supply points",
-                    errors),
-                ParseSupplyPoints(
-                    input.DestroySupplyPoints,
-                    $"structureTypes[{index}].destroySupplyPoints",
-                    $"Structure {index + 1} destroy supply points",
-                    errors)));
+                ParseCatalogSupplyPoints(input.SupplyPoints),
+                ParseCatalogSupplyPoints(input.PillageSupplyPoints),
+                ParseCatalogSupplyPoints(input.DestroySupplyPoints)));
         }
 
         return parsed;
@@ -1446,6 +1430,16 @@ public static class CampaignSetupRules
     private static int ParseSupplyPoints(int? value, string field, string label, List<DomainError> errors)
     {
         return ParseCampaignPoints(value, field, label, errors, HuntInEstaliaDefaults.SupplyPoints);
+    }
+
+    private static int ParseCatalogSupplyPoints(int? value)
+    {
+        if (value is null || value < 0 || value > MaxCampaignPoints)
+        {
+            return 0;
+        }
+
+        return value.Value;
     }
 
     private static int ParseSplitForcePenalty(int? value, List<DomainError> errors)

@@ -5,7 +5,7 @@ namespace MapAndMuster.Domain.Campaigns;
 /// </summary>
 public static class HuntInEstaliaDefaults
 {
-    /// <summary>Default supply points for terrain, structures, pillage, and destroy when omitted.</summary>
+    /// <summary>Default supply points for new terrain and structure catalog rows.</summary>
     public const int SupplyPoints = 1;
 
     /// <summary>Supply subtracted from map supply when a player has split forces. Used as a raw amount unless percent mode is on.</summary>

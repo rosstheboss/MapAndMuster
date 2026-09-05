@@ -277,7 +277,7 @@ internal static class CatalogJson
             Missions = [.. type.Missions.Select(FromDocument)],
             CampaignPoints = type.CampaignPoints,
             IsWaterFeature = type.IsWaterFeature,
-            SupplyPoints = type.SupplyPoints > 0 ? type.SupplyPoints : HuntInEstaliaDefaults.SupplyPoints,
+            SupplyPoints = Math.Max(0, type.SupplyPoints),
         };
     }
 
@@ -296,9 +296,9 @@ internal static class CatalogJson
             IsDestructible = type.IsDestructible ?? IsDestructible,
             Missions = [.. type.Missions.Select(FromDocument)],
             CampaignPoints = type.CampaignPoints,
-            SupplyPoints = type.SupplyPoints > 0 ? type.SupplyPoints : HuntInEstaliaDefaults.SupplyPoints,
-            PillageSupplyPoints = type.PillageSupplyPoints > 0 ? type.PillageSupplyPoints : HuntInEstaliaDefaults.SupplyPoints,
-            DestroySupplyPoints = type.DestroySupplyPoints > 0 ? type.DestroySupplyPoints : HuntInEstaliaDefaults.SupplyPoints,
+            SupplyPoints = Math.Max(0, type.SupplyPoints),
+            PillageSupplyPoints = Math.Max(0, type.PillageSupplyPoints),
+            DestroySupplyPoints = Math.Max(0, type.DestroySupplyPoints),
         };
     }
 
