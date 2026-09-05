@@ -539,7 +539,7 @@ describe('CampaignSetupPage', () => {
     const khorneFlagRadios = [
       ...compiled.querySelectorAll<HTMLInputElement>(`input[name="subfaction-flag-${daemonsIndex}-0"]`),
     ];
-    expect(khorneFlagRadios.map((input) => input.closest('label')?.textContent?.trim())).toEqual([
+    expect(khorneFlagRadios.map((input) => input.closest('label')?.textContent.trim())).toEqual([
       'Color flag',
       'Uploaded image',
     ]);

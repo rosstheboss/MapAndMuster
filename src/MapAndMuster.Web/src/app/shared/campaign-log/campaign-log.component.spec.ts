@@ -361,7 +361,7 @@ describe('CampaignLogComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const scroller = (fixture.nativeElement as HTMLElement).querySelector('.log-scroll') as HTMLElement;
+    const scroller = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('.log-scroll')!;
     Object.defineProperty(scroller, 'scrollHeight', { configurable: true, get: () => 400 });
     Object.defineProperty(scroller, 'clientHeight', { configurable: true, get: () => 100 });
     scroller.scrollTop = 0;

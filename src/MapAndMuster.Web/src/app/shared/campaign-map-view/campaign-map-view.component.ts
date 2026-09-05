@@ -1319,11 +1319,12 @@ export class CampaignMapViewComponent {
     this.pinchCooldown = true;
     this.panning.set(true);
     const points = [...this.pointers.values()];
-    const first = points[0];
-    const second = points[1];
-    if (!first || !second) {
+    if (points.length < 2) {
       return;
     }
+
+    const first = points[0];
+    const second = points[1];
 
     const viewport = this.viewport()?.nativeElement.getBoundingClientRect();
     if (!viewport) {
@@ -1354,11 +1355,12 @@ export class CampaignMapViewComponent {
 
     const pinch = this.pinch;
     const points = [...this.pointers.values()];
-    const first = points[0];
-    const second = points[1];
-    if (!pinch || !first || !second) {
+    if (!pinch || points.length < 2) {
       return true;
     }
+
+    const first = points[0];
+    const second = points[1];
 
     const viewport = this.viewport()?.nativeElement.getBoundingClientRect();
     if (!viewport) {

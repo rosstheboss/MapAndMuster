@@ -592,7 +592,7 @@ describe('CampaignMapViewComponent', () => {
     view.fitToPanel.set(false);
     view.zoom.set(1);
     fixture.detectChanges();
-    const layoutsAt = () =>
+    const layoutsAt = (): { flag: { width: number } | null }[] =>
       (
         fixture.componentInstance as unknown as { territoryLayouts: () => { flag: { width: number } | null }[] }
       ).territoryLayouts();

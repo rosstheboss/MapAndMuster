@@ -57,16 +57,14 @@ describe('AppDialogComponent', () => {
     const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]');
     expect(dialog).toBeTruthy();
     expect(dialog?.getAttribute('aria-modal')).toBe('true');
-    expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
+    expect(document.activeElement?.textContent.trim()).toBe('Cancel');
     expect(TestBed.inject(AppDialogService).hasOpen()).toBe(true);
     expect(document.querySelector('.app-shell')?.hasAttribute('inert')).toBe(true);
 
-    const deleteButton = [...(dialog?.querySelectorAll('button') ?? [])].find(
-      (button) => button.textContent?.trim() === 'Delete',
+    const deleteButton = [...dialog!.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Delete',
     );
-    const cancel = [...(dialog?.querySelectorAll('button') ?? [])].find(
-      (button) => button.textContent?.trim() === 'Cancel',
-    );
+    const cancel = [...dialog!.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Cancel');
     expect(deleteButton).toBeTruthy();
     expect(cancel).toBeTruthy();
 

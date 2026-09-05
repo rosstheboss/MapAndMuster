@@ -1090,7 +1090,7 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('You can change your faction until the campaign starts');
     expect(compiled.textContent).toContain('North');
     expect(compiled.querySelector('#faction')).toBeTruthy();
-    expect([...compiled.querySelectorAll('#faction option')].map((option) => option.textContent?.trim())).toContain(
+    expect([...compiled.querySelectorAll('#faction option')].map((option) => option.textContent.trim())).toContain(
       'North - Riders',
     );
 
@@ -1154,7 +1154,7 @@ describe('CampaignDetailPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     const options = [...compiled.querySelectorAll('#staff-faction-user-2 option')].map((option) =>
-      option.textContent?.trim(),
+      option.textContent.trim(),
     );
     expect(options).toContain('North');
     expect(options).toContain('North - Riders');
@@ -1406,7 +1406,7 @@ describe('CampaignDetailPage', () => {
     expect(commitBefore?.hasAttribute('disabled')).toBe(true);
     const saveDraft = compiled.querySelector('button[aria-label^="Save draft"]');
     expect(saveDraft).toBeTruthy();
-    expect(saveDraft?.textContent?.trim()).toBe('Save draft');
+    expect(saveDraft?.textContent.trim()).toBe('Save draft');
     expect(compiled.querySelector('.force-card')).toBeTruthy();
     expect(compiled.querySelector('.commitment-roster .status-chip')?.textContent).toContain('Drafting');
     expect(compiled.textContent).toContain('0 of 2 players committed');
@@ -2017,7 +2017,7 @@ describe('CampaignDetailPage', () => {
     const commit = [...compiled.querySelectorAll('button')].find((button) =>
       button.textContent.trim().startsWith('Commit Actions'),
     );
-    expect(commit?.hasAttribute('disabled') || commit?.disabled).toBe(true);
+    expect(commit?.disabled).toBe(true);
     expect(compiled.querySelector('.campaign-status-bar')?.textContent).not.toContain('Not committed');
     http.verify();
   });

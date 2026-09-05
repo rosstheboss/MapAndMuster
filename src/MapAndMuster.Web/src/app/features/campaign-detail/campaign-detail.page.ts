@@ -1270,7 +1270,7 @@ export class CampaignDetailPage {
       return null;
     }
 
-    const points = supply.temporarySupplyPoints ?? 0;
+    const points = supply.temporarySupplyPoints;
     const contributions = (supply.contributions ?? []).filter((row) => row.kind === 'Temporary');
     return {
       currentSupplyPoints: points,
@@ -2852,10 +2852,11 @@ export class CampaignDetailPage {
     const known = new Set(forces.map((force) => force.id));
     const merged = { ...fromServer };
     for (const forceId of dirtyForceIds) {
-      const draft = local[forceId];
-      if (draft && known.has(forceId)) {
-        merged[forceId] = draft;
+      if (!known.has(forceId) || !Object.hasOwn(local, forceId)) {
+        continue;
       }
+
+      merged[forceId] = local[forceId];
     }
 
     return merged;
@@ -3244,7 +3245,7 @@ function privateObjectiveFactionName(assignment: PrivateObjectiveAssignment, cam
 function privateObjectiveHolderLabel(assignment: PrivateObjectiveAssignment, campaign: CampaignDetail): string {
   if (assignment.holderKind === 'Player') {
     const participant = campaign.participants?.find((item) => item.userId === assignment.holderId);
-    const name = participant?.displayName || participant?.username || 'Player';
+    const name = participant?.displayName ?? participant?.username ?? 'Player';
     const faction = participant?.factionName?.trim();
     return faction ? `${name} · ${faction}` : name;
   }
