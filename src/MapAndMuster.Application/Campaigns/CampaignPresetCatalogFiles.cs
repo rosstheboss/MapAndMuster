@@ -213,6 +213,7 @@ internal static class CampaignPresetCatalogFiles
             HasSupplyPointsAdvantage = destination.HasSupplyPointsAdvantage,
             SupplyPointsAdvantageSide = destination.SupplyPointsAdvantageSide,
             SupplyPointsAdvantageAmount = destination.SupplyPointsAdvantageAmount,
+            StatusChanges = destination.StatusChanges,
         };
     }
 }

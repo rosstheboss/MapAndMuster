@@ -13,7 +13,8 @@ public sealed class SpecialRuleContext
     public SpecialRuleContext(
         IReadOnlyList<SpecialRuleSetup> catalog,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> factionRuleIds,
-        IReadOnlyDictionary<(Guid FactionId, string Subfaction), IReadOnlyList<Guid>> subfactionRuleIds)
+        IReadOnlyDictionary<(Guid FactionId, string Subfaction), IReadOnlyList<Guid>> subfactionRuleIds,
+        IReadOnlySet<Guid>? requiresSubfactionFactionIds = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(factionRuleIds);
@@ -21,6 +22,7 @@ public sealed class SpecialRuleContext
         Catalog = catalog;
         FactionRuleIds = factionRuleIds;
         SubfactionRuleIds = subfactionRuleIds;
+        RequiresSubfactionFactionIds = requiresSubfactionFactionIds ?? new HashSet<Guid>();
         EffectById = catalog
             .Where(static rule => SpecialRuleEffectKeys.IsKnown(rule.EffectKey))
             .ToDictionary(static rule => rule.Id, static rule => rule.EffectKey!, EqualityComparer<Guid>.Default);
@@ -41,7 +43,16 @@ public sealed class SpecialRuleContext
     /// <summary>Gets special-rule identifiers assigned to each faction subfaction.</summary>
     public IReadOnlyDictionary<(Guid FactionId, string Subfaction), IReadOnlyList<Guid>> SubfactionRuleIds { get; }
 
+    /// <summary>Gets factions that must choose a named subfaction.</summary>
+    public IReadOnlySet<Guid> RequiresSubfactionFactionIds { get; }
+
     private IReadOnlyDictionary<Guid, string> EffectById { get; }
+
+    /// <summary>Returns whether the faction must take a subfaction.</summary>
+    public bool FactionRequiresSubfaction(Guid factionId)
+    {
+        return RequiresSubfactionFactionIds.Contains(factionId);
+    }
 
     /// <summary>Returns whether the force has a mechanical special rule.</summary>
     public bool Has(CampaignForce force, string effectKey)
@@ -166,6 +177,13 @@ public static class StructureKinds
 
     /// <summary>Returns whether the structure is a Supply Depot.</summary>
     public static bool IsSupplyDepot(string? name) => Matches(name, "Supply Depot", "SupplyDepot");
+
+    /// <summary>
+    /// Returns whether Hold on this structure can clear Diseased: Capital City, City, Supply Depot,
+    /// or Town. Destroyed structures are excluded by the caller.
+    /// </summary>
+    public static bool CanCureDisease(string? name) =>
+        Matches(name, "Capital City", "CapitalCity", "City", "Supply Depot", "SupplyDepot", "Town");
 
     /// <summary>Returns whether the structure is a Fortification.</summary>
     public static bool IsFortification(string? name) => Matches(name, "Fortification");

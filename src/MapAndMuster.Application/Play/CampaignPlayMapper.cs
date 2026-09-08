@@ -385,7 +385,12 @@ internal static class CampaignPlayMapper
             .Select(forceId => play.Forces.FirstOrDefault(force => force.Id == forceId))
             .OfType<CampaignForce>()
             .ToArray();
-        var sides = BattleMatchRules.Sides(reportingForces, allies, play.BrokenAllyFactionIds);
+        var sides = BattleMatchRules.Sides(
+            reportingForces,
+            allies,
+            play.BrokenAllyFactionIds,
+            play.BrokenAllySubfactions,
+            allyBetrayals: play.AllyBetrayals);
         var assignment = ResolveMissingMission(play, map, campaign, battle, allies);
         var missionId = battle.MissionId ?? assignment?.MissionId;
         var attackerForceId = battle.AttackerForceId ?? assignment?.AttackerForceId;
@@ -504,7 +509,8 @@ internal static class CampaignPlayMapper
                     CampaignPlayCatalog.SpecialRules(campaign),
                     play.Forces,
                     campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName),
-                    play.BrokenAllyFactionIds)
+                    play.BrokenAllyFactionIds,
+                    play.AllyBetrayals)
                 : [],
             ResultQuestions =
             [
@@ -769,11 +775,82 @@ internal static class CampaignPlayMapper
             });
         }
 
+        var byUser = participants.ToDictionary(static item => item.UserId);
         return
         [
-            .. participants.OrderBy(static participant => participant.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .. participants
+                .Select(participant => WithTraitorVictims(participant, campaign, byUser))
+                .OrderBy(static participant => participant.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static participant => participant.Username, StringComparer.OrdinalIgnoreCase),
         ];
+    }
+
+    private static CampaignParticipantDetail WithTraitorVictims(
+        CampaignParticipantDetail participant,
+        StoredCampaign campaign,
+        Dictionary<Guid, CampaignParticipantDetail> byUser)
+    {
+        var play = campaign.PlayState;
+        if (play is null || play.AllyBetrayals.Count == 0)
+        {
+            return participant;
+        }
+
+        var victims = new List<TraitorVictimDetail>();
+        var seen = new HashSet<(Guid FactionId, string Subfaction, Guid User)>();
+        foreach (var betrayal in play.AllyBetrayals.Where(item => item.TraitorUserId == participant.UserId))
+        {
+            var key = (
+                betrayal.BetrayedFactionId,
+                betrayal.BetrayedSubfaction ?? string.Empty,
+                betrayal.BetrayedUserId ?? Guid.Empty);
+            if (!seen.Add(key))
+            {
+                continue;
+            }
+
+            var faction = campaign.Factions.FirstOrDefault(item => item.Id == betrayal.BetrayedFactionId);
+            byUser.TryGetValue(betrayal.BetrayedUserId ?? Guid.Empty, out var victim);
+            victims.Add(new TraitorVictimDetail
+            {
+                UserId = betrayal.BetrayedUserId,
+                Username = victim?.Username,
+                DisplayName = victim?.DisplayName,
+                FactionName = faction?.Name ?? "Unknown faction",
+                Subfaction = betrayal.BetrayedSubfaction ?? victim?.Subfaction,
+            });
+        }
+
+        if (victims.Count == 0)
+        {
+            return participant;
+        }
+
+        return new CampaignParticipantDetail
+        {
+            UserId = participant.UserId,
+            Username = participant.Username,
+            DisplayName = participant.DisplayName,
+            IsPlayer = participant.IsPlayer,
+            IsGameMaster = participant.IsGameMaster,
+            IsAdministrator = participant.IsAdministrator,
+            FactionName = participant.FactionName,
+            Subfaction = participant.Subfaction,
+            FactionId = participant.FactionId,
+            FactionColor = participant.FactionColor,
+            HasFlagImage = participant.HasFlagImage,
+            TintFlagImage = participant.TintFlagImage,
+            AllyGroupName = participant.AllyGroupName,
+            CurrentSupplyPoints = participant.CurrentSupplyPoints,
+            TemporarySupplyPoints = participant.TemporarySupplyPoints,
+            MapSupplyPoints = participant.MapSupplyPoints,
+            RoundFreeSupplyPoints = participant.RoundFreeSupplyPoints,
+            MaxArmyPoints = participant.MaxArmyPoints,
+            FreeCharacterCount = participant.FreeCharacterCount,
+            SplitPenaltyPoints = participant.SplitPenaltyPoints,
+            Contributions = participant.Contributions,
+            TraitorVictims = victims,
+        };
     }
 
     private static IReadOnlyList<PlayItemObjectiveDetail> VisibleItems(
@@ -978,6 +1055,12 @@ internal static class CampaignPlayMapper
                 $"{(entry.ActorUserId is null ? "A private objective" : actor + " revealed a private objective")}: {entry.Message ?? "a private objective"}.",
             PlayLogKind.ItemObjectiveDestroyed =>
                 $"{actor} destroyed {entry.Message ?? "an item objective"}.",
+            PlayLogKind.ForceStatusChanged =>
+                entry.ForceId is { } statusForce
+                    ? $"{ForceController(play, statusForce, names)}: {entry.Message ?? "status changed."}"
+                    : entry.Message ?? $"{actor} recorded a force status change.",
+            PlayLogKind.AllianceBetrayed =>
+                $"{actor} betrayed an ally in {territory}.",
             _ => $"{actor} recorded a campaign change in {territory}.",
         };
     }

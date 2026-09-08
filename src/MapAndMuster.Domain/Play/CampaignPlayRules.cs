@@ -233,7 +233,8 @@ public static class CampaignPlayRules
         Func<int, int>? pickIndex = null,
         IReadOnlyList<TerrainTypeSetup>? terrainTypes = null,
         IReadOnlyList<StructureTypeSetup>? structureTypes = null,
-        SpecialRuleContext? specialRules = null)
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyList<MissionSetup>? missions = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -259,6 +260,7 @@ public static class CampaignPlayRules
                 terrainTypes,
                 structureTypes,
                 specialRules,
+                missions,
                 previousLog);
             previousLog = last.State.Log.Count;
             if (last.NotifyManagerUserIds.Count > 0)
@@ -297,6 +299,7 @@ public static class CampaignPlayRules
         IReadOnlyList<TerrainTypeSetup>? terrainTypes,
         IReadOnlyList<StructureTypeSetup>? structureTypes,
         SpecialRuleContext? specialRules,
+        IReadOnlyList<MissionSetup>? missions,
         int previousLogCount)
     {
         var current = state.CurrentWindow();
@@ -348,7 +351,8 @@ public static class CampaignPlayRules
                     forceStatuses,
                     pickIndex ?? (static count => 0),
                     factionAllyGroups,
-                    specialRules);
+                    specialRules,
+                    missions);
             }
         }
 
@@ -452,7 +456,8 @@ public static class CampaignPlayRules
                     rules,
                     state.Forces,
                     factionAllyGroups,
-                    state.BrokenAllyFactionIds))
+                    state.BrokenAllyFactionIds,
+                    state.AllyBetrayals))
             {
                 error = new DomainError("order.target.invalid", "Choose an eligible retreat destination.", "targetTerritoryId");
                 return false;
@@ -520,13 +525,25 @@ public static class CampaignPlayRules
             }
         }
 
-        if (kind == ActionKind.Pillage && !ActionResolution.IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
+        if (kind == ActionKind.Pillage && !ActionResolution.IsValidPillage(
+                map,
+                force,
+                factionAllyGroups,
+                state.BrokenAllyFactionIds,
+                rules,
+                state.BrokenAllySubfactions,
+                state.AllyBetrayals))
         {
             error = new DomainError("order.pillage.invalid", "Pillage requires a pillageable structure that is not allied.", "kind");
             return false;
         }
 
-        if (kind == ActionKind.Repair && !ActionResolution.IsValidRepair(map, force, factionAllyGroups, state.BrokenAllyFactionIds))
+        if (kind == ActionKind.Repair && !ActionResolution.IsValidRepair(
+                map,
+                force,
+                factionAllyGroups,
+                state.BrokenAllyFactionIds,
+                state.AllyBetrayals))
         {
             error = new DomainError("order.repair.invalid", "Repair requires a pillaged structure you or an ally own.", "kind");
             return false;
@@ -1010,7 +1027,8 @@ public static class CampaignPlayRules
             specialRules,
             state.Forces,
             factionAllyGroups,
-            state.BrokenAllyFactionIds))
+            state.BrokenAllyFactionIds,
+            state.AllyBetrayals))
         {
             error = new DomainError(
                 "retreat.target.invalid",
@@ -1130,7 +1148,8 @@ public static class CampaignPlayRules
             specialRules,
             state.Forces,
             factionAllyGroups,
-            state.BrokenAllyFactionIds))
+            state.BrokenAllyFactionIds,
+            state.AllyBetrayals))
         {
             error = new DomainError(
                 "retreat.target.invalid",
@@ -1426,13 +1445,15 @@ public static class CampaignPlayRules
         SpecialRuleContext? specialRules = null,
         IReadOnlyList<CampaignForce>? occupyingForces = null,
         IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
-        IReadOnlyCollection<Guid>? brokenAllyFactionIds = null)
+        IReadOnlyCollection<Guid>? brokenAllyFactionIds = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(force);
         var rules = specialRules ?? SpecialRuleContext.None;
         var allies = factionAllyGroups ?? new Dictionary<Guid, string?>();
         var broken = brokenAllyFactionIds ?? [];
+        var betrayals = allyBetrayals ?? [];
         var others = (occupyingForces ?? [])
             .Where(item => item.Id != force.Id)
             .ToArray();
@@ -1442,12 +1463,12 @@ public static class CampaignPlayRules
         {
             if (territory.Id == force.TerritoryId
                 || FactionSpecialRulePolicies.IsEnemySpawn(territory, force)
-                || IsEnemyOccupied(territory.Id, force, others, allies, broken))
+                || IsEnemyOccupied(territory.Id, force, others, allies, broken, betrayals))
             {
                 continue;
             }
 
-            if (artOfWar || IsStandardRetreatTerritory(territory, force, others, allies, broken))
+            if (artOfWar || IsStandardRetreatTerritory(territory, force, others, allies, broken, betrayals))
             {
                 ids.Add(territory.Id);
             }
@@ -1460,7 +1481,7 @@ public static class CampaignPlayRules
             if (capital is not null
                 && capital.Id != force.TerritoryId
                 && !FactionSpecialRulePolicies.IsEnemySpawn(capital, force)
-                && !IsEnemyOccupied(capital.Id, force, others, allies, broken)
+                && !IsEnemyOccupied(capital.Id, force, others, allies, broken, betrayals)
                 && !ids.Contains(capital.Id))
             {
                 ids.Add(capital.Id);
@@ -1666,7 +1687,14 @@ public static class CampaignPlayRules
 
         resolved = AssignOpeningMatches(resolved, resolvedMap, factionAllyGroups, choose);
         var snapshots = resolved.Snapshots.Where(item => item.WindowId != window.Id).Append(snapshot).ToArray();
-        resolved = ApplyActionStatuses(resolved.With(snapshots: snapshots), resolvedMap, window, forceStatuses, specialRules, closeAt);
+        resolved = ApplyActionStatuses(
+            resolved.With(snapshots: snapshots),
+            resolvedMap,
+            window,
+            forceStatuses,
+            specialRules,
+            closeAt,
+            snapshot.Forces);
         var missing = submissions
             .Where(item => item.WindowId == window.Id && item.Source == OrderSource.DeadlineHold)
             .Select(item => item.ForceId);
@@ -1683,7 +1711,8 @@ public static class CampaignPlayRules
         IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
         Func<int, int>? pickIndex = null,
         IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
-        SpecialRuleContext? specialRules = null)
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyList<MissionSetup>? missions = null)
     {
         var choose = pickIndex ?? (static count => 0);
         var allies = factionAllyGroups ?? new Dictionary<Guid, string?>();
@@ -1803,7 +1832,7 @@ public static class CampaignPlayRules
         }
 
         next = ApplyRetreats(next, map, window, closeAt, pickIndex ?? (static count => 0));
-        next = ApplyBattleStatuses(next, map, window, forceStatuses, specialRules, closeAt);
+        next = ApplyBattleStatuses(next, map, window, forceStatuses, specialRules, closeAt, missions);
         var claimedMap = ApplyOccupationClaims(next, map, allies, choose);
         return FinishWindow(next, claimedMap, window, closeAt, due, forceStatuses);
     }
@@ -1841,7 +1870,8 @@ public static class CampaignPlayRules
             state.Forces,
             allies,
             state.BrokenAllyFactionIds,
-            pickIndex);
+            pickIndex,
+            state.AllyBetrayals);
     }
 
     private static CampaignPlayState ApplyDefaultRetreats(
@@ -1883,7 +1913,15 @@ public static class CampaignPlayRules
                     continue;
                 }
 
-                var target = PickSafestRetreat(map, force, occupied, specialRules, state.Forces, allies, state.BrokenAllyFactionIds);
+                var target = PickSafestRetreat(
+                    map,
+                    force,
+                    occupied,
+                    specialRules,
+                    state.Forces,
+                    allies,
+                    state.BrokenAllyFactionIds,
+                    state.AllyBetrayals);
                 occupied.Add(target);
                 retreats.Add(new RetreatOrder(Guid.NewGuid(), battle.Id, force.Id, target, true, utcNow));
                 log.Add(new PlayLogEntry(
@@ -2438,6 +2476,7 @@ public static class CampaignPlayRules
             forces: snapshot.Forces,
             structures: snapshot.Structures,
             brokenAllyFactionIds: snapshot.BrokenAllyFactionIds,
+            allyBetrayals: snapshot.AllyBetrayals,
             itemObjectives: snapshot.ItemObjectives,
             battles: [.. state.Battles.Where(item => item.SourceWindowId != lastAction.Id)]);
         var snapshotForce = restored.Forces.FirstOrDefault(item => item.Id == forceId);
@@ -2912,7 +2951,8 @@ public static class CampaignPlayRules
         SpecialRuleContext? specialRules = null,
         IReadOnlyList<CampaignForce>? occupyingForces = null,
         IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
-        IReadOnlyCollection<Guid>? brokenAllyFactionIds = null)
+        IReadOnlyCollection<Guid>? brokenAllyFactionIds = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         return EligibleRetreats(
             map,
@@ -2920,7 +2960,8 @@ public static class CampaignPlayRules
             specialRules,
             occupyingForces,
             factionAllyGroups,
-            brokenAllyFactionIds).Contains(targetTerritoryId);
+            brokenAllyFactionIds,
+            allyBetrayals).Contains(targetTerritoryId);
     }
 
     private static bool IsStandardRetreatTerritory(
@@ -2928,7 +2969,8 @@ public static class CampaignPlayRules
         CampaignForce force,
         IReadOnlyList<CampaignForce> others,
         IReadOnlyDictionary<Guid, string?> allies,
-        IReadOnlyCollection<Guid> broken)
+        IReadOnlyCollection<Guid> broken,
+        IReadOnlyList<AllyBetrayal> betrayals)
     {
         if (territory.OwnerFactionId is null)
         {
@@ -2940,7 +2982,12 @@ public static class CampaignPlayRules
             return true;
         }
 
-        return ActionResolution.AreAllies(force.FactionId, territory.OwnerFactionId.Value, allies, broken);
+        return ActionResolution.AreAllies(force.FactionId, territory.OwnerFactionId.Value, allies, broken)
+            && !AllyBetrayalRules.PlayerBetrayedFaction(
+                force.ControllerUserId,
+                territory.OwnerFactionId.Value,
+                null,
+                betrayals);
     }
 
     private static bool IsEnemyOccupied(
@@ -2948,12 +2995,14 @@ public static class CampaignPlayRules
         CampaignForce force,
         IReadOnlyList<CampaignForce> others,
         IReadOnlyDictionary<Guid, string?> allies,
-        IReadOnlyCollection<Guid> broken)
+        IReadOnlyCollection<Guid> broken,
+        IReadOnlyList<AllyBetrayal> betrayals)
     {
         return others.Any(item =>
             item.TerritoryId == territoryId
-            && item.FactionId != force.FactionId
-            && !ActionResolution.AreAllies(force.FactionId, item.FactionId, allies, broken));
+            && (AllyBetrayalRules.AreHostile(force, item, betrayals)
+                || (item.FactionId != force.FactionId
+                    && !ActionResolution.AreAllies(force.FactionId, item.FactionId, allies, broken))));
     }
 
     private static DateTimeOffset LastEnd(CampaignPlayState state, DateTimeOffset fallback)
@@ -3016,13 +3065,83 @@ public static class CampaignPlayRules
             forceId is { } id ? [id] : []);
     }
 
+    /// <summary>
+    /// Assigns a catalog status or Normal to one or more forces. Managers and administrators may
+    /// assign any catalog status, including onto immune factions.
+    /// </summary>
+    public static bool TrySetForceStatuses(
+        CampaignPlayState state,
+        Guid actorUserId,
+        IReadOnlyList<Guid> forceIds,
+        string? statusName,
+        IReadOnlyList<ForceStatusSetup> catalog,
+        DateTimeOffset utcNow,
+        [NotNullWhen(true)] out CampaignPlayState? next,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(forceIds);
+        ArgumentNullException.ThrowIfNull(catalog);
+        next = null;
+        var target = ForceStatusNames.IsNormal(statusName) ? null : statusName?.Trim();
+        if (target is not null
+            && catalog.All(status => !string.Equals(status.Name, target, StringComparison.OrdinalIgnoreCase)))
+        {
+            error = new DomainError(
+                "forceStatus.unknown",
+                "Choose a configured force status or Normal.",
+                "statusName");
+            return false;
+        }
+
+        var selected = forceIds.Count == 0
+            ? state.Forces
+            : state.Forces.Where(force => forceIds.Contains(force.Id)).ToArray();
+        if (selected.Count == 0)
+        {
+            error = new DomainError("forceStatus.force.unknown", "Choose at least one force.", "forceIds");
+            return false;
+        }
+
+        if (forceIds.Count > 0 && selected.Count != forceIds.Distinct().Count())
+        {
+            error = new DomainError("forceStatus.force.unknown", "Choose forces that exist in this campaign.", "forceIds");
+            return false;
+        }
+
+        var byId = state.Forces.ToDictionary(static force => force.Id);
+        foreach (var force in selected)
+        {
+            byId[force.Id] = ForceStatusRules.Assign(force, target, catalog);
+        }
+
+        var applied = state.Forces.Select(force => byId[force.Id]).ToArray();
+        var attributions = selected.ToDictionary(
+            static force => force.Id,
+            _ => new ForceStatusRules.Attribution(ForceStatusChangeSource.Staff, actorUserId: actorUserId));
+        var (facts, log) = RecordStatusChanges(
+            state.Forces,
+            applied,
+            catalog,
+            utcNow,
+            attributions,
+            state.CurrentWindow()?.Id);
+        next = state.With(
+            forces: applied,
+            forceStatusChanges: facts.Count == 0 ? state.ForceStatusChanges : [.. state.ForceStatusChanges, .. facts])
+            .AppendLog([.. log]);
+        error = null;
+        return true;
+    }
+
     private static CampaignPlayState ApplyActionStatuses(
         CampaignPlayState state,
         PlayMap map,
         PhaseWindow window,
         IReadOnlyList<ForceStatusSetup>? statuses,
         SpecialRuleContext? specialRules,
-        DateTimeOffset utcNow)
+        DateTimeOffset utcNow,
+        IReadOnlyList<CampaignForce>? previousForces = null)
     {
         var catalog = statuses ?? [];
         if (catalog.Count == 0)
@@ -3034,17 +3153,42 @@ public static class CampaignPlayRules
             force => force.Id,
             force => ForceStatusRules.FromAction(
                 state.LatestSubmission(window.Id, force.Id)?.Kind,
-                map.Territory(force.TerritoryId)?.IsWaterFeature == true));
-        var applied = ForceStatusRules.Apply(state.Forces, catalog, facts, specialRules);
-        var changes = DetectStatusChanges(
-            state.Forces,
-            applied,
+                map.Territory(force.TerritoryId)?.IsWaterFeature == true,
+                ForceStatusRules.CanCureDisease(map.Territory(force.TerritoryId)),
+                force.InBattle));
+        var application = ForceStatusRules.ApplyDetailed(state.Forces, catalog, facts, specialRules);
+        var attributions = new Dictionary<Guid, ForceStatusRules.Attribution>(application.Attributions);
+        foreach (var entry in state.Log.Where(item =>
+                     item.Kind == PlayLogKind.ForcesRejoined && item.WindowId == window.Id))
+        {
+            if (entry.ForceId is not { } survivingId)
+            {
+                continue;
+            }
+
+            var before = (previousForces ?? state.Forces).FirstOrDefault(item => item.Id == survivingId);
+            var after = application.Forces.FirstOrDefault(item => item.Id == survivingId);
+            if (after is null
+                || !ForceStatusNames.IsDiseased(after.StatusName)
+                || ForceStatusNames.IsDiseased(before?.StatusName))
+            {
+                continue;
+            }
+
+            attributions[survivingId] = new ForceStatusRules.Attribution(ForceStatusChangeSource.Rejoin);
+        }
+
+        var (changes, log) = RecordStatusChanges(
+            previousForces ?? state.Forces,
+            application.Forces,
             catalog,
             utcNow,
-            static (previous, next) => (next.Id, next.FactionId, (Guid?)next.ControllerUserId));
+            attributions,
+            window.Id);
         return state.With(
-            forces: applied,
-            forceStatusChanges: changes.Count == 0 ? state.ForceStatusChanges : [.. state.ForceStatusChanges, .. changes]);
+                forces: application.Forces,
+                forceStatusChanges: changes.Count == 0 ? state.ForceStatusChanges : [.. state.ForceStatusChanges, .. changes])
+            .AppendLog([.. log]);
     }
 
     private static CampaignPlayState ApplyBattleStatuses(
@@ -3053,11 +3197,15 @@ public static class CampaignPlayRules
         PhaseWindow window,
         IReadOnlyList<ForceStatusSetup>? statuses,
         SpecialRuleContext? specialRules,
-        DateTimeOffset utcNow)
+        DateTimeOffset utcNow,
+        IReadOnlyList<MissionSetup>? missions = null)
     {
         var catalog = statuses ?? [];
         var rules = specialRules ?? SpecialRuleContext.None;
-        if (catalog.Count == 0 && !rules.AnyoneHas(SpecialRuleEffectKeys.BringersOfThePlague))
+        var missionCatalog = missions ?? [];
+        if (catalog.Count == 0
+            && !rules.AnyoneHas(SpecialRuleEffectKeys.BringersOfThePlague)
+            && missionCatalog.All(static mission => mission.StatusChanges.Count == 0))
         {
             return state;
         }
@@ -3074,25 +3222,27 @@ public static class CampaignPlayRules
         foreach (var force in state.Forces)
         {
             var fought = battles.Where(item => item.ParticipantForceIds.Contains(force.Id)).ToArray();
+            var lostOnWater = fought.Any(item =>
+                !item.IsNoContest
+                && !item.IsDraw
+                && item.WinnerForceId != force.Id
+                && map.Territory(item.TerritoryId)?.IsWaterFeature == true);
+            var surrendered = fought.Any(item => item.SurrenderedForceIds.Contains(force.Id) && !item.IsNoContest);
             facts[force.Id] = ForceStatusRules.FromBattle(
-                fought.Any(item => !item.IsNoContest),
+                fought.Any(item => !item.IsNoContest && item.SurrenderedForceIds.All(id => id != force.Id)),
                 fought.Any(item => !item.IsNoContest && item.WinnerForceId == force.Id),
                 fought.Any(item => !item.IsNoContest && !item.IsDraw && item.WinnerForceId != force.Id),
                 retreated.Contains(force.Id) && fought.Any(item => !item.IsNoContest),
-                map.Territory(force.TerritoryId)?.IsWaterFeature == true);
+                map.Territory(force.TerritoryId)?.IsWaterFeature == true,
+                surrendered,
+                lostOnWater);
         }
 
-        var applied = catalog.Count == 0
-            ? state.Forces
-            : ForceStatusRules.Apply(state.Forces, catalog, facts, rules);
-        var catalogChanges = DetectStatusChanges(
-            state.Forces,
-            applied,
-            catalog,
-            utcNow,
-            static (previous, next) => (next.Id, next.FactionId, (Guid?)next.ControllerUserId));
-        var byId = applied.ToDictionary(static force => force.Id);
-        var inflictedActors = new Dictionary<Guid, CampaignForce>();
+        var application = catalog.Count == 0
+            ? new ForceStatusRules.Application(state.Forces, new Dictionary<Guid, ForceStatusRules.Attribution>())
+            : ForceStatusRules.ApplyDetailed(state.Forces, catalog, facts, rules);
+        var byId = application.Forces.ToDictionary(static force => force.Id);
+        var attributions = new Dictionary<Guid, ForceStatusRules.Attribution>(application.Attributions);
         foreach (var battle in battles.Where(static item =>
                      !item.IsDraw && !item.IsNoContest && item.WinnerForceId is not null))
         {
@@ -3117,73 +3267,90 @@ public static class CampaignPlayRules
                 }
 
                 byId[loser.Id] = loser.WithStatus(inflicted);
-                inflictedActors[loser.Id] = winner;
+                attributions[loser.Id] = new ForceStatusRules.Attribution(
+                    ForceStatusChangeSource.SpecialRule,
+                    SpecialRuleEffectKeys.BringersOfThePlague,
+                    winner.Id,
+                    winner.FactionId,
+                    winner.ControllerUserId);
             }
         }
 
-        var final = applied.Select(force => byId[force.Id]).ToArray();
-        var inflictedChanges = DetectStatusChanges(
-            applied,
-            final,
-            catalog,
-            utcNow,
-            (previous, next) =>
-            {
-                if (inflictedActors.TryGetValue(next.Id, out var winner))
-                {
-                    return (winner.Id, winner.FactionId, (Guid?)winner.ControllerUserId);
-                }
-
-                return (next.Id, next.FactionId, (Guid?)next.ControllerUserId);
-            });
-        return state.With(
-            forces: final,
-            forceStatusChanges: catalogChanges.Count + inflictedChanges.Count == 0
-                ? state.ForceStatusChanges
-                : [.. state.ForceStatusChanges, .. catalogChanges, .. inflictedChanges]);
-    }
-
-    private static List<ForceStatusChangeFact> DetectStatusChanges(
-        IReadOnlyList<CampaignForce> before,
-        IReadOnlyList<CampaignForce> after,
-        IReadOnlyList<ForceStatusSetup> catalog,
-        DateTimeOffset utcNow,
-        Func<CampaignForce, CampaignForce, (Guid? ActorForceId, Guid ActorFactionId, Guid? ActorUserId)> actorFor)
-    {
-        ArgumentNullException.ThrowIfNull(before);
-        ArgumentNullException.ThrowIfNull(after);
-        ArgumentNullException.ThrowIfNull(catalog);
-        ArgumentNullException.ThrowIfNull(actorFor);
-        var byName = catalog.ToDictionary(static status => status.Name, static status => status.Id, StringComparer.OrdinalIgnoreCase);
-        var previousById = before.ToDictionary(static force => force.Id);
-        var facts = new List<ForceStatusChangeFact>();
-        foreach (var next in after.OrderBy(static force => force.Id))
+        var afterSpecial = byId.Values.OrderBy(static force => force.Id).ToList();
+        if (catalog.Any(static status => ForceStatusNames.IsDiseased(status.Name)))
         {
-            if (!previousById.TryGetValue(next.Id, out var previous)
-                || string.Equals(previous.StatusName, next.StatusName, StringComparison.Ordinal))
+            ForceStatusRules.SpreadContagion(afterSpecial, rules, attributions);
+            ForceStatusRules.SpreadBattleContagion(
+                afterSpecial,
+                battles.Select(static battle => battle.ParticipantForceIds),
+                rules,
+                attributions);
+        }
+
+        foreach (var battle in battles.Where(static item => !item.IsNoContest && !item.IsDraw))
+        {
+            var mission = battle.MissionId is { } missionId
+                ? missionCatalog.FirstOrDefault(item => item.Id == missionId)
+                : null;
+            if (mission is null || mission.StatusChanges.Count == 0)
             {
                 continue;
             }
 
-            var actor = actorFor(previous, next);
-            facts.Add(new ForceStatusChangeFact(
-                Guid.NewGuid(),
-                next.Id,
-                next.FactionId,
-                next.ControllerUserId,
-                next.StatusName is { } name && byName.TryGetValue(name, out var statusId) ? statusId : null,
-                previous.StatusName,
-                next.StatusName,
-                actor.ActorForceId,
-                actor.ActorFactionId,
-                actor.ActorUserId,
-                utcNow,
-                previous.StatusName is { } previousName && byName.TryGetValue(previousName, out var previousId)
-                    ? previousId
-                    : null));
+            foreach (var forceId in battle.ParticipantForceIds)
+            {
+                var force = afterSpecial.FirstOrDefault(item => item.Id == forceId);
+                if (force is null)
+                {
+                    continue;
+                }
+
+                var won = battle.WinnerForceId == force.Id;
+                var (updated, attribution) = ForceStatusRules.ApplyMission(force, mission, won, rules);
+                if (attribution is null)
+                {
+                    continue;
+                }
+
+                var index = afterSpecial.FindIndex(item => item.Id == force.Id);
+                afterSpecial[index] = updated;
+                attributions[force.Id] = attribution.Value;
+            }
         }
 
-        return facts;
+        var (changes, log) = RecordStatusChanges(
+            state.Forces,
+            afterSpecial,
+            catalog,
+            utcNow,
+            attributions,
+            window.Id);
+        return state.With(
+                forces: afterSpecial,
+                forceStatusChanges: changes.Count == 0 ? state.ForceStatusChanges : [.. state.ForceStatusChanges, .. changes])
+            .AppendLog([.. log]);
+    }
+
+    private static (List<ForceStatusChangeFact> Facts, List<PlayLogEntry> Log) RecordStatusChanges(
+        IReadOnlyList<CampaignForce> before,
+        IReadOnlyList<CampaignForce> after,
+        IReadOnlyList<ForceStatusSetup> catalog,
+        DateTimeOffset utcNow,
+        IReadOnlyDictionary<Guid, ForceStatusRules.Attribution> attributions,
+        Guid? windowId)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(attributions);
+        var (facts, log) = ForceStatusRules.RecordChanges(
+            before,
+            after,
+            catalog,
+            utcNow,
+            attributions,
+            windowId);
+        return (facts, log);
     }
 
     internal static IReadOnlyList<Guid> ForcesRequiredToRetreat(CampaignBattle battle)
@@ -3219,7 +3386,12 @@ public static class CampaignPlayRules
                 && !battle.SurrenderedForceIds.Contains(force.Id)
                 && !state.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == force.Id))
             .ToArray();
-        var sides = BattleMatchRules.Sides(fighting, factionAllyGroups, state.BrokenAllyFactionIds);
+        var sides = BattleMatchRules.Sides(
+            fighting,
+            factionAllyGroups,
+            state.BrokenAllyFactionIds,
+            state.BrokenAllySubfactions,
+            allyBetrayals: state.AllyBetrayals);
         if (sides.Count == 0)
         {
             var noContest = battle.With(
@@ -3271,7 +3443,9 @@ public static class CampaignPlayRules
             factionAllyGroups,
             state.BrokenAllyFactionIds,
             force => StrengthOf(force, state, map),
-            static _ => 0);
+            static _ => 0,
+            state.BrokenAllySubfactions,
+            allyBetrayals: state.AllyBetrayals);
         var waiting = fighting.Select(static force => force.Id).Except(active).ToArray();
         var continued = battle.With(activeForceIds: active, waitingForceIds: waiting);
         return state.With(battles: ReplaceBattle(state.Battles, continued));
@@ -3365,7 +3539,9 @@ public static class CampaignPlayRules
                 factionAllyGroups,
                 state.BrokenAllyFactionIds,
                 force => StrengthOf(force, state, map),
-                pickIndex);
+                pickIndex,
+                state.BrokenAllySubfactions,
+                allyBetrayals: state.AllyBetrayals);
             var waiting = fighting.Select(static force => force.Id).Except(active).ToArray();
             if (waiting.Length == 0 && active.Count == fighting.Length)
             {
@@ -3410,7 +3586,12 @@ public static class CampaignPlayRules
 
         var remainingForces = spent.Forces.Where(force => remainingIds.Contains(force.Id)).ToArray();
         var allies = factionAllyGroups ?? new Dictionary<Guid, string?>();
-        var sides = BattleMatchRules.Sides(remainingForces, allies, spent.BrokenAllyFactionIds);
+        var sides = BattleMatchRules.Sides(
+            remainingForces,
+            allies,
+            spent.BrokenAllyFactionIds,
+            spent.BrokenAllySubfactions,
+            allyBetrayals: spent.AllyBetrayals);
         var choose = pickIndex ?? (static count => 0);
         IReadOnlyList<Guid> active = [];
         IReadOnlyList<Guid> waiting = remainingIds;
@@ -3423,7 +3604,9 @@ public static class CampaignPlayRules
                 allies,
                 spent.BrokenAllyFactionIds,
                 force => StrengthOf(force, spent, map),
-                choose);
+                choose,
+                spent.BrokenAllySubfactions,
+                allyBetrayals: spent.AllyBetrayals);
             waiting = [.. remainingIds.Except(active)];
             if (!parkForNextBattlePhase)
             {
@@ -3583,7 +3766,12 @@ public static class CampaignPlayRules
         var allyGroups = new Dictionary<Guid, string?>();
         foreach (var group in occupied.Where(static pair => pair.Value.Count > 1))
         {
-            var sides = BattleMatchRules.Sides(group.Value, allyGroups, state.BrokenAllyFactionIds);
+            var sides = BattleMatchRules.Sides(
+                group.Value,
+                allyGroups,
+                state.BrokenAllyFactionIds,
+                state.BrokenAllySubfactions,
+                allyBetrayals: state.AllyBetrayals);
             if (sides.Count < 2)
             {
                 continue;
@@ -3597,7 +3785,14 @@ public static class CampaignPlayRules
             var blocked = occupied.Keys.ToHashSet();
             foreach (var displaced in ranked.Skip(1))
             {
-                if (!ActionResolution.AreEnemies(keeper.FactionId, displaced.FactionId, allyGroups, state.BrokenAllyFactionIds))
+                if (!FactionSpecialRulePolicies.AreEnemies(
+                    keeper,
+                    displaced,
+                    allyGroups,
+                    state.BrokenAllyFactionIds,
+                    state.BrokenAllySubfactions,
+                    SpecialRuleContext.None,
+                    state.AllyBetrayals))
                 {
                     continue;
                 }
@@ -3665,7 +3860,8 @@ public static class CampaignPlayRules
         SpecialRuleContext? specialRules = null,
         IReadOnlyList<CampaignForce>? occupyingForces = null,
         IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
-        IReadOnlyCollection<Guid>? brokenAllyFactionIds = null)
+        IReadOnlyCollection<Guid>? brokenAllyFactionIds = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         var spawn = map.SpawnFor(force.FactionId);
         PlayTerritory? best = null;
@@ -3676,7 +3872,8 @@ public static class CampaignPlayRules
             specialRules,
             occupyingForces,
             factionAllyGroups,
-            brokenAllyFactionIds))
+            brokenAllyFactionIds,
+            allyBetrayals))
         {
             var territory = map.Territory(id);
             if (territory is null)
@@ -3727,7 +3924,8 @@ public static class CampaignPlayRules
                 item.PossessorForceId,
                 item.IsRevealed,
                 item.OriginalTerritoryId,
-                item.WasHiddenUntilFound))]);
+                item.WasHiddenUntilFound))],
+            state.AllyBetrayals);
     }
 
     private static PlayMap RestoreMap(PlayMap map, ActionWindowSnapshot snapshot)

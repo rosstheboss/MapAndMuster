@@ -367,6 +367,7 @@ public static class CampaignMapper
                             DestroyItem = result.DestroyItem,
                             ReplacementItemTypeId = result.ReplacementItemTypeId,
                             GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+                            SetForceStatusName = result.SetForceStatusName,
                         }),
                     ],
                 })]
@@ -499,6 +500,7 @@ public static class CampaignMapper
         foreach (var participant in participants.Where(static item => item.IsPlayer))
         {
             names[(PrivateObjectiveHolderKind.Player, participant.UserId)] = participant.DisplayName;
+            names[(PrivateObjectiveHolderKind.Traitor, participant.UserId)] = participant.DisplayName;
         }
 
         foreach (var faction in campaign.Factions)
@@ -532,6 +534,7 @@ public static class CampaignMapper
         return assignment.HolderKind switch
         {
             PrivateObjectiveHolderKind.Player => assignment.HolderId == viewerUserId,
+            PrivateObjectiveHolderKind.Traitor => assignment.HolderId == viewerUserId,
             PrivateObjectiveHolderKind.Faction => viewerFactionId is { } faction && assignment.HolderId == faction,
             PrivateObjectiveHolderKind.AllyGroup => viewerAllyGroupId is { } group && assignment.HolderId == group,
             _ => false,
@@ -637,6 +640,17 @@ public static class CampaignMapper
             HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
             SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
             SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
+            StatusChanges =
+            [
+                .. mission.StatusChanges.Select(static change => new MissionStatusChangeDetail
+                {
+                    Id = change.Id,
+                    Outcome = change.Outcome,
+                    WhenCurrentStatus = change.WhenCurrentStatus,
+                    SetStatus = change.SetStatus,
+                    LeaveUnchanged = change.LeaveUnchanged,
+                }),
+            ],
         };
     }
 

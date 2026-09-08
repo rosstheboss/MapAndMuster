@@ -453,6 +453,9 @@ public sealed class ItemObjectiveChoiceResultRequest
 
     /// <summary>Gets a private-objective catalog type granted to the possessing player.</summary>
     public Guid? GrantedPrivateObjectiveTypeId { get; init; }
+
+    /// <summary>Gets a catalog force status to apply, or Normal to clear.</summary>
+    public string? SetForceStatusName { get; init; }
 }
 
 /// <summary>
@@ -603,6 +606,30 @@ public sealed class MissionRequest
 
     /// <summary>Gets the signed raw supply-point change.</summary>
     public int SupplyPointsAdvantageAmount { get; init; }
+
+    /// <summary>Gets ordered win/lose status-change conditions.</summary>
+    public IReadOnlyList<MissionStatusChangeRequest>? StatusChanges { get; init; }
+}
+
+/// <summary>
+/// One ordered win/lose status-change condition on a mission.
+/// </summary>
+public sealed class MissionStatusChangeRequest
+{
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Gets Win or Lose.</summary>
+    public required string Outcome { get; init; }
+
+    /// <summary>Gets the required current status, or empty to match any remaining status.</summary>
+    public string? WhenCurrentStatus { get; init; }
+
+    /// <summary>Gets the status to apply, or Normal. Ignored when leave-unchanged is true.</summary>
+    public string? SetStatus { get; init; }
+
+    /// <summary>Gets whether the force keeps its current status.</summary>
+    public bool LeaveUnchanged { get; init; }
 }
 
 /// <summary>
@@ -1062,6 +1089,30 @@ public sealed class CampaignParticipantResponse
 
     /// <summary>Gets per-source lines that sum to the displayed current total.</summary>
     public IReadOnlyList<SupplyContributionResponse> Contributions { get; init; } = [];
+
+    /// <summary>Gets players this member betrayed through Backstab, when they are a traitor.</summary>
+    public IReadOnlyList<TraitorVictimResponse> TraitorVictims { get; init; } = [];
+}
+
+/// <summary>
+/// A player or empty-land faction this traitor Backstabbed.
+/// </summary>
+public sealed class TraitorVictimResponse
+{
+    /// <summary>Gets the betrayed player's user identifier, when a force was present.</summary>
+    public Guid? UserId { get; init; }
+
+    /// <summary>Gets the betrayed player's username, when known.</summary>
+    public string? Username { get; init; }
+
+    /// <summary>Gets the betrayed player's display name, when known.</summary>
+    public string? DisplayName { get; init; }
+
+    /// <summary>Gets the betrayed faction name.</summary>
+    public required string FactionName { get; init; }
+
+    /// <summary>Gets the betrayed subfaction name, when the betrayal is scoped to one.</summary>
+    public string? Subfaction { get; init; }
 }
 
 /// <summary>
@@ -1452,6 +1503,9 @@ public sealed class ItemObjectiveChoiceResultResponse
 
     /// <summary>Gets a private-objective catalog type granted to the possessing player.</summary>
     public Guid? GrantedPrivateObjectiveTypeId { get; init; }
+
+    /// <summary>Gets a catalog force status to apply, or Normal to clear.</summary>
+    public string? SetForceStatusName { get; init; }
 }
 
 /// <summary>
@@ -1785,6 +1839,30 @@ public sealed class MissionResponse
 
     /// <summary>Gets the signed raw supply-point change.</summary>
     public int SupplyPointsAdvantageAmount { get; init; }
+
+    /// <summary>Gets ordered win/lose status-change conditions.</summary>
+    public IReadOnlyList<MissionStatusChangeResponse> StatusChanges { get; init; } = [];
+}
+
+/// <summary>
+/// One ordered win/lose status-change condition on a mission.
+/// </summary>
+public sealed class MissionStatusChangeResponse
+{
+    /// <summary>Gets the condition identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets Win or Lose.</summary>
+    public required string Outcome { get; init; }
+
+    /// <summary>Gets the required current status, or null to match any remaining status.</summary>
+    public string? WhenCurrentStatus { get; init; }
+
+    /// <summary>Gets the status to apply, or null for Normal.</summary>
+    public string? SetStatus { get; init; }
+
+    /// <summary>Gets whether the force keeps its current status.</summary>
+    public bool LeaveUnchanged { get; init; }
 }
 
 /// <summary>
@@ -2151,6 +2229,7 @@ public static class CampaignResponses
                                     DestroyItem = result.DestroyItem,
                                     ReplacementItemTypeId = result.ReplacementItemTypeId,
                                     GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+                                    SetForceStatusName = result.SetForceStatusName,
                                 }),
                             ],
                         }),
@@ -2353,6 +2432,17 @@ public static class CampaignResponses
                     FreeCharacterCount = participant.FreeCharacterCount,
                     SplitPenaltyPoints = participant.SplitPenaltyPoints,
                     Contributions = FromContributions(participant.Contributions),
+                    TraitorVictims =
+                    [
+                        .. participant.TraitorVictims.Select(static victim => new TraitorVictimResponse
+                        {
+                            UserId = victim.UserId,
+                            Username = victim.Username,
+                            DisplayName = victim.DisplayName,
+                            FactionName = victim.FactionName,
+                            Subfaction = victim.Subfaction,
+                        }),
+                    ],
                 }),
             ],
             MentionableMembers =
@@ -2682,6 +2772,7 @@ public static class CampaignResponses
                                 DestroyItem = result.DestroyItem,
                                 ReplacementItemTypeId = result.ReplacementItemTypeId,
                                 GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+                                SetForceStatusName = result.SetForceStatusName,
                             })
                             .ToArray(),
                     })
@@ -2882,6 +2973,16 @@ public static class CampaignResponses
                 HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
                 SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
                 SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
+                StatusChanges = mission.StatusChanges?
+                    .Select(static change => new MissionStatusChangeInput
+                    {
+                        Id = change.Id,
+                        Outcome = change.Outcome,
+                        WhenCurrentStatus = change.WhenCurrentStatus,
+                        SetStatus = change.SetStatus,
+                        LeaveUnchanged = change.LeaveUnchanged,
+                    })
+                    .ToArray(),
             })
             .ToArray();
     }
@@ -2916,6 +3017,17 @@ public static class CampaignResponses
             HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
             SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
             SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
+            StatusChanges =
+            [
+                .. mission.StatusChanges.Select(static change => new MissionStatusChangeResponse
+                {
+                    Id = change.Id,
+                    Outcome = change.Outcome,
+                    WhenCurrentStatus = change.WhenCurrentStatus,
+                    SetStatus = change.SetStatus,
+                    LeaveUnchanged = change.LeaveUnchanged,
+                }),
+            ],
         };
     }
 

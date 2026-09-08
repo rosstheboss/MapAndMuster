@@ -418,6 +418,30 @@ public sealed class CampaignParticipantDetail
 
     /// <summary>Gets per-source lines that sum to the displayed current total.</summary>
     public IReadOnlyList<SupplyContributionDetail> Contributions { get; init; } = [];
+
+    /// <summary>Gets players this member betrayed through Backstab, when they are a traitor.</summary>
+    public IReadOnlyList<TraitorVictimDetail> TraitorVictims { get; init; } = [];
+}
+
+/// <summary>
+/// A player or empty-land faction this traitor Backstabbed.
+/// </summary>
+public sealed class TraitorVictimDetail
+{
+    /// <summary>Gets the betrayed player's user identifier, when a force was present.</summary>
+    public Guid? UserId { get; init; }
+
+    /// <summary>Gets the betrayed player's username, when known.</summary>
+    public string? Username { get; init; }
+
+    /// <summary>Gets the betrayed player's display name, when known.</summary>
+    public string? DisplayName { get; init; }
+
+    /// <summary>Gets the betrayed faction name.</summary>
+    public required string FactionName { get; init; }
+
+    /// <summary>Gets the betrayed subfaction name, when the betrayal is scoped to one.</summary>
+    public string? Subfaction { get; init; }
 }
 
 /// <summary>
@@ -1067,6 +1091,9 @@ public sealed class ItemObjectiveChoiceResultDetail
 
     /// <summary>Gets a private-objective catalog type granted to the possessing player.</summary>
     public Guid? GrantedPrivateObjectiveTypeId { get; init; }
+
+    /// <summary>Gets a catalog force status to apply, or Normal to clear.</summary>
+    public string? SetForceStatusName { get; init; }
 }
 
 /// <summary>
@@ -1439,6 +1466,30 @@ public sealed class MissionDetail
 
     /// <summary>Gets the signed raw supply-point change.</summary>
     public int SupplyPointsAdvantageAmount { get; init; }
+
+    /// <summary>Gets ordered win/lose status-change conditions.</summary>
+    public IReadOnlyList<MissionStatusChangeDetail> StatusChanges { get; init; } = [];
+}
+
+/// <summary>
+/// One ordered win/lose status-change condition on a mission.
+/// </summary>
+public sealed class MissionStatusChangeDetail
+{
+    /// <summary>Gets the condition identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets Win or Lose.</summary>
+    public required string Outcome { get; init; }
+
+    /// <summary>Gets the required current status, or null to match any remaining status.</summary>
+    public string? WhenCurrentStatus { get; init; }
+
+    /// <summary>Gets the status to apply, or null for Normal.</summary>
+    public string? SetStatus { get; init; }
+
+    /// <summary>Gets whether the force keeps its current status.</summary>
+    public bool LeaveUnchanged { get; init; }
 }
 
 /// <summary>
@@ -1634,6 +1685,9 @@ public sealed class StoredItemObjectiveChoiceResult
 
     /// <summary>Gets a private-objective catalog type granted to the possessing player.</summary>
     public Guid? GrantedPrivateObjectiveTypeId { get; init; }
+
+    /// <summary>Gets a catalog force status to apply, or Normal to clear.</summary>
+    public string? SetForceStatusName { get; init; }
 }
 
 /// <summary>
@@ -1826,6 +1880,30 @@ public sealed class StoredMission
 
     /// <summary>Gets the signed raw supply-point change.</summary>
     public int SupplyPointsAdvantageAmount { get; init; }
+
+    /// <summary>Gets ordered win/lose status-change conditions.</summary>
+    public IReadOnlyList<StoredMissionStatusChange> StatusChanges { get; init; } = [];
+}
+
+/// <summary>
+/// A persisted mission win/lose status-change condition.
+/// </summary>
+public sealed class StoredMissionStatusChange
+{
+    /// <summary>Gets the condition identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets Win or Lose.</summary>
+    public required string Outcome { get; init; }
+
+    /// <summary>Gets the required current status, or null to match any remaining status.</summary>
+    public string? WhenCurrentStatus { get; init; }
+
+    /// <summary>Gets the status to apply, or null for Normal.</summary>
+    public string? SetStatus { get; init; }
+
+    /// <summary>Gets whether the force keeps its current status.</summary>
+    public bool LeaveUnchanged { get; init; }
 }
 
 /// <summary>

@@ -105,7 +105,8 @@ public static class ActionResolution
                     factionAllyGroups,
                     state.BrokenAllyFactionIds,
                     state.BrokenAllySubfactions,
-                    rules)
+                    rules,
+                    state.AllyBetrayals)
                 : force.TerritoryId;
             if (order.Kind is ActionKind.Move or ActionKind.Retreat && destination != force.TerritoryId)
             {
@@ -140,24 +141,48 @@ public static class ActionResolution
 
         var broken = state.BrokenAllyFactionIds.ToHashSet();
         var brokenSubfactions = state.BrokenAllySubfactions.ToList();
+        var betrayals = state.AllyBetrayals.ToList();
         foreach (var order in resolved.Values)
         {
-            if (order.Kind == ActionKind.Backstab && forces.TryGetValue(order.ForceId, out var force))
+            if (order.Kind != ActionKind.Backstab)
             {
-                if (rules.Has(force, SpecialRuleEffectKeys.DividedWeStand)
-                    && !string.IsNullOrWhiteSpace(force.Subfaction))
-                {
-                    if (!brokenSubfactions.Any(item =>
-                        item.FactionId == force.FactionId
-                        && string.Equals(item.Subfaction, force.Subfaction, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        brokenSubfactions.Add(new BrokenAllySubfaction(force.FactionId, force.Subfaction));
-                    }
-                }
-                else
-                {
-                    broken.Add(force.FactionId);
-                }
+                continue;
+            }
+
+            var actor = nextForces.FirstOrDefault(item => item.Id == order.ForceId);
+            if (actor is null)
+            {
+                continue;
+            }
+
+            var present = nextForces.Where(item => item.TerritoryId == actor.TerritoryId).ToArray();
+            var recorded = RecordBackstabBetrayals(
+                actor,
+                present,
+                map,
+                factionAllyGroups,
+                broken,
+                brokenSubfactions,
+                betrayals,
+                rules);
+            foreach (var betrayal in recorded)
+            {
+                betrayals.Add(betrayal);
+                log.Add(new PlayLogEntry(
+                    Guid.NewGuid(),
+                    utcNow,
+                    PlayLogKind.AllianceBetrayed,
+                    window.Id,
+                    actor.Id,
+                    actor.ControllerUserId,
+                    actor.TerritoryId,
+                    targetTerritoryId: null,
+                    battleId: null,
+                    ActionKind.Backstab,
+                    present
+                        .Where(item => AllyBetrayalRules.MatchesVictim(betrayal, item))
+                        .Select(static item => item.Id)
+                        .ToArray()));
             }
         }
 
@@ -168,7 +193,14 @@ public static class ActionResolution
             var present = forceIds
                 .Select(id => nextForces.First(force => force.Id == id))
                 .ToArray();
-            if (CreatesBattle(present, map.Territory(territoryId)!, factionAllyGroups, broken, brokenSubfactions, rules))
+            if (CreatesBattle(
+                present,
+                map.Territory(territoryId)!,
+                factionAllyGroups,
+                broken,
+                brokenSubfactions,
+                rules,
+                betrayals))
             {
                 var presentIds = present.Select(static force => force.Id).ToArray();
                 var existing = battles.FirstOrDefault(item =>
@@ -206,7 +238,10 @@ public static class ActionResolution
                         broken,
                         terrainTypes,
                         structureTypes ?? [],
-                        pickIndex ?? (static count => 0));
+                        pickIndex ?? (static count => 0),
+                        brokenSubfactions,
+                        rules,
+                        betrayals);
                 var battle = new CampaignBattle(
                     Guid.NewGuid(),
                     territoryId,
@@ -258,13 +293,15 @@ public static class ActionResolution
             pickIndex ?? (static count => 0),
             skipClaimTerritories,
             rules,
-            brokenSubfactions);
+            brokenSubfactions,
+            betrayals);
         return (
             state.With(
                 forces: nextForces,
                 battles: battles,
                 brokenAllyFactionIds: [.. broken.OrderBy(static id => id)],
                 brokenAllySubfactions: [.. brokenSubfactions.OrderBy(static item => item.FactionId).ThenBy(static item => item.Subfaction)],
+                allyBetrayals: [.. betrayals],
                 structures: CaptureStructures(nextMap),
                 itemObjectives: items,
                 log: log),
@@ -306,12 +343,19 @@ public static class ActionResolution
             kinds.Add(ActionKind.Build);
         }
 
-        if (IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
+        if (IsValidPillage(
+            map,
+            force,
+            factionAllyGroups,
+            state.BrokenAllyFactionIds,
+            rules,
+            state.BrokenAllySubfactions,
+            state.AllyBetrayals))
         {
             kinds.Add(ActionKind.Pillage);
         }
 
-        if (IsValidRepair(map, force, factionAllyGroups, state.BrokenAllyFactionIds))
+        if (IsValidRepair(map, force, factionAllyGroups, state.BrokenAllyFactionIds, state.AllyBetrayals))
         {
             kinds.Add(ActionKind.Repair);
         }
@@ -346,7 +390,8 @@ public static class ActionResolution
         IReadOnlyList<CampaignForce> forces,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyCollection<Guid> broken,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(forces);
@@ -377,7 +422,8 @@ public static class ActionResolution
                 map,
                 factionAllyGroups,
                 broken.ToHashSet(),
-                pickIndex);
+                pickIndex,
+                allyBetrayals);
             if (claimed != territory.OwnerFactionId)
             {
                 next[territory.Id] = next[territory.Id].With(ownerFactionId: claimed, assignOwner: true);
@@ -419,12 +465,20 @@ public static class ActionResolution
         }
 
         if (kind == ActionKind.Pillage
-            && !IsValidPillage(map, force, factionAllyGroups, state.BrokenAllyFactionIds, rules, state.BrokenAllySubfactions))
+            && !IsValidPillage(
+                map,
+                force,
+                factionAllyGroups,
+                state.BrokenAllyFactionIds,
+                rules,
+                state.BrokenAllySubfactions,
+                state.AllyBetrayals))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
-        if (kind == ActionKind.Repair && !IsValidRepair(map, force, factionAllyGroups, state.BrokenAllyFactionIds))
+        if (kind == ActionKind.Repair
+            && !IsValidRepair(map, force, factionAllyGroups, state.BrokenAllyFactionIds, state.AllyBetrayals))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
@@ -535,7 +589,8 @@ public static class ActionResolution
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyCollection<Guid> broken,
         SpecialRuleContext? specialRules = null,
-        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null)
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         var rules = specialRules ?? SpecialRuleContext.None;
         var territory = map.Territory(force.TerritoryId);
@@ -556,6 +611,7 @@ public static class ActionResolution
 
         if (territory.OwnerFactionId is { } owner
             && AreAllies(force.FactionId, owner, factionAllyGroups, broken)
+            && !AllyBetrayalRules.PlayerBetrayedFaction(force.ControllerUserId, owner, null, allyBetrayals ?? [])
             && !FactionSpecialRulePolicies.CanPillageAllied(force, rules))
         {
             return false;
@@ -569,7 +625,8 @@ public static class ActionResolution
         PlayMap map,
         CampaignForce force,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
-        IReadOnlyCollection<Guid> broken)
+        IReadOnlyCollection<Guid> broken,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         var territory = map.Territory(force.TerritoryId);
         if (territory is null
@@ -580,8 +637,13 @@ public static class ActionResolution
             return false;
         }
 
-        return owner == force.FactionId
-            || AreAllies(force.FactionId, owner, factionAllyGroups, broken);
+        if (owner == force.FactionId)
+        {
+            return true;
+        }
+
+        return AreAllies(force.FactionId, owner, factionAllyGroups, broken)
+            && !AllyBetrayalRules.PlayerBetrayedFaction(force.ControllerUserId, owner, null, allyBetrayals ?? []);
     }
 
     internal static bool IsValidBackstab(
@@ -598,46 +660,83 @@ public static class ActionResolution
         var rules = specialRules ?? SpecialRuleContext.None;
         var broken = state.BrokenAllyFactionIds;
         var brokenSubfactions = state.BrokenAllySubfactions;
-        if (!HasAllianceToBreak(force, factionAllyGroups, broken, rules, brokenSubfactions))
-        {
-            return false;
-        }
-
+        var betrayals = state.AllyBetrayals;
         var othersHere = state.Forces
             .Where(other => other.Id != force.Id && other.TerritoryId == force.TerritoryId)
             .ToArray();
         if (othersHere.Any(other =>
-            FactionSpecialRulePolicies.AreAllies(force, other, factionAllyGroups, broken, brokenSubfactions, rules)))
+            FactionSpecialRulePolicies.AreAllies(
+                force,
+                other,
+                factionAllyGroups,
+                broken,
+                brokenSubfactions,
+                rules,
+                betrayals)))
         {
             return true;
         }
 
         var territory = map.Territory(force.TerritoryId);
         return territory?.OwnerFactionId is { } owner
-            && AreAllies(force.FactionId, owner, factionAllyGroups, broken);
+            && AreAllies(force.FactionId, owner, factionAllyGroups, broken)
+            && !AllyBetrayalRules.PlayerBetrayedFaction(force.ControllerUserId, owner, null, betrayals);
     }
 
-    private static bool HasAllianceToBreak(
-        CampaignForce force,
+    private static List<AllyBetrayal> RecordBackstabBetrayals(
+        CampaignForce actor,
+        IReadOnlyList<CampaignForce> present,
+        PlayMap map,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
-        IReadOnlyList<Guid> broken,
-        SpecialRuleContext rules,
-        IReadOnlyList<BrokenAllySubfaction> brokenSubfactions)
+        IReadOnlyCollection<Guid> broken,
+        IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
+        IReadOnlyList<AllyBetrayal> existing,
+        SpecialRuleContext rules)
     {
-        if (rules.Has(force, SpecialRuleEffectKeys.DividedWeStand)
-            && !string.IsNullOrWhiteSpace(force.Subfaction))
+        var added = new List<AllyBetrayal>();
+        var alliesHere = present
+            .Where(other =>
+                other.Id != actor.Id
+                && FactionSpecialRulePolicies.AreAllies(
+                    actor,
+                    other,
+                    factionAllyGroups,
+                    broken,
+                    brokenSubfactions,
+                    rules,
+                    existing))
+            .ToArray();
+        if (alliesHere.Length > 0)
         {
-            return !brokenSubfactions.Any(item =>
-                item.FactionId == force.FactionId
-                && string.Equals(item.Subfaction, force.Subfaction, StringComparison.OrdinalIgnoreCase));
+            foreach (var victim in alliesHere)
+            {
+                var scope = AllyBetrayalRules.ScopeKey(victim.FactionId, victim.Subfaction, rules);
+                var row = new AllyBetrayal(actor.ControllerUserId, victim.FactionId, scope, victim.ControllerUserId);
+                if (!existing.Concat(added).Any(item => AllyBetrayalRules.SameRow(item, row)))
+                {
+                    added.Add(row);
+                }
+            }
+
+            return added;
         }
 
-        if (broken.Contains(force.FactionId))
+        var territory = map.Territory(actor.TerritoryId);
+        if (territory?.OwnerFactionId is not { } owner
+            || owner == actor.FactionId
+            || !AreAllies(actor.FactionId, owner, factionAllyGroups, broken)
+            || AllyBetrayalRules.PlayerBetrayedFaction(actor.ControllerUserId, owner, null, existing))
         {
-            return false;
+            return added;
         }
 
-        return factionAllyGroups.TryGetValue(force.FactionId, out var group) && !string.IsNullOrWhiteSpace(group);
+        var emptyLand = new AllyBetrayal(actor.ControllerUserId, owner, BetrayedSubfaction: null, BetrayedUserId: null);
+        if (!existing.Any(item => AllyBetrayalRules.SameRow(item, emptyLand)))
+        {
+            added.Add(emptyLand);
+        }
+
+        return added;
     }
 
     private static bool CreatesBattle(
@@ -646,7 +745,8 @@ public static class ActionResolution
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         HashSet<Guid> broken,
         IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        IReadOnlyList<AllyBetrayal> allyBetrayals)
     {
         return FactionSpecialRulePolicies.CreatesBattle(
             present,
@@ -654,7 +754,8 @@ public static class ActionResolution
             factionAllyGroups,
             broken,
             brokenSubfactions,
-            rules);
+            rules,
+            allyBetrayals);
     }
 
     internal static bool AreEnemies(
@@ -729,7 +830,14 @@ public static class ActionResolution
                 continue;
             }
 
-            result.Add(members[0]);
+            var surviving = members[0];
+            if (members.Any(static member => ForceStatusNames.IsDiseased(member.StatusName))
+                && FactionSpecialRulePolicies.AllowsStatus(surviving, ForceStatusNames.Diseased, rules))
+            {
+                surviving = surviving.WithStatus(ForceStatusNames.Diseased);
+            }
+
+            result.Add(surviving);
             if (members.Length > 1)
             {
                 log.Add(new PlayLogEntry(
@@ -737,9 +845,9 @@ public static class ActionResolution
                     utcNow,
                     PlayLogKind.ForcesRejoined,
                     window.Id,
-                    members[0].Id,
-                    members[0].ControllerUserId,
-                    members[0].TerritoryId,
+                    surviving.Id,
+                    surviving.ControllerUserId,
+                    surviving.TerritoryId,
                     targetTerritoryId: null,
                     battleId: null,
                     actionKind: null,
@@ -760,7 +868,8 @@ public static class ActionResolution
         Func<int, int> pickIndex,
         HashSet<Guid>? skipClaimTerritories = null,
         SpecialRuleContext? specialRules = null,
-        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null)
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         _ = specialRules;
         _ = brokenSubfactions;
@@ -839,7 +948,8 @@ public static class ActionResolution
                 map,
                 factionAllyGroups,
                 broken,
-                pickIndex);
+                pickIndex,
+                allyBetrayals);
             if (claimed != territory.OwnerFactionId)
             {
                 next[territory.Id] = next[territory.Id].With(ownerFactionId: claimed, assignOwner: true);
@@ -888,15 +998,19 @@ public static class ActionResolution
         PlayMap map,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         HashSet<Guid> broken,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
+        var betrayals = allyBetrayals ?? [];
         var factions = occupants.Select(static force => force.FactionId).Distinct().ToArray();
         if (factions.Length == 1)
         {
             var factionId = factions[0];
             if (territory.OwnerFactionId is { } owner
                 && owner != factionId
-                && AreAllies(factionId, owner, factionAllyGroups, broken))
+                && AreAllies(factionId, owner, factionAllyGroups, broken)
+                && !occupants.Any(item =>
+                    AllyBetrayalRules.PlayerBetrayedFaction(item.ControllerUserId, owner, null, betrayals)))
             {
                 return owner;
             }

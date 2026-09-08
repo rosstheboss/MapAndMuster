@@ -185,7 +185,9 @@ public sealed class ForceStatusChangeFact
         Guid? actorFactionId,
         Guid? actorUserId,
         DateTimeOffset occurredUtc,
-        Guid? previousStatusTypeId = null)
+        Guid? previousStatusTypeId = null,
+        ForceStatusChangeSource source = ForceStatusChangeSource.Catalog,
+        string? sourceDetail = null)
     {
         Id = id;
         ForceId = forceId;
@@ -199,6 +201,8 @@ public sealed class ForceStatusChangeFact
         ActorUserId = actorUserId;
         OccurredUtc = occurredUtc;
         PreviousStatusTypeId = previousStatusTypeId;
+        Source = source;
+        SourceDetail = string.IsNullOrWhiteSpace(sourceDetail) ? null : sourceDetail.Trim();
     }
 
     /// <summary>Gets the fact identifier.</summary>
@@ -236,6 +240,12 @@ public sealed class ForceStatusChangeFact
 
     /// <summary>Gets when the change was recorded, in UTC.</summary>
     public DateTimeOffset OccurredUtc { get; }
+
+    /// <summary>Gets why the status changed.</summary>
+    public ForceStatusChangeSource Source { get; }
+
+    /// <summary>Gets extra source text, such as a mission or item name.</summary>
+    public string? SourceDetail { get; }
 }
 
 /// <summary>

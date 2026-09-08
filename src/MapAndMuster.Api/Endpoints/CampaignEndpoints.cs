@@ -415,6 +415,14 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
 
+        group.MapPost("/{campaignId:guid}/play/set-force-statuses", SetForceStatusesAsync)
+            .WithName("SetForceStatuses")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
         group.MapPost("/{campaignId:guid}/play/debug/enter", EnterDebugAsync)
             .WithName("EnterCampaignDebug")
             .Produces<CampaignPlayResponse>()
@@ -2380,6 +2388,34 @@ public static class CampaignEndpoints
                     RingerFactionId = request.RingerFactionId,
                     MissionId = request.MissionId,
                     PlayerIsDefender = request.PlayerIsDefender,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> SetForceStatusesAsync(
+        Guid campaignId,
+        SetForceStatusesRequest request,
+        ClaimsPrincipal principal,
+        SetForceStatusesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new SetForceStatusesCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    ForceIds = request.ForceIds ?? [],
+                    StatusName = request.StatusName,
                 },
                 cancellationToken)
             .ConfigureAwait(false);

@@ -166,6 +166,7 @@ export interface CampaignMission {
   hasFile: boolean;
   fileName: string | null;
   resultQuestions?: MissionResultQuestion[];
+  statusChanges?: MissionStatusChange[];
   isAttackerDefender?: boolean;
   hasArmyPointsAdvantage?: boolean;
   armyPointsAdvantageSide?: string;
@@ -183,6 +184,14 @@ export interface MissionResultQuestion {
   battlePoints: number;
   campaignPoints: number;
   standardQuestionId?: string | null;
+}
+
+export interface MissionStatusChange {
+  id: string;
+  outcome: string;
+  whenCurrentStatus?: string | null;
+  setStatus?: string | null;
+  leaveUnchanged?: boolean;
 }
 
 export interface StandardBattleResultQuestion {
@@ -254,6 +263,7 @@ export interface ItemObjectiveChoiceResult {
   destroyItem?: boolean;
   replacementItemTypeId?: string | null;
   grantedPrivateObjectiveTypeId?: string | null;
+  setForceStatusName?: string | null;
 }
 
 export interface CampaignSpecialRule {
@@ -518,6 +528,7 @@ export interface SaveItemObjectiveChoiceResultPayload {
   destroyItem?: boolean;
   replacementItemTypeId?: string | null;
   grantedPrivateObjectiveTypeId?: string | null;
+  setForceStatusName?: string | null;
 }
 
 export interface SaveSpecialRulePayload {
@@ -572,6 +583,7 @@ export interface SaveMissionPayload {
   url?: string | null;
   clearFile?: boolean;
   resultQuestions?: SaveMissionResultQuestionPayload[];
+  statusChanges?: SaveMissionStatusChangePayload[];
   isAttackerDefender?: boolean;
   hasArmyPointsAdvantage?: boolean;
   armyPointsAdvantageSide?: string;
@@ -589,6 +601,14 @@ export interface SaveMissionResultQuestionPayload {
   battlePoints?: number;
   campaignPoints?: number;
   standardQuestionId?: string | null;
+}
+
+export interface SaveMissionStatusChangePayload {
+  id?: string;
+  outcome: string;
+  whenCurrentStatus?: string | null;
+  setStatus?: string | null;
+  leaveUnchanged?: boolean;
 }
 
 export interface MapGraphDetail {
@@ -680,6 +700,7 @@ export interface CampaignPlayDetail {
   privateObjectives?: PrivateObjectiveAssignment[];
   privateObjectiveUnclaimedCounts?: PrivateObjectiveUnclaimedCount[];
   specialRules?: CampaignSpecialRule[];
+  forceStatuses?: CampaignForceStatus[];
   pointsPerBattleWon?: number;
   pointsPerBattleDraw?: number;
   useDifferentialBattleScoring?: boolean;
@@ -949,6 +970,15 @@ export interface CampaignParticipant {
   freeCharacterCount?: number | null;
   splitPenaltyPoints?: number | null;
   contributions?: SupplyContribution[];
+  traitorVictims?: TraitorVictim[];
+}
+
+export interface TraitorVictim {
+  userId?: string | null;
+  username?: string | null;
+  displayName?: string | null;
+  factionName: string;
+  subfaction?: string | null;
 }
 
 export interface UserSearchHit {
@@ -1043,6 +1073,12 @@ export interface InjectRingerBattlePayload {
   ringerFactionId: string;
   missionId?: string | null;
   playerIsDefender?: boolean;
+}
+
+export interface SetForceStatusesPayload {
+  revision: number;
+  forceIds?: string[];
+  statusName?: string | null;
 }
 
 export interface ChooseFactionPayload {

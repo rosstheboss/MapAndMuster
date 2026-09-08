@@ -58,7 +58,7 @@ export const OLD_WORLD_SPECIAL_RULES: readonly SpecialRulePreset[] = [
     name: 'Bringers of the Plague',
     effectKey: 'BringersOfThePlague',
     description:
-      'A Nurgle army can never be diseased or well rested. However, if they beat any army that is not Diseased or Shaken, ' +
+      'A Nurgle army can never be diseased or well rested. However, if they beat any army that is not already Diseased, ' +
       'then that opposing army is now Diseased.',
   },
   {

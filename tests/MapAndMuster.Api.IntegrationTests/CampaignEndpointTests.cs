@@ -1548,6 +1548,163 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task ManagerCanAssignForceStatusAndPlayersCannot()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("status");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+        var statuses = new ForceStatusRequest[]
+        {
+            new()
+            {
+                Name = "Diseased",
+                Effects = "Display-only disease effects.",
+                EnableTrigger = "Disease",
+                ClearTrigger = "HoldAtSettlement",
+            },
+        };
+        using var createdResponse = await client.PostAsJsonAsync(
+            "/api/campaigns",
+            ValidCampaignBody("Status War", forceStatuses: statuses));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        var south = created.Factions.Single(faction => faction.Name == "South");
+        using var chosen = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/faction",
+            new ChooseFactionRequest { Revision = created.Revision, FactionId = south.Id });
+        Assert.Equal(HttpStatusCode.OK, chosen.StatusCode);
+
+        var afterFaction = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(afterFaction);
+        var plainsId = afterFaction.TerrainTypes.Single(type => type.Name == "Plains").Id;
+        var spawnId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        using var mapResponse = await client.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}/map/graph",
+            new SaveMapGraphRequest
+            {
+                Revision = afterFaction.Revision,
+                Territories =
+                [
+                    GraphTerritory(spawnId, 1, 0.1, 0.1, 0.3, "Southmarch", plainsId, spawnFactionId: south.Id),
+                ],
+            });
+        Assert.Equal(HttpStatusCode.OK, mapResponse.StatusCode);
+
+        var mapped = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(mapped);
+        var started = DateTime.UtcNow.AddHours(-1);
+        using var startResponse = await client.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}",
+            new SaveCampaignRequest
+            {
+                Name = "Status War",
+                Description = "A contested frontier.",
+                PlayerCount = 8,
+                IsPrivate = false,
+                IsPubliclyViewable = true,
+                CreatorIsParticipant = true,
+                Factions =
+                [
+                    .. mapped.Factions.Select(static faction => new FactionRequest
+                    {
+                        Id = faction.Id,
+                        Name = faction.Name,
+                        Subfactions = faction.Subfactions,
+                        Color = faction.Color,
+                        RequiresSubfaction = faction.RequiresSubfaction,
+                    }),
+                ],
+                Revision = mapped.Revision,
+                TimeZoneId = "UTC",
+                StartsAtLocal = started.ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture),
+                RoundCount = 8,
+                RoundLengthAmount = 1,
+                RoundLengthUnit = "Weeks",
+                Phases =
+                [
+                    new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                    new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                    new RoundPhaseRequest { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+                ],
+                TerrainTypes =
+                [
+                    .. mapped.TerrainTypes.Select(static type => new TerrainTypeRequest
+                    {
+                        Id = type.Id,
+                        Name = type.Name,
+                        Color = type.Color,
+                        CampaignPoints = type.CampaignPoints,
+                        IsWaterFeature = type.IsWaterFeature,
+                        SupplyPoints = type.SupplyPoints,
+                        Missions =
+                        [
+                            .. type.Missions.Select(static mission => new MissionRequest
+                            {
+                                Id = mission.Id,
+                                Name = mission.Name,
+                                Url = mission.Url,
+                            }),
+                        ],
+                    }),
+                ],
+                ForceStatuses =
+                [
+                    .. mapped.ForceStatuses.Select(static status => new ForceStatusRequest
+                    {
+                        Id = status.Id,
+                        Name = status.Name,
+                        Effects = status.Effects,
+                        EnableTrigger = status.EnableTrigger,
+                        ClearTrigger = status.ClearTrigger,
+                    }),
+                ],
+            });
+        Assert.Equal(HttpStatusCode.OK, startResponse.StatusCode);
+
+        var play = await client.GetFromJsonAsync<CampaignPlayResponse>($"/api/campaigns/{created.Id}/play", JsonOptions);
+        Assert.NotNull(play);
+        var force = Assert.Single(play.Forces);
+        using var assigned = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/set-force-statuses",
+            new SetForceStatusesRequest
+            {
+                Revision = play.Revision,
+                ForceIds = [force.Id],
+                StatusName = "Diseased",
+            });
+        Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
+        var updated = await assigned.Content.ReadFromJsonAsync<CampaignPlayResponse>(JsonOptions);
+        Assert.NotNull(updated);
+        Assert.Equal("Diseased", Assert.Single(updated.Forces).StatusName);
+        Assert.Contains(updated.Log, item => item.Kind == "ForceStatusChanged" && item.Summary.Contains("Diseased", StringComparison.Ordinal));
+
+        using var stranger = _factory.CreateClient();
+        var strangerName = UniqueName("sstatus");
+        await RegisterConfirmAndLoginAsync(stranger, $"{strangerName}@example.test", strangerName);
+        using var forbidden = await stranger.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/set-force-statuses",
+            new SetForceStatusesRequest
+            {
+                Revision = updated.Revision,
+                ForceIds = [force.Id],
+                StatusName = "Normal",
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        using var anonymous = _factory.CreateClient();
+        using var unauthorized = await anonymous.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/play/set-force-statuses",
+            new SetForceStatusesRequest
+            {
+                Revision = updated.Revision,
+                ForceIds = [force.Id],
+                StatusName = "Normal",
+            });
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+    }
+
+    [Fact]
     public async Task PublicViewersCanReadPlayWithoutDrafting()
     {
         using var owner = _factory.CreateClient();
@@ -1775,7 +1932,8 @@ public sealed class CampaignEndpointTests
         bool isPrivate = false,
         string? joinPassword = null,
         bool isPubliclyViewable = true,
-        string? startsAtLocal = null)
+        string? startsAtLocal = null,
+        IReadOnlyList<ForceStatusRequest>? forceStatuses = null)
     {
         return new SaveCampaignRequest
         {
@@ -1803,6 +1961,7 @@ public sealed class CampaignEndpointTests
                 new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
                 new RoundPhaseRequest { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
             ],
+            ForceStatuses = forceStatuses,
         };
     }
 
@@ -1814,7 +1973,8 @@ public sealed class CampaignEndpointTests
         double size,
         string? name = null,
         Guid? terrainTypeId = null,
-        Guid? structureTypeId = null)
+        Guid? structureTypeId = null,
+        Guid? spawnFactionId = null)
     {
         return new TerritoryRequest
         {
@@ -1823,6 +1983,7 @@ public sealed class CampaignEndpointTests
             Name = name,
             TerrainTypeId = terrainTypeId,
             StructureTypeId = structureTypeId,
+            SpawnFactionId = spawnFactionId,
             Polygon =
             [
                 new MapPointRequest { X = x, Y = y },

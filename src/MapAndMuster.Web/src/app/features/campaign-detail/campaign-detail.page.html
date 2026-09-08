@@ -440,8 +440,8 @@
                   }
                   @if (draftFor(force.id).kind === 'Backstab') {
                     <p class="muted">
-                      End your alliance. If you share a territory with a former ally after resolution, a battle is
-                      created.
+                      End this player's alliance with the occupying ally. Other members of your faction stay allied. If
+                      you share a territory with a former ally after resolution, a battle is created.
                     </p>
                   }
                   @if (savedDraft(force.id); as saved) {
@@ -1214,6 +1214,9 @@
                         >
                           {{ row.displayName }}
                         </button>
+                        @if (!row.factionId && traitorVictims(row.userId).length > 0) {
+                          <app-traitor-mark [victims]="traitorVictims(row.userId)" />
+                        }
                         @if (row.username !== row.displayName) {
                           <a
                             class="profile-link"
@@ -1257,6 +1260,9 @@
                                 [style.background]="row.factionColor"
                                 aria-hidden="true"
                               ></span>
+                            }
+                            @if (traitorVictims(row.userId).length > 0) {
+                              <app-traitor-mark [victims]="traitorVictims(row.userId)" />
                             }
                             {{ row.factionName }}
                           </button>
@@ -1530,6 +1536,9 @@
                         >
                           {{ player.displayName }}
                         </button>
+                        @if (player.traitorVictims.length > 0) {
+                          <app-traitor-mark [victims]="player.traitorVictims" />
+                        }
                         <span> ({{ player.factionLabel }})</span>
                       </li>
                     }
@@ -1789,6 +1798,9 @@
                   >
                     {{ participant.displayName }}
                   </button>
+                  @if ((participant.traitorVictims ?? []).length > 0) {
+                    <app-traitor-mark [victims]="participant.traitorVictims ?? []" />
+                  }
                   <a
                     class="profile-link"
                     [routerLink]="['/users', participant.username]"
@@ -2081,6 +2093,69 @@
                     Mark the player as the defender
                   </label>
                   <button type="submit" class="button">Start ringer battle</button>
+                }
+              </form>
+            }
+            @if (assignableForces().length > 0 && catalogStatusNames().length > 0) {
+              <form class="panel stack" (ngSubmit)="assignForceStatuses()">
+                <h2>
+                  <button
+                    type="button"
+                    class="section-toggle"
+                    [attr.aria-expanded]="isOpen('forceStatus')"
+                    (click)="toggleSection('forceStatus')"
+                  >
+                    Assign force status
+                  </button>
+                </h2>
+                @if (isOpen('forceStatus')) {
+                  <p class="muted">
+                    Managers and administrators can set any catalog status, including onto factions that are normally
+                    immune. The change is recorded in the game log.
+                  </p>
+                  <label class="choice-row">
+                    <input
+                      id="force-status-all"
+                      type="checkbox"
+                      [ngModel]="forceStatusAll()"
+                      (ngModelChange)="forceStatusAll.set($event)"
+                      name="forceStatusAll"
+                    />
+                    All forces
+                  </label>
+                  @if (!forceStatusAll()) {
+                    <div class="field">
+                      <label for="force-status-force">Force</label>
+                      <select
+                        id="force-status-force"
+                        [ngModel]="forceStatusForceId()"
+                        (ngModelChange)="forceStatusForceId.set($event)"
+                        name="forceStatusForce"
+                      >
+                        @for (force of assignableForces(); track force.id) {
+                          <option [value]="force.id">
+                            {{ force.controllerUsername || 'Force' }} · {{ factionName(force.factionId) }} ·
+                            {{ force.statusName || 'Normal' }}
+                          </option>
+                        }
+                      </select>
+                    </div>
+                  }
+                  <div class="field">
+                    <label for="force-status-name">Status</label>
+                    <select
+                      id="force-status-name"
+                      [ngModel]="forceStatusName()"
+                      (ngModelChange)="forceStatusName.set($event)"
+                      name="forceStatusName"
+                    >
+                      <option value="Normal">Normal</option>
+                      @for (name of catalogStatusNames(); track name) {
+                        <option [value]="name">{{ name }}</option>
+                      }
+                    </select>
+                  </div>
+                  <button type="submit" class="button">Assign status</button>
                 }
               </form>
             }

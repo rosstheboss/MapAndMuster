@@ -889,6 +889,19 @@ public sealed class InjectRingerBattleRequest
     public bool PlayerIsDefender { get; init; }
 }
 
+/// <summary>Request to assign a catalog force status or Normal.</summary>
+public sealed class SetForceStatusesRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets forces to change. Empty means every force.</summary>
+    public IReadOnlyList<Guid>? ForceIds { get; init; }
+
+    /// <summary>Gets the catalog status name, or Normal.</summary>
+    public string? StatusName { get; init; }
+}
+
 /// <summary>Request to choose a faction.</summary>
 public sealed class ChooseFactionRequest
 {
@@ -1120,6 +1133,7 @@ public static class PlayResponses
                                     DestroyItem = result.DestroyItem,
                                     ReplacementItemTypeId = result.ReplacementItemTypeId,
                                     GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+                                    SetForceStatusName = result.SetForceStatusName,
                                 }),
                             ],
                         }),

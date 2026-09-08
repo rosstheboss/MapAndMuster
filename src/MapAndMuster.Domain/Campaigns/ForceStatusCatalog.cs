@@ -19,10 +19,15 @@ public static class ForceStatusCatalog
     [
         new(
             "Diseased",
-            "Tabletop battles fought while diseased use the campaign sheet's disease modifiers. " +
-            "The app displays this and does not resolve the tabletop effect. Map movement is unchanged.",
-            ForceStatusEnableTrigger.OccupyingWater,
-            ForceStatusClearTrigger.HoldWhileNotWater),
+            "In battle, before deployment, roll a D6 for every non-Character, non-War Machine, non-Chariot unit. " +
+            "On a 1 that unit is Sick and rerolls 6s to Wound unless it has Poisoned attacks. " +
+            "The app displays this and does not resolve the tabletop effect. " +
+            "Gained after three consecutive actions in water-feature territories, a fought defeat on water, " +
+            "surrender after two water-feature actions, contagion from another faction, rejoining a Diseased split, " +
+            "or a plague-bearing combat win. Cleared by Hold at a Capital City, City, Supply Depot, or Town. " +
+            "Diseased overrides other catalog statuses.",
+            ForceStatusEnableTrigger.Disease,
+            ForceStatusClearTrigger.HoldAtSettlement),
         new(
             "Shaken",
             "Tabletop battles fought while shaken use the campaign sheet's shaken modifiers. " +

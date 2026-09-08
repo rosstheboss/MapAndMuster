@@ -10,6 +10,7 @@ import type {
   ChooseFactionPayload,
   ExtendCampaignSchedulePayload,
   InjectRingerBattlePayload,
+  SetForceStatusesPayload,
   MapGraphDetail,
   PlayRevisionPayload,
   PostCampaignChatPayload,
@@ -419,6 +420,16 @@ export class CampaignService {
     return firstValueFrom(
       this.http.post<CampaignPlayDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/play/inject-ringer`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async setForceStatuses(campaignId: string, payload: SetForceStatusesPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/set-force-statuses`,
         payload,
         { withCredentials: true },
       ),

@@ -1,4 +1,5 @@
-export type ForceStatusEnableTrigger = 'Hold' | 'AfterBattle' | 'BattleWon' | 'BattleLostOrRetreat' | 'OccupyingWater';
+export type ForceStatusEnableTrigger =
+  'Hold' | 'AfterBattle' | 'BattleWon' | 'BattleLostOrRetreat' | 'OccupyingWater' | 'Disease';
 
 export type ForceStatusClearTrigger =
   | 'Hold'
@@ -7,7 +8,8 @@ export type ForceStatusClearTrigger =
   | 'AfterMoveOrBattle'
   | 'BattleWon'
   | 'BattleLostOrRetreat'
-  | 'HoldWhileNotWater';
+  | 'HoldWhileNotWater'
+  | 'HoldAtSettlement';
 
 export interface ForceStatusPreset {
   name: string;
@@ -24,6 +26,7 @@ export const FORCE_STATUS_ENABLE_OPTIONS: readonly { id: ForceStatusEnableTrigge
   { id: 'BattleWon', label: 'After winning a battle' },
   { id: 'BattleLostOrRetreat', label: 'After losing a battle or forced retreat' },
   { id: 'OccupyingWater', label: 'While occupying a water-feature territory' },
+  { id: 'Disease', label: 'Named Diseased engine (water, contagion, rejoin)' },
 ];
 
 export const FORCE_STATUS_CLEAR_OPTIONS: readonly { id: ForceStatusClearTrigger; label: string }[] = [
@@ -34,6 +37,7 @@ export const FORCE_STATUS_CLEAR_OPTIONS: readonly { id: ForceStatusClearTrigger;
   { id: 'BattleWon', label: 'After winning a battle' },
   { id: 'BattleLostOrRetreat', label: 'After losing a battle or forced retreat' },
   { id: 'HoldWhileNotWater', label: 'After Hold while not on a water-feature territory' },
+  { id: 'HoldAtSettlement', label: 'After Hold at a Capital City, City, Supply Depot, or Town' },
 ];
 
 /**
@@ -44,10 +48,15 @@ export const STANDARD_FORCE_STATUSES: readonly ForceStatusPreset[] = [
   {
     name: 'Diseased',
     effects:
-      "Tabletop battles fought while diseased use the campaign sheet's disease modifiers. " +
-      'The app displays this and does not resolve the tabletop effect. Map movement is unchanged.',
-    enableTrigger: 'OccupyingWater',
-    clearTrigger: 'HoldWhileNotWater',
+      'In battle, before deployment, roll a D6 for every non-Character, non-War Machine, non-Chariot unit. ' +
+      'On a 1 that unit is Sick and rerolls 6s to Wound unless it has Poisoned attacks. ' +
+      'The app displays this and does not resolve the tabletop effect. ' +
+      'Gained after three consecutive actions in water-feature territories, a fought defeat on water, ' +
+      'surrender after two water-feature actions, contagion from another faction, rejoining a Diseased split, ' +
+      'or a plague-bearing combat win. Cleared by Hold at a Capital City, City, Supply Depot, or Town. ' +
+      'Diseased overrides other catalog statuses.',
+    enableTrigger: 'Disease',
+    clearTrigger: 'HoldAtSettlement',
   },
   {
     name: 'Shaken',

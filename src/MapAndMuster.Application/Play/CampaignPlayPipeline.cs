@@ -78,7 +78,8 @@ internal static class CampaignPlayPipeline
             CampaignPlayCatalog.PickIndex,
             CampaignPlayCatalog.TerrainSetups(campaign),
             CampaignPlayCatalog.StructureSetups(campaign),
-            CampaignPlayCatalog.SpecialRules(campaign));
+            CampaignPlayCatalog.SpecialRules(campaign),
+            CampaignPlayCatalog.MissionSetups(campaign));
         var effected = CampaignPlayCatalog.ApplyEffects(campaign, advanced.State, advanced.Map, utcNow);
         effected = await CampaignCompletionLog.SyncAsync(
                 campaign,
@@ -244,7 +245,8 @@ internal static class CampaignPlayPipeline
                 CampaignPlayCatalog.PickIndex,
                 CampaignPlayCatalog.TerrainSetups(campaign),
                 CampaignPlayCatalog.StructureSetups(campaign),
-                CampaignPlayCatalog.SpecialRules(campaign));
+                CampaignPlayCatalog.SpecialRules(campaign),
+                CampaignPlayCatalog.MissionSetups(campaign));
             var playMap = advanced.PreserveMap ? workingMap : advanced.Map;
             var endsUtc = mutation.PreserveSchedule && advanced.PreserveSchedule
                 ? campaign.EndsUtc

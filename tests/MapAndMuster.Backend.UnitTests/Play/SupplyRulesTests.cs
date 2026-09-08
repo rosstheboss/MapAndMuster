@@ -91,6 +91,67 @@ public sealed class SupplyRulesTests
     }
 
     [Fact]
+    public void MapSupplyOmitsAlliedLandAfterThePlayerBetraysThatFaction()
+    {
+        var ally = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
+        var mate = Guid.Parse("44444444-4444-4444-4444-444444444445");
+        var state = EmptyState(forceCount: 1);
+        var map = new PlayMap(
+            [
+                new PlayTerritory(Spawn, 1, Faction, Faction, null, null, StructureCondition.Operational, terrainTypeId: Terrain),
+                new PlayTerritory(
+                    Adjacent,
+                    2,
+                    ally,
+                    null,
+                    Keep,
+                    "Keep",
+                    StructureCondition.Operational,
+                    isPillageable: true,
+                    isDestructible: true,
+                    terrainTypeId: Terrain),
+            ],
+            [(Spawn, Adjacent)],
+            [new StructureTypePlayRules(Keep, "Keep", true, true, true, 1, 1, 1)]);
+        var traitorCatalog = new SupplyCatalog(
+            new Dictionary<Guid, int> { [Terrain] = 1 },
+            new Dictionary<Guid, StructureSupplyRules> { [Keep] = new(1, 1, 1) },
+            HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue,
+            HuntInEstaliaDefaults.ArmyEscalations(8),
+            new Dictionary<Guid, Guid> { [Player] = Faction, [mate] = Faction },
+            new Dictionary<Guid, string?> { [Faction] = "League", [ally] = "League" },
+            new HashSet<Guid>(),
+            allyBetrayals: [new AllyBetrayal(Player, ally, null, null)]);
+        var traitorSupply = SupplyRules.ForPlayer(state, map, traitorCatalog, Player, roundNumber: 1);
+        Assert.DoesNotContain(traitorSupply.Contributions, item => item.TerritoryId == Adjacent && item.IsAllied);
+
+        var mateCatalog = new SupplyCatalog(
+            new Dictionary<Guid, int> { [Terrain] = 1 },
+            new Dictionary<Guid, StructureSupplyRules> { [Keep] = new(1, 1, 1) },
+            HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue,
+            HuntInEstaliaDefaults.ArmyEscalations(8),
+            new Dictionary<Guid, Guid> { [Player] = Faction, [mate] = Faction },
+            new Dictionary<Guid, string?> { [Faction] = "League", [ally] = "League" },
+            new HashSet<Guid>(),
+            allyBetrayals: [new AllyBetrayal(Player, ally, null, null)]);
+        var mateState = new CampaignPlayState(
+            [],
+            [new CampaignForce(Guid.NewGuid(), mate, Faction, Spawn, false)],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []);
+        var mateSupply = SupplyRules.ForPlayer(mateState, map, mateCatalog, mate, roundNumber: 1);
+        Assert.Contains(mateSupply.Contributions, item => item.TerritoryId == Adjacent && item.IsAllied);
+    }
+
+    [Fact]
     public void SplitForcesApplyDefaultRawPenalty()
     {
         var state = EmptyState(forceCount: 2, territoryId: Spawn);

@@ -86,6 +86,7 @@ internal static class CampaignPointStandingsMapper
             PrivateObjectivePoints = campaign.PrivateObjectiveTypes.ToDictionary(static type => type.Id, static type => type.CampaignPoints),
             AllyGroupByFaction = CampaignPlayCatalog.AllyGroupByFaction(campaign),
             BrokenAllyFactionIds = play.BrokenAllyFactionIds.ToHashSet(),
+            AllyBetrayals = play.AllyBetrayals,
             ExtraBattleReportPoints = CampaignPlayCatalog.ExtraBattleReportPoints(campaign),
         });
 

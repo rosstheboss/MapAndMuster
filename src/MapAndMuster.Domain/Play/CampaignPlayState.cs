@@ -33,7 +33,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<ForceDelinquency>? delinquencies = null,
         IReadOnlyList<BrokenAllySubfaction>? brokenAllySubfactions = null,
         IReadOnlyList<ForceStatusChangeFact>? forceStatusChanges = null,
-        IReadOnlyList<StructureWorkFact>? structureWorks = null)
+        IReadOnlyList<StructureWorkFact>? structureWorks = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         ArgumentNullException.ThrowIfNull(windows);
         ArgumentNullException.ThrowIfNull(forces);
@@ -70,6 +71,7 @@ public sealed class CampaignPlayState
         BrokenAllySubfactions = brokenAllySubfactions ?? [];
         ForceStatusChanges = forceStatusChanges ?? [];
         StructureWorks = structureWorks ?? [];
+        AllyBetrayals = allyBetrayals ?? [];
     }
 
     /// <summary>Gets an empty play state.</summary>
@@ -145,6 +147,12 @@ public sealed class CampaignPlayState
     public IReadOnlyList<StructureWorkFact> StructureWorks { get; }
 
     /// <summary>
+    /// Gets player-scoped Backstab betrayals. The traitor, not their faction, is treated as an
+    /// enemy by the betrayed faction or scoped subfaction.
+    /// </summary>
+    public IReadOnlyList<AllyBetrayal> AllyBetrayals { get; }
+
+    /// <summary>
     /// Returns a copy with replaced collections.
     /// </summary>
     public CampaignPlayState With(
@@ -171,7 +179,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<ForceDelinquency>? delinquencies = null,
         IReadOnlyList<BrokenAllySubfaction>? brokenAllySubfactions = null,
         IReadOnlyList<ForceStatusChangeFact>? forceStatusChanges = null,
-        IReadOnlyList<StructureWorkFact>? structureWorks = null)
+        IReadOnlyList<StructureWorkFact>? structureWorks = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         return new CampaignPlayState(
             windows ?? Windows,
@@ -196,7 +205,8 @@ public sealed class CampaignPlayState
             delinquencies ?? Delinquencies,
             brokenAllySubfactions ?? BrokenAllySubfactions,
             forceStatusChanges ?? ForceStatusChanges,
-            structureWorks ?? StructureWorks);
+            structureWorks ?? StructureWorks,
+            allyBetrayals ?? AllyBetrayals);
     }
 
     /// <summary>

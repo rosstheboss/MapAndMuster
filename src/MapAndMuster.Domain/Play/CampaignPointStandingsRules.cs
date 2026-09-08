@@ -330,6 +330,13 @@ public static class CampaignPointStandingsRules
                 continue;
             }
 
+            var playerSubfaction = state.Forces.FirstOrDefault(item => item.ControllerUserId == player.UserId)?.Subfaction;
+            if (AllyBetrayalRules.PlayerBetrayedFaction(player.UserId, possessor.FactionId, possessor.Subfaction, state.AllyBetrayals)
+                || AllyBetrayalRules.PlayerBetrayedFaction(possessor.ControllerUserId, factionId, playerSubfaction, state.AllyBetrayals))
+            {
+                continue;
+            }
+
             if (broken.Contains(factionId) || broken.Contains(possessor.FactionId))
             {
                 continue;
@@ -615,6 +622,9 @@ public sealed class CampaignPointScoringState
 
     /// <summary>Gets factions that left their ally group through Backstab.</summary>
     public IReadOnlySet<Guid> BrokenAllyFactionIds { get; init; } = new HashSet<Guid>();
+
+    /// <summary>Gets player-scoped Backstab betrayals.</summary>
+    public IReadOnlyList<AllyBetrayal> AllyBetrayals { get; init; } = [];
 
     /// <summary>
     /// Gets extra campaign points from slain generals, destroyed supply lines, and scored mission questions.

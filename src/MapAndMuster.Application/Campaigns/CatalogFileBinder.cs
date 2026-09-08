@@ -155,6 +155,7 @@ internal static class CatalogFileBinder
                                     DestroyItem = result.DestroyItem,
                                     ReplacementItemTypeId = result.ReplacementItemTypeId,
                                     GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+                                    SetForceStatusName = result.SetForceStatusName,
                                 }),
                             ],
                         }),
@@ -429,6 +430,17 @@ internal static class CatalogFileBinder
                     HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
                     SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide.ToString(),
                     SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
+                    StatusChanges =
+                    [
+                        .. mission.StatusChanges.Select(static change => new StoredMissionStatusChange
+                        {
+                            Id = change.Id,
+                            Outcome = change.Outcome.ToString(),
+                            WhenCurrentStatus = change.WhenCurrentStatus,
+                            SetStatus = change.SetStatus,
+                            LeaveUnchanged = change.LeaveUnchanged,
+                        }),
+                    ],
                 };
             }),
         ];

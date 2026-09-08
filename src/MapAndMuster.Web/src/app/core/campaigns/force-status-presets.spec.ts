@@ -13,6 +13,8 @@ describe('force-status-presets', () => {
     const copy = forceStatusesFromStandardPreset();
     copy[0].name = 'Changed';
     expect(STANDARD_FORCE_STATUSES[0].name).toBe('Diseased');
+    expect(STANDARD_FORCE_STATUSES[0].enableTrigger).toBe('Disease');
+    expect(STANDARD_FORCE_STATUSES[0].clearTrigger).toBe('HoldAtSettlement');
     expect(copy.find((status) => status.name === 'Well Rested')?.enableTrigger).toBe('Hold');
   });
 });

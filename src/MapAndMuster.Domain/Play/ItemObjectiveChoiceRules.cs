@@ -132,7 +132,9 @@ public static class ItemObjectiveChoiceRules
         DateTimeOffset utcNow,
         Func<int, int> pickIndex,
         out CampaignPlayState next,
-        out DomainError? error)
+        out DomainError? error,
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(types);
@@ -238,6 +240,35 @@ public static class ItemObjectiveChoiceRules
         if (result.GrantedPrivateObjectiveTypeId is { } grantedId)
         {
             nextState = GrantSecretFromRelic(nextState, grantedId, actorUserId, utcNow);
+        }
+
+        if (result.SetForceStatusName is not null
+            && forceStatuses is { Count: > 0 } catalog)
+        {
+            var (updatedForce, attribution) = ForceStatusRules.ApplyConfiguredStatus(
+                force,
+                result.SetForceStatusName,
+                catalog,
+                specialRules ?? SpecialRuleContext.None,
+                ForceStatusChangeSource.ItemObjective,
+                type.Name);
+            if (attribution is not null)
+            {
+                var nextForces = nextState.Forces.Select(entry => entry.Id == updatedForce.Id ? updatedForce : entry).ToArray();
+                var (facts, log) = ForceStatusRules.RecordChanges(
+                    nextState.Forces,
+                    nextForces,
+                    catalog,
+                    utcNow,
+                    new Dictionary<Guid, ForceStatusRules.Attribution> { [updatedForce.Id] = attribution.Value },
+                    nextState.CurrentWindow()?.Id);
+                nextState = nextState.With(
+                        forces: nextForces,
+                        forceStatusChanges: facts.Count == 0
+                            ? nextState.ForceStatusChanges
+                            : [.. nextState.ForceStatusChanges, .. facts])
+                    .AppendLog([.. log]);
+            }
         }
 
         next = nextState;

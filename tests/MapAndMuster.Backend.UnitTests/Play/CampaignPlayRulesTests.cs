@@ -1566,6 +1566,33 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
+    public void StaffCanAssignAnyCatalogStatusIncludingOntoImmuneFactions()
+    {
+        var (state, _, _) = Seeded();
+        var catalog = ForceStatusCatalog.Standard
+            .Select(status => new ForceStatusSetup(
+                Guid.NewGuid(),
+                status.Name,
+                status.Effects,
+                status.EnableTrigger,
+                status.ClearTrigger))
+            .ToArray();
+        var force = state.Forces[0];
+        Assert.True(CampaignPlayRules.TrySetForceStatuses(
+            state,
+            PlayerOne,
+            [force.Id],
+            "Diseased",
+            catalog,
+            state.Windows[0].StartsUtc,
+            out var next,
+            out _));
+        Assert.Equal("Diseased", next!.Forces.Single(item => item.Id == force.Id).StatusName);
+        Assert.Contains(next.Log, item => item.Kind == PlayLogKind.ForceStatusChanged);
+        Assert.Contains(next.ForceStatusChanges, item => item.Source == ForceStatusChangeSource.Staff);
+    }
+
+    [Fact]
     public void BattleSupplySpendUsesTheReportingForceChainThenTheSharedTemporaryPool()
     {
         var isolated = Guid.Parse("99999999-9999-9999-9999-999999999999");

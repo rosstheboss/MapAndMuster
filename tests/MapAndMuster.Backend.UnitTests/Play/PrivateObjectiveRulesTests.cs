@@ -74,6 +74,143 @@ public sealed class PrivateObjectiveRulesTests
     }
 
     [Fact]
+    public void SeedInitialDoesNotAssignTraitorHolderKinds()
+    {
+        var traitorType = Manual(
+            "Traitor hunt",
+            Guid.Parse("00000000-0000-0000-0000-000000000009"),
+            PrivateObjectiveHolderKind.Traitor);
+        var playerType = Manual(
+            "Player hunt",
+            Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            PrivateObjectiveHolderKind.Player);
+        var player = Guid.NewGuid();
+
+        var seeded = PrivateObjectiveRules.SeedInitial(
+            [traitorType, playerType],
+            [player],
+            [],
+            [],
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+
+        Assert.Single(seeded);
+        Assert.Equal(playerType.Id, seeded[0].TypeId);
+        Assert.Equal(PrivateObjectiveHolderKind.Player, seeded[0].HolderKind);
+    }
+
+    [Fact]
+    public void GrantOwedTraitorObjectivesAddsOneUniqueTypePerRelationship()
+    {
+        var first = Manual("First knife", PrivateObjectiveHolderKind.Traitor);
+        var second = Manual("Second knife", PrivateObjectiveHolderKind.Traitor);
+        var traitor = Guid.NewGuid();
+        var factionA = Guid.NewGuid();
+        var factionB = Guid.NewGuid();
+        var state = CampaignPlayState.Empty.With(allyBetrayals:
+        [
+            new AllyBetrayal(traitor, factionA, null, Guid.NewGuid()),
+            new AllyBetrayal(traitor, factionB, null, Guid.NewGuid()),
+        ]);
+
+        var granted = PrivateObjectiveRules.GrantOwedTraitorObjectives(
+            state,
+            [first, second],
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+
+        Assert.Equal(2, granted.PrivateObjectives.Count);
+        Assert.All(
+            granted.PrivateObjectives,
+            item =>
+            {
+                Assert.Equal(PrivateObjectiveHolderKind.Traitor, item.HolderKind);
+                Assert.Equal(traitor, item.HolderId);
+            });
+        Assert.Equal(2, granted.PrivateObjectives.Select(item => item.TypeId).Distinct().Count());
+    }
+
+    [Fact]
+    public void GrantOwedTraitorObjectivesSkipsTypesThePlayerAlreadyHolds()
+    {
+        var first = Manual("Shared hunt", PrivateObjectiveHolderKind.Player, PrivateObjectiveHolderKind.Traitor);
+        var second = Manual("Knife hunt", PrivateObjectiveHolderKind.Traitor);
+        var traitor = Guid.NewGuid();
+        var existing = new PrivateObjectiveAssignment(
+            Guid.NewGuid(),
+            first.Id,
+            PrivateObjectiveHolderKind.Player,
+            traitor,
+            PrivateObjectiveScoringKind.Manual,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            DateTimeOffset.UtcNow);
+        var state = CampaignPlayState.Empty.With(
+            privateObjectives: [existing],
+            allyBetrayals: [new AllyBetrayal(traitor, Guid.NewGuid(), null, Guid.NewGuid())]);
+
+        var granted = PrivateObjectiveRules.GrantOwedTraitorObjectives(
+            state,
+            [first, second],
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+
+        var traitorAssignment = Assert.Single(
+            granted.PrivateObjectives,
+            item => item.HolderKind == PrivateObjectiveHolderKind.Traitor);
+        Assert.Equal(second.Id, traitorAssignment.TypeId);
+    }
+
+    [Fact]
+    public void GrantOwedTraitorObjectivesDoesNotDuplicateWhenThePoolIsExhausted()
+    {
+        var only = Manual("Only knife", PrivateObjectiveHolderKind.Traitor);
+        var traitor = Guid.NewGuid();
+        var state = CampaignPlayState.Empty.With(allyBetrayals:
+        [
+            new AllyBetrayal(traitor, Guid.NewGuid(), null, Guid.NewGuid()),
+            new AllyBetrayal(traitor, Guid.NewGuid(), null, Guid.NewGuid()),
+        ]);
+
+        var granted = PrivateObjectiveRules.GrantOwedTraitorObjectives(
+            state,
+            [only],
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+
+        Assert.Single(granted.PrivateObjectives);
+        Assert.Equal(only.Id, granted.PrivateObjectives[0].TypeId);
+    }
+
+    [Fact]
+    public void TryGrantRejectsACatalogTypeThePlayerAlreadyHolds()
+    {
+        var type = Manual("Shared hunt", PrivateObjectiveHolderKind.Player, PrivateObjectiveHolderKind.Traitor);
+        var player = Guid.NewGuid();
+        Assert.True(PrivateObjectiveRules.TryGrant(
+            CampaignPlayState.Empty,
+            [type],
+            PrivateObjectiveHolderKind.Player,
+            player,
+            type.Id,
+            DateTimeOffset.UtcNow,
+            static _ => 0,
+            out var granted,
+            out _));
+
+        Assert.False(PrivateObjectiveRules.TryGrant(
+            granted,
+            [type],
+            PrivateObjectiveHolderKind.Traitor,
+            player,
+            type.Id,
+            DateTimeOffset.UtcNow,
+            static _ => 0,
+            out _,
+            out var error));
+        Assert.Equal("privateObjective.unavailable", error?.Code);
+    }
+
+    [Fact]
     public void SeedGivesUniqueThenReshuffledDuplicatesUntilEveryHolderHasOne()
     {
         var first = Manual(

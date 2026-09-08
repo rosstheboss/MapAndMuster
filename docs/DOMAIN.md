@@ -140,8 +140,8 @@ does not change movement or adjacency by itself.
 
 Named public objectives live in their own setup section (name, optional description, and points).
 Private objectives are a separate optional catalog (at most 50). Each private objective has a
-name, optional description, campaign points, one or more holder kinds (player, faction, and/or
-ally group), and either Manual or Automatic scoring. Automatic objectives name a criterion:
+name, optional description, campaign points, one or more holder kinds (player, faction, ally
+group, and/or Traitor), and either Manual or Automatic scoring. Automatic objectives name a criterion:
 control a number of territories; control listed territories; control, pillage, or destroy a
 number of a chosen structure type; win or lose a number of finalized battles; record a number of
 player-chosen retreats (orders submitted by a player; delinquency defaults and staff corrections
@@ -151,14 +151,20 @@ type, or of any type; control a relic (any, or a named catalog item); defeat an 
 battle (any, one random opponent chosen at assignment, or a specific faction or ally group);
 or gain a force status a number of times, cause another force to gain a status, or gain a status
 after gaining or losing another status. At launch, occupying players, factions, and ally groups each
-receive one secret objective from that holder kind's pool. A holder kind with no configured
+receive one secret objective from that holder kind's pool. Traitor-kind objectives are not seeded.
+A holder kind with no configured
 objectives receives none. Assignments in a pool are unique until that pool is exhausted; remaining
 holders then receive duplicates from a newly shuffled copy of the same pool, repeating until
-everyone in the pool has one. Duplicate catalog types are independent assignments: each recipient
-must complete their own copy, and each revealed copy awards its points to that player, faction, or
-ally group. A player who joins play later receives one player-pool objective the same way. After
+everyone in the pool has one, except that one player may never hold two assignments of the same
+catalog type. Player-held and Traitor-held assignments share that uniqueness. Faction and ally-group
+copies remain independent: each of those holders completes their own copy, and each revealed copy
+awards its points to that holder. A player who joins play later receives one player-pool objective the same way. After
+a successful Backstab, the traitor also receives one Traitor-pool objective per distinct betrayed
+alliance relationship (the whole victim faction, or one required or daemon subfaction). The Traitor
+pool recycles when exhausted, still skipping any type that player already holds. After
 launch, a manager may grant a specific catalog objective, or a random one from that holder's pool,
-to a chosen player, faction, or ally group. Private-objective catalog
+to a chosen player, faction, or ally group. Managers cannot grant Traitor-kind assignments; those
+arrive only from Backstab. Private-objective catalog
 entries cannot be added after launch.
 
 Points per finalized battle win are configured with public objectives (default 0). Battle-point
@@ -182,10 +188,11 @@ Named Hunt effect keys the engine enforces or calculates (matched by key, not di
   are moved into the same territory.
 - `Slavers`: each owned unpillaged Town or City grants one extra map supply point.
 - `DividedWeStand`: daemon-god subfactions of the same faction count as allies and may backstab
-  each other by god.
+  each other by god. Backstab against one god makes only that god's players enemies of the traitor;
+  other gods of the same faction remain allied to that traitor.
 - `OnlyBloodSatisfies`: Pillage may target an allied structure and may destroy it in one action.
-- `BringersOfThePlague`: never Diseased or Well Rested; beating a force that is not Diseased or
-  Shaken inflicts Diseased.
+- `BringersOfThePlague`: never Diseased or Well Rested; beating a force that is not already
+  Diseased inflicts Diseased, including when that loser is Shaken.
 - `ArtOfWar`: Retreat may enter any non-enemy-spawn territory and may capture it.
 - `ConduitsOfPower`: a player is told when they are adjacent to a still-hidden relic. After a
   relic is revealed, they may Move to any territory adjacent to it.
@@ -221,16 +228,31 @@ or army-list mercenary slots.
 A campaign may configure named force statuses (at most 20). Each status has a unique name other
 than Normal, effect text shown on the force, an enable trigger, and a clear trigger. A force has
 at most one status; Normal is stored as no status. Setup can copy the standard catalog:
-Diseased (enable when occupying a water-feature territory; clear by Hold while not on water),
-Shaken (enable after a lost battle or forced retreat, except a no-result neither-submission
-forced retreat; clear by Hold), Confident (enable after a won battle; clear after a loss or
-retreat), Exhausted (enable after any resolved battle; clear by Hold), and Well Rested (enable
-after Hold; clear after a move or battle). Catalog order
-matters when more than one enable trigger matches: the first matching status wins, so a loss
-becomes Shaken rather than Exhausted. Effect text is display-only; the app does not resolve
-tabletop modifiers. Named effect keys can refuse a status: `Undead` never Shaken, Diseased, Well
-Rested, or Confident; `BringersOfThePlague` never Diseased or Well Rested; `ToughGuts` never
-Diseased.
+Diseased, Shaken, Confident, Exhausted, and Well Rested. Catalog order matters when more than one
+enable trigger matches: the first matching status wins, so a loss becomes Shaken rather than
+Exhausted. Effect text is display-only; the app does not resolve tabletop modifiers. Named effect
+keys can refuse a status: `Undead` never Shaken, Diseased, Well Rested, or Confident;
+`BringersOfThePlague` never Diseased or Well Rested; `ToughGuts` never Diseased.
+
+Named Diseased is an engine status matched by name, not by the OccupyingWater trigger. OccupyingWater
+remains available for custom statuses. Diseased is gained when a force completes three consecutive
+resolved actions in water-feature territories (the territories may differ), loses a fought battle
+on a water-feature territory, surrenders before fighting after two consecutive water-feature
+actions, shares a territory or a battle in the same phase with another faction that is Diseased,
+or is forced back together with a Diseased split of the same player. A plague-bearing combat win
+(`BringersOfThePlague`) inflicts Diseased on the loser anywhere, including when that loser is
+Shaken. Diseased overrides other catalog statuses. While Diseased, Hold does not apply Well Rested
+or other catalog statuses. Hold on a Capital City, City, Supply Depot, or Town (not Castle; not a
+destroyed structure) clears Diseased to Normal. Missions, item-objective results, special rules,
+and staff assignment may still replace Diseased. Immune factions skip engine and contagion
+infection; a manager or administrator assignment ignores immunity.
+
+Missions may list ordered win/lose status-change conditions. The first matching row for that
+outcome applies. An empty current-status match is a catch-all; a Leave unchanged row keeps the
+current status, including Diseased. Staff and campaign managers may assign any catalog status or
+Normal to one force or every force. Every status change is recorded as a play-log fact with the
+source (catalog, consecutive water, water battle, water surrender, contagion, rejoin, special
+rule, mission, item objective, staff, or settlement Hold).
 
 The creating user is always a campaign manager (Game Master). If they also participate, they
 occupy one player slot. Private campaigns store a hashed join password; the plaintext password
@@ -306,7 +328,7 @@ closes the campaign; automatic criteria continue to score if they are met in tha
 
 While a campaign is in progress, the map toolbar offers a display-only highlight mode for the
 current viewer: configured overlay colors, faction colors, or alliance colors (unaligned
-factions, and factions whose alliance was broken by Backstab, use their faction color). The
+factions, and factions whose alliance was broken by Backstab in older campaigns, use their faction color). The
 browser stores that highlight mode, which panels were expanded or collapsed, standings sort,
 last chat recipient, and last chat scroll position in a per-campaign cookie (`cv-{campaignId}`,
 Path=/, Max-Age one year, SameSite=Lax), following the same pattern as the color-theme cookie.
@@ -499,9 +521,17 @@ Player-submittable actions in an open action window are listed in this order:
   that owner may repair.
 - `Split`: create a second force in an eligible adjacent territory; maximum two per player in
   the supplied rules.
-- `Backstab`: terminate an alliance relationship. It is only available when the acting force
+- `Backstab`: terminate an alliance relationship for the acting player only, not their whole
+  faction. It is only available when the acting force
   shares a territory with an allied force, or occupies an allied faction's territory that has no
-  allied force present. If the acting force occupies a former ally's
+  allied force present. The betrayed faction (or, when the victim faction requires a subfaction or
+  has `DividedWeStand`, only that subfaction) treats this traitor as an enemy. Other factions in
+  the same ally group are unchanged. Other players of the traitor's faction remain allied.
+  Empty-land Backstab has no subfaction on the territory, so it always betrays the whole owner
+  faction. The traitor gains no map supply and no allied-relic campaign points from the betrayed
+  faction or scoped subfaction. Each distinct betrayed relationship grants one extra Traitor private
+  objective when that pool is configured. Player lists show a knife mark beside a traitor's faction
+  logo; hovering it lists who they betrayed. If the acting force occupies a former ally's
   territory and no former-ally force (and no other remaining ally of that former ally) is there,
   the force claims that territory and auto-pillages the structure when it is pillageable;
   auto-pillage never destroys. If the backstab forces a battle instead, there is no auto-pillage;
@@ -901,8 +931,9 @@ Completed campaigns are ordered by most recently finished.
 - Two forces belonging to the same player rejoin when they occupy the same territory. The
   surviving force keeps one action slot afterward, and the rejoin is recorded in the play log.
 - A force has at most one status: Normal, Diseased, Exhausted, Well Rested, Shaken, or
-  Confident, subject to faction exceptions. A no-result forced retreat (neither side submitted)
-  does not apply Shaken.
+  Confident, subject to faction exceptions. Diseased overrides other catalog statuses. A
+  no-result forced retreat (neither side submitted) does not apply Shaken. Staff and campaign
+  managers may assign any catalog status. Every change is logged with its source.
 - Neutral territories are unowned land. They are not armies.
 - A GM or administrator may inject a ringer battle during an open battle phase. The ringer is
   ephemeral: it is not a `CampaignForce`, does not occupy the map, and leaves no trace win or
@@ -993,15 +1024,16 @@ and the game log.
 
 ## Objectives and relics
 
-Objective visibility scopes: Public, Player, Faction, Alliance, Backstabber, and Staff.
+Objective visibility scopes: Public, Player, Faction, Alliance, Traitor, and Staff.
 Completion and awarded points are separate so a secret objective can be completed without
 publicly revealing it.
 
 Named public objectives are a campaign catalog. A manager or administrator awards or revokes
 them during play; each change appends a public log fact.
 
-Private objectives are a campaign catalog assigned to a player, a faction, or an ally group.
-Unrevealed text and criteria are omitted from unauthorized payloads. The campaign page lists the
+Private objectives are a campaign catalog assigned to a player, a faction, an ally group, or a
+traitor (a player who successfully resolved Backstab). A player may score each catalog type only
+once. Unrevealed text and criteria are omitted from unauthorized payloads. The campaign page lists the
 viewer's own private objectives at the top of Private objectives and reiterates still-unclaimed
 ones in Summary. Other players' claimed or revealed private objectives appear in a collapsed
 subpanel ordered by faction name. Unclaimed private objectives for other holders are not listed.

@@ -259,9 +259,16 @@ public static class SupplyRules
         ArgumentNullException.ThrowIfNull(force);
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(occupiedAfterSubmittedRetreats);
-        var eligible = CampaignPlayRules.EligibleRetreats(map, force);
+        var eligible = CampaignPlayRules.EligibleRetreats(
+            map,
+            force,
+            catalog.SpecialRules,
+            occupyingForces: null,
+            catalog.AllyGroupByFaction.ToDictionary(static pair => pair.Key, static pair => pair.Value),
+            catalog.BrokenAllyFactionIds,
+            catalog.AllyBetrayals);
         var spawn = map.SpawnFor(force.FactionId);
-        var connected = ConnectedTerritoryIds(map, catalog, force.FactionId, originTerritoryId: null);
+        var connected = ConnectedTerritoryIds(map, catalog, force.FactionId, force.ControllerUserId, originTerritoryId: null);
         PlayTerritory? best = null;
         var bestRank = int.MaxValue;
         foreach (var id in eligible)
@@ -273,7 +280,7 @@ public static class SupplyRules
             }
 
             var occupied = occupiedAfterSubmittedRetreats.Contains(id);
-            var rank = RetreatRank(territory, force.FactionId, connected, catalog, occupied, spawn?.Id);
+            var rank = RetreatRank(territory, force.FactionId, force.ControllerUserId, connected, catalog, occupied, spawn?.Id);
             if (rank < bestRank || (rank == bestRank && (best is null || territory.DisplayNumber < best.DisplayNumber)))
             {
                 best = territory;
@@ -418,7 +425,7 @@ public static class SupplyRules
             return 0;
         }
 
-        var connected = ConnectedTerritoryIds(map, catalog, factionId, originTerritoryId);
+        var connected = ConnectedTerritoryIds(map, catalog, factionId, userId, originTerritoryId);
         var total = 0;
         foreach (var territoryId in connected)
         {
@@ -429,7 +436,7 @@ public static class SupplyRules
             }
 
             var countsForSupply = territory.OwnerFactionId == factionId
-                || (territory.OwnerFactionId is { } owner && InSupplyNetwork(territory, factionId, catalog));
+                || (territory.OwnerFactionId is { } owner && InSupplyNetwork(territory, factionId, userId, catalog));
             if (!countsForSupply)
             {
                 continue;
@@ -598,11 +605,12 @@ public static class SupplyRules
         PlayMap map,
         SupplyCatalog catalog,
         Guid factionId,
+        Guid userId,
         Guid? originTerritoryId)
     {
         var connected = new HashSet<Guid>();
         var queue = new Queue<Guid>();
-        foreach (var start in SupplyOrigins(map, catalog, factionId, originTerritoryId))
+        foreach (var start in SupplyOrigins(map, catalog, factionId, userId, originTerritoryId))
         {
             if (connected.Add(start))
             {
@@ -621,7 +629,7 @@ public static class SupplyRules
                 }
 
                 var neighbor = map.Territory(neighborId);
-                if (neighbor is null || !InSupplyNetwork(neighbor, factionId, catalog))
+                if (neighbor is null || !InSupplyNetwork(neighbor, factionId, userId, catalog))
                 {
                     connected.Remove(neighborId);
                     continue;
@@ -638,6 +646,7 @@ public static class SupplyRules
         PlayMap map,
         SupplyCatalog catalog,
         Guid factionId,
+        Guid userId,
         Guid? originTerritoryId)
     {
         if (originTerritoryId is not { } origin)
@@ -657,7 +666,7 @@ public static class SupplyRules
             yield break;
         }
 
-        if (IsSupplyOrigin(map, catalog, factionId, territory))
+        if (IsSupplyOrigin(map, catalog, factionId, userId, territory))
         {
             yield return origin;
             yield break;
@@ -666,7 +675,7 @@ public static class SupplyRules
         foreach (var neighborId in map.Neighbors(origin))
         {
             var neighbor = map.Territory(neighborId);
-            if (neighbor is not null && IsSupplyOrigin(map, catalog, factionId, neighbor))
+            if (neighbor is not null && IsSupplyOrigin(map, catalog, factionId, userId, neighbor))
             {
                 yield return neighborId;
             }
@@ -677,13 +686,14 @@ public static class SupplyRules
         PlayMap map,
         SupplyCatalog catalog,
         Guid factionId,
+        Guid userId,
         PlayTerritory territory)
     {
         var spawn = map.SpawnFor(factionId);
-        return (spawn is not null && territory.Id == spawn.Id) || InSupplyNetwork(territory, factionId, catalog);
+        return (spawn is not null && territory.Id == spawn.Id) || InSupplyNetwork(territory, factionId, userId, catalog);
     }
 
-    private static bool InSupplyNetwork(PlayTerritory territory, Guid factionId, SupplyCatalog catalog)
+    private static bool InSupplyNetwork(PlayTerritory territory, Guid factionId, Guid userId, SupplyCatalog catalog)
     {
         if (territory.OwnerFactionId is not { } owner)
         {
@@ -700,6 +710,11 @@ public static class SupplyRules
             return false;
         }
 
+        if (AllyBetrayalRules.PlayerBetrayedFaction(userId, owner, null, catalog.AllyBetrayals))
+        {
+            return false;
+        }
+
         var selfGroup = catalog.AllyGroupByFaction.GetValueOrDefault(factionId);
         var ownerGroup = catalog.AllyGroupByFaction.GetValueOrDefault(owner);
         return !string.IsNullOrWhiteSpace(selfGroup)
@@ -709,6 +724,7 @@ public static class SupplyRules
     private static int RetreatRank(
         PlayTerritory territory,
         Guid factionId,
+        Guid userId,
         HashSet<Guid> connected,
         SupplyCatalog catalog,
         bool occupied,
@@ -725,7 +741,7 @@ public static class SupplyRules
             return 0 + occupiedPenalty;
         }
 
-        if (InSupplyNetwork(territory, factionId, catalog) && connected.Contains(territory.Id))
+        if (InSupplyNetwork(territory, factionId, userId, catalog) && connected.Contains(territory.Id))
         {
             return 1 + occupiedPenalty;
         }

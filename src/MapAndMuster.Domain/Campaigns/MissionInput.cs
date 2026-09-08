@@ -43,4 +43,7 @@ public sealed class MissionInput
 
     /// <summary>Gets the signed raw supply-point change.</summary>
     public int SupplyPointsAdvantageAmount { get; init; }
+
+    /// <summary>Gets ordered win/lose status-change conditions.</summary>
+    public IReadOnlyList<MissionStatusChangeInput>? StatusChanges { get; init; }
 }

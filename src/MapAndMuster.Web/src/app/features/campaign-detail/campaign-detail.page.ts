@@ -36,6 +36,7 @@ import type {
   PrivateObjectiveAssignment,
   PublicObjectiveLeader,
   PublicObjectiveLeaderboard,
+  TraitorVictim,
   UserSearchHit,
 } from '../../core/campaigns/campaign.models';
 import {
@@ -95,6 +96,7 @@ import {
 } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { FactionLogoComponent } from '../../shared/faction-logo/faction-logo.component';
+import { TraitorMarkComponent } from '../../shared/traitor-mark/traitor-mark.component';
 import { PhaseCountdownComponent } from '../../shared/phase-countdown/phase-countdown.component';
 
 const CAMPAIGN_SECTIONS = [
@@ -109,6 +111,7 @@ const CAMPAIGN_SECTIONS = [
   'battles',
   'debug',
   'ringer',
+  'forceStatus',
   'schedule',
   'details',
   'factions',
@@ -125,6 +128,7 @@ interface AllyGroupPlayer {
   userId: string;
   displayName: string;
   factionLabel: string;
+  traitorVictims: TraitorVictim[];
 }
 
 interface FactionSpawnPlace {
@@ -193,6 +197,7 @@ function openSections(): Record<CampaignSection, boolean> {
     AppDialogComponent,
     MapSymbolComponent,
     FactionLogoComponent,
+    TraitorMarkComponent,
     PhaseCountdownComponent,
   ],
   templateUrl: './campaign-detail.page.html',
@@ -260,6 +265,9 @@ export class CampaignDetailPage {
   protected readonly ringerFactionId = signal('');
   protected readonly ringerMissionId = signal('');
   protected readonly ringerPlayerIsDefender = signal(false);
+  protected readonly forceStatusForceId = signal('');
+  protected readonly forceStatusName = signal('Normal');
+  protected readonly forceStatusAll = signal(false);
   protected readonly drafts = signal<Record<string, OrderDraft>>({});
   protected readonly debugDrafts = signal<Record<string, OrderDraft>>({});
   private readonly dirtyDraftForceIds = signal<ReadonlySet<string>>(new Set());
@@ -872,6 +880,10 @@ export class CampaignDetailPage {
 
   protected isStandingViewer(userId: string): boolean {
     return this.auth.currentUser()?.id === userId;
+  }
+
+  protected traitorVictims(userId: string): TraitorVictim[] {
+    return this.campaign()?.participants?.find((participant) => participant.userId === userId)?.traitorVictims ?? [];
   }
 
   protected onChatChannelChange(key: string): void {
@@ -2330,6 +2342,36 @@ export class CampaignDetailPage {
     );
   }
 
+  protected assignableForces(): PlayForce[] {
+    return this.play()?.forces ?? [];
+  }
+
+  protected catalogStatusNames(): string[] {
+    const statuses = this.play()?.forceStatuses ?? this.campaign()?.forceStatuses ?? [];
+    return statuses.map((status) => status.name.trim()).filter((name) => name.length > 0);
+  }
+
+  protected async assignForceStatuses(): Promise<void> {
+    const play = this.play();
+    if (!play) {
+      return;
+    }
+
+    const all = this.forceStatusAll();
+    const forceId = this.forceStatusForceId() || this.assignableForces()[0]?.id;
+    if (!all && !forceId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.setForceStatuses(play.id, {
+        revision: play.revision,
+        forceIds: all ? [] : [forceId],
+        statusName: this.forceStatusName() || 'Normal',
+      }),
+    );
+  }
+
   protected async enterDebug(): Promise<void> {
     const play = this.play();
     if (!play) {
@@ -2764,6 +2806,7 @@ export class CampaignDetailPage {
             privateObjectiveUnclaimedCounts:
               play.privateObjectiveUnclaimedCounts ?? current.privateObjectiveUnclaimedCounts,
             specialRules: play.specialRules ?? current.specialRules,
+            forceStatuses: play.forceStatuses ?? current.forceStatuses,
           }
         : current,
     );
@@ -3208,7 +3251,7 @@ function isOwnPrivateAssignment(
   campaign: CampaignDetail,
   userId: string,
 ): boolean {
-  if (assignment.holderKind === 'Player') {
+  if (assignment.holderKind === 'Player' || assignment.holderKind === 'Traitor') {
     return assignment.holderId === userId;
   }
 
@@ -3243,11 +3286,12 @@ function privateObjectiveFactionName(assignment: PrivateObjectiveAssignment, cam
 }
 
 function privateObjectiveHolderLabel(assignment: PrivateObjectiveAssignment, campaign: CampaignDetail): string {
-  if (assignment.holderKind === 'Player') {
+  if (assignment.holderKind === 'Player' || assignment.holderKind === 'Traitor') {
     const participant = campaign.participants?.find((item) => item.userId === assignment.holderId);
     const name = participant?.displayName ?? participant?.username ?? 'Player';
     const faction = participant?.factionName?.trim();
-    return faction ? `${name} · ${faction}` : name;
+    const labeled = faction ? `${name} · ${faction}` : name;
+    return assignment.holderKind === 'Traitor' ? `${labeled} · Traitor` : labeled;
   }
 
   if (assignment.holderKind === 'Faction') {
@@ -3294,6 +3338,7 @@ function allyGroupPlayers(
         userId: participant.userId,
         displayName: participant.displayName,
         factionLabel: playerFactionLabel(participant, faction),
+        traitorVictims: participant.traitorVictims ?? [],
       };
     })
     .filter((player): player is AllyGroupPlayer => player !== null)

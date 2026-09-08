@@ -464,6 +464,43 @@ public sealed class CampaignPointStandingsRulesTests
         Assert.Equal(0, result.Standings.Single(row => row.UserId == ally).PublicObjectivePoints);
     }
 
+    [Fact]
+    public void IgnoresAlliedRelicsOnlyForTheTraitorPlayer()
+    {
+        var traitor = Guid.NewGuid();
+        var mate = Guid.NewGuid();
+        var ally = Guid.NewGuid();
+        var faction = Guid.NewGuid();
+        var allyFaction = Guid.NewGuid();
+        var group = Guid.NewGuid();
+        var allyForce = Guid.NewGuid();
+        var relic = Guid.NewGuid();
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players:
+            [
+                new CampaignPointPlayer(traitor, faction),
+                new CampaignPointPlayer(mate, faction),
+                new CampaignPointPlayer(ally, allyFaction),
+            ],
+            forces:
+            [
+                new CampaignForce(Guid.NewGuid(), traitor, faction, Guid.NewGuid(), false),
+                new CampaignForce(Guid.NewGuid(), mate, faction, Guid.NewGuid(), false),
+                new CampaignForce(allyForce, ally, allyFaction, Guid.NewGuid(), false),
+            ],
+            items:
+            [
+                new CampaignItemObjective(Guid.NewGuid(), relic, "Relic", null, allyForce, true, Guid.NewGuid(), false),
+            ],
+            ranking: new GeneralPublicObjectivePoints(0, 0, 0, alliedRelicControlPoints: 5),
+            allyGroupByFaction: new Dictionary<Guid, Guid?> { [faction] = group, [allyFaction] = group },
+            allyBetrayals: [new AllyBetrayal(traitor, allyFaction, null, ally)]));
+
+        Assert.Equal(0, result.Standings.Single(row => row.UserId == traitor).PublicObjectivePoints);
+        Assert.Equal(5, result.Standings.Single(row => row.UserId == mate).PublicObjectivePoints);
+        Assert.Equal(0, result.Standings.Single(row => row.UserId == ally).PublicObjectivePoints);
+    }
+
     private static CampaignPointScoringState State(
         IReadOnlyList<CampaignPointPlayer>? players = null,
         IReadOnlyList<CampaignPointTerritory>? territories = null,
@@ -479,7 +516,8 @@ public sealed class CampaignPointStandingsRulesTests
         IReadOnlyDictionary<Guid, int>? structurePoints = null,
         IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null,
         IReadOnlySet<Guid>? brokenAllyFactionIds = null,
-        IReadOnlyList<CampaignNamedPublicObjective>? namedPublicObjectives = null)
+        IReadOnlyList<CampaignNamedPublicObjective>? namedPublicObjectives = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         return new CampaignPointScoringState
         {
@@ -498,6 +536,7 @@ public sealed class CampaignPointStandingsRulesTests
             Awards = awards ?? [],
             AllyGroupByFaction = allyGroupByFaction ?? new Dictionary<Guid, Guid?>(),
             BrokenAllyFactionIds = brokenAllyFactionIds ?? new HashSet<Guid>(),
+            AllyBetrayals = allyBetrayals ?? [],
         };
     }
 

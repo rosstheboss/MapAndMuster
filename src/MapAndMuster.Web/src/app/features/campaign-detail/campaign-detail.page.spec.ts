@@ -2827,6 +2827,71 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
+  it('lets a manager assign a catalog status to a force', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      forceStatuses: [
+        {
+          id: 'status-diseased',
+          name: 'Diseased',
+          effects: 'Disease effects.',
+          enableTrigger: 'Disease',
+          clearTrigger: 'HoldAtSettlement',
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        forceStatuses: [
+          {
+            id: 'status-diseased',
+            name: 'Diseased',
+            effects: 'Disease effects.',
+            enableTrigger: 'Disease',
+            clearTrigger: 'HoldAtSettlement',
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'manage');
+    openSection(fixture, 'forceStatus');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Assign force status');
+    const page = fixture.componentInstance as unknown as { assignForceStatuses: () => Promise<void> };
+    const pending = page.assignForceStatuses();
+    const request = http.expectOne(`/api/campaigns/${campaign.id}/play/set-force-statuses`);
+    expect(request.request.body).toEqual({
+      revision: campaign.revision,
+      forceIds: ['force-1'],
+      statusName: 'Normal',
+    });
+    request.flush(playState());
+    await pending;
+    await fixture.whenStable();
+    http.verify();
+  });
+
   it('offers ringer, player, and draw when reporting a ringer battle', async () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);

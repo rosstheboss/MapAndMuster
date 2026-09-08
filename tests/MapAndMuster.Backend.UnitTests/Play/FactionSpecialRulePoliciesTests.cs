@@ -117,6 +117,87 @@ public sealed class FactionSpecialRulePoliciesTests
             [],
             [new BrokenAllySubfaction(Bretonnia, "Khorne")],
             rules));
+        var khornePlayer = Guid.NewGuid();
+        var nurglePlayer = Guid.NewGuid();
+        var scopedKhorne = new CampaignForce(Guid.NewGuid(), khornePlayer, Bretonnia, Origin, false, subfaction: "Khorne");
+        var scopedNurgle = new CampaignForce(Guid.NewGuid(), nurglePlayer, Bretonnia, Via, false, subfaction: "Nurgle");
+        var tzeentch = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), Bretonnia, Dest, false, subfaction: "Tzeentch");
+        var betrayals = new[] { new AllyBetrayal(khornePlayer, Bretonnia, "Nurgle", nurglePlayer) };
+        Assert.True(FactionSpecialRulePolicies.AreEnemies(
+            scopedKhorne,
+            scopedNurgle,
+            new Dictionary<Guid, string?>(),
+            [],
+            [],
+            rules,
+            betrayals));
+        Assert.False(FactionSpecialRulePolicies.AreEnemies(
+            scopedKhorne,
+            tzeentch,
+            new Dictionary<Guid, string?>(),
+            [],
+            [],
+            rules,
+            betrayals));
+    }
+
+    [Fact]
+    public void OptionalSubfactionBetrayalTurnsTheWholeFactionAgainstTheTraitorOnly()
+    {
+        var traitorId = Guid.NewGuid();
+        var victimId = Guid.NewGuid();
+        var mateId = Guid.NewGuid();
+        var otherBretonniaId = Guid.NewGuid();
+        var empire = new CampaignForce(Guid.NewGuid(), traitorId, ChaosDwarfs, Origin, false);
+        var mate = new CampaignForce(Guid.NewGuid(), mateId, ChaosDwarfs, Via, false);
+        var crusade = new CampaignForce(
+            Guid.NewGuid(),
+            victimId,
+            Bretonnia,
+            Origin,
+            false,
+            subfaction: "Errantry Crusade");
+        var royal = new CampaignForce(
+            Guid.NewGuid(),
+            otherBretonniaId,
+            Bretonnia,
+            Dest,
+            false,
+            subfaction: "Royal Army");
+        var groups = new Dictionary<Guid, string?> { [ChaosDwarfs] = "Coalition", [Bretonnia] = "Coalition" };
+        var betrayals = new[] { new AllyBetrayal(traitorId, Bretonnia, null, victimId) };
+        Assert.True(FactionSpecialRulePolicies.AreEnemies(
+            empire,
+            crusade,
+            groups,
+            [],
+            [],
+            SpecialRuleContext.None,
+            betrayals));
+        Assert.True(FactionSpecialRulePolicies.AreEnemies(
+            empire,
+            royal,
+            groups,
+            [],
+            [],
+            SpecialRuleContext.None,
+            betrayals));
+        Assert.False(FactionSpecialRulePolicies.AreEnemies(
+            mate,
+            crusade,
+            groups,
+            [],
+            [],
+            SpecialRuleContext.None,
+            betrayals));
+        Assert.True(FactionSpecialRulePolicies.AreAllies(
+            mate,
+            royal,
+            groups,
+            [],
+            [],
+            SpecialRuleContext.None,
+            betrayals));
     }
 
     private static SpecialRuleContext Context(Guid factionId, string effectKey)

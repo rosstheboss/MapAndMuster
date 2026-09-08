@@ -104,6 +104,13 @@ type MissionQuestionGroup = FormGroup<{
   campaignPoints: FormControl<number>;
   standardQuestionId: FormControl<string>;
 }>;
+type MissionStatusChangeGroup = FormGroup<{
+  id: FormControl<string>;
+  outcome: FormControl<string>;
+  whenCurrentStatus: FormControl<string>;
+  setStatus: FormControl<string>;
+  leaveUnchanged: FormControl<boolean>;
+}>;
 type StandardBattleResultQuestionGroup = FormGroup<{
   id: FormControl<string>;
   prompt: FormControl<string>;
@@ -117,6 +124,7 @@ type MissionGroup = FormGroup<{
   url: FormControl<string>;
   clearFile: FormControl<boolean>;
   resultQuestions: FormArray<MissionQuestionGroup>;
+  statusChanges: FormArray<MissionStatusChangeGroup>;
   isAttackerDefender: FormControl<boolean>;
   hasArmyPointsAdvantage: FormControl<boolean>;
   armyPointsAdvantageSide: FormControl<string>;
@@ -192,6 +200,7 @@ type ItemChoiceResultGroup = FormGroup<{
   destroyItem: FormControl<boolean>;
   replacementItemTypeId: FormControl<string>;
   grantedPrivateObjectiveTypeId: FormControl<string>;
+  setForceStatusName: FormControl<string>;
 }>;
 type PublicObjectiveGroup = FormGroup<{
   id: FormControl<string>;
@@ -220,6 +229,7 @@ type PrivateObjectiveGroup = FormGroup<{
   allowPlayer: FormControl<boolean>;
   allowFaction: FormControl<boolean>;
   allowAllyGroup: FormControl<boolean>;
+  allowTraitor: FormControl<boolean>;
   scoringKind: FormControl<string>;
   automaticKind: FormControl<string>;
   requiredCount: FormControl<number>;
@@ -635,6 +645,22 @@ export class CampaignSetupPage {
 
   protected questionsOf(mission: MissionGroup): FormArray<MissionQuestionGroup> {
     return mission.controls.resultQuestions;
+  }
+
+  protected statusChangesOf(mission: MissionGroup): FormArray<MissionStatusChangeGroup> {
+    return mission.controls.statusChanges;
+  }
+
+  protected addMissionStatusChange(mission: MissionGroup): void {
+    if (mission.controls.statusChanges.length >= 12) {
+      return;
+    }
+
+    mission.controls.statusChanges.push(this.createMissionStatusChangeGroup());
+  }
+
+  protected removeMissionStatusChange(mission: MissionGroup, index: number): void {
+    mission.controls.statusChanges.removeAt(index);
   }
 
   protected addMissionQuestion(mission: MissionGroup): void {
@@ -1704,6 +1730,7 @@ export class CampaignSetupPage {
       mission.controls.id.setValue(this.newId());
       mission.controls.url.setValue('');
       this.replaceArray(mission.controls.resultQuestions, []);
+      this.replaceArray(mission.controls.statusChanges, []);
     }
   }
 
@@ -2669,6 +2696,7 @@ export class CampaignSetupPage {
       url: [url, [maxLength(2048), httpUrl]],
       clearFile: [clearFile],
       resultQuestions: this.formBuilder.array<MissionQuestionGroup>([]),
+      statusChanges: this.formBuilder.array<MissionStatusChangeGroup>([]),
       isAttackerDefender: [extra?.isAttackerDefender ?? false],
       hasArmyPointsAdvantage: [extra?.hasArmyPointsAdvantage ?? false],
       armyPointsAdvantageSide: [extra?.armyPointsAdvantageSide ?? 'Defender'],
@@ -2695,6 +2723,22 @@ export class CampaignSetupPage {
       battlePoints: [battlePoints, [minValue(0), maxValue(999)]],
       campaignPoints: [campaignPoints, [minValue(0), maxValue(999)]],
       standardQuestionId: [standardQuestionId],
+    });
+  }
+
+  private createMissionStatusChangeGroup(
+    id?: string,
+    outcome = 'Win',
+    whenCurrentStatus = '',
+    setStatus = '',
+    leaveUnchanged = false,
+  ): MissionStatusChangeGroup {
+    return this.formBuilder.nonNullable.group({
+      id: [id ?? this.newId()],
+      outcome: [outcome],
+      whenCurrentStatus: [whenCurrentStatus],
+      setStatus: [setStatus],
+      leaveUnchanged: [leaveUnchanged],
     });
   }
 
@@ -2887,6 +2931,18 @@ export class CampaignSetupPage {
         ),
       ),
     );
+    this.replaceArray(
+      group.controls.statusChanges,
+      (mission.statusChanges ?? []).map((change) =>
+        this.createMissionStatusChangeGroup(
+          change.id,
+          change.outcome,
+          change.whenCurrentStatus ?? '',
+          change.setStatus ?? '',
+          change.leaveUnchanged === true,
+        ),
+      ),
+    );
     return group;
   }
 
@@ -2995,6 +3051,7 @@ export class CampaignSetupPage {
       allowPlayer: [kinds.has('Player')],
       allowFaction: [kinds.has('Faction')],
       allowAllyGroup: [kinds.has('AllyGroup')],
+      allowTraitor: [kinds.has('Traitor')],
       scoringKind: [type?.scoringKind ?? 'Manual'],
       automaticKind: [type?.automaticKind ?? 'None'],
       requiredCount: [type?.requiredCount ?? 1, [minValue(1), maxValue(999)]],
@@ -3034,6 +3091,7 @@ export class CampaignSetupPage {
       destroyItem: [result?.destroyItem === true],
       replacementItemTypeId: [result?.replacementItemTypeId ?? ''],
       grantedPrivateObjectiveTypeId: [result?.grantedPrivateObjectiveTypeId ?? ''],
+      setForceStatusName: [result?.setForceStatusName ?? ''],
     });
   }
 
@@ -3551,6 +3609,7 @@ export class CampaignSetupPage {
               destroyItem: result.destroyItem,
               replacementItemTypeId: result.replacementItemTypeId.trim() || null,
               grantedPrivateObjectiveTypeId: result.grantedPrivateObjectiveTypeId.trim() || null,
+              setForceStatusName: result.setForceStatusName.trim() || null,
             })),
           })),
       }));
@@ -3582,6 +3641,7 @@ export class CampaignSetupPage {
           type.allowPlayer ? 'Player' : null,
           type.allowFaction ? 'Faction' : null,
           type.allowAllyGroup ? 'AllyGroup' : null,
+          type.allowTraitor ? 'Traitor' : null,
         ].filter((kind): kind is string => kind !== null),
         scoringKind: type.scoringKind,
         automaticKind: type.scoringKind === 'Automatic' ? type.automaticKind : 'None',
@@ -3690,6 +3750,13 @@ export class CampaignSetupPage {
       campaignPoints: number;
       standardQuestionId?: string;
     }[];
+    statusChanges?: {
+      id: string;
+      outcome: string;
+      whenCurrentStatus: string;
+      setStatus: string;
+      leaveUnchanged: boolean;
+    }[];
     isAttackerDefender?: boolean;
     hasArmyPointsAdvantage?: boolean;
     armyPointsAdvantageSide?: string;
@@ -3714,6 +3781,15 @@ export class CampaignSetupPage {
           battlePoints: Number(question.battlePoints) || 0,
           campaignPoints: Number(question.campaignPoints) || 0,
           standardQuestionId: (question.standardQuestionId ?? '').length > 0 ? question.standardQuestionId : null,
+        })),
+      statusChanges: (mission.statusChanges ?? [])
+        .filter((change) => change.outcome.trim().length > 0)
+        .map((change) => ({
+          id: change.id,
+          outcome: change.outcome,
+          whenCurrentStatus: change.whenCurrentStatus.trim() || null,
+          setStatus: change.leaveUnchanged ? null : change.setStatus.trim() || null,
+          leaveUnchanged: change.leaveUnchanged === true,
         })),
       isAttackerDefender: Boolean(mission.isAttackerDefender),
       hasArmyPointsAdvantage: Boolean(mission.hasArmyPointsAdvantage),

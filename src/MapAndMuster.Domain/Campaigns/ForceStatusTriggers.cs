@@ -19,6 +19,9 @@ public enum ForceStatusEnableTrigger
 
     /// <summary>Applied when the force occupies a water-feature territory after resolution.</summary>
     OccupyingWater = 4,
+
+    /// <summary>Applied by the named Diseased engine (consecutive water, water battles, contagion).</summary>
+    Disease = 5,
 }
 
 /// <summary>
@@ -46,4 +49,7 @@ public enum ForceStatusClearTrigger
 
     /// <summary>Cleared after the force Holds while not occupying a water-feature territory.</summary>
     HoldWhileNotWater = 6,
+
+    /// <summary>Cleared after Hold on a Capital City, City, Supply Depot, or Town.</summary>
+    HoldAtSettlement = 7,
 }

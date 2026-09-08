@@ -202,6 +202,22 @@ public sealed class CampaignNotificationPublisher
                     cancellationToken)
                 .ConfigureAwait(false);
         }
+
+        var previousStatusIds = new HashSet<Guid>(
+            (previous.PlayState ?? CampaignPlayState.Empty).ForceStatusChanges.Select(static item => item.Id));
+        if ((next.PlayState ?? CampaignPlayState.Empty).ForceStatusChanges
+            .Any(item => !previousStatusIds.Contains(item.Id) && item.Source == ForceStatusChangeSource.Staff))
+        {
+            await NotifyMembersAsync(
+                    next,
+                    NotificationKind.StaffForceStatusAssigned,
+                    "Force status assigned",
+                    $"A manager or administrator assigned a force status in {next.Name}. Open the campaign log for the source.",
+                    path,
+                    $"force-status:{next.Id:N}:{next.Revision}",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>

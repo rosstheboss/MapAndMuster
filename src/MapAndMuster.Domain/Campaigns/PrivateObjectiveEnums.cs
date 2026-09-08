@@ -13,6 +13,9 @@ public enum PrivateObjectiveHolderKind
 
     /// <summary>One ally group.</summary>
     AllyGroup = 2,
+
+    /// <summary>A player who successfully resolved Backstab. Not assigned at launch.</summary>
+    Traitor = 3,
 }
 
 /// <summary>

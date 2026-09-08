@@ -1709,6 +1709,90 @@ public sealed class CampaignSetupRulesTests
     }
 
     [Fact]
+    public void AcceptsMissionStatusChangeConditions()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out var setup,
+            out _,
+            out var errors,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    Effects = "Tabletop shaken modifiers apply.",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                },
+                new ForceStatusInput
+                {
+                    Name = "Confident",
+                    Effects = "Tabletop confident modifiers apply.",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleWon),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.BattleLostOrRetreat),
+                },
+                new ForceStatusInput
+                {
+                    Name = "Diseased",
+                    Effects = "Display-only disease effects.",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.Disease),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.HoldAtSettlement),
+                },
+            ],
+            missions:
+            [
+                new MissionInput
+                {
+                    Name = "Pitched Battle",
+                    StatusChanges =
+                    [
+                        new MissionStatusChangeInput
+                        {
+                            Outcome = nameof(MissionBattleOutcome.Win),
+                            WhenCurrentStatus = "Diseased",
+                            LeaveUnchanged = true,
+                        },
+                        new MissionStatusChangeInput
+                        {
+                            Outcome = nameof(MissionBattleOutcome.Win),
+                            WhenCurrentStatus = "Shaken",
+                            SetStatus = "Normal",
+                        },
+                        new MissionStatusChangeInput
+                        {
+                            Outcome = nameof(MissionBattleOutcome.Win),
+                            SetStatus = "Confident",
+                        },
+                    ],
+                },
+            ]);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        var mission = Assert.Single(setup!.Missions, item => item.Name == "Pitched Battle");
+        Assert.Equal(3, mission.StatusChanges.Count);
+        Assert.True(mission.StatusChanges[0].LeaveUnchanged);
+        Assert.Equal("Diseased", mission.StatusChanges[0].WhenCurrentStatus);
+        Assert.Equal("Shaken", mission.StatusChanges[1].WhenCurrentStatus);
+        Assert.Null(mission.StatusChanges[1].SetStatus);
+        Assert.Null(mission.StatusChanges[2].WhenCurrentStatus);
+        Assert.Equal("Confident", mission.StatusChanges[2].SetStatus);
+    }
+
+    [Fact]
     public void UniqueNameKeyTreatsWhitespaceAsEquivalent()
     {
         Assert.Equal("The Hunt in Estalia", CampaignSetupRules.CollapseName("  The Hunt   in Estalia\t"));

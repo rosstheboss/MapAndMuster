@@ -91,6 +91,9 @@ public static class CampaignSetupRules
     /// <summary>Maximum missions in the campaign catalog.</summary>
     public const int MaxMissionCatalogCount = 80;
 
+    /// <summary>Maximum win/lose status-change conditions on one mission.</summary>
+    public const int MaxMissionStatusChangeCount = 12;
+
     /// <summary>Maximum length of faction, subfaction, and ally-group names.</summary>
     public const int NamedItemMaxLength = 60;
 
@@ -351,6 +354,9 @@ public static class CampaignSetupRules
         var parsedSpecialRules = ParseSpecialRules(specialRules, usedIds, collected);
         var parsedStandardQuestions = ParseStandardBattleResultQuestions(standardBattleResultQuestions, usedIds, collected);
         var parsedForceStatuses = ParseForceStatuses(forceStatuses, usedIds, collected);
+        var knownForceStatusNames = parsedForceStatuses
+            .Select(static status => status.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var specialRuleIds = parsedSpecialRules.Select(static rule => rule.Id).ToHashSet();
         var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, specialRuleIds, collected);
         ValidateAllyMembership(parsedFactions, parsedGroups, collected);
@@ -364,9 +370,10 @@ public static class CampaignSetupRules
             requireAtLeastOne: false,
             collected,
             maxCount: MaxMissionCatalogCount,
-            standardQuestions: parsedStandardQuestions);
-        var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, parsedStandardQuestions, collected);
-        var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, parsedStandardQuestions, collected);
+            standardQuestions: parsedStandardQuestions,
+            knownForceStatusNames: knownForceStatusNames);
+        var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, parsedStandardQuestions, collected, knownForceStatusNames);
+        var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, parsedStandardQuestions, collected, knownForceStatusNames);
         var structureTypeIds = parsedStructures.Select(static type => type.Id).ToHashSet();
         var knownItemObjectiveTypeIds = (itemObjectiveTypes ?? [])
             .Select(static item => item.Id)
@@ -388,6 +395,7 @@ public static class CampaignSetupRules
             usedIds,
             specialRuleIds,
             privateObjectiveIds,
+            knownForceStatusNames,
             collected);
         var parsedPublic = ParsePublicObjectiveTypes(publicObjectiveTypes, usedIds, collected);
         var parsedBattleScoring = ParseBattleScoring(
@@ -873,7 +881,8 @@ public static class CampaignSetupRules
         HashSet<Guid> usedIds,
         MissionIndex missions,
         IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
-        List<DomainError> errors)
+        List<DomainError> errors,
+        HashSet<string> knownForceStatusNames)
     {
         var supplied = terrainTypes is null || terrainTypes.Count == 0
             ? CampaignCatalogDefaults.TerrainTypes()
@@ -924,7 +933,8 @@ public static class CampaignSetupRules
                 $"Terrain type {index + 1}",
                 requireAtLeastOne: true,
                 errors,
-                standardQuestions: standardQuestions);
+                standardQuestions: standardQuestions,
+                knownForceStatusNames: knownForceStatusNames);
             if (name is null || color is null)
             {
                 continue;
@@ -956,7 +966,8 @@ public static class CampaignSetupRules
         HashSet<Guid> usedIds,
         MissionIndex missions,
         IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
-        List<DomainError> errors)
+        List<DomainError> errors,
+        HashSet<string> knownForceStatusNames)
     {
         var supplied = structureTypes is null
             ? CampaignCatalogDefaults.StructureTypes()
@@ -999,7 +1010,8 @@ public static class CampaignSetupRules
                 $"Structure {index + 1}",
                 requireAtLeastOne: false,
                 errors,
-                standardQuestions: standardQuestions);
+                standardQuestions: standardQuestions,
+                knownForceStatusNames: knownForceStatusNames);
             if (name is null)
             {
                 continue;
@@ -1043,6 +1055,7 @@ public static class CampaignSetupRules
         HashSet<Guid> usedIds,
         HashSet<Guid> knownSpecialRuleIds,
         HashSet<Guid> knownPrivateObjectiveIds,
+        HashSet<string> knownForceStatusNames,
         List<DomainError> errors)
     {
         var supplied = itemObjectiveTypes ?? [];
@@ -1120,6 +1133,7 @@ public static class CampaignSetupRules
                     input.Choices,
                     usedIds,
                     knownPrivateObjectiveIds,
+                    knownForceStatusNames,
                     index,
                     errors),
                 ParseAssignedSpecialRuleIds(
@@ -1804,7 +1818,8 @@ public static class CampaignSetupRules
         bool requireAtLeastOne,
         List<DomainError> errors,
         int? maxCount = null,
-        IReadOnlyList<StandardBattleResultQuestionSetup>? standardQuestions = null)
+        IReadOnlyList<StandardBattleResultQuestionSetup>? standardQuestions = null,
+        HashSet<string>? knownForceStatusNames = null)
     {
         var supplied = missions?
             .Where(static mission =>
@@ -1905,7 +1920,14 @@ public static class CampaignSetupRules
                     mission.SupplyPointsAdvantageSide,
                     $"{field}[{missionIndex}].supplyPointsAdvantageSide",
                     errors),
-                mission.SupplyPointsAdvantageAmount);
+                mission.SupplyPointsAdvantageAmount,
+                ParseMissionStatusChanges(
+                    mission.StatusChanges,
+                    usedIds,
+                    knownForceStatusNames ?? [],
+                    $"{field}[{missionIndex}].statusChanges",
+                    $"{ownerLabel} mission {missionIndex + 1}",
+                    errors));
             index.ById[id] = created;
             index.Names[name] = id;
             seenOnOwner.Add(id);
@@ -1941,6 +1963,108 @@ public static class CampaignSetupRules
             "Advantage side must be Attacker or Defender.",
             field));
         return MissionAdvantageSide.Defender;
+    }
+
+    private static List<MissionStatusChangeSetup> ParseMissionStatusChanges(
+        IReadOnlyList<MissionStatusChangeInput>? changes,
+        HashSet<Guid> usedIds,
+        HashSet<string> knownForceStatusNames,
+        string field,
+        string ownerLabel,
+        List<DomainError> errors)
+    {
+        var supplied = changes ?? [];
+        if (supplied.Count > MaxMissionStatusChangeCount)
+        {
+            errors.Add(new DomainError(
+                "missions.statusChanges.invalid",
+                $"{ownerLabel} can have at most {MaxMissionStatusChangeCount} status-change conditions.",
+                field));
+            return [];
+        }
+
+        var parsed = new List<MissionStatusChangeSetup>();
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var outcomeField = $"{field}[{index}].outcome";
+            if (string.IsNullOrWhiteSpace(input.Outcome)
+                || !Enum.TryParse<MissionBattleOutcome>(input.Outcome.Trim(), true, out var outcome)
+                || !Enum.IsDefined(outcome))
+            {
+                errors.Add(new DomainError(
+                    "missions.statusChanges.outcome.invalid",
+                    "Status-change outcome must be Win or Lose.",
+                    outcomeField));
+                continue;
+            }
+
+            if (!TryParseMissionStatusName(
+                    input.WhenCurrentStatus,
+                    knownForceStatusNames,
+                    allowEmpty: true,
+                    $"{field}[{index}].whenCurrentStatus",
+                    errors,
+                    out var whenCurrent))
+            {
+                continue;
+            }
+
+            if (!TryParseMissionStatusName(
+                    input.SetStatus,
+                    knownForceStatusNames,
+                    allowEmpty: true,
+                    $"{field}[{index}].setStatus",
+                    errors,
+                    out var setStatus))
+            {
+                continue;
+            }
+
+            parsed.Add(new MissionStatusChangeSetup(
+                ResolveId(input.Id, usedIds, $"{field}[{index}].id", errors),
+                outcome,
+                whenCurrent,
+                setStatus,
+                input.LeaveUnchanged));
+        }
+
+        return parsed;
+    }
+
+    private static bool TryParseMissionStatusName(
+        string? raw,
+        HashSet<string> knownForceStatusNames,
+        bool allowEmpty,
+        string field,
+        List<DomainError> errors,
+        out string? name)
+    {
+        name = null;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            name = null;
+            return allowEmpty;
+        }
+
+        if (ForceStatusNames.IsNormal(raw))
+        {
+            name = "Normal";
+            return true;
+        }
+
+        var trimmed = raw.Trim();
+        if (!knownForceStatusNames.Contains(trimmed))
+        {
+            errors.Add(new DomainError(
+                "missions.statusChanges.status.invalid",
+                "Status-change conditions must name a configured force status or Normal.",
+                field));
+            return false;
+        }
+
+        name = trimmed;
+        return true;
     }
 
     private static MissionSetup? TryReuseMission(
@@ -2839,7 +2963,7 @@ public static class CampaignSetupRules
             {
                 errors.Add(new DomainError(
                     $"privateObjectiveTypes[{index}].allowedHolderKinds.invalid",
-                    $"Private objective {index + 1} holder must be Player, Faction, or AllyGroup.",
+                    $"Private objective {index + 1} holder must be Player, Faction, AllyGroup, or Traitor.",
                     $"privateObjectiveTypes[{index}].allowedHolderKinds"));
                 continue;
             }
@@ -3086,6 +3210,7 @@ public static class CampaignSetupRules
         IReadOnlyList<ItemObjectiveChoiceInput>? choices,
         HashSet<Guid> usedIds,
         HashSet<Guid> knownPrivateObjectiveIds,
+        HashSet<string> knownForceStatusNames,
         int itemIndex,
         List<DomainError> errors)
     {
@@ -3129,6 +3254,7 @@ public static class CampaignSetupRules
                 input.Results,
                 usedIds,
                 knownPrivateObjectiveIds,
+                knownForceStatusNames,
                 itemIndex,
                 index,
                 errors);
@@ -3158,6 +3284,7 @@ public static class CampaignSetupRules
         IReadOnlyList<ItemObjectiveChoiceResultInput>? results,
         HashSet<Guid> usedIds,
         HashSet<Guid> knownPrivateObjectiveIds,
+        HashSet<string> knownForceStatusNames,
         int itemIndex,
         int choiceIndex,
         List<DomainError> errors)
@@ -3197,6 +3324,17 @@ public static class CampaignSetupRules
                 granted = null;
             }
 
+            if (!TryParseMissionStatusName(
+                    input.SetForceStatusName,
+                    knownForceStatusNames,
+                    allowEmpty: true,
+                    $"itemObjectiveTypes[{itemIndex}].choices[{choiceIndex}].results[{index}].setForceStatusName",
+                    errors,
+                    out var setStatus))
+            {
+                continue;
+            }
+
             parsed.Add(new ItemObjectiveChoiceResultSetup(
                 ResolveId(
                     input.Id,
@@ -3207,7 +3345,8 @@ public static class CampaignSetupRules
                 stateKey,
                 input.DestroyItem,
                 input.ReplacementItemTypeId is { } replacement && replacement != Guid.Empty ? replacement : null,
-                granted is { } id && id != Guid.Empty ? id : null));
+                granted is { } id && id != Guid.Empty ? id : null,
+                setStatus));
         }
 
         return parsed;

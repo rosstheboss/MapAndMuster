@@ -20,7 +20,10 @@ public static class BattleMissionRules
         IReadOnlyCollection<Guid> brokenAllyFactionIds,
         IReadOnlyList<TerrainTypeSetup> terrainTypes,
         IReadOnlyList<StructureTypeSetup> structureTypes,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null,
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         ArgumentNullException.ThrowIfNull(present);
         ArgumentNullException.ThrowIfNull(arrivalKinds);
@@ -36,7 +39,15 @@ public static class BattleMissionRules
             return null;
         }
 
-        var roles = TryDetermineRoles(territory, present, arrivalKinds, factionAllyGroups, brokenAllyFactionIds);
+        var roles = TryDetermineRoles(
+            territory,
+            present,
+            arrivalKinds,
+            factionAllyGroups,
+            brokenAllyFactionIds,
+            brokenSubfactions,
+            specialRules,
+            allyBetrayals);
         var attackerDefender = pool.Where(static mission => mission.IsAttackerDefender).ToArray();
         var normal = pool.Where(static mission => !mission.IsAttackerDefender).ToArray();
         MissionSetup[] candidates;
@@ -55,7 +66,14 @@ public static class BattleMissionRules
         else
         {
             candidates = attackerDefender;
-            var assigned = RandomRoles(present, factionAllyGroups, brokenAllyFactionIds, pickIndex);
+            var assigned = RandomRoles(
+                present,
+                factionAllyGroups,
+                brokenAllyFactionIds,
+                pickIndex,
+                brokenSubfactions,
+                specialRules,
+                allyBetrayals);
             attackerForceId = assigned?.AttackerForceId;
             defenderForceId = assigned?.DefenderForceId;
         }
@@ -115,14 +133,24 @@ public static class BattleMissionRules
         IReadOnlyList<CampaignForce> present,
         IReadOnlyDictionary<Guid, ActionKind> arrivalKinds,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
-        IReadOnlyCollection<Guid> brokenAllyFactionIds)
+        IReadOnlyCollection<Guid> brokenAllyFactionIds,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions,
+        SpecialRuleContext? specialRules,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals)
     {
         var ordered = present.OrderBy(static force => force.Id).ToArray();
         var backstabber = ordered.FirstOrDefault(force =>
             arrivalKinds.GetValueOrDefault(force.Id) == ActionKind.Backstab);
         if (backstabber is not null)
         {
-            var target = FirstEnemy(backstabber, ordered, factionAllyGroups, brokenAllyFactionIds);
+            var target = FirstEnemy(
+                backstabber,
+                ordered,
+                factionAllyGroups,
+                brokenAllyFactionIds,
+                brokenSubfactions,
+                specialRules,
+                allyBetrayals);
             if (target is not null)
             {
                 return (backstabber.Id, target.Id);
@@ -133,9 +161,10 @@ public static class BattleMissionRules
         {
             var defender = ordered.FirstOrDefault(force =>
                 force.FactionId == owner
-                || ActionResolution.AreAllies(force.FactionId, owner, factionAllyGroups, brokenAllyFactionIds));
+                || (ActionResolution.AreAllies(force.FactionId, owner, factionAllyGroups, brokenAllyFactionIds)
+                    && !AllyBetrayalRules.PlayerBetrayedFaction(force.ControllerUserId, owner, null, allyBetrayals ?? [])));
             var attacker = ordered.FirstOrDefault(force =>
-                ActionResolution.AreEnemies(force.FactionId, owner, factionAllyGroups, brokenAllyFactionIds));
+                EnemiesOfOwner(force, owner, factionAllyGroups, brokenAllyFactionIds, allyBetrayals));
             if (defender is not null && attacker is not null)
             {
                 return (attacker.Id, defender.Id);
@@ -148,11 +177,14 @@ public static class BattleMissionRules
         {
             foreach (var mover in movers)
             {
-                if (ActionResolution.AreEnemies(
-                        holder.FactionId,
-                        mover.FactionId,
+                if (AreForceEnemies(
+                        holder,
+                        mover,
                         factionAllyGroups,
-                        brokenAllyFactionIds))
+                        brokenAllyFactionIds,
+                        brokenSubfactions,
+                        specialRules,
+                        allyBetrayals))
                 {
                     return (mover.Id, holder.Id);
                 }
@@ -166,7 +198,10 @@ public static class BattleMissionRules
         IReadOnlyList<CampaignForce> present,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyCollection<Guid> brokenAllyFactionIds,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions,
+        SpecialRuleContext? specialRules,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals)
     {
         var ordered = present.OrderBy(static force => force.Id).ToArray();
         if (ordered.Length < 2)
@@ -176,11 +211,14 @@ public static class BattleMissionRules
 
         var attacker = ordered[ClampIndex(pickIndex(ordered.Length), ordered.Length)];
         var enemies = ordered
-            .Where(force => ActionResolution.AreEnemies(
-                attacker.FactionId,
-                force.FactionId,
+            .Where(force => AreForceEnemies(
+                attacker,
+                force,
                 factionAllyGroups,
-                brokenAllyFactionIds))
+                brokenAllyFactionIds,
+                brokenSubfactions,
+                specialRules,
+                allyBetrayals))
             .ToArray();
         if (enemies.Length == 0)
         {
@@ -195,15 +233,55 @@ public static class BattleMissionRules
         CampaignForce force,
         IReadOnlyList<CampaignForce> present,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
-        IReadOnlyCollection<Guid> brokenAllyFactionIds)
+        IReadOnlyCollection<Guid> brokenAllyFactionIds,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions,
+        SpecialRuleContext? specialRules,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals)
     {
         return present.FirstOrDefault(other =>
             other.Id != force.Id
-            && ActionResolution.AreEnemies(
-                force.FactionId,
-                other.FactionId,
+            && AreForceEnemies(
+                force,
+                other,
                 factionAllyGroups,
-                brokenAllyFactionIds));
+                brokenAllyFactionIds,
+                brokenSubfactions,
+                specialRules,
+                allyBetrayals));
+    }
+
+    private static bool AreForceEnemies(
+        CampaignForce left,
+        CampaignForce right,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlyCollection<Guid> brokenAllyFactionIds,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions,
+        SpecialRuleContext? specialRules,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals)
+    {
+        return FactionSpecialRulePolicies.AreEnemies(
+            left,
+            right,
+            factionAllyGroups,
+            brokenAllyFactionIds,
+            brokenSubfactions ?? [],
+            specialRules ?? SpecialRuleContext.None,
+            allyBetrayals);
+    }
+
+    private static bool EnemiesOfOwner(
+        CampaignForce force,
+        Guid ownerFactionId,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlyCollection<Guid> brokenAllyFactionIds,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals)
+    {
+        if (AllyBetrayalRules.PlayerBetrayedFaction(force.ControllerUserId, ownerFactionId, null, allyBetrayals ?? []))
+        {
+            return true;
+        }
+
+        return ActionResolution.AreEnemies(force.FactionId, ownerFactionId, factionAllyGroups, brokenAllyFactionIds);
     }
 
     private static bool IsAttackingArrival(ActionKind kind)

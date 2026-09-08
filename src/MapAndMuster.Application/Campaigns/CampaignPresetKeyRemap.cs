@@ -150,6 +150,7 @@ internal static class CampaignPresetKeyRemap
             HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
             SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
             SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
+            StatusChanges = mission.StatusChanges,
         };
     }
 

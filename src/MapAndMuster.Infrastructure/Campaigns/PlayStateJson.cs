@@ -166,6 +166,13 @@ internal static class PlayStateJson
                 FactionId = item.FactionId,
                 Subfaction = item.Subfaction,
             })],
+            AllyBetrayals = [.. state.AllyBetrayals.Select(static item => new AllyBetrayalDocument
+            {
+                TraitorUserId = item.TraitorUserId,
+                BetrayedFactionId = item.BetrayedFactionId,
+                BetrayedSubfaction = item.BetrayedSubfaction,
+                BetrayedUserId = item.BetrayedUserId,
+            })],
             Structures = [.. state.Structures.Select(static item => new StructureDocument
             {
                 TerritoryId = item.TerritoryId,
@@ -214,6 +221,13 @@ internal static class PlayStateJson
                     Condition = territory.Condition.ToString(),
                 })],
                 ItemObjectives = [.. item.ItemObjectives.Select(ToItem)],
+                AllyBetrayals = [.. item.AllyBetrayals.Select(static betrayal => new AllyBetrayalDocument
+                {
+                    TraitorUserId = betrayal.TraitorUserId,
+                    BetrayedFactionId = betrayal.BetrayedFactionId,
+                    BetrayedSubfaction = betrayal.BetrayedSubfaction,
+                    BetrayedUserId = betrayal.BetrayedUserId,
+                })],
             })],
             DebugActorUserId = state.DebugActorUserId,
             DebugStartedUtc = state.DebugStartedUtc,
@@ -274,6 +288,8 @@ internal static class PlayStateJson
                 ActorFactionId = item.ActorFactionId,
                 ActorUserId = item.ActorUserId,
                 OccurredUtc = item.OccurredUtc,
+                Source = item.Source.ToString(),
+                SourceDetail = item.SourceDetail,
             })],
             PlayerSupplies = [.. state.PlayerSupplies.Select(static item => new PlayerSupplyDocument
             {
@@ -446,7 +462,11 @@ internal static class PlayStateJson
                 item.ActorFactionId,
                 item.ActorUserId,
                 item.OccurredUtc,
-                item.PreviousStatusTypeId))],
+                item.PreviousStatusTypeId,
+                Enum.TryParse<ForceStatusChangeSource>(item.Source, true, out var source)
+                    ? source
+                    : ForceStatusChangeSource.Catalog,
+                item.SourceDetail))],
             [.. (document.StructureWorks ?? []).Select(static item => new StructureWorkFact(
                 item.Id,
                 item.TerritoryId,
@@ -454,7 +474,12 @@ internal static class PlayStateJson
                 Enum.Parse<ActionKind>(item.Kind, true),
                 item.ActorFactionId,
                 item.ActorUserId,
-                item.OccurredUtc))]);
+                item.OccurredUtc))],
+            [.. (document.AllyBetrayals ?? []).Select(static item => new AllyBetrayal(
+                item.TraitorUserId,
+                item.BetrayedFactionId,
+                item.BetrayedSubfaction,
+                item.BetrayedUserId))]);
     }
 
     private static IReadOnlyList<ActionWindowSnapshot> ToSnapshots(PlayDocument document)
@@ -475,7 +500,12 @@ internal static class PlayStateJson
                     territory.StructureTypeId,
                     territory.StructureName,
                     Enum.Parse<StructureCondition>(territory.Condition, true)))],
-                [.. (item.ItemObjectives ?? []).Select(FromItem)])),
+                [.. (item.ItemObjectives ?? []).Select(FromItem)],
+                [.. (item.AllyBetrayals ?? []).Select(static betrayal => new AllyBetrayal(
+                    betrayal.TraitorUserId,
+                    betrayal.BetrayedFactionId,
+                    betrayal.BetrayedSubfaction,
+                    betrayal.BetrayedUserId))])),
         ];
     }
 
@@ -557,6 +587,7 @@ internal static class PlayStateJson
             InBattle = force.InBattle,
             StatusName = force.StatusName,
             Subfaction = force.Subfaction,
+            ConsecutiveWaterActions = force.ConsecutiveWaterActions,
         };
     }
 
@@ -569,7 +600,8 @@ internal static class PlayStateJson
             force.TerritoryId,
             force.InBattle,
             force.StatusName,
-            force.Subfaction);
+            force.Subfaction,
+            force.ConsecutiveWaterActions);
     }
 
     private sealed class PlayDocument
@@ -584,6 +616,7 @@ internal static class PlayStateJson
         public List<RetreatDocument> Retreats { get; set; } = [];
         public List<Guid> BrokenAllyFactionIds { get; set; } = [];
         public List<BrokenAllySubfactionDocument> BrokenAllySubfactions { get; set; } = [];
+        public List<AllyBetrayalDocument> AllyBetrayals { get; set; } = [];
         public List<StructureDocument> Structures { get; set; } = [];
         public List<ItemObjectiveDocument>? ItemObjectives { get; set; }
         public List<LogDocument> Log { get; set; } = [];
@@ -622,6 +655,7 @@ internal static class PlayStateJson
         public bool InBattle { get; set; }
         public string? StatusName { get; set; }
         public string? Subfaction { get; set; }
+        public int ConsecutiveWaterActions { get; set; }
     }
 
     private sealed class DraftDocument
@@ -662,6 +696,14 @@ internal static class PlayStateJson
     {
         public Guid FactionId { get; set; }
         public string Subfaction { get; set; } = "";
+    }
+
+    private sealed class AllyBetrayalDocument
+    {
+        public Guid TraitorUserId { get; set; }
+        public Guid BetrayedFactionId { get; set; }
+        public string? BetrayedSubfaction { get; set; }
+        public Guid? BetrayedUserId { get; set; }
     }
 
     private sealed class BattleDocument
@@ -825,6 +867,7 @@ internal static class PlayStateJson
         public List<Guid> BrokenAllyFactionIds { get; set; } = [];
         public List<TerritorySnapshotDocument> Territories { get; set; } = [];
         public List<ItemObjectiveDocument>? ItemObjectives { get; set; }
+        public List<AllyBetrayalDocument>? AllyBetrayals { get; set; }
     }
 
     private sealed class TerritorySnapshotDocument
@@ -887,5 +930,7 @@ internal static class PlayStateJson
         public Guid? ActorFactionId { get; set; }
         public Guid? ActorUserId { get; set; }
         public DateTimeOffset OccurredUtc { get; set; }
+        public string? Source { get; set; }
+        public string? SourceDetail { get; set; }
     }
 }

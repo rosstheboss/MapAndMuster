@@ -205,6 +205,12 @@ public enum PlayLogKind
 
     /// <summary>A snapshot of final scores and remaining item objectives after the campaign ended.</summary>
     CampaignEnded = 36,
+
+    /// <summary>A force gained or lost a named status.</summary>
+    ForceStatusChanged = 37,
+
+    /// <summary>A player resolved Backstab and is now a traitor toward that ally.</summary>
+    AllianceBetrayed = 38,
 }
 
 /// <summary>

@@ -80,6 +80,77 @@ public sealed class ItemObjectiveChoiceRulesTests
     }
 
     [Fact]
+    public void ChoiceResultCanSetForceStatusIncludingOverDiseased()
+    {
+        var originalId = Guid.NewGuid();
+        var choiceId = Guid.NewGuid();
+        var resultId = Guid.NewGuid();
+        var forceId = Guid.NewGuid();
+        var player = Guid.NewGuid();
+        var territory = Guid.NewGuid();
+        var confidentId = Guid.NewGuid();
+        var type = new ItemObjectiveTypeSetup(
+            originalId,
+            "Relic",
+            isHiddenUntilFound: false,
+            ItemObjectivePlacementKind.Random,
+            allowOnSpawn: false,
+            campaignPoints: 1,
+            flavorText: "A relic.",
+            choices:
+            [
+                new ItemObjectiveChoiceSetup(
+                    choiceId,
+                    "Claim",
+                    [
+                        new ItemObjectiveChoiceResultSetup(
+                            resultId,
+                            "The relic steadies the force.",
+                            "Claimed",
+                            destroyItem: false,
+                            replacementItemTypeId: null,
+                            grantedPrivateObjectiveTypeId: null,
+                            setForceStatusName: "Confident"),
+                    ]),
+            ]);
+        var catalog = new ForceStatusSetup(
+            confidentId,
+            "Confident",
+            "Confident.",
+            ForceStatusEnableTrigger.BattleWon,
+            ForceStatusClearTrigger.BattleLostOrRetreat);
+        var item = new CampaignItemObjective(
+            Guid.NewGuid(),
+            originalId,
+            "Relic",
+            territoryId: null,
+            possessorForceId: forceId,
+            isRevealed: true,
+            territory,
+            wasHiddenUntilFound: false,
+            "A relic.");
+        var state = CampaignPlayState.Empty.With(
+            forces: [new CampaignForce(forceId, player, Guid.NewGuid(), territory, false, "Diseased")],
+            itemObjectives: [item]);
+
+        Assert.True(ItemObjectiveChoiceRules.TryResolve(
+            state,
+            item.Id,
+            choiceId,
+            player,
+            [type],
+            DateTimeOffset.UtcNow,
+            static _ => 0,
+            out var next,
+            out _,
+            [catalog]));
+
+        Assert.Equal("Confident", Assert.Single(next.Forces).StatusName);
+        Assert.Contains(next.Log, entry => entry.Kind == PlayLogKind.ForceStatusChanged);
+        Assert.Contains(next.ForceStatusChanges, fact => fact.Source == ForceStatusChangeSource.ItemObjective);
+    }
+
+    [Fact]
     public void DestroyedItemsAwardNoStandingsPoints()
     {
         var typeId = Guid.NewGuid();

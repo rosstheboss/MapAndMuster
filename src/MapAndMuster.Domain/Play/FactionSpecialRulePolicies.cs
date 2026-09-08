@@ -126,7 +126,8 @@ public static class FactionSpecialRulePolicies
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyCollection<Guid> brokenFactions,
         IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         if (viaId is not { } via || via == Guid.Empty || via == targetId || via == force.TerritoryId)
         {
@@ -138,7 +139,15 @@ public static class FactionSpecialRulePolicies
             return targetId;
         }
 
-        if (HasEnemy(startingForces, via, force, factionAllyGroups, brokenFactions, brokenSubfactions, rules))
+        if (HasEnemy(
+            startingForces,
+            via,
+            force,
+            factionAllyGroups,
+            brokenFactions,
+            brokenSubfactions,
+            rules,
+            allyBetrayals))
         {
             return via;
         }
@@ -170,11 +179,17 @@ public static class FactionSpecialRulePolicies
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyCollection<Guid> brokenFactions,
         IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
-        if (left.Id == right.Id)
+        if (left.Id == right.Id || left.ControllerUserId == right.ControllerUserId)
         {
             return false;
+        }
+
+        if (AllyBetrayalRules.AreHostile(left, right, allyBetrayals ?? []))
+        {
+            return true;
         }
 
         if (AreDividedGods(left, right, rules))
@@ -197,8 +212,19 @@ public static class FactionSpecialRulePolicies
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyCollection<Guid> brokenFactions,
         IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
+        if (left.ControllerUserId == right.ControllerUserId)
+        {
+            return false;
+        }
+
+        if (AllyBetrayalRules.AreHostile(left, right, allyBetrayals ?? []))
+        {
+            return false;
+        }
+
         if (AreDividedGods(left, right, rules))
         {
             return !SameGod(left, right)
@@ -216,7 +242,8 @@ public static class FactionSpecialRulePolicies
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyCollection<Guid> brokenFactions,
         IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         if (territory.IsSpawn && present.Any(force => rules.Has(force, SpecialRuleEffectKeys.UndergroundNetwork)))
         {
@@ -227,7 +254,14 @@ public static class FactionSpecialRulePolicies
         {
             for (var j = i + 1; j < present.Length; j++)
             {
-                if (AreEnemies(present[i], present[j], factionAllyGroups, brokenFactions, brokenSubfactions, rules))
+                if (AreEnemies(
+                    present[i],
+                    present[j],
+                    factionAllyGroups,
+                    brokenFactions,
+                    brokenSubfactions,
+                    rules,
+                    allyBetrayals))
                 {
                     return true;
                 }
@@ -324,7 +358,11 @@ public static class FactionSpecialRulePolicies
         return true;
     }
 
-    /// <summary>Returns Diseased when a Nurgle force beats a non-Diseased, non-Shaken army.</summary>
+    /// <summary>
+    /// Returns Diseased when a plague-bearing force wins a fought battle, regardless of location.
+    /// Diseased overrides the loser's other statuses. Immune factions are refused by
+    /// <see cref="AllowsStatus"/>.
+    /// </summary>
     public static string? StatusInflictedOnLoser(CampaignForce winner, CampaignForce loser, SpecialRuleContext rules)
     {
         if (!rules.Has(winner, SpecialRuleEffectKeys.BringersOfThePlague))
@@ -332,12 +370,12 @@ public static class FactionSpecialRulePolicies
             return null;
         }
 
-        if (MatchesAny(loser.StatusName, "Diseased", "Shaken"))
+        if (ForceStatusNames.IsDiseased(loser.StatusName))
         {
             return null;
         }
 
-        return "Diseased";
+        return ForceStatusNames.Diseased;
     }
 
     /// <summary>Returns whether a hidden item is adjacent to the force.</summary>
@@ -459,12 +497,13 @@ public static class FactionSpecialRulePolicies
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyCollection<Guid> brokenFactions,
         IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals)
     {
         return forces.Any(force =>
             force.TerritoryId == territoryId
             && force.Id != mover.Id
-            && AreEnemies(mover, force, factionAllyGroups, brokenFactions, brokenSubfactions, rules));
+            && AreEnemies(mover, force, factionAllyGroups, brokenFactions, brokenSubfactions, rules, allyBetrayals));
     }
 
     private static bool AreDividedGods(CampaignForce left, CampaignForce right, SpecialRuleContext rules)

@@ -21,6 +21,7 @@ public sealed class MissionSetup
     /// <param name="hasSupplyPointsAdvantage">Whether attacker or defender supply points are adjusted.</param>
     /// <param name="supplyPointsAdvantageSide">Which role receives the supply-point adjustment.</param>
     /// <param name="supplyPointsAdvantageAmount">Signed raw supply-point change.</param>
+    /// <param name="statusChanges">Ordered win/lose status-change conditions. First match applies.</param>
     public MissionSetup(
         Guid id,
         string name,
@@ -34,7 +35,8 @@ public sealed class MissionSetup
         int armyPointsAdvantageAmount = 0,
         bool hasSupplyPointsAdvantage = false,
         MissionAdvantageSide supplyPointsAdvantageSide = MissionAdvantageSide.Defender,
-        int supplyPointsAdvantageAmount = 0)
+        int supplyPointsAdvantageAmount = 0,
+        IReadOnlyList<MissionStatusChangeSetup>? statusChanges = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Id = id;
@@ -50,6 +52,7 @@ public sealed class MissionSetup
         HasSupplyPointsAdvantage = hasSupplyPointsAdvantage;
         SupplyPointsAdvantageSide = supplyPointsAdvantageSide;
         SupplyPointsAdvantageAmount = supplyPointsAdvantageAmount;
+        StatusChanges = statusChanges ?? [];
     }
 
     /// <summary>Gets the mission identifier.</summary>
@@ -90,4 +93,7 @@ public sealed class MissionSetup
 
     /// <summary>Gets the signed raw supply-point change.</summary>
     public int SupplyPointsAdvantageAmount { get; }
+
+    /// <summary>Gets ordered win/lose status-change conditions. The first matching condition applies.</summary>
+    public IReadOnlyList<MissionStatusChangeSetup> StatusChanges { get; }
 }

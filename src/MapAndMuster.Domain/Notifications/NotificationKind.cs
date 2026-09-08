@@ -34,4 +34,7 @@ public enum NotificationKind
 
     /// <summary>A force reached three missed-order offences and may need to be kicked.</summary>
     DelinquencyKickRecommendation = 9,
+
+    /// <summary>A manager or administrator assigned a force status.</summary>
+    StaffForceStatusAssigned = 10,
 }

@@ -103,7 +103,8 @@ internal static class CampaignPlayCatalog
                                 result.NewStateKey,
                                 result.DestroyItem,
                                 result.ReplacementItemTypeId,
-                                result.GrantedPrivateObjectiveTypeId)),
+                                result.GrantedPrivateObjectiveTypeId,
+                                result.SetForceStatusName)),
                         ])),
                 ],
                 type.SpecialRuleIds)),
@@ -174,6 +175,16 @@ internal static class CampaignPlayCatalog
                 [.. campaign.AllyGroups.Select(static group => group.Id)]);
         }
 
+        next = PrivateObjectiveRules.GrantOwedTraitorObjectives(
+            next,
+            types,
+            utcNow,
+            PickIndex,
+            FactionByPlayer(campaign),
+            AllyGroupByFaction(campaign),
+            [.. campaign.Memberships.Where(static member => member.IsPlayer).Select(static member => member.UserId)],
+            [.. campaign.Factions.Select(static faction => faction.Id)],
+            [.. campaign.AllyGroups.Select(static group => group.Id)]);
         next = PrivateObjectiveRules.EvaluateAutomatic(
             next,
             types,
@@ -201,7 +212,8 @@ internal static class CampaignPlayCatalog
             campaign.PlayState?.BrokenAllyFactionIds.ToHashSet() ?? [],
             SpecialRules(campaign),
             SubfactionsByPlayer(campaign),
-            campaign.SplitForceSupplyPenaltyIsPercent);
+            campaign.SplitForceSupplyPenaltyIsPercent,
+            campaign.PlayState?.AllyBetrayals ?? []);
     }
 
     public static SpecialRuleContext SpecialRules(StoredCampaign campaign)
@@ -222,7 +234,11 @@ internal static class CampaignPlayCatalog
             }
         }
 
-        return new SpecialRuleContext(catalog, factionIds, subfactionIds);
+        return new SpecialRuleContext(
+            catalog,
+            factionIds,
+            subfactionIds,
+            campaign.Factions.Where(static faction => faction.RequiresSubfaction).Select(static faction => faction.Id).ToHashSet());
     }
 
     public static IReadOnlyDictionary<Guid, string?> SubfactionsByPlayer(StoredCampaign campaign)
@@ -314,6 +330,43 @@ internal static class CampaignPlayCatalog
         ];
     }
 
+    public static IReadOnlyList<MissionSetup> MissionSetups(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        var seen = new HashSet<Guid>();
+        var missions = new List<MissionSetup>();
+        void Add(StoredMission mission)
+        {
+            if (seen.Add(mission.Id))
+            {
+                missions.Add(ToMissionSetup(mission));
+            }
+        }
+
+        foreach (var mission in campaign.Missions)
+        {
+            Add(mission);
+        }
+
+        foreach (var type in campaign.TerrainTypes)
+        {
+            foreach (var mission in type.Missions)
+            {
+                Add(mission);
+            }
+        }
+
+        foreach (var type in campaign.StructureTypes)
+        {
+            foreach (var mission in type.Missions)
+            {
+                Add(mission);
+            }
+        }
+
+        return missions;
+    }
+
     public static MissionSetup ToMissionSetup(StoredMission mission)
     {
         ArgumentNullException.ThrowIfNull(mission);
@@ -334,7 +387,17 @@ internal static class CampaignPlayCatalog
             Enum.TryParse<MissionAdvantageSide>(mission.SupplyPointsAdvantageSide, true, out var supplySide)
                 ? supplySide
                 : MissionAdvantageSide.Defender,
-            mission.SupplyPointsAdvantageAmount);
+            mission.SupplyPointsAdvantageAmount,
+            [
+                .. (mission.StatusChanges ?? []).Select(static change => new MissionStatusChangeSetup(
+                    change.Id,
+                    Enum.TryParse<MissionBattleOutcome>(change.Outcome, true, out var outcome)
+                        ? outcome
+                        : MissionBattleOutcome.Win,
+                    change.WhenCurrentStatus,
+                    change.SetStatus,
+                    change.LeaveUnchanged)),
+            ]);
     }
 
     public static bool TryToReports(

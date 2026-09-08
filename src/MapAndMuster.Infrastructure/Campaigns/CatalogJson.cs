@@ -264,6 +264,17 @@ internal static class CatalogJson
             HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
             SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
             SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
+            StatusChanges =
+            [
+                .. mission.StatusChanges.Select(static change => new MissionStatusChangeDocument
+                {
+                    Id = change.Id,
+                    Outcome = change.Outcome,
+                    WhenCurrentStatus = change.WhenCurrentStatus,
+                    SetStatus = change.SetStatus,
+                    LeaveUnchanged = change.LeaveUnchanged,
+                }),
+            ],
         };
     }
 
@@ -324,6 +335,17 @@ internal static class CatalogJson
                 ? "Defender"
                 : mission.SupplyPointsAdvantageSide,
             SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
+            StatusChanges =
+            [
+                .. (mission.StatusChanges ?? []).Select(static change => new StoredMissionStatusChange
+                {
+                    Id = change.Id == Guid.Empty ? Guid.NewGuid() : change.Id,
+                    Outcome = string.IsNullOrWhiteSpace(change.Outcome) ? "Win" : change.Outcome,
+                    WhenCurrentStatus = change.WhenCurrentStatus,
+                    SetStatus = change.SetStatus,
+                    LeaveUnchanged = change.LeaveUnchanged,
+                }),
+            ],
         };
     }
 
@@ -366,6 +388,7 @@ internal static class CatalogJson
             DestroyItem = result.DestroyItem,
             ReplacementItemTypeId = result.ReplacementItemTypeId,
             GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+            SetForceStatusName = result.SetForceStatusName,
         };
     }
 
@@ -469,6 +492,7 @@ internal static class CatalogJson
             DestroyItem = result.DestroyItem,
             ReplacementItemTypeId = result.ReplacementItemTypeId,
             GrantedPrivateObjectiveTypeId = result.GrantedPrivateObjectiveTypeId,
+            SetForceStatusName = result.SetForceStatusName,
         };
     }
 
@@ -926,6 +950,21 @@ internal static class CatalogJson
         public string? SupplyPointsAdvantageSide { get; set; }
 
         public int SupplyPointsAdvantageAmount { get; set; }
+
+        public List<MissionStatusChangeDocument>? StatusChanges { get; set; }
+    }
+
+    private sealed class MissionStatusChangeDocument
+    {
+        public Guid Id { get; set; }
+
+        public string Outcome { get; set; } = "Win";
+
+        public string? WhenCurrentStatus { get; set; }
+
+        public string? SetStatus { get; set; }
+
+        public bool LeaveUnchanged { get; set; }
     }
 
     private sealed class MissionQuestionDocument
@@ -989,6 +1028,8 @@ internal static class CatalogJson
         public Guid? ReplacementItemTypeId { get; set; }
 
         public Guid? GrantedPrivateObjectiveTypeId { get; set; }
+
+        public string? SetForceStatusName { get; set; }
     }
 
     private sealed class SpecialRuleDocument

@@ -677,14 +677,7 @@ public sealed class UploadMissionFileHandler
                 }
 
                 previousKey ??= missions[index].FileStorageKey;
-                missions[index] = new StoredMission
-                {
-                    Id = missions[index].Id,
-                    Name = missions[index].Name,
-                    Url = fileStorageKey is null ? missions[index].Url : null,
-                    FileStorageKey = fileStorageKey ?? missions[index].FileStorageKey,
-                    FileName = fileStorageKey is null ? missions[index].FileName : processed.FileName,
-                };
+                missions[index] = WithMissionFile(missions[index], processed, fileStorageKey);
                 replaced = true;
                 found = true;
             }
@@ -713,14 +706,7 @@ public sealed class UploadMissionFileHandler
                 }
 
                 previousKey ??= missions[index].FileStorageKey;
-                missions[index] = new StoredMission
-                {
-                    Id = missions[index].Id,
-                    Name = missions[index].Name,
-                    Url = fileStorageKey is null ? missions[index].Url : null,
-                    FileStorageKey = fileStorageKey ?? missions[index].FileStorageKey,
-                    FileName = fileStorageKey is null ? missions[index].FileName : processed.FileName,
-                };
+                missions[index] = WithMissionFile(missions[index], processed, fileStorageKey);
                 replaced = true;
                 found = true;
             }
@@ -746,6 +732,31 @@ public sealed class UploadMissionFileHandler
         nextTerrains = terrains;
         nextStructures = structures;
         return found;
+    }
+
+    private static StoredMission WithMissionFile(
+        StoredMission mission,
+        ProcessedCampaignDocumentResult processed,
+        string? fileStorageKey)
+    {
+        return new StoredMission
+        {
+            Id = mission.Id,
+            Name = mission.Name,
+            Url = fileStorageKey is null ? mission.Url : null,
+            FileStorageKey = fileStorageKey ?? mission.FileStorageKey,
+            FileName = fileStorageKey is null ? mission.FileName : processed.FileName,
+            ResultQuestions = mission.ResultQuestions,
+            IsAttackerDefender = mission.IsAttackerDefender,
+            HasArmyPointsAdvantage = mission.HasArmyPointsAdvantage,
+            ArmyPointsAdvantageSide = mission.ArmyPointsAdvantageSide,
+            ArmyPointsAdvantageIsPercent = mission.ArmyPointsAdvantageIsPercent,
+            ArmyPointsAdvantageAmount = mission.ArmyPointsAdvantageAmount,
+            HasSupplyPointsAdvantage = mission.HasSupplyPointsAdvantage,
+            SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
+            SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
+            StatusChanges = mission.StatusChanges,
+        };
     }
 }
 

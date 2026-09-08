@@ -20,7 +20,8 @@ public sealed class SupplyCatalog
         IReadOnlySet<Guid> brokenAllyFactionIds,
         SpecialRuleContext? specialRules = null,
         IReadOnlyDictionary<Guid, string?>? subfactionByPlayer = null,
-        bool splitForceSupplyPenaltyIsPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent)
+        bool splitForceSupplyPenaltyIsPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         ArgumentNullException.ThrowIfNull(terrainSupplyByType);
         ArgumentNullException.ThrowIfNull(structures);
@@ -39,6 +40,7 @@ public sealed class SupplyCatalog
         BrokenAllyFactionIds = brokenAllyFactionIds;
         SpecialRules = specialRules ?? SpecialRuleContext.None;
         SubfactionByPlayer = subfactionByPlayer ?? new Dictionary<Guid, string?>();
+        AllyBetrayals = allyBetrayals ?? [];
     }
 
     /// <summary>Gets supply points for each terrain type.</summary>
@@ -70,6 +72,9 @@ public sealed class SupplyCatalog
 
     /// <summary>Gets each player's chosen subfaction.</summary>
     public IReadOnlyDictionary<Guid, string?> SubfactionByPlayer { get; }
+
+    /// <summary>Gets player-scoped Backstab betrayals.</summary>
+    public IReadOnlyList<AllyBetrayal> AllyBetrayals { get; }
 }
 
 /// <summary>

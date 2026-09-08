@@ -11,20 +11,28 @@ public static class BattleMatchRules
     public static IReadOnlyList<IReadOnlyList<CampaignForce>> Sides(
         IReadOnlyList<CampaignForce> forces,
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
-        IReadOnlyCollection<Guid> brokenAllyFactionIds)
+        IReadOnlyCollection<Guid> brokenAllyFactionIds,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null,
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         ArgumentNullException.ThrowIfNull(forces);
         ArgumentNullException.ThrowIfNull(factionAllyGroups);
         ArgumentNullException.ThrowIfNull(brokenAllyFactionIds);
+        var rules = specialRules ?? SpecialRuleContext.None;
+        var gods = brokenSubfactions ?? [];
         var sides = new List<List<CampaignForce>>();
         foreach (var force in forces.OrderBy(static item => item.Id))
         {
             var matched = sides.FirstOrDefault(side =>
-                side.All(member => !ActionResolution.AreEnemies(
-                    member.FactionId,
-                    force.FactionId,
+                side.All(member => !FactionSpecialRulePolicies.AreEnemies(
+                    member,
+                    force,
                     factionAllyGroups,
-                    brokenAllyFactionIds)));
+                    brokenAllyFactionIds,
+                    gods,
+                    rules,
+                    allyBetrayals)));
             if (matched is null)
             {
                 sides.Add([force]);
@@ -47,10 +55,13 @@ public static class BattleMatchRules
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyCollection<Guid> brokenAllyFactionIds,
         Func<CampaignForce, CombatantStrengthRules.Strength> strengthOf,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null,
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         ArgumentNullException.ThrowIfNull(fighting);
-        var sides = Sides(fighting, factionAllyGroups, brokenAllyFactionIds);
+        var sides = Sides(fighting, factionAllyGroups, brokenAllyFactionIds, brokenSubfactions, specialRules, allyBetrayals);
         if (sides.Count <= 1)
         {
             return [.. fighting.Select(static force => force.Id)];
@@ -69,7 +80,14 @@ public static class BattleMatchRules
 
         var first = ranked[0];
         var second = ranked.First(force =>
-            ActionResolution.AreEnemies(first.FactionId, force.FactionId, factionAllyGroups, brokenAllyFactionIds));
+            FactionSpecialRulePolicies.AreEnemies(
+                first,
+                force,
+                factionAllyGroups,
+                brokenAllyFactionIds,
+                brokenSubfactions ?? [],
+                specialRules ?? SpecialRuleContext.None,
+                allyBetrayals));
         return [first.Id, second.Id];
     }
 }

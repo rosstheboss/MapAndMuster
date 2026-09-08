@@ -44,6 +44,8 @@ Player and Game Master in the same campaign.
   or upload a portable preset package (catalog, overlay, map image, and uploaded logos) between hosts.
 - Campaign-point, supply-line, temporary-supply, status, objective, and relic tracking.
 - Configurable force statuses with enable/clear triggers and display-only tabletop effects.
+  Named Diseased uses consecutive water-feature actions, water battles, contagion, rejoin, and
+  plague-bearing wins; missions, item results, and staff assignment can also set status.
 - Public faction rules and private player/faction/alliance objectives.
 - Multiple GMs, ephemeral ringer battles, campaign extension, corrections, revision history, and audit.
 - Manager add/kick of players, promotion of a player to campaign manager, bringing in a user as

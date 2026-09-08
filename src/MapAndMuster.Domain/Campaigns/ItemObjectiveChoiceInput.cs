@@ -37,4 +37,7 @@ public sealed class ItemObjectiveChoiceResultInput
 
     /// <summary>Gets a private-objective catalog type granted to the possessing player.</summary>
     public Guid? GrantedPrivateObjectiveTypeId { get; init; }
+
+    /// <summary>Gets a catalog force status to apply, or Normal to clear. Omitted leaves status unchanged.</summary>
+    public string? SetForceStatusName { get; init; }
 }

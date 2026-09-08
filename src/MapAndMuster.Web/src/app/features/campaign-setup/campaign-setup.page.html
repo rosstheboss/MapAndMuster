@@ -988,6 +988,10 @@
                         <input type="checkbox" formControlName="allowAllyGroup" />
                         Ally groups
                       </label>
+                      <label class="choice-row">
+                        <input type="checkbox" formControlName="allowTraitor" />
+                        Traitors (only after a successful Backstab)
+                      </label>
                     </fieldset>
                     <div class="nested-row">
                       <div class="field grow">
@@ -1956,6 +1960,92 @@
                         Add unique result question
                       </button>
                     </div>
+                    <div class="field" formArrayName="statusChanges">
+                      <p class="subsection-heading">Status changes</p>
+                      <p class="muted">
+                        Ordered conditions after a won or lost fought battle. The first matching row applies and may
+                        replace Diseased. Leave the current status empty to match any remaining status. Choose Leave
+                        unchanged to skip a match, such as keeping Diseased.
+                      </p>
+                      @for (change of statusChangesOf(mission).controls; track change; let changeIndex = $index) {
+                        <div class="nested-card stack" [formGroupName]="changeIndex">
+                          <div class="nested-row">
+                            <div class="field">
+                              <label [attr.for]="'catalog-status-outcome-' + index + '-' + changeIndex">When</label>
+                              <select
+                                [id]="'catalog-status-outcome-' + index + '-' + changeIndex"
+                                formControlName="outcome"
+                              >
+                                <option value="Win">Won</option>
+                                <option value="Lose">Lost</option>
+                              </select>
+                            </div>
+                            <div class="field grow">
+                              <label [attr.for]="'catalog-status-when-' + index + '-' + changeIndex"
+                                >If currently</label
+                              >
+                              <select
+                                [id]="'catalog-status-when-' + index + '-' + changeIndex"
+                                formControlName="whenCurrentStatus"
+                              >
+                                <option value="">Any status</option>
+                                <option value="Normal">Normal</option>
+                                @for (status of forceStatuses.controls; track status.controls.id.value) {
+                                  @if (status.controls.name.value.trim()) {
+                                    <option [value]="status.controls.name.value">
+                                      {{ status.controls.name.value }}
+                                    </option>
+                                  }
+                                }
+                              </select>
+                            </div>
+                          </div>
+                          <label class="choice-row">
+                            <input
+                              [id]="'catalog-status-keep-' + index + '-' + changeIndex"
+                              type="checkbox"
+                              formControlName="leaveUnchanged"
+                            />
+                            Leave unchanged
+                          </label>
+                          @if (!change.controls.leaveUnchanged.value) {
+                            <div class="field">
+                              <label [attr.for]="'catalog-status-set-' + index + '-' + changeIndex"
+                                >Set status to</label
+                              >
+                              <select
+                                [id]="'catalog-status-set-' + index + '-' + changeIndex"
+                                formControlName="setStatus"
+                              >
+                                <option value="">Normal</option>
+                                @for (status of forceStatuses.controls; track status.controls.id.value) {
+                                  @if (status.controls.name.value.trim()) {
+                                    <option [value]="status.controls.name.value">
+                                      {{ status.controls.name.value }}
+                                    </option>
+                                  }
+                                }
+                              </select>
+                            </div>
+                          }
+                          <button
+                            type="button"
+                            class="button-secondary"
+                            (click)="removeMissionStatusChange(mission, changeIndex)"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      }
+                      <button
+                        type="button"
+                        class="button-secondary"
+                        (click)="addMissionStatusChange(mission)"
+                        [disabled]="statusChangesOf(mission).length >= 12"
+                      >
+                        Add status-change condition
+                      </button>
+                    </div>
                     <label class="choice-row">
                       <input
                         [id]="'catalog-mission-ad-' + index"
@@ -2799,6 +2889,26 @@
                                         @if (objective.controls.name.value.trim()) {
                                           <option [value]="objective.controls.id.value">
                                             {{ objective.controls.name.value }}
+                                          </option>
+                                        }
+                                      }
+                                    </select>
+                                  </div>
+                                  <div class="field grow">
+                                    <label
+                                      [attr.for]="'item-result-status-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                      >Set force status (optional)</label
+                                    >
+                                    <select
+                                      [id]="'item-result-status-' + index + '-' + choiceIndex + '-' + resultIndex"
+                                      formControlName="setForceStatusName"
+                                    >
+                                      <option value="">No status change</option>
+                                      <option value="Normal">Normal</option>
+                                      @for (status of forceStatuses.controls; track status.controls.id.value) {
+                                        @if (status.controls.name.value.trim()) {
+                                          <option [value]="status.controls.name.value">
+                                            {{ status.controls.name.value }}
                                           </option>
                                         }
                                       }

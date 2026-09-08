@@ -41,7 +41,8 @@ public sealed class ItemObjectiveChoiceResultSetup
         string? newStateKey,
         bool destroyItem,
         Guid? replacementItemTypeId,
-        Guid? grantedPrivateObjectiveTypeId)
+        Guid? grantedPrivateObjectiveTypeId,
+        string? setForceStatusName = null)
     {
         Id = id;
         FlavorText = flavorText;
@@ -49,6 +50,7 @@ public sealed class ItemObjectiveChoiceResultSetup
         DestroyItem = destroyItem;
         ReplacementItemTypeId = replacementItemTypeId;
         GrantedPrivateObjectiveTypeId = grantedPrivateObjectiveTypeId;
+        SetForceStatusName = string.IsNullOrWhiteSpace(setForceStatusName) ? null : setForceStatusName.Trim();
     }
 
     /// <summary>Gets the result identifier.</summary>
@@ -68,4 +70,7 @@ public sealed class ItemObjectiveChoiceResultSetup
 
     /// <summary>Gets a private-objective catalog type granted to the possessing player.</summary>
     public Guid? GrantedPrivateObjectiveTypeId { get; }
+
+    /// <summary>Gets a catalog force status to apply, or Normal to clear. Null leaves status unchanged.</summary>
+    public string? SetForceStatusName { get; }
 }

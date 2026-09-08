@@ -286,7 +286,7 @@ public static class PrivateObjectiveRules
                 return false;
             }
 
-            if (HolderAlreadyHas(state.PrivateObjectives, holderKind, holderId, type.Id))
+            if (PlayerAlreadyHas(state.PrivateObjectives, holderKind, holderId, type.Id))
             {
                 error = new DomainError(
                     "privateObjective.unavailable",
@@ -328,6 +328,60 @@ public static class PrivateObjectiveRules
     }
 
     /// <summary>
+    /// Grants one Traitor-pool objective per distinct successful Backstab relationship the player
+    /// does not already hold. Recycles the pool after it is exhausted, never duplicating a type
+    /// the player already has as a player-held or Traitor assignment.
+    /// </summary>
+    public static CampaignPlayState GrantOwedTraitorObjectives(
+        CampaignPlayState state,
+        IReadOnlyList<PrivateObjectiveTypePlayRules> types,
+        DateTimeOffset utcNow,
+        Func<int, int> pickIndex,
+        IReadOnlyDictionary<Guid, Guid>? factionByPlayer = null,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null,
+        IReadOnlyList<Guid>? playerUserIds = null,
+        IReadOnlyList<Guid>? factionIds = null,
+        IReadOnlyList<Guid>? allyGroupIds = null)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(types);
+        ArgumentNullException.ThrowIfNull(pickIndex);
+        var next = state;
+        foreach (var traitorId in state.AllyBetrayals.Select(static item => item.TraitorUserId).Distinct().OrderBy(static id => id))
+        {
+            var owed = AllyBetrayalRules.DistinctRelationshipCount(state.AllyBetrayals, traitorId);
+            var held = next.PrivateObjectives.Count(item =>
+                item.HolderKind == PrivateObjectiveHolderKind.Traitor && item.HolderId == traitorId);
+            while (held < owed)
+            {
+                if (!TryGrant(
+                        next,
+                        types,
+                        PrivateObjectiveHolderKind.Traitor,
+                        traitorId,
+                        typeId: null,
+                        utcNow,
+                        pickIndex,
+                        out var granted,
+                        out _,
+                        factionByPlayer,
+                        allyGroupByFaction,
+                        playerUserIds,
+                        factionIds,
+                        allyGroupIds))
+                {
+                    break;
+                }
+
+                next = granted;
+                held++;
+            }
+        }
+
+        return next;
+    }
+
+    /// <summary>
     /// Submits a manual claim for manager approval.
     /// </summary>
     public static bool TryClaim(
@@ -357,6 +411,15 @@ public static class PrivateObjectiveRules
         if (assignment.Status != PrivateObjectiveAssignmentStatus.Assigned)
         {
             error = new DomainError("privateObjective.claimed", "That private objective is already claimed or revealed.");
+            return false;
+        }
+
+        if (PlayerAlreadyScored(state.PrivateObjectives, assignment))
+        {
+            error = new DomainError(
+                "privateObjective.duplicate",
+                "This holder has already scored that private objective.",
+                "assignmentId");
             return false;
         }
 
@@ -401,6 +464,15 @@ public static class PrivateObjectiveRules
         if (assignment.ScoringKind != PrivateObjectiveScoringKind.Manual)
         {
             error = new DomainError("privateObjective.automatic", "Automatic private objectives complete themselves.");
+            return false;
+        }
+
+        if (PlayerAlreadyScored(state.PrivateObjectives, assignment))
+        {
+            error = new DomainError(
+                "privateObjective.duplicate",
+                "This holder has already scored that private objective.",
+                "assignmentId");
             return false;
         }
 
@@ -477,14 +549,15 @@ public static class PrivateObjectiveRules
             }
 
             if (!IsAutomaticComplete(
-                    assignment,
-                    type,
-                    state,
-                    territories,
-                    factionByPlayer,
-                    allyGroupByFaction,
-                    brokenAllyFactionIds,
-                    map))
+                assignment,
+                type,
+                state,
+                territories,
+                factionByPlayer,
+                allyGroupByFaction,
+                brokenAllyFactionIds,
+                map)
+                || PlayerAlreadyScored(next, assignment))
             {
                 continue;
             }
@@ -542,6 +615,7 @@ public static class PrivateObjectiveRules
             var applies = assignment.HolderKind switch
             {
                 PrivateObjectiveHolderKind.Player => assignment.HolderId == playerUserId,
+                PrivateObjectiveHolderKind.Traitor => assignment.HolderId == playerUserId,
                 PrivateObjectiveHolderKind.Faction => factionId is { } faction && assignment.HolderId == faction,
                 PrivateObjectiveHolderKind.AllyGroup => allyGroupId is { } group && assignment.HolderId == group,
                 _ => false,
@@ -579,6 +653,7 @@ public static class PrivateObjectiveRules
         return assignment.HolderKind switch
         {
             PrivateObjectiveHolderKind.Player => assignment.HolderId == viewerUserId,
+            PrivateObjectiveHolderKind.Traitor => assignment.HolderId == viewerUserId,
             PrivateObjectiveHolderKind.Faction => viewerFactionId is { } faction && assignment.HolderId == faction,
             PrivateObjectiveHolderKind.AllyGroup => viewerAllyGroupId is { } group && assignment.HolderId == group,
             _ => false,
@@ -650,7 +725,7 @@ public static class PrivateObjectiveRules
         }
 
         var holderHas = existing
-            .Where(item => item.HolderKind == holderKind && item.HolderId == holderId)
+            .Where(item => SamePlayerHeldPool(item.HolderKind, holderKind) && item.HolderId == holderId)
             .Select(static item => item.TypeId)
             .ToHashSet();
         var usedInKind = existing
@@ -676,14 +751,56 @@ public static class PrivateObjectiveRules
         return [.. types.Where(item => item.Allows(holderKind)).OrderBy(static item => item.Id)];
     }
 
+    private static bool PlayerAlreadyHas(
+        IReadOnlyList<PrivateObjectiveAssignment> existing,
+        PrivateObjectiveHolderKind holderKind,
+        Guid holderId,
+        Guid typeId)
+    {
+        if (IsPlayerHeld(holderKind))
+        {
+            return existing.Any(item =>
+                IsPlayerHeld(item.HolderKind) && item.HolderId == holderId && item.TypeId == typeId);
+        }
+
+        return existing.Any(item =>
+            item.HolderKind == holderKind && item.HolderId == holderId && item.TypeId == typeId);
+    }
+
+    private static bool PlayerAlreadyScored(
+        IReadOnlyList<PrivateObjectiveAssignment> existing,
+        PrivateObjectiveAssignment assignment)
+    {
+        if (!IsPlayerHeld(assignment.HolderKind))
+        {
+            return false;
+        }
+
+        return existing.Any(item =>
+            item.Id != assignment.Id
+            && item.TypeId == assignment.TypeId
+            && item.HolderId == assignment.HolderId
+            && IsPlayerHeld(item.HolderKind)
+            && item.Status == PrivateObjectiveAssignmentStatus.Revealed);
+    }
+
+    private static bool IsPlayerHeld(PrivateObjectiveHolderKind kind)
+    {
+        return kind is PrivateObjectiveHolderKind.Player or PrivateObjectiveHolderKind.Traitor;
+    }
+
+    private static bool SamePlayerHeldPool(PrivateObjectiveHolderKind left, PrivateObjectiveHolderKind right)
+    {
+        return left == right || (IsPlayerHeld(left) && IsPlayerHeld(right));
+    }
+
     private static bool HolderAlreadyHas(
         IReadOnlyList<PrivateObjectiveAssignment> existing,
         PrivateObjectiveHolderKind holderKind,
         Guid holderId,
         Guid typeId)
     {
-        return existing.Any(item =>
-            item.HolderKind == holderKind && item.HolderId == holderId && item.TypeId == typeId);
+        return PlayerAlreadyHas(existing, holderKind, holderId, typeId);
     }
 
     private static bool IsAutomaticComplete(
@@ -697,7 +814,7 @@ public static class PrivateObjectiveRules
         PlayMap? map)
     {
         var factionIds = HolderFactions(assignment, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds);
-        if (factionIds.Count == 0 && assignment.HolderKind != PrivateObjectiveHolderKind.Player)
+        if (factionIds.Count == 0 && !IsPlayerHeld(assignment.HolderKind))
         {
             return false;
         }
@@ -1066,10 +1183,10 @@ public static class PrivateObjectiveRules
             return null;
         }
 
-        var excludedPlayer = holderKind == PrivateObjectiveHolderKind.Player ? holderId : (Guid?)null;
+        var excludedPlayer = IsPlayerHeld(holderKind) ? holderId : (Guid?)null;
         var excludedFaction = holderKind == PrivateObjectiveHolderKind.Faction
             ? holderId
-            : holderKind == PrivateObjectiveHolderKind.Player && factionByPlayer is not null
+            : IsPlayerHeld(holderKind) && factionByPlayer is not null
                 ? factionByPlayer.GetValueOrDefault(holderId)
                 : (Guid?)null;
         var excludedAlly = holderKind == PrivateObjectiveHolderKind.AllyGroup
@@ -1103,6 +1220,9 @@ public static class PrivateObjectiveRules
             PrivateObjectiveHolderKind.Player => factionByPlayer.TryGetValue(assignment.HolderId, out var faction)
                 ? [faction]
                 : [],
+            PrivateObjectiveHolderKind.Traitor => factionByPlayer.TryGetValue(assignment.HolderId, out var traitorFaction)
+                ? [traitorFaction]
+                : [],
             PrivateObjectiveHolderKind.Faction => [assignment.HolderId],
             PrivateObjectiveHolderKind.AllyGroup =>
             [
@@ -1124,6 +1244,7 @@ public static class PrivateObjectiveRules
         return assignment.HolderKind switch
         {
             PrivateObjectiveHolderKind.Player => fact.ActorUserId == assignment.HolderId,
+            PrivateObjectiveHolderKind.Traitor => fact.ActorUserId == assignment.HolderId,
             PrivateObjectiveHolderKind.Faction => fact.ActorFactionId == assignment.HolderId,
             PrivateObjectiveHolderKind.AllyGroup =>
                 allyGroupByFaction.GetValueOrDefault(fact.ActorFactionId) == assignment.HolderId
@@ -1142,6 +1263,7 @@ public static class PrivateObjectiveRules
         return assignment.HolderKind switch
         {
             PrivateObjectiveHolderKind.Player => fact.ActorUserId == assignment.HolderId,
+            PrivateObjectiveHolderKind.Traitor => fact.ActorUserId == assignment.HolderId,
             PrivateObjectiveHolderKind.Faction => fact.ActorFactionId == assignment.HolderId,
             PrivateObjectiveHolderKind.AllyGroup =>
                 allyGroupByFaction.GetValueOrDefault(fact.ActorFactionId) == assignment.HolderId

@@ -813,6 +813,77 @@ public sealed class InjectRingerBattleHandler
 }
 
 /// <summary>
+/// Assigns a catalog force status or Normal for managers and administrators.
+/// </summary>
+public sealed class SetForceStatusesHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public SetForceStatusesHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Assigns the status.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(
+        SetForceStatusesCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignPlayPipeline.MutateAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, map, campaign, utcNow) =>
+            {
+                var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
+                if (membership?.IsGameMaster != true && !command.IsAdministrator)
+                {
+                    return PlayMutation.Fail(new Domain.Common.DomainError(
+                        ErrorCodes.CampaignForbidden,
+                        "Only a campaign manager or administrator can assign force statuses."));
+                }
+
+                if (!CampaignPlayRules.TrySetForceStatuses(
+                    state,
+                    command.UserId,
+                    command.ForceIds,
+                    command.StatusName,
+                    CampaignPlayPipeline.ForceStatuses(campaign),
+                    utcNow,
+                    out var next,
+                    out var error)
+                    || next is null)
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.Ok(next, map, preserveMap: true);
+            },
+            cancellationToken,
+            _notifications);
+    }
+}
+
+/// <summary>
 /// Assigns a faction to a player who has not chosen one yet.
 /// </summary>
 public sealed class ChooseFactionHandler
@@ -1339,7 +1410,8 @@ public sealed class GrantPrivateObjectiveHandler
                         "Only a campaign manager can grant private objectives."));
                 }
 
-                if (!Enum.TryParse<PrivateObjectiveHolderKind>(command.HolderKind, true, out var holderKind))
+                if (!Enum.TryParse<PrivateObjectiveHolderKind>(command.HolderKind, true, out var holderKind)
+                    || holderKind == PrivateObjectiveHolderKind.Traitor)
                 {
                     return PlayMutation.Fail(new Domain.Common.DomainError(
                         "privateObjective.holder.invalid",
@@ -1430,7 +1502,8 @@ public sealed class ClaimPrivateObjectiveHandler
                         allyGroupId,
                         staffView: false,
                         campaignCompleted: false)
-                    || (assignment.HolderKind == PrivateObjectiveHolderKind.Player && assignment.HolderId != command.UserId)
+                    || (assignment.HolderKind is PrivateObjectiveHolderKind.Player or PrivateObjectiveHolderKind.Traitor
+                        && assignment.HolderId != command.UserId)
                     || (assignment.HolderKind == PrivateObjectiveHolderKind.Faction && assignment.HolderId != membership?.FactionId)
                     || (assignment.HolderKind == PrivateObjectiveHolderKind.AllyGroup && assignment.HolderId != allyGroupId))
                 {
@@ -1583,7 +1656,9 @@ public sealed class ResolveItemObjectiveChoiceHandler
                         utcNow,
                         CampaignPlayCatalog.PickIndex,
                         out var next,
-                        out var error)
+                        out var error,
+                        CampaignPlayPipeline.ForceStatuses(campaign),
+                        CampaignPlayCatalog.SpecialRules(campaign))
                     || next is null)
                 {
                     return PlayMutation.Fail(error);

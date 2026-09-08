@@ -101,7 +101,8 @@ public sealed class CampaignForce
         Guid territoryId,
         bool inBattle,
         string? statusName = null,
-        string? subfaction = null)
+        string? subfaction = null,
+        int consecutiveWaterActions = 0)
     {
         Id = id;
         ControllerUserId = controllerUserId;
@@ -110,6 +111,7 @@ public sealed class CampaignForce
         InBattle = inBattle;
         StatusName = string.IsNullOrWhiteSpace(statusName) ? null : statusName.Trim();
         Subfaction = string.IsNullOrWhiteSpace(subfaction) ? null : subfaction.Trim();
+        ConsecutiveWaterActions = Math.Max(0, consecutiveWaterActions);
     }
 
     /// <summary>Gets the force identifier.</summary>
@@ -133,10 +135,17 @@ public sealed class CampaignForce
     /// <summary>Gets the chosen subfaction, when the controller picked one.</summary>
     public string? Subfaction { get; }
 
+    /// <summary>Gets how many consecutive resolved actions this force occupied a water-feature territory.</summary>
+    public int ConsecutiveWaterActions { get; }
+
     /// <summary>
-    /// Returns a copy with a new location or battle flag. Status and subfaction are preserved.
+    /// Returns a copy with a new location, battle flag, or water-occupation streak. Status and
+    /// subfaction are preserved.
     /// </summary>
-    public CampaignForce With(Guid? territoryId = null, bool? inBattle = null)
+    public CampaignForce With(
+        Guid? territoryId = null,
+        bool? inBattle = null,
+        int? consecutiveWaterActions = null)
     {
         return new CampaignForce(
             Id,
@@ -145,7 +154,8 @@ public sealed class CampaignForce
             territoryId ?? TerritoryId,
             inBattle ?? InBattle,
             StatusName,
-            Subfaction);
+            Subfaction,
+            consecutiveWaterActions ?? ConsecutiveWaterActions);
     }
 
     /// <summary>
@@ -153,7 +163,15 @@ public sealed class CampaignForce
     /// </summary>
     public CampaignForce WithStatus(string? statusName)
     {
-        return new CampaignForce(Id, ControllerUserId, FactionId, TerritoryId, InBattle, statusName, Subfaction);
+        return new CampaignForce(
+            Id,
+            ControllerUserId,
+            FactionId,
+            TerritoryId,
+            InBattle,
+            statusName,
+            Subfaction,
+            ConsecutiveWaterActions);
     }
 
     /// <summary>
@@ -161,7 +179,15 @@ public sealed class CampaignForce
     /// </summary>
     public CampaignForce WithFaction(Guid factionId, string? subfaction)
     {
-        return new CampaignForce(Id, ControllerUserId, factionId, TerritoryId, InBattle, StatusName, subfaction);
+        return new CampaignForce(
+            Id,
+            ControllerUserId,
+            factionId,
+            TerritoryId,
+            InBattle,
+            StatusName,
+            subfaction,
+            ConsecutiveWaterActions);
     }
 }
 
@@ -819,7 +845,8 @@ public sealed class ActionWindowSnapshot
         IReadOnlyList<TerritoryStructureState> structures,
         IReadOnlyList<Guid> brokenAllyFactionIds,
         IReadOnlyList<TerritorySnapshot> territories,
-        IReadOnlyList<CampaignItemObjective>? itemObjectives = null)
+        IReadOnlyList<CampaignItemObjective>? itemObjectives = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
         ArgumentNullException.ThrowIfNull(forces);
         ArgumentNullException.ThrowIfNull(structures);
@@ -831,6 +858,7 @@ public sealed class ActionWindowSnapshot
         BrokenAllyFactionIds = brokenAllyFactionIds;
         Territories = territories;
         ItemObjectives = itemObjectives ?? [];
+        AllyBetrayals = allyBetrayals ?? [];
     }
 
     /// <summary>Gets the action window.</summary>
@@ -850,4 +878,7 @@ public sealed class ActionWindowSnapshot
 
     /// <summary>Gets item objectives before resolution.</summary>
     public IReadOnlyList<CampaignItemObjective> ItemObjectives { get; }
+
+    /// <summary>Gets player-scoped betrayals before resolution.</summary>
+    public IReadOnlyList<AllyBetrayal> AllyBetrayals { get; }
 }

@@ -288,6 +288,30 @@ public sealed class InjectRingerBattleCommand
 }
 
 /// <summary>
+/// Command to assign a catalog force status or Normal.
+/// </summary>
+public sealed class SetForceStatusesCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets forces to change. Empty means every force.</summary>
+    public IReadOnlyList<Guid> ForceIds { get; init; } = [];
+
+    /// <summary>Gets the catalog status name, or Normal.</summary>
+    public string? StatusName { get; init; }
+}
+
+/// <summary>
 /// Command to choose a faction.
 /// </summary>
 public sealed class ChooseFactionCommand

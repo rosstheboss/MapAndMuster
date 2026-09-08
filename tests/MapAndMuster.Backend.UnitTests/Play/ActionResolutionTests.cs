@@ -12,6 +12,7 @@ public sealed class ActionResolutionTests
     private static readonly Guid Midland = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid PlayerOne = Guid.Parse("44444444-4444-4444-4444-444444444444");
     private static readonly Guid PlayerTwo = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    private static readonly Guid PlayerThree = Guid.Parse("77777777-7777-7777-7777-777777777777");
     private static readonly Guid TownId = Guid.Parse("dddddd01-dddd-dddd-dddd-dddddddddddd");
     private static readonly Guid CityId = Guid.Parse("dddddd02-dddd-dddd-dddd-dddddddddddd");
     private static readonly Guid FortId = Guid.Parse("dddddd03-dddd-dddd-dddd-dddddddddddd");
@@ -211,6 +212,18 @@ public sealed class ActionResolutionTests
     }
 
     [Fact]
+    public void SplitChildDoesNotInheritDiseased()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, NorthSpawn, false, "Diseased");
+        var resolved = Resolve(State(force, Submit(force.Id, ActionKind.Split, Midland)), Map());
+        var parent = Assert.Single(resolved.State.Forces, item => item.Id == force.Id);
+        var child = Assert.Single(resolved.State.Forces, item => item.Id != force.Id);
+        Assert.Equal("Diseased", parent.StatusName);
+        Assert.Null(child.StatusName);
+        Assert.Equal(0, child.ConsecutiveWaterActions);
+    }
+
+    [Fact]
     public void SamePlayerForcesRejoinIntoOneActionAndAreLogged()
     {
         var staying = new CampaignForce(Guid.Parse("77777777-7777-7777-7777-777777777777"), PlayerOne, North, Midland, false);
@@ -235,14 +248,175 @@ public sealed class ActionResolutionTests
     }
 
     [Fact]
-    public void BackstabBreaksTheAlliance()
+    public void RejoinBecomesDiseasedWhenEitherSplitIsDiseased()
+    {
+        var staying = new CampaignForce(
+            Guid.Parse("77777777-7777-7777-7777-777777777777"),
+            PlayerOne,
+            North,
+            Midland,
+            false,
+            "Shaken");
+        var moving = new CampaignForce(
+            Guid.Parse("88888888-8888-8888-8888-888888888888"),
+            PlayerOne,
+            North,
+            NorthSpawn,
+            false,
+            "Diseased");
+        var resolved = Resolve(
+            State(
+                [staying, moving],
+                [
+                    Submit(staying.Id, ActionKind.Hold),
+                    Submit(moving.Id, ActionKind.Move, Midland),
+                ]),
+            Map());
+
+        var survivor = Assert.Single(resolved.State.Forces);
+        Assert.Equal("Diseased", survivor.StatusName);
+    }
+
+    [Fact]
+    public void BackstabBreaksTheAllianceForTheTraitorOnly()
     {
         var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
         var resolved = Resolve(
             State(force, Submit(force.Id, ActionKind.Backstab)),
             Map(midlandOwner: South),
             AlliedGroups());
-        Assert.Contains(North, resolved.State.BrokenAllyFactionIds);
+        Assert.DoesNotContain(North, resolved.State.BrokenAllyFactionIds);
+        var betrayal = Assert.Single(resolved.State.AllyBetrayals);
+        Assert.Equal(PlayerOne, betrayal.TraitorUserId);
+        Assert.Equal(South, betrayal.BetrayedFactionId);
+        Assert.Null(betrayal.BetrayedSubfaction);
+        Assert.Null(betrayal.BetrayedUserId);
+        Assert.Contains(resolved.State.Log, item => item.Kind == PlayLogKind.AllianceBetrayed);
+    }
+
+    [Fact]
+    public void BackstabAgainstACoLocatedAllyRecordsTheVictimPlayer()
+    {
+        var north = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var south = new CampaignForce(Guid.NewGuid(), PlayerTwo, South, Midland, false);
+        var resolved = Resolve(
+            State(
+                [north, south],
+                [Submit(north.Id, ActionKind.Backstab), Submit(south.Id, ActionKind.Hold, actorUserId: PlayerTwo)]),
+            Map(midlandOwner: South),
+            AlliedGroups());
+        var betrayal = Assert.Single(resolved.State.AllyBetrayals);
+        Assert.Equal(PlayerTwo, betrayal.BetrayedUserId);
+        Assert.Single(resolved.State.Battles);
+    }
+
+    [Fact]
+    public void TwoCoLocatedPlayersOfTheSameFactionCountAsOneTraitorRelationship()
+    {
+        var north = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var southOne = new CampaignForce(Guid.NewGuid(), PlayerTwo, South, Midland, false);
+        var southTwo = new CampaignForce(Guid.NewGuid(), PlayerThree, South, Midland, false);
+        var resolved = Resolve(
+            State(
+                [north, southOne, southTwo],
+                [
+                    Submit(north.Id, ActionKind.Backstab),
+                    Submit(southOne.Id, ActionKind.Hold, actorUserId: PlayerTwo),
+                    Submit(southTwo.Id, ActionKind.Hold, actorUserId: PlayerThree),
+                ]),
+            Map(midlandOwner: South),
+            AlliedGroups());
+        Assert.Equal(2, resolved.State.AllyBetrayals.Count);
+        Assert.Equal(1, AllyBetrayalRules.DistinctRelationshipCount(resolved.State.AllyBetrayals, PlayerOne));
+        Assert.Contains(resolved.State.AllyBetrayals, item => item.BetrayedUserId == PlayerTwo);
+        Assert.Contains(resolved.State.AllyBetrayals, item => item.BetrayedUserId == PlayerThree);
+    }
+
+    [Fact]
+    public void OptionalSubfactionBackstabRecordsAWholeFactionBetrayal()
+    {
+        var north = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var south = new CampaignForce(
+            Guid.NewGuid(),
+            PlayerTwo,
+            South,
+            Midland,
+            false,
+            subfaction: "Errantry Crusade");
+        var resolved = Resolve(
+            State(
+                [north, south],
+                [Submit(north.Id, ActionKind.Backstab), Submit(south.Id, ActionKind.Hold, actorUserId: PlayerTwo)]),
+            Map(midlandOwner: South),
+            AlliedGroups());
+        var betrayal = Assert.Single(resolved.State.AllyBetrayals);
+        Assert.Null(betrayal.BetrayedSubfaction);
+        Assert.Equal(South, betrayal.BetrayedFactionId);
+    }
+
+    [Fact]
+    public void RequiredSubfactionBackstabLeavesOtherGodsAllied()
+    {
+        var north = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var khorne = new CampaignForce(
+            Guid.NewGuid(),
+            PlayerTwo,
+            South,
+            Midland,
+            false,
+            subfaction: "Khorne");
+        var tzeentch = new CampaignForce(
+            Guid.NewGuid(),
+            PlayerThree,
+            South,
+            SouthSpawn,
+            false,
+            subfaction: "Tzeentch");
+        var rules = new SpecialRuleContext(
+            [],
+            new Dictionary<Guid, IReadOnlyList<Guid>>(),
+            new Dictionary<(Guid, string), IReadOnlyList<Guid>>(),
+            new HashSet<Guid> { South });
+        var resolved = Resolve(
+            State(
+                [north, khorne, tzeentch],
+                [
+                    Submit(north.Id, ActionKind.Backstab),
+                    Submit(khorne.Id, ActionKind.Hold, actorUserId: PlayerTwo),
+                    Submit(tzeentch.Id, ActionKind.Hold, actorUserId: PlayerThree),
+                ]),
+            Map(midlandOwner: South),
+            AlliedGroups(),
+            rules);
+        var betrayal = Assert.Single(resolved.State.AllyBetrayals);
+        Assert.Equal("Khorne", betrayal.BetrayedSubfaction);
+        var traitor = resolved.State.Forces.Single(item => item.ControllerUserId == PlayerOne);
+        var khorneForce = resolved.State.Forces.Single(item => item.ControllerUserId == PlayerTwo);
+        var tzeentchForce = resolved.State.Forces.Single(item => item.ControllerUserId == PlayerThree);
+        Assert.True(FactionSpecialRulePolicies.AreEnemies(
+            traitor,
+            khorneForce,
+            AlliedGroups(),
+            [],
+            [],
+            rules,
+            resolved.State.AllyBetrayals));
+        Assert.False(FactionSpecialRulePolicies.AreEnemies(
+            traitor,
+            tzeentchForce,
+            AlliedGroups(),
+            [],
+            [],
+            rules,
+            resolved.State.AllyBetrayals));
+        Assert.True(FactionSpecialRulePolicies.AreAllies(
+            traitor,
+            tzeentchForce,
+            AlliedGroups(),
+            [],
+            [],
+            rules,
+            resolved.State.AllyBetrayals));
     }
 
     [Fact]
@@ -318,9 +492,16 @@ public sealed class ActionResolutionTests
     private static (CampaignPlayState State, PlayMap Map) Resolve(
         CampaignPlayState state,
         PlayMap map,
-        IReadOnlyDictionary<Guid, string?>? allyGroups = null)
+        IReadOnlyDictionary<Guid, string?>? allyGroups = null,
+        SpecialRuleContext? specialRules = null)
     {
-        return ActionResolution.Resolve(state, map, OpenAction(), allyGroups ?? UnalignedGroups(), Now);
+        return ActionResolution.Resolve(
+            state,
+            map,
+            OpenAction(),
+            allyGroups ?? UnalignedGroups(),
+            Now,
+            specialRules: specialRules);
     }
 
     private static CampaignPlayState State(CampaignForce force, params OrderSubmission[] submissions)
