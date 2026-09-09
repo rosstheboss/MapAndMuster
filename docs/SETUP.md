@@ -3,7 +3,8 @@
 ## Prerequisites
 
 - .NET 10 SDK matching `global.json`.
-- Node 24.19.0, pinned in `.nvmrc` and `src/MapAndMuster.Web/.nvmrc`.
+- Node 26.8.1, pinned in `.nvmrc` and `src/MapAndMuster.Web/.nvmrc`. Angular 22 supports Node 26.
+  Vitest setup replaces Node's experimental `localStorage` stub so jsdom can store map preferences in tests.
 - Docker-compatible container runtime for PostgreSQL integration tests and local services.
 - Visual Studio Community/Professional with web tooling, Visual Studio Code, or Cursor.
 

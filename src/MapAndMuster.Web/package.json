@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "packageManager": "npm@11.12.1",
+  "engines": {
+    "node": "^26.8.1"
+  },
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
