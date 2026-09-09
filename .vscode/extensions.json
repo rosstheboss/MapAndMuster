@@ -5,6 +5,7 @@
     "esbenp.prettier-vscode",
     "ms-dotnettools.csdevkit",
     "ms-dotnettools.csharp",
-    "stylelint.vscode-stylelint"
+    "stylelint.vscode-stylelint",
+    "davidanson.vscode-markdownlint"
   ]
 }
