@@ -36,7 +36,7 @@ Backend package versions are centrally managed in `Directory.Packages.props`.
 
 ## Frontend quality tools
 
-`src/MapAndMuster.Web` uses Angular ESLint, Prettier, Stylelint, and Vitest. Scripts from `config/package-scripts.json` are merged into `src/MapAndMuster.Web/package.json`. ESLint and Stylelint configuration is copied from `config/` into the Angular root. Package versions are pinned in `package-lock.json`.
+`src/MapAndMuster.Web` uses Angular ESLint, Prettier, Stylelint, and Vitest. Scripts from `config/package-scripts.json` are merged into `src/MapAndMuster.Web/package.json`. ESLint and Stylelint configuration is copied from `config/` into the Angular root. Package versions are pinned in `package-lock.json`. Transitive nightly-audit patches are pinned with `overrides` in `src/MapAndMuster.Web/package.json`.
 
 ## Local services
 
