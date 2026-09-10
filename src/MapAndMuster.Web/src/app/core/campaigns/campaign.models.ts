@@ -1,3 +1,7 @@
+import type { ForceStatusCondition } from './force-status-presets';
+
+export type { ForceStatusCondition };
+
 export interface CampaignListItem {
   id: string;
   name: string;
@@ -277,8 +281,14 @@ export interface CampaignForceStatus {
   id: string;
   name: string;
   effects: string;
-  enableTrigger: string;
-  clearTrigger: string;
+  enableTrigger?: string;
+  clearTrigger?: string;
+  enableOccurrences?: number;
+  clearOccurrences?: number;
+  enableConditions?: ForceStatusCondition[];
+  clearConditions?: ForceStatusCondition[];
+  priority?: number;
+  cancelsStatusIds?: string[];
 }
 
 export interface CampaignPrivateObjectiveType {
@@ -550,8 +560,14 @@ export interface SaveForceStatusPayload {
   id?: string;
   name: string;
   effects?: string | null;
-  enableTrigger: string;
-  clearTrigger: string;
+  enableConditions: ForceStatusCondition[];
+  clearConditions: ForceStatusCondition[];
+  enableTrigger?: string;
+  clearTrigger?: string;
+  enableOccurrences?: number;
+  clearOccurrences?: number;
+  priority: number;
+  cancelsStatusIds?: string[];
 }
 
 export interface SavePrivateObjectiveTypePayload {

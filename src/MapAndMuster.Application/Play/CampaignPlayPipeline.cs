@@ -320,19 +320,7 @@ internal static class CampaignPlayPipeline
     public static IReadOnlyList<ForceStatusSetup> ForceStatuses(StoredCampaign campaign)
     {
         ArgumentNullException.ThrowIfNull(campaign);
-        return
-        [
-            .. campaign.ForceStatuses
-                .Where(static status =>
-                    Enum.TryParse<ForceStatusEnableTrigger>(status.EnableTrigger, true, out _)
-                    && Enum.TryParse<ForceStatusClearTrigger>(status.ClearTrigger, true, out _))
-                .Select(static status => new ForceStatusSetup(
-                    status.Id,
-                    status.Name,
-                    status.Effects,
-                    Enum.Parse<ForceStatusEnableTrigger>(status.EnableTrigger, true),
-                    Enum.Parse<ForceStatusClearTrigger>(status.ClearTrigger, true))),
-        ];
+        return CatalogFileBinder.ToForceStatusSetups(campaign.ForceStatuses);
     }
 
     public static StoredCampaign Clone(

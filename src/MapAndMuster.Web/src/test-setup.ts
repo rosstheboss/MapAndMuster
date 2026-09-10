@@ -1,5 +1,14 @@
 // Node 26 enables an experimental Web Storage global that is undefined unless
 // --localstorage-file is set. That stub shadows jsdom's localStorage and breaks tests.
+function isUsableStorage(value: unknown): value is Storage {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const storage = value as Storage;
+  return typeof storage.getItem === 'function' && typeof storage.removeItem === 'function';
+}
+
 function createMemoryStorage(): Storage {
   const store = new Map<string, string>();
   return {
@@ -24,8 +33,7 @@ function createMemoryStorage(): Storage {
   };
 }
 
-const existing = globalThis.localStorage;
-if (typeof existing?.getItem !== 'function' || typeof existing.removeItem !== 'function') {
+if (!isUsableStorage(globalThis.localStorage)) {
   const memory = createMemoryStorage();
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,

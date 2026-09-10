@@ -99,8 +99,10 @@ Modules may initially share a database and process. Keep public module interacti
   file cleanup does not delete them while a preset still uses them.
 - Administrators may download a campaign or named preset as a `.mapandmuster-preset` ZIP (manifest,
   catalog, settings, overlay JSON, a visual overlay SVG, map image, and referenced catalog files) and
-  upload that ZIP into the named-preset library on another host. Import re-processes files and remaps
-  storage keys. Overlay SVG in the package is a visual export only; import applies overlay JSON, never
+  upload that ZIP into the named-preset library on another host. Import remaps storage keys. A package
+  whose collapsed name matches an existing named preset overwrites that row; identical map, overlay,
+  and catalog files keep their existing keys, and only changed files are re-processed and stored.
+  Overlay SVG in the package is a visual export only; import applies overlay JSON, never
   active SVG. The import endpoint accepts packages up to 64 MB. User map uploads stay at 20 MB; a stored
   PNG can exceed that after re-encoding, and import re-processes that stored map up to the package cap.
   Other requests keep the 24 MB Kestrel/form limit.

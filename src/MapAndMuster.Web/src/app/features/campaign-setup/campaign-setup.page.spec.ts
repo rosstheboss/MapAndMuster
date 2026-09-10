@@ -603,6 +603,41 @@ describe('CampaignSetupPage', () => {
       'Ambushing rolls',
     );
     expect(compiled.querySelector<HTMLInputElement>('#force-status-name-0')?.value).toBe('Diseased');
+    expect(compiled.querySelector<HTMLInputElement>('#force-status-priority-0')?.value).toBe('0');
+    expect(compiled.querySelector<HTMLInputElement>('#force-status-priority-3')?.value).toBe('3');
+    expect(compiled.querySelector<HTMLInputElement>('#force-status-enable-count-0')?.value).toBe('1');
+    expect(compiled.querySelector<HTMLInputElement>('#force-status-clear-count-0')?.value).toBe('1');
+    expect(compiled.querySelector('#force-status-enable-list-0')?.textContent).toContain(
+      'Named Diseased engine (water, contagion, rejoin)',
+    );
+    expect(compiled.querySelector('#force-status-clear-list-0')?.textContent).toContain(
+      'After Hold at a Capital City, City, Supply Depot, or Town',
+    );
+    expect(
+      compiled.querySelector(
+        '[aria-label="Remove Named Diseased engine (water, contagion, rejoin) from enable conditions"]',
+      ),
+    ).toBeTruthy();
+    const forceStatuses = (
+      fixture.componentInstance as unknown as {
+        forceStatuses: {
+          controls: readonly {
+            controls: {
+              name: { value: string };
+              priority: { value: number };
+              cancelsStatusIds: { value: string[] };
+              id: { value: string };
+            };
+          }[];
+        };
+      }
+    ).forceStatuses;
+    expect(forceStatuses.controls.map((status) => status.controls.priority.value)).toEqual([0, 1, 2, 3, 4]);
+    const exhausted = forceStatuses.controls.find((status) => status.controls.name.value === 'Exhausted');
+    const wellRested = forceStatuses.controls.find((status) => status.controls.name.value === 'Well Rested');
+    expect(exhausted?.controls.cancelsStatusIds.value).toEqual([wellRested?.controls.id.value]);
+    expect(compiled.querySelector('#force-status-cancel-pick-3')).toBeTruthy();
+    expect(compiled.querySelector('[aria-label="Remove Well Rested from cancel out"]')).toBeTruthy();
     expect(compiled.querySelector('#forceStatusPreset')).toBeTruthy();
     expect(compiled.querySelector('#specialRulePreset')).toBeTruthy();
     expect(
@@ -664,6 +699,51 @@ describe('CampaignSetupPage', () => {
     fixture.detectChanges();
     expect(compiled.querySelector('#ally-group-color-0')).toBeTruthy();
     TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('adds and removes cancel-out statuses from a dropdown list', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      campaignPresetId: { setValue: (value: string) => void };
+      applySelectedCampaignPreset: () => void;
+      forceStatuses: {
+        controls: readonly {
+          controls: {
+            name: { value: string };
+            id: { value: string };
+            cancelsStatusIds: { value: string[] };
+          };
+        }[];
+      };
+    };
+    page.campaignPresetId.setValue(HUNT_IN_ESTALIA_CAMPAIGN_PRESET_ID);
+    page.applySelectedCampaignPreset();
+    fixture.detectChanges();
+
+    const exhausted = page.forceStatuses.controls.find((status) => status.controls.name.value === 'Exhausted');
+    const shaken = page.forceStatuses.controls.find((status) => status.controls.name.value === 'Shaken');
+    const wellRested = page.forceStatuses.controls.find((status) => status.controls.name.value === 'Well Rested');
+    expect(exhausted).toBeTruthy();
+    expect(shaken).toBeTruthy();
+    expect(wellRested).toBeTruthy();
+    expect(compiled.querySelector('[aria-label="Remove Well Rested from cancel out"]')).toBeTruthy();
+
+    setSelectValue(compiled.querySelector('#force-status-cancel-pick-3'), shaken!.controls.id.value);
+    fixture.detectChanges();
+    expect(exhausted!.controls.cancelsStatusIds.value).toEqual([
+      wellRested!.controls.id.value,
+      shaken!.controls.id.value,
+    ]);
+    expect(compiled.querySelector('[aria-label="Remove Shaken from cancel out"]')).toBeTruthy();
+
+    compiled.querySelector<HTMLButtonElement>('[aria-label="Remove Well Rested from cancel out"]')?.click();
+    fixture.detectChanges();
+    expect(exhausted!.controls.cancelsStatusIds.value).toEqual([shaken!.controls.id.value]);
+    expect(compiled.querySelector('[aria-label="Remove Well Rested from cancel out"]')).toBeNull();
   });
 
   it('keeps factions in an ally group after the group is renamed', async () => {
@@ -1057,6 +1137,114 @@ describe('CampaignSetupPage', () => {
       '/api/campaign-presets/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/factions/preset-north/flag',
     );
     http.verify();
+  });
+
+  it('defaults a new force status to the lowest unused priority and reverts duplicate edits', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      applyStandardForceStatuses: () => void;
+      addForceStatus: () => void;
+      rememberForceStatusPriority: (index: number) => void;
+      commitForceStatusPriority: (index: number) => void;
+      forceStatuses: {
+        at: (index: number) => {
+          controls: {
+            priority: { value: number; setValue: (value: number) => void };
+            enableConditions: {
+              length: number;
+              at: (index: number) => { controls: { occurrences: { value: number } } };
+            };
+            clearConditions: {
+              length: number;
+              at: (index: number) => { controls: { occurrences: { value: number } } };
+            };
+          };
+        };
+      };
+    };
+
+    page.applyStandardForceStatuses();
+    page.addForceStatus();
+    fixture.detectChanges();
+    expect(page.forceStatuses.at(0).controls.enableConditions.at(0).controls.occurrences.value).toBe(1);
+    expect(page.forceStatuses.at(0).controls.clearConditions.at(0).controls.occurrences.value).toBe(1);
+    expect(page.forceStatuses.at(5).controls.priority.value).toBe(5);
+    expect(page.forceStatuses.at(5).controls.enableConditions.length).toBe(0);
+    expect(page.forceStatuses.at(5).controls.clearConditions.length).toBe(0);
+    expect(compiled.querySelector('#force-status-enable-list-0')).toBeTruthy();
+    expect(compiled.querySelector('#force-status-enable-count-0')).toBeTruthy();
+
+    page.rememberForceStatusPriority(5);
+    page.forceStatuses.at(5).controls.priority.setValue(0);
+    page.commitForceStatusPriority(5);
+    expect(page.forceStatuses.at(5).controls.priority.value).toBe(5);
+
+    page.rememberForceStatusPriority(5);
+    page.forceStatuses.at(5).controls.priority.setValue(6);
+    page.commitForceStatusPriority(5);
+    expect(page.forceStatuses.at(5).controls.priority.value).toBe(6);
+    expect(compiled.querySelector('#force-status-priority-5')).toBeTruthy();
+  });
+
+  it('adds and removes enable and clear conditions and blocks save when a list is empty', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    interface StatusGroup {
+      controls: {
+        name: { setValue: (value: string) => void };
+        enablePick: { setValue: (value: string) => void };
+        enablePickOccurrences: { setValue: (value: number) => void };
+        enableConditions: {
+          length: number;
+          at: (index: number) => { controls: { trigger: { value: string }; occurrences: { value: number } } };
+        };
+        clearPick: { setValue: (value: string) => void };
+        clearConditions: { length: number };
+      };
+    }
+    const page = fixture.componentInstance as unknown as {
+      addForceStatus: () => void;
+      addForceStatusEnableCondition: (status: StatusGroup) => void;
+      addForceStatusClearCondition: (status: StatusGroup) => void;
+      forceStatuses: { at: (index: number) => StatusGroup };
+      save: () => Promise<void>;
+    };
+
+    page.addForceStatus();
+    const status = page.forceStatuses.at(0);
+    status.controls.name.setValue('Custom');
+    fixture.detectChanges();
+    await page.save();
+    fixture.detectChanges();
+    let lines = [...compiled.querySelectorAll('.error-banner p')].map((node) => node.textContent.trim());
+    expect(lines).toContain('Force status 1 needs at least one enable condition.');
+    expect(lines).toContain('Force status 1 needs at least one clear condition.');
+
+    status.controls.enablePick.setValue('Hold');
+    status.controls.enablePickOccurrences.setValue(2);
+    page.addForceStatusEnableCondition(status);
+    status.controls.clearPick.setValue('BattleWon');
+    page.addForceStatusClearCondition(status);
+    fixture.detectChanges();
+    expect(status.controls.enableConditions.length).toBe(1);
+    expect(status.controls.enableConditions.at(0).controls.trigger.value).toBe('Hold');
+    expect(status.controls.enableConditions.at(0).controls.occurrences.value).toBe(2);
+    expect(compiled.querySelector('#force-status-enable-list-0')?.textContent).toContain('After Hold');
+    expect(compiled.querySelector('#force-status-clear-list-0')?.textContent).toContain('After winning a battle');
+
+    compiled.querySelector<HTMLButtonElement>('[aria-label="Remove After Hold from enable conditions"]')!.click();
+    fixture.detectChanges();
+    expect(status.controls.enableConditions.length).toBe(0);
+    await page.save();
+    fixture.detectChanges();
+    lines = [...compiled.querySelectorAll('.error-banner p')].map((node) => node.textContent.trim());
+    expect(lines).toContain('Force status 1 needs at least one enable condition.');
+    expect(lines).not.toContain('Force status 1 needs at least one clear condition.');
   });
 });
 

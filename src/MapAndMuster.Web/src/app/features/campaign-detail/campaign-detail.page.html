@@ -2134,8 +2134,10 @@
                       >
                         @for (force of assignableForces(); track force.id) {
                           <option [value]="force.id">
-                            {{ force.controllerUsername || 'Force' }} · {{ factionName(force.factionId) }} ·
-                            {{ force.statusName || 'Normal' }}
+                            {{ force.controllerUsername || 'Force' }} · {{ factionName(force.factionId) }}
+                            @if (force.statusName) {
+                              · {{ force.statusName }}
+                            }
                           </option>
                         }
                       </select>
@@ -2149,7 +2151,7 @@
                       (ngModelChange)="forceStatusName.set($event)"
                       name="forceStatusName"
                     >
-                      <option value="Normal">Normal</option>
+                      <option value="Normal">No status</option>
                       @for (name of catalogStatusNames(); track name) {
                         <option [value]="name">{{ name }}</option>
                       }

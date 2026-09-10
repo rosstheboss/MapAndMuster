@@ -1676,6 +1676,10 @@ public sealed class CampaignSetupRulesTests
         Assert.Equal("Shaken", status.Name);
         Assert.Equal(ForceStatusEnableTrigger.BattleLostOrRetreat, status.EnableTrigger);
         Assert.Equal(ForceStatusClearTrigger.Hold, status.ClearTrigger);
+        Assert.Equal(0, status.Priority);
+        Assert.Empty(status.CancelsStatusIds);
+        Assert.Equal(1, status.EnableOccurrences);
+        Assert.Equal(1, status.ClearOccurrences);
 
         Assert.False(CampaignSetupRules.TryCreate(
             "Border War",
@@ -1706,6 +1710,359 @@ public sealed class CampaignSetupRulesTests
                 },
             ]));
         Assert.Contains(rejected, error => error.Code == "forceStatuses.normal");
+    }
+
+    [Fact]
+    public void AssignsUniqueForceStatusPrioritiesAndRejectsDuplicates()
+    {
+        var shakenId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
+        var confidentId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2");
+        var exhaustedId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3");
+        var restedId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4");
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out var setup,
+            out _,
+            out var errors,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Id = shakenId,
+                    Name = "Shaken",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                    Priority = 0,
+                },
+                new ForceStatusInput
+                {
+                    Id = confidentId,
+                    Name = "Confident",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleWon),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.BattleLostOrRetreat),
+                    Priority = 1,
+                },
+                new ForceStatusInput
+                {
+                    Id = exhaustedId,
+                    Name = "Exhausted",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.AfterBattle),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                    CancelsStatusIds = [restedId],
+                },
+                new ForceStatusInput
+                {
+                    Id = restedId,
+                    Name = "Well Rested",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.Hold),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.AfterMoveOrBattle),
+                    Priority = 5,
+                },
+            ]);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.Collection(
+            setup!.ForceStatuses,
+            status => Assert.Equal(0, status.Priority),
+            status => Assert.Equal(1, status.Priority),
+            status => Assert.Equal(2, status.Priority),
+            status => Assert.Equal(5, status.Priority));
+        var exhausted = Assert.Single(setup.ForceStatuses, status => status.Name == "Exhausted");
+        Assert.Equal(restedId, Assert.Single(exhausted.CancelsStatusIds));
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var duplicate,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                    Priority = 1,
+                },
+                new ForceStatusInput
+                {
+                    Name = "Confident",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleWon),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.BattleLostOrRetreat),
+                    Priority = 1,
+                },
+            ]));
+        Assert.Contains(duplicate, error => error.Code == "forceStatuses.priority.duplicate");
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var invalid,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                    Priority = 1000,
+                },
+            ]));
+        Assert.Contains(invalid, error => error.Code == "forceStatuses.priority.invalid");
+    }
+
+    [Fact]
+    public void AcceptsForceStatusOccurrencesAndRejectsOutOfRange()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out var setup,
+            out _,
+            out var errors,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                    EnableOccurrences = 2,
+                    ClearOccurrences = 3,
+                },
+            ]);
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        var status = Assert.Single(setup!.ForceStatuses);
+        Assert.Equal(2, status.EnableOccurrences);
+        Assert.Equal(3, status.ClearOccurrences);
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var zero,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                    EnableOccurrences = 0,
+                },
+            ]));
+        Assert.Contains(zero, error => error.Code == "forceStatuses.enableOccurrences.invalid");
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var tooHigh,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                    ClearOccurrences = 11,
+                },
+            ]));
+        Assert.Contains(tooHigh, error => error.Code == "forceStatuses.clearOccurrences.invalid");
+    }
+
+    [Fact]
+    public void AcceptsMultipleForceStatusConditionsAndRejectsAnEmptyList()
+    {
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out var setup,
+            out _,
+            out var errors,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    EnableConditions =
+                    [
+                        new ForceStatusConditionInput
+                        {
+                            Trigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                            Occurrences = 2,
+                        },
+                        new ForceStatusConditionInput
+                        {
+                            Trigger = nameof(ForceStatusEnableTrigger.Hold),
+                            Occurrences = 1,
+                        },
+                    ],
+                    ClearConditions =
+                    [
+                        new ForceStatusConditionInput { Trigger = nameof(ForceStatusClearTrigger.Hold) },
+                        new ForceStatusConditionInput { Trigger = nameof(ForceStatusClearTrigger.BattleWon) },
+                    ],
+                },
+            ]);
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        var status = Assert.Single(setup!.ForceStatuses);
+        Assert.Equal(2, status.EnableConditions.Count);
+        Assert.Equal(2, status.ClearConditions.Count);
+        Assert.Equal(ForceStatusEnableTrigger.BattleLostOrRetreat, status.EnableConditions[0].Trigger);
+        Assert.Equal(2, status.EnableConditions[0].Occurrences);
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var missing,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    EnableConditions = [],
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                },
+            ]));
+        Assert.Contains(missing, error => error.Code == "forceStatuses.enable.required");
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var duplicate,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    EnableConditions =
+                    [
+                        new ForceStatusConditionInput { Trigger = nameof(ForceStatusEnableTrigger.Hold) },
+                        new ForceStatusConditionInput { Trigger = nameof(ForceStatusEnableTrigger.Hold) },
+                    ],
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                },
+            ]));
+        Assert.Contains(duplicate, error => error.Code == "forceStatuses.enable.duplicate");
     }
 
     [Fact]

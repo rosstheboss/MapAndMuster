@@ -102,7 +102,10 @@ public sealed class CampaignForce
         bool inBattle,
         string? statusName = null,
         string? subfaction = null,
-        int consecutiveWaterActions = 0)
+        int consecutiveWaterActions = 0,
+        IReadOnlyDictionary<string, int>? enableStreaks = null,
+        IReadOnlyDictionary<string, int>? clearStreaks = null,
+        int clearStreak = 0)
     {
         Id = id;
         ControllerUserId = controllerUserId;
@@ -112,6 +115,9 @@ public sealed class CampaignForce
         StatusName = string.IsNullOrWhiteSpace(statusName) ? null : statusName.Trim();
         Subfaction = string.IsNullOrWhiteSpace(subfaction) ? null : subfaction.Trim();
         ConsecutiveWaterActions = Math.Max(0, consecutiveWaterActions);
+        EnableStreaks = NormalizeStreaks(enableStreaks);
+        ClearStreaks = NormalizeStreaks(clearStreaks);
+        ClearStreak = Math.Clamp(clearStreak, 0, 10);
     }
 
     /// <summary>Gets the force identifier.</summary>
@@ -139,13 +145,31 @@ public sealed class CampaignForce
     public int ConsecutiveWaterActions { get; }
 
     /// <summary>
-    /// Returns a copy with a new location, battle flag, or water-occupation streak. Status and
-    /// subfaction are preserved.
+    /// Gets consecutive enable-trigger matches keyed by status id and trigger.
+    /// </summary>
+    public IReadOnlyDictionary<string, int> EnableStreaks { get; }
+
+    /// <summary>
+    /// Gets consecutive clear-trigger matches for the current status.
+    /// </summary>
+    public IReadOnlyDictionary<string, int> ClearStreaks { get; }
+
+    /// <summary>
+    /// Gets a legacy single clear-streak count used when play state predates per-trigger keys.
+    /// </summary>
+    public int ClearStreak { get; }
+
+    /// <summary>
+    /// Returns a copy with a new location, battle flag, water-occupation streak, or trigger streaks.
+    /// Status and subfaction are preserved.
     /// </summary>
     public CampaignForce With(
         Guid? territoryId = null,
         bool? inBattle = null,
-        int? consecutiveWaterActions = null)
+        int? consecutiveWaterActions = null,
+        IReadOnlyDictionary<string, int>? enableStreaks = null,
+        IReadOnlyDictionary<string, int>? clearStreaks = null,
+        int? clearStreak = null)
     {
         return new CampaignForce(
             Id,
@@ -155,23 +179,31 @@ public sealed class CampaignForce
             inBattle ?? InBattle,
             StatusName,
             Subfaction,
-            consecutiveWaterActions ?? ConsecutiveWaterActions);
+            consecutiveWaterActions ?? ConsecutiveWaterActions,
+            enableStreaks ?? EnableStreaks,
+            clearStreaks ?? ClearStreaks,
+            clearStreak ?? ClearStreak);
     }
 
     /// <summary>
-    /// Returns a copy with a replacement status. Null is Normal.
+    /// Returns a copy with a replacement status. Null is Normal. Changing status resets the clear streak.
     /// </summary>
     public CampaignForce WithStatus(string? statusName)
     {
+        var next = string.IsNullOrWhiteSpace(statusName) ? null : statusName.Trim();
+        var same = string.Equals(next, StatusName, StringComparison.Ordinal);
         return new CampaignForce(
             Id,
             ControllerUserId,
             FactionId,
             TerritoryId,
             InBattle,
-            statusName,
+            next,
             Subfaction,
-            ConsecutiveWaterActions);
+            ConsecutiveWaterActions,
+            EnableStreaks,
+            same ? ClearStreaks : new Dictionary<string, int>(),
+            same ? ClearStreak : 0);
     }
 
     /// <summary>
@@ -187,7 +219,22 @@ public sealed class CampaignForce
             InBattle,
             StatusName,
             subfaction,
-            ConsecutiveWaterActions);
+            ConsecutiveWaterActions,
+            EnableStreaks,
+            ClearStreaks,
+            ClearStreak);
+    }
+
+    private static Dictionary<string, int> NormalizeStreaks(IReadOnlyDictionary<string, int>? streaks)
+    {
+        if (streaks is null || streaks.Count == 0)
+        {
+            return new Dictionary<string, int>(StringComparer.Ordinal);
+        }
+
+        return streaks
+            .Where(static pair => !string.IsNullOrWhiteSpace(pair.Key) && pair.Value > 0)
+            .ToDictionary(static pair => pair.Key, static pair => Math.Min(pair.Value, 10), StringComparer.Ordinal);
     }
 }
 

@@ -195,11 +195,22 @@ public sealed class ImportCampaignPresetHandler
                 $"Preset name must be {CampaignSetupRules.NameMinLength} to {CampaignSetupRules.NameMaxLength} characters.");
         }
 
+        var existing = await FindExistingByNameAsync(name, cancellationToken).ConfigureAwait(false);
+        var existingFiles = existing is null
+            ? []
+            : await LoadExistingFilesAsync(existing, cancellationToken).ConfigureAwait(false);
         var keyMap = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (oldKey, bytes) in unpacked.Value.Files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var stored = await StoreFileAsync(oldKey, bytes, cancellationToken).ConfigureAwait(false);
+            var reused = FindReusableKey(oldKey, bytes, existingFiles);
+            if (reused is not null)
+            {
+                keyMap[oldKey] = reused;
+                continue;
+            }
+
+            var stored = await StoreFileAsync(oldKey, bytes, existingFiles, cancellationToken).ConfigureAwait(false);
             if (!stored.IsSuccess || stored.Value is null)
             {
                 return OperationResults.Failure<CampaignPresetListItem>(
@@ -217,9 +228,72 @@ public sealed class ImportCampaignPresetHandler
         return OperationResults.Success(saved);
     }
 
+    private async Task<StoredCampaign?> FindExistingByNameAsync(string name, CancellationToken cancellationToken)
+    {
+        var key = CampaignSetupRules.UniqueNameKey(name);
+        var listed = await _presets.ListAsync(cancellationToken).ConfigureAwait(false);
+        var match = listed.FirstOrDefault(item => CampaignSetupRules.UniqueNameKey(item.Name) == key);
+        return match is null
+            ? null
+            : await _presets.FindByIdAsync(match.Id, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<(string Key, byte[] Bytes)>> LoadExistingFilesAsync(
+        StoredCampaign existing,
+        CancellationToken cancellationToken)
+    {
+        var files = new List<(string Key, byte[] Bytes)>();
+        foreach (var key in CatalogFileBinder.CollectCampaignStorageKeys(existing).Distinct(StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            byte[]? bytes = null;
+            if (key.StartsWith("maps/", StringComparison.Ordinal))
+            {
+                var map = await _maps.OpenReadAsync(key, cancellationToken).ConfigureAwait(false);
+                bytes = map?.Content;
+            }
+            else
+            {
+                var asset = await _assets.OpenReadAsync(key, cancellationToken).ConfigureAwait(false);
+                bytes = asset?.Content;
+            }
+
+            if (bytes is { Length: > 0 })
+            {
+                files.Add((key, bytes));
+            }
+        }
+
+        return files;
+    }
+
+    private static string? FindReusableKey(
+        string oldKey,
+        byte[] bytes,
+        IReadOnlyList<(string Key, byte[] Bytes)> existingFiles)
+    {
+        if (!CatalogFileBinder.IsUserUploadedFileKey(oldKey) || bytes.Length == 0)
+        {
+            return null;
+        }
+
+        var slash = oldKey.IndexOf('/', StringComparison.Ordinal);
+        var prefix = oldKey[..(slash + 1)];
+        foreach (var (key, stored) in existingFiles)
+        {
+            if (key.StartsWith(prefix, StringComparison.Ordinal) && stored.AsSpan().SequenceEqual(bytes))
+            {
+                return key;
+            }
+        }
+
+        return null;
+    }
+
     private async Task<OperationResult<string>> StoreFileAsync(
         string oldKey,
         byte[] bytes,
+        IReadOnlyList<(string Key, byte[] Bytes)> existingFiles,
         CancellationToken cancellationToken)
     {
         if (!CatalogFileBinder.IsUserUploadedFileKey(oldKey))
@@ -245,6 +319,12 @@ public sealed class ImportCampaignPresetHandler
                     processed.Message ?? "A mission document in the campaign preset is not valid.");
             }
 
+            var reusedDocument = FindReusableKey(oldKey, processed.Content, existingFiles);
+            if (reusedDocument is not null)
+            {
+                return OperationResults.Success(reusedDocument);
+            }
+
             var key = await _assets
                 .SaveAsync(folder, processed.Content, processed.FileExtension, processed.ContentType, cancellationToken)
                 .ConfigureAwait(false);
@@ -266,6 +346,12 @@ public sealed class ImportCampaignPresetHandler
                 return OperationResults.Failure<string>(
                     processed.ErrorCode ?? ErrorCodes.UploadInvalidImage,
                     processed.Message ?? "An image in the campaign preset is not valid.");
+            }
+
+            var reusedImage = FindReusableKey(oldKey, processed.Content, existingFiles);
+            if (reusedImage is not null)
+            {
+                return OperationResults.Success(reusedImage);
             }
 
             if (isMap)

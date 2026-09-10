@@ -1188,6 +1188,18 @@ public static class PlayResponses
                     Effects = status.Effects,
                     EnableTrigger = status.EnableTrigger,
                     ClearTrigger = status.ClearTrigger,
+                    EnableConditions = CampaignResponses.ConditionResponses(
+                        status.EnableConditions,
+                        status.EnableTrigger,
+                        status.EnableOccurrences),
+                    ClearConditions = CampaignResponses.ConditionResponses(
+                        status.ClearConditions,
+                        status.ClearTrigger,
+                        status.ClearOccurrences),
+                    Priority = status.Priority,
+                    CancelsStatusIds = status.CancelsStatusIds,
+                    EnableOccurrences = status.EnableOccurrences,
+                    ClearOccurrences = status.ClearOccurrences,
                 }),
             ],
             PointsPerBattleWon = detail.PointsPerBattleWon,

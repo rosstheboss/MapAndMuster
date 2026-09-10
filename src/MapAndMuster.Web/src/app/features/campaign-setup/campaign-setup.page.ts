@@ -36,7 +36,16 @@ import {
 import {
   FORCE_STATUS_CLEAR_OPTIONS,
   FORCE_STATUS_ENABLE_OPTIONS,
+  FORCE_STATUS_OCCURRENCES_MAX,
+  FORCE_STATUS_OCCURRENCES_MIN,
+  FORCE_STATUS_PRIORITY_MAX,
+  FORCE_STATUS_PRIORITY_MIN,
+  committedForceStatusPriority,
+  forceStatusClearConditions,
+  forceStatusEnableConditions,
   forceStatusesFromStandardPreset,
+  nextForceStatusPriority,
+  normalizeForceStatusOccurrences,
   STANDARD_FORCE_STATUSES,
 } from '../../core/campaigns/force-status-presets';
 import { OLD_WORLD_SPECIAL_RULES, type SpecialRulePreset } from '../../core/campaigns/special-rule-presets';
@@ -214,12 +223,22 @@ type SpecialRuleGroup = FormGroup<{
   text: FormControl<string>;
   effectKey: FormControl<string>;
 }>;
+type ForceStatusConditionGroup = FormGroup<{
+  trigger: FormControl<string>;
+  occurrences: FormControl<number>;
+}>;
 type ForceStatusGroup = FormGroup<{
   id: FormControl<string>;
   name: FormControl<string>;
   effects: FormControl<string>;
-  enableTrigger: FormControl<string>;
-  clearTrigger: FormControl<string>;
+  enablePick: FormControl<string>;
+  enablePickOccurrences: FormControl<number>;
+  enableConditions: FormArray<ForceStatusConditionGroup>;
+  clearPick: FormControl<string>;
+  clearPickOccurrences: FormControl<number>;
+  clearConditions: FormArray<ForceStatusConditionGroup>;
+  priority: FormControl<number>;
+  cancelsStatusIds: FormControl<string[]>;
 }>;
 type PrivateObjectiveGroup = FormGroup<{
   id: FormControl<string>;
@@ -371,6 +390,7 @@ export class CampaignSetupPage {
   private pendingPresetItemIds = new Map<string, string>();
   private presetsLoaded = false;
   private hydrating = false;
+  private readonly forceStatusPriorityOriginal = new Map<number, number>();
   private loadedDetail: CampaignDetail | null = null;
   private savedFormValue: unknown = null;
   private readonly formTick = signal(0);
@@ -405,6 +425,10 @@ export class CampaignSetupPage {
   protected readonly allCampaignPresets = computed(() => campaignPresetApplyOptions(this.savedPresets()));
   protected readonly forceStatusEnableOptions = FORCE_STATUS_ENABLE_OPTIONS;
   protected readonly forceStatusClearOptions = FORCE_STATUS_CLEAR_OPTIONS;
+  protected readonly forceStatusPriorityMin = FORCE_STATUS_PRIORITY_MIN;
+  protected readonly forceStatusPriorityMax = FORCE_STATUS_PRIORITY_MAX;
+  protected readonly forceStatusOccurrencesMin = FORCE_STATUS_OCCURRENCES_MIN;
+  protected readonly forceStatusOccurrencesMax = FORCE_STATUS_OCCURRENCES_MAX;
   protected readonly structureSymbols = STRUCTURE_TYPES;
   protected readonly itemObjectiveSymbols = ITEM_OBJECTIVE_SYMBOLS;
   protected readonly structureImageMaxPx = 50;
@@ -1020,9 +1044,18 @@ export class CampaignSetupPage {
     this.replaceArray(
       this.forceStatuses,
       copy.forceStatuses.map((status) =>
-        this.createForceStatusGroup(undefined, status.name, status.effects, status.enableTrigger, status.clearTrigger),
+        this.createForceStatusGroup(
+          undefined,
+          status.name,
+          status.effects,
+          forceStatusEnableConditions(status),
+          forceStatusClearConditions(status),
+          status.priority,
+          [],
+        ),
       ),
     );
+    this.wirePresetForceStatusCancels();
     this.bumpCatalog();
     const ruleIds = this.specialRuleIdsByName();
     this.replaceArray(
@@ -1126,15 +1159,22 @@ export class CampaignSetupPage {
       ),
     );
     this.applyStandardBattleResultQuestions(campaign);
+    const incomingStatuses = campaign.forceStatuses ?? [];
+    const appliedStatusIds = new Map<string, string>();
+    for (const status of incomingStatuses) {
+      appliedStatusIds.set(status.id, forceStatusIds.get(status.name.trim().toLowerCase()) ?? this.newId());
+    }
     this.replaceArray(
       this.forceStatuses,
-      (campaign.forceStatuses ?? []).map((status) =>
+      incomingStatuses.map((status, index) =>
         this.createForceStatusGroup(
-          forceStatusIds.get(status.name.trim().toLowerCase()) ?? this.newId(),
+          appliedStatusIds.get(status.id) ?? this.newId(),
           status.name,
           status.effects,
-          status.enableTrigger,
-          status.clearTrigger,
+          forceStatusEnableConditions(status),
+          forceStatusClearConditions(status),
+          status.priority ?? index,
+          (status.cancelsStatusIds ?? []).map((id) => appliedStatusIds.get(id)).filter((id): id is string => !!id),
         ),
       ),
     );
@@ -1571,9 +1611,18 @@ export class CampaignSetupPage {
     this.replaceArray(
       this.forceStatuses,
       forceStatusesFromStandardPreset().map((status) =>
-        this.createForceStatusGroup(undefined, status.name, status.effects, status.enableTrigger, status.clearTrigger),
+        this.createForceStatusGroup(
+          undefined,
+          status.name,
+          status.effects,
+          forceStatusEnableConditions(status),
+          forceStatusClearConditions(status),
+          status.priority,
+          [],
+        ),
       ),
     );
+    this.wirePresetForceStatusCancels();
   }
 
   protected addForceStatus(): void {
@@ -1600,15 +1649,20 @@ export class CampaignSetupPage {
     }
 
     const preset = STANDARD_FORCE_STATUSES.find((status) => status.name.toLowerCase() === name.toLowerCase());
-    this.forceStatuses.push(
-      this.createForceStatusGroup(
-        undefined,
-        preset?.name ?? name,
-        preset?.effects ?? '',
-        preset?.enableTrigger ?? 'Hold',
-        preset?.clearTrigger ?? 'Hold',
-      ),
+    const used = this.forceStatuses.controls.map((status) => status.controls.priority.value);
+    const requested = preset?.priority;
+    const priority = requested !== undefined && !used.includes(requested) ? requested : nextForceStatusPriority(used);
+    const group = this.createForceStatusGroup(
+      undefined,
+      preset?.name ?? name,
+      preset?.effects ?? '',
+      preset ? forceStatusEnableConditions(preset) : [],
+      preset ? forceStatusClearConditions(preset) : [],
+      priority,
+      [],
     );
+    this.forceStatuses.push(group);
+    this.wirePresetForceStatusCancelsFor(group.controls.name.value, group.controls.id.value);
     this.forceStatusPresetPick.setValue('');
   }
 
@@ -1624,7 +1678,145 @@ export class CampaignSetupPage {
   }
 
   protected removeForceStatus(index: number): void {
+    const id = this.forceStatuses.at(index).controls.id.value;
     this.forceStatuses.removeAt(index);
+    for (const status of this.forceStatuses.controls) {
+      const ids = status.controls.cancelsStatusIds.value.filter((item) => item !== id);
+      if (ids.length !== status.controls.cancelsStatusIds.value.length) {
+        status.controls.cancelsStatusIds.setValue(ids);
+      }
+    }
+  }
+
+  protected forceStatusEnableOptionLabel(trigger: string): string {
+    return FORCE_STATUS_ENABLE_OPTIONS.find((option) => option.id === trigger)?.label ?? trigger;
+  }
+
+  protected forceStatusClearOptionLabel(trigger: string): string {
+    return FORCE_STATUS_CLEAR_OPTIONS.find((option) => option.id === trigger)?.label ?? trigger;
+  }
+
+  protected availableForceStatusEnableOptions(status: ForceStatusGroup): { id: string; label: string }[] {
+    const used = new Set(
+      status.controls.enableConditions.controls.map((condition) => condition.controls.trigger.value),
+    );
+    return FORCE_STATUS_ENABLE_OPTIONS.filter((option) => !used.has(option.id));
+  }
+
+  protected availableForceStatusClearOptions(status: ForceStatusGroup): { id: string; label: string }[] {
+    const used = new Set(status.controls.clearConditions.controls.map((condition) => condition.controls.trigger.value));
+    return FORCE_STATUS_CLEAR_OPTIONS.filter((option) => !used.has(option.id));
+  }
+
+  protected addForceStatusEnableCondition(status: ForceStatusGroup): void {
+    this.addForceStatusCondition(
+      status.controls.enableConditions,
+      status.controls.enablePick,
+      status.controls.enablePickOccurrences,
+    );
+  }
+
+  protected addForceStatusClearCondition(status: ForceStatusGroup): void {
+    this.addForceStatusCondition(
+      status.controls.clearConditions,
+      status.controls.clearPick,
+      status.controls.clearPickOccurrences,
+    );
+  }
+
+  private addForceStatusCondition(
+    list: FormArray<ForceStatusConditionGroup>,
+    pick: FormControl<string>,
+    occurrences: FormControl<number>,
+  ): void {
+    const trigger = pick.value.trim();
+    if (!trigger || list.controls.some((condition) => condition.controls.trigger.value === trigger)) {
+      return;
+    }
+
+    list.push(this.createForceStatusConditionGroup(trigger, occurrences.value));
+    list.markAsDirty();
+    pick.setValue('');
+    occurrences.setValue(FORCE_STATUS_OCCURRENCES_MIN);
+  }
+
+  protected removeForceStatusEnableCondition(status: ForceStatusGroup, index: number): void {
+    status.controls.enableConditions.removeAt(index);
+    status.controls.enableConditions.markAsDirty();
+  }
+
+  protected removeForceStatusClearCondition(status: ForceStatusGroup, index: number): void {
+    status.controls.clearConditions.removeAt(index);
+    status.controls.clearConditions.markAsDirty();
+  }
+
+  protected forceStatusCancelOptions(status: ForceStatusGroup): { id: string; name: string }[] {
+    const selected = new Set(status.controls.cancelsStatusIds.value);
+    return this.forceStatuses.controls
+      .filter(
+        (other) =>
+          other.controls.id.value !== status.controls.id.value &&
+          other.controls.name.value.trim().length > 0 &&
+          !selected.has(other.controls.id.value),
+      )
+      .map((other) => ({ id: other.controls.id.value, name: other.controls.name.value.trim() }));
+  }
+
+  protected forceStatusCancelEntries(status: ForceStatusGroup): { id: string; name: string }[] {
+    const names = new Map(
+      this.forceStatuses.controls.map((other) => [other.controls.id.value, other.controls.name.value.trim()] as const),
+    );
+    return status.controls.cancelsStatusIds.value.flatMap((id) => {
+      const name = names.get(id);
+      return name ? [{ id, name }] : [];
+    });
+  }
+
+  protected addForceStatusCancel(status: ForceStatusGroup, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const targetId = select.value;
+    select.value = '';
+    if (!targetId || targetId === status.controls.id.value) {
+      return;
+    }
+
+    const current = status.controls.cancelsStatusIds.value;
+    if (current.includes(targetId)) {
+      return;
+    }
+
+    status.controls.cancelsStatusIds.setValue([...current, targetId]);
+    status.controls.cancelsStatusIds.markAsDirty();
+  }
+
+  protected removeForceStatusCancel(status: ForceStatusGroup, targetId: string): void {
+    const next = status.controls.cancelsStatusIds.value.filter((id) => id !== targetId);
+    if (next.length === status.controls.cancelsStatusIds.value.length) {
+      return;
+    }
+
+    status.controls.cancelsStatusIds.setValue(next);
+    status.controls.cancelsStatusIds.markAsDirty();
+  }
+
+  protected commitForceStatusPriority(index: number, event?: Event): void {
+    if (event instanceof KeyboardEvent) {
+      event.preventDefault();
+      (event.target as HTMLInputElement | null)?.blur();
+    }
+
+    const control = this.forceStatuses.at(index).controls.priority;
+    const usedByOthers = this.forceStatuses.controls
+      .map((status, itemIndex) => (itemIndex === index ? null : status.controls.priority.value))
+      .filter((value): value is number => value !== null);
+    const previous = this.forceStatusPriorityOriginal.get(index) ?? control.value;
+    const next = committedForceStatusPriority(control.value, previous, usedByOthers);
+    control.setValue(next);
+    this.forceStatusPriorityOriginal.set(index, next);
+  }
+
+  protected rememberForceStatusPriority(index: number): void {
+    this.forceStatusPriorityOriginal.set(index, this.forceStatuses.at(index).controls.priority.value);
   }
 
   protected addPrivateObjective(): void {
@@ -2498,13 +2690,15 @@ export class CampaignSetupPage {
       );
       this.replaceArray(
         this.forceStatuses,
-        (campaign.forceStatuses ?? []).map((status) =>
+        (campaign.forceStatuses ?? []).map((status, index) =>
           this.createForceStatusGroup(
             status.id,
             status.name,
             status.effects,
-            status.enableTrigger,
-            status.clearTrigger,
+            forceStatusEnableConditions(status),
+            forceStatusClearConditions(status),
+            status.priority ?? index,
+            status.cancelsStatusIds ?? [],
           ),
         ),
       );
@@ -2997,16 +3191,88 @@ export class CampaignSetupPage {
     id?: string,
     name = '',
     effects = '',
-    enableTrigger = 'Hold',
-    clearTrigger = 'Hold',
+    enableConditions: readonly { trigger: string; occurrences: number }[] = [],
+    clearConditions: readonly { trigger: string; occurrences: number }[] = [],
+    priority?: number,
+    cancelsStatusIds: readonly string[] = [],
   ): ForceStatusGroup {
+    const used = this.forceStatuses.controls.map((status) => status.controls.priority.value);
+    const nextPriority = priority ?? nextForceStatusPriority(used);
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
       name: [name, [maxLength(60)]],
       effects: [effects, maxLength(2000)],
-      enableTrigger: [enableTrigger, required],
-      clearTrigger: [clearTrigger, required],
+      enablePick: [''],
+      enablePickOccurrences: [
+        FORCE_STATUS_OCCURRENCES_MIN,
+        [minValue(FORCE_STATUS_OCCURRENCES_MIN), maxValue(FORCE_STATUS_OCCURRENCES_MAX)],
+      ],
+      enableConditions: this.formBuilder.array<ForceStatusConditionGroup>(
+        enableConditions.map((condition) =>
+          this.createForceStatusConditionGroup(condition.trigger, condition.occurrences),
+        ),
+      ),
+      clearPick: [''],
+      clearPickOccurrences: [
+        FORCE_STATUS_OCCURRENCES_MIN,
+        [minValue(FORCE_STATUS_OCCURRENCES_MIN), maxValue(FORCE_STATUS_OCCURRENCES_MAX)],
+      ],
+      clearConditions: this.formBuilder.array<ForceStatusConditionGroup>(
+        clearConditions.map((condition) =>
+          this.createForceStatusConditionGroup(condition.trigger, condition.occurrences),
+        ),
+      ),
+      priority: [nextPriority, [minValue(FORCE_STATUS_PRIORITY_MIN), maxValue(FORCE_STATUS_PRIORITY_MAX)]],
+      cancelsStatusIds: [cancelsStatusIds.concat()],
     });
+  }
+
+  private createForceStatusConditionGroup(trigger: string, occurrences?: number): ForceStatusConditionGroup {
+    return this.formBuilder.nonNullable.group({
+      trigger: [trigger, required],
+      occurrences: [
+        normalizeForceStatusOccurrences(occurrences),
+        [minValue(FORCE_STATUS_OCCURRENCES_MIN), maxValue(FORCE_STATUS_OCCURRENCES_MAX)],
+      ],
+    });
+  }
+
+  private wirePresetForceStatusCancels(): void {
+    for (const group of this.forceStatuses.controls) {
+      this.wirePresetForceStatusCancelsFor(group.controls.name.value, group.controls.id.value);
+    }
+  }
+
+  private wirePresetForceStatusCancelsFor(name: string, id: string): void {
+    const key = name.trim().toLowerCase();
+    if (!key) {
+      return;
+    }
+
+    const byName = new Map(
+      this.forceStatuses.controls.map((item) => [item.controls.name.value.trim().toLowerCase(), item] as const),
+    );
+    const group = byName.get(key);
+    const preset = STANDARD_FORCE_STATUSES.find((item) => item.name.toLowerCase() === key);
+    if (group && preset) {
+      const ids = preset.cancelsStatusNames
+        .map((item) => byName.get(item.toLowerCase())?.controls.id.value)
+        .filter((item): item is string => !!item && item !== id);
+      if (ids.length > 0) {
+        group.controls.cancelsStatusIds.setValue([...new Set([...group.controls.cancelsStatusIds.value, ...ids])]);
+      }
+    }
+
+    for (const other of STANDARD_FORCE_STATUSES) {
+      if (!other.cancelsStatusNames.some((item) => item.toLowerCase() === key)) {
+        continue;
+      }
+
+      const owner = byName.get(other.name.toLowerCase());
+      if (owner && !owner.controls.cancelsStatusIds.value.includes(id)) {
+        owner.controls.cancelsStatusIds.setValue([...owner.controls.cancelsStatusIds.value, id]);
+      }
+    }
   }
 
   private createSpecialRuleGroup(id?: string, name = '', text = '', effectKey?: string): SpecialRuleGroup {
@@ -3627,8 +3893,20 @@ export class CampaignSetupPage {
         id: status.id,
         name: status.name.trim(),
         effects: status.effects.trim() || null,
-        enableTrigger: status.enableTrigger,
-        clearTrigger: status.clearTrigger,
+        enableConditions: status.enableConditions.map((condition) => ({
+          trigger: condition.trigger,
+          occurrences: Number(condition.occurrences),
+        })),
+        clearConditions: status.clearConditions.map((condition) => ({
+          trigger: condition.trigger,
+          occurrences: Number(condition.occurrences),
+        })),
+        enableTrigger: status.enableConditions[0]?.trigger,
+        clearTrigger: status.clearConditions[0]?.trigger,
+        enableOccurrences: status.enableConditions[0] ? Number(status.enableConditions[0].occurrences) : undefined,
+        clearOccurrences: status.clearConditions[0] ? Number(status.clearConditions[0].occurrences) : undefined,
+        priority: Number(status.priority),
+        cancelsStatusIds: status.cancelsStatusIds,
       }));
     const privateObjectiveTypes = value.privateObjectiveTypes
       .filter((type) => type.name.trim().length > 0)
@@ -4186,6 +4464,7 @@ export class CampaignSetupPage {
     });
 
     const usedForceStatusNames = new Set<string>();
+    const usedForceStatusPriorities = new Set<number>();
     this.forceStatuses.controls.forEach((status, index) => {
       const name = status.controls.name.value.trim();
       if (!name) {
@@ -4214,16 +4493,73 @@ export class CampaignSetupPage {
 
       usedForceStatusNames.add(key);
 
-      if (!status.controls.enableTrigger.value) {
-        failures.push(`Force status ${index + 1} needs an enable condition.`);
+      if (status.controls.enableConditions.length === 0) {
+        failures.push(`Force status ${index + 1} needs at least one enable condition.`);
         sections.add('forceStatuses');
         sections.add(`force-status-${index}`);
       }
 
-      if (!status.controls.clearTrigger.value) {
-        failures.push(`Force status ${index + 1} needs a clear condition.`);
+      status.controls.enableConditions.controls.forEach((condition, conditionIndex) => {
+        if (!condition.controls.trigger.value) {
+          failures.push(`Force status ${index + 1} enable condition ${conditionIndex + 1} needs a trigger.`);
+          sections.add('forceStatuses');
+          sections.add(`force-status-${index}`);
+        }
+
+        const enableOccurrences = condition.controls.occurrences.value;
+        if (
+          !Number.isInteger(enableOccurrences) ||
+          enableOccurrences < FORCE_STATUS_OCCURRENCES_MIN ||
+          enableOccurrences > FORCE_STATUS_OCCURRENCES_MAX
+        ) {
+          failures.push(
+            `Force status ${index + 1} enable consecutive occurrences must be an integer from ${FORCE_STATUS_OCCURRENCES_MIN} to ${FORCE_STATUS_OCCURRENCES_MAX}.`,
+          );
+          sections.add('forceStatuses');
+          sections.add(`force-status-${index}`);
+        }
+      });
+
+      if (status.controls.clearConditions.length === 0) {
+        failures.push(`Force status ${index + 1} needs at least one clear condition.`);
         sections.add('forceStatuses');
         sections.add(`force-status-${index}`);
+      }
+
+      status.controls.clearConditions.controls.forEach((condition, conditionIndex) => {
+        if (!condition.controls.trigger.value) {
+          failures.push(`Force status ${index + 1} clear condition ${conditionIndex + 1} needs a trigger.`);
+          sections.add('forceStatuses');
+          sections.add(`force-status-${index}`);
+        }
+
+        const clearOccurrences = condition.controls.occurrences.value;
+        if (
+          !Number.isInteger(clearOccurrences) ||
+          clearOccurrences < FORCE_STATUS_OCCURRENCES_MIN ||
+          clearOccurrences > FORCE_STATUS_OCCURRENCES_MAX
+        ) {
+          failures.push(
+            `Force status ${index + 1} clear consecutive occurrences must be an integer from ${FORCE_STATUS_OCCURRENCES_MIN} to ${FORCE_STATUS_OCCURRENCES_MAX}.`,
+          );
+          sections.add('forceStatuses');
+          sections.add(`force-status-${index}`);
+        }
+      });
+
+      const priority = status.controls.priority.value;
+      if (!Number.isInteger(priority) || priority < FORCE_STATUS_PRIORITY_MIN || priority > FORCE_STATUS_PRIORITY_MAX) {
+        failures.push(
+          `Force status ${index + 1} priority must be an integer from ${FORCE_STATUS_PRIORITY_MIN} to ${FORCE_STATUS_PRIORITY_MAX}.`,
+        );
+        sections.add('forceStatuses');
+        sections.add(`force-status-${index}`);
+      } else if (usedForceStatusPriorities.has(priority)) {
+        failures.push(`Force status ${index + 1} priority must be unique.`);
+        sections.add('forceStatuses');
+        sections.add(`force-status-${index}`);
+      } else {
+        usedForceStatusPriorities.add(priority);
       }
     });
 

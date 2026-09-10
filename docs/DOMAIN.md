@@ -111,8 +111,11 @@ preset replaces that catalog entry in the apply list.
 Administrators may also download the current Edit campaign setup as a portable
 `.mapandmuster-preset` ZIP (catalog, settings, overlay JSON, a visual overlay SVG, the original map
 image, and referenced catalog files) and upload that file into another host's named-preset library.
-Upload stores the package as a named preset; apply it with Add preset. Import uses overlay JSON only;
-the bundled SVG is not executed or used as the overlay schema. Portable packages may be up to 64 MB.
+Upload stores the package as a named preset; apply it with Add preset. Re-uploading a package whose
+collapsed name matches an existing named preset overwrites that preset and does not create another
+preset or campaign. Identical map, overlay, and catalog files keep their existing storage keys;
+only changed files are stored again. Import uses overlay JSON only; the bundled SVG is not executed
+or used as the overlay schema. Portable packages may be up to 64 MB.
 User-uploaded maps stay at 20 MB; the stored PNG after re-encoding can be larger, and import accepts that
 stored map up to the 64 MB package cap. Other uploads stay on the 24 MB host limit.
 
@@ -226,11 +229,23 @@ Tabletop-only Hunt keys stay as catalog text and battle reminders: `ExpertAmbush
 or army-list mercenary slots.
 
 A campaign may configure named force statuses (at most 20). Each status has a unique name other
-than Normal, effect text shown on the force, an enable trigger, and a clear trigger. A force has
-at most one status; Normal is stored as no status. Setup can copy the standard catalog:
-Diseased, Shaken, Confident, Exhausted, and Well Rested. Catalog order matters when more than one
-enable trigger matches: the first matching status wins, so a loss becomes Shaken rather than
-Exhausted. Effect text is display-only; the app does not resolve tabletop modifiers. Named effect
+than Normal, effect text shown on the force, one or more enable conditions, one or more clear
+conditions, a unique priority integer from 0 to 999 (0 is highest), and optional cancel-out statuses.
+Each condition is a trigger plus a consecutive-occurrence count from 1 to 10 (default 1). At least
+one enable condition and one clear condition are required; the same trigger cannot appear twice in
+one list. A force has at most one status; Normal is stored as no
+status and is not shown as a named status in the UI. Setup can copy the standard catalog: Diseased,
+Shaken, Confident, Exhausted, and Well Rested, with priorities 0, 1, 2, 3, and 4 in that list order.
+A newly added status defaults to the lowest unused priority. Any listed enable or clear condition
+whose trigger matches that many times in a row can gain or clear the status. Battle triggers count
+consecutive battles (a Hold does not break a battle-loss streak; a win does). Water and Hold triggers count
+consecutive action phases (a battle window does not break an occupying-water streak; leaving water
+does). Priority and cancel-out still apply when the Nth matching event fires. When a force would
+gain a status while it already has one, or two effects would apply at the same time, the lower
+priority number remains. If the incoming status lists the current (or simultaneous) status as a
+cancel-out, both are removed and the force has no status. Exhausted cancels Well Rested in the
+standard catalog, so a Well Rested force that would become Exhausted has no status instead.
+Effect text is display-only; the app does not resolve tabletop modifiers. Named effect
 keys can refuse a status: `Undead` never Shaken, Diseased, Well Rested, or Confident;
 `BringersOfThePlague` never Diseased or Well Rested; `ToughGuts` never Diseased.
 
@@ -241,9 +256,12 @@ on a water-feature territory, surrenders before fighting after two consecutive w
 actions, shares a territory or a battle in the same phase with another faction that is Diseased,
 or is forced back together with a Diseased split of the same player. A plague-bearing combat win
 (`BringersOfThePlague`) inflicts Diseased on the loser anywhere, including when that loser is
-Shaken. Diseased overrides other catalog statuses. While Diseased, Hold does not apply Well Rested
+Shaken, unless a higher-priority status remains or a cancel-out clears both. Standard Diseased is
+priority 0, so it outranks other catalog statuses. While Diseased, Hold does not apply Well Rested
 or other catalog statuses. Hold on a Capital City, City, Supply Depot, or Town (not Castle; not a
-destroyed structure) clears Diseased to Normal. Missions, item-objective results, special rules,
+destroyed structure) clears Diseased to Normal. If a listed clear condition is Hold at a settlement
+and that condition's count is greater than 1, that many consecutive settlement Holds are required;
+otherwise one settlement Hold still cures. Missions, item-objective results, special rules,
 and staff assignment may still replace Diseased. Immune factions skip engine and contagion
 infection; a manager or administrator assignment ignores immunity.
 
@@ -930,9 +948,14 @@ Completed campaigns are ordered by most recently finished.
 - Split forces have independent orders, locations, supply paths, battles, and statuses.
 - Two forces belonging to the same player rejoin when they occupy the same territory. The
   surviving force keeps one action slot afterward, and the rejoin is recorded in the play log.
-- A force has at most one status: Normal, Diseased, Exhausted, Well Rested, Shaken, or
-  Confident, subject to faction exceptions. Diseased overrides other catalog statuses. A
-  no-result forced retreat (neither side submitted) does not apply Shaken. Staff and campaign
+- A force has at most one named status (Diseased, Exhausted, Well Rested, Shaken, or
+  Confident in the standard catalog), subject to faction exceptions. No named status means
+  Normal, which is not shown as a status in the UI. Lower unique priority numbers outrank
+  higher ones; a configured cancel-out pair becomes no status. Standard Diseased is priority 0.
+  Enable and clear each require 1 to 10 consecutive matching triggers (default 1). Named Diseased
+  enable stays the engine; a settlement-Hold clear count greater than 1 waits for that many
+  consecutive settlement Holds.
+  A no-result forced retreat (neither side submitted) does not apply Shaken. Staff and campaign
   managers may assign any catalog status. Every change is logged with its source.
 - Neutral territories are unowned land. They are not armies.
 - A GM or administrator may inject a ringer battle during an open battle phase. The ringer is

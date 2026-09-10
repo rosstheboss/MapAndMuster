@@ -2603,6 +2603,7 @@ public static class CampaignSetupRules
             return parsed;
         }
 
+        var drafts = new List<(int Index, Guid Id, string Name, string Effects, IReadOnlyList<ForceStatusEnableCondition> Enables, IReadOnlyList<ForceStatusClearCondition> Clears, int? Priority, IReadOnlyList<Guid> Cancels)>();
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < supplied.Count; index++)
         {
@@ -2642,33 +2643,259 @@ public static class CampaignSetupRules
                 $"forceStatuses[{index}].effects",
                 $"Force status {index + 1} effects",
                 errors) ?? string.Empty;
-            if (!TryParseForceStatusEnable(input.EnableTrigger, out var enable))
+            var enables = ParseEnableConditions(input, index, errors);
+            var clears = ParseClearConditions(input, index, errors);
+            if (enables is null || clears is null)
             {
-                errors.Add(new DomainError(
-                    "forceStatuses.enable.invalid",
-                    "Choose how this force status is enabled.",
-                    $"forceStatuses[{index}].enableTrigger"));
                 continue;
             }
 
-            if (!TryParseForceStatusClear(input.ClearTrigger, out var clear))
+            int? priority = null;
+            if (input.Priority is { } suppliedPriority)
             {
-                errors.Add(new DomainError(
-                    "forceStatuses.clear.invalid",
-                    "Choose how this force status is cleared.",
-                    $"forceStatuses[{index}].clearTrigger"));
-                continue;
+                if (!ForceStatusPriority.IsValid(suppliedPriority))
+                {
+                    errors.Add(new DomainError(
+                        "forceStatuses.priority.invalid",
+                        $"Force status priority must be between {ForceStatusPriority.Min} and {ForceStatusPriority.Max}.",
+                        $"forceStatuses[{index}].priority"));
+                    continue;
+                }
+
+                priority = suppliedPriority;
             }
 
-            parsed.Add(new ForceStatusSetup(
+            drafts.Add((
+                index,
                 ResolveId(input.Id, usedIds, $"forceStatuses[{index}].id", errors),
                 name,
                 effects,
-                enable,
-                clear));
+                enables,
+                clears,
+                priority,
+                input.CancelsStatusIds ?? []));
+        }
+
+        var usedPriorities = drafts
+            .Where(static draft => draft.Priority is not null)
+            .Select(static draft => draft.Priority!.Value)
+            .ToList();
+        var seenPriorities = new HashSet<int>();
+        foreach (var draft in drafts.Where(static item => item.Priority is not null))
+        {
+            if (!seenPriorities.Add(draft.Priority!.Value))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.priority.duplicate",
+                    "Force status priorities must be unique.",
+                    $"forceStatuses[{draft.Index}].priority"));
+            }
+        }
+
+        var knownIds = drafts.Select(static draft => draft.Id).ToHashSet();
+        foreach (var draft in drafts)
+        {
+            var priority = draft.Priority ?? ForceStatusPriority.NextAvailable(usedPriorities);
+            if (draft.Priority is null)
+            {
+                usedPriorities.Add(priority);
+            }
+
+            var cancels = new List<Guid>();
+            var seenCancels = new HashSet<Guid>();
+            foreach (var cancelId in draft.Cancels)
+            {
+                if (cancelId == Guid.Empty || !seenCancels.Add(cancelId))
+                {
+                    continue;
+                }
+
+                if (cancelId == draft.Id)
+                {
+                    errors.Add(new DomainError(
+                        "forceStatuses.cancels.self",
+                        "A force status cannot cancel itself.",
+                        $"forceStatuses[{draft.Index}].cancelsStatusIds"));
+                    continue;
+                }
+
+                if (!knownIds.Contains(cancelId))
+                {
+                    errors.Add(new DomainError(
+                        "forceStatuses.cancels.unknown",
+                        "Cancel-out statuses must be other statuses in this campaign.",
+                        $"forceStatuses[{draft.Index}].cancelsStatusIds"));
+                    continue;
+                }
+
+                cancels.Add(cancelId);
+            }
+
+            parsed.Add(new ForceStatusSetup(
+                draft.Id,
+                draft.Name,
+                draft.Effects,
+                draft.Enables,
+                draft.Clears,
+                priority,
+                cancels));
         }
 
         return parsed;
+    }
+
+    private static List<ForceStatusEnableCondition>? ParseEnableConditions(
+        ForceStatusInput input,
+        int index,
+        List<DomainError> errors)
+    {
+        if (input.EnableConditions is { Count: > 0 } listed)
+        {
+            var parsed = new List<ForceStatusEnableCondition>();
+            var seen = new HashSet<ForceStatusEnableTrigger>();
+            for (var item = 0; item < listed.Count; item++)
+            {
+                if (!TryParseForceStatusEnable(listed[item].Trigger, out var trigger))
+                {
+                    errors.Add(new DomainError(
+                        "forceStatuses.enable.invalid",
+                        "Choose how this force status is enabled.",
+                        $"forceStatuses[{index}].enableConditions[{item}].trigger"));
+                    return null;
+                }
+
+                if (!seen.Add(trigger))
+                {
+                    errors.Add(new DomainError(
+                        "forceStatuses.enable.duplicate",
+                        "Enable conditions must use distinct triggers.",
+                        $"forceStatuses[{index}].enableConditions[{item}].trigger"));
+                    return null;
+                }
+
+                var occurrences = ForceStatusOccurrences.Default;
+                if (listed[item].Occurrences is { } supplied)
+                {
+                    if (!ForceStatusOccurrences.IsValid(supplied))
+                    {
+                        errors.Add(new DomainError(
+                            "forceStatuses.enableOccurrences.invalid",
+                            $"Force status consecutive enable occurrences must be between {ForceStatusOccurrences.Min} and {ForceStatusOccurrences.Max}.",
+                            $"forceStatuses[{index}].enableConditions[{item}].occurrences"));
+                        return null;
+                    }
+
+                    occurrences = supplied;
+                }
+
+                parsed.Add(new ForceStatusEnableCondition(trigger, occurrences));
+            }
+
+            return parsed;
+        }
+
+        if (!TryParseForceStatusEnable(input.EnableTrigger, out var enable))
+        {
+            errors.Add(new DomainError(
+                string.IsNullOrWhiteSpace(input.EnableTrigger) ? "forceStatuses.enable.required" : "forceStatuses.enable.invalid",
+                "Choose how this force status is enabled.",
+                $"forceStatuses[{index}].enableTrigger"));
+            return null;
+        }
+
+        var singleOccurrences = ForceStatusOccurrences.Default;
+        if (input.EnableOccurrences is { } suppliedEnableOccurrences)
+        {
+            if (!ForceStatusOccurrences.IsValid(suppliedEnableOccurrences))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.enableOccurrences.invalid",
+                    $"Force status consecutive enable occurrences must be between {ForceStatusOccurrences.Min} and {ForceStatusOccurrences.Max}.",
+                    $"forceStatuses[{index}].enableOccurrences"));
+                return null;
+            }
+
+            singleOccurrences = suppliedEnableOccurrences;
+        }
+
+        return [new ForceStatusEnableCondition(enable, singleOccurrences)];
+    }
+
+    private static List<ForceStatusClearCondition>? ParseClearConditions(
+        ForceStatusInput input,
+        int index,
+        List<DomainError> errors)
+    {
+        if (input.ClearConditions is { Count: > 0 } listed)
+        {
+            var parsed = new List<ForceStatusClearCondition>();
+            var seen = new HashSet<ForceStatusClearTrigger>();
+            for (var item = 0; item < listed.Count; item++)
+            {
+                if (!TryParseForceStatusClear(listed[item].Trigger, out var trigger))
+                {
+                    errors.Add(new DomainError(
+                        "forceStatuses.clear.invalid",
+                        "Choose how this force status is cleared.",
+                        $"forceStatuses[{index}].clearConditions[{item}].trigger"));
+                    return null;
+                }
+
+                if (!seen.Add(trigger))
+                {
+                    errors.Add(new DomainError(
+                        "forceStatuses.clear.duplicate",
+                        "Clear conditions must use distinct triggers.",
+                        $"forceStatuses[{index}].clearConditions[{item}].trigger"));
+                    return null;
+                }
+
+                var occurrences = ForceStatusOccurrences.Default;
+                if (listed[item].Occurrences is { } supplied)
+                {
+                    if (!ForceStatusOccurrences.IsValid(supplied))
+                    {
+                        errors.Add(new DomainError(
+                            "forceStatuses.clearOccurrences.invalid",
+                            $"Force status consecutive clear occurrences must be between {ForceStatusOccurrences.Min} and {ForceStatusOccurrences.Max}.",
+                            $"forceStatuses[{index}].clearConditions[{item}].occurrences"));
+                        return null;
+                    }
+
+                    occurrences = supplied;
+                }
+
+                parsed.Add(new ForceStatusClearCondition(trigger, occurrences));
+            }
+
+            return parsed;
+        }
+
+        if (!TryParseForceStatusClear(input.ClearTrigger, out var clear))
+        {
+            errors.Add(new DomainError(
+                string.IsNullOrWhiteSpace(input.ClearTrigger) ? "forceStatuses.clear.required" : "forceStatuses.clear.invalid",
+                "Choose how this force status is cleared.",
+                $"forceStatuses[{index}].clearTrigger"));
+            return null;
+        }
+
+        var singleOccurrences = ForceStatusOccurrences.Default;
+        if (input.ClearOccurrences is { } suppliedClearOccurrences)
+        {
+            if (!ForceStatusOccurrences.IsValid(suppliedClearOccurrences))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.clearOccurrences.invalid",
+                    $"Force status consecutive clear occurrences must be between {ForceStatusOccurrences.Min} and {ForceStatusOccurrences.Max}.",
+                    $"forceStatuses[{index}].clearOccurrences"));
+                return null;
+            }
+
+            singleOccurrences = suppliedClearOccurrences;
+        }
+
+        return [new ForceStatusClearCondition(clear, singleOccurrences)];
     }
 
     private static bool TryParseForceStatusEnable(string? raw, out ForceStatusEnableTrigger trigger)

@@ -572,9 +572,11 @@
           </legend>
           <div [hidden]="!isOpen('forceStatuses')">
             <p class="muted">
-              A force has at most one status at a time. Normal is the absence of a status and is not configured. Enable
-              and clear conditions decide when a status is applied or removed. Effects are display-only for the tabletop
-              sheet. Up to 20 statuses.
+              A force has at most one status at a time. Having no status is not configured as a named row. Enable and
+              clear conditions decide when a status is applied or removed. Priority is a unique integer from 0 to 999; 0
+              wins over every larger number when more than one status would apply. Cancel-out is optional: if this
+              status would be gained while the force has a cancelled status, both are removed. Effects are display-only
+              for the tabletop sheet. Up to 20 statuses.
             </p>
             <div class="nested-row">
               <div class="field grow">
@@ -618,6 +620,20 @@
                         <label [attr.for]="'force-status-name-' + index">Status {{ index + 1 }} name</label>
                         <input [id]="'force-status-name-' + index" type="text" formControlName="name" maxlength="60" />
                       </div>
+                      <div class="field">
+                        <label [attr.for]="'force-status-priority-' + index">Priority</label>
+                        <input
+                          [id]="'force-status-priority-' + index"
+                          type="number"
+                          [min]="forceStatusPriorityMin"
+                          [max]="forceStatusPriorityMax"
+                          step="1"
+                          formControlName="priority"
+                          (focus)="rememberForceStatusPriority(index)"
+                          (keydown.enter)="commitForceStatusPriority(index, $event)"
+                          (blur)="commitForceStatusPriority(index)"
+                        />
+                      </div>
                       <button type="button" class="button-secondary" (click)="removeForceStatus(index)">Remove</button>
                     </div>
                     <div class="field">
@@ -630,24 +646,182 @@
                       ></textarea>
                       <p class="muted">Shown on the campaign page. The app does not resolve tabletop modifiers.</p>
                     </div>
-                    <div class="nested-row">
-                      <div class="field grow">
-                        <label [attr.for]="'force-status-enable-' + index">Enable when</label>
-                        <select [id]="'force-status-enable-' + index" formControlName="enableTrigger">
-                          @for (option of forceStatusEnableOptions; track option.id) {
-                            <option [value]="option.id">{{ option.label }}</option>
+                    <fieldset class="field">
+                      <legend>Enable when</legend>
+                      <p class="muted">
+                        Add at least one condition. Any listed trigger that happens that many times in a row gains the
+                        status. Battle triggers count consecutive battles; water and Hold triggers count consecutive
+                        action phases.
+                      </p>
+                      <div class="nested-row">
+                        <div class="field grow">
+                          <label [attr.for]="'force-status-enable-' + index">Trigger</label>
+                          <select
+                            [id]="'force-status-enable-' + index"
+                            formControlName="enablePick"
+                            [attr.disabled]="availableForceStatusEnableOptions(status).length === 0 ? true : null"
+                          >
+                            <option value="">Select a trigger</option>
+                            @for (option of availableForceStatusEnableOptions(status); track option.id) {
+                              <option [value]="option.id">{{ option.label }}</option>
+                            }
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label [attr.for]="'force-status-enable-count-' + index">Consecutive occurrences</label>
+                          <input
+                            [id]="'force-status-enable-count-' + index"
+                            type="number"
+                            [min]="forceStatusOccurrencesMin"
+                            [max]="forceStatusOccurrencesMax"
+                            step="1"
+                            formControlName="enablePickOccurrences"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          class="button-secondary"
+                          [disabled]="!status.controls.enablePick.value"
+                          (click)="addForceStatusEnableCondition(status)"
+                        >
+                          Add
+                        </button>
+                      </div>
+                      @if (status.controls.enableConditions.length > 0) {
+                        <ul class="cancel-status-list" [id]="'force-status-enable-list-' + index">
+                          @for (
+                            condition of status.controls.enableConditions.controls;
+                            track condition;
+                            let item = $index
+                          ) {
+                            <li class="cancel-status-row">
+                              <span>
+                                {{ forceStatusEnableOptionLabel(condition.controls.trigger.value) }} ×
+                                {{ condition.controls.occurrences.value }}
+                              </span>
+                              <button
+                                type="button"
+                                class="button-danger icon-button"
+                                [attr.aria-label]="
+                                  'Remove ' +
+                                  forceStatusEnableOptionLabel(condition.controls.trigger.value) +
+                                  ' from enable conditions'
+                                "
+                                (click)="removeForceStatusEnableCondition(status, item)"
+                              >
+                                <app-icon name="x" />
+                              </button>
+                            </li>
+                          }
+                        </ul>
+                      }
+                    </fieldset>
+                    <fieldset class="field">
+                      <legend>Clear when</legend>
+                      <p class="muted">
+                        Add at least one condition. Any listed trigger that happens that many times in a row returns the
+                        force to no status.
+                      </p>
+                      <div class="nested-row">
+                        <div class="field grow">
+                          <label [attr.for]="'force-status-clear-' + index">Trigger</label>
+                          <select
+                            [id]="'force-status-clear-' + index"
+                            formControlName="clearPick"
+                            [attr.disabled]="availableForceStatusClearOptions(status).length === 0 ? true : null"
+                          >
+                            <option value="">Select a trigger</option>
+                            @for (option of availableForceStatusClearOptions(status); track option.id) {
+                              <option [value]="option.id">{{ option.label }}</option>
+                            }
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label [attr.for]="'force-status-clear-count-' + index">Consecutive occurrences</label>
+                          <input
+                            [id]="'force-status-clear-count-' + index"
+                            type="number"
+                            [min]="forceStatusOccurrencesMin"
+                            [max]="forceStatusOccurrencesMax"
+                            step="1"
+                            formControlName="clearPickOccurrences"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          class="button-secondary"
+                          [disabled]="!status.controls.clearPick.value"
+                          (click)="addForceStatusClearCondition(status)"
+                        >
+                          Add
+                        </button>
+                      </div>
+                      @if (status.controls.clearConditions.length > 0) {
+                        <ul class="cancel-status-list" [id]="'force-status-clear-list-' + index">
+                          @for (
+                            condition of status.controls.clearConditions.controls;
+                            track condition;
+                            let item = $index
+                          ) {
+                            <li class="cancel-status-row">
+                              <span>
+                                {{ forceStatusClearOptionLabel(condition.controls.trigger.value) }} ×
+                                {{ condition.controls.occurrences.value }}
+                              </span>
+                              <button
+                                type="button"
+                                class="button-danger icon-button"
+                                [attr.aria-label]="
+                                  'Remove ' +
+                                  forceStatusClearOptionLabel(condition.controls.trigger.value) +
+                                  ' from clear conditions'
+                                "
+                                (click)="removeForceStatusClearCondition(status, item)"
+                              >
+                                <app-icon name="x" />
+                              </button>
+                            </li>
+                          }
+                        </ul>
+                      }
+                    </fieldset>
+                    <fieldset class="field">
+                      <legend>Cancel out</legend>
+                      <p class="muted">
+                        Optional. If this status would be gained while the force has a selected status, both are removed
+                        and the force has no status.
+                      </p>
+                      <div class="field">
+                        <label [attr.for]="'force-status-cancel-pick-' + index">Add a status</label>
+                        <select
+                          [id]="'force-status-cancel-pick-' + index"
+                          [disabled]="forceStatusCancelOptions(status).length === 0"
+                          (change)="addForceStatusCancel(status, $event)"
+                        >
+                          <option value="">Select a status</option>
+                          @for (option of forceStatusCancelOptions(status); track option.id) {
+                            <option [value]="option.id">{{ option.name }}</option>
                           }
                         </select>
                       </div>
-                      <div class="field grow">
-                        <label [attr.for]="'force-status-clear-' + index">Clear when</label>
-                        <select [id]="'force-status-clear-' + index" formControlName="clearTrigger">
-                          @for (option of forceStatusClearOptions; track option.id) {
-                            <option [value]="option.id">{{ option.label }}</option>
+                      @if (forceStatusCancelEntries(status).length > 0) {
+                        <ul class="cancel-status-list">
+                          @for (entry of forceStatusCancelEntries(status); track entry.id) {
+                            <li class="cancel-status-row">
+                              <span>{{ entry.name }}</span>
+                              <button
+                                type="button"
+                                class="button-danger icon-button"
+                                [attr.aria-label]="'Remove ' + entry.name + ' from cancel out'"
+                                (click)="removeForceStatusCancel(status, entry.id)"
+                              >
+                                <app-icon name="x" />
+                              </button>
+                            </li>
                           }
-                        </select>
-                      </div>
-                    </div>
+                        </ul>
+                      }
+                    </fieldset>
                   </div>
                 </div>
               }
@@ -1989,7 +2163,7 @@
                                 formControlName="whenCurrentStatus"
                               >
                                 <option value="">Any status</option>
-                                <option value="Normal">Normal</option>
+                                <option value="Normal">No status</option>
                                 @for (status of forceStatuses.controls; track status.controls.id.value) {
                                   @if (status.controls.name.value.trim()) {
                                     <option [value]="status.controls.name.value">
@@ -2017,7 +2191,7 @@
                                 [id]="'catalog-status-set-' + index + '-' + changeIndex"
                                 formControlName="setStatus"
                               >
-                                <option value="">Normal</option>
+                                <option value="">No status</option>
                                 @for (status of forceStatuses.controls; track status.controls.id.value) {
                                   @if (status.controls.name.value.trim()) {
                                     <option [value]="status.controls.name.value">
@@ -2904,7 +3078,7 @@
                                       formControlName="setForceStatusName"
                                     >
                                       <option value="">No status change</option>
-                                      <option value="Normal">Normal</option>
+                                      <option value="Normal">No status</option>
                                       @for (status of forceStatuses.controls; track status.controls.id.value) {
                                         @if (status.controls.name.value.trim()) {
                                           <option [value]="status.controls.name.value">

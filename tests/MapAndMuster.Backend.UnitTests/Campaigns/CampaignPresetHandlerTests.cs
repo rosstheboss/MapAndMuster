@@ -557,6 +557,105 @@ public sealed class CampaignPresetHandlerTests
         Assert.Equal("Frontier War", result.Value.Name);
         Assert.Single(presets.Items);
     }
+
+    [Fact]
+    public async Task ImportReusesIdenticalFilesAndKeepsOneNamedPreset()
+    {
+        var presets = new FakePresetStore();
+        var maps = new MemoryMapStorage();
+        var images = new PassingImageProcessor();
+        var codec = new RecordingPackageCodec
+        {
+            Contents = new CampaignPresetPackageContents
+            {
+                Name = "Frontier War",
+                Campaign = new PresetCampaignStore().Campaign,
+                Files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+                {
+                    ["maps/border.png"] = [11, 12, 13],
+                },
+            },
+        };
+        var handler = new ImportCampaignPresetHandler(
+            presets,
+            maps,
+            new MemoryAssetStorage(),
+            images,
+            new PassingDocumentProcessor(),
+            codec,
+            new FixedClock());
+        var command = new ImportCampaignPresetCommand
+        {
+            UserId = Guid.NewGuid(),
+            IsAdministrator = true,
+            Content = [1, 2, 3],
+        };
+
+        var first = await handler.HandleAsync(command, CancellationToken.None);
+        var second = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(first.Value!.Id, second.Value!.Id);
+        Assert.Single(presets.Items);
+        Assert.Equal("maps/saved.png", presets.Items[0].MapStorageKey);
+        Assert.Equal(1, maps.SaveCount);
+        Assert.Equal(1, images.ProcessCount);
+    }
+
+    [Fact]
+    public async Task ImportStoresAChangedMapWithoutCreatingASecondPreset()
+    {
+        var presets = new FakePresetStore();
+        var maps = new MemoryMapStorage();
+        var images = new PassingImageProcessor();
+        var codec = new RecordingPackageCodec
+        {
+            Contents = new CampaignPresetPackageContents
+            {
+                Name = "Frontier War",
+                Campaign = new PresetCampaignStore().Campaign,
+                Files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+                {
+                    ["maps/border.png"] = [11, 12, 13],
+                },
+            },
+        };
+        var handler = new ImportCampaignPresetHandler(
+            presets,
+            maps,
+            new MemoryAssetStorage(),
+            images,
+            new PassingDocumentProcessor(),
+            codec,
+            new FixedClock());
+        var command = new ImportCampaignPresetCommand
+        {
+            UserId = Guid.NewGuid(),
+            IsAdministrator = true,
+            Content = [1, 2, 3],
+        };
+
+        var first = await handler.HandleAsync(command, CancellationToken.None);
+        codec.Contents = new CampaignPresetPackageContents
+        {
+            Name = "Frontier War",
+            Campaign = new PresetCampaignStore().Campaign,
+            Files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            {
+                ["maps/border.png"] = [21, 22, 23],
+            },
+        };
+        var second = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(first.Value!.Id, second.Value!.Id);
+        Assert.Single(presets.Items);
+        Assert.Equal(new byte[] { 21, 22, 23 }, maps.Files["maps/saved.png"]);
+        Assert.Equal(2, maps.SaveCount);
+        Assert.Equal(2, images.ProcessCount);
+    }
 }
 
 file sealed class FixedClock : IClock
@@ -1019,8 +1118,11 @@ file sealed class MemoryMapStorage : ICampaignMapStorage
 {
     public Dictionary<string, byte[]> Files { get; } = new(StringComparer.Ordinal);
 
+    public int SaveCount { get; private set; }
+
     public Task<string> SaveAsync(ReadOnlyMemory<byte> content, string fileExtension, CancellationToken cancellationToken)
     {
+        SaveCount++;
         var key = $"maps/saved{fileExtension}";
         Files[key] = content.ToArray();
         return Task.FromResult(key);
@@ -1043,6 +1145,8 @@ file sealed class MemoryAssetStorage : ICampaignAssetStorage
 {
     public Dictionary<string, byte[]> Files { get; } = new(StringComparer.Ordinal);
 
+    public int SaveCount { get; private set; }
+
     public Task<string> SaveAsync(
         string folder,
         ReadOnlyMemory<byte> content,
@@ -1050,6 +1154,7 @@ file sealed class MemoryAssetStorage : ICampaignAssetStorage
         string contentType,
         CancellationToken cancellationToken)
     {
+        SaveCount++;
         var key = $"{folder}/saved{fileExtension}";
         Files[key] = content.ToArray();
         return Task.FromResult(key);
@@ -1076,6 +1181,8 @@ file sealed class PassingImageProcessor : ICampaignMapProcessor
 
     public long? LastLength { get; private set; }
 
+    public int ProcessCount { get; private set; }
+
     public async Task<ProcessedCampaignMapResult> ProcessAsync(
         Stream content,
         string contentType,
@@ -1086,6 +1193,7 @@ file sealed class PassingImageProcessor : ICampaignMapProcessor
     {
         LastMaxBytes = maxBytes;
         LastLength = length;
+        ProcessCount++;
         using var copy = new MemoryStream();
         await content.CopyToAsync(copy, cancellationToken).ConfigureAwait(false);
         return new ProcessedCampaignMapResult

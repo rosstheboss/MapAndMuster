@@ -151,7 +151,7 @@ internal static class CatalogJson
                             SpecialRuleIds = item.SpecialRuleIds,
                         })
                         .ToArray()),
-            [.. (document.ForceStatuses ?? []).Select(FromDocument)],
+            [.. NormalizeForceStatuses((document.ForceStatuses ?? []).Select(FromDocument))],
             ReadSplitForcePenaltyValue(document),
             ReadSplitForcePenaltyIsPercent(document),
             ReadStandardBattleResultQuestions(document, catalogMissions),
@@ -412,7 +412,77 @@ internal static class CatalogJson
             Effects = status.Effects,
             EnableTrigger = status.EnableTrigger,
             ClearTrigger = status.ClearTrigger,
+            EnableConditions = ToConditionDocuments(status.EnableConditions, status.EnableTrigger, status.EnableOccurrences),
+            ClearConditions = ToConditionDocuments(status.ClearConditions, status.ClearTrigger, status.ClearOccurrences),
+            Priority = status.Priority,
+            CancelsStatusIds = [.. status.CancelsStatusIds],
+            EnableOccurrences = status.EnableOccurrences,
+            ClearOccurrences = status.ClearOccurrences,
         };
+    }
+
+    private static List<ForceStatusConditionDocument> ToConditionDocuments(
+        IReadOnlyList<StoredForceStatusCondition> listed,
+        string trigger,
+        int occurrences)
+    {
+        if (listed.Count > 0)
+        {
+            return
+            [
+                .. listed.Select(static condition => new ForceStatusConditionDocument
+                {
+                    Trigger = condition.Trigger,
+                    Occurrences = condition.Occurrences,
+                }),
+            ];
+        }
+
+        if (string.IsNullOrWhiteSpace(trigger))
+        {
+            return [];
+        }
+
+        return
+        [
+            new ForceStatusConditionDocument
+            {
+                Trigger = trigger,
+                Occurrences = occurrences,
+            },
+        ];
+    }
+
+    private static IReadOnlyList<StoredForceStatusCondition> FromConditionDocuments(
+        List<ForceStatusConditionDocument>? listed,
+        string? trigger,
+        int? occurrences)
+    {
+        if (listed is { Count: > 0 })
+        {
+            return
+            [
+                .. listed.Select(static condition => new StoredForceStatusCondition
+                {
+                    Trigger = condition.Trigger ?? string.Empty,
+                    Occurrences = ForceStatusOccurrences.Normalize(condition.Occurrences),
+                }),
+            ];
+        }
+
+        if (string.IsNullOrWhiteSpace(trigger))
+        {
+            return [];
+        }
+
+        return
+        [
+            new StoredForceStatusCondition
+            {
+                Trigger = trigger,
+                Occurrences = ForceStatusOccurrences.Normalize(occurrences),
+            },
+        ];
     }
 
     private static PrivateObjectiveDocument ToDocument(StoredPrivateObjectiveType type)
@@ -516,7 +586,68 @@ internal static class CatalogJson
             Effects = status.Effects ?? string.Empty,
             EnableTrigger = status.EnableTrigger ?? string.Empty,
             ClearTrigger = status.ClearTrigger ?? string.Empty,
+            EnableConditions = FromConditionDocuments(status.EnableConditions, status.EnableTrigger, status.EnableOccurrences),
+            ClearConditions = FromConditionDocuments(status.ClearConditions, status.ClearTrigger, status.ClearOccurrences),
+            Priority = status.Priority ?? -1,
+            CancelsStatusIds = status.CancelsStatusIds ?? [],
+            EnableOccurrences = ForceStatusOccurrences.Normalize(status.EnableOccurrences),
+            ClearOccurrences = ForceStatusOccurrences.Normalize(status.ClearOccurrences),
         };
+    }
+
+    private static StoredForceStatus[] NormalizeForceStatuses(IEnumerable<StoredForceStatus> statuses)
+    {
+        var list = statuses.ToArray();
+        if (list.Length == 0)
+        {
+            return list;
+        }
+
+        var knownIds = list.Select(static status => status.Id).ToHashSet();
+        var withCancels = list.Select(status => new StoredForceStatus
+        {
+            Id = status.Id,
+            Name = status.Name,
+            Effects = status.Effects,
+            EnableTrigger = status.EnableTrigger,
+            ClearTrigger = status.ClearTrigger,
+            EnableConditions = status.EnableConditions,
+            ClearConditions = status.ClearConditions,
+            Priority = status.Priority,
+            CancelsStatusIds =
+            [
+                .. status.CancelsStatusIds
+                    .Where(id => id != status.Id && knownIds.Contains(id))
+                    .Distinct(),
+            ],
+            EnableOccurrences = ForceStatusOccurrences.Normalize(status.EnableOccurrences),
+            ClearOccurrences = ForceStatusOccurrences.Normalize(status.ClearOccurrences),
+        }).ToArray();
+        var priorities = withCancels.Select(static status => status.Priority).ToArray();
+        var unique = priorities.Distinct().Count() == priorities.Length
+            && priorities.All(ForceStatusPriority.IsValid);
+        if (unique)
+        {
+            return withCancels;
+        }
+
+        return
+        [
+            .. withCancels.Select((status, index) => new StoredForceStatus
+            {
+                Id = status.Id,
+                Name = status.Name,
+                Effects = status.Effects,
+                EnableTrigger = status.EnableTrigger,
+                ClearTrigger = status.ClearTrigger,
+                EnableConditions = status.EnableConditions,
+                ClearConditions = status.ClearConditions,
+                Priority = index,
+                CancelsStatusIds = status.CancelsStatusIds,
+                EnableOccurrences = status.EnableOccurrences,
+                ClearOccurrences = status.ClearOccurrences,
+            }),
+        ];
     }
 
     private static StoredPrivateObjectiveType FromDocument(PrivateObjectiveDocument type)
@@ -1054,6 +1185,25 @@ internal static class CatalogJson
         public string? EnableTrigger { get; set; }
 
         public string? ClearTrigger { get; set; }
+
+        public int? Priority { get; set; }
+
+        public List<Guid>? CancelsStatusIds { get; set; }
+
+        public List<ForceStatusConditionDocument>? EnableConditions { get; set; }
+
+        public List<ForceStatusConditionDocument>? ClearConditions { get; set; }
+
+        public int? EnableOccurrences { get; set; }
+
+        public int? ClearOccurrences { get; set; }
+    }
+
+    private sealed class ForceStatusConditionDocument
+    {
+        public string? Trigger { get; set; }
+
+        public int? Occurrences { get; set; }
     }
 
     private sealed class PrivateObjectiveDocument

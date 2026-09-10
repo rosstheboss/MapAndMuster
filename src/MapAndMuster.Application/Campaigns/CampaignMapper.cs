@@ -191,6 +191,12 @@ public static class CampaignMapper
                 Effects = status.Effects,
                 EnableTrigger = status.EnableTrigger,
                 ClearTrigger = status.ClearTrigger,
+                EnableConditions = DetailConditions(status.EnableConditions, status.EnableTrigger, status.EnableOccurrences),
+                ClearConditions = DetailConditions(status.ClearConditions, status.ClearTrigger, status.ClearOccurrences),
+                Priority = status.Priority,
+                CancelsStatusIds = status.CancelsStatusIds,
+                EnableOccurrences = status.EnableOccurrences,
+                ClearOccurrences = status.ClearOccurrences,
             })],
             PrivateObjectiveTypes = VisiblePrivateTypes(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed),
             PrivateObjectives = VisiblePrivateAssignments(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed),
@@ -652,6 +658,38 @@ public static class CampaignMapper
                 }),
             ],
         };
+    }
+
+    private static IReadOnlyList<ForceStatusConditionDetail> DetailConditions(
+        IReadOnlyList<StoredForceStatusCondition> listed,
+        string trigger,
+        int occurrences)
+    {
+        if (listed.Count > 0)
+        {
+            return
+            [
+                .. listed.Select(static condition => new ForceStatusConditionDetail
+                {
+                    Trigger = condition.Trigger,
+                    Occurrences = ForceStatusOccurrences.Normalize(condition.Occurrences),
+                }),
+            ];
+        }
+
+        if (string.IsNullOrWhiteSpace(trigger))
+        {
+            return [];
+        }
+
+        return
+        [
+            new ForceStatusConditionDetail
+            {
+                Trigger = trigger,
+                Occurrences = ForceStatusOccurrences.Normalize(occurrences),
+            },
+        ];
     }
 
     internal static IReadOnlyList<StoredMission> CatalogMissions(StoredCampaign campaign)

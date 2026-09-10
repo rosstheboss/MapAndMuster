@@ -588,6 +588,13 @@ internal static class PlayStateJson
             StatusName = force.StatusName,
             Subfaction = force.Subfaction,
             ConsecutiveWaterActions = force.ConsecutiveWaterActions,
+            EnableStreaks = force.EnableStreaks.Count == 0
+                ? null
+                : force.EnableStreaks.ToDictionary(static pair => pair.Key, static pair => pair.Value),
+            ClearStreaks = force.ClearStreaks.Count == 0
+                ? null
+                : force.ClearStreaks.ToDictionary(static pair => pair.Key, static pair => pair.Value),
+            ClearStreak = force.ClearStreak,
         };
     }
 
@@ -601,7 +608,10 @@ internal static class PlayStateJson
             force.InBattle,
             force.StatusName,
             force.Subfaction,
-            force.ConsecutiveWaterActions);
+            force.ConsecutiveWaterActions,
+            force.EnableStreaks,
+            force.ClearStreaks,
+            force.ClearStreak);
     }
 
     private sealed class PlayDocument
@@ -656,6 +666,12 @@ internal static class PlayStateJson
         public string? StatusName { get; set; }
         public string? Subfaction { get; set; }
         public int ConsecutiveWaterActions { get; set; }
+
+        public Dictionary<string, int>? EnableStreaks { get; set; }
+
+        public Dictionary<string, int>? ClearStreaks { get; set; }
+
+        public int ClearStreak { get; set; }
     }
 
     private sealed class DraftDocument

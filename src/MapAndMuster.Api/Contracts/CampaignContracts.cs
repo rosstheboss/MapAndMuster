@@ -490,11 +490,41 @@ public sealed class ForceStatusRequest
     /// <summary>Gets tabletop effect text.</summary>
     public string? Effects { get; init; }
 
-    /// <summary>Gets the enable-trigger name.</summary>
+    /// <summary>Gets the enable-trigger name when a single condition is supplied.</summary>
     public string? EnableTrigger { get; init; }
 
-    /// <summary>Gets the clear-trigger name.</summary>
+    /// <summary>Gets the clear-trigger name when a single condition is supplied.</summary>
     public string? ClearTrigger { get; init; }
+
+    /// <summary>Gets enable conditions. Any matching condition can gain the status.</summary>
+    public IReadOnlyList<ForceStatusConditionRequest>? EnableConditions { get; init; }
+
+    /// <summary>Gets clear conditions. Any matching condition can return the force to Normal.</summary>
+    public IReadOnlyList<ForceStatusConditionRequest>? ClearConditions { get; init; }
+
+    /// <summary>Gets the unique ranking from 0 (highest) to 999 (lowest), when supplied.</summary>
+    public int? Priority { get; init; }
+
+    /// <summary>Gets catalog identifiers this status cancels to Normal, when supplied.</summary>
+    public IReadOnlyList<Guid>? CancelsStatusIds { get; init; }
+
+    /// <summary>Gets how many times in a row the enable trigger must match, when supplied.</summary>
+    public int? EnableOccurrences { get; init; }
+
+    /// <summary>Gets how many times in a row a single clear trigger must match, when supplied.</summary>
+    public int? ClearOccurrences { get; init; }
+}
+
+/// <summary>
+/// One enable or clear trigger and its consecutive-occurrence count.
+/// </summary>
+public sealed class ForceStatusConditionRequest
+{
+    /// <summary>Gets the trigger name.</summary>
+    public string? Trigger { get; init; }
+
+    /// <summary>Gets how many times in a row the trigger must match, when supplied.</summary>
+    public int? Occurrences { get; init; }
 }
 
 /// <summary>
@@ -1545,6 +1575,36 @@ public sealed class ForceStatusResponse
 
     /// <summary>Gets the clear-trigger name.</summary>
     public required string ClearTrigger { get; init; }
+
+    /// <summary>Gets enable conditions. Any matching condition can gain the status.</summary>
+    public IReadOnlyList<ForceStatusConditionResponse> EnableConditions { get; init; } = [];
+
+    /// <summary>Gets clear conditions. Any matching condition can return the force to Normal.</summary>
+    public IReadOnlyList<ForceStatusConditionResponse> ClearConditions { get; init; } = [];
+
+    /// <summary>Gets the unique ranking. Lower numbers outrank higher numbers.</summary>
+    public int Priority { get; init; }
+
+    /// <summary>Gets catalog identifiers this status cancels to Normal.</summary>
+    public IReadOnlyList<Guid> CancelsStatusIds { get; init; } = [];
+
+    /// <summary>Gets how many consecutive enable-trigger matches are required.</summary>
+    public int EnableOccurrences { get; init; }
+
+    /// <summary>Gets how many consecutive clear-trigger matches are required.</summary>
+    public int ClearOccurrences { get; init; }
+}
+
+/// <summary>
+/// One enable or clear trigger and its consecutive-occurrence count.
+/// </summary>
+public sealed class ForceStatusConditionResponse
+{
+    /// <summary>Gets the trigger name.</summary>
+    public required string Trigger { get; init; }
+
+    /// <summary>Gets how many consecutive matching triggers are required.</summary>
+    public int Occurrences { get; init; }
 }
 
 /// <summary>
@@ -2277,6 +2337,12 @@ public static class CampaignResponses
                     Effects = status.Effects,
                     EnableTrigger = status.EnableTrigger,
                     ClearTrigger = status.ClearTrigger,
+                    EnableConditions = ConditionResponses(status.EnableConditions, status.EnableTrigger, status.EnableOccurrences),
+                    ClearConditions = ConditionResponses(status.ClearConditions, status.ClearTrigger, status.ClearOccurrences),
+                    Priority = status.Priority,
+                    CancelsStatusIds = status.CancelsStatusIds,
+                    EnableOccurrences = status.EnableOccurrences,
+                    ClearOccurrences = status.ClearOccurrences,
                 }),
             ],
             PrivateObjectiveTypes =
@@ -2828,8 +2894,58 @@ public static class CampaignResponses
                 Effects = status.Effects,
                 EnableTrigger = status.EnableTrigger,
                 ClearTrigger = status.ClearTrigger,
+                EnableConditions = status.EnableConditions?
+                    .Select(static condition => new ForceStatusConditionInput
+                    {
+                        Trigger = condition.Trigger,
+                        Occurrences = condition.Occurrences,
+                    })
+                    .ToArray(),
+                ClearConditions = status.ClearConditions?
+                    .Select(static condition => new ForceStatusConditionInput
+                    {
+                        Trigger = condition.Trigger,
+                        Occurrences = condition.Occurrences,
+                    })
+                    .ToArray(),
+                Priority = status.Priority,
+                CancelsStatusIds = status.CancelsStatusIds,
+                EnableOccurrences = status.EnableOccurrences,
+                ClearOccurrences = status.ClearOccurrences,
             })
             .ToArray();
+    }
+
+    internal static IReadOnlyList<ForceStatusConditionResponse> ConditionResponses(
+        IReadOnlyList<ForceStatusConditionDetail> listed,
+        string trigger,
+        int occurrences)
+    {
+        if (listed.Count > 0)
+        {
+            return
+            [
+                .. listed.Select(static condition => new ForceStatusConditionResponse
+                {
+                    Trigger = condition.Trigger,
+                    Occurrences = condition.Occurrences,
+                }),
+            ];
+        }
+
+        if (string.IsNullOrWhiteSpace(trigger))
+        {
+            return [];
+        }
+
+        return
+        [
+            new ForceStatusConditionResponse
+            {
+                Trigger = trigger,
+                Occurrences = occurrences,
+            },
+        ];
     }
 
     /// <summary>

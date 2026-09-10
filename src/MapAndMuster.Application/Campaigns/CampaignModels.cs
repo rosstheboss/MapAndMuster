@@ -1154,6 +1154,36 @@ public sealed class ForceStatusDetail
 
     /// <summary>Gets the clear-trigger name.</summary>
     public required string ClearTrigger { get; init; }
+
+    /// <summary>Gets the unique ranking. Lower numbers outrank higher numbers.</summary>
+    public int Priority { get; init; }
+
+    /// <summary>Gets catalog identifiers this status cancels to Normal.</summary>
+    public IReadOnlyList<Guid> CancelsStatusIds { get; init; } = [];
+
+    /// <summary>Gets enable conditions. Any matching condition can gain the status.</summary>
+    public IReadOnlyList<ForceStatusConditionDetail> EnableConditions { get; init; } = [];
+
+    /// <summary>Gets clear conditions. Any matching condition can return the force to Normal.</summary>
+    public IReadOnlyList<ForceStatusConditionDetail> ClearConditions { get; init; } = [];
+
+    /// <summary>Gets how many consecutive enable-trigger matches are required.</summary>
+    public int EnableOccurrences { get; init; } = ForceStatusOccurrences.Default;
+
+    /// <summary>Gets how many consecutive clear-trigger matches are required.</summary>
+    public int ClearOccurrences { get; init; } = ForceStatusOccurrences.Default;
+}
+
+/// <summary>
+/// One enable or clear trigger and its consecutive-occurrence count.
+/// </summary>
+public sealed class ForceStatusConditionDetail
+{
+    /// <summary>Gets the trigger name.</summary>
+    public required string Trigger { get; init; }
+
+    /// <summary>Gets how many consecutive matching triggers are required.</summary>
+    public int Occurrences { get; init; } = ForceStatusOccurrences.Default;
 }
 
 /// <summary>
@@ -1748,6 +1778,36 @@ public sealed class StoredForceStatus
 
     /// <summary>Gets the clear-trigger name.</summary>
     public required string ClearTrigger { get; init; }
+
+    /// <summary>Gets the unique ranking. Lower numbers outrank higher numbers.</summary>
+    public int Priority { get; init; }
+
+    /// <summary>Gets catalog identifiers this status cancels to Normal.</summary>
+    public IReadOnlyList<Guid> CancelsStatusIds { get; init; } = [];
+
+    /// <summary>Gets enable conditions. Any matching condition can gain the status.</summary>
+    public IReadOnlyList<StoredForceStatusCondition> EnableConditions { get; init; } = [];
+
+    /// <summary>Gets clear conditions. Any matching condition can return the force to Normal.</summary>
+    public IReadOnlyList<StoredForceStatusCondition> ClearConditions { get; init; } = [];
+
+    /// <summary>Gets how many consecutive enable-trigger matches are required.</summary>
+    public int EnableOccurrences { get; init; } = ForceStatusOccurrences.Default;
+
+    /// <summary>Gets how many consecutive clear-trigger matches are required.</summary>
+    public int ClearOccurrences { get; init; } = ForceStatusOccurrences.Default;
+}
+
+/// <summary>
+/// One persisted enable or clear trigger and its consecutive-occurrence count.
+/// </summary>
+public sealed class StoredForceStatusCondition
+{
+    /// <summary>Gets the trigger name.</summary>
+    public required string Trigger { get; init; }
+
+    /// <summary>Gets how many consecutive matching triggers are required.</summary>
+    public int Occurrences { get; init; } = ForceStatusOccurrences.Default;
 }
 
 /// <summary>

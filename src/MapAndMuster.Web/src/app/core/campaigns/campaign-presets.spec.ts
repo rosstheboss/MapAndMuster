@@ -35,6 +35,10 @@ describe('campaign presets', () => {
       'Exhausted',
       'Well Rested',
     ]);
+    expect(copy!.forceStatuses.map((status) => status.priority)).toEqual([0, 1, 2, 3, 4]);
+    expect(copy!.forceStatuses.find((status) => status.name === 'Exhausted')?.cancelsStatusNames).toEqual([
+      'Well Rested',
+    ]);
     expect(copy!.factions.find((faction) => faction.name === 'Beastmen Brayherds')?.specialRuleNames).toEqual([
       'Expert Ambushers',
     ]);

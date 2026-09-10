@@ -19,7 +19,8 @@ Required early suites:
 - Move adjacency, spawn restrictions, split/rejoin with a play-log entry, backstab, pillage/repair, and retreat.
 - Supply graph traversal, alliance inclusion, temporary supply, and split forces.
 - Status transitions and faction exceptions, including configured force-status enable/clear
-  triggers and catalog order when more than one trigger matches.
+  condition lists, consecutive occurrence counts, unique priorities when more than one trigger matches,
+  and optional cancel-out pairs.
 - Public/private objective visibility, completion, manager approval of private claims, automatic
   private-objective scoring, and launch assignment (unique draws per holder-kind pool, then
   reshuffled duplicates until every holder in a non-empty pool has an independent assignment).
@@ -31,7 +32,8 @@ Required early suites:
   identifiers by name and copies uploaded logos onto matching catalog names.
   Saving the same name after trimming whitespace overwrites the previous preset.
   Administrator preset-package download/upload copies catalog, overlay JSON, map image, and catalog
-  files including logos; non-administrators are rejected.
+  files including logos; non-administrators are rejected. Re-uploading the same collapsed name
+  overwrites one named preset and reuses identical map and catalog file bytes.
 
 ## Backend integration tests
 
@@ -63,7 +65,8 @@ Cover:
   applying onto another campaign remaps overlay terrain identifiers onto that campaign's catalog
   and copies matching logos.
 - Administrator download/upload of a `.mapandmuster-preset` ZIP round-trips map image, overlay
-  graph, and catalog logos; non-administrators receive 403.
+  graph, and catalog logos; non-administrators receive 403. Re-import of the same collapsed name
+  keeps a single named preset and reuses unchanged file bytes.
 
 ## Angular tests
 
@@ -73,7 +76,7 @@ Cover components/services for:
 
 - Order drafting from the map menu or force-panel **Save draft**, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed.
 - Campaign-page status bar (round/phase, throttled countdown live region, viewer commit chip, compact commitment count, Go to your orders). While a campaign is running, Actions, Chat, and Standings are open by default; other sections stay collapsed and the last set is stored in a per-campaign cookie. Staff tools are under collapsed Manage campaign. Battle, campaign, phase, and force-status enums use display labels. A hidden-relic notice and each battle reminder render once. The campaign log summary shows unread mention and private counts from `GET /log` without marking the log read on load. Log timestamps sit after the entry text (relative when under 24 hours).
-- Create/edit campaign starts with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded; optional sections start collapsed. The sticky toolbar shows remaining required sections, nested mission groups have unique names, and Edit map is hidden after a campaign starts.
+- Create/edit campaign starts with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded; optional sections start collapsed. The sticky toolbar shows remaining required sections, nested mission groups have unique names, and Edit map is hidden after a campaign starts. Force-status cancel-out is a dropdown that adds named statuses to a removable list. Enable and clear each have a consecutive-occurrence integer from 1 to 10.
 - Countdown display without treating the browser clock as authoritative.
 - Map territory selection, force markers, polygon editing including Close Territory enclose and
   shared-border versus overlapping-interior checks, move drop validity, keyboard alternatives,

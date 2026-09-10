@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using MapAndMuster.Application.Campaigns;
 using MapAndMuster.Application.Common;
+using MapAndMuster.Application.Maps;
 using MapAndMuster.Infrastructure.Campaigns;
 
 namespace MapAndMuster.Api.IntegrationTests;
@@ -148,5 +149,92 @@ public sealed class CampaignPresetPackageCodecTests
         Assert.Equal(0, town.SupplyPoints);
         Assert.Equal(0, town.PillageSupplyPoints);
         Assert.Equal(0, town.DestroySupplyPoints);
+    }
+
+    [Fact]
+    public void RoundTripKeepsMapImageAndOverlayGraph()
+    {
+        var terrainId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        var campaign = new StoredCampaign
+        {
+            Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            Name = "Frontier War",
+            PlayerSlotCount = 8,
+            IsPrivate = false,
+            IsPubliclyViewable = true,
+            CreatorIsParticipant = true,
+            MapStorageKey = "maps/board.png",
+            Revision = 1,
+            CreatedUtc = DateTimeOffset.UnixEpoch,
+            UpdatedUtc = DateTimeOffset.UnixEpoch,
+            CreatedByUserId = Guid.Empty,
+            Memberships = [],
+            Factions = [],
+            AllyGroups = [],
+            Links = [],
+            TimeZoneId = "UTC",
+            StartsUtc = DateTimeOffset.UnixEpoch,
+            EndsUtc = DateTimeOffset.UnixEpoch,
+            RoundCount = 8,
+            RoundLengthAmount = 1,
+            RoundLengthUnit = "Weeks",
+            Phases =
+            [
+                new StoredRoundPhase { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                new StoredRoundPhase { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+            ],
+            MapGraph = new StoredMapGraph
+            {
+                Territories =
+                [
+                    new TerritoryDetail
+                    {
+                        Id = Guid.Parse("55555555-5555-5555-5555-555555555555"),
+                        DisplayNumber = 1,
+                        Name = "Northmarch",
+                        Polygon =
+                        [
+                            new MapPointDetail { X = 0.1, Y = 0.1 },
+                            new MapPointDetail { X = 0.3, Y = 0.1 },
+                            new MapPointDetail { X = 0.3, Y = 0.3 },
+                            new MapPointDetail { X = 0.1, Y = 0.3 },
+                        ],
+                        TerrainTypeId = terrainId,
+                    },
+                ],
+                Adjacencies = [],
+            },
+            TerrainTypes =
+            [
+                new StoredTerrainType
+                {
+                    Id = terrainId,
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [],
+                },
+            ],
+            StructureTypes = [],
+            BattleScoring = MapAndMuster.Domain.Campaigns.BattleScoringSetup.Default,
+        };
+        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            ["maps/board.png"] = [9, 8, 7],
+        };
+
+        var codec = new CampaignPresetPackageCodec();
+        var packed = codec.Write(campaign, files);
+        using (var zip = new ZipArchive(new MemoryStream(packed), ZipArchiveMode.Read))
+        {
+            Assert.NotNull(zip.GetEntry("overlay.json"));
+            Assert.NotNull(zip.GetEntry("overlay.svg"));
+            Assert.NotNull(zip.GetEntry("map.png"));
+        }
+
+        var unpacked = codec.Read(packed);
+        Assert.True(unpacked.IsSuccess, unpacked.Message);
+        Assert.NotNull(unpacked.Value);
+        Assert.Equal("Northmarch", unpacked.Value.Campaign.MapGraph?.Territories[0].Name);
+        Assert.Equal([9, 8, 7], unpacked.Value.Files[unpacked.Value.Campaign.MapStorageKey!]);
     }
 }

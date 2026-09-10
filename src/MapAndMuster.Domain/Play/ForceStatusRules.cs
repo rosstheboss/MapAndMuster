@@ -4,8 +4,10 @@ namespace MapAndMuster.Domain.Play;
 
 /// <summary>
 /// Applies configured force-status enable and clear triggers, then the named Diseased engine rules.
-/// A force has at most one status; Normal is stored as no status name. Diseased overrides other
-/// catalog statuses. Mission, item, special-rule, and staff changes may replace Diseased.
+/// A force has at most one status; Normal is stored as no status name. Enable and clear counts
+/// require that many matching triggers in a row. When more than one status would apply, the lowest
+/// unique priority number wins. A status may cancel another to Normal.
+/// Staff assignment may set any catalog status; mission and item gains use priority and cancel-out.
 /// </summary>
 public static class ForceStatusRules
 {
@@ -145,8 +147,8 @@ public static class ForceStatusRules
 
     /// <summary>
     /// Applies catalog statuses and named Diseased rules. Current statuses that have not met
-    /// their clear trigger are kept; otherwise the first matching enable in catalog order wins.
-    /// Named Diseased overrides other catalog statuses.
+    /// their clear trigger remain candidates. Newly enabled statuses are candidates too. Cancel-out
+    /// pairs become Normal; otherwise the lowest priority number wins.
     /// </summary>
     public static IReadOnlyList<CampaignForce> Apply(
         IReadOnlyList<CampaignForce> forces,
@@ -188,7 +190,13 @@ public static class ForceStatusRules
                     ? force.ConsecutiveWaterActions + 1
                     : 0
                 : force.ConsecutiveWaterActions;
-            var withStreak = force.With(consecutiveWaterActions: streak);
+            var enableStreaks = NextEnableStreaks(force, statuses, facts);
+            var clearStreaks = NextClearStreaks(force, statuses, facts);
+            var withStreak = force.With(
+                consecutiveWaterActions: streak,
+                enableStreaks: enableStreaks,
+                clearStreaks: clearStreaks,
+                clearStreak: 0);
             if (statuses.Count == 0 && !hasDisease)
             {
                 next.Add(withStreak);
@@ -203,6 +211,14 @@ public static class ForceStatusRules
                 hasDisease,
                 rules);
             var updated = withStreak.WithStatus(status);
+            if (!string.Equals(updated.StatusName, withStreak.StatusName, StringComparison.Ordinal))
+            {
+                var remainingStreaks = enableStreaks
+                    .Where(pair => KeepEnableStreak(pair.Key, pair.Value, status, statuses))
+                    .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal);
+                updated = updated.With(enableStreaks: remainingStreaks, clearStreaks: new Dictionary<string, int>(), clearStreak: 0);
+            }
+
             if (attribution is { } assigned
                 && !string.Equals(updated.StatusName, force.StatusName, StringComparison.Ordinal))
             {
@@ -214,23 +230,27 @@ public static class ForceStatusRules
 
         if (hasDisease)
         {
-            SpreadContagion(next, rules, attributions);
+            SpreadContagion(next, statuses, rules, attributions);
         }
 
         return new Application(next, attributions);
     }
 
     /// <summary>
-    /// Inflicts Diseased on other factions sharing a territory with a Diseased force.
+    /// Inflicts Diseased on other factions sharing a territory with a Diseased force, subject to
+    /// priority and cancel-out.
     /// </summary>
     public static void SpreadContagion(
         List<CampaignForce> forces,
+        IReadOnlyList<ForceStatusSetup> statuses,
         SpecialRuleContext rules,
         IDictionary<Guid, Attribution> attributions)
     {
         ArgumentNullException.ThrowIfNull(forces);
+        ArgumentNullException.ThrowIfNull(statuses);
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(attributions);
+        var considered = new HashSet<Guid>();
         var changed = true;
         while (changed)
         {
@@ -251,41 +271,49 @@ public static class ForceStatusRules
                 {
                     var force = forces[index];
                     if (force.TerritoryId != group.Key
+                        || considered.Contains(force.Id)
                         || ForceStatusNames.IsDiseased(force.StatusName)
-                        || carriers.All(carrier => carrier.FactionId == force.FactionId)
-                        || !FactionSpecialRulePolicies.AllowsStatus(force, ForceStatusNames.Diseased, rules))
+                        || carriers.All(carrier => carrier.FactionId == force.FactionId))
                     {
                         continue;
                     }
 
                     var carrier = carriers.First(item => item.FactionId != force.FactionId);
-                    forces[index] = force.WithStatus(ForceStatusNames.Diseased);
-                    attributions[force.Id] = new Attribution(
-                        ForceStatusChangeSource.Contagion,
-                        "sharing a territory with a Diseased force of another faction",
-                        carrier.Id,
-                        carrier.FactionId,
-                        carrier.ControllerUserId);
-                    changed = true;
+                    considered.Add(force.Id);
+                    if (TryApplyDiseasedGain(
+                        forces,
+                        index,
+                        carrier,
+                        statuses,
+                        rules,
+                        attributions,
+                        "sharing a territory with a Diseased force of another faction"))
+                    {
+                        changed = true;
+                    }
                 }
             }
         }
     }
 
     /// <summary>
-    /// Inflicts Diseased on other factions that fought in the same battle this phase, even after a retreat.
+    /// Inflicts Diseased on other factions that fought in the same battle this phase, even after a retreat,
+    /// subject to priority and cancel-out.
     /// </summary>
     public static void SpreadBattleContagion(
         List<CampaignForce> forces,
         IEnumerable<IReadOnlyList<Guid>> participantGroups,
+        IReadOnlyList<ForceStatusSetup> statuses,
         SpecialRuleContext rules,
         IDictionary<Guid, Attribution> attributions)
     {
         ArgumentNullException.ThrowIfNull(forces);
         ArgumentNullException.ThrowIfNull(participantGroups);
+        ArgumentNullException.ThrowIfNull(statuses);
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(attributions);
         var groups = participantGroups.Select(static group => group.ToArray()).ToArray();
+        var considered = new HashSet<Guid>();
         var changed = true;
         while (changed)
         {
@@ -309,22 +337,26 @@ public static class ForceStatusRules
                 {
                     var force = forces[index];
                     if (!ids.Contains(force.Id)
+                        || considered.Contains(force.Id)
                         || ForceStatusNames.IsDiseased(force.StatusName)
-                        || carriers.All(carrier => carrier.FactionId == force.FactionId)
-                        || !FactionSpecialRulePolicies.AllowsStatus(force, ForceStatusNames.Diseased, rules))
+                        || carriers.All(carrier => carrier.FactionId == force.FactionId))
                     {
                         continue;
                     }
 
                     var carrier = carriers.First(item => item.FactionId != force.FactionId);
-                    forces[index] = force.WithStatus(ForceStatusNames.Diseased);
-                    attributions[force.Id] = new Attribution(
-                        ForceStatusChangeSource.Contagion,
-                        "sharing a battle with a Diseased force of another faction",
-                        carrier.Id,
-                        carrier.FactionId,
-                        carrier.ControllerUserId);
-                    changed = true;
+                    considered.Add(force.Id);
+                    if (TryApplyDiseasedGain(
+                        forces,
+                        index,
+                        carrier,
+                        statuses,
+                        rules,
+                        attributions,
+                        "sharing a battle with a Diseased force of another faction"))
+                    {
+                        changed = true;
+                    }
                 }
             }
         }
@@ -332,14 +364,15 @@ public static class ForceStatusRules
 
     /// <summary>
     /// Applies the first matching mission status-change condition for a won or lost fought battle.
-    /// Explicit conditions may replace Diseased; a catch-all still matches Diseased unless a
-    /// leave-unchanged row matched first.
+    /// Explicit Normal clears the status. Named gains use priority and cancel-out when a catalog is
+    /// supplied. A leave-unchanged row keeps the current status, including Diseased.
     /// </summary>
     public static (CampaignForce Force, Attribution? Attribution) ApplyMission(
         CampaignForce force,
         MissionSetup mission,
         bool won,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        IReadOnlyList<ForceStatusSetup>? catalog = null)
     {
         ArgumentNullException.ThrowIfNull(force);
         ArgumentNullException.ThrowIfNull(mission);
@@ -356,6 +389,17 @@ public static class ForceStatusRules
             if (change.LeaveUnchanged)
             {
                 return (force, null);
+            }
+
+            if (catalog is { Count: > 0 })
+            {
+                return ApplyConfiguredStatus(
+                    force,
+                    change.SetStatus ?? "Normal",
+                    catalog,
+                    rules,
+                    ForceStatusChangeSource.Mission,
+                    mission.Name);
             }
 
             if (change.SetStatus is { } next
@@ -403,7 +447,8 @@ public static class ForceStatusRules
 
     /// <summary>
     /// Applies a configured status name from a mission, item, or similar source. Empty names do
-    /// nothing. Normal clears the status. Immune factions refuse named statuses other than Normal.
+    /// nothing. Normal clears the status. Named gains use priority and cancel-out. Immune factions
+    /// refuse named statuses other than Normal.
     /// </summary>
     public static (CampaignForce Force, Attribution? Attribution) ApplyConfiguredStatus(
         CampaignForce force,
@@ -421,19 +466,58 @@ public static class ForceStatusRules
             return (force, null);
         }
 
-        var assigned = Assign(force, statusName, catalog);
-        if (assigned.StatusName is { } next
-            && !FactionSpecialRulePolicies.AllowsStatus(assigned, next, rules))
+        if (ForceStatusNames.IsNormal(statusName))
+        {
+            var cleared = force.WithStatus(null);
+            if (string.Equals(cleared.StatusName, force.StatusName, StringComparison.Ordinal))
+            {
+                return (force, null);
+            }
+
+            return (cleared, new Attribution(source, detail, force.Id, force.FactionId, force.ControllerUserId));
+        }
+
+        var match = catalog.FirstOrDefault(status =>
+            string.Equals(status.Name, statusName, StringComparison.OrdinalIgnoreCase));
+        if (match is null || !FactionSpecialRulePolicies.AllowsStatus(force, match.Name, rules))
         {
             return (force, null);
         }
 
-        if (string.Equals(assigned.StatusName, force.StatusName, StringComparison.Ordinal))
+        var nextName = ResolveGain(force.StatusName, match, catalog);
+        if (string.Equals(nextName, force.StatusName, StringComparison.Ordinal))
         {
             return (force, null);
         }
 
-        return (assigned, new Attribution(source, detail, force.Id, force.FactionId, force.ControllerUserId));
+        return (force.WithStatus(nextName), new Attribution(source, detail, force.Id, force.FactionId, force.ControllerUserId));
+    }
+
+    /// <summary>
+    /// Resolves gaining <paramref name="incoming"/> while the force has <paramref name="currentName"/>.
+    /// Cancel-out yields Normal. Otherwise the lower priority number remains.
+    /// </summary>
+    public static string? ResolveGain(
+        string? currentName,
+        ForceStatusSetup incoming,
+        IReadOnlyList<ForceStatusSetup> catalog)
+    {
+        ArgumentNullException.ThrowIfNull(incoming);
+        ArgumentNullException.ThrowIfNull(catalog);
+        var current = currentName is { } name
+            ? catalog.FirstOrDefault(status => string.Equals(status.Name, name, StringComparison.OrdinalIgnoreCase))
+            : null;
+        if (current is not null && incoming.CancelsStatusIds.Contains(current.Id))
+        {
+            return null;
+        }
+
+        if (current is not null && current.Priority <= incoming.Priority)
+        {
+            return current.Name;
+        }
+
+        return incoming.Name;
     }
 
     /// <summary>
@@ -612,6 +696,38 @@ public static class ForceStatusRules
         return StructureKinds.CanCureDisease(territory.StructureName);
     }
 
+    private static bool TryApplyDiseasedGain(
+        List<CampaignForce> forces,
+        int index,
+        CampaignForce carrier,
+        IReadOnlyList<ForceStatusSetup> statuses,
+        SpecialRuleContext rules,
+        IDictionary<Guid, Attribution> attributions,
+        string detail)
+    {
+        var force = forces[index];
+        var diseased = statuses.FirstOrDefault(static status => ForceStatusNames.IsDiseased(status.Name));
+        if (diseased is null || !FactionSpecialRulePolicies.AllowsStatus(force, ForceStatusNames.Diseased, rules))
+        {
+            return false;
+        }
+
+        var nextName = ResolveGain(force.StatusName, diseased, statuses);
+        if (string.Equals(nextName, force.StatusName, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        forces[index] = force.WithStatus(nextName);
+        attributions[force.Id] = new Attribution(
+            ForceStatusChangeSource.Contagion,
+            detail,
+            carrier.Id,
+            carrier.FactionId,
+            carrier.ControllerUserId);
+        return true;
+    }
+
     private static (string? Status, Attribution? Attribution) ResolveForce(
         CampaignForce force,
         IReadOnlyList<ForceStatusSetup> statuses,
@@ -623,56 +739,118 @@ public static class ForceStatusRules
         var diseased = ForceStatusNames.IsDiseased(force.StatusName);
         if (hasDisease && diseased && facts.Held && facts.OccupiesCureSettlement)
         {
-            return (null, new Attribution(ForceStatusChangeSource.SettlementHold));
-        }
-
-        if (hasDisease && diseased)
-        {
-            return (ForceStatusNames.Diseased, null);
-        }
-
-        string? next = force.StatusName;
-        Attribution? attribution = null;
-        var current = force.StatusName is { } name && catalogByName.TryGetValue(name, out var status)
-            && !ForceStatusNames.IsDiseased(status.Name)
-            ? status
-            : null;
-        if (current is not null && MatchesClear(current.ClearTrigger, facts))
-        {
-            next = null;
-            attribution = new Attribution(ForceStatusChangeSource.Catalog, current.Name);
-        }
-
-        if (next is not null && !FactionSpecialRulePolicies.AllowsStatus(force, next, rules))
-        {
-            next = null;
-        }
-
-        if (next is null)
-        {
-            foreach (var candidate in statuses)
+            var needed = catalogByName.TryGetValue(ForceStatusNames.Diseased, out var settlementDiseased)
+                ? SettlementHoldClearOccurrences(settlementDiseased)
+                : ForceStatusOccurrences.Default;
+            if (needed <= ForceStatusOccurrences.Default
+                || EnableStreakValue(force.ClearStreaks, ForceStatusStreakKeys.Clear(ForceStatusClearTrigger.HoldAtSettlement), force.ClearStreak) >= needed)
             {
-                if (ForceStatusNames.IsDiseased(candidate.Name)
-                    || !MatchesEnable(candidate.EnableTrigger, facts)
-                    || !FactionSpecialRulePolicies.AllowsStatus(force, candidate.Name, rules))
+                return (null, new Attribution(ForceStatusChangeSource.SettlementHold));
+            }
+        }
+
+        var starting = force.StatusName is { } name && catalogByName.TryGetValue(name, out var startingSetup)
+            ? startingSetup
+            : null;
+        var startingCleared = starting is not null && starting.ClearConditions.Any(condition =>
+            ShouldEvaluateClear(condition.Trigger, facts)
+            && MatchesClear(condition.Trigger, facts)
+            && EnableStreakValue(
+                force.ClearStreaks,
+                ForceStatusStreakKeys.Clear(condition.Trigger),
+                force.ClearStreak) >= condition.Occurrences);
+        var incoming = new List<ForceStatusSetup>();
+        foreach (var candidate in statuses)
+        {
+            if (ForceStatusNames.IsDiseased(candidate.Name)
+                || !candidate.EnableConditions.Any(condition => IsEnableReady(force, candidate, condition, facts))
+                || !FactionSpecialRulePolicies.AllowsStatus(force, candidate.Name, rules))
+            {
+                continue;
+            }
+
+            incoming.Add(candidate);
+        }
+
+        Attribution? diseaseAttribution = null;
+        if (hasDisease
+            && catalogByName.TryGetValue(ForceStatusNames.Diseased, out var diseasedSetup)
+            && FactionSpecialRulePolicies.AllowsStatus(force, ForceStatusNames.Diseased, rules)
+            && TryInfect(force, facts, out var diseaseSource))
+        {
+            incoming.Add(diseasedSetup);
+            diseaseAttribution = diseaseSource;
+        }
+
+        var cancelled = new HashSet<Guid>();
+        if (starting is not null)
+        {
+            foreach (var candidate in incoming)
+            {
+                if (!candidate.CancelsStatusIds.Contains(starting.Id))
                 {
                     continue;
                 }
 
-                next = candidate.Name;
-                attribution = new Attribution(ForceStatusChangeSource.Catalog, candidate.Name);
-                break;
+                cancelled.Add(candidate.Id);
+                cancelled.Add(starting.Id);
             }
         }
 
-        if (hasDisease
-            && FactionSpecialRulePolicies.AllowsStatus(force, ForceStatusNames.Diseased, rules)
-            && TryInfect(force, facts, out var diseaseSource))
+        for (var left = 0; left < incoming.Count; left++)
         {
-            return (ForceStatusNames.Diseased, diseaseSource);
+            for (var right = 0; right < incoming.Count; right++)
+            {
+                if (left == right || !incoming[left].CancelsStatusIds.Contains(incoming[right].Id))
+                {
+                    continue;
+                }
+
+                cancelled.Add(incoming[left].Id);
+                cancelled.Add(incoming[right].Id);
+            }
         }
 
-        return (next, attribution);
+        var remaining = new List<ForceStatusSetup>();
+        if (starting is not null
+            && !startingCleared
+            && !cancelled.Contains(starting.Id)
+            && FactionSpecialRulePolicies.AllowsStatus(force, starting.Name, rules))
+        {
+            remaining.Add(starting);
+        }
+
+        foreach (var candidate in incoming)
+        {
+            if (!cancelled.Contains(candidate.Id))
+            {
+                remaining.Add(candidate);
+            }
+        }
+
+        remaining = [.. remaining.DistinctBy(static status => status.Id)];
+        if (remaining.Count == 0)
+        {
+            return starting is null
+                ? (null, null)
+                : (null, new Attribution(ForceStatusChangeSource.Catalog, starting.Name));
+        }
+
+        var winner = remaining
+            .OrderBy(static status => status.Priority)
+            .ThenBy(static status => status.Id)
+            .First();
+        if (string.Equals(winner.Name, force.StatusName, StringComparison.Ordinal))
+        {
+            return (winner.Name, null);
+        }
+
+        if (diseaseAttribution is not null && ForceStatusNames.IsDiseased(winner.Name))
+        {
+            return (winner.Name, diseaseAttribution);
+        }
+
+        return (winner.Name, new Attribution(ForceStatusChangeSource.Catalog, winner.Name));
     }
 
     private static bool TryInfect(CampaignForce force, Facts facts, out Attribution attribution)
@@ -697,6 +875,203 @@ public static class ForceStatusRules
 
         attribution = default;
         return false;
+    }
+
+    private static int SettlementHoldClearOccurrences(ForceStatusSetup diseased)
+    {
+        var settlement = diseased.ClearConditions.FirstOrDefault(static condition =>
+            condition.Trigger == ForceStatusClearTrigger.HoldAtSettlement);
+        return settlement?.Occurrences ?? ForceStatusOccurrences.Default;
+    }
+
+    private static bool IsEnableReady(
+        CampaignForce force,
+        ForceStatusSetup status,
+        ForceStatusEnableCondition condition,
+        Facts facts)
+    {
+        return ShouldEvaluateEnable(condition.Trigger, facts)
+            && MatchesEnable(condition.Trigger, facts)
+            && EnableStreakValue(
+                force.EnableStreaks,
+                ForceStatusStreakKeys.Enable(status.Id, condition.Trigger),
+                LegacyEnableStreak(force, status.Id)) >= condition.Occurrences;
+    }
+
+    private static int LegacyEnableStreak(CampaignForce force, Guid statusId)
+    {
+        return force.EnableStreaks.GetValueOrDefault(statusId.ToString("D"));
+    }
+
+    private static int EnableStreakValue(IReadOnlyDictionary<string, int> streaks, string key, int legacy)
+    {
+        if (streaks.TryGetValue(key, out var value))
+        {
+            return value;
+        }
+
+        return legacy;
+    }
+
+    private static bool KeepEnableStreak(
+        string key,
+        int streak,
+        string? gained,
+        IReadOnlyList<ForceStatusSetup> statuses)
+    {
+        if (ForceStatusStreakKeys.TryParseEnable(key, out var statusId, out var trigger))
+        {
+            var setup = statuses.FirstOrDefault(candidate => candidate.Id == statusId);
+            if (setup is null)
+            {
+                return false;
+            }
+
+            if (gained is not null && string.Equals(setup.Name, gained, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var condition = setup.EnableConditions.FirstOrDefault(item => item.Trigger == trigger);
+            return condition is not null && streak < condition.Occurrences;
+        }
+
+        if (!Guid.TryParse(key, out statusId))
+        {
+            return false;
+        }
+
+        var legacy = statuses.FirstOrDefault(candidate => candidate.Id == statusId);
+        if (legacy is null)
+        {
+            return false;
+        }
+
+        if (gained is not null && string.Equals(legacy.Name, gained, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return streak < legacy.EnableConditions.Min(static condition => condition.Occurrences);
+    }
+
+    private static Dictionary<string, int> NextEnableStreaks(
+        CampaignForce force,
+        IReadOnlyList<ForceStatusSetup> statuses,
+        Facts facts)
+    {
+        var next = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var status in statuses)
+        {
+            var legacy = LegacyEnableStreak(force, status.Id);
+            foreach (var condition in status.EnableConditions)
+            {
+                var key = ForceStatusStreakKeys.Enable(status.Id, condition.Trigger);
+                var previous = EnableStreakValue(force.EnableStreaks, key, legacy);
+                if (!ShouldEvaluateEnable(condition.Trigger, facts))
+                {
+                    if (previous > 0)
+                    {
+                        next[key] = previous;
+                    }
+
+                    continue;
+                }
+
+                var streak = MatchesEnable(condition.Trigger, facts)
+                    ? Math.Min(previous + 1, ForceStatusOccurrences.Max)
+                    : 0;
+                if (streak > 0)
+                {
+                    next[key] = streak;
+                }
+            }
+        }
+
+        return next;
+    }
+
+    private static Dictionary<string, int> NextClearStreaks(
+        CampaignForce force,
+        IReadOnlyList<ForceStatusSetup> statuses,
+        Facts facts)
+    {
+        var next = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (force.StatusName is not { } name)
+        {
+            return next;
+        }
+
+        var starting = statuses.FirstOrDefault(status =>
+            string.Equals(status.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (starting is null)
+        {
+            return next;
+        }
+
+        var legacy = force.ClearStreaks.Count == 0 ? force.ClearStreak : 0;
+        foreach (var condition in starting.ClearConditions)
+        {
+            var key = ForceStatusStreakKeys.Clear(condition.Trigger);
+            var previous = EnableStreakValue(force.ClearStreaks, key, legacy);
+            if (!ShouldEvaluateClear(condition.Trigger, facts))
+            {
+                if (previous > 0)
+                {
+                    next[key] = previous;
+                }
+
+                continue;
+            }
+
+            var streak = MatchesClear(condition.Trigger, facts)
+                ? Math.Min(previous + 1, ForceStatusOccurrences.Max)
+                : 0;
+            if (streak > 0)
+            {
+                next[key] = streak;
+            }
+        }
+
+        return next;
+    }
+
+    private static bool ShouldEvaluateEnable(ForceStatusEnableTrigger trigger, Facts facts)
+    {
+        if (facts.SkipActionResolution)
+        {
+            return false;
+        }
+
+        return trigger switch
+        {
+            ForceStatusEnableTrigger.Hold or ForceStatusEnableTrigger.OccupyingWater => facts.UpdateWaterStreak,
+            ForceStatusEnableTrigger.AfterBattle
+                or ForceStatusEnableTrigger.BattleWon
+                or ForceStatusEnableTrigger.BattleLostOrRetreat => !facts.UpdateWaterStreak,
+            _ => false,
+        };
+    }
+
+    private static bool ShouldEvaluateClear(ForceStatusClearTrigger trigger, Facts facts)
+    {
+        if (facts.SkipActionResolution)
+        {
+            return false;
+        }
+
+        return trigger switch
+        {
+            ForceStatusClearTrigger.Hold
+                or ForceStatusClearTrigger.AfterMove
+                or ForceStatusClearTrigger.HoldWhileNotWater
+                or ForceStatusClearTrigger.HoldAtSettlement => facts.UpdateWaterStreak,
+            ForceStatusClearTrigger.AfterBattle
+                or ForceStatusClearTrigger.BattleWon
+                or ForceStatusClearTrigger.BattleLostOrRetreat => !facts.UpdateWaterStreak,
+            ForceStatusClearTrigger.AfterMoveOrBattle => true,
+            _ => false,
+        };
     }
 
     private static bool CurrentStatusMatches(string? current, string required)

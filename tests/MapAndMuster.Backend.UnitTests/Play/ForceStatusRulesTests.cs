@@ -14,6 +14,27 @@ public sealed class ForceStatusRulesTests
     private static readonly Guid TerritoryId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
 
     [Fact]
+    public void StandardCatalogGivesDiseasedHighestPriorityAndExhaustedCancelsWellRested()
+    {
+        var catalog = Catalog();
+        Assert.Collection(
+            catalog,
+            status => Assert.Equal(0, status.Priority),
+            status => Assert.Equal(1, status.Priority),
+            status => Assert.Equal(2, status.Priority),
+            status => Assert.Equal(3, status.Priority),
+            status => Assert.Equal(4, status.Priority));
+        var exhausted = Assert.Single(catalog, static status => status.Name == "Exhausted");
+        var rested = Assert.Single(catalog, static status => status.Name == "Well Rested");
+        Assert.Equal(rested.Id, Assert.Single(exhausted.CancelsStatusIds));
+        Assert.All(catalog, static status =>
+        {
+            Assert.Equal(1, status.EnableOccurrences);
+            Assert.Equal(1, status.ClearOccurrences);
+        });
+    }
+
+    [Fact]
     public void HoldEnablesWellRestedAndClearsShaken()
     {
         var catalog = Catalog();
@@ -67,6 +88,34 @@ public sealed class ForceStatusRulesTests
 
         var next = Assert.Single(ForceStatusRules.Apply([force], catalog, facts));
         Assert.Equal("Exhausted", next.StatusName);
+    }
+
+    [Fact]
+    public void ExhaustedCancelsWellRestedToNoStatus()
+    {
+        var catalog = Catalog();
+        var rested = Force(statusName: "Well Rested");
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromBattle(fought: true, won: false, lost: false, retreated: false, occupiesWater: false),
+        };
+
+        var next = Assert.Single(ForceStatusRules.Apply([rested], catalog, facts));
+        Assert.Null(next.StatusName);
+    }
+
+    [Fact]
+    public void HigherPriorityKeepsCurrentStatusWhenALowerPriorityWouldApply()
+    {
+        var catalog = Catalog();
+        var shaken = Force(statusName: "Shaken");
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromBattle(fought: true, won: false, lost: false, retreated: false, occupiesWater: false),
+        };
+
+        var next = Assert.Single(ForceStatusRules.Apply([shaken], catalog, facts));
+        Assert.Equal("Shaken", next.StatusName);
     }
 
     [Fact]
@@ -298,6 +347,233 @@ public sealed class ForceStatusRulesTests
     }
 
     [Fact]
+    public void TwoConsecutiveBattleLossesEnableWhenOccurrencesAreTwo()
+    {
+        var shaken = Status(
+            "Shaken",
+            ForceStatusEnableTrigger.BattleLostOrRetreat,
+            ForceStatusClearTrigger.Hold,
+            enableOccurrences: 2);
+        var afterOne = Assert.Single(ForceStatusRules.Apply([Force()], [shaken], BattleLoss()));
+        Assert.Null(afterOne.StatusName);
+        Assert.Equal(1, afterOne.EnableStreaks[EnableKey(shaken)]);
+
+        var afterTwo = Assert.Single(ForceStatusRules.Apply([afterOne], [shaken], BattleLoss()));
+        Assert.Equal("Shaken", afterTwo.StatusName);
+        Assert.False(afterTwo.EnableStreaks.ContainsKey(EnableKey(shaken)));
+    }
+
+    [Fact]
+    public void ABattleWinResetsABattleLossEnableStreak()
+    {
+        var shaken = Status(
+            "Shaken",
+            ForceStatusEnableTrigger.BattleLostOrRetreat,
+            ForceStatusClearTrigger.Hold,
+            enableOccurrences: 2);
+        var afterLoss = Assert.Single(ForceStatusRules.Apply([Force()], [shaken], BattleLoss()));
+        var afterWin = Assert.Single(ForceStatusRules.Apply(
+            [afterLoss],
+            [shaken],
+            new Dictionary<Guid, ForceStatusRules.Facts>
+            {
+                [ForceId] = ForceStatusRules.FromBattle(true, true, false, false, false),
+            }));
+        Assert.Null(afterWin.StatusName);
+        Assert.Equal(0, afterWin.EnableStreaks.GetValueOrDefault(EnableKey(shaken)));
+
+        var afterSecondLoss = Assert.Single(ForceStatusRules.Apply([afterWin], [shaken], BattleLoss()));
+        Assert.Null(afterSecondLoss.StatusName);
+        Assert.Equal(1, afterSecondLoss.EnableStreaks[EnableKey(shaken)]);
+    }
+
+    [Fact]
+    public void HoldDoesNotResetABattleLossEnableStreak()
+    {
+        var shaken = Status(
+            "Shaken",
+            ForceStatusEnableTrigger.BattleLostOrRetreat,
+            ForceStatusClearTrigger.Hold,
+            enableOccurrences: 2);
+        var afterLoss = Assert.Single(ForceStatusRules.Apply([Force()], [shaken], BattleLoss()));
+        var afterHold = Assert.Single(ForceStatusRules.Apply(
+            [afterLoss],
+            [shaken],
+            new Dictionary<Guid, ForceStatusRules.Facts>
+            {
+                [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false),
+            }));
+        Assert.Equal(1, afterHold.EnableStreaks[EnableKey(shaken)]);
+
+        var afterSecondLoss = Assert.Single(ForceStatusRules.Apply([afterHold], [shaken], BattleLoss()));
+        Assert.Equal("Shaken", afterSecondLoss.StatusName);
+    }
+
+    [Fact]
+    public void OccupyingWaterEnablesAfterConfiguredActionPhases()
+    {
+        var damp = Status(
+            "Damp",
+            ForceStatusEnableTrigger.OccupyingWater,
+            ForceStatusClearTrigger.HoldWhileNotWater,
+            enableOccurrences: 3);
+        var water = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: true),
+        };
+
+        var first = Assert.Single(ForceStatusRules.Apply([Force()], [damp], water));
+        var second = Assert.Single(ForceStatusRules.Apply([first], [damp], water));
+        var afterBattle = Assert.Single(ForceStatusRules.Apply(
+            [second],
+            [damp],
+            new Dictionary<Guid, ForceStatusRules.Facts>
+            {
+                [ForceId] = ForceStatusRules.FromBattle(true, true, false, false, true),
+            }));
+        Assert.Null(afterBattle.StatusName);
+        Assert.Equal(2, afterBattle.EnableStreaks[EnableKey(damp)]);
+
+        var third = Assert.Single(ForceStatusRules.Apply([afterBattle], [damp], water));
+        Assert.Equal("Damp", third.StatusName);
+    }
+
+    [Fact]
+    public void OccupyingWaterResetsWhenAnActionIsNotOnWater()
+    {
+        var damp = Status(
+            "Damp",
+            ForceStatusEnableTrigger.OccupyingWater,
+            ForceStatusClearTrigger.HoldWhileNotWater,
+            enableOccurrences: 3);
+        var water = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: true),
+        };
+        var land = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false),
+        };
+
+        var first = Assert.Single(ForceStatusRules.Apply([Force()], [damp], water));
+        var second = Assert.Single(ForceStatusRules.Apply([first], [damp], water));
+        var inland = Assert.Single(ForceStatusRules.Apply([second], [damp], land));
+        Assert.Equal(0, inland.EnableStreaks.GetValueOrDefault(EnableKey(damp)));
+        var again = Assert.Single(ForceStatusRules.Apply([inland], [damp], water));
+        Assert.Null(again.StatusName);
+        Assert.Equal(1, again.EnableStreaks[EnableKey(damp)]);
+    }
+
+    [Fact]
+    public void DelayedExhaustedStillCancelsWellRested()
+    {
+        var restedId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var exhaustedId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var rested = new ForceStatusSetup(
+            restedId,
+            "Well Rested",
+            "rest",
+            ForceStatusEnableTrigger.Hold,
+            ForceStatusClearTrigger.AfterMoveOrBattle,
+            4,
+            [],
+            1,
+            3);
+        var exhausted = new ForceStatusSetup(
+            exhaustedId,
+            "Exhausted",
+            "tired",
+            ForceStatusEnableTrigger.AfterBattle,
+            ForceStatusClearTrigger.Hold,
+            3,
+            [restedId],
+            2,
+            1);
+        var catalog = new[] { exhausted, rested };
+        var battle = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromBattle(true, false, false, false, false),
+        };
+
+        var afterOne = Assert.Single(ForceStatusRules.Apply([Force(statusName: "Well Rested")], catalog, battle));
+        Assert.Equal("Well Rested", afterOne.StatusName);
+        var afterTwo = Assert.Single(ForceStatusRules.Apply([afterOne], catalog, battle));
+        Assert.Null(afterTwo.StatusName);
+        Assert.Equal(0, afterTwo.EnableStreaks.GetValueOrDefault(EnableKey(exhausted)));
+    }
+
+    [Fact]
+    public void SettlementHoldClearsDiseasedAfterConfiguredOccurrences()
+    {
+        var catalog = new[]
+        {
+            new ForceStatusSetup(
+                Guid.NewGuid(),
+                "Diseased",
+                "sick",
+                ForceStatusEnableTrigger.Disease,
+                ForceStatusClearTrigger.HoldAtSettlement,
+                0,
+                [],
+                1,
+                2),
+        };
+        var hold = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false, occupiesCureSettlement: true),
+        };
+
+        var afterOne = Assert.Single(ForceStatusRules.Apply([Force(statusName: "Diseased")], catalog, hold));
+        Assert.Equal("Diseased", afterOne.StatusName);
+        var afterTwo = Assert.Single(ForceStatusRules.Apply([afterOne], catalog, hold));
+        Assert.Null(afterTwo.StatusName);
+    }
+
+    [Fact]
+    public void EitherListedEnableConditionCanGainTheStatus()
+    {
+        var shaken = new ForceStatusSetup(
+            Guid.NewGuid(),
+            "Shaken",
+            "effects",
+            [
+                new ForceStatusEnableCondition(ForceStatusEnableTrigger.BattleLostOrRetreat, 2),
+                new ForceStatusEnableCondition(ForceStatusEnableTrigger.Hold, 1),
+            ],
+            [new ForceStatusClearCondition(ForceStatusClearTrigger.BattleWon)]);
+        var afterHold = Assert.Single(ForceStatusRules.Apply(
+            [Force()],
+            [shaken],
+            new Dictionary<Guid, ForceStatusRules.Facts>
+            {
+                [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false),
+            }));
+        Assert.Equal("Shaken", afterHold.StatusName);
+    }
+
+    [Fact]
+    public void EitherListedClearConditionCanClearTheStatus()
+    {
+        var shaken = new ForceStatusSetup(
+            Guid.NewGuid(),
+            "Shaken",
+            "effects",
+            [new ForceStatusEnableCondition(ForceStatusEnableTrigger.BattleLostOrRetreat)],
+            [
+                new ForceStatusClearCondition(ForceStatusClearTrigger.Hold, 2),
+                new ForceStatusClearCondition(ForceStatusClearTrigger.BattleWon, 1),
+            ]);
+        var afterWin = Assert.Single(ForceStatusRules.Apply(
+            [Force(statusName: "Shaken")],
+            [shaken],
+            new Dictionary<Guid, ForceStatusRules.Facts>
+            {
+                [ForceId] = ForceStatusRules.FromBattle(true, true, false, false, false),
+            }));
+        Assert.Null(afterWin.StatusName);
+    }
+
+    [Fact]
     public void DescribeChangeIncludesTheSource()
     {
         var text = ForceStatusRules.DescribeChange("Shaken", "Diseased", ForceStatusChangeSource.Staff, null);
@@ -310,16 +586,42 @@ public sealed class ForceStatusRulesTests
         return new CampaignForce(ForceId, UserId, FactionId, TerritoryId, false, statusName, consecutiveWaterActions: consecutiveWaterActions);
     }
 
+    private static ForceStatusSetup Status(
+        string name,
+        ForceStatusEnableTrigger enable,
+        ForceStatusClearTrigger clear,
+        int enableOccurrences = 1,
+        int clearOccurrences = 1,
+        int priority = 1,
+        IReadOnlyList<Guid>? cancels = null)
+    {
+        return new ForceStatusSetup(
+            Guid.NewGuid(),
+            name,
+            "effects",
+            enable,
+            clear,
+            priority,
+            cancels,
+            enableOccurrences,
+            clearOccurrences);
+    }
+
+    private static Dictionary<Guid, ForceStatusRules.Facts> BattleLoss()
+    {
+        return new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromBattle(true, false, true, true, false),
+        };
+    }
+
+    private static string EnableKey(ForceStatusSetup status, ForceStatusEnableTrigger? trigger = null)
+    {
+        return ForceStatusStreakKeys.Enable(status.Id, trigger ?? status.EnableTrigger);
+    }
+
     private static IReadOnlyList<ForceStatusSetup> Catalog()
     {
-        return
-        [
-            .. ForceStatusCatalog.Standard.Select(status => new ForceStatusSetup(
-                Guid.NewGuid(),
-                status.Name,
-                status.Effects,
-                status.EnableTrigger,
-                status.ClearTrigger)),
-        ];
+        return ForceStatusCatalog.CreateStandardSetups();
     }
 }

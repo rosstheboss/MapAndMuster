@@ -1553,14 +1553,7 @@ public sealed class CampaignPlayRulesTests
     public void HoldAppliesWellRestedFromConfiguredStatuses()
     {
         var (state, map, schedule) = Seeded();
-        var catalog = ForceStatusCatalog.Standard
-            .Select(status => new ForceStatusSetup(
-                Guid.NewGuid(),
-                status.Name,
-                status.Effects,
-                status.EnableTrigger,
-                status.ClearTrigger))
-            .ToArray();
+        var catalog = ForceStatusCatalog.CreateStandardSetups();
         var advanced = CampaignPlayRules.Advance(state, map, schedule, AllyGroups(), state.Windows[0].EndsUtc, catalog);
         Assert.All(advanced.State.Forces, force => Assert.Equal("Well Rested", force.StatusName));
     }
@@ -1569,14 +1562,7 @@ public sealed class CampaignPlayRulesTests
     public void StaffCanAssignAnyCatalogStatusIncludingOntoImmuneFactions()
     {
         var (state, _, _) = Seeded();
-        var catalog = ForceStatusCatalog.Standard
-            .Select(status => new ForceStatusSetup(
-                Guid.NewGuid(),
-                status.Name,
-                status.Effects,
-                status.EnableTrigger,
-                status.ClearTrigger))
-            .ToArray();
+        var catalog = ForceStatusCatalog.CreateStandardSetups();
         var force = state.Forces[0];
         Assert.True(CampaignPlayRules.TrySetForceStatuses(
             state,

@@ -3266,7 +3266,17 @@ public static class CampaignPlayRules
                     continue;
                 }
 
-                byId[loser.Id] = loser.WithStatus(inflicted);
+                var match = catalog.FirstOrDefault(status =>
+                    string.Equals(status.Name, inflicted, StringComparison.OrdinalIgnoreCase));
+                var nextName = match is null
+                    ? inflicted
+                    : ForceStatusRules.ResolveGain(loser.StatusName, match, catalog);
+                if (string.Equals(nextName, loser.StatusName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                byId[loser.Id] = loser.WithStatus(nextName);
                 attributions[loser.Id] = new ForceStatusRules.Attribution(
                     ForceStatusChangeSource.SpecialRule,
                     SpecialRuleEffectKeys.BringersOfThePlague,
@@ -3279,10 +3289,11 @@ public static class CampaignPlayRules
         var afterSpecial = byId.Values.OrderBy(static force => force.Id).ToList();
         if (catalog.Any(static status => ForceStatusNames.IsDiseased(status.Name)))
         {
-            ForceStatusRules.SpreadContagion(afterSpecial, rules, attributions);
+            ForceStatusRules.SpreadContagion(afterSpecial, catalog, rules, attributions);
             ForceStatusRules.SpreadBattleContagion(
                 afterSpecial,
                 battles.Select(static battle => battle.ParticipantForceIds),
+                catalog,
                 rules,
                 attributions);
         }
@@ -3306,7 +3317,7 @@ public static class CampaignPlayRules
                 }
 
                 var won = battle.WinnerForceId == force.Id;
-                var (updated, attribution) = ForceStatusRules.ApplyMission(force, mission, won, rules);
+                var (updated, attribution) = ForceStatusRules.ApplyMission(force, mission, won, rules, catalog);
                 if (attribution is null)
                 {
                     continue;
@@ -3907,7 +3918,11 @@ public static class CampaignPlayRules
                 force.TerritoryId,
                 force.InBattle,
                 force.StatusName,
-                force.Subfaction))],
+                force.Subfaction,
+                force.ConsecutiveWaterActions,
+                force.EnableStreaks,
+                force.ClearStreaks,
+                force.ClearStreak))],
             state.Structures,
             state.BrokenAllyFactionIds,
             [.. map.Territories.Select(static territory => new TerritorySnapshot(

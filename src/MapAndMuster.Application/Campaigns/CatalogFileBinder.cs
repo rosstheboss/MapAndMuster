@@ -222,6 +222,124 @@ internal static class CatalogFileBinder
                 Effects = status.Effects,
                 EnableTrigger = status.EnableTrigger.ToString(),
                 ClearTrigger = status.ClearTrigger.ToString(),
+                EnableConditions = BindEnableConditions(status.EnableConditions),
+                ClearConditions = BindClearConditions(status.ClearConditions),
+                Priority = status.Priority,
+                CancelsStatusIds = status.CancelsStatusIds,
+                EnableOccurrences = status.EnableOccurrences,
+                ClearOccurrences = status.ClearOccurrences,
+            }),
+        ];
+    }
+
+    public static IReadOnlyList<ForceStatusSetup> ToForceStatusSetups(IReadOnlyList<StoredForceStatus> statuses)
+    {
+        ArgumentNullException.ThrowIfNull(statuses);
+        return
+        [
+            .. statuses
+                .Select(TryCreateSetup)
+                .OfType<ForceStatusSetup>(),
+        ];
+    }
+
+    private static ForceStatusSetup? TryCreateSetup(StoredForceStatus status)
+    {
+        var enables = ParseEnableConditions(status);
+        var clears = ParseClearConditions(status);
+        if (enables.Count == 0 || clears.Count == 0)
+        {
+            return null;
+        }
+
+        return new ForceStatusSetup(
+            status.Id,
+            status.Name,
+            status.Effects,
+            enables,
+            clears,
+            status.Priority,
+            status.CancelsStatusIds);
+    }
+
+    private static IReadOnlyList<ForceStatusEnableCondition> ParseEnableConditions(StoredForceStatus status)
+    {
+        var listed = status.EnableConditions;
+        if (listed.Count == 0 && !string.IsNullOrWhiteSpace(status.EnableTrigger))
+        {
+            listed =
+            [
+                new StoredForceStatusCondition
+                {
+                    Trigger = status.EnableTrigger,
+                    Occurrences = ForceStatusOccurrences.Normalize(status.EnableOccurrences),
+                },
+            ];
+        }
+
+        return
+        [
+            .. listed
+                .Where(static condition =>
+                    Enum.TryParse<ForceStatusEnableTrigger>(condition.Trigger, true, out var trigger)
+                    && Enum.IsDefined(trigger))
+                .Select(static condition => new ForceStatusEnableCondition(
+                    Enum.Parse<ForceStatusEnableTrigger>(condition.Trigger, true),
+                    ForceStatusOccurrences.Normalize(condition.Occurrences)))
+                .DistinctBy(static condition => condition.Trigger),
+        ];
+    }
+
+    private static IReadOnlyList<ForceStatusClearCondition> ParseClearConditions(StoredForceStatus status)
+    {
+        var listed = status.ClearConditions;
+        if (listed.Count == 0 && !string.IsNullOrWhiteSpace(status.ClearTrigger))
+        {
+            listed =
+            [
+                new StoredForceStatusCondition
+                {
+                    Trigger = status.ClearTrigger,
+                    Occurrences = ForceStatusOccurrences.Normalize(status.ClearOccurrences),
+                },
+            ];
+        }
+
+        return
+        [
+            .. listed
+                .Where(static condition =>
+                    Enum.TryParse<ForceStatusClearTrigger>(condition.Trigger, true, out var trigger)
+                    && Enum.IsDefined(trigger))
+                .Select(static condition => new ForceStatusClearCondition(
+                    Enum.Parse<ForceStatusClearTrigger>(condition.Trigger, true),
+                    ForceStatusOccurrences.Normalize(condition.Occurrences)))
+                .DistinctBy(static condition => condition.Trigger),
+        ];
+    }
+
+    private static IReadOnlyList<StoredForceStatusCondition> BindEnableConditions(
+        IReadOnlyList<ForceStatusEnableCondition> conditions)
+    {
+        return
+        [
+            .. conditions.Select(static condition => new StoredForceStatusCondition
+            {
+                Trigger = condition.Trigger.ToString(),
+                Occurrences = condition.Occurrences,
+            }),
+        ];
+    }
+
+    private static IReadOnlyList<StoredForceStatusCondition> BindClearConditions(
+        IReadOnlyList<ForceStatusClearCondition> conditions)
+    {
+        return
+        [
+            .. conditions.Select(static condition => new StoredForceStatusCondition
+            {
+                Trigger = condition.Trigger.ToString(),
+                Occurrences = condition.Occurrences,
             }),
         ];
     }

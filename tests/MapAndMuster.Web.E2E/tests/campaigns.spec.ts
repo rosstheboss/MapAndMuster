@@ -69,9 +69,27 @@ test('signed-in players can open their campaigns and start setup', async ({ page
     daemons.getByRole('checkbox', { name: 'Players who choose this faction must pick a subfaction' }),
   ).toBeChecked();
   await expect(page.getByLabel('Terrain 1 name')).toHaveValue('Beach');
+  await page
+    .locator('#setup-forceStatuses')
+    .getByRole('button', { name: /Force statuses/ })
+    .click();
+  await page.getByRole('button', { name: 'Add standard force statuses' }).click();
+  await expect(page.getByLabel('Status 1 name')).toHaveValue('Diseased');
+  await expect(page.locator('#force-status-priority-0')).toHaveValue('0');
+  await expect(page.locator('#force-status-enable-count-0')).toHaveValue('1');
+  await expect(page.locator('#force-status-clear-count-0')).toHaveValue('1');
+  await expect(page.locator('#force-status-enable-list-0')).toContainText('Named Diseased engine');
+  await expect(page.locator('#force-status-clear-list-0')).toContainText('Hold at a Capital City');
+  await page.getByRole('button', { name: 'Exhausted' }).click();
+  await expect(page.getByRole('button', { name: 'Remove Well Rested from cancel out' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add custom force status' }).click();
+  await page.getByRole('button', { name: 'Force status 6' }).click();
+  await page.getByLabel('Status 6 name').fill('Custom');
   await page.getByRole('button', { name: 'Create campaign' }).click();
   await expect(page.getByRole('alert')).toContainText('Campaign name is not filled in.');
   await expect(page.getByRole('alert')).toContainText('Start date and time is not filled in.');
+  await expect(page.getByRole('alert')).toContainText('Force status 6 needs at least one enable condition.');
+  await expect(page.getByRole('alert')).toContainText('Force status 6 needs at least one clear condition.');
 });
 
 test('signed-in players can browse all campaigns', async ({ page }) => {
