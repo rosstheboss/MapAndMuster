@@ -41,7 +41,7 @@ internal static class CampaignPlayPipeline
 
         if (CampaignLifecycle.Progress(campaign, utcNow).Status == CampaignStatus.Scheduled)
         {
-            return PlayLoad.Fail("play.not_started", "This campaign has not started yet.");
+            return PlayLoad.Fail(ErrorCodes.PlayNotStarted, "This campaign has not started yet.");
         }
 
         var map = CampaignLifecycle.ToPlayMap(campaign);
@@ -363,6 +363,10 @@ internal static class CampaignPlayPipeline
             Phases = existing.Phases,
             MapGraph = graph ?? existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
+            TerrainTags = existing.TerrainTags,
+            StructureTags = existing.StructureTags,
+            FactionTags = existing.FactionTags,
+            MissionTags = existing.MissionTags,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,

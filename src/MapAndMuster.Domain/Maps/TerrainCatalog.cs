@@ -87,7 +87,7 @@ public static class TerrainCatalog
     }
 
     /// <summary>
-    /// Whether a default terrain type is a water feature.
+    /// Whether a default terrain type receives the Water tag in the standard catalog.
     /// </summary>
     /// <param name="type">The terrain type.</param>
     /// <returns><see langword="true"/> for Beach, Lake, Riverlands, Sea, and Swamp.</returns>
@@ -97,7 +97,7 @@ public static class TerrainCatalog
     }
 
     /// <summary>
-    /// Whether a default terrain label is a water feature.
+    /// Whether a default terrain label receives the Water tag in the standard catalog.
     /// </summary>
     /// <param name="label">The terrain display label.</param>
     /// <returns><see langword="true"/> for the default water types.</returns>

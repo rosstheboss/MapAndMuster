@@ -9,6 +9,7 @@
     [attr.aria-activedescendant]="open() ? optionId(highlight()) : null"
     aria-autocomplete="list"
     [placeholder]="placeholder()"
+    [attr.maxlength]="maxLength()"
     [value]="query()"
     [disabled]="disabled()"
     (input)="onInput($event)"

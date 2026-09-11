@@ -69,6 +69,22 @@ test('signed-in players can open their campaigns and start setup', async ({ page
     daemons.getByRole('checkbox', { name: 'Players who choose this faction must pick a subfaction' }),
   ).toBeChecked();
   await expect(page.getByLabel('Terrain 1 name')).toHaveValue('Beach');
+  await expect(page.locator('#setup-terrain')).toContainText('Water');
+  await page.locator('#terrain-tag-draft').fill('Coastal');
+  await page.locator('#terrain-tag-draft').press('Enter');
+  await expect(page.getByRole('heading', { level: 1, name: 'Create campaign' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('#setup-terrain')).toContainText('Coastal');
+  await page.locator('#setup-terrain').getByRole('button', { name: 'Beach' }).click();
+  const beachCard = page.locator('#setup-terrain .nested-card').filter({ has: page.getByLabel('Terrain 1 name') });
+  await expect(beachCard.getByRole('button', { name: 'Remove tag Water' })).toBeVisible();
+  await page.locator('#terrain-tags-0').click();
+  await expect(page.getByRole('option', { name: 'Coastal' })).toBeVisible();
+  await page.getByRole('option', { name: 'Coastal' }).click();
+  await expect(beachCard.getByRole('button', { name: 'Remove tag Coastal' })).toBeVisible();
+  await page.locator('#terrain-tags-0').fill('NoSuchTag');
+  await page.locator('#terrain-tags-0').press('Enter');
+  await expect(beachCard.getByRole('button', { name: 'Remove tag NoSuchTag' })).toHaveCount(0);
   await page
     .locator('#setup-forceStatuses')
     .getByRole('button', { name: /Force statuses/ })
@@ -78,17 +94,28 @@ test('signed-in players can open their campaigns and start setup', async ({ page
   await expect(page.locator('#force-status-priority-0')).toHaveValue('0');
   await expect(page.locator('#force-status-enable-count-0')).toHaveValue('1');
   await expect(page.locator('#force-status-clear-count-0')).toHaveValue('1');
-  await expect(page.locator('#force-status-enable-list-0')).toContainText('Named Diseased engine');
-  await expect(page.locator('#force-status-clear-list-0')).toContainText('Hold at a Capital City');
+  await expect(page.locator('#force-status-enable-list-0')).toContainText('After consecutive action phases');
+  await expect(page.locator('#force-status-enable-list-0')).toContainText('terrain tag Water');
+  await expect(page.locator('#force-status-clear-list-0')).toContainText('After Hold');
+  await expect(page.locator('#force-status-clear-list-0')).toContainText('structure Capital City');
   await page.getByRole('button', { name: 'Exhausted' }).click();
   await expect(page.getByRole('button', { name: 'Remove Well Rested from cancel out' })).toBeVisible();
   await page.getByRole('button', { name: 'Add custom force status' }).click();
   await page.getByRole('button', { name: 'Force status 6' }).click();
   await page.getByLabel('Status 6 name').fill('Custom');
+  const customStatus = page.locator('.nested-card').filter({ has: page.getByLabel('Status 6 name') });
+  await customStatus.locator('#force-status-enable-5').selectOption('Hold');
+  await customStatus.locator('#force-status-enable-location-5').selectOption('Any');
+  await customStatus.getByRole('button', { name: 'Add', exact: true }).first().click();
+  await customStatus.locator('#force-status-enable-5').selectOption('Hold');
+  await customStatus.locator('#force-status-enable-location-5').selectOption('TerrainType');
+  await customStatus.locator('#force-status-enable-type-5').selectOption({ label: 'Beach' });
+  await customStatus.getByRole('button', { name: 'Add', exact: true }).first().click();
+  await expect(page.locator('#force-status-enable-list-5')).toContainText('After Hold × 1 at any location');
+  await expect(page.locator('#force-status-enable-list-5')).toContainText('After Hold × 1 at terrain Beach');
   await page.getByRole('button', { name: 'Create campaign' }).click();
   await expect(page.getByRole('alert')).toContainText('Campaign name is not filled in.');
   await expect(page.getByRole('alert')).toContainText('Start date and time is not filled in.');
-  await expect(page.getByRole('alert')).toContainText('Force status 6 needs at least one enable condition.');
   await expect(page.getByRole('alert')).toContainText('Force status 6 needs at least one clear condition.');
 });
 

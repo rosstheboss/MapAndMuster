@@ -12,6 +12,11 @@ public sealed class ForceStatusRulesTests
     private static readonly Guid FactionId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private static readonly Guid OtherFactionId = Guid.Parse("cccccccc-cccc-cccc-cccc-ccccccccccc1");
     private static readonly Guid TerritoryId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+    private static readonly Guid WaterTagId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+    private static readonly Guid CapitalCityId = Guid.Parse("ffffffff-ffff-ffff-ffff-fffffffffff1");
+    private static readonly Guid CityId = Guid.Parse("ffffffff-ffff-ffff-ffff-fffffffffff2");
+    private static readonly Guid SupplyDepotId = Guid.Parse("ffffffff-ffff-ffff-ffff-fffffffffff3");
+    private static readonly Guid TownId = Guid.Parse("ffffffff-ffff-ffff-ffff-fffffffffff4");
 
     [Fact]
     public void StandardCatalogGivesDiseasedHighestPriorityAndExhaustedCancelsWellRested()
@@ -27,11 +32,31 @@ public sealed class ForceStatusRulesTests
         var exhausted = Assert.Single(catalog, static status => status.Name == "Exhausted");
         var rested = Assert.Single(catalog, static status => status.Name == "Well Rested");
         Assert.Equal(rested.Id, Assert.Single(exhausted.CancelsStatusIds));
-        Assert.All(catalog, static status =>
+        Assert.All(catalog.Where(static status => status.Name != "Diseased"), static status =>
         {
             Assert.Equal(1, status.EnableOccurrences);
             Assert.Equal(1, status.ClearOccurrences);
         });
+        var diseased = Assert.Single(catalog, static status => status.Name == "Diseased");
+        Assert.Contains(
+            diseased.EnableConditions,
+            static condition =>
+                condition.Trigger == ForceStatusEnableTrigger.ConsecutiveActions && condition.Occurrences == 3);
+        Assert.Contains(
+            diseased.EnableConditions,
+            static condition =>
+                condition.Trigger == ForceStatusEnableTrigger.BattleLostOrRetreat && condition.Occurrences == 1);
+        Assert.Contains(
+            diseased.EnableConditions,
+            static condition => condition.Trigger == ForceStatusEnableTrigger.Surrender && condition.Occurrences == 2);
+        Assert.Equal(4, diseased.ClearConditions.Count);
+        Assert.All(
+            diseased.ClearConditions,
+            static condition =>
+            {
+                Assert.Equal(ForceStatusClearTrigger.Hold, condition.Trigger);
+                Assert.Equal(ConditionLocationKind.StructureType, condition.Location.Kind);
+            });
     }
 
     [Fact]
@@ -137,7 +162,11 @@ public sealed class ForceStatusRulesTests
     public void ThreeConsecutiveWaterActionsEnableDiseased()
     {
         var catalog = Catalog();
-        var force = Force(consecutiveWaterActions: 2);
+        var diseased = Assert.Single(catalog, static status => status.Name == "Diseased");
+        var force = Force(enableStreaks: new Dictionary<string, int>
+        {
+            [EnableKey(diseased, ForceStatusEnableTrigger.ConsecutiveActions)] = 2,
+        });
         var facts = new Dictionary<Guid, ForceStatusRules.Facts>
         {
             [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: true),
@@ -146,8 +175,7 @@ public sealed class ForceStatusRulesTests
         var application = ForceStatusRules.ApplyDetailed([force], catalog, facts);
         var next = Assert.Single(application.Forces);
         Assert.Equal("Diseased", next.StatusName);
-        Assert.Equal(3, next.ConsecutiveWaterActions);
-        Assert.Equal(ForceStatusChangeSource.ConsecutiveWater, application.Attributions[ForceId].Source);
+        Assert.Equal(ForceStatusChangeSource.Catalog, application.Attributions[ForceId].Source);
     }
 
     [Fact]
@@ -174,49 +202,82 @@ public sealed class ForceStatusRulesTests
     public void SurrenderAfterTwoWaterActionsEnablesDiseased()
     {
         var catalog = Catalog();
-        var force = Force(consecutiveWaterActions: 2);
-        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
-        {
-            [ForceId] = ForceStatusRules.FromBattle(
-                fought: false,
-                won: false,
-                lost: true,
-                retreated: true,
-                occupiesWater: true,
-                surrendered: true),
-        };
+        var diseased = Assert.Single(catalog, static status => status.Name == "Diseased");
+        var afterOne = Assert.Single(
+            ForceStatusRules.Apply(
+                [Force()],
+                catalog,
+                new Dictionary<Guid, ForceStatusRules.Facts>
+                {
+                    [ForceId] = ForceStatusRules.FromAction(ActionKind.Move, occupiesWater: true),
+                }));
+        var afterTwo = Assert.Single(
+            ForceStatusRules.Apply(
+                [afterOne],
+                catalog,
+                new Dictionary<Guid, ForceStatusRules.Facts>
+                {
+                    [ForceId] = ForceStatusRules.FromAction(ActionKind.Move, occupiesWater: true),
+                }));
+        Assert.Null(afterTwo.StatusName);
+        Assert.Equal(2, afterTwo.EnableStreaks.GetValueOrDefault(EnableKey(diseased, ForceStatusEnableTrigger.Surrender)));
 
-        var next = Assert.Single(ForceStatusRules.Apply([force], catalog, facts));
+        var next = Assert.Single(
+            ForceStatusRules.Apply(
+                [afterTwo],
+                catalog,
+                new Dictionary<Guid, ForceStatusRules.Facts>
+                {
+                    [ForceId] = ForceStatusRules.FromBattle(
+                        fought: false,
+                        won: false,
+                        lost: false,
+                        retreated: false,
+                        occupiesWater: true,
+                        surrendered: true),
+                }));
         Assert.Equal("Diseased", next.StatusName);
-        Assert.Equal(2, next.ConsecutiveWaterActions);
     }
 
     [Fact]
     public void SurrenderAfterOneWaterActionDoesNotEnableDiseased()
     {
         var catalog = Catalog();
-        var force = Force(consecutiveWaterActions: 1);
-        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
-        {
-            [ForceId] = ForceStatusRules.FromBattle(
-                fought: false,
-                won: false,
-                lost: true,
-                retreated: true,
-                occupiesWater: true,
-                surrendered: true),
-        };
-
-        var next = Assert.Single(ForceStatusRules.Apply([force], catalog, facts));
-        Assert.Equal("Shaken", next.StatusName);
-        Assert.Equal(1, next.ConsecutiveWaterActions);
+        var afterOne = Assert.Single(
+            ForceStatusRules.Apply(
+                [Force()],
+                catalog,
+                new Dictionary<Guid, ForceStatusRules.Facts>
+                {
+                    [ForceId] = ForceStatusRules.FromAction(ActionKind.Move, occupiesWater: true),
+                }));
+        var next = Assert.Single(
+            ForceStatusRules.Apply(
+                [afterOne],
+                catalog,
+                new Dictionary<Guid, ForceStatusRules.Facts>
+                {
+                    [ForceId] = ForceStatusRules.FromBattle(
+                        fought: false,
+                        won: false,
+                        lost: false,
+                        retreated: false,
+                        occupiesWater: true,
+                        surrendered: true),
+                }));
+        Assert.Null(next.StatusName);
     }
 
     [Fact]
     public void BattleWindowDoesNotCountAsAWaterAction()
     {
         var catalog = Catalog();
-        var force = Force(consecutiveWaterActions: 2);
+        var diseased = Assert.Single(catalog, static status => status.Name == "Diseased");
+        var force = Force(
+            enableStreaks: new Dictionary<string, int>
+            {
+                [EnableKey(diseased, ForceStatusEnableTrigger.ConsecutiveActions)] = 2,
+            });
         var facts = new Dictionary<Guid, ForceStatusRules.Facts>
         {
             [ForceId] = ForceStatusRules.FromBattle(
@@ -229,7 +290,7 @@ public sealed class ForceStatusRulesTests
 
         var next = Assert.Single(ForceStatusRules.Apply([force], catalog, facts));
         Assert.Equal("Exhausted", next.StatusName);
-        Assert.Equal(2, next.ConsecutiveWaterActions);
+        Assert.Equal(2, next.EnableStreaks.GetValueOrDefault(EnableKey(diseased, ForceStatusEnableTrigger.ConsecutiveActions)));
     }
 
     [Fact]
@@ -252,7 +313,7 @@ public sealed class ForceStatusRulesTests
     }
 
     [Fact]
-    public void HoldAtSettlementClearsDiseasedToNormalWithoutWellRested()
+    public void HoldAtSettlementClearsDiseasedAndHoldEnablesWellRested()
     {
         var catalog = Catalog();
         var diseased = Force(statusName: "Diseased");
@@ -261,11 +322,12 @@ public sealed class ForceStatusRulesTests
             [ForceId] = ForceStatusRules.FromAction(
                 ActionKind.Hold,
                 occupiesWater: false,
-                occupiesCureSettlement: true),
+                occupiesCureSettlement: true,
+                territory: Settlement(CapitalCityId, "Capital City")),
         };
 
         var next = Assert.Single(ForceStatusRules.Apply([diseased], catalog, facts));
-        Assert.Null(next.StatusName);
+        Assert.Equal("Well Rested", next.StatusName);
     }
 
     [Fact]
@@ -581,9 +643,32 @@ public sealed class ForceStatusRulesTests
         Assert.Contains("manager or administrator", text);
     }
 
-    private static CampaignForce Force(string? statusName = null, int consecutiveWaterActions = 0)
+    private static CampaignForce Force(
+        string? statusName = null,
+        int consecutiveWaterActions = 0,
+        IReadOnlyDictionary<string, int>? enableStreaks = null)
     {
-        return new CampaignForce(ForceId, UserId, FactionId, TerritoryId, false, statusName, consecutiveWaterActions: consecutiveWaterActions);
+        return new CampaignForce(
+            ForceId,
+            UserId,
+            FactionId,
+            TerritoryId,
+            false,
+            statusName,
+            consecutiveWaterActions: consecutiveWaterActions,
+            enableStreaks: enableStreaks);
+    }
+
+    private static PlayTerritory Settlement(Guid structureId, string name)
+    {
+        return new PlayTerritory(
+            TerritoryId,
+            1,
+            FactionId,
+            null,
+            structureId,
+            name,
+            StructureCondition.Operational);
     }
 
     private static ForceStatusSetup Status(
@@ -617,11 +702,22 @@ public sealed class ForceStatusRulesTests
 
     private static string EnableKey(ForceStatusSetup status, ForceStatusEnableTrigger? trigger = null)
     {
-        return ForceStatusStreakKeys.Enable(status.Id, trigger ?? status.EnableTrigger);
+        var condition = trigger is { } requested
+            ? status.EnableConditions.First(item => item.Trigger == requested)
+            : status.EnableConditions[0];
+        return ForceStatusStreakKeys.Enable(status.Id, condition.Id);
     }
 
     private static IReadOnlyList<ForceStatusSetup> Catalog()
     {
-        return ForceStatusCatalog.CreateStandardSetups();
+        return ForceStatusCatalog.CreateStandardSetups(
+            WaterTagId,
+            new Dictionary<string, Guid>
+            {
+                ["Capital City"] = CapitalCityId,
+                ["City"] = CityId,
+                ["Supply Depot"] = SupplyDepotId,
+                ["Town"] = TownId,
+            });
     }
 }

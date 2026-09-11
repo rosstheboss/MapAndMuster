@@ -39,6 +39,8 @@ internal static class CampaignPointStandingsMapper
             .ToArray();
         var graph = campaign.MapGraph;
         var conditions = play.Structures.ToDictionary(static item => item.TerritoryId);
+        var terrainTagsById = campaign.TerrainTypes.ToDictionary(static type => type.Id, static type => type.TagIds);
+        var structureTagsById = campaign.StructureTypes.ToDictionary(static type => type.Id, static type => type.TagIds);
         var territories = graph is null
             ? Array.Empty<CampaignPointTerritory>()
             : [.. graph.Territories.Select(territory =>
@@ -48,11 +50,16 @@ internal static class CampaignPointStandingsMapper
                 var condition = structure?.Condition
                     ?? ParseCondition(territory.StructureCondition)
                     ?? StructureCondition.Operational;
+                terrainTagsById.TryGetValue(territory.TerrainTypeId, out var terrainTags);
+                structureTagsById.TryGetValue(structureTypeId ?? Guid.Empty, out var structureTags);
+                var intact = structureTypeId is not null && condition != StructureCondition.Destroyed;
                 return new CampaignPointTerritory(
                     territory.Id,
                     territory.OwnerFactionId,
-                    structureTypeId,
-                    condition);
+                    intact ? structureTypeId : null,
+                    intact ? condition : StructureCondition.Operational,
+                    terrainTags ?? [],
+                    intact ? structureTags ?? [] : []);
             })];
         var adjacencies = graph is null
             ? Array.Empty<CampaignPointAdjacency>()

@@ -6,6 +6,9 @@
     "ms-dotnettools.csdevkit",
     "ms-dotnettools.csharp",
     "stylelint.vscode-stylelint",
-    "davidanson.vscode-markdownlint"
+    "davidanson.vscode-markdownlint",
+    "firefox-devtools.vscode-firefox-debug",
+    "ms-vscode.powershell",
+    "ms-ossdata.vscode-pgsql"
   ]
 }

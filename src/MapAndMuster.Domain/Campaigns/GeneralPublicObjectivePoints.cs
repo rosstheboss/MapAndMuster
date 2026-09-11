@@ -16,7 +16,11 @@ public sealed class GeneralPublicObjectivePoints
         int mostBattlesWon,
         int mostStructurePoints = 0,
         int pointsPerTerritory = 0,
-        int alliedRelicControlPoints = 0)
+        int alliedRelicControlPoints = 0,
+        Guid? mostTerritoriesTerrainTagId = null,
+        Guid? longestTerritoryChainTerrainTagId = null,
+        Guid? mostStructurePointsStructureTagId = null,
+        Guid? pointsPerTerritoryTerrainTagId = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(mostTerritories);
         ArgumentOutOfRangeException.ThrowIfNegative(longestTerritoryChain);
@@ -30,6 +34,10 @@ public sealed class GeneralPublicObjectivePoints
         MostStructurePoints = mostStructurePoints;
         PointsPerTerritory = pointsPerTerritory;
         AlliedRelicControlPoints = alliedRelicControlPoints;
+        MostTerritoriesTerrainTagId = mostTerritoriesTerrainTagId;
+        LongestTerritoryChainTerrainTagId = longestTerritoryChainTerrainTagId;
+        MostStructurePointsStructureTagId = mostStructurePointsStructureTagId;
+        PointsPerTerritoryTerrainTagId = pointsPerTerritoryTerrainTagId;
     }
 
     /// <summary>Gets an all-zero configuration that ignores every built-in public objective.</summary>
@@ -55,4 +63,16 @@ public sealed class GeneralPublicObjectivePoints
     /// or a current ally. Relics the scoring player holds do not count. Zero ignores the objective.
     /// </summary>
     public int AlliedRelicControlPoints { get; }
+
+    /// <summary>Gets an optional terrain tag that limits most-territories scoring.</summary>
+    public Guid? MostTerritoriesTerrainTagId { get; }
+
+    /// <summary>Gets an optional terrain tag that limits longest-chain scoring.</summary>
+    public Guid? LongestTerritoryChainTerrainTagId { get; }
+
+    /// <summary>Gets an optional structure tag that limits most-structure-points scoring.</summary>
+    public Guid? MostStructurePointsStructureTagId { get; }
+
+    /// <summary>Gets an optional terrain tag that limits points-per-territory scoring.</summary>
+    public Guid? PointsPerTerritoryTerrainTagId { get; }
 }

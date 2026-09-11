@@ -61,23 +61,7 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
                 zip,
                 CatalogEntry,
                 Encoding.UTF8.GetBytes(
-                    CatalogJson.Serialize(
-                        campaign.TerrainTypes,
-                        campaign.StructureTypes,
-                        campaign.ItemObjectiveTypes,
-                        campaign.PublicObjectiveTypes,
-                        campaign.BattleScoring,
-                        campaign.RankingObjectivePoints,
-                        campaign.SpecialRules,
-                        campaign.PrivateObjectiveTypes,
-                        campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds),
-                        campaign.ForceStatuses,
-                        campaign.SplitForceSupplyPenaltyPercent,
-                        campaign.SplitForceSupplyPenaltyIsPercent,
-                        campaign.StandardBattleResultQuestions,
-                        campaign.ArmyEscalations,
-                        campaign.Missions,
-                        campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules))));
+                    CatalogJson.Serialize(campaign)));
             WriteEntry(zip, SettingsEntry, Encoding.UTF8.GetBytes(CampaignPresetSettingsJson.Serialize(campaign)));
             if (campaign.MapGraph is not null)
             {
@@ -214,6 +198,10 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
                     Phases = campaign.Phases,
                     MapGraph = campaign.MapGraph,
                     TerrainTypes = campaign.TerrainTypes,
+                    TerrainTags = campaign.TerrainTags,
+                    StructureTags = campaign.StructureTags,
+                    FactionTags = campaign.FactionTags,
+                    MissionTags = campaign.MissionTags,
                     StructureTypes = campaign.StructureTypes,
                     ItemObjectiveTypes = campaign.ItemObjectiveTypes,
                     PublicObjectiveTypes = campaign.PublicObjectiveTypes,
@@ -253,7 +241,7 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
         var catalogJson = Encoding.UTF8.GetString(catalogBytes);
         var settingsJson = Encoding.UTF8.GetString(settingsBytes);
         var overlayJson = overlayBytes is null ? null : Encoding.UTF8.GetString(overlayBytes);
-        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions) = CatalogJson.Deserialize(catalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions, TerrainTags, StructureTags, FactionTags, MissionTags, FactionTagIds, SubfactionTagIds) = CatalogJson.Deserialize(catalogJson);
         var settings = CampaignPresetSettingsJson.Deserialize(settingsJson);
         var created = DateTimeOffset.UnixEpoch;
         return new StoredCampaign
@@ -290,6 +278,8 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
                     SubfactionSpecialRules = faction.SubfactionSpecialRules.Count > 0
                         ? faction.SubfactionSpecialRules
                         : SubfactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
+                    TagIds = FactionTagIds.GetValueOrDefault(faction.Id) ?? [],
+                    SubfactionTags = SubfactionTagIds.GetValueOrDefault(faction.Id) ?? [],
                 }),
             ],
             AllyGroups = settings.AllyGroups,
@@ -304,6 +294,10 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
             MapGraph = MapGraphJson.Deserialize(overlayJson),
             TerrainTypes = TerrainTypes,
             StructureTypes = StructureTypes,
+            TerrainTags = TerrainTags,
+            StructureTags = StructureTags,
+            FactionTags = FactionTags,
+            MissionTags = MissionTags,
             ItemObjectiveTypes = ItemObjectiveTypes,
             PublicObjectiveTypes = PublicObjectiveTypes,
             SpecialRules = SpecialRules,

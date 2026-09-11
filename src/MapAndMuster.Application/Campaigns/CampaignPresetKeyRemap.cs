@@ -49,6 +49,8 @@ internal static class CampaignPresetKeyRemap
                     TintFlagImage = faction.TintFlagImage,
                     SpecialRuleIds = faction.SpecialRuleIds,
                     SubfactionSpecialRules = faction.SubfactionSpecialRules,
+                    TagIds = faction.TagIds,
+                    SubfactionTags = faction.SubfactionTags,
                 }),
             ],
             AllyGroups = campaign.AllyGroups,
@@ -64,6 +66,10 @@ internal static class CampaignPresetKeyRemap
             MapGraph = campaign.MapGraph,
             TerrainTypes = [.. campaign.TerrainTypes.Select(type => RemapTerrain(type, keys))],
             StructureTypes = [.. campaign.StructureTypes.Select(type => RemapStructure(type, keys))],
+            TerrainTags = campaign.TerrainTags,
+            StructureTags = campaign.StructureTags,
+            FactionTags = campaign.FactionTags,
+            MissionTags = campaign.MissionTags,
             ItemObjectiveTypes = [.. campaign.ItemObjectiveTypes.Select(type => RemapItem(type, keys))],
             PublicObjectiveTypes = campaign.PublicObjectiveTypes,
             SpecialRules = campaign.SpecialRules,
@@ -89,7 +95,7 @@ internal static class CampaignPresetKeyRemap
             Missions = [.. type.Missions.Select(mission => RemapMission(mission, keys))],
             CampaignPoints = type.CampaignPoints,
             SupplyPoints = type.SupplyPoints,
-            IsWaterFeature = type.IsWaterFeature,
+            TagIds = type.TagIds,
         };
     }
 
@@ -110,6 +116,7 @@ internal static class CampaignPresetKeyRemap
             SupplyPoints = type.SupplyPoints,
             PillageSupplyPoints = type.PillageSupplyPoints,
             DestroySupplyPoints = type.DestroySupplyPoints,
+            TagIds = type.TagIds,
         };
     }
 
@@ -151,6 +158,7 @@ internal static class CampaignPresetKeyRemap
             SupplyPointsAdvantageSide = mission.SupplyPointsAdvantageSide,
             SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
             StatusChanges = mission.StatusChanges,
+            TagIds = mission.TagIds,
         };
     }
 

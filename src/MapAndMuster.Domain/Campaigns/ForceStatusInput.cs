@@ -40,13 +40,25 @@ public sealed class ForceStatusInput
 }
 
 /// <summary>
-/// One enable or clear trigger and its consecutive-occurrence count.
+/// One enable or clear trigger, consecutive-occurrence count, and optional location filter.
 /// </summary>
 public sealed class ForceStatusConditionInput
 {
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
     /// <summary>Gets the trigger name.</summary>
     public string? Trigger { get; init; }
 
     /// <summary>Gets how many times in a row the trigger must match, when supplied.</summary>
     public int? Occurrences { get; init; }
+
+    /// <summary>Gets Any, TerrainType, TerrainTag, StructureType, or StructureTag.</summary>
+    public string? LocationKind { get; init; }
+
+    /// <summary>Gets the terrain or structure type when the location is a type filter.</summary>
+    public Guid? LocationTypeId { get; init; }
+
+    /// <summary>Gets the terrain or structure tag when the location is a tag filter.</summary>
+    public Guid? LocationTagId { get; init; }
 }

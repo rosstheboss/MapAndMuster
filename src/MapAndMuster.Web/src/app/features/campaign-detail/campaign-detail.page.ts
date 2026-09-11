@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   afterNextRender,
   Component,
@@ -9,36 +10,29 @@ import {
   viewChild,
   type ElementRef,
 } from '@angular/core';
-import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, isConcurrencyConflict, readApiError } from '../../core/auth/auth.service';
-import { CampaignService } from '../../core/campaigns/campaign.service';
-import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
-import type {
-  CampaignChatSend,
-  CampaignDetail,
-  CampaignFaction,
-  CampaignMission,
-  CampaignParticipant,
-  CampaignPlayDetail,
-  CampaignSpecialRule,
-  BattleParticipantReport,
-  ArmyListSupplyCategory,
-  MapGraphDetail,
-  PlayBattle,
-  PlayBattleForceSupply,
-  PlayDraft,
-  PlayForce,
-  PlayItemObjective,
-  PlayerSupplyView,
-  PrivateObjectiveAssignment,
-  PublicObjectiveLeader,
-  PublicObjectiveLeaderboard,
-  TraitorVictim,
-  UserSearchHit,
-} from '../../core/campaigns/campaign.models';
+import {
+  CAMPAIGN_LOG_POLL_MS,
+  latestDelinquencyEntryForUser,
+  mergeCampaignLog,
+  type CampaignLogExportRequest,
+  type CampaignLogSync,
+} from '../../core/campaigns/campaign-log';
+import { MAP_EDIT_CLOSED_MESSAGE, MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
+import {
+  actionNumberAt,
+  battleStatusLabel,
+  DURATION_UNITS,
+  forceStatusLabel,
+  formatCountdown,
+  formatDuration,
+  formatPhaseEndTimestamp,
+  formatPhaseLabel,
+  statusLabel,
+} from '../../core/campaigns/campaign-schedule';
 import {
   CampaignViewPrefsService,
   DEFAULT_STANDINGS_SORT,
@@ -50,27 +44,34 @@ import {
   type StandingsSort,
   type StandingsSortColumn,
 } from '../../core/campaigns/campaign-view-prefs.service';
+import type {
+  ArmyListSupplyCategory,
+  BattleParticipantReport,
+  CampaignChatSend,
+  CampaignDetail,
+  CampaignFaction,
+  CampaignMission,
+  CampaignParticipant,
+  CampaignPlayDetail,
+  CampaignSpecialRule,
+  MapGraphDetail,
+  PlayBattle,
+  PlayBattleForceSupply,
+  PlayDraft,
+  PlayerSupplyView,
+  PlayForce,
+  PlayItemObjective,
+  PrivateObjectiveAssignment,
+  PublicObjectiveLeader,
+  PublicObjectiveLeaderboard,
+  TraitorVictim,
+  UserSearchHit,
+} from '../../core/campaigns/campaign.models';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
-import {
-  CAMPAIGN_LOG_POLL_MS,
-  latestDelinquencyEntryForUser,
-  mergeCampaignLog,
-  type CampaignLogExportRequest,
-  type CampaignLogSync,
-} from '../../core/campaigns/campaign-log';
-import { MAP_EDIT_CLOSED_MESSAGE, MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
+import { CampaignService } from '../../core/campaigns/campaign.service';
+import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import { compareNames } from '../../core/campaigns/faction-presets';
-import {
-  actionNumberAt,
-  DURATION_UNITS,
-  formatCountdown,
-  formatDuration,
-  formatPhaseEndTimestamp,
-  formatPhaseLabel,
-  statusLabel,
-  battleStatusLabel,
-  forceStatusLabel,
-} from '../../core/campaigns/campaign-schedule';
+import { isWaterTagName } from '../../core/campaigns/force-status-presets';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { formatLocation } from '../../core/location/location';
@@ -81,23 +82,23 @@ import {
   parseMapFactionOptionValue,
   playerFactionOptions,
 } from '../../core/maps/map-faction-options';
-import { mapSvgCatalogFrom, serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
 import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
 import { normalizeStructureCondition, territoryLabel } from '../../core/maps/map-graph.models';
-import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
+import { mapSvgCatalogFrom, serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
 import { CampaignLogComponent } from '../../shared/campaign-log/campaign-log.component';
-import { ConfirmButtonComponent } from '../../shared/confirm-button/confirm-button.component';
-import { AppDialogComponent } from '../../shared/dialog/dialog.component';
 import {
   CampaignMapViewComponent,
   type MapForceMarker,
   type MapHeldItem,
   type MapItemMarker,
 } from '../../shared/campaign-map-view/campaign-map-view.component';
-import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
+import { ConfirmButtonComponent } from '../../shared/confirm-button/confirm-button.component';
+import { AppDialogComponent } from '../../shared/dialog/dialog.component';
 import { FactionLogoComponent } from '../../shared/faction-logo/faction-logo.component';
-import { TraitorMarkComponent } from '../../shared/traitor-mark/traitor-mark.component';
+import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { PhaseCountdownComponent } from '../../shared/phase-countdown/phase-countdown.component';
+import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
+import { TraitorMarkComponent } from '../../shared/traitor-mark/traitor-mark.component';
 
 const CAMPAIGN_SECTIONS = [
   'log',
@@ -239,6 +240,7 @@ export class CampaignDetailPage {
   protected readonly chatBusy = signal(false);
   protected readonly chatError = signal<string | null>(null);
   protected readonly openSections = signal(openSections());
+  protected readonly commitmentsRosterOpen = signal(false);
   protected readonly highlightMode = signal<MapHighlightMode>('configured');
   protected readonly standingsSort = signal<StandingsSort>({ ...DEFAULT_STANDINGS_SORT });
   protected readonly chatChannelKey = signal(defaultCampaignViewPrefs().chatChannelKey);
@@ -364,7 +366,12 @@ export class CampaignDetailPage {
   });
   protected readonly canUncommit = computed(() => {
     const play = this.play();
-    return !!play?.isCommitted && play.currentPhaseKind === 'Action' && !!play.currentWindowId;
+    return (
+      !!play?.isCommitted &&
+      play.currentPhaseKind === 'Action' &&
+      !!play.currentWindowId &&
+      this.orderableForces().length > 0
+    );
   });
   protected readonly commitmentSummary = computed(() => {
     const play = this.play();
@@ -403,7 +410,7 @@ export class CampaignDetailPage {
 
     const mine = this.myForces();
     if (mine.length > 0 && mine.every((force) => force.inBattle)) {
-      return null;
+      return 'Committed';
     }
 
     return play.isCommitted ? 'Committed' : 'Not committed';
@@ -1391,6 +1398,10 @@ export class CampaignDetailPage {
     );
   }
 
+  protected toggleCommitmentsRoster(): void {
+    this.commitmentsRosterOpen.update((open) => !open);
+  }
+
   protected goToCommitments(): void {
     if (this.isBattlePhase() || this.hasOpenBattles()) {
       this.setSection('battles', true);
@@ -1404,6 +1415,7 @@ export class CampaignDetailPage {
     }
 
     this.setSection('orders', true);
+    this.commitmentsRosterOpen.set(true);
     afterNextRender(
       () => {
         this.scrollElementIntoView(this.commitmentsBlock()?.nativeElement);
@@ -1487,7 +1499,16 @@ export class CampaignDetailPage {
   }
 
   protected isWaterFeature(id: string | null | undefined): boolean {
-    return terrainTypeById(this.campaign(), id)?.isWaterFeature === true;
+    const campaign = this.campaign();
+    const type = terrainTypeById(campaign, id);
+    if (!campaign || !type) {
+      return false;
+    }
+
+    const waterIds = new Set(
+      (campaign.terrainTags ?? []).filter((tag) => isWaterTagName(tag.name)).map((tag) => tag.id),
+    );
+    return (type.tagIds ?? []).some((tagId) => waterIds.has(tagId));
   }
 
   protected specialRulesFor(ids: readonly string[] | undefined): CampaignSpecialRule[] {
@@ -1614,6 +1635,52 @@ export class CampaignDetailPage {
 
   protected draftKindsFor(force: PlayForce): readonly string[] {
     return force.inBattle ? [] : force.availableActions;
+  }
+
+  protected privateObjectiveProgress(assignment: PrivateObjectiveAssignment): string | null {
+    if (assignment.scoringKind !== 'Automatic' || assignment.currentCount == null || assignment.requiredCount == null) {
+      return null;
+    }
+
+    return `(${assignment.currentCount}/${assignment.requiredCount})`;
+  }
+
+  protected privateObjectiveSummary(assignment: PrivateObjectiveAssignment): string | null {
+    const progress = this.privateObjectiveProgress(assignment);
+    if (assignment.description && progress) {
+      return `${assignment.description} ${progress}`;
+    }
+
+    return assignment.description ?? progress;
+  }
+
+  protected battleLockCaption(force: PlayForce): string {
+    const place = this.territoryName(force.territoryId);
+    const battle = this.play()?.battles.find((item) => item.participantForceIds.includes(force.id));
+    const opponents = this.battleOpponentNames(force, battle);
+    const withWhom = opponents.length > 0 ? ` with ${joinDisplayNames(opponents)}` : '';
+    return `Locked in battle at ${place}${withWhom}. This force cannot perform an action until the battle is resolved.`;
+  }
+
+  private battleOpponentNames(force: PlayForce, battle: PlayBattle | undefined): string[] {
+    const play = this.play();
+    if (!play || !battle) {
+      return [];
+    }
+
+    const names = play.forces
+      .filter((item) => battle.participantForceIds.includes(item.id) && item.id !== force.id)
+      .map((item) => `${item.controllerUsername ?? 'Player'} · ${this.factionName(item.factionId)}`);
+    if (names.length > 0) {
+      return names;
+    }
+
+    if (battle.isRinger) {
+      const faction = battle.ringerFactionId ? this.factionName(battle.ringerFactionId) : 'a ringer';
+      return [faction === 'Unknown faction' ? 'a ringer' : faction];
+    }
+
+    return [];
   }
 
   protected debugKindsFor(force: PlayForce): readonly string[] {
@@ -2535,7 +2602,8 @@ export class CampaignDetailPage {
     this.ending.set(true);
     this.error.set(null);
     try {
-      await this.campaignsApi.end(campaign.id, campaign.revision);
+      const revision = this.play()?.revision ?? campaign.revision;
+      await this.campaignsApi.end(campaign.id, revision);
       this.confirmingEnd.set(false);
       this.ending.set(false);
       await this.router.navigateByUrl('/campaigns');
@@ -2985,7 +3053,9 @@ export class CampaignDetailPage {
     try {
       if (this.shouldLoadPlay(campaign)) {
         const play = await this.campaignsApi.getPlay(campaign.id);
-        this.applyPlay(play, { preserveLocalWork: true });
+        if (play) {
+          this.applyPlay(play, { preserveLocalWork: true });
+        }
         return;
       }
 
@@ -2993,7 +3063,9 @@ export class CampaignDetailPage {
       this.campaign.set(next);
       if (this.shouldLoadPlay(next)) {
         const play = await this.campaignsApi.getPlay(next.id);
-        this.applyPlay(play, { preserveLocalWork: true });
+        if (play) {
+          this.applyPlay(play, { preserveLocalWork: true });
+        }
       }
     } catch {
       // Keep the visible board; the next poll retries.
@@ -3009,6 +3081,11 @@ export class CampaignDetailPage {
 
     try {
       const play = await this.campaignsApi.getPlay(campaign.id);
+      if (!play) {
+        this.error.set('The campaign was changed by another request. Reload and try again.');
+        return;
+      }
+
       this.applyPlay(play);
       this.error.set(null);
     } catch {
@@ -3123,6 +3200,7 @@ export class CampaignDetailPage {
     }
 
     this.openSections.set(next);
+    this.commitmentsRosterOpen.set(false);
   }
 
   private persistViewPrefs(): void {
@@ -3240,6 +3318,18 @@ function factionSpawnPlaces(faction: CampaignFaction, territories: readonly MapT
     subfactionLabel: place.subfaction ? `${place.subfaction}: ` : '',
     suffix: index === places.length - 1 ? ')' : '',
   }));
+}
+
+function joinDisplayNames(names: string[]): string {
+  if (names.length <= 1) {
+    return names[0] ?? '';
+  }
+
+  if (names.length === 2) {
+    return `${names[0]} and ${names[1]}`;
+  }
+
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
 }
 
 function factionBelongsToAllyGroup(faction: CampaignFaction, group: { id: string; name: string }): boolean {

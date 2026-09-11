@@ -84,23 +84,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
 
         record.Name = displayName;
         record.NormalizedName = normalized;
-        record.CatalogJson = CatalogJson.Serialize(
-            campaign.TerrainTypes,
-            campaign.StructureTypes,
-            campaign.ItemObjectiveTypes,
-            campaign.PublicObjectiveTypes,
-            campaign.BattleScoring,
-            campaign.RankingObjectivePoints,
-            campaign.SpecialRules,
-            campaign.PrivateObjectiveTypes,
-            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds),
-            campaign.ForceStatuses,
-            campaign.SplitForceSupplyPenaltyPercent,
-            campaign.SplitForceSupplyPenaltyIsPercent,
-            campaign.StandardBattleResultQuestions,
-            campaign.ArmyEscalations,
-            campaign.Missions,
-            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules));
+        record.CatalogJson = CatalogJson.Serialize(campaign);
         record.SettingsJson = CampaignPresetSettingsJson.Serialize(campaign);
         record.MapGraphJson = campaign.MapGraph is null ? null : MapGraphJson.Serialize(campaign.MapGraph);
         record.MapStorageKey = campaign.MapStorageKey;
@@ -139,7 +123,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
 
     private static StoredCampaign ToStored(CampaignPresetRecord record)
     {
-        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions, TerrainTags, StructureTags, FactionTags, MissionTags, FactionTagIds, SubfactionTagIds) = CatalogJson.Deserialize(record.CatalogJson);
         var settings = CampaignPresetSettingsJson.Deserialize(record.SettingsJson);
         var created = record.CreatedUtc;
         return new StoredCampaign
@@ -176,6 +160,8 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
                     SubfactionSpecialRules = faction.SubfactionSpecialRules.Count > 0
                         ? faction.SubfactionSpecialRules
                         : SubfactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
+                    TagIds = FactionTagIds.GetValueOrDefault(faction.Id) ?? [],
+                    SubfactionTags = SubfactionTagIds.GetValueOrDefault(faction.Id) ?? [],
                 }),
             ],
             AllyGroups = settings.AllyGroups,
@@ -190,6 +176,10 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
             MapGraph = MapGraphJson.Deserialize(record.MapGraphJson),
             TerrainTypes = TerrainTypes,
             StructureTypes = StructureTypes,
+            TerrainTags = TerrainTags,
+            StructureTags = StructureTags,
+            FactionTags = FactionTags,
+            MissionTags = MissionTags,
             ItemObjectiveTypes = ItemObjectiveTypes,
             PublicObjectiveTypes = PublicObjectiveTypes,
             SpecialRules = SpecialRules,

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using MapAndMuster.Application.Play;
 using MapAndMuster.Domain.Identity;
 
@@ -62,6 +63,9 @@ public sealed class ExportCampaignLogCommand
 public static class CampaignLogExport
 {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
+    private static readonly Regex IsoInstant = new(
+        @"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     /// <summary>
     /// Parses <c>txt</c> or <c>csv</c> from a query string.
@@ -144,10 +148,37 @@ public static class CampaignLogExport
     /// </summary>
     public static string FormatDisplayTimestamp(DateTimeOffset occurredUtc, string timeZoneId)
     {
+        return $"({FormatLocalInstant(occurredUtc, timeZoneId)})";
+    }
+
+    /// <summary>
+    /// Replaces UTC ISO instants in a schedule-extension summary with campaign-local clock times.
+    /// </summary>
+    public static string LocalizeScheduleExtendedSummary(string summary, string timeZoneId)
+    {
+        ArgumentNullException.ThrowIfNull(summary);
+        ArgumentException.ThrowIfNullOrWhiteSpace(timeZoneId);
+        return IsoInstant.Replace(summary, match =>
+        {
+            if (!DateTimeOffset.TryParse(
+                    match.Value,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var instant))
+            {
+                return match.Value;
+            }
+
+            return FormatLocalInstant(instant, timeZoneId);
+        });
+    }
+
+    private static string FormatLocalInstant(DateTimeOffset occurredUtc, string timeZoneId)
+    {
         var zone = ResolveZone(timeZoneId);
         var local = TimeZoneInfo.ConvertTime(occurredUtc, zone);
         var clock = local.ToString("yyyy-MM-dd hh:mm:ss tt", CultureInfo.InvariantCulture);
-        return $"({clock} {Abbreviation(zone, local)})";
+        return $"{clock} {Abbreviation(zone, local)}";
     }
 
     private static string WriteText(string timeZoneId, IReadOnlyList<PlayLogEntryDetail> entries)
@@ -159,7 +190,7 @@ public static class CampaignLogExport
             builder.Append(' ');
             builder.Append(entry.Originator);
             builder.Append(": ");
-            builder.Append(entry.Summary.Replace("\r\n", "\n", StringComparison.Ordinal));
+            builder.Append(DisplaySummary(entry, timeZoneId).Replace("\r\n", "\n", StringComparison.Ordinal));
             builder.Append('\n');
         }
 
@@ -182,11 +213,21 @@ public static class CampaignLogExport
             builder.Append(',');
             builder.Append(Csv(entry.Originator));
             builder.Append(',');
-            builder.Append(Csv(entry.Summary));
+            builder.Append(Csv(DisplaySummary(entry, timeZoneId)));
             builder.Append("\r\n");
         }
 
         return builder.ToString();
+    }
+
+    private static string DisplaySummary(PlayLogEntryDetail entry, string timeZoneId)
+    {
+        if (!string.Equals(entry.Kind, "ScheduleExtended", StringComparison.OrdinalIgnoreCase))
+        {
+            return entry.Summary;
+        }
+
+        return LocalizeScheduleExtendedSummary(entry.Summary, timeZoneId);
     }
 
     private static string Source(PlayLogEntryDetail entry)

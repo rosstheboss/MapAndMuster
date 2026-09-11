@@ -18,7 +18,8 @@ public sealed class StructureTypePlayRules
         bool isDestructible,
         int supplyPoints = HuntInEstaliaDefaults.SupplyPoints,
         int pillageSupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
-        int destroySupplyPoints = HuntInEstaliaDefaults.SupplyPoints)
+        int destroySupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
+        IReadOnlyList<Guid>? tagIds = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Id = id;
@@ -29,6 +30,7 @@ public sealed class StructureTypePlayRules
         SupplyPoints = supplyPoints;
         PillageSupplyPoints = pillageSupplyPoints;
         DestroySupplyPoints = destroySupplyPoints;
+        TagIds = tagIds ?? [];
     }
 
     /// <summary>Gets the structure type identifier.</summary>
@@ -54,4 +56,7 @@ public sealed class StructureTypePlayRules
 
     /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
     public int DestroySupplyPoints { get; }
+
+    /// <summary>Gets structure-catalog tags assigned to this type.</summary>
+    public IReadOnlyList<Guid> TagIds { get; }
 }

@@ -165,6 +165,18 @@ public sealed class CampaignDetail
     /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
     public IReadOnlyList<MissionDetail> Missions { get; init; } = [];
 
+    /// <summary>Gets terrain-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagDetail> TerrainTags { get; init; } = [];
+
+    /// <summary>Gets structure-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagDetail> StructureTags { get; init; } = [];
+
+    /// <summary>Gets faction-catalog tags shared with subfactions.</summary>
+    public IReadOnlyList<CatalogTagDetail> FactionTags { get; init; } = [];
+
+    /// <summary>Gets mission-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagDetail> MissionTags { get; init; } = [];
+
     /// <summary>Gets configured force statuses other than Normal.</summary>
     public IReadOnlyList<ForceStatusDetail> ForceStatuses { get; init; } = [];
 
@@ -215,6 +227,18 @@ public sealed class CampaignDetail
 
     /// <summary>Gets campaign points for each revealed relic held by an ally or faction-mate other than the player.</summary>
     public int AlliedRelicControlCampaignPoints { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits most-territories scoring.</summary>
+    public Guid? MostTerritoriesTerrainTagId { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits longest-chain scoring.</summary>
+    public Guid? LongestTerritoryChainTerrainTagId { get; init; }
+
+    /// <summary>Gets an optional structure tag that limits most-structure-points scoring.</summary>
+    public Guid? MostStructurePointsStructureTagId { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits points-per-territory scoring.</summary>
+    public Guid? PointsPerTerritoryTerrainTagId { get; init; }
 
     /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int SplitForceSupplyPenaltyPercent { get; init; } =
@@ -541,6 +565,18 @@ public sealed class RoundPhaseDetail
 }
 
 /// <summary>
+/// A catalog tag in a campaign detail response.
+/// </summary>
+public sealed class CatalogTagDetail
+{
+    /// <summary>Gets the tag identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the unique tag name within its kind.</summary>
+    public required string Name { get; init; }
+}
+
+/// <summary>
 /// A faction in a campaign detail response.
 /// </summary>
 public sealed class FactionDetail
@@ -577,6 +613,12 @@ public sealed class FactionDetail
 
     /// <summary>Gets special-rule assignments for named subfactions.</summary>
     public IReadOnlyList<SubfactionSpecialRulesDetail> SubfactionSpecialRules { get; init; } = [];
+
+    /// <summary>Gets faction-catalog tags assigned to this faction.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
+
+    /// <summary>Gets extra faction-catalog tags for named subfactions.</summary>
+    public IReadOnlyList<StoredSubfactionTags> SubfactionTags { get; init; } = [];
 
     /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
     public IReadOnlyList<SubfactionAppearanceDetail> SubfactionAppearances { get; init; } = [];
@@ -746,6 +788,18 @@ public sealed class StoredCampaign
     /// <summary>Gets the terrain types.</summary>
     public required IReadOnlyList<StoredTerrainType> TerrainTypes { get; init; }
 
+    /// <summary>Gets terrain-catalog tags.</summary>
+    public IReadOnlyList<StoredCatalogTag> TerrainTags { get; init; } = [];
+
+    /// <summary>Gets structure-catalog tags.</summary>
+    public IReadOnlyList<StoredCatalogTag> StructureTags { get; init; } = [];
+
+    /// <summary>Gets faction-catalog tags shared with subfactions.</summary>
+    public IReadOnlyList<StoredCatalogTag> FactionTags { get; init; } = [];
+
+    /// <summary>Gets mission-catalog tags.</summary>
+    public IReadOnlyList<StoredCatalogTag> MissionTags { get; init; } = [];
+
     /// <summary>Gets the structure types.</summary>
     public required IReadOnlyList<StoredStructureType> StructureTypes { get; init; }
 
@@ -869,6 +923,12 @@ public sealed class StoredFaction
 
     /// <summary>Gets special-rule assignments for named subfactions.</summary>
     public IReadOnlyList<SubfactionSpecialRulesDetail> SubfactionSpecialRules { get; init; } = [];
+
+    /// <summary>Gets faction-catalog tags assigned to this faction.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
+
+    /// <summary>Gets extra faction-catalog tags for named subfactions.</summary>
+    public IReadOnlyList<StoredSubfactionTags> SubfactionTags { get; init; } = [];
 }
 
 /// <summary>
@@ -890,6 +950,30 @@ public sealed class StoredSubfactionAppearance
 
     /// <summary>Gets whether an uploaded logo should be tinted with the resolved color.</summary>
     public bool TintFlagImage { get; init; }
+}
+
+/// <summary>
+/// Extra faction-catalog tags for one named subfaction.
+/// </summary>
+public sealed class StoredSubfactionTags
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets extra faction-catalog tag identifiers.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
+}
+
+/// <summary>
+/// A persisted catalog tag.
+/// </summary>
+public sealed class StoredCatalogTag
+{
+    /// <summary>Gets the tag identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the unique tag name within its kind.</summary>
+    public required string Name { get; init; }
 }
 
 /// <summary>
@@ -963,8 +1047,8 @@ public sealed class TerrainTypeDetail
     /// <summary>Gets supply points granted by a controlled territory of this terrain.</summary>
     public int SupplyPoints { get; init; } = 1;
 
-    /// <summary>Gets whether this terrain is a water feature.</summary>
-    public bool IsWaterFeature { get; init; }
+    /// <summary>Gets terrain-catalog tags assigned to this type.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
 }
 
 /// <summary>
@@ -1010,6 +1094,9 @@ public sealed class StructureTypeDetail
 
     /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
     public int DestroySupplyPoints { get; init; } = 1;
+
+    /// <summary>Gets structure-catalog tags assigned to this type.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
 }
 
 /// <summary>
@@ -1184,6 +1271,18 @@ public sealed class ForceStatusConditionDetail
 
     /// <summary>Gets how many consecutive matching triggers are required.</summary>
     public int Occurrences { get; init; } = ForceStatusOccurrences.Default;
+
+    /// <summary>Gets the condition identifier.</summary>
+    public Guid Id { get; init; }
+
+    /// <summary>Gets Any, TerrainType, TerrainTag, StructureType, or StructureTag.</summary>
+    public string LocationKind { get; init; } = nameof(ConditionLocationKind.Any);
+
+    /// <summary>Gets the terrain or structure type when the location is a type filter.</summary>
+    public Guid? LocationTypeId { get; init; }
+
+    /// <summary>Gets the terrain or structure tag when the location is a tag filter.</summary>
+    public Guid? LocationTagId { get; init; }
 }
 
 /// <summary>
@@ -1250,6 +1349,12 @@ public sealed class PrivateObjectiveTypeDetail
 
     /// <summary>Gets whether GainedAfter waits for the prerequisite to have been lost.</summary>
     public bool PrerequisiteWasLost { get; init; }
+
+    /// <summary>Gets the structure-catalog tag for structure-based automatic criteria.</summary>
+    public Guid? StructureTagId { get; init; }
+
+    /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
+    public Guid? TerrainTagId { get; init; }
 }
 
 /// <summary>
@@ -1283,6 +1388,12 @@ public sealed class PrivateObjectiveAssignmentDetail
 
     /// <summary>Gets campaign points when the viewer may see them.</summary>
     public int? CampaignPoints { get; init; }
+
+    /// <summary>Gets current automatic progress when the viewer may see it.</summary>
+    public int? CurrentCount { get; init; }
+
+    /// <summary>Gets the automatic requirement when the viewer may see it.</summary>
+    public int? RequiredCount { get; init; }
 
     /// <summary>Gets whether the viewer may claim this assignment.</summary>
     public bool CanClaim { get; init; }
@@ -1499,6 +1610,9 @@ public sealed class MissionDetail
 
     /// <summary>Gets ordered win/lose status-change conditions.</summary>
     public IReadOnlyList<MissionStatusChangeDetail> StatusChanges { get; init; } = [];
+
+    /// <summary>Gets mission-catalog tags assigned to this mission.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
 }
 
 /// <summary>
@@ -1587,8 +1701,8 @@ public sealed class StoredTerrainType
     /// <summary>Gets supply points granted by a controlled territory of this terrain.</summary>
     public int SupplyPoints { get; init; } = 1;
 
-    /// <summary>Gets whether this terrain is a water feature.</summary>
-    public bool IsWaterFeature { get; init; }
+    /// <summary>Gets terrain-catalog tags assigned to this type.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
 }
 
 /// <summary>
@@ -1634,6 +1748,9 @@ public sealed class StoredStructureType
 
     /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
     public int DestroySupplyPoints { get; init; } = 1;
+
+    /// <summary>Gets structure-catalog tags assigned to this type.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
 }
 
 /// <summary>
@@ -1808,6 +1925,18 @@ public sealed class StoredForceStatusCondition
 
     /// <summary>Gets how many consecutive matching triggers are required.</summary>
     public int Occurrences { get; init; } = ForceStatusOccurrences.Default;
+
+    /// <summary>Gets the condition identifier.</summary>
+    public Guid Id { get; init; }
+
+    /// <summary>Gets Any, TerrainType, TerrainTag, StructureType, or StructureTag.</summary>
+    public string LocationKind { get; init; } = nameof(ConditionLocationKind.Any);
+
+    /// <summary>Gets the terrain or structure type when the location is a type filter.</summary>
+    public Guid? LocationTypeId { get; init; }
+
+    /// <summary>Gets the terrain or structure tag when the location is a tag filter.</summary>
+    public Guid? LocationTagId { get; init; }
 }
 
 /// <summary>
@@ -1874,6 +2003,12 @@ public sealed class StoredPrivateObjectiveType
 
     /// <summary>Gets whether GainedAfter waits for the prerequisite to have been lost.</summary>
     public bool PrerequisiteWasLost { get; init; }
+
+    /// <summary>Gets the structure-catalog tag for structure-based automatic criteria.</summary>
+    public Guid? StructureTagId { get; init; }
+
+    /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
+    public Guid? TerrainTagId { get; init; }
 }
 
 /// <summary>
@@ -1943,6 +2078,9 @@ public sealed class StoredMission
 
     /// <summary>Gets ordered win/lose status-change conditions.</summary>
     public IReadOnlyList<StoredMissionStatusChange> StatusChanges { get; init; } = [];
+
+    /// <summary>Gets mission-catalog tags assigned to this mission.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
 }
 
 /// <summary>

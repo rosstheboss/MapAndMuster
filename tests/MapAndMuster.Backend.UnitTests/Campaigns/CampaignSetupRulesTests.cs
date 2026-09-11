@@ -44,10 +44,11 @@ public sealed class CampaignSetupRulesTests
         Assert.Equal(12, setup.TerrainTypes.Count);
         Assert.Equal("Beach", setup.TerrainTypes[0].Name);
         Assert.Equal("Beach control", setup.TerrainTypes[0].Missions[0].Name);
-        Assert.True(setup.TerrainTypes[0].IsWaterFeature);
-        Assert.Contains(setup.TerrainTypes, type => type.Name == "Cave" && !type.IsWaterFeature);
-        Assert.Contains(setup.TerrainTypes, type => type.Name == "Sea" && type.IsWaterFeature);
-        Assert.Contains(setup.TerrainTypes, type => type.Name == "Swamp" && type.IsWaterFeature);
+        var waterTag = Assert.Single(setup.TerrainTags, static tag => CatalogTags.IsWater(tag.Name));
+        Assert.Contains(waterTag.Id, setup.TerrainTypes[0].TagIds);
+        Assert.Contains(setup.TerrainTypes, type => type.Name == "Cave" && !type.TagIds.Contains(waterTag.Id));
+        Assert.Contains(setup.TerrainTypes, type => type.Name == "Sea" && type.TagIds.Contains(waterTag.Id));
+        Assert.Contains(setup.TerrainTypes, type => type.Name == "Swamp" && type.TagIds.Contains(waterTag.Id));
         Assert.Contains(setup.TerrainTypes, type => type.Name == "Forest");
         Assert.Contains(setup.TerrainTypes, type => type.Name == "Jungle");
         Assert.Equal(6, setup.StructureTypes.Count);
@@ -1990,7 +1991,7 @@ public sealed class CampaignSetupRulesTests
                     ],
                     ClearConditions =
                     [
-                        new ForceStatusConditionInput { Trigger = nameof(ForceStatusClearTrigger.Hold) },
+                        new ForceStatusConditionInput { Trigger = nameof(ForceStatusClearTrigger.AfterMove) },
                         new ForceStatusConditionInput { Trigger = nameof(ForceStatusClearTrigger.BattleWon) },
                     ],
                 },
@@ -2062,7 +2063,7 @@ public sealed class CampaignSetupRulesTests
                     ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
                 },
             ]));
-        Assert.Contains(duplicate, error => error.Code == "forceStatuses.enable.duplicate");
+        Assert.Contains(duplicate, error => error.Code == "forceStatuses.clear.required");
     }
 
     [Fact]

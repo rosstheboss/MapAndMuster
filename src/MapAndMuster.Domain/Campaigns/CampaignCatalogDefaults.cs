@@ -20,7 +20,6 @@ public static class CampaignCatalogDefaults
                 Name = entry.Label,
                 Color = entry.OverlayColor,
                 Missions = [new MissionInput { Name = DefaultMissionName(entry.Label) }],
-                IsWaterFeature = TerrainCatalog.IsWaterFeature(entry.Type),
                 SupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
             }),
         ];

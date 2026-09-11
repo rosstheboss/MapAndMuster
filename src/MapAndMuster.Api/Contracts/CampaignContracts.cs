@@ -91,6 +91,18 @@ public sealed class SaveCampaignRequest
     /// <summary>Gets reusable missions. Omitted means nested terrain and structure missions only.</summary>
     public IReadOnlyList<MissionRequest>? Missions { get; init; }
 
+    /// <summary>Gets terrain-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagRequest>? TerrainTags { get; init; }
+
+    /// <summary>Gets structure-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagRequest>? StructureTags { get; init; }
+
+    /// <summary>Gets faction-catalog tags shared with subfactions.</summary>
+    public IReadOnlyList<CatalogTagRequest>? FactionTags { get; init; }
+
+    /// <summary>Gets mission-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagRequest>? MissionTags { get; init; }
+
     /// <summary>Gets configured force statuses other than Normal. Omitted or empty means none.</summary>
     public IReadOnlyList<ForceStatusRequest>? ForceStatuses { get; init; }
 
@@ -135,6 +147,18 @@ public sealed class SaveCampaignRequest
 
     /// <summary>Gets campaign points for each revealed relic held by an ally or faction-mate other than the player.</summary>
     public int? AlliedRelicControlCampaignPoints { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits most-territories scoring.</summary>
+    public Guid? MostTerritoriesTerrainTagId { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits longest-chain scoring.</summary>
+    public Guid? LongestTerritoryChainTerrainTagId { get; init; }
+
+    /// <summary>Gets an optional structure tag that limits most-structure-points scoring.</summary>
+    public Guid? MostStructurePointsStructureTagId { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits points-per-territory scoring.</summary>
+    public Guid? PointsPerTerritoryTerrainTagId { get; init; }
 
     /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int? SplitForceSupplyPenaltyPercent { get; init; }
@@ -220,6 +244,12 @@ public sealed class FactionRequest
     /// <summary>Gets special-rule assignments for named subfactions.</summary>
     public IReadOnlyList<SubfactionSpecialRulesRequest>? SubfactionSpecialRules { get; init; }
 
+    /// <summary>Gets faction-catalog tag identifiers assigned to this faction.</summary>
+    public IReadOnlyList<Guid>? TagIds { get; init; }
+
+    /// <summary>Gets extra faction-catalog tags for named subfactions.</summary>
+    public IReadOnlyList<SubfactionTagsRequest>? SubfactionTags { get; init; }
+
     /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
     public IReadOnlyList<SubfactionAppearanceRequest>? SubfactionAppearances { get; init; }
 }
@@ -234,6 +264,30 @@ public sealed class SubfactionSpecialRulesRequest
 
     /// <summary>Gets special-rule identifiers assigned to this subfaction.</summary>
     public IReadOnlyList<Guid>? SpecialRuleIds { get; init; }
+}
+
+/// <summary>
+/// Extra faction-catalog tags for one named subfaction in a save request.
+/// </summary>
+public sealed class SubfactionTagsRequest
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets extra faction-catalog tag identifiers.</summary>
+    public IReadOnlyList<Guid>? TagIds { get; init; }
+}
+
+/// <summary>
+/// A catalog tag in a save request.
+/// </summary>
+public sealed class CatalogTagRequest
+{
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Gets the tag name.</summary>
+    public required string Name { get; init; }
 }
 
 /// <summary>
@@ -304,11 +358,14 @@ public sealed class TerrainTypeRequest
     /// <summary>Gets campaign points awarded for currently owning a territory of this terrain.</summary>
     public int? CampaignPoints { get; init; }
 
-    /// <summary>Gets whether this terrain is a water feature.</summary>
+    /// <summary>Gets whether this terrain is a water feature. Accepted only when loading older catalogs.</summary>
     public bool? IsWaterFeature { get; init; }
 
     /// <summary>Gets supply points granted by a controlled territory of this terrain.</summary>
     public int? SupplyPoints { get; init; }
+
+    /// <summary>Gets terrain-catalog tag identifiers assigned to this type.</summary>
+    public IReadOnlyList<Guid>? TagIds { get; init; }
 }
 
 /// <summary>
@@ -354,6 +411,9 @@ public sealed class StructureTypeRequest
 
     /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
     public int? DestroySupplyPoints { get; init; }
+
+    /// <summary>Gets structure-catalog tag identifiers assigned to this type.</summary>
+    public IReadOnlyList<Guid>? TagIds { get; init; }
 }
 
 /// <summary>
@@ -525,6 +585,18 @@ public sealed class ForceStatusConditionRequest
 
     /// <summary>Gets how many times in a row the trigger must match, when supplied.</summary>
     public int? Occurrences { get; init; }
+
+    /// <summary>Gets the condition identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Gets Any, TerrainType, TerrainTag, StructureType, or StructureTag.</summary>
+    public string? LocationKind { get; init; }
+
+    /// <summary>Gets the terrain or structure type when the location is a type filter.</summary>
+    public Guid? LocationTypeId { get; init; }
+
+    /// <summary>Gets the terrain or structure tag when the location is a tag filter.</summary>
+    public Guid? LocationTagId { get; init; }
 }
 
 /// <summary>
@@ -591,6 +663,12 @@ public sealed class PrivateObjectiveTypeRequest
 
     /// <summary>Gets whether GainedAfter waits for the prerequisite to have been lost.</summary>
     public bool PrerequisiteWasLost { get; init; }
+
+    /// <summary>Gets the structure-catalog tag for structure-based automatic criteria.</summary>
+    public Guid? StructureTagId { get; init; }
+
+    /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
+    public Guid? TerrainTagId { get; init; }
 }
 
 /// <summary>
@@ -639,6 +717,9 @@ public sealed class MissionRequest
 
     /// <summary>Gets ordered win/lose status-change conditions.</summary>
     public IReadOnlyList<MissionStatusChangeRequest>? StatusChanges { get; init; }
+
+    /// <summary>Gets mission-catalog tag identifiers assigned to this mission.</summary>
+    public IReadOnlyList<Guid>? TagIds { get; init; }
 }
 
 /// <summary>
@@ -868,6 +949,18 @@ public sealed class CampaignDetailResponse
     /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
     public IReadOnlyList<MissionResponse> Missions { get; init; } = [];
 
+    /// <summary>Gets terrain-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagResponse> TerrainTags { get; init; } = [];
+
+    /// <summary>Gets structure-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagResponse> StructureTags { get; init; } = [];
+
+    /// <summary>Gets faction-catalog tags shared with subfactions.</summary>
+    public IReadOnlyList<CatalogTagResponse> FactionTags { get; init; } = [];
+
+    /// <summary>Gets mission-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagResponse> MissionTags { get; init; } = [];
+
     /// <summary>Gets configured force statuses other than Normal.</summary>
     public IReadOnlyList<ForceStatusResponse> ForceStatuses { get; init; } = [];
 
@@ -918,6 +1011,18 @@ public sealed class CampaignDetailResponse
 
     /// <summary>Gets campaign points for each revealed relic held by an ally or faction-mate other than the player.</summary>
     public int AlliedRelicControlCampaignPoints { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits most-territories scoring.</summary>
+    public Guid? MostTerritoriesTerrainTagId { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits longest-chain scoring.</summary>
+    public Guid? LongestTerritoryChainTerrainTagId { get; init; }
+
+    /// <summary>Gets an optional structure tag that limits most-structure-points scoring.</summary>
+    public Guid? MostStructurePointsStructureTagId { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits points-per-territory scoring.</summary>
+    public Guid? PointsPerTerritoryTerrainTagId { get; init; }
 
     /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int SplitForceSupplyPenaltyPercent { get; init; }
@@ -1297,6 +1402,12 @@ public sealed class FactionResponse
     /// <summary>Gets special-rule assignments for named subfactions.</summary>
     public IReadOnlyList<SubfactionSpecialRulesResponse> SubfactionSpecialRules { get; init; } = [];
 
+    /// <summary>Gets faction-catalog tags assigned to this faction.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
+
+    /// <summary>Gets extra faction-catalog tags for named subfactions.</summary>
+    public IReadOnlyList<SubfactionTagsResponse> SubfactionTags { get; init; } = [];
+
     /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
     public IReadOnlyList<SubfactionAppearanceResponse> SubfactionAppearances { get; init; } = [];
 }
@@ -1311,6 +1422,30 @@ public sealed class SubfactionSpecialRulesResponse
 
     /// <summary>Gets special-rule identifiers assigned to this subfaction.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+}
+
+/// <summary>
+/// Extra faction-catalog tags for one named subfaction.
+/// </summary>
+public sealed class SubfactionTagsResponse
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets extra faction-catalog tag identifiers.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
+}
+
+/// <summary>
+/// A catalog tag in a campaign response.
+/// </summary>
+public sealed class CatalogTagResponse
+{
+    /// <summary>Gets the tag identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the unique tag name within its kind.</summary>
+    public required string Name { get; init; }
 }
 
 /// <summary>
@@ -1387,8 +1522,8 @@ public sealed class TerrainTypeResponse
     /// <summary>Gets supply points granted by a controlled territory of this terrain.</summary>
     public int SupplyPoints { get; init; } = 1;
 
-    /// <summary>Gets whether this terrain is a water feature.</summary>
-    public bool IsWaterFeature { get; init; }
+    /// <summary>Gets terrain-catalog tags assigned to this type.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
 }
 
 /// <summary>
@@ -1434,6 +1569,9 @@ public sealed class StructureTypeResponse
 
     /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
     public int DestroySupplyPoints { get; init; } = 1;
+
+    /// <summary>Gets structure-catalog tags assigned to this type.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
 }
 
 /// <summary>
@@ -1605,6 +1743,18 @@ public sealed class ForceStatusConditionResponse
 
     /// <summary>Gets how many consecutive matching triggers are required.</summary>
     public int Occurrences { get; init; }
+
+    /// <summary>Gets the condition identifier.</summary>
+    public Guid Id { get; init; }
+
+    /// <summary>Gets Any, TerrainType, TerrainTag, StructureType, or StructureTag.</summary>
+    public string LocationKind { get; init; } = nameof(ConditionLocationKind.Any);
+
+    /// <summary>Gets the terrain or structure type when the location is a type filter.</summary>
+    public Guid? LocationTypeId { get; init; }
+
+    /// <summary>Gets the terrain or structure tag when the location is a tag filter.</summary>
+    public Guid? LocationTagId { get; init; }
 }
 
 /// <summary>
@@ -1671,6 +1821,12 @@ public sealed class PrivateObjectiveTypeResponse
 
     /// <summary>Gets whether GainedAfter waits for the prerequisite to have been lost.</summary>
     public bool PrerequisiteWasLost { get; init; }
+
+    /// <summary>Gets the structure-catalog tag for structure-based automatic criteria.</summary>
+    public Guid? StructureTagId { get; init; }
+
+    /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
+    public Guid? TerrainTagId { get; init; }
 }
 
 /// <summary>
@@ -1704,6 +1860,12 @@ public sealed class PrivateObjectiveAssignmentResponse
 
     /// <summary>Gets campaign points when the viewer may see them.</summary>
     public int? CampaignPoints { get; init; }
+
+    /// <summary>Gets current automatic progress when the viewer may see it.</summary>
+    public int? CurrentCount { get; init; }
+
+    /// <summary>Gets the automatic requirement when the viewer may see it.</summary>
+    public int? RequiredCount { get; init; }
 
     /// <summary>Gets whether the viewer may claim this assignment.</summary>
     public bool CanClaim { get; init; }
@@ -1902,6 +2064,9 @@ public sealed class MissionResponse
 
     /// <summary>Gets ordered win/lose status-change conditions.</summary>
     public IReadOnlyList<MissionStatusChangeResponse> StatusChanges { get; init; } = [];
+
+    /// <summary>Gets mission-catalog tags assigned to this mission.</summary>
+    public IReadOnlyList<Guid> TagIds { get; init; } = [];
 }
 
 /// <summary>
@@ -2020,7 +2185,7 @@ public sealed class AddCampaignMemberRequest
 /// </summary>
 public sealed class EndCampaignRequest
 {
-    /// <summary>Gets the last observed campaign revision.</summary>
+    /// <summary>Gets the last observed campaign revision. Ending uses the current stored revision.</summary>
     public required int Revision { get; init; }
 }
 
@@ -2213,6 +2378,15 @@ public static class CampaignResponses
                             SpecialRuleIds = item.SpecialRuleIds,
                         }),
                     ],
+                    TagIds = faction.TagIds,
+                    SubfactionTags =
+                    [
+                        .. faction.SubfactionTags.Select(static item => new SubfactionTagsResponse
+                        {
+                            Name = item.Name,
+                            TagIds = item.TagIds,
+                        }),
+                    ],
                     SubfactionAppearances =
                     [
                         .. faction.SubfactionAppearances.Select(static item => new SubfactionAppearanceResponse
@@ -2235,7 +2409,7 @@ public static class CampaignResponses
                     Color = type.Color,
                     CampaignPoints = type.CampaignPoints,
                     SupplyPoints = type.SupplyPoints,
-                    IsWaterFeature = type.IsWaterFeature,
+                    TagIds = type.TagIds,
                     Missions = [.. type.Missions.Select(FromMission)],
                 }),
             ],
@@ -2255,6 +2429,7 @@ public static class CampaignResponses
                     SupplyPoints = type.SupplyPoints,
                     PillageSupplyPoints = type.PillageSupplyPoints,
                     DestroySupplyPoints = type.DestroySupplyPoints,
+                    TagIds = type.TagIds,
                     Missions = [.. type.Missions.Select(FromMission)],
                 }),
             ],
@@ -2328,6 +2503,10 @@ public static class CampaignResponses
                 }),
             ],
             Missions = [.. detail.Missions.Select(FromMission)],
+            TerrainTags = [.. detail.TerrainTags.Select(FromTag)],
+            StructureTags = [.. detail.StructureTags.Select(FromTag)],
+            FactionTags = [.. detail.FactionTags.Select(FromTag)],
+            MissionTags = [.. detail.MissionTags.Select(FromTag)],
             ForceStatuses =
             [
                 .. detail.ForceStatuses.Select(static status => new ForceStatusResponse
@@ -2369,6 +2548,8 @@ public static class CampaignResponses
                     StatusMatchKind = type.StatusMatchKind,
                     PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
                     PrerequisiteWasLost = type.PrerequisiteWasLost,
+                    StructureTagId = type.StructureTagId,
+                    TerrainTagId = type.TerrainTagId,
                 }),
             ],
             PrivateObjectives =
@@ -2384,6 +2565,8 @@ public static class CampaignResponses
                     Name = item.Name,
                     Description = item.Description,
                     CampaignPoints = item.CampaignPoints,
+                    CurrentCount = item.CurrentCount,
+                    RequiredCount = item.RequiredCount,
                     CanClaim = item.CanClaim,
                     CanModerate = item.CanModerate,
                 }),
@@ -2411,6 +2594,10 @@ public static class CampaignResponses
             MostStructurePointsCampaignPoints = detail.MostStructurePointsCampaignPoints,
             PointsPerTerritoryCampaignPoints = detail.PointsPerTerritoryCampaignPoints,
             AlliedRelicControlCampaignPoints = detail.AlliedRelicControlCampaignPoints,
+            MostTerritoriesTerrainTagId = detail.MostTerritoriesTerrainTagId,
+            LongestTerritoryChainTerrainTagId = detail.LongestTerritoryChainTerrainTagId,
+            MostStructurePointsStructureTagId = detail.MostStructurePointsStructureTagId,
+            PointsPerTerritoryTerrainTagId = detail.PointsPerTerritoryTerrainTagId,
             SplitForceSupplyPenaltyPercent = detail.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = detail.SplitForceSupplyPenaltyIsPercent,
             RoundEscalations =
@@ -2731,6 +2918,14 @@ public static class CampaignResponses
                         SpecialRuleIds = item.SpecialRuleIds,
                     })
                     .ToArray(),
+                TagIds = faction.TagIds,
+                SubfactionTags = faction.SubfactionTags?
+                    .Select(static item => new SubfactionTagsInput
+                    {
+                        Name = item.Name,
+                        TagIds = item.TagIds,
+                    })
+                    .ToArray(),
                 SubfactionAppearances = faction.SubfactionAppearances?
                     .Select(static item => new SubfactionAppearanceInput
                     {
@@ -2773,6 +2968,7 @@ public static class CampaignResponses
                 Missions = ToMissionInputs(type.Missions),
                 IsWaterFeature = type.IsWaterFeature,
                 SupplyPoints = type.SupplyPoints,
+                TagIds = type.TagIds,
             })
             .ToArray();
     }
@@ -2800,6 +2996,7 @@ public static class CampaignResponses
                 SupplyPoints = type.SupplyPoints,
                 PillageSupplyPoints = type.PillageSupplyPoints,
                 DestroySupplyPoints = type.DestroySupplyPoints,
+                TagIds = type.TagIds,
             })
             .ToArray();
     }
@@ -2897,15 +3094,23 @@ public static class CampaignResponses
                 EnableConditions = status.EnableConditions?
                     .Select(static condition => new ForceStatusConditionInput
                     {
+                        Id = condition.Id,
                         Trigger = condition.Trigger,
                         Occurrences = condition.Occurrences,
+                        LocationKind = condition.LocationKind,
+                        LocationTypeId = condition.LocationTypeId,
+                        LocationTagId = condition.LocationTagId,
                     })
                     .ToArray(),
                 ClearConditions = status.ClearConditions?
                     .Select(static condition => new ForceStatusConditionInput
                     {
+                        Id = condition.Id,
                         Trigger = condition.Trigger,
                         Occurrences = condition.Occurrences,
+                        LocationKind = condition.LocationKind,
+                        LocationTypeId = condition.LocationTypeId,
+                        LocationTagId = condition.LocationTagId,
                     })
                     .ToArray(),
                 Priority = status.Priority,
@@ -2927,8 +3132,12 @@ public static class CampaignResponses
             [
                 .. listed.Select(static condition => new ForceStatusConditionResponse
                 {
+                    Id = condition.Id,
                     Trigger = condition.Trigger,
                     Occurrences = condition.Occurrences,
+                    LocationKind = condition.LocationKind,
+                    LocationTypeId = condition.LocationTypeId,
+                    LocationTagId = condition.LocationTagId,
                 }),
             ];
         }
@@ -2977,6 +3186,8 @@ public static class CampaignResponses
                 StatusMatchKind = type.StatusMatchKind,
                 PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
                 PrerequisiteWasLost = type.PrerequisiteWasLost,
+                StructureTagId = type.StructureTagId,
+                TerrainTagId = type.TerrainTagId,
             })
             .ToArray();
     }
@@ -3061,6 +3272,26 @@ public static class CampaignResponses
         };
     }
 
+    internal static IReadOnlyList<CatalogTagInput>? ToTagInputs(IReadOnlyList<CatalogTagRequest>? tags)
+    {
+        return tags?
+            .Select(static tag => new CatalogTagInput
+            {
+                Id = tag.Id,
+                Name = tag.Name,
+            })
+            .ToArray();
+    }
+
+    internal static CatalogTagResponse FromTag(CatalogTagDetail tag)
+    {
+        return new CatalogTagResponse
+        {
+            Id = tag.Id,
+            Name = tag.Name,
+        };
+    }
+
     internal static MissionInput[]? ToMissionInputs(IReadOnlyList<MissionRequest>? missions)
     {
         return missions?
@@ -3099,6 +3330,7 @@ public static class CampaignResponses
                         LeaveUnchanged = change.LeaveUnchanged,
                     })
                     .ToArray(),
+                TagIds = mission.TagIds,
             })
             .ToArray();
     }
@@ -3144,6 +3376,7 @@ public static class CampaignResponses
                     LeaveUnchanged = change.LeaveUnchanged,
                 }),
             ],
+            TagIds = mission.TagIds,
         };
     }
 

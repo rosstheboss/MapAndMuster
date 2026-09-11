@@ -297,12 +297,14 @@ export class CampaignService {
     );
   }
 
-  async getPlay(campaignId: string): Promise<CampaignPlayDetail> {
-    return firstValueFrom(
+  async getPlay(campaignId: string): Promise<CampaignPlayDetail | null> {
+    const response = await firstValueFrom(
       this.http.get<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play`, {
+        observe: 'response',
         withCredentials: true,
       }),
     );
+    return response.body;
   }
 
   async chooseFaction(campaignId: string, payload: ChooseFactionPayload): Promise<CampaignPlayDetail> {

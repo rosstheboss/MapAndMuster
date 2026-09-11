@@ -13,4 +13,9 @@
     <ProjectReference Include="..\MapAndMuster.Domain\MapAndMuster.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="MapAndMuster.Backend.UnitTests" />
+  </ItemGroup>
+
 </Project>
+

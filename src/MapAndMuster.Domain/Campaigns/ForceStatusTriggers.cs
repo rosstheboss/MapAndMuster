@@ -17,11 +17,29 @@ public enum ForceStatusEnableTrigger
     /// <summary>Applied after the force loses a resolved battle or is forced to retreat.</summary>
     BattleLostOrRetreat = 3,
 
-    /// <summary>Applied when the force occupies a water-feature territory after resolution.</summary>
+    /// <summary>Legacy occupying-water trigger. Mapped to ConsecutiveActions on the Water terrain tag.</summary>
     OccupyingWater = 4,
 
-    /// <summary>Applied by the named Diseased engine (consecutive water, water battles, contagion).</summary>
+    /// <summary>Legacy named-Diseased engine trigger. Mapped to Water catalog conditions.</summary>
     Disease = 5,
+
+    /// <summary>Applied after any resolved action phase while the location still matches.</summary>
+    ConsecutiveActions = 6,
+
+    /// <summary>Applied after the force surrenders. Occurrences count consecutive matching action phases at that location.</summary>
+    Surrender = 7,
+
+    /// <summary>Applied after a successful Build.</summary>
+    Build = 8,
+
+    /// <summary>Applied after a successful Pillage that does not destroy the structure.</summary>
+    Pillage = 9,
+
+    /// <summary>Applied after a successful Repair.</summary>
+    Repair = 10,
+
+    /// <summary>Applied after a successful destroy (second Pillage or DestroyImmediately).</summary>
+    Destroy = 11,
 }
 
 /// <summary>
@@ -47,9 +65,27 @@ public enum ForceStatusClearTrigger
     /// <summary>Cleared after the force loses a resolved battle or is forced to retreat.</summary>
     BattleLostOrRetreat = 5,
 
-    /// <summary>Cleared after the force Holds while not occupying a water-feature territory.</summary>
+    /// <summary>Legacy Hold-while-not-water trigger. Mapped to Hold anywhere.</summary>
     HoldWhileNotWater = 6,
 
-    /// <summary>Cleared after Hold on a Capital City, City, Supply Depot, or Town.</summary>
+    /// <summary>Legacy Hold-at-settlement trigger. Mapped to Hold on Capital City, City, Supply Depot, and Town.</summary>
     HoldAtSettlement = 7,
+
+    /// <summary>Cleared after consecutive matching action phases.</summary>
+    ConsecutiveActions = 8,
+
+    /// <summary>Cleared after the force surrenders. Occurrences count consecutive matching action phases at that location.</summary>
+    Surrender = 9,
+
+    /// <summary>Cleared after a successful Build.</summary>
+    Build = 10,
+
+    /// <summary>Cleared after a successful Pillage that does not destroy the structure.</summary>
+    Pillage = 11,
+
+    /// <summary>Cleared after a successful Repair.</summary>
+    Repair = 12,
+
+    /// <summary>Cleared after a successful destroy (second Pillage or DestroyImmediately).</summary>
+    Destroy = 13,
 }

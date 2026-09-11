@@ -1,4 +1,4 @@
-import { Component, computed, forwardRef, input, signal } from '@angular/core';
+import { Component, computed, forwardRef, input, output, signal } from '@angular/core';
 import { type ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 
 @Component({
@@ -17,6 +17,8 @@ export class FilterableComboboxComponent implements ControlValueAccessor {
   readonly inputId = input.required<string>();
   readonly options = input<readonly string[]>([]);
   readonly placeholder = input('');
+  readonly maxLength = input<number | null>(null);
+  readonly optionChosen = output<string>();
 
   protected readonly query = signal('');
   protected readonly open = signal(false);
@@ -115,6 +117,7 @@ export class FilterableComboboxComponent implements ControlValueAccessor {
     this.query.set(option);
     this.open.set(false);
     this.emit(option);
+    this.optionChosen.emit(option);
   }
 
   protected optionId(index: number): string {

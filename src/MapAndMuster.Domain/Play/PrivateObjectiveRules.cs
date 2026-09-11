@@ -30,7 +30,9 @@ public sealed class PrivateObjectiveTypePlayRules
         IReadOnlyList<Guid>? forceStatusTypeIds = null,
         PrivateObjectiveStatusMatchKind statusMatchKind = PrivateObjectiveStatusMatchKind.None,
         Guid? prerequisiteForceStatusTypeId = null,
-        bool prerequisiteWasLost = false)
+        bool prerequisiteWasLost = false,
+        Guid? structureTagId = null,
+        Guid? terrainTagId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(allowedHolderKinds);
@@ -54,6 +56,8 @@ public sealed class PrivateObjectiveTypePlayRules
         StatusMatchKind = statusMatchKind;
         PrerequisiteForceStatusTypeId = prerequisiteForceStatusTypeId;
         PrerequisiteWasLost = prerequisiteWasLost;
+        StructureTagId = structureTagId;
+        TerrainTagId = terrainTagId;
     }
 
     /// <summary>Gets the catalog identifier.</summary>
@@ -113,6 +117,12 @@ public sealed class PrivateObjectiveTypePlayRules
     /// <summary>Gets whether GainedAfter waits for the prerequisite to have been lost.</summary>
     public bool PrerequisiteWasLost { get; }
 
+    /// <summary>Gets the structure-catalog tag for structure-based automatic criteria.</summary>
+    public Guid? StructureTagId { get; }
+
+    /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
+    public Guid? TerrainTagId { get; }
+
     /// <summary>Gets whether this catalog entry may be assigned to <paramref name="kind"/>.</summary>
     public bool Allows(PrivateObjectiveHolderKind kind)
     {
@@ -127,7 +137,9 @@ public readonly record struct PrivateObjectiveTerritory(
     Guid TerritoryId,
     Guid? OwnerFactionId,
     Guid? StructureTypeId,
-    StructureCondition StructureCondition);
+    StructureCondition StructureCondition,
+    IReadOnlyList<Guid>? TerrainTagIds = null,
+    IReadOnlyList<Guid>? StructureTagIds = null);
 
 /// <summary>
 /// Assigns, claims, approves, and automatically completes private objectives.
@@ -514,6 +526,47 @@ public static class PrivateObjectiveRules
     }
 
     /// <summary>
+    /// Current matching facts versus the configured requirement for an automatic assignment.
+    /// </summary>
+    public static (int Current, int Required)? AutomaticProgress(
+        PrivateObjectiveAssignment assignment,
+        PrivateObjectiveTypePlayRules type,
+        CampaignPlayState state,
+        IReadOnlyList<PrivateObjectiveTerritory> territories,
+        IReadOnlyDictionary<Guid, Guid> factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
+        IReadOnlySet<Guid> brokenAllyFactionIds,
+        PlayMap? map = null)
+    {
+        ArgumentNullException.ThrowIfNull(assignment);
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(territories);
+        ArgumentNullException.ThrowIfNull(factionByPlayer);
+        ArgumentNullException.ThrowIfNull(allyGroupByFaction);
+        ArgumentNullException.ThrowIfNull(brokenAllyFactionIds);
+        if (assignment.ScoringKind != PrivateObjectiveScoringKind.Automatic
+            || type.AutomaticKind == PrivateObjectiveAutomaticKind.None)
+        {
+            return null;
+        }
+
+        var required = type.AutomaticKind is PrivateObjectiveAutomaticKind.AdjacentToRelic
+            or PrivateObjectiveAutomaticKind.ControlRelic
+            ? 1
+            : type.RequiredCount;
+        return (CountAutomaticFacts(
+            assignment,
+            type,
+            state,
+            territories,
+            factionByPlayer,
+            allyGroupByFaction,
+            brokenAllyFactionIds,
+            map), required);
+    }
+
+    /// <summary>
     /// Completes automatic private objectives whose map criteria are currently met.
     /// </summary>
     public static CampaignPlayState EvaluateAutomatic(
@@ -819,54 +872,96 @@ public static class PrivateObjectiveRules
             return false;
         }
 
-        var owned = territories.Where(territory =>
-            territory.OwnerFactionId is { } owner && factionIds.Contains(owner)).ToArray();
+        return type.AutomaticKind switch
+        {
+            PrivateObjectiveAutomaticKind.AdjacentToRelic => RelicAdjacent(
+                type,
+                state,
+                OwnedTerritories(assignment, territories, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds),
+                map,
+                HolderForces(assignment, state.Forces, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)),
+            PrivateObjectiveAutomaticKind.ControlRelic => RelicControlled(
+                type,
+                state,
+                HolderForces(assignment, state.Forces, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)),
+            PrivateObjectiveAutomaticKind.None => false,
+            _ => CountAutomaticFacts(
+                    assignment,
+                    type,
+                    state,
+                    territories,
+                    factionByPlayer,
+                    allyGroupByFaction,
+                    brokenAllyFactionIds,
+                    map)
+                >= type.RequiredCount,
+        };
+    }
+
+    private static int CountAutomaticFacts(
+        PrivateObjectiveAssignment assignment,
+        PrivateObjectiveTypePlayRules type,
+        CampaignPlayState state,
+        IReadOnlyList<PrivateObjectiveTerritory> territories,
+        IReadOnlyDictionary<Guid, Guid> factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
+        IReadOnlySet<Guid> brokenAllyFactionIds,
+        PlayMap? map)
+    {
+        var owned = OwnedTerritories(assignment, territories, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds);
         var holderForces = HolderForces(assignment, state.Forces, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds);
         return type.AutomaticKind switch
         {
-            PrivateObjectiveAutomaticKind.ControlTerritoryCount => owned.Length >= type.RequiredCount,
+            PrivateObjectiveAutomaticKind.ControlTerritoryCount =>
+                owned.Count(territory => TerrainMatches(type, territory)),
             PrivateObjectiveAutomaticKind.ControlNamedTerritories =>
-                type.TerritoryIds.Count(id => owned.Any(territory => territory.TerritoryId == id)) >= type.RequiredCount,
+                type.TerritoryIds.Count(id => owned.Any(territory =>
+                    territory.TerritoryId == id && TerrainMatches(type, territory))),
             PrivateObjectiveAutomaticKind.ControlStructureType =>
                 owned.Count(territory =>
-                    StructureMatches(type, territory.StructureTypeId)
-                    && territory.StructureCondition != StructureCondition.Destroyed) >= type.RequiredCount,
+                    StructureMatches(type, territory.StructureTypeId, territory.StructureTagIds)
+                    && territory.StructureCondition != StructureCondition.Destroyed),
             PrivateObjectiveAutomaticKind.PillageStructureType =>
                 owned.Count(territory =>
-                    StructureMatches(type, territory.StructureTypeId)
-                    && territory.StructureCondition == StructureCondition.Pillaged) >= type.RequiredCount,
+                    StructureMatches(type, territory.StructureTypeId, territory.StructureTagIds)
+                    && territory.StructureCondition == StructureCondition.Pillaged),
             PrivateObjectiveAutomaticKind.DestroyStructureType =>
                 state.StructureDestructions.Count(fact =>
-                    StructureMatches(type, fact.StructureTypeId)
-                    && AttributionMatches(assignment, fact, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds))
-                    >= type.RequiredCount,
-            PrivateObjectiveAutomaticKind.BattleWinCount =>
-                CountBattles(state, holderForces, won: true) >= type.RequiredCount,
-            PrivateObjectiveAutomaticKind.BattleLossCount =>
-                CountBattles(state, holderForces, won: false) >= type.RequiredCount,
+                    StructureMatches(type, fact.StructureTypeId, null)
+                    && AttributionMatches(assignment, fact, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)),
+            PrivateObjectiveAutomaticKind.BattleWinCount => CountBattles(state, holderForces, won: true),
+            PrivateObjectiveAutomaticKind.BattleLossCount => CountBattles(state, holderForces, won: false),
             PrivateObjectiveAutomaticKind.PlayerRetreatCount =>
                 state.Retreats.Count(retreat =>
                     !retreat.IsDefault
                     && !retreat.IsStaffCorrection
-                    && holderForces.Any(force => force.Id == retreat.ForceId)) >= type.RequiredCount,
+                    && holderForces.Any(force => force.Id == retreat.ForceId)),
             PrivateObjectiveAutomaticKind.AdjacentToRelic =>
-                RelicAdjacent(type, state, owned, map, holderForces),
+                RelicAdjacent(type, state, owned, map, holderForces) ? 1 : 0,
             PrivateObjectiveAutomaticKind.BuildStructureType =>
-                CountStructureWork(assignment, type, state, ActionKind.Build, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)
-                    >= type.RequiredCount,
+                CountStructureWork(assignment, type, state, ActionKind.Build, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds),
             PrivateObjectiveAutomaticKind.RepairStructureType =>
-                CountStructureWork(assignment, type, state, ActionKind.Repair, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)
-                    >= type.RequiredCount,
-            PrivateObjectiveAutomaticKind.ControlRelic =>
-                RelicControlled(type, state, holderForces),
+                CountStructureWork(assignment, type, state, ActionKind.Repair, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds),
+            PrivateObjectiveAutomaticKind.ControlRelic => RelicControlled(type, state, holderForces) ? 1 : 0,
             PrivateObjectiveAutomaticKind.DefeatOpponent =>
-                CountDefeats(assignment, type, state, holderForces, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)
-                    >= type.RequiredCount,
+                CountDefeats(assignment, type, state, holderForces, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds),
             PrivateObjectiveAutomaticKind.ForceStatus =>
-                CountStatusMatches(assignment, type, state, holderForces, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds)
-                    >= type.RequiredCount,
-            _ => false,
+                CountStatusMatches(assignment, type, state, holderForces, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds),
+            _ => 0,
         };
+    }
+
+    private static PrivateObjectiveTerritory[] OwnedTerritories(
+        PrivateObjectiveAssignment assignment,
+        IReadOnlyList<PrivateObjectiveTerritory> territories,
+        IReadOnlyDictionary<Guid, Guid> factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?> allyGroupByFaction,
+        IReadOnlySet<Guid> brokenAllyFactionIds)
+    {
+        var factionIds = HolderFactions(assignment, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds);
+        return territories
+            .Where(territory => territory.OwnerFactionId is { } owner && factionIds.Contains(owner))
+            .ToArray();
     }
 
     private static List<CampaignForce> HolderForces(
@@ -878,7 +973,8 @@ public static class PrivateObjectiveRules
     {
         return assignment.HolderKind switch
         {
-            PrivateObjectiveHolderKind.Player => [.. forces.Where(force => force.ControllerUserId == assignment.HolderId)],
+            PrivateObjectiveHolderKind.Player or PrivateObjectiveHolderKind.Traitor =>
+                [.. forces.Where(force => force.ControllerUserId == assignment.HolderId)],
             PrivateObjectiveHolderKind.Faction => [.. forces.Where(force => force.FactionId == assignment.HolderId)],
             PrivateObjectiveHolderKind.AllyGroup =>
             [
@@ -890,11 +986,25 @@ public static class PrivateObjectiveRules
         };
     }
 
-    private static bool StructureMatches(PrivateObjectiveTypePlayRules type, Guid? structureTypeId)
+    private static bool TerrainMatches(PrivateObjectiveTypePlayRules type, PrivateObjectiveTerritory territory)
+    {
+        return type.TerrainTagId is not { } tag
+            || (territory.TerrainTagIds ?? []).Contains(tag);
+    }
+
+    private static bool StructureMatches(
+        PrivateObjectiveTypePlayRules type,
+        Guid? structureTypeId,
+        IReadOnlyList<Guid>? structureTagIds)
     {
         if (type.MatchesAnyStructureType)
         {
             return structureTypeId is not null;
+        }
+
+        if (type.StructureTagId is { } tag)
+        {
+            return structureTagIds is not null && structureTagIds.Contains(tag);
         }
 
         return type.StructureTypeId is { } id && structureTypeId == id;
@@ -922,7 +1032,7 @@ public static class PrivateObjectiveRules
     {
         return state.StructureWorks.Count(fact =>
             fact.Kind == kind
-            && StructureMatches(type, fact.StructureTypeId)
+            && StructureMatches(type, fact.StructureTypeId, null)
             && AttributionMatchesWork(assignment, fact, factionByPlayer, allyGroupByFaction, brokenAllyFactionIds));
     }
 

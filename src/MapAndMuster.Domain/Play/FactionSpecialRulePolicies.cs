@@ -574,29 +574,88 @@ public static class FactionSpecialRulePolicies
 
         if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.UndergroundNetwork))
         {
-            var occupied = existingForces.Select(static force => force.TerritoryId).ToHashSet();
-            var emptyTowns = map.Territories
-                .Where(territory =>
-                    StructureKinds.IsTownOrCity(territory.StructureName)
-                    && !StructureKinds.IsCapitalCity(territory.StructureName)
-                    && !territory.IsSpawn
-                    && !occupied.Contains(territory.Id))
-                .OrderBy(static territory => territory.DisplayNumber)
-                .ToArray();
-            if (emptyTowns.Length > 0)
-            {
-                return (emptyTowns[pickIndex(emptyTowns.Length)].Id, true);
-            }
-
-            var capital = map.Territories.FirstOrDefault(static territory => StructureKinds.IsCapitalCity(territory.StructureName));
-            if (capital is not null)
-            {
-                return (capital.Id, false);
-            }
+            return UndergroundNetworkPlacement(map, existingForces, pickIndex);
         }
 
         var spawn = map.SpawnFor(factionId, subfaction);
         return spawn is null ? null : (spawn.Id, false);
+    }
+
+    /// <summary>
+    /// Territory used when a force would be sent to spawn. Underground Network uses the same
+    /// Town or City pick as the initial placement.
+    /// </summary>
+    public static (Guid TerritoryId, bool Capture)? ForcedSpawnPlacement(
+        PlayMap map,
+        Guid factionId,
+        string? subfaction,
+        IReadOnlyList<CampaignForce> existingForces,
+        SpecialRuleContext rules,
+        Func<int, int> pickIndex,
+        IReadOnlySet<Guid>? blockedTerritoryIds = null)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(existingForces);
+        ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(pickIndex);
+        if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.UndergroundNetwork))
+        {
+            return UndergroundNetworkPlacement(map, existingForces, pickIndex, blockedTerritoryIds);
+        }
+
+        var spawn = map.SpawnFor(factionId, subfaction);
+        return spawn is null ? null : (spawn.Id, false);
+    }
+
+    /// <summary>
+    /// Random Town or City: unoccupied Neutral first, then unoccupied owned, then occupied.
+    /// Capture empty land that is not a spawn or Capital City.
+    /// </summary>
+    private static (Guid TerritoryId, bool Capture)? UndergroundNetworkPlacement(
+        PlayMap map,
+        IReadOnlyList<CampaignForce> existingForces,
+        Func<int, int> pickIndex,
+        IReadOnlySet<Guid>? blockedTerritoryIds = null)
+    {
+        var occupiedIds = existingForces.Select(static force => force.TerritoryId).ToHashSet();
+        var blocked = blockedTerritoryIds ?? new HashSet<Guid>();
+        var settlements = map.Territories
+            .Where(territory =>
+                territory.StructureCondition != StructureCondition.Destroyed
+                && !blocked.Contains(territory.Id)
+                && (StructureKinds.IsTownOrCity(territory.StructureName)
+                    || StructureKinds.IsCapitalCity(territory.StructureName)))
+            .OrderBy(static territory => territory.DisplayNumber)
+            .ToArray();
+        var unoccupiedNeutral = settlements
+            .Where(territory => !occupiedIds.Contains(territory.Id) && territory.OwnerFactionId is null)
+            .ToArray();
+        if (unoccupiedNeutral.Length > 0)
+        {
+            return CaptureChoice(unoccupiedNeutral[pickIndex(unoccupiedNeutral.Length)]);
+        }
+
+        var unoccupiedOwned = settlements
+            .Where(territory => !occupiedIds.Contains(territory.Id) && territory.OwnerFactionId is not null)
+            .ToArray();
+        if (unoccupiedOwned.Length > 0)
+        {
+            return CaptureChoice(unoccupiedOwned[pickIndex(unoccupiedOwned.Length)]);
+        }
+
+        var occupied = settlements.Where(territory => occupiedIds.Contains(territory.Id)).ToArray();
+        if (occupied.Length > 0)
+        {
+            return (occupied[pickIndex(occupied.Length)].Id, false);
+        }
+
+        return null;
+    }
+
+    private static (Guid TerritoryId, bool Capture) CaptureChoice(PlayTerritory territory)
+    {
+        var capture = !territory.IsSpawn && !StructureKinds.IsCapitalCity(territory.StructureName);
+        return (territory.Id, capture);
     }
 
     /// <summary>Assigns territory ownership to a faction.</summary>

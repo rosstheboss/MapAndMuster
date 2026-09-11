@@ -123,6 +123,30 @@ public sealed class CreateCampaignCommand
 
     /// <summary>Gets reusable missions. Omitted means nested terrain and structure missions only.</summary>
     public IReadOnlyList<MissionInput>? Missions { get; init; }
+
+    /// <summary>Gets terrain-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagInput>? TerrainTags { get; init; }
+
+    /// <summary>Gets structure-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagInput>? StructureTags { get; init; }
+
+    /// <summary>Gets faction-catalog tags shared with subfactions.</summary>
+    public IReadOnlyList<CatalogTagInput>? FactionTags { get; init; }
+
+    /// <summary>Gets mission-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagInput>? MissionTags { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits most-territories scoring.</summary>
+    public Guid? MostTerritoriesTerrainTagId { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits longest-chain scoring.</summary>
+    public Guid? LongestTerritoryChainTerrainTagId { get; init; }
+
+    /// <summary>Gets an optional structure tag that limits most-structure-points scoring.</summary>
+    public Guid? MostStructurePointsStructureTagId { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits points-per-territory scoring.</summary>
+    public Guid? PointsPerTerritoryTerrainTagId { get; init; }
 }
 
 /// <summary>
@@ -252,6 +276,30 @@ public sealed class UpdateCampaignCommand
 
     /// <summary>Gets reusable missions. Omitted means nested terrain and structure missions only.</summary>
     public IReadOnlyList<MissionInput>? Missions { get; init; }
+
+    /// <summary>Gets terrain-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagInput>? TerrainTags { get; init; }
+
+    /// <summary>Gets structure-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagInput>? StructureTags { get; init; }
+
+    /// <summary>Gets faction-catalog tags shared with subfactions.</summary>
+    public IReadOnlyList<CatalogTagInput>? FactionTags { get; init; }
+
+    /// <summary>Gets mission-catalog tags.</summary>
+    public IReadOnlyList<CatalogTagInput>? MissionTags { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits most-territories scoring.</summary>
+    public Guid? MostTerritoriesTerrainTagId { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits longest-chain scoring.</summary>
+    public Guid? LongestTerritoryChainTerrainTagId { get; init; }
+
+    /// <summary>Gets an optional structure tag that limits most-structure-points scoring.</summary>
+    public Guid? MostStructurePointsStructureTagId { get; init; }
+
+    /// <summary>Gets an optional terrain tag that limits points-per-territory scoring.</summary>
+    public Guid? PointsPerTerritoryTerrainTagId { get; init; }
 }
 
 /// <summary>
@@ -454,6 +502,9 @@ public sealed class EndCampaignCommand
     /// <summary>Gets the campaign identifier.</summary>
     public required Guid CampaignId { get; init; }
 
-    /// <summary>Gets the last observed campaign revision, when the caller supplied one.</summary>
+    /// <summary>
+    /// Gets the last observed campaign revision, when the caller supplied one. Ending closes against
+    /// the current stored revision, so a stale client value does not block the close.
+    /// </summary>
     public int? ExpectedRevision { get; init; }
 }

@@ -85,7 +85,15 @@ public sealed class CreateCampaignHandler
                 command.SplitForceSupplyPenaltyPercent,
                 command.SplitForceSupplyPenaltyIsPercent,
                 command.StandardBattleResultQuestions,
-                command.Missions))
+                command.Missions,
+                command.TerrainTags,
+                command.StructureTags,
+                command.FactionTags,
+                command.MissionTags,
+                command.MostTerritoriesTerrainTagId,
+                command.LongestTerritoryChainTerrainTagId,
+                command.MostStructurePointsStructureTagId,
+                command.PointsPerTerritoryTerrainTagId))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -220,7 +228,15 @@ public sealed class UpdateCampaignHandler
                 command.SplitForceSupplyPenaltyPercent,
                 command.SplitForceSupplyPenaltyIsPercent,
                 command.StandardBattleResultQuestions,
-                command.Missions))
+                command.Missions,
+                command.TerrainTags,
+                command.StructureTags,
+                command.FactionTags,
+                command.MissionTags,
+                command.MostTerritoriesTerrainTagId,
+                command.LongestTerritoryChainTerrainTagId,
+                command.MostStructurePointsStructureTagId,
+                command.PointsPerTerritoryTerrainTagId))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -369,6 +385,8 @@ internal static class CampaignPersistenceFactory
                         TintFlagImage = faction.TintFlagImage,
                         SpecialRuleIds = faction.SpecialRuleIds,
                         SubfactionSpecialRules = faction.SubfactionSpecialRules,
+                        TagIds = faction.TagIds,
+                        SubfactionTags = faction.SubfactionTags,
                     };
                 }),
             ];
@@ -401,6 +419,8 @@ internal static class CampaignPersistenceFactory
                     StatusMatchKind = type.StatusMatchKind,
                     PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
                     PrerequisiteWasLost = type.PrerequisiteWasLost,
+                    StructureTagId = type.StructureTagId,
+                    TerrainTagId = type.TerrainTagId,
                 }),
             ];
         }
@@ -460,6 +480,10 @@ internal static class CampaignPersistenceFactory
                 }),
             ],
             MapGraph = mapGraph,
+            TerrainTags = CatalogFileBinder.BindTags(setup.TerrainTags),
+            StructureTags = CatalogFileBinder.BindTags(setup.StructureTags),
+            FactionTags = CatalogFileBinder.BindTags(setup.FactionTags),
+            MissionTags = CatalogFileBinder.BindTags(setup.MissionTags),
             TerrainTypes = CatalogFileBinder.BindTerrains(setup.TerrainTypes, previousTerrainTypes, previousMissions),
             StructureTypes = CatalogFileBinder.BindStructures(setup.StructureTypes, previousStructureTypes, previousMissions),
             ItemObjectiveTypes = CatalogFileBinder.BindItemObjectives(setup.ItemObjectiveTypes, previousItemObjectiveTypes),

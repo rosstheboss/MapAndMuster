@@ -1,5 +1,14 @@
 export type ForceStatusEnableTrigger =
-  'Hold' | 'AfterBattle' | 'BattleWon' | 'BattleLostOrRetreat' | 'OccupyingWater' | 'Disease';
+  | 'Hold'
+  | 'AfterBattle'
+  | 'BattleWon'
+  | 'BattleLostOrRetreat'
+  | 'ConsecutiveActions'
+  | 'Surrender'
+  | 'Build'
+  | 'Pillage'
+  | 'Repair'
+  | 'Destroy';
 
 export type ForceStatusClearTrigger =
   | 'Hold'
@@ -8,12 +17,22 @@ export type ForceStatusClearTrigger =
   | 'AfterMoveOrBattle'
   | 'BattleWon'
   | 'BattleLostOrRetreat'
-  | 'HoldWhileNotWater'
-  | 'HoldAtSettlement';
+  | 'ConsecutiveActions'
+  | 'Surrender'
+  | 'Build'
+  | 'Pillage'
+  | 'Repair'
+  | 'Destroy';
+
+export type ConditionLocationKind = 'Any' | 'TerrainType' | 'TerrainTag' | 'StructureType' | 'StructureTag';
 
 export interface ForceStatusCondition {
+  id?: string;
   trigger: string;
   occurrences: number;
+  locationKind?: ConditionLocationKind;
+  locationTypeId?: string | null;
+  locationTagId?: string | null;
 }
 
 export interface ForceStatusPreset {
@@ -26,6 +45,8 @@ export interface ForceStatusPreset {
 }
 
 export const STANDARD_FORCE_STATUSES_PRESET_ID = 'standard-force-statuses';
+export const WATER_TERRAIN_TAG_NAME = 'Water';
+export const DISEASE_CURE_STRUCTURE_NAMES = ['Capital City', 'City', 'Supply Depot', 'Town'] as const;
 
 export const FORCE_STATUS_PRIORITY_MIN = 0;
 export const FORCE_STATUS_PRIORITY_MAX = 999;
@@ -37,8 +58,12 @@ export const FORCE_STATUS_ENABLE_OPTIONS: readonly { id: ForceStatusEnableTrigge
   { id: 'AfterBattle', label: 'After any resolved battle' },
   { id: 'BattleWon', label: 'After winning a battle' },
   { id: 'BattleLostOrRetreat', label: 'After losing a battle or forced retreat' },
-  { id: 'OccupyingWater', label: 'While occupying a water-feature territory' },
-  { id: 'Disease', label: 'Named Diseased engine (water, contagion, rejoin)' },
+  { id: 'ConsecutiveActions', label: 'After consecutive action phases' },
+  { id: 'Surrender', label: 'After surrender (consecutive action phases at the location)' },
+  { id: 'Build', label: 'After a successful Build' },
+  { id: 'Pillage', label: 'After a successful Pillage' },
+  { id: 'Repair', label: 'After a successful Repair' },
+  { id: 'Destroy', label: 'After a successful Destroy' },
 ];
 
 export const FORCE_STATUS_CLEAR_OPTIONS: readonly { id: ForceStatusClearTrigger; label: string }[] = [
@@ -48,27 +73,43 @@ export const FORCE_STATUS_CLEAR_OPTIONS: readonly { id: ForceStatusClearTrigger;
   { id: 'AfterMoveOrBattle', label: 'After Move, Split, or a resolved battle' },
   { id: 'BattleWon', label: 'After winning a battle' },
   { id: 'BattleLostOrRetreat', label: 'After losing a battle or forced retreat' },
-  { id: 'HoldWhileNotWater', label: 'After Hold while not on a water-feature territory' },
-  { id: 'HoldAtSettlement', label: 'After Hold at a Capital City, City, Supply Depot, or Town' },
+  { id: 'ConsecutiveActions', label: 'After consecutive action phases' },
+  { id: 'Surrender', label: 'After surrender (consecutive action phases at the location)' },
+  { id: 'Build', label: 'After a successful Build' },
+  { id: 'Pillage', label: 'After a successful Pillage' },
+  { id: 'Repair', label: 'After a successful Repair' },
+  { id: 'Destroy', label: 'After a successful Destroy' },
 ];
+
+const DISEASED_EFFECTS =
+  'In battle, before deployment, roll a D6 for every non-Character, non-War Machine, non-Chariot unit. ' +
+  'On a 1 that unit is Sick and rerolls 6s to Wound unless it has Poisoned attacks. ' +
+  'The app displays this and does not resolve the tabletop effect. ' +
+  'Gained after three consecutive actions on Water terrain, a fought defeat on Water, ' +
+  'surrender after two consecutive Water actions, contagion from another faction, rejoining a Diseased split, ' +
+  'or a plague-bearing combat win. Cleared by Hold at a Capital City, City, Supply Depot, or Town. ' +
+  'Priority 0, so it outranks other standard statuses unless a cancel-out applies.';
 
 /**
  * Standard force statuses copied from docs/DOMAIN.md. Normal is the absence of a status and is not
  * configured. Effects are generic campaign-app text. Priorities are 0, 1, 2... in list order.
+ * Diseased location filters are filled when the preset is applied to a campaign catalog.
  */
 export const STANDARD_FORCE_STATUSES: readonly ForceStatusPreset[] = [
   {
     name: 'Diseased',
-    effects:
-      'In battle, before deployment, roll a D6 for every non-Character, non-War Machine, non-Chariot unit. ' +
-      'On a 1 that unit is Sick and rerolls 6s to Wound unless it has Poisoned attacks. ' +
-      'The app displays this and does not resolve the tabletop effect. ' +
-      'Gained after three consecutive actions in water-feature territories, a fought defeat on water, ' +
-      'surrender after two water-feature actions, contagion from another faction, rejoining a Diseased split, ' +
-      'or a plague-bearing combat win. Cleared by Hold at a Capital City, City, Supply Depot, or Town. ' +
-      'Priority 0, so it outranks other standard statuses unless a cancel-out applies.',
-    enableConditions: [{ trigger: 'Disease', occurrences: 1 }],
-    clearConditions: [{ trigger: 'HoldAtSettlement', occurrences: 1 }],
+    effects: DISEASED_EFFECTS,
+    enableConditions: [
+      { trigger: 'ConsecutiveActions', occurrences: 3, locationKind: 'TerrainTag' },
+      { trigger: 'BattleLostOrRetreat', occurrences: 1, locationKind: 'TerrainTag' },
+      { trigger: 'Surrender', occurrences: 2, locationKind: 'TerrainTag' },
+    ],
+    clearConditions: [
+      { trigger: 'Hold', occurrences: 1, locationKind: 'StructureType' },
+      { trigger: 'Hold', occurrences: 1, locationKind: 'StructureType' },
+      { trigger: 'Hold', occurrences: 1, locationKind: 'StructureType' },
+      { trigger: 'Hold', occurrences: 1, locationKind: 'StructureType' },
+    ],
     priority: 0,
     cancelsStatusNames: [],
   },
@@ -77,8 +118,8 @@ export const STANDARD_FORCE_STATUSES: readonly ForceStatusPreset[] = [
     effects:
       "Tabletop battles fought while shaken use the campaign sheet's shaken modifiers. " +
       'The app displays this and does not resolve the tabletop effect.',
-    enableConditions: [{ trigger: 'BattleLostOrRetreat', occurrences: 1 }],
-    clearConditions: [{ trigger: 'Hold', occurrences: 1 }],
+    enableConditions: [{ trigger: 'BattleLostOrRetreat', occurrences: 1, locationKind: 'Any' }],
+    clearConditions: [{ trigger: 'Hold', occurrences: 1, locationKind: 'Any' }],
     priority: 1,
     cancelsStatusNames: [],
   },
@@ -87,8 +128,8 @@ export const STANDARD_FORCE_STATUSES: readonly ForceStatusPreset[] = [
     effects:
       "Tabletop battles fought while confident use the campaign sheet's confident modifiers. " +
       'The app displays this and does not resolve the tabletop effect.',
-    enableConditions: [{ trigger: 'BattleWon', occurrences: 1 }],
-    clearConditions: [{ trigger: 'BattleLostOrRetreat', occurrences: 1 }],
+    enableConditions: [{ trigger: 'BattleWon', occurrences: 1, locationKind: 'Any' }],
+    clearConditions: [{ trigger: 'BattleLostOrRetreat', occurrences: 1, locationKind: 'Any' }],
     priority: 2,
     cancelsStatusNames: [],
   },
@@ -98,8 +139,8 @@ export const STANDARD_FORCE_STATUSES: readonly ForceStatusPreset[] = [
       "Tabletop battles fought while exhausted use the campaign sheet's fatigue modifiers. " +
       'The app displays this and does not resolve the tabletop effect. ' +
       'Cancels Well Rested: gaining Exhausted while Well Rested leaves the force with no status.',
-    enableConditions: [{ trigger: 'AfterBattle', occurrences: 1 }],
-    clearConditions: [{ trigger: 'Hold', occurrences: 1 }],
+    enableConditions: [{ trigger: 'AfterBattle', occurrences: 1, locationKind: 'Any' }],
+    clearConditions: [{ trigger: 'Hold', occurrences: 1, locationKind: 'Any' }],
     priority: 3,
     cancelsStatusNames: ['Well Rested'],
   },
@@ -108,20 +149,62 @@ export const STANDARD_FORCE_STATUSES: readonly ForceStatusPreset[] = [
     effects:
       "Tabletop battles fought while well rested use the campaign sheet's rest modifiers. " +
       'The app displays this and does not resolve the tabletop effect. Hold is the rest action that grants this status.',
-    enableConditions: [{ trigger: 'Hold', occurrences: 1 }],
-    clearConditions: [{ trigger: 'AfterMoveOrBattle', occurrences: 1 }],
+    enableConditions: [{ trigger: 'Hold', occurrences: 1, locationKind: 'Any' }],
+    clearConditions: [{ trigger: 'AfterMoveOrBattle', occurrences: 1, locationKind: 'Any' }],
     priority: 4,
     cancelsStatusNames: [],
   },
 ];
 
-export function forceStatusesFromStandardPreset(): ForceStatusPreset[] {
-  return STANDARD_FORCE_STATUSES.map((status) => ({
-    ...status,
-    enableConditions: status.enableConditions.map((condition) => ({ ...condition })),
-    clearConditions: status.clearConditions.map((condition) => ({ ...condition })),
-    cancelsStatusNames: [...status.cancelsStatusNames],
-  }));
+export function diseasedEnableConditions(waterTagId: string): ForceStatusCondition[] {
+  const water = waterLocation(waterTagId);
+  return [
+    { trigger: 'ConsecutiveActions', occurrences: 3, ...water },
+    { trigger: 'BattleLostOrRetreat', occurrences: 1, ...water },
+    { trigger: 'Surrender', occurrences: 2, ...water },
+  ];
+}
+
+export function diseasedClearConditions(structureIdsByName: Record<string, string>): ForceStatusCondition[] {
+  const clears = DISEASE_CURE_STRUCTURE_NAMES.flatMap((name) => {
+    const id = structureIdsByName[name];
+    return id
+      ? [
+          {
+            trigger: 'Hold',
+            occurrences: FORCE_STATUS_OCCURRENCES_MIN,
+            locationKind: 'StructureType' as const,
+            locationTypeId: id,
+          },
+        ]
+      : [];
+  });
+  return clears.length > 0
+    ? clears
+    : [{ trigger: 'Hold', occurrences: FORCE_STATUS_OCCURRENCES_MIN, locationKind: 'Any' }];
+}
+
+export function forceStatusesFromStandardPreset(
+  waterTagId = '',
+  structureIdsByName: Record<string, string> = {},
+): ForceStatusPreset[] {
+  return STANDARD_FORCE_STATUSES.map((status) => {
+    if (status.name !== 'Diseased') {
+      return {
+        ...status,
+        enableConditions: status.enableConditions.map((condition) => ({ ...condition })),
+        clearConditions: status.clearConditions.map((condition) => ({ ...condition })),
+        cancelsStatusNames: [...status.cancelsStatusNames],
+      };
+    }
+
+    return {
+      ...status,
+      enableConditions: diseasedEnableConditions(waterTagId),
+      clearConditions: diseasedClearConditions(structureIdsByName),
+      cancelsStatusNames: [...status.cancelsStatusNames],
+    };
+  });
 }
 
 export function forceStatusEnableConditions(status: {
@@ -147,8 +230,12 @@ function listedOrLegacy(
 ): ForceStatusCondition[] {
   if (listed && listed.length > 0) {
     return listed.map((condition) => ({
+      id: condition.id,
       trigger: condition.trigger,
       occurrences: normalizeForceStatusOccurrences(condition.occurrences),
+      locationKind: condition.locationKind ?? 'Any',
+      locationTypeId: condition.locationTypeId ?? null,
+      locationTagId: condition.locationTagId ?? null,
     }));
   }
 
@@ -156,7 +243,17 @@ function listedOrLegacy(
     return [];
   }
 
-  return [{ trigger, occurrences: normalizeForceStatusOccurrences(occurrences) }];
+  return [
+    {
+      trigger,
+      occurrences: normalizeForceStatusOccurrences(occurrences),
+      locationKind: 'Any',
+    },
+  ];
+}
+
+function waterLocation(waterTagId: string): Pick<ForceStatusCondition, 'locationKind' | 'locationTagId'> {
+  return { locationKind: 'TerrainTag', locationTagId: waterTagId || null };
 }
 
 export function normalizeForceStatusOccurrences(value: number | undefined): number {
@@ -201,4 +298,8 @@ export function committedForceStatusPriority(
   }
 
   return value;
+}
+
+export function isWaterTagName(name: string | null | undefined): boolean {
+  return name?.trim().toLowerCase() === WATER_TERRAIN_TAG_NAME.toLowerCase();
 }

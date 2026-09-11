@@ -472,7 +472,7 @@ public static class SupplyRules
                         isAllied));
             }
 
-            total += ExtraMapSupply(territory, factionId, catalog, userId, contributions);
+            total += ExtraMapSupply(map, territory, factionId, catalog, userId, contributions);
         }
 
         total += PathIndependentSupply(map, catalog, factionId, userId, connected, contributions);
@@ -481,6 +481,7 @@ public static class SupplyRules
     }
 
     private static int ExtraMapSupply(
+        PlayMap map,
         PlayTerritory territory,
         Guid factionId,
         SupplyCatalog catalog,
@@ -502,7 +503,7 @@ public static class SupplyRules
         if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.SpawningPools)
             && territory.OwnerFactionId == factionId)
         {
-            if (territory.IsWaterFeature && !StructureKinds.IsSettlement(name)
+            if (map.IsWaterFeature(territory) && !StructureKinds.IsSettlement(name)
                 && (territory.StructureTypeId is null || territory.StructureCondition != StructureCondition.Operational))
             {
                 extra += AddSpecial(
@@ -553,7 +554,7 @@ public static class SupplyRules
 
             if (rules.Has(factionId, subfaction, SpecialRuleEffectKeys.SpawningPools)
                 && territory.OwnerFactionId == factionId
-                && territory.IsWaterFeature
+                && map.IsWaterFeature(territory)
                 && !StructureKinds.IsSettlement(territory.StructureName)
                 && (territory.StructureTypeId is null || territory.StructureCondition != StructureCondition.Operational))
             {

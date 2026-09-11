@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using MapAndMuster.Domain.Campaigns;
 using MapAndMuster.Domain.Common;
 
@@ -38,7 +39,14 @@ public static class CampaignPlayRules
         var seededMap = ApplySpawnFlags(map);
         if (state.Windows.Count > 0)
         {
-            return new PlayOutcome(state, seededMap, schedule.EndsUtc, schedule.RoundCount);
+            return PlaceMissingStartingForces(
+                state,
+                seededMap,
+                players,
+                rules,
+                choose,
+                schedule.EndsUtc,
+                schedule.RoundCount);
         }
 
         if (utcNow < schedule.StartsUtc)
@@ -165,6 +173,34 @@ public static class CampaignPlayRules
         var forces = state.Forces.Append(
             new CampaignForce(Guid.NewGuid(), userId, factionId, placement.Value.TerritoryId, false, subfaction: subfaction)).ToArray();
         return new PlayOutcome(state.With(forces: forces), nextMap, default, 0, preserveSchedule: true);
+    }
+
+    private static PlayOutcome PlaceMissingStartingForces(
+        CampaignPlayState state,
+        PlayMap map,
+        IReadOnlyList<PlayerFactionAssignment> players,
+        SpecialRuleContext rules,
+        Func<int, int> choose,
+        DateTimeOffset endsUtc,
+        int roundCount)
+    {
+        var nextState = state;
+        var nextMap = map;
+        foreach (var player in players.Where(static item => item.FactionId.HasValue).OrderBy(static item => item.UserId))
+        {
+            var placed = EnsureForce(
+                nextState,
+                nextMap,
+                player.UserId,
+                player.FactionId!.Value,
+                player.Subfaction,
+                rules,
+                choose);
+            nextState = placed.State;
+            nextMap = placed.Map;
+        }
+
+        return new PlayOutcome(nextState, nextMap, endsUtc, roundCount);
     }
 
     /// <summary>
@@ -973,7 +1009,13 @@ public static class CampaignPlayRules
             parkForNextBattlePhase: false);
         if (map is not null)
         {
-            logged = ApplyStaffCorrectionRetreats(logged, map, updated, utcNow);
+            logged = ApplyStaffCorrectionRetreats(
+                logged,
+                map,
+                updated,
+                utcNow,
+                catalog?.SpecialRules,
+                pickIndex);
         }
 
         (next, _) = CloseCompletedBattlePhase(logged, map ?? MapUnchanged, utcNow, forceStatuses);
@@ -1261,7 +1303,8 @@ public static class CampaignPlayRules
 
         error = null;
         var existingRounds = windows.Count == 0 ? 0 : windows.Max(static window => window.RoundNumber);
-        if (roundCount > existingRounds)
+        var roundsAdded = Math.Max(0, roundCount - existingRounds);
+        if (roundsAdded > 0)
         {
             var cursor = windows.Count == 0 ? schedule.StartsUtc : windows[^1].EndsUtc;
             for (var round = existingRounds + 1; round <= roundCount; round++)
@@ -1297,12 +1340,89 @@ public static class CampaignPlayRules
             null,
             null,
             null,
-            []));
+            [],
+            FormatScheduleExtendedMessage(schedule, windows, extensions, roundsAdded)));
         outcome = new PlayOutcome(next, MapUnchanged, LastEnd(next, schedule.EndsUtc), roundCount)
         {
             PreserveMap = true,
         };
         return true;
+    }
+
+    private static string FormatScheduleExtendedMessage(
+        CampaignSchedule schedule,
+        IReadOnlyList<PhaseWindow> windows,
+        IReadOnlyList<PhaseExtension> extensions,
+        int roundsAdded)
+    {
+        string? lengthened = null;
+        if (extensions.Count > 0)
+        {
+            var pieces = new List<string>(extensions.Count);
+            foreach (var extension in extensions)
+            {
+                var window = windows.First(item => item.Id == extension.WindowId);
+                var label = CampaignPhaseLabels.Format(schedule.Phases, window.PhaseNumber, window.Kind);
+                pieces.Add(
+                    $"{label} of round {window.RoundNumber} by {FormatExtraDuration(extension.ExtraDuration)} (now ends {FormatUtcInstant(window.EndsUtc)})");
+            }
+
+            lengthened = "lengthened " + JoinEnglish(pieces);
+        }
+
+        var added = roundsAdded switch
+        {
+            <= 0 => null,
+            1 => "added 1 round",
+            _ => $"added {roundsAdded} rounds",
+        };
+
+        if (lengthened is not null && added is not null)
+        {
+            return $"{lengthened}. {char.ToUpperInvariant(added[0])}{added[1..]}.";
+        }
+
+        if (lengthened is not null)
+        {
+            return $"{lengthened}.";
+        }
+
+        if (added is not null)
+        {
+            return $"{added}.";
+        }
+
+        return "updated the schedule.";
+    }
+
+    private static string FormatExtraDuration(ScheduleDuration duration)
+    {
+        var unit = duration.Unit switch
+        {
+            DurationUnit.Minutes => duration.Amount == 1 ? "minute" : "minutes",
+            DurationUnit.Hours => duration.Amount == 1 ? "hour" : "hours",
+            DurationUnit.Days => duration.Amount == 1 ? "day" : "days",
+            DurationUnit.Weeks => duration.Amount == 1 ? "week" : "weeks",
+            DurationUnit.Months => duration.Amount == 1 ? "month" : "months",
+            _ => duration.Unit.ToString().ToLowerInvariant(),
+        };
+        return string.Create(CultureInfo.InvariantCulture, $"{duration.Amount} {unit}");
+    }
+
+    private static string FormatUtcInstant(DateTimeOffset utc)
+    {
+        return utc.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+    }
+
+    private static string JoinEnglish(List<string> parts)
+    {
+        return parts.Count switch
+        {
+            0 => string.Empty,
+            1 => parts[0],
+            2 => $"{parts[0]} and {parts[1]}",
+            _ => string.Join(", ", parts.Take(parts.Count - 1)) + ", and " + parts[^1],
+        };
     }
 
     /// <summary>
@@ -1805,8 +1925,8 @@ public static class CampaignPlayRules
 
         if (due)
         {
-            next = ApplyDefaultRetreats(next, map, window, closeAt, noContestOnly: false, specialRules, allies);
-            next = ApplyDefaultRetreats(next, map, window, closeAt, noContestOnly: true, specialRules, allies);
+            next = ApplyDefaultRetreats(next, map, window, closeAt, noContestOnly: false, specialRules, allies, choose);
+            next = ApplyDefaultRetreats(next, map, window, closeAt, noContestOnly: true, specialRules, allies, choose);
             if (noResultForceIds.Count > 0)
             {
                 next = DelinquencyRules.Record(next, noResultForceIds, window, closeAt);
@@ -1831,7 +1951,7 @@ public static class CampaignPlayRules
             return (next, map);
         }
 
-        next = ApplyRetreats(next, map, window, closeAt, pickIndex ?? (static count => 0));
+        next = ApplyRetreats(next, map, window, closeAt, pickIndex ?? (static count => 0), specialRules);
         next = ApplyBattleStatuses(next, map, window, forceStatuses, specialRules, closeAt, missions);
         var claimedMap = ApplyOccupationClaims(next, map, allies, choose);
         return FinishWindow(next, claimedMap, window, closeAt, due, forceStatuses);
@@ -1881,7 +2001,8 @@ public static class CampaignPlayRules
         DateTimeOffset utcNow,
         bool noContestOnly,
         SpecialRuleContext? specialRules = null,
-        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null)
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        Func<int, int>? pickIndex = null)
     {
         var retreats = state.Retreats.ToList();
         var log = new List<PlayLogEntry>();
@@ -1921,7 +2042,8 @@ public static class CampaignPlayRules
                     state.Forces,
                     allies,
                     state.BrokenAllyFactionIds,
-                    state.AllyBetrayals);
+                    state.AllyBetrayals,
+                    pickIndex);
                 occupied.Add(target);
                 retreats.Add(new RetreatOrder(Guid.NewGuid(), battle.Id, force.Id, target, true, utcNow));
                 log.Add(new PlayLogEntry(
@@ -1947,7 +2069,8 @@ public static class CampaignPlayRules
         PlayMap map,
         PhaseWindow window,
         DateTimeOffset utcNow,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        SpecialRuleContext? specialRules = null)
     {
         var forces = state.Forces.ToDictionary(static force => force.Id);
         var origins = new Dictionary<Guid, Guid>();
@@ -1993,7 +2116,7 @@ public static class CampaignPlayRules
             }
         }
 
-        ResolveRetreatCollisions(forces, map, state, pickIndex, utcNow, out var collisionLog);
+        ResolveRetreatCollisions(forces, map, state, pickIndex, utcNow, out var collisionLog, specialRules);
         var log = new List<PlayLogEntry>(collisionLog);
         var nextForces = forces.Values.OrderBy(static force => force.Id).ToArray();
         var items = ItemObjectiveRules.DropCarriedByMovers(state.ItemObjectives, origins, utcNow, log);
@@ -2845,7 +2968,9 @@ public static class CampaignPlayRules
         CampaignPlayState state,
         PlayMap map,
         CampaignBattle battle,
-        DateTimeOffset utcNow)
+        DateTimeOffset utcNow,
+        SpecialRuleContext? specialRules = null,
+        Func<int, int>? pickIndex = null)
     {
         var retreats = state.Retreats.ToList();
         var log = new List<PlayLogEntry>();
@@ -2863,7 +2988,13 @@ public static class CampaignPlayRules
                 continue;
             }
 
-            var target = PickSafestRetreat(map, force, occupied, occupyingForces: state.Forces);
+            var target = PickSafestRetreat(
+                map,
+                force,
+                occupied,
+                specialRules,
+                occupyingForces: state.Forces,
+                pickIndex: pickIndex);
             occupied.Add(target);
             retreats.Add(new RetreatOrder(
                 Guid.NewGuid(),
@@ -3151,11 +3282,23 @@ public static class CampaignPlayRules
 
         var facts = state.Forces.ToDictionary(
             force => force.Id,
-            force => ForceStatusRules.FromAction(
-                state.LatestSubmission(window.Id, force.Id)?.Kind,
-                map.Territory(force.TerritoryId)?.IsWaterFeature == true,
-                ForceStatusRules.CanCureDisease(map.Territory(force.TerritoryId)),
-                force.InBattle));
+            force =>
+            {
+                var territory = map.Territory(force.TerritoryId);
+                var kind = state.LatestSubmission(window.Id, force.Id)?.Kind;
+                var destroyed = kind == ActionKind.Pillage && territory?.StructureTypeId is null;
+                var pillaged = kind == ActionKind.Pillage && territory?.StructureCondition == StructureCondition.Pillaged;
+                return ForceStatusRules.FromAction(
+                    kind,
+                    territory is not null && map.IsWaterFeature(territory),
+                    ForceStatusRules.CanCureDisease(territory),
+                    force.InBattle,
+                    territory,
+                    kind == ActionKind.Build,
+                    pillaged,
+                    kind == ActionKind.Repair,
+                    destroyed);
+            });
         var application = ForceStatusRules.ApplyDetailed(state.Forces, catalog, facts, specialRules);
         var attributions = new Dictionary<Guid, ForceStatusRules.Attribution>(application.Attributions);
         foreach (var entry in state.Log.Where(item =>
@@ -3226,16 +3369,20 @@ public static class CampaignPlayRules
                 !item.IsNoContest
                 && !item.IsDraw
                 && item.WinnerForceId != force.Id
-                && map.Territory(item.TerritoryId)?.IsWaterFeature == true);
+                && map.Territory(item.TerritoryId) is { } battleTerritory
+                && map.IsWaterFeature(battleTerritory));
             var surrendered = fought.Any(item => item.SurrenderedForceIds.Contains(force.Id) && !item.IsNoContest);
+            var location = fought.Select(item => map.Territory(item.TerritoryId)).OfType<PlayTerritory>().FirstOrDefault()
+                ?? map.Territory(force.TerritoryId);
             facts[force.Id] = ForceStatusRules.FromBattle(
                 fought.Any(item => !item.IsNoContest && item.SurrenderedForceIds.All(id => id != force.Id)),
                 fought.Any(item => !item.IsNoContest && item.WinnerForceId == force.Id),
                 fought.Any(item => !item.IsNoContest && !item.IsDraw && item.WinnerForceId != force.Id),
                 retreated.Contains(force.Id) && fought.Any(item => !item.IsNoContest),
-                map.Territory(force.TerritoryId)?.IsWaterFeature == true,
+                location is not null && map.IsWaterFeature(location),
                 surrendered,
-                lostOnWater);
+                lostOnWater,
+                location);
         }
 
         var application = catalog.Count == 0
@@ -3759,7 +3906,8 @@ public static class CampaignPlayRules
         CampaignPlayState state,
         Func<int, int> pickIndex,
         DateTimeOffset utcNow,
-        out List<PlayLogEntry> log)
+        out List<PlayLogEntry> log,
+        SpecialRuleContext? specialRules = null)
     {
         log = [];
         var occupied = new Dictionary<Guid, List<CampaignForce>>();
@@ -3808,7 +3956,13 @@ public static class CampaignPlayRules
                     continue;
                 }
 
-                var target = PickSafestRetreat(map, displaced, blocked, occupyingForces: forces.Values.ToArray());
+                var target = PickSafestRetreat(
+                    map,
+                    displaced,
+                    blocked,
+                    specialRules,
+                    occupyingForces: forces.Values.ToArray(),
+                    pickIndex: pickIndex);
                 blocked.Add(target);
                 forces[displaced.Id] = displaced.With(territoryId: target, inBattle: false);
                 log.Add(new PlayLogEntry(
@@ -3872,9 +4026,10 @@ public static class CampaignPlayRules
         IReadOnlyList<CampaignForce>? occupyingForces = null,
         IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
         IReadOnlyCollection<Guid>? brokenAllyFactionIds = null,
-        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
+        Func<int, int>? pickIndex = null)
     {
-        var spawn = map.SpawnFor(force.FactionId);
+        var spawn = map.SpawnFor(force.FactionId, force.Subfaction);
         PlayTerritory? best = null;
         var bestRank = int.MaxValue;
         foreach (var id in EligibleRetreats(
@@ -3904,7 +4059,22 @@ public static class CampaignPlayRules
             }
         }
 
-        return best?.Id ?? spawn?.Id ?? force.TerritoryId;
+        if (best is not null)
+        {
+            return best.Id;
+        }
+
+        var blocked = new HashSet<Guid>(occupied) { force.TerritoryId };
+        var others = (occupyingForces ?? []).Where(item => item.Id != force.Id).ToArray();
+        var fallback = FactionSpecialRulePolicies.ForcedSpawnPlacement(
+            map,
+            force.FactionId,
+            force.Subfaction,
+            others,
+            specialRules ?? SpecialRuleContext.None,
+            pickIndex ?? (static count => 0),
+            blocked);
+        return fallback?.TerritoryId ?? spawn?.Id ?? force.TerritoryId;
     }
 
     private static ActionWindowSnapshot CaptureWindowSnapshot(CampaignPlayState state, PlayMap map, Guid windowId)
@@ -3963,9 +4133,10 @@ public static class CampaignPlayRules
                 captured.Condition,
                 territory.IsPillageable,
                 territory.IsDestructible,
-                territory.IsWaterFeature,
                 territory.TerrainTypeId,
-                territory.SpawnSubfaction);
+                territory.SpawnSubfaction,
+                territory.TerrainTagIds,
+                captured.StructureTypeId is null ? [] : territory.StructureTagIds);
         }).ToArray();
         return map.WithTerritories(next);
     }

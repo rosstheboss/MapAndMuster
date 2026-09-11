@@ -282,6 +282,7 @@ public sealed class MarkCampaignLogReadHandler
 /// </summary>
 public sealed class EndCampaignHandler
 {
+    private const int EndRevisionAttempts = 3;
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly CampaignNotificationPublisher _notifications;
@@ -312,68 +313,76 @@ public sealed class EndCampaignHandler
     public async Task<OperationResult> HandleAsync(EndCampaignCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        var campaign = await _campaigns.FindByIdAsync(command.CampaignId, cancellationToken).ConfigureAwait(false);
-        if (campaign is null || !CampaignAccess.CanView(campaign, command.UserId, command.IsAdministrator))
+        OperationResult? lastConflict = null;
+        for (var attempt = 0; attempt < EndRevisionAttempts; attempt++)
         {
-            return OperationResult.Failure(ErrorCodes.CampaignNotFound, "The campaign was not found.");
-        }
+            var campaign = await _campaigns.FindByIdAsync(command.CampaignId, cancellationToken).ConfigureAwait(false);
+            if (campaign is null || !CampaignAccess.CanView(campaign, command.UserId, command.IsAdministrator))
+            {
+                return OperationResult.Failure(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+            }
 
-        if (!CampaignAccess.CanStaffMembers(campaign, command.UserId, command.IsAdministrator))
-        {
-            return OperationResult.Failure(
-                ErrorCodes.CampaignForbidden,
-                "Only a campaign manager or administrator can end this campaign.");
-        }
+            if (!CampaignAccess.CanStaffMembers(campaign, command.UserId, command.IsAdministrator))
+            {
+                return OperationResult.Failure(
+                    ErrorCodes.CampaignForbidden,
+                    "Only a campaign manager or administrator can end this campaign.");
+            }
 
-        if (campaign.ClosedUtc is not null)
-        {
-            return OperationResult.Success();
-        }
+            if (campaign.ClosedUtc is not null)
+            {
+                return OperationResult.Success();
+            }
 
-        if (command.ExpectedRevision is { } expected && campaign.Revision != expected)
-        {
-            return OperationResult.Failure(
-                ErrorCodes.ConcurrencyConflict,
-                "The campaign was updated by another request. Reload and try again.");
-        }
-
-        var utcNow = _clock.UtcNow;
-        var closedEntry = new PlayLogEntry(
-            Guid.NewGuid(),
-            utcNow,
-            PlayLogKind.CampaignClosed,
-            null,
-            null,
-            command.UserId,
-            null,
-            null,
-            null,
-            null,
-            []);
-        var play = (campaign.PlayState ?? CampaignPlayState.Empty).AppendLog(closedEntry);
-        var provisional = CampaignMapClone.CloneWithClosed(campaign, utcNow, utcNow, play);
-        play = await CampaignCompletionLog.SyncAsync(
-                provisional,
-                play,
+            var utcNow = _clock.UtcNow;
+            var closedEntry = new PlayLogEntry(
+                Guid.NewGuid(),
                 utcNow,
-                _accounts,
-                revised: false,
-                cancellationToken)
-            .ConfigureAwait(false);
-        var updated = CampaignMapClone.CloneWithClosed(campaign, utcNow, utcNow, play);
-        var outcome = await _campaigns
-            .UpdateAsync(updated, command.ExpectedRevision ?? campaign.Revision, cancellationToken)
-            .ConfigureAwait(false);
-        if (!outcome.IsSuccess || outcome.Campaign is null)
-        {
-            return OperationResult.Failure(
-                outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
-                outcome.Message ?? "The campaign could not be ended.");
+                PlayLogKind.CampaignClosed,
+                null,
+                null,
+                command.UserId,
+                null,
+                null,
+                null,
+                null,
+                []);
+            var play = (campaign.PlayState ?? CampaignPlayState.Empty).AppendLog(closedEntry);
+            var provisional = CampaignMapClone.CloneWithClosed(campaign, utcNow, utcNow, play);
+            play = await CampaignCompletionLog.SyncAsync(
+                    provisional,
+                    play,
+                    utcNow,
+                    _accounts,
+                    revised: false,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var updated = CampaignMapClone.CloneWithClosed(campaign, utcNow, utcNow, play);
+            var outcome = await _campaigns
+                .UpdateAsync(updated, campaign.Revision, cancellationToken)
+                .ConfigureAwait(false);
+            if (outcome.IsSuccess && outcome.Campaign is not null)
+            {
+                await _notifications.PublishPlayAdvanceAsync(campaign, outcome.Campaign, cancellationToken)
+                    .ConfigureAwait(false);
+                return OperationResult.Success();
+            }
+
+            if (outcome.ErrorCode != ErrorCodes.ConcurrencyConflict)
+            {
+                return OperationResult.Failure(
+                    outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
+                    outcome.Message ?? "The campaign could not be ended.");
+            }
+
+            lastConflict = OperationResult.Failure(
+                ErrorCodes.ConcurrencyConflict,
+                outcome.Message ?? "The campaign was updated by another request. Reload and try again.");
         }
 
-        await _notifications.PublishPlayAdvanceAsync(campaign, outcome.Campaign, cancellationToken)
-            .ConfigureAwait(false);
-        return OperationResult.Success();
+        return lastConflict ?? OperationResult.Failure(
+            ErrorCodes.ConcurrencyConflict,
+            "The campaign was updated by another request. Reload and try again.");
     }
 }
 
@@ -574,6 +583,10 @@ internal static class CampaignMapClone
             Phases = existing.Phases,
             MapGraph = existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
+            TerrainTags = existing.TerrainTags,
+            StructureTags = existing.StructureTags,
+            FactionTags = existing.FactionTags,
+            MissionTags = existing.MissionTags,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
@@ -630,6 +643,10 @@ internal static class CampaignMapClone
             Phases = existing.Phases,
             MapGraph = existing.MapGraph,
             TerrainTypes = terrainTypes,
+            TerrainTags = existing.TerrainTags,
+            StructureTags = existing.StructureTags,
+            FactionTags = existing.FactionTags,
+            MissionTags = existing.MissionTags,
             StructureTypes = structureTypes,
             ItemObjectiveTypes = itemObjectiveTypes ?? existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
@@ -684,6 +701,10 @@ internal static class CampaignMapClone
             Phases = existing.Phases,
             MapGraph = existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
+            TerrainTags = existing.TerrainTags,
+            StructureTags = existing.StructureTags,
+            FactionTags = existing.FactionTags,
+            MissionTags = existing.MissionTags,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
@@ -739,6 +760,10 @@ internal static class CampaignMapClone
             Phases = existing.Phases,
             MapGraph = existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
+            TerrainTags = existing.TerrainTags,
+            StructureTags = existing.StructureTags,
+            FactionTags = existing.FactionTags,
+            MissionTags = existing.MissionTags,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
@@ -795,6 +820,10 @@ internal static class CampaignMapClone
             Phases = existing.Phases,
             MapGraph = graph ?? existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
+            TerrainTags = existing.TerrainTags,
+            StructureTags = existing.StructureTags,
+            FactionTags = existing.FactionTags,
+            MissionTags = existing.MissionTags,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
@@ -851,6 +880,10 @@ internal static class CampaignMapClone
             Phases = existing.Phases,
             MapGraph = existing.MapGraph,
             TerrainTypes = existing.TerrainTypes,
+            TerrainTags = existing.TerrainTags,
+            StructureTags = existing.StructureTags,
+            FactionTags = existing.FactionTags,
+            MissionTags = existing.MissionTags,
             StructureTypes = existing.StructureTypes,
             ItemObjectiveTypes = existing.ItemObjectiveTypes,
             PublicObjectiveTypes = existing.PublicObjectiveTypes,

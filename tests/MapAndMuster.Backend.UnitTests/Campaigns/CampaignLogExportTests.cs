@@ -59,6 +59,24 @@ public sealed class CampaignLogExportTests
     }
 
     [Fact]
+    public void TextFileLocalizesScheduleExtensionEndsInTheCampaignTimeZone()
+    {
+        var file = CampaignLogExport.Write(
+            "Border War",
+            "America/New_York",
+            [Entry(
+                "ScheduleExtended",
+                "northplayer lengthened Action 1 of round 1 by 2 days (now ends 2026-08-15T20:00:00.000Z).")],
+            CampaignLogExportFormat.Text);
+
+        Assert.Contains(
+            "now ends 2026-08-15 04:00:00 PM EDT",
+            Encoding.UTF8.GetString(file.Content),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("2026-08-15T20:00:00.000Z", Encoding.UTF8.GetString(file.Content), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CsvFileQuotesCommasAndNeverIncludesPrivateChat()
     {
         var selected = CampaignLogExport.Select(

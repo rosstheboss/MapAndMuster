@@ -41,6 +41,10 @@ internal static class CampaignPresetCatalogFiles
             Phases = campaign.Phases,
             MapGraph = campaign.MapGraph,
             PlayState = campaign.PlayState,
+            TerrainTags = campaign.TerrainTags,
+            StructureTags = campaign.StructureTags,
+            FactionTags = campaign.FactionTags,
+            MissionTags = campaign.MissionTags,
             TerrainTypes = Merge(campaign.TerrainTypes, preset.TerrainTypes, static type => type.Name, CopyTerrainFiles),
             StructureTypes = Merge(
                 campaign.StructureTypes,
@@ -120,6 +124,8 @@ internal static class CampaignPresetCatalogFiles
             TintFlagImage = hasFlag ? source.TintFlagImage : destination.TintFlagImage,
             SpecialRuleIds = destination.SpecialRuleIds,
             SubfactionSpecialRules = destination.SubfactionSpecialRules,
+            TagIds = destination.TagIds,
+            SubfactionTags = destination.SubfactionTags,
         };
     }
 
@@ -148,7 +154,7 @@ internal static class CampaignPresetCatalogFiles
             Missions = Merge(destination.Missions, source.Missions, static mission => mission.Name, CopyMissionFiles),
             CampaignPoints = destination.CampaignPoints,
             SupplyPoints = destination.SupplyPoints,
-            IsWaterFeature = destination.IsWaterFeature,
+            TagIds = destination.TagIds,
         };
     }
 
@@ -171,6 +177,7 @@ internal static class CampaignPresetCatalogFiles
             SupplyPoints = destination.SupplyPoints,
             PillageSupplyPoints = destination.PillageSupplyPoints,
             DestroySupplyPoints = destination.DestroySupplyPoints,
+            TagIds = destination.TagIds,
         };
     }
 

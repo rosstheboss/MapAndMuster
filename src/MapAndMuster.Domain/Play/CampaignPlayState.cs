@@ -279,6 +279,7 @@ public sealed class CampaignPlayState
     /// </summary>
     public IReadOnlyList<Guid> RequiredOrderPlayers(Guid windowId)
     {
+        _ = windowId;
         return
         [
             .. Forces
@@ -286,6 +287,28 @@ public sealed class CampaignPlayState
                 .Select(static force => force.ControllerUserId)
                 .Distinct(),
         ];
+    }
+
+    /// <summary>
+    /// Players who have a force during an action window, including those whose forces are all in battle.
+    /// </summary>
+    public IReadOnlyList<Guid> ActionRosterPlayers()
+    {
+        return [.. Forces.Select(static force => force.ControllerUserId).Distinct()];
+    }
+
+    /// <summary>
+    /// Whether the player has committed, or owes no action because every force is locked in battle.
+    /// </summary>
+    public bool IsActionCommitted(Guid windowId, Guid userId)
+    {
+        if (Commitments.Any(item => item.WindowId == windowId && item.UserId == userId))
+        {
+            return true;
+        }
+
+        var mine = Forces.Where(force => force.ControllerUserId == userId).ToArray();
+        return mine.Length > 0 && mine.All(static force => force.InBattle);
     }
 
     /// <summary>

@@ -34,6 +34,10 @@ public sealed class CampaignSetup
     /// <param name="splitForceSupplyPenaltyIsPercent">Whether the split-force penalty is a percent of map supply. The default is a raw amount.</param>
     /// <param name="standardBattleResultQuestions">Reusable battle-result questions. Empty means none.</param>
     /// <param name="missions">Reusable missions. Empty means only nested terrain and structure missions.</param>
+    /// <param name="terrainTags">Terrain-catalog tags.</param>
+    /// <param name="structureTags">Structure-catalog tags.</param>
+    /// <param name="factionTags">Faction-catalog tags shared with subfactions.</param>
+    /// <param name="missionTags">Mission-catalog tags.</param>
     public CampaignSetup(
         string name,
         string? description,
@@ -60,7 +64,11 @@ public sealed class CampaignSetup
         int? splitForceSupplyPenaltyPercent = null,
         bool splitForceSupplyPenaltyIsPercent = HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent,
         IReadOnlyList<StandardBattleResultQuestionSetup>? standardBattleResultQuestions = null,
-        IReadOnlyList<MissionSetup>? missions = null)
+        IReadOnlyList<MissionSetup>? missions = null,
+        IReadOnlyList<CatalogTag>? terrainTags = null,
+        IReadOnlyList<CatalogTag>? structureTags = null,
+        IReadOnlyList<CatalogTag>? factionTags = null,
+        IReadOnlyList<CatalogTag>? missionTags = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factions);
@@ -97,6 +105,10 @@ public sealed class CampaignSetup
         SplitForceSupplyPenaltyIsPercent = splitForceSupplyPenaltyIsPercent;
         StandardBattleResultQuestions = standardBattleResultQuestions ?? [];
         Missions = missions ?? [];
+        TerrainTags = terrainTags ?? [];
+        StructureTags = structureTags ?? [];
+        FactionTags = factionTags ?? [];
+        MissionTags = missionTags ?? [];
     }
 
     /// <summary>Gets the campaign name.</summary>
@@ -173,6 +185,18 @@ public sealed class CampaignSetup
 
     /// <summary>Gets reusable missions. Empty means only nested terrain and structure missions.</summary>
     public IReadOnlyList<MissionSetup> Missions { get; }
+
+    /// <summary>Gets terrain-catalog tags.</summary>
+    public IReadOnlyList<CatalogTag> TerrainTags { get; }
+
+    /// <summary>Gets structure-catalog tags.</summary>
+    public IReadOnlyList<CatalogTag> StructureTags { get; }
+
+    /// <summary>Gets faction-catalog tags shared with subfactions.</summary>
+    public IReadOnlyList<CatalogTag> FactionTags { get; }
+
+    /// <summary>Gets mission-catalog tags.</summary>
+    public IReadOnlyList<CatalogTag> MissionTags { get; }
 
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon => BattleScoring.PointsPerWin;

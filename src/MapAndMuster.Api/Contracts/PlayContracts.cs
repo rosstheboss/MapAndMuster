@@ -1156,6 +1156,8 @@ public static class PlayResponses
                     Name = item.Name,
                     Description = item.Description,
                     CampaignPoints = item.CampaignPoints,
+                    CurrentCount = item.CurrentCount,
+                    RequiredCount = item.RequiredCount,
                     CanClaim = item.CanClaim,
                     CanModerate = item.CanModerate,
                 }),

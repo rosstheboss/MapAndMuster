@@ -237,6 +237,65 @@ public sealed class CampaignPointStandingsRulesTests
     }
 
     [Fact]
+    public void RankingMostTerritoriesCanFilterByTerrainTag()
+    {
+        var north = Guid.NewGuid();
+        var south = Guid.NewGuid();
+        var northFaction = Guid.NewGuid();
+        var southFaction = Guid.NewGuid();
+        var water = Guid.NewGuid();
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players:
+            [
+                new CampaignPointPlayer(north, northFaction),
+                new CampaignPointPlayer(south, southFaction),
+            ],
+            territories:
+            [
+                new CampaignPointTerritory(Guid.NewGuid(), northFaction, null, StructureCondition.Operational, [water]),
+                new CampaignPointTerritory(Guid.NewGuid(), southFaction, null, StructureCondition.Operational),
+                new CampaignPointTerritory(Guid.NewGuid(), southFaction, null, StructureCondition.Operational),
+            ],
+            ranking: new GeneralPublicObjectivePoints(5, 0, 0, mostTerritoriesTerrainTagId: water)));
+
+        Assert.Equal(5, result.Standings.Single(row => row.UserId == north).PublicObjectivePoints);
+        Assert.Equal(0, result.Standings.Single(row => row.UserId == south).PublicObjectivePoints);
+    }
+
+    [Fact]
+    public void RankingMostStructurePointsCanFilterByStructureTag()
+    {
+        var north = Guid.NewGuid();
+        var south = Guid.NewGuid();
+        var northFaction = Guid.NewGuid();
+        var southFaction = Guid.NewGuid();
+        var town = Guid.NewGuid();
+        var keep = Guid.NewGuid();
+        var fortTag = Guid.NewGuid();
+        var result = CampaignPointStandingsRules.Calculate(State(
+            players:
+            [
+                new CampaignPointPlayer(north, northFaction),
+                new CampaignPointPlayer(south, southFaction),
+            ],
+            territories:
+            [
+                new CampaignPointTerritory(
+                    Guid.NewGuid(),
+                    northFaction,
+                    town,
+                    StructureCondition.Operational,
+                    StructureTagIds: [fortTag]),
+                new CampaignPointTerritory(Guid.NewGuid(), southFaction, keep, StructureCondition.Operational),
+            ],
+            structurePoints: new Dictionary<Guid, int> { [town] = 3, [keep] = 9 },
+            ranking: new GeneralPublicObjectivePoints(0, 0, 0, mostStructurePoints: 4, mostStructurePointsStructureTagId: fortTag)));
+
+        Assert.Equal(4, result.Standings.Single(row => row.UserId == north).PublicObjectivePoints);
+        Assert.Equal(0, result.Standings.Single(row => row.UserId == south).PublicObjectivePoints);
+    }
+
+    [Fact]
     public void AwardsConfiguredPointsForEachOwnedTerritory()
     {
         var player = Guid.NewGuid();

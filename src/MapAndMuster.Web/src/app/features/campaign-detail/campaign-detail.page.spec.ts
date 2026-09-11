@@ -5,12 +5,12 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { of } from 'rxjs';
 
-import { AuthService } from '../../core/auth/auth.service';
 import type { OwnProfile } from '../../core/auth/auth.models';
-import { CampaignDetailPage } from './campaign-detail.page';
-import type { CampaignPlayDetail } from '../../core/campaigns/campaign.models';
+import { AuthService } from '../../core/auth/auth.service';
 import { cookieNameFor, writeStoredPrefs } from '../../core/campaigns/campaign-view-prefs.service';
+import type { CampaignPlayDetail } from '../../core/campaigns/campaign.models';
 import type { MapTerritory } from '../../core/maps/map-graph.models';
+import { CampaignDetailPage } from './campaign-detail.page';
 
 const campaign = {
   id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
@@ -162,12 +162,7 @@ function viewerProfile(userId: string): OwnProfile {
 }
 
 function flushPlayUnavailable(http: HttpTestingController): void {
-  http
-    .expectOne(`/api/campaigns/${campaign.id}/play`)
-    .flush(
-      { code: 'play.not_started', message: 'This campaign has not started yet.' },
-      { status: 400, statusText: 'Bad Request' },
-    );
+  http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(null, { status: 204, statusText: 'No Content' });
 }
 
 function flushLog(http: HttpTestingController, log: unknown[] = campaign.log, revision = campaign.revision): void {
@@ -374,6 +369,53 @@ describe('CampaignDetailPage', () => {
     fixture.destroy();
     expect(document.querySelector('.app-dialog-backdrop')).toBeNull();
     http.verify();
+  });
+
+  it('ends an in-progress campaign using the play revision', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+      currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(playState({ hasMap: false, revision: 6 }));
+    flushLog(http, campaign.log, 6);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'manage');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('.manage-campaign .button-danger')!.click();
+    fixture.detectChanges();
+    const confirm = [...compiled.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
+      (element) => element.textContent.trim() === 'End campaign',
+    );
+    expect(confirm).toBeTruthy();
+    confirm!.click();
+    const end = http.expectOne(`/api/campaigns/${campaign.id}/end`);
+    expect(end.request.method).toBe('POST');
+    expect(end.request.body).toEqual({ revision: 6 });
+    end.flush(null, { status: 204, statusText: 'No Content' });
+    await fixture.whenStable();
+    expect(navigate).toHaveBeenCalledWith('/campaigns');
+    fixture.destroy();
   });
 
   it('lets a manager promote a player or add a manager-only user', async () => {
@@ -1104,10 +1146,7 @@ describe('CampaignDetailPage', () => {
           adjacencies: [],
         });
       } else if (request.request.url.endsWith('/play')) {
-        request.flush(
-          { code: 'play.not_started', message: 'This campaign has not started yet.' },
-          { status: 400, statusText: 'Bad Request' },
-        );
+        request.flush(null, { status: 204, statusText: 'No Content' });
       } else {
         request.flush({
           ...campaign,
@@ -1408,8 +1447,15 @@ describe('CampaignDetailPage', () => {
     expect(saveDraft).toBeTruthy();
     expect(saveDraft?.textContent.trim()).toBe('Save draft');
     expect(compiled.querySelector('.force-card')).toBeTruthy();
-    expect(compiled.querySelector('.commitment-roster .status-chip')?.textContent).toContain('Drafting');
+    expect(compiled.querySelector('.commitment-roster')).toBeNull();
     expect(compiled.textContent).toContain('0 of 2 players committed');
+    const commitmentsToggle = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Commitments',
+    );
+    expect(commitmentsToggle?.getAttribute('aria-expanded')).toBe('false');
+    commitmentsToggle?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('.commitment-roster .status-chip')?.textContent).toContain('Drafting');
     (saveDraft as HTMLButtonElement).click();
     const draft = http.expectOne(`/api/campaigns/${campaign.id}/play/draft`);
     expect((draft.request.body as { kind: string }).kind).toBe('Hold');
@@ -1967,7 +2013,7 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
-  it('does not require an action from a force that is already in battle', async () => {
+  it('shows automatic private objective progress next to the description', async () => {
     TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
@@ -1988,6 +2034,56 @@ describe('CampaignDetailPage', () => {
     });
     http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
       playState({
+        privateObjectives: [
+          {
+            id: 'po-auto',
+            typeId: 'type-auto',
+            holderKind: 'Player',
+            holderId: 'user-1',
+            status: 'Assigned',
+            scoringKind: 'Automatic',
+            name: 'Hold five territories',
+            description: 'Control five territories.',
+            campaignPoints: 4,
+            currentCount: 2,
+            requiredCount: 5,
+            canClaim: false,
+            canModerate: false,
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'faction');
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Control five territories. (2/5)');
+    http.verify();
+  });
+
+  it('does not require an action from a force that is already in battle', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [squareTerritory('t1', 'Midland', 0.1)],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        isCommitted: true,
         forces: [
           {
             id: 'force-1',
@@ -2000,8 +2096,38 @@ describe('CampaignDetailPage', () => {
             moveTargets: [],
             availableActions: ['Surrender'],
           },
+          {
+            id: 'force-2',
+            controllerUserId: 'user-2',
+            controllerUsername: 'southplayer',
+            factionId: '2',
+            territoryId: 't1',
+            isMine: false,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: [],
+          },
         ],
-        commitments: [{ userId: 'user-2', username: 'southplayer', isCommitted: false }],
+        commitments: [
+          { userId: 'user-1', username: 'northplayer', isCommitted: true },
+          { userId: 'user-2', username: 'southplayer', isCommitted: false },
+        ],
+        battles: [
+          {
+            id: 'battle-1',
+            territoryId: 't1',
+            status: 'AwaitingResults',
+            participantForceIds: ['force-1', 'force-2'],
+            reportingForceIds: ['force-1', 'force-2'],
+            isMine: true,
+            mySubmission: null,
+            opponentSubmission: null,
+            winnerForceId: null,
+            isDraw: false,
+            needsRetreat: false,
+            retreatTargets: [],
+          },
+        ],
       }),
     );
     flushLog(http);
@@ -2011,14 +2137,19 @@ describe('CampaignDetailPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain(
-      'This force is in battle and does not need an action until the battle is resolved.',
+      'Locked in battle at Midland with southplayer · South. This force cannot perform an action until the battle is resolved.',
     );
+    expect(compiled.textContent).toContain('You have no actions to commit this phase.');
+    expect(compiled.textContent).not.toContain('Choose an action for each of your forces');
+    expect(compiled.querySelectorAll('.commitment-summary').length).toBe(1);
+    expect(compiled.textContent).toContain('1 of 2 players committed. Waiting on southplayer.');
     expect(compiled.querySelector('#kind-force-1')).toBeNull();
     const commit = [...compiled.querySelectorAll('button')].find((button) =>
       button.textContent.trim().startsWith('Commit Actions'),
     );
-    expect(commit?.disabled).toBe(true);
-    expect(compiled.querySelector('.campaign-status-bar')?.textContent).not.toContain('Not committed');
+    expect(commit).toBeUndefined();
+    expect(compiled.textContent).not.toContain('Uncommit');
+    expect(compiled.querySelector('.campaign-status-bar')?.textContent).toContain('Committed');
     http.verify();
   });
 
@@ -3369,6 +3500,8 @@ describe('CampaignDetailPage', () => {
     expect(page.isOpen('map')).toBe(false);
     expect(page.isOpen('manage')).toBe(false);
     expect(page.isOpen('details')).toBe(false);
+    expect(compiled.textContent).toContain('Choose an action for each of your forces');
+    expect(compiled.querySelectorAll('.commitment-summary').length).toBe(1);
     const statusBar = compiled.querySelector('.campaign-status-bar');
     const actions = [...compiled.querySelectorAll('h2')].find((heading) => heading.textContent.includes('Actions'));
     const log = compiled.querySelector('app-campaign-log');

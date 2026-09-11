@@ -40,4 +40,10 @@ public sealed class FactionInput
 
     /// <summary>Gets special-rule assignments for named subfactions.</summary>
     public IReadOnlyList<SubfactionSpecialRulesInput>? SubfactionSpecialRules { get; init; }
+
+    /// <summary>Gets faction-catalog tag identifiers assigned to this faction.</summary>
+    public IReadOnlyList<Guid>? TagIds { get; init; }
+
+    /// <summary>Gets extra faction-catalog tags for named subfactions.</summary>
+    public IReadOnlyList<SubfactionTagsInput>? SubfactionTags { get; init; }
 }

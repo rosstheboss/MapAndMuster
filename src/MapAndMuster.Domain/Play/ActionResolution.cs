@@ -50,7 +50,7 @@ public static class ActionResolution
         {
             var order = resolved[force.Id];
             var submission = state.LatestSubmission(window.Id, force.Id);
-            AppendResolvedActionLog(log, window, force, submission, order, utcNow);
+            AppendResolvedActionLog(log, window, force, submission, order, utcNow, map);
         }
 
         var nextForces = new List<CampaignForce>();
@@ -182,7 +182,8 @@ public static class ActionResolution
                     present
                         .Where(item => AllyBetrayalRules.MatchesVictim(betrayal, item))
                         .Select(static item => item.Id)
-                        .ToArray()));
+                        .ToArray(),
+                    BetrayalLogMessage(map, actor, betrayal)));
             }
         }
 
@@ -1083,7 +1084,8 @@ public static class ActionResolution
         CampaignForce force,
         OrderSubmission? submission,
         ResolvedOrder order,
-        DateTimeOffset utcNow)
+        DateTimeOffset utcNow,
+        PlayMap map)
     {
         var submittedKind = submission?.Kind ?? ActionKind.Hold;
         if (submission?.Source == OrderSource.DeadlineHold)
@@ -1137,6 +1139,11 @@ public static class ActionResolution
             return;
         }
 
+        if (order.Kind == ActionKind.Backstab)
+        {
+            return;
+        }
+
         log.Add(Entry(
             utcNow,
             PlayLogKind.ResolvedAction,
@@ -1144,7 +1151,86 @@ public static class ActionResolution
             force,
             order.Kind,
             force.TerritoryId,
-            order.TargetTerritoryId));
+            order.TargetTerritoryId,
+            StructureMessage(map, force, order)));
+    }
+
+    private static string? StructureMessage(PlayMap map, CampaignForce force, ResolvedOrder order)
+    {
+        if (order.Kind == ActionKind.Pillage && DestroysStructure(map, force, order))
+        {
+            return PlayLogFacts.DestroyedStructure(TerritoryStructureName(map, force.TerritoryId));
+        }
+
+        if (order.Kind is ActionKind.Pillage or ActionKind.Repair)
+        {
+            return TerritoryStructureName(map, force.TerritoryId);
+        }
+
+        if (order.Kind == ActionKind.Build && order.StructureTypeId is { } structureTypeId)
+        {
+            return map.StructureRules(structureTypeId)?.Name ?? "structure";
+        }
+
+        return null;
+    }
+
+    private static bool DestroysStructure(PlayMap map, CampaignForce force, ResolvedOrder order)
+    {
+        var territory = map.Territory(force.TerritoryId);
+        if (territory?.StructureTypeId is null)
+        {
+            return false;
+        }
+
+        if (order.DestroyImmediately && territory.IsDestructible)
+        {
+            return true;
+        }
+
+        return territory.StructureCondition != StructureCondition.Operational && territory.IsDestructible;
+    }
+
+    private static string TerritoryStructureName(PlayMap map, Guid territoryId)
+    {
+        var territory = map.Territory(territoryId);
+        if (!string.IsNullOrWhiteSpace(territory?.StructureName))
+        {
+            return territory.StructureName;
+        }
+
+        if (territory?.StructureTypeId is { } structureTypeId
+            && map.StructureRules(structureTypeId) is { Name: { Length: > 0 } name })
+        {
+            return name;
+        }
+
+        return "structure";
+    }
+
+    private static string BetrayalLogMessage(PlayMap map, CampaignForce actor, AllyBetrayal betrayal)
+    {
+        if (betrayal.BetrayedUserId is { } victimId)
+        {
+            return PlayLogFacts.Betrayal(PlayLogFacts.BetrayalAttack, victimId, betrayal.BetrayedFactionId);
+        }
+
+        var territory = map.Territory(actor.TerritoryId);
+        var willPillage = territory is not null
+            && territory.OwnerFactionId == betrayal.BetrayedFactionId
+            && territory.IsPillageable
+            && territory.StructureTypeId is not null
+            && territory.StructureCondition == StructureCondition.Operational;
+        if (willPillage)
+        {
+            return PlayLogFacts.Betrayal(
+                PlayLogFacts.BetrayalPillage,
+                null,
+                betrayal.BetrayedFactionId,
+                TerritoryStructureName(map, actor.TerritoryId));
+        }
+
+        return PlayLogFacts.Betrayal(PlayLogFacts.BetrayalClaim, null, betrayal.BetrayedFactionId);
     }
 
     private static PlayLogEntry Entry(
@@ -1154,7 +1240,8 @@ public static class ActionResolution
         CampaignForce force,
         ActionKind actionKind,
         Guid territoryId,
-        Guid? targetTerritoryId)
+        Guid? targetTerritoryId,
+        string? message = null)
     {
         return new PlayLogEntry(
             Guid.NewGuid(),
@@ -1167,7 +1254,8 @@ public static class ActionResolution
             targetTerritoryId,
             battleId: null,
             actionKind,
-            [force.Id]);
+            [force.Id],
+            message);
     }
 
     private static ResolvedOrder Hold(CampaignForce force, OrderAdjustment adjustment)

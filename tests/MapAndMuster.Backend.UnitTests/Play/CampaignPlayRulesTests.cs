@@ -140,6 +140,44 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
+    public void SeedPlacesUndergroundNetworkOnAnEmptyTownAndHealsAMissingForceAfterLaunch()
+    {
+        var skaven = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        var playerThree = Guid.Parse("88888888-8888-8888-8888-888888888888");
+        var rules = UndergroundNetworkFor(skaven);
+        var map = CreateMapWithTowns();
+        var schedule = CreateSchedule();
+        var seeded = CampaignPlayRules.Seed(
+            CampaignPlayState.Empty,
+            map,
+            schedule,
+            [
+                new PlayerFactionAssignment(PlayerOne, North),
+                new PlayerFactionAssignment(playerThree, skaven),
+            ],
+            schedule.StartsUtc,
+            specialRules: rules);
+
+        var skavenForce = seeded.State.Forces.Single(force => force.FactionId == skaven);
+        Assert.Equal(Midland, skavenForce.TerritoryId);
+        Assert.Equal(skaven, seeded.Map.Territory(Midland)?.OwnerFactionId);
+
+        var withoutSkaven = seeded.State.With(forces: [.. seeded.State.Forces.Where(force => force.FactionId != skaven)]);
+        var healed = CampaignPlayRules.Seed(
+            withoutSkaven,
+            seeded.Map.Replace(seeded.Map.Territory(Midland)!.With(ownerFactionId: null, assignOwner: true)),
+            schedule,
+            [
+                new PlayerFactionAssignment(PlayerOne, North),
+                new PlayerFactionAssignment(playerThree, skaven),
+            ],
+            schedule.StartsUtc,
+            specialRules: rules);
+
+        Assert.Contains(healed.State.Forces, force => force.ControllerUserId == playerThree && force.TerritoryId == Midland);
+    }
+
+    [Fact]
     public void CommitRequiresADraftForEveryForce()
     {
         var (state, map, schedule) = Seeded();
@@ -726,6 +764,73 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
+    public void MissingRetreatForUndergroundNetworkGoesToAnEmptyControlledTown()
+    {
+        var skaven = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        var townType = Guid.NewGuid();
+        var cityType = Guid.NewGuid();
+        var rules = UndergroundNetworkFor(skaven);
+        var map = new PlayMap(
+            [
+                new PlayTerritory(NorthSpawn, 1, North, North, null, null, StructureCondition.Operational),
+                new PlayTerritory(Midland, 2, null, null, cityType, "City", StructureCondition.Operational),
+                new PlayTerritory(East, 3, North, null, townType, "Town", StructureCondition.Operational),
+            ],
+            [(NorthSpawn, Midland), (Midland, East)],
+            [
+                new StructureTypePlayRules(townType, "Town", false, true, true, 1, 1, 1),
+                new StructureTypePlayRules(cityType, "City", false, true, true, 1, 1, 1),
+            ]);
+        var schedule = CreateSchedule();
+        var allies = new Dictionary<Guid, string?> { [North] = null, [skaven] = null };
+        var seeded = CampaignPlayRules.Seed(
+            CampaignPlayState.Empty,
+            map,
+            schedule,
+            [new PlayerFactionAssignment(PlayerOne, North), new PlayerFactionAssignment(PlayerTwo, skaven)],
+            schedule.StartsUtc,
+            specialRules: rules);
+        map = seeded.Map;
+        var state = seeded.State;
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var skavenForce = state.Forces.Single(force => force.FactionId == skaven);
+        Assert.Equal(Midland, skavenForce.TerritoryId);
+
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state, PlayerOne, northForce.Id, ActionKind.Move, Midland, null, map, schedule.StartsUtc, out var northDraft, out _));
+        Assert.True(CampaignPlayRules.TryCommit(northDraft!, map, PlayerOne, allies, schedule.StartsUtc, out var afterNorth, out _));
+        state = afterNorth!.State;
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state, PlayerTwo, skavenForce.Id, ActionKind.Hold, null, null, map, schedule.StartsUtc, out var skavenDraft, out _));
+        Assert.True(CampaignPlayRules.TryCommit(skavenDraft!, map, PlayerTwo, allies, schedule.StartsUtc, out var closed, out _));
+        state = closed!.State;
+        map = closed.PreserveMap ? map : closed.Map;
+
+        var battle = state.Battles[0];
+        var now = DuringOpenBattle(state);
+        Assert.True(CampaignPlayRules.TrySubmitBattleResult(
+            state, PlayerOne, battle.Id, northForce.Id, false, now, out var one, out _));
+        Assert.True(CampaignPlayRules.TryAcceptBattleResult(
+            one!.State, PlayerTwo, battle.Id, now, out var accepted, out _));
+        var retreatMap = accepted!.PreserveMap ? map : accepted.Map;
+        var battleWindow = accepted.State.Windows.First(window =>
+            window.Kind == RoundPhaseKind.Battle && window.Status == PhaseWindowStatus.Open);
+        var advanced = CampaignPlayRules.Advance(
+            accepted.State,
+            retreatMap,
+            schedule,
+            allies,
+            battleWindow.EndsUtc,
+            specialRules: rules);
+
+        Assert.Equal(East, advanced.State.Forces.Single(force => force.FactionId == skaven).TerritoryId);
+        Assert.Equal(skaven, advanced.Map.Territory(East)?.OwnerFactionId);
+        Assert.Contains(
+            advanced.State.Log,
+            item => item.Kind == PlayLogKind.DefaultRetreat && item.TargetTerritoryId == East);
+    }
+
+    [Fact]
     public void DebugSessionIsLoggedAndExclusive()
     {
         var (state, _, schedule) = Seeded();
@@ -1077,8 +1182,57 @@ public sealed class CampaignPlayRulesTests
             PlayerOne,
             out var outcome,
             out _));
-        Assert.Contains(outcome!.State.Log, item => item.Kind == PlayLogKind.ScheduleExtended && item.ActorUserId == PlayerOne);
+        Assert.Contains(
+            outcome!.State.Log,
+            item => item.Kind == PlayLogKind.ScheduleExtended
+                && item.ActorUserId == PlayerOne
+                && item.Message == "added 1 round.");
         Assert.Equal(4, outcome.RoundCount);
+    }
+
+    [Fact]
+    public void ExtendingAWindowRecordsDurationAndNewEndInTheLog()
+    {
+        var (state, map, schedule) = Seeded();
+        _ = map;
+        var window = state.Windows[0];
+        var extra = new ScheduleDuration(2, DurationUnit.Days);
+        var expectedEnd = CampaignCalendar.Add(window.EndsUtc, schedule.TimeZone, extra);
+        var iso = expectedEnd.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.True(CampaignPlayRules.TryExtendSchedule(
+            state,
+            schedule,
+            roundCount: 3,
+            [new PhaseExtension(window.Id, extra)],
+            schedule.StartsUtc,
+            PlayerOne,
+            out var outcome,
+            out _));
+        var entry = Assert.Single(outcome!.State.Log, item => item.Kind == PlayLogKind.ScheduleExtended);
+        Assert.Equal($"lengthened Action 1 of round 1 by 2 days (now ends {iso}).", entry.Message);
+    }
+
+    [Fact]
+    public void ExtendingAWindowAndAddingRoundsRecordsBothInTheLog()
+    {
+        var (state, map, schedule) = Seeded();
+        _ = map;
+        var window = state.Windows[0];
+        var extra = new ScheduleDuration(1, DurationUnit.Hours);
+
+        Assert.True(CampaignPlayRules.TryExtendSchedule(
+            state,
+            schedule,
+            roundCount: 5,
+            [new PhaseExtension(window.Id, extra)],
+            schedule.StartsUtc,
+            PlayerOne,
+            out var outcome,
+            out _));
+        var entry = Assert.Single(outcome!.State.Log, item => item.Kind == PlayLogKind.ScheduleExtended);
+        Assert.Contains("lengthened Action 1 of round 1 by 1 hour (now ends ", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("Added 2 rounds.", entry.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1753,6 +1907,27 @@ public sealed class CampaignPlayRulesTests
             ? [(NorthSpawn, Midland), (Midland, SouthSpawn), (NorthSpawn, SouthSpawn), (Midland, East)]
             : [(NorthSpawn, Midland), (Midland, SouthSpawn), (NorthSpawn, SouthSpawn), (SouthSpawn, East)];
         return new PlayMap(territories, edges);
+    }
+
+    private static SpecialRuleContext UndergroundNetworkFor(Guid factionId)
+    {
+        var ruleId = Guid.NewGuid();
+        return new SpecialRuleContext(
+            [new SpecialRuleSetup(ruleId, "The Underground Network", "Rule text.", SpecialRuleEffectKeys.UndergroundNetwork)],
+            new Dictionary<Guid, IReadOnlyList<Guid>> { [factionId] = [ruleId] },
+            new Dictionary<(Guid, string), IReadOnlyList<Guid>>());
+    }
+
+    private static PlayMap CreateMapWithTowns()
+    {
+        var townType = Guid.NewGuid();
+        return new PlayMap(
+            [
+                new PlayTerritory(NorthSpawn, 1, North, North, null, null, StructureCondition.Operational),
+                new PlayTerritory(Midland, 2, null, null, townType, "Town", StructureCondition.Operational),
+                new PlayTerritory(SouthSpawn, 3, South, South, null, null, StructureCondition.Operational),
+            ],
+            [(NorthSpawn, Midland), (Midland, SouthSpawn), (NorthSpawn, SouthSpawn)]);
     }
 
     private static SpecialRuleContext ArtOfWarFor(Guid factionId)

@@ -108,6 +108,12 @@ export function formatLogTimestamp(value: string, timeZone?: string | null, form
   return formatted ? `(${formatted})` : '';
 }
 
+const ISO_INSTANT = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})/g;
+
+export function localizeLogInstants(text: string, timeZone?: string | null, format?: string | null): string {
+  return text.replace(ISO_INSTANT, (iso) => formatInstant(iso, timeZone, format) || iso);
+}
+
 export function formatLogTimeLabel(
   value: string,
   timeZone?: string | null,

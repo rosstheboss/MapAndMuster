@@ -156,6 +156,30 @@ describe('CampaignService', () => {
     http.verify();
   });
 
+  it('treats play as unavailable when the campaign has not started', async () => {
+    const service = TestBed.inject(CampaignService);
+    const http = TestBed.inject(HttpTestingController);
+    const pending = service.getPlay('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    const request = http.expectOne('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/play');
+    expect(request.request.method).toBe('GET');
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    expect(await pending).toBeNull();
+    http.verify();
+  });
+
+  it('loads play when the campaign has started', async () => {
+    const service = TestBed.inject(CampaignService);
+    const http = TestBed.inject(HttpTestingController);
+    const pending = service.getPlay('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    http.expectOne('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/play').flush({
+      id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      revision: 2,
+      status: 'InProgress',
+    });
+    expect((await pending)?.revision).toBe(2);
+    http.verify();
+  });
+
   it('ends a campaign with its current revision', async () => {
     const service = TestBed.inject(CampaignService);
     const http = TestBed.inject(HttpTestingController);

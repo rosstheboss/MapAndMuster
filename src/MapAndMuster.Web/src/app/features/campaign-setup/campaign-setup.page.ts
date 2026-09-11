@@ -17,6 +17,7 @@ import type {
   CampaignPublicObjectiveType,
   CampaignStructureType,
   CampaignTerrainType,
+  CatalogTag,
   ItemObjectiveChoice,
   ItemObjectiveChoiceResult,
   SaveCampaignPayload,
@@ -34,19 +35,26 @@ import {
   huntInEstaliaArmyEscalations,
 } from '../../core/campaigns/hunt-in-estalia-defaults';
 import {
+  DISEASE_CURE_STRUCTURE_NAMES,
   FORCE_STATUS_CLEAR_OPTIONS,
   FORCE_STATUS_ENABLE_OPTIONS,
   FORCE_STATUS_OCCURRENCES_MAX,
   FORCE_STATUS_OCCURRENCES_MIN,
   FORCE_STATUS_PRIORITY_MAX,
   FORCE_STATUS_PRIORITY_MIN,
+  WATER_TERRAIN_TAG_NAME,
   committedForceStatusPriority,
+  diseasedClearConditions,
+  diseasedEnableConditions,
   forceStatusClearConditions,
   forceStatusEnableConditions,
   forceStatusesFromStandardPreset,
+  isWaterTagName,
   nextForceStatusPriority,
   normalizeForceStatusOccurrences,
   STANDARD_FORCE_STATUSES,
+  type ConditionLocationKind,
+  type ForceStatusCondition,
 } from '../../core/campaigns/force-status-presets';
 import { OLD_WORLD_SPECIAL_RULES, type SpecialRulePreset } from '../../core/campaigns/special-rule-presets';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
@@ -142,6 +150,12 @@ type MissionGroup = FormGroup<{
   hasSupplyPointsAdvantage: FormControl<boolean>;
   supplyPointsAdvantageSide: FormControl<string>;
   supplyPointsAdvantageAmount: FormControl<number>;
+  tagIds: FormControl<string[]>;
+  tagDraft: FormControl<string>;
+}>;
+type CatalogTagGroup = FormGroup<{
+  id: FormControl<string>;
+  name: FormControl<string>;
 }>;
 type FactionGroup = FormGroup<{
   id: FormControl<string>;
@@ -155,13 +169,17 @@ type FactionGroup = FormGroup<{
   subfactions: FormArray<NamedGroup>;
   specialRuleIds: FormControl<string[]>;
   subfactionSpecialRuleIds: FormControl<Record<string, string[]>>;
+  tagIds: FormControl<string[]>;
+  subfactionTagIds: FormControl<Record<string, string[]>>;
+  tagDraft: FormControl<string>;
 }>;
 type TerrainGroup = FormGroup<{
   id: FormControl<string>;
   name: FormControl<string>;
   color: FormControl<string>;
   campaignPoints: FormControl<number>;
-  isWaterFeature: FormControl<boolean>;
+  tagIds: FormControl<string[]>;
+  tagDraft: FormControl<string>;
   supplyPoints: FormControl<number>;
   missions: FormArray<MissionGroup>;
 }>;
@@ -181,6 +199,8 @@ type StructureGroup = FormGroup<{
   pillageSupplyPoints: FormControl<number>;
   destroySupplyPoints: FormControl<number>;
   missions: FormArray<MissionGroup>;
+  tagIds: FormControl<string[]>;
+  tagDraft: FormControl<string>;
 }>;
 type ItemObjectiveGroup = FormGroup<{
   id: FormControl<string>;
@@ -224,8 +244,12 @@ type SpecialRuleGroup = FormGroup<{
   effectKey: FormControl<string>;
 }>;
 type ForceStatusConditionGroup = FormGroup<{
+  id: FormControl<string>;
   trigger: FormControl<string>;
   occurrences: FormControl<number>;
+  locationKind: FormControl<string>;
+  locationTypeId: FormControl<string>;
+  locationTagId: FormControl<string>;
 }>;
 type ForceStatusGroup = FormGroup<{
   id: FormControl<string>;
@@ -233,9 +257,15 @@ type ForceStatusGroup = FormGroup<{
   effects: FormControl<string>;
   enablePick: FormControl<string>;
   enablePickOccurrences: FormControl<number>;
+  enablePickLocationKind: FormControl<string>;
+  enablePickTypeId: FormControl<string>;
+  enablePickTagId: FormControl<string>;
   enableConditions: FormArray<ForceStatusConditionGroup>;
   clearPick: FormControl<string>;
   clearPickOccurrences: FormControl<number>;
+  clearPickLocationKind: FormControl<string>;
+  clearPickTypeId: FormControl<string>;
+  clearPickTagId: FormControl<string>;
   clearConditions: FormArray<ForceStatusConditionGroup>;
   priority: FormControl<number>;
   cancelsStatusIds: FormControl<string[]>;
@@ -264,6 +294,8 @@ type PrivateObjectiveGroup = FormGroup<{
   statusMatchKind: FormControl<string>;
   prerequisiteForceStatusTypeId: FormControl<string>;
   prerequisiteWasLost: FormControl<boolean>;
+  structureTagId: FormControl<string>;
+  terrainTagId: FormControl<string>;
 }>;
 type PhaseGroup = FormGroup<{
   kind: FormControl<string>;
@@ -298,6 +330,14 @@ const TOP_LEVEL_SECTION_IDS = [
 ] as const;
 
 const DEFAULT_OPEN_SECTIONS = new Set(['details', 'schedule', 'factions', 'terrain', 'map']);
+const CATALOG_TAG_MAX = 9999;
+const CONDITION_LOCATION_OPTIONS: readonly { id: ConditionLocationKind; label: string }[] = [
+  { id: 'Any', label: 'Any location' },
+  { id: 'TerrainType', label: 'Specific terrain type' },
+  { id: 'TerrainTag', label: 'Terrain tag' },
+  { id: 'StructureType', label: 'Specific structure type' },
+  { id: 'StructureTag', label: 'Structure tag' },
+];
 
 const SETUP_INDEX_SECTIONS: readonly {
   id: (typeof TOP_LEVEL_SECTION_IDS)[number];
@@ -452,6 +492,11 @@ export class CampaignSetupPage {
   });
   protected readonly specialRulePresetPick = this.formBuilder.nonNullable.control('');
   protected readonly forceStatusPresetPick = this.formBuilder.nonNullable.control('');
+  protected readonly terrainTagDraft = this.formBuilder.nonNullable.control('', { validators: [maxLength(60)] });
+  protected readonly structureTagDraft = this.formBuilder.nonNullable.control('', { validators: [maxLength(60)] });
+  protected readonly factionTagDraft = this.formBuilder.nonNullable.control('', { validators: [maxLength(60)] });
+  protected readonly missionTagDraft = this.formBuilder.nonNullable.control('', { validators: [maxLength(60)] });
+  protected readonly subfactionTagDrafts = new Map<string, FormControl<string>>();
   private readonly catalogTick = signal(0);
   private readonly assignmentPicks = new Map<string, FormControl<string>>();
 
@@ -483,6 +528,10 @@ export class CampaignSetupPage {
     specialRules: this.formBuilder.array<SpecialRuleGroup>([]),
     standardBattleResultQuestions: this.formBuilder.array<StandardBattleResultQuestionGroup>([]),
     missions: this.formBuilder.array<MissionGroup>([]),
+    terrainTags: this.formBuilder.array<CatalogTagGroup>([]),
+    structureTags: this.formBuilder.array<CatalogTagGroup>([]),
+    factionTags: this.formBuilder.array<CatalogTagGroup>([]),
+    missionTags: this.formBuilder.array<CatalogTagGroup>([]),
     forceStatuses: this.formBuilder.array<ForceStatusGroup>([]),
     privateObjectiveTypes: this.formBuilder.array<PrivateObjectiveGroup>([]),
     publicObjectiveTypes: this.formBuilder.array<PublicObjectiveGroup>([]),
@@ -499,6 +548,10 @@ export class CampaignSetupPage {
     mostStructurePointsCampaignPoints: [0, [minValue(0), maxValue(999)]],
     pointsPerTerritoryCampaignPoints: [0, [minValue(0), maxValue(999)]],
     alliedRelicControlCampaignPoints: [0, [minValue(0), maxValue(999)]],
+    mostTerritoriesTerrainTagId: [''],
+    longestTerritoryChainTerrainTagId: [''],
+    mostStructurePointsStructureTagId: [''],
+    pointsPerTerritoryTerrainTagId: [''],
     splitForceSupplyPenaltyPercent: [HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_VALUE, [minValue(0), maxValue(100)]],
     splitForceSupplyPenaltyIsPercent: [HUNT_IN_ESTALIA_SPLIT_FORCE_SUPPLY_PENALTY_IS_PERCENT],
     roundEscalations: this.formBuilder.array<RoundEscalationGroup>(
@@ -534,6 +587,7 @@ export class CampaignSetupPage {
     if (id) {
       void this.loadCampaign(id);
     } else {
+      this.ensureDefaultWaterTags();
       this.loading.set(false);
     }
 
@@ -597,6 +651,22 @@ export class CampaignSetupPage {
 
   protected get missions(): FormArray<MissionGroup> {
     return this.form.controls.missions;
+  }
+
+  protected get terrainTags(): FormArray<CatalogTagGroup> {
+    return this.form.controls.terrainTags;
+  }
+
+  protected get structureTags(): FormArray<CatalogTagGroup> {
+    return this.form.controls.structureTags;
+  }
+
+  protected get factionTags(): FormArray<CatalogTagGroup> {
+    return this.form.controls.factionTags;
+  }
+
+  protected get missionTags(): FormArray<CatalogTagGroup> {
+    return this.form.controls.missionTags;
   }
 
   protected get forceStatuses(): FormArray<ForceStatusGroup> {
@@ -988,8 +1058,9 @@ export class CampaignSetupPage {
 
     this.replaceArray(
       this.terrainTypes,
-      types.map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color, '', 0, entry.isWaterFeature)),
+      types.map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color)),
     );
+    this.applyWaterTagsFromPreset(types);
   }
 
   protected applySelectedStructurePreset(): void {
@@ -1048,8 +1119,8 @@ export class CampaignSetupPage {
           undefined,
           status.name,
           status.effects,
-          forceStatusEnableConditions(status),
-          forceStatusClearConditions(status),
+          this.presetForceStatusEnableConditions(status),
+          this.presetForceStatusClearConditions(status),
           status.priority,
           [],
         ),
@@ -1074,10 +1145,9 @@ export class CampaignSetupPage {
     );
     this.replaceArray(
       this.terrainTypes,
-      copy.terrainTypes.map((entry) =>
-        this.createTerrainGroup(undefined, entry.name, entry.color, '', 0, entry.isWaterFeature),
-      ),
+      copy.terrainTypes.map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color)),
     );
+    this.applyWaterTagsFromPreset(copy.terrainTypes);
     this.replaceArray(
       this.structureTypes,
       copy.structureTypes.map((entry) =>
@@ -1099,6 +1169,7 @@ export class CampaignSetupPage {
       copy.itemObjectives.map((item) => this.createItemObjectiveGroup(item)),
     );
     this.applyBattleScoringDefaults();
+    this.remapDiseasedForceStatusLocations();
   }
 
   private async applySavedCampaignPreset(presetId: string): Promise<void> {
@@ -1158,6 +1229,7 @@ export class CampaignSetupPage {
         this.createSpecialRuleGroup(rule.id, rule.name, rule.text, rule.effectKey ?? undefined),
       ),
     );
+    this.applyTagCatalogs(campaign);
     this.applyStandardBattleResultQuestions(campaign);
     const incomingStatuses = campaign.forceStatuses ?? [];
     const appliedStatusIds = new Map<string, string>();
@@ -1210,6 +1282,8 @@ export class CampaignSetupPage {
             tintFlagImage: faction.tintFlagImage,
             specialRuleIds: faction.specialRuleIds ?? [],
             subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
+            tagIds: faction.tagIds ?? [],
+            subfactionTagIds: this.subfactionTagIdsFromDetail(faction.subfactionTags),
           },
         );
       }),
@@ -1293,6 +1367,8 @@ export class CampaignSetupPage {
               item.prerequisiteForceStatusTypeId,
               appliedForceStatusIds,
             ),
+            structureTagId: item.structureTagId ?? '',
+            terrainTagId: item.terrainTagId ?? '',
           },
           item.id,
         ),
@@ -1324,6 +1400,7 @@ export class CampaignSetupPage {
     this.form.controls.mostStructurePointsCampaignPoints.setValue(campaign.mostStructurePointsCampaignPoints ?? 0);
     this.form.controls.pointsPerTerritoryCampaignPoints.setValue(campaign.pointsPerTerritoryCampaignPoints ?? 0);
     this.form.controls.alliedRelicControlCampaignPoints.setValue(campaign.alliedRelicControlCampaignPoints ?? 0);
+    this.applyRankingTagFilters(campaign);
     this.applySplitForcePenalty(campaign);
     this.applyStandardBattleResultQuestions(campaign);
     this.applyRoundEscalations(campaign.roundEscalations, campaign.roundCount);
@@ -1608,9 +1685,10 @@ export class CampaignSetupPage {
   }
 
   protected applyStandardForceStatuses(): void {
+    const statuses = forceStatusesFromStandardPreset(this.ensureWaterTerrainTag(), this.settlementStructureIdsByName());
     this.replaceArray(
       this.forceStatuses,
-      forceStatusesFromStandardPreset().map((status) =>
+      statuses.map((status) =>
         this.createForceStatusGroup(
           undefined,
           status.name,
@@ -1656,8 +1734,8 @@ export class CampaignSetupPage {
       undefined,
       preset?.name ?? name,
       preset?.effects ?? '',
-      preset ? forceStatusEnableConditions(preset) : [],
-      preset ? forceStatusClearConditions(preset) : [],
+      preset ? this.presetForceStatusEnableConditions(preset) : [],
+      preset ? this.presetForceStatusClearConditions(preset) : [],
       priority,
       [],
     );
@@ -1696,16 +1774,16 @@ export class CampaignSetupPage {
     return FORCE_STATUS_CLEAR_OPTIONS.find((option) => option.id === trigger)?.label ?? trigger;
   }
 
-  protected availableForceStatusEnableOptions(status: ForceStatusGroup): { id: string; label: string }[] {
-    const used = new Set(
-      status.controls.enableConditions.controls.map((condition) => condition.controls.trigger.value),
-    );
-    return FORCE_STATUS_ENABLE_OPTIONS.filter((option) => !used.has(option.id));
+  protected availableForceStatusEnableOptions(): { id: string; label: string }[] {
+    return [...FORCE_STATUS_ENABLE_OPTIONS];
   }
 
-  protected availableForceStatusClearOptions(status: ForceStatusGroup): { id: string; label: string }[] {
-    const used = new Set(status.controls.clearConditions.controls.map((condition) => condition.controls.trigger.value));
-    return FORCE_STATUS_CLEAR_OPTIONS.filter((option) => !used.has(option.id));
+  protected availableForceStatusClearOptions(): { id: string; label: string }[] {
+    return [...FORCE_STATUS_CLEAR_OPTIONS];
+  }
+
+  protected conditionLocationOptions(): readonly { id: ConditionLocationKind; label: string }[] {
+    return CONDITION_LOCATION_OPTIONS;
   }
 
   protected addForceStatusEnableCondition(status: ForceStatusGroup): void {
@@ -1713,6 +1791,9 @@ export class CampaignSetupPage {
       status.controls.enableConditions,
       status.controls.enablePick,
       status.controls.enablePickOccurrences,
+      status.controls.enablePickLocationKind,
+      status.controls.enablePickTypeId,
+      status.controls.enablePickTagId,
     );
   }
 
@@ -1721,6 +1802,9 @@ export class CampaignSetupPage {
       status.controls.clearConditions,
       status.controls.clearPick,
       status.controls.clearPickOccurrences,
+      status.controls.clearPickLocationKind,
+      status.controls.clearPickTypeId,
+      status.controls.clearPickTagId,
     );
   }
 
@@ -1728,16 +1812,34 @@ export class CampaignSetupPage {
     list: FormArray<ForceStatusConditionGroup>,
     pick: FormControl<string>,
     occurrences: FormControl<number>,
+    locationKind: FormControl<string>,
+    locationTypeId: FormControl<string>,
+    locationTagId: FormControl<string>,
   ): void {
     const trigger = pick.value.trim();
-    if (!trigger || list.controls.some((condition) => condition.controls.trigger.value === trigger)) {
+    if (!trigger) {
       return;
     }
 
-    list.push(this.createForceStatusConditionGroup(trigger, occurrences.value));
+    const condition = this.createForceStatusConditionGroup({
+      trigger,
+      occurrences: occurrences.value,
+      locationKind: (locationKind.value || 'Any') as ConditionLocationKind,
+      locationTypeId: locationTypeId.value || null,
+      locationTagId: locationTagId.value || null,
+    });
+    const fingerprint = this.forceStatusConditionFingerprint(condition);
+    if (list.controls.some((item) => this.forceStatusConditionFingerprint(item) === fingerprint)) {
+      return;
+    }
+
+    list.push(condition);
     list.markAsDirty();
     pick.setValue('');
     occurrences.setValue(FORCE_STATUS_OCCURRENCES_MIN);
+    locationKind.setValue('Any');
+    locationTypeId.setValue('');
+    locationTagId.setValue('');
   }
 
   protected removeForceStatusEnableCondition(status: ForceStatusGroup, index: number): void {
@@ -1748,6 +1850,247 @@ export class CampaignSetupPage {
   protected removeForceStatusClearCondition(status: ForceStatusGroup, index: number): void {
     status.controls.clearConditions.removeAt(index);
     status.controls.clearConditions.markAsDirty();
+  }
+
+  protected onCatalogTagKey(
+    event: KeyboardEvent,
+    catalog: FormArray<CatalogTagGroup>,
+    draft: FormControl<string>,
+  ): void {
+    if (event.key !== 'Enter' && event.key !== ',') {
+      return;
+    }
+
+    event.preventDefault();
+    this.addCatalogTagFromDraft(catalog, draft);
+  }
+
+  protected addCatalogTagFromDraft(catalog: FormArray<CatalogTagGroup>, draft: FormControl<string>): void {
+    const name = draft.value.trim();
+    if (!this.tryAddCatalogTag(catalog, name)) {
+      return;
+    }
+
+    draft.setValue('');
+  }
+
+  protected removeCatalogTag(
+    catalog: FormArray<CatalogTagGroup>,
+    index: number,
+    kind: 'terrain' | 'structure' | 'faction' | 'mission',
+  ): void {
+    const id = catalog.at(index).controls.id.value;
+    catalog.removeAt(index);
+    this.stripTagId(id, kind);
+  }
+
+  protected assignedCatalogTags(
+    control: FormControl<string[]>,
+    catalog: FormArray<CatalogTagGroup>,
+  ): { id: string; name: string }[] {
+    const names = new Map(catalog.controls.map((tag) => [tag.controls.id.value, tag.controls.name.value] as const));
+    return control.value.flatMap((id) => {
+      const name = names.get(id);
+      return name ? [{ id, name }] : [];
+    });
+  }
+
+  protected inheritedFactionTags(faction: FactionGroup): { id: string; name: string }[] {
+    return this.assignedCatalogTags(faction.controls.tagIds, this.factionTags);
+  }
+
+  protected assignedSubfactionTags(faction: FactionGroup, subfaction: string): { id: string; name: string }[] {
+    const ids = faction.controls.subfactionTagIds.value[subfaction] ?? [];
+    return this.assignedCatalogTags(this.formBuilder.nonNullable.control(ids), this.factionTags);
+  }
+
+  protected onItemTagKey(
+    event: KeyboardEvent,
+    control: FormControl<string[]>,
+    catalog: FormArray<CatalogTagGroup>,
+    draft: FormControl<string>,
+  ): void {
+    if (event.key !== 'Enter' && event.key !== ',') {
+      return;
+    }
+
+    event.preventDefault();
+    this.assignDefinedTag(control, catalog, draft);
+  }
+
+  protected unassignedTagNames(assignedIds: readonly string[], catalog: FormArray<CatalogTagGroup>): string[] {
+    const assigned = new Set(assignedIds);
+    return catalog.controls
+      .map((tag) => ({ id: tag.controls.id.value, name: tag.controls.name.value.trim() }))
+      .filter((tag) => tag.name.length > 0 && !assigned.has(tag.id))
+      .map((tag) => tag.name);
+  }
+
+  protected unassignedSubfactionTagNames(faction: FactionGroup, subfaction: string): string[] {
+    const extras = faction.controls.subfactionTagIds.value[subfaction] ?? [];
+    return this.unassignedTagNames([...faction.controls.tagIds.value, ...extras], this.factionTags);
+  }
+
+  protected onSubfactionTagKey(event: KeyboardEvent, faction: FactionGroup, subfaction: string): void {
+    if (event.key !== 'Enter' && event.key !== ',') {
+      return;
+    }
+
+    event.preventDefault();
+    this.assignSubfactionTag(faction, subfaction);
+  }
+
+  protected subfactionTagDraftControl(faction: FactionGroup, subfaction: string): FormControl<string> {
+    const key = this.subfactionTagDraftKey(faction.controls.id.value, subfaction);
+    const existing = this.subfactionTagDrafts.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const control = this.formBuilder.nonNullable.control('');
+    this.subfactionTagDrafts.set(key, control);
+    return control;
+  }
+
+  protected assignSubfactionTag(faction: FactionGroup, subfaction: string): void {
+    const draft = this.subfactionTagDraftControl(faction, subfaction);
+    const tag = this.findDefinedTag(this.factionTags, draft.value);
+    draft.setValue('');
+    if (!tag || faction.controls.tagIds.value.includes(tag.id)) {
+      return;
+    }
+
+    const current = faction.controls.subfactionTagIds.value[subfaction] ?? [];
+    if (current.includes(tag.id)) {
+      return;
+    }
+
+    faction.controls.subfactionTagIds.setValue({
+      ...faction.controls.subfactionTagIds.value,
+      [subfaction]: [...current, tag.id],
+    });
+  }
+
+  protected removeAssignedTag(control: FormControl<string[]>, tagId: string): void {
+    control.setValue(control.value.filter((id) => id !== tagId));
+  }
+
+  protected removeSubfactionTag(faction: FactionGroup, subfaction: string, tagId: string): void {
+    const current = faction.controls.subfactionTagIds.value[subfaction] ?? [];
+    faction.controls.subfactionTagIds.setValue({
+      ...faction.controls.subfactionTagIds.value,
+      [subfaction]: current.filter((id) => id !== tagId),
+    });
+  }
+
+  protected assignDefinedTag(
+    control: FormControl<string[]>,
+    catalog: FormArray<CatalogTagGroup>,
+    draft: FormControl<string>,
+  ): boolean {
+    const tag = this.findDefinedTag(catalog, draft.value);
+    draft.setValue('');
+    if (!tag || control.value.includes(tag.id)) {
+      return false;
+    }
+
+    control.setValue([...control.value, tag.id]);
+    return true;
+  }
+
+  protected forceStatusLocationLabel(condition: ForceStatusConditionGroup): string {
+    const kind = condition.controls.locationKind.value;
+    if (kind === 'TerrainType') {
+      const name = this.terrainTypes.controls.find(
+        (item) => item.controls.id.value === condition.controls.locationTypeId.value,
+      )?.controls.name.value;
+      return name ? `terrain ${name}` : 'a terrain type';
+    }
+
+    if (kind === 'StructureType') {
+      const name = this.structureTypes.controls.find(
+        (item) => item.controls.id.value === condition.controls.locationTypeId.value,
+      )?.controls.name.value;
+      return name ? `structure ${name}` : 'a structure type';
+    }
+
+    if (kind === 'TerrainTag') {
+      const name = this.terrainTags.controls.find(
+        (item) => item.controls.id.value === condition.controls.locationTagId.value,
+      )?.controls.name.value;
+      return name ? `terrain tag ${name}` : 'a terrain tag';
+    }
+
+    if (kind === 'StructureTag') {
+      const name = this.structureTags.controls.find(
+        (item) => item.controls.id.value === condition.controls.locationTagId.value,
+      )?.controls.name.value;
+      return name ? `structure tag ${name}` : 'a structure tag';
+    }
+
+    return 'any location';
+  }
+
+  protected namedTerrainTypes(): { id: string; name: string }[] {
+    return this.namedCatalogItems(this.terrainTypes.controls);
+  }
+
+  protected namedStructureTypes(): { id: string; name: string }[] {
+    return this.namedCatalogItems(this.structureTypes.controls);
+  }
+
+  protected namedTerrainTags(): { id: string; name: string }[] {
+    return this.namedCatalogItems(this.terrainTags.controls);
+  }
+
+  protected namedStructureTags(): { id: string; name: string }[] {
+    return this.namedCatalogItems(this.structureTags.controls);
+  }
+
+  protected privateObjectiveUsesStructure(item: PrivateObjectiveGroup): boolean {
+    const kind = item.controls.automaticKind.value;
+    return (
+      kind === 'ControlStructureType' ||
+      kind === 'PillageStructureType' ||
+      kind === 'DestroyStructureType' ||
+      kind === 'BuildStructureType' ||
+      kind === 'RepairStructureType'
+    );
+  }
+
+  protected privateObjectiveUsesTerrainTag(item: PrivateObjectiveGroup): boolean {
+    const kind = item.controls.automaticKind.value;
+    return kind === 'ControlTerritoryCount' || kind === 'ControlNamedTerritories';
+  }
+
+  protected privateObjectiveStructureMatchMode(item: PrivateObjectiveGroup): 'any' | 'type' | 'tag' {
+    if (item.controls.matchesAnyStructureType.value) {
+      return 'any';
+    }
+
+    if (item.controls.structureTagId.value) {
+      return 'tag';
+    }
+
+    return 'type';
+  }
+
+  protected setPrivateObjectiveStructureMatchMode(item: PrivateObjectiveGroup, mode: 'any' | 'type' | 'tag'): void {
+    item.controls.matchesAnyStructureType.setValue(mode === 'any');
+    if (mode !== 'type') {
+      item.controls.structureTypeId.setValue('');
+    }
+
+    if (mode !== 'tag') {
+      item.controls.structureTagId.setValue('');
+    }
+  }
+
+  protected onPrivateObjectiveStructureMatchChange(item: PrivateObjectiveGroup, event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (value === 'any' || value === 'type' || value === 'tag') {
+      this.setPrivateObjectiveStructureMatchMode(item, value);
+    }
   }
 
   protected forceStatusCancelOptions(status: ForceStatusGroup): { id: string; name: string }[] {
@@ -2590,7 +2933,14 @@ export class CampaignSetupPage {
     this.campaignId.set(created.detail.id);
     this.loadedDetail = created.detail;
     this.clearPendingUploads();
-    this.hydrateFromDetail(created.detail);
+    this.hydrating = true;
+    try {
+      // Keep existing FormArray groups so setup @for loops do not rebuild after a save.
+      this.applyCampaignMetadata(created.detail);
+    } finally {
+      this.hydrating = false;
+    }
+
     this.captureBaseline();
   }
 
@@ -2618,14 +2968,13 @@ export class CampaignSetupPage {
     }
   }
 
-  private hydrateFromDetail(campaign: CampaignDetail): void {
-    this.hydrating = true;
-    try {
-      this.revision = campaign.revision;
-      this.hasExistingMap.set(campaign.hasMap);
-      this.setStoredMapPreview(campaign.id, campaign.revision, campaign.hasMap);
-      this.rememberStoredFiles(campaign);
-      this.form.patchValue({
+  private applyCampaignMetadata(campaign: CampaignDetail): void {
+    this.revision = campaign.revision;
+    this.hasExistingMap.set(campaign.hasMap);
+    this.setStoredMapPreview(campaign.id, campaign.revision, campaign.hasMap);
+    this.rememberStoredFiles(campaign);
+    this.form.patchValue(
+      {
         name: campaign.name,
         description: campaign.description ?? '',
         playerCount: campaign.playerSlotCount,
@@ -2640,7 +2989,46 @@ export class CampaignSetupPage {
         roundCount: campaign.roundCount,
         roundLengthAmount: campaign.roundLengthAmount,
         roundLengthUnit: campaign.roundLengthUnit,
-      });
+      },
+      { emitEvent: false },
+    );
+    this.form.controls.pointsPerBattleWon.setValue(campaign.pointsPerBattleWon ?? 2, { emitEvent: false });
+    this.form.controls.pointsPerBattleDraw.setValue(campaign.pointsPerBattleDraw ?? 1, { emitEvent: false });
+    this.form.controls.useDifferentialBattleScoring.setValue(campaign.useDifferentialBattleScoring ?? true, {
+      emitEvent: false,
+    });
+    this.form.controls.differentialMultiplier.setValue(campaign.differentialMultiplier ?? 1, { emitEvent: false });
+    this.form.controls.differentialMinimum.setValue(campaign.differentialMinimum ?? 0, { emitEvent: false });
+    this.form.controls.differentialMaximum.setValue(campaign.differentialMaximum ?? 10, { emitEvent: false });
+    this.form.controls.allowNegativeDifferential.setValue(campaign.allowNegativeDifferential ?? false, {
+      emitEvent: false,
+    });
+    this.form.controls.mostTerritoriesCampaignPoints.setValue(campaign.mostTerritoriesCampaignPoints ?? 0, {
+      emitEvent: false,
+    });
+    this.form.controls.longestTerritoryChainCampaignPoints.setValue(campaign.longestTerritoryChainCampaignPoints ?? 0, {
+      emitEvent: false,
+    });
+    this.form.controls.mostBattlesWonCampaignPoints.setValue(campaign.mostBattlesWonCampaignPoints ?? 0, {
+      emitEvent: false,
+    });
+    this.form.controls.mostStructurePointsCampaignPoints.setValue(campaign.mostStructurePointsCampaignPoints ?? 0, {
+      emitEvent: false,
+    });
+    this.form.controls.pointsPerTerritoryCampaignPoints.setValue(campaign.pointsPerTerritoryCampaignPoints ?? 0, {
+      emitEvent: false,
+    });
+    this.form.controls.alliedRelicControlCampaignPoints.setValue(campaign.alliedRelicControlCampaignPoints ?? 0, {
+      emitEvent: false,
+    });
+    this.applyRankingTagFilters(campaign);
+    this.applySplitForcePenalty(campaign);
+  }
+
+  private hydrateFromDetail(campaign: CampaignDetail): void {
+    this.hydrating = true;
+    try {
+      this.applyCampaignMetadata(campaign);
       this.replaceArray(
         this.factions,
         campaign.factions.map((faction) =>
@@ -2653,6 +3041,8 @@ export class CampaignSetupPage {
             appearances: faction.subfactionAppearances,
             specialRuleIds: faction.specialRuleIds ?? [],
             subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
+            tagIds: faction.tagIds ?? [],
+            subfactionTagIds: this.subfactionTagIdsFromDetail(faction.subfactionTags),
           }),
         ),
       );
@@ -2664,6 +3054,7 @@ export class CampaignSetupPage {
         this.links,
         campaign.links.map((link) => this.createLinkGroup(link.label, link.url)),
       );
+      this.applyTagCatalogs(campaign);
       this.replaceArray(
         this.terrainTypes,
         campaign.terrainTypes.length > 0
@@ -2711,22 +3102,6 @@ export class CampaignSetupPage {
         this.publicObjectiveTypes,
         (campaign.publicObjectiveTypes ?? []).map((type) => this.createPublicObjectiveGroup(type, type.id)),
       );
-      this.form.controls.pointsPerBattleWon.setValue(campaign.pointsPerBattleWon ?? 2);
-      this.form.controls.pointsPerBattleDraw.setValue(campaign.pointsPerBattleDraw ?? 1);
-      this.form.controls.useDifferentialBattleScoring.setValue(campaign.useDifferentialBattleScoring ?? true);
-      this.form.controls.differentialMultiplier.setValue(campaign.differentialMultiplier ?? 1);
-      this.form.controls.differentialMinimum.setValue(campaign.differentialMinimum ?? 0);
-      this.form.controls.differentialMaximum.setValue(campaign.differentialMaximum ?? 10);
-      this.form.controls.allowNegativeDifferential.setValue(campaign.allowNegativeDifferential ?? false);
-      this.form.controls.mostTerritoriesCampaignPoints.setValue(campaign.mostTerritoriesCampaignPoints ?? 0);
-      this.form.controls.longestTerritoryChainCampaignPoints.setValue(
-        campaign.longestTerritoryChainCampaignPoints ?? 0,
-      );
-      this.form.controls.mostBattlesWonCampaignPoints.setValue(campaign.mostBattlesWonCampaignPoints ?? 0);
-      this.form.controls.mostStructurePointsCampaignPoints.setValue(campaign.mostStructurePointsCampaignPoints ?? 0);
-      this.form.controls.pointsPerTerritoryCampaignPoints.setValue(campaign.pointsPerTerritoryCampaignPoints ?? 0);
-      this.form.controls.alliedRelicControlCampaignPoints.setValue(campaign.alliedRelicControlCampaignPoints ?? 0);
-      this.applySplitForcePenalty(campaign);
       this.applyStandardBattleResultQuestions(campaign);
       this.applyRoundEscalations(campaign.roundEscalations, campaign.roundCount);
       this.replaceArray(
@@ -2764,6 +3139,8 @@ export class CampaignSetupPage {
       appearances?: readonly (SubfactionAppearance | FactionPresetSubfactionAppearance)[];
       specialRuleIds?: readonly string[];
       subfactionSpecialRuleIds?: Record<string, string[]>;
+      tagIds?: readonly string[];
+      subfactionTagIds?: Record<string, string[]>;
     },
   ): FactionGroup {
     const names = subfactions.length > 0 ? subfactions : [''];
@@ -2793,6 +3170,11 @@ export class CampaignSetupPage {
       subfactionSpecialRuleIds: this.formBuilder.nonNullable.control<Record<string, string[]>>(
         options?.subfactionSpecialRuleIds ? { ...options.subfactionSpecialRuleIds } : {},
       ),
+      tagIds: [options?.tagIds ? [...options.tagIds] : []],
+      subfactionTagIds: this.formBuilder.nonNullable.control<Record<string, string[]>>(
+        options?.subfactionTagIds ? { ...options.subfactionTagIds } : {},
+      ),
+      tagDraft: [''],
     });
   }
 
@@ -2899,6 +3281,8 @@ export class CampaignSetupPage {
       hasSupplyPointsAdvantage: [extra?.hasSupplyPointsAdvantage ?? false],
       supplyPointsAdvantageSide: [extra?.supplyPointsAdvantageSide ?? 'Defender'],
       supplyPointsAdvantageAmount: [extra?.supplyPointsAdvantageAmount ?? 0],
+      tagIds: [extra?.tagIds ? [...extra.tagIds] : []],
+      tagDraft: [''],
     });
   }
 
@@ -3026,14 +3410,15 @@ export class CampaignSetupPage {
     color = '#7CB342',
     missionName = '',
     campaignPoints = 0,
-    isWaterFeature = false,
+    tagIds: readonly string[] = [],
   ): TerrainGroup {
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
       name: [name, [required, maxLength(60)]],
       color: [color, required],
       campaignPoints: [campaignPoints, [minValue(0), maxValue(999)]],
-      isWaterFeature: [isWaterFeature],
+      tagIds: [tagIds.concat()],
+      tagDraft: [''],
       supplyPoints: [HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS, [minValue(0), maxValue(999)]],
       missions: this.formBuilder.array<MissionGroup>([this.createMissionGroup(undefined, missionName)]),
     });
@@ -3049,7 +3434,8 @@ export class CampaignSetupPage {
       name: [type.name, [required, maxLength(60)]],
       color: [type.color, required],
       campaignPoints: [type.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
-      isWaterFeature: [type.isWaterFeature === true],
+      tagIds: [type.tagIds ? [...type.tagIds] : []],
+      tagDraft: [''],
       supplyPoints: [type.supplyPoints ?? 0, [minValue(0), maxValue(999)]],
       missions: this.formBuilder.array<MissionGroup>(missions),
     });
@@ -3066,6 +3452,7 @@ export class CampaignSetupPage {
     isPillageable = true,
     isDestructible = true,
     campaignPoints = 0,
+    tagIds: readonly string[] = [],
   ): StructureGroup {
     return this.formBuilder.nonNullable.group({
       id: [id ?? this.newId()],
@@ -3083,6 +3470,8 @@ export class CampaignSetupPage {
       pillageSupplyPoints: [HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS, [minValue(0), maxValue(999)]],
       destroySupplyPoints: [HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS, [minValue(0), maxValue(999)]],
       missions: this.formBuilder.array<MissionGroup>(missions ?? []),
+      tagIds: [tagIds.concat()],
+      tagDraft: [''],
     });
   }
 
@@ -3105,6 +3494,7 @@ export class CampaignSetupPage {
       supplyPoints: type.supplyPoints ?? 0,
       pillageSupplyPoints: type.pillageSupplyPoints ?? 0,
       destroySupplyPoints: type.destroySupplyPoints ?? 0,
+      tagIds: type.tagIds ? [...type.tagIds] : [],
     });
     return group;
   }
@@ -3191,8 +3581,8 @@ export class CampaignSetupPage {
     id?: string,
     name = '',
     effects = '',
-    enableConditions: readonly { trigger: string; occurrences: number }[] = [],
-    clearConditions: readonly { trigger: string; occurrences: number }[] = [],
+    enableConditions: readonly ForceStatusCondition[] = [],
+    clearConditions: readonly ForceStatusCondition[] = [],
     priority?: number,
     cancelsStatusIds: readonly string[] = [],
   ): ForceStatusGroup {
@@ -3207,33 +3597,40 @@ export class CampaignSetupPage {
         FORCE_STATUS_OCCURRENCES_MIN,
         [minValue(FORCE_STATUS_OCCURRENCES_MIN), maxValue(FORCE_STATUS_OCCURRENCES_MAX)],
       ],
+      enablePickLocationKind: ['Any'],
+      enablePickTypeId: [''],
+      enablePickTagId: [''],
       enableConditions: this.formBuilder.array<ForceStatusConditionGroup>(
-        enableConditions.map((condition) =>
-          this.createForceStatusConditionGroup(condition.trigger, condition.occurrences),
-        ),
+        enableConditions.map((condition) => this.createForceStatusConditionGroup(condition)),
       ),
       clearPick: [''],
       clearPickOccurrences: [
         FORCE_STATUS_OCCURRENCES_MIN,
         [minValue(FORCE_STATUS_OCCURRENCES_MIN), maxValue(FORCE_STATUS_OCCURRENCES_MAX)],
       ],
+      clearPickLocationKind: ['Any'],
+      clearPickTypeId: [''],
+      clearPickTagId: [''],
       clearConditions: this.formBuilder.array<ForceStatusConditionGroup>(
-        clearConditions.map((condition) =>
-          this.createForceStatusConditionGroup(condition.trigger, condition.occurrences),
-        ),
+        clearConditions.map((condition) => this.createForceStatusConditionGroup(condition)),
       ),
       priority: [nextPriority, [minValue(FORCE_STATUS_PRIORITY_MIN), maxValue(FORCE_STATUS_PRIORITY_MAX)]],
       cancelsStatusIds: [cancelsStatusIds.concat()],
     });
   }
 
-  private createForceStatusConditionGroup(trigger: string, occurrences?: number): ForceStatusConditionGroup {
+  private createForceStatusConditionGroup(condition: ForceStatusCondition): ForceStatusConditionGroup {
+    const kind = condition.locationKind ?? 'Any';
     return this.formBuilder.nonNullable.group({
-      trigger: [trigger, required],
+      id: [condition.id ?? this.newId()],
+      trigger: [condition.trigger, required],
       occurrences: [
-        normalizeForceStatusOccurrences(occurrences),
+        normalizeForceStatusOccurrences(condition.occurrences),
         [minValue(FORCE_STATUS_OCCURRENCES_MIN), maxValue(FORCE_STATUS_OCCURRENCES_MAX)],
       ],
+      locationKind: this.formBuilder.nonNullable.control<string>(kind),
+      locationTypeId: [condition.locationTypeId ?? ''],
+      locationTagId: [condition.locationTagId ?? ''],
     });
   }
 
@@ -3333,6 +3730,8 @@ export class CampaignSetupPage {
       statusMatchKind: [type?.statusMatchKind ?? 'Gained'],
       prerequisiteForceStatusTypeId: [type?.prerequisiteForceStatusTypeId ?? ''],
       prerequisiteWasLost: [type?.prerequisiteWasLost === true],
+      structureTagId: [type?.structureTagId ?? ''],
+      terrainTagId: [type?.terrainTagId ?? ''],
     });
   }
 
@@ -3383,6 +3782,17 @@ export class CampaignSetupPage {
     const next: Record<string, string[]> = {};
     for (const assignment of assignments ?? []) {
       next[assignment.name] = [...assignment.specialRuleIds];
+    }
+
+    return next;
+  }
+
+  private subfactionTagIdsFromDetail(
+    assignments: readonly { name: string; tagIds: readonly string[] }[] | undefined,
+  ): Record<string, string[]> {
+    const next: Record<string, string[]> = {};
+    for (const assignment of assignments ?? []) {
+      next[assignment.name] = [...assignment.tagIds];
     }
 
     return next;
@@ -3733,9 +4143,7 @@ export class CampaignSetupPage {
   }
 
   private createDefaultTerrainGroups(): TerrainGroup[] {
-    return defaultTerrainCatalog().map((entry) =>
-      this.createTerrainGroup(undefined, entry.name, entry.color, '', 0, entry.isWaterFeature === true),
-    );
+    return defaultTerrainCatalog().map((entry) => this.createTerrainGroup(undefined, entry.name, entry.color));
   }
 
   private createDefaultStructureGroups(): StructureGroup[] {
@@ -3752,6 +4160,285 @@ export class CampaignSetupPage {
         entry.isDestructible,
       ),
     );
+  }
+
+  private createCatalogTagGroup(id?: string, name = ''): CatalogTagGroup {
+    return this.formBuilder.nonNullable.group({
+      id: [id ?? this.newId()],
+      name: [name, [required, maxLength(60)]],
+    });
+  }
+
+  private applyTagCatalogs(campaign: CampaignDetail): void {
+    this.replaceArray(
+      this.terrainTags,
+      (campaign.terrainTags ?? []).map((tag) => this.createCatalogTagGroup(tag.id, tag.name)),
+    );
+    this.replaceArray(
+      this.structureTags,
+      (campaign.structureTags ?? []).map((tag) => this.createCatalogTagGroup(tag.id, tag.name)),
+    );
+    this.replaceArray(
+      this.factionTags,
+      (campaign.factionTags ?? []).map((tag) => this.createCatalogTagGroup(tag.id, tag.name)),
+    );
+    this.replaceArray(
+      this.missionTags,
+      (campaign.missionTags ?? []).map((tag) => this.createCatalogTagGroup(tag.id, tag.name)),
+    );
+  }
+
+  private applyRankingTagFilters(campaign: CampaignDetail): void {
+    this.form.controls.mostTerritoriesTerrainTagId.setValue(campaign.mostTerritoriesTerrainTagId ?? '');
+    this.form.controls.longestTerritoryChainTerrainTagId.setValue(campaign.longestTerritoryChainTerrainTagId ?? '');
+    this.form.controls.mostStructurePointsStructureTagId.setValue(campaign.mostStructurePointsStructureTagId ?? '');
+    this.form.controls.pointsPerTerritoryTerrainTagId.setValue(campaign.pointsPerTerritoryTerrainTagId ?? '');
+  }
+
+  private ensureDefaultWaterTags(): void {
+    this.applyWaterTagsFromPreset(defaultTerrainCatalog());
+  }
+
+  private ensureWaterTerrainTag(): string {
+    const existing = this.terrainTags.controls.find((tag) => isWaterTagName(tag.controls.name.value));
+    if (existing) {
+      return existing.controls.id.value;
+    }
+
+    const group = this.createCatalogTagGroup(undefined, WATER_TERRAIN_TAG_NAME);
+    this.terrainTags.push(group);
+    return group.controls.id.value;
+  }
+
+  private applyWaterTagsFromPreset(entries: readonly { name: string; isWaterFeature?: boolean }[]): void {
+    const waterNames = new Set(
+      entries.filter((entry) => entry.isWaterFeature === true).map((entry) => entry.name.trim().toLowerCase()),
+    );
+    if (waterNames.size === 0) {
+      return;
+    }
+
+    const waterId = this.ensureWaterTerrainTag();
+    for (const terrain of this.terrainTypes.controls) {
+      if (!waterNames.has(terrain.controls.name.value.trim().toLowerCase())) {
+        continue;
+      }
+
+      const ids = terrain.controls.tagIds.value;
+      if (!ids.includes(waterId)) {
+        terrain.controls.tagIds.setValue([...ids, waterId]);
+      }
+    }
+  }
+
+  private settlementStructureIdsByName(): Record<string, string> {
+    const ids: Record<string, string> = {};
+    for (const type of this.structureTypes.controls) {
+      const name = type.controls.name.value.trim();
+      if ((DISEASE_CURE_STRUCTURE_NAMES as readonly string[]).includes(name)) {
+        ids[name] = type.controls.id.value;
+      }
+    }
+
+    return ids;
+  }
+
+  private presetForceStatusEnableConditions(status: {
+    name: string;
+    enableConditions?: readonly ForceStatusCondition[] | null;
+    enableTrigger?: string;
+    enableOccurrences?: number;
+  }): ForceStatusCondition[] {
+    if (status.name.trim().toLowerCase() === 'diseased') {
+      return diseasedEnableConditions(this.ensureWaterTerrainTag());
+    }
+
+    return forceStatusEnableConditions(status);
+  }
+
+  private presetForceStatusClearConditions(status: {
+    name: string;
+    clearConditions?: readonly ForceStatusCondition[] | null;
+    clearTrigger?: string;
+    clearOccurrences?: number;
+  }): ForceStatusCondition[] {
+    if (status.name.trim().toLowerCase() === 'diseased') {
+      return diseasedClearConditions(this.settlementStructureIdsByName());
+    }
+
+    return forceStatusClearConditions(status);
+  }
+
+  private remapDiseasedForceStatusLocations(): void {
+    for (const status of this.forceStatuses.controls) {
+      if (status.controls.name.value.trim().toLowerCase() !== 'diseased') {
+        continue;
+      }
+
+      this.replaceArray(
+        status.controls.enableConditions,
+        diseasedEnableConditions(this.ensureWaterTerrainTag()).map((condition) =>
+          this.createForceStatusConditionGroup(condition),
+        ),
+      );
+      this.replaceArray(
+        status.controls.clearConditions,
+        diseasedClearConditions(this.settlementStructureIdsByName()).map((condition) =>
+          this.createForceStatusConditionGroup(condition),
+        ),
+      );
+    }
+  }
+
+  private tryAddCatalogTag(catalog: FormArray<CatalogTagGroup>, name: string): boolean {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.length > 60 || catalog.length >= CATALOG_TAG_MAX) {
+      return false;
+    }
+
+    if (catalog.controls.some((tag) => tag.controls.name.value.trim().toLowerCase() === trimmed.toLowerCase())) {
+      return false;
+    }
+
+    catalog.push(this.createCatalogTagGroup(undefined, trimmed));
+    return true;
+  }
+
+  private findDefinedTag(catalog: FormArray<CatalogTagGroup>, name: string): { id: string; name: string } | null {
+    const key = name.trim().toLowerCase();
+    if (!key) {
+      return null;
+    }
+
+    const match = catalog.controls.find((tag) => tag.controls.name.value.trim().toLowerCase() === key);
+    return match ? { id: match.controls.id.value, name: match.controls.name.value } : null;
+  }
+
+  private stripTagId(tagId: string, kind: 'terrain' | 'structure' | 'faction' | 'mission'): void {
+    if (kind === 'terrain') {
+      for (const item of this.terrainTypes.controls) {
+        this.removeAssignedTag(item.controls.tagIds, tagId);
+      }
+
+      this.clearConditionTag(tagId, 'TerrainTag');
+      if (this.form.controls.mostTerritoriesTerrainTagId.value === tagId) {
+        this.form.controls.mostTerritoriesTerrainTagId.setValue('');
+      }
+
+      if (this.form.controls.longestTerritoryChainTerrainTagId.value === tagId) {
+        this.form.controls.longestTerritoryChainTerrainTagId.setValue('');
+      }
+
+      if (this.form.controls.pointsPerTerritoryTerrainTagId.value === tagId) {
+        this.form.controls.pointsPerTerritoryTerrainTagId.setValue('');
+      }
+
+      for (const objective of this.privateObjectiveTypes.controls) {
+        if (objective.controls.terrainTagId.value === tagId) {
+          objective.controls.terrainTagId.setValue('');
+        }
+      }
+
+      return;
+    }
+
+    if (kind === 'structure') {
+      for (const item of this.structureTypes.controls) {
+        this.removeAssignedTag(item.controls.tagIds, tagId);
+      }
+
+      this.clearConditionTag(tagId, 'StructureTag');
+      if (this.form.controls.mostStructurePointsStructureTagId.value === tagId) {
+        this.form.controls.mostStructurePointsStructureTagId.setValue('');
+      }
+
+      for (const objective of this.privateObjectiveTypes.controls) {
+        if (objective.controls.structureTagId.value === tagId) {
+          objective.controls.structureTagId.setValue('');
+        }
+      }
+
+      return;
+    }
+
+    if (kind === 'faction') {
+      for (const faction of this.factions.controls) {
+        this.removeAssignedTag(faction.controls.tagIds, tagId);
+        const next: Record<string, string[]> = {};
+        for (const [name, ids] of Object.entries(faction.controls.subfactionTagIds.value)) {
+          next[name] = ids.filter((id) => id !== tagId);
+        }
+
+        faction.controls.subfactionTagIds.setValue(next);
+      }
+
+      return;
+    }
+
+    for (const mission of this.missions.controls) {
+      this.removeAssignedTag(mission.controls.tagIds, tagId);
+    }
+  }
+
+  private clearConditionTag(tagId: string, kind: ConditionLocationKind): void {
+    for (const status of this.forceStatuses.controls) {
+      for (const condition of [
+        ...status.controls.enableConditions.controls,
+        ...status.controls.clearConditions.controls,
+      ]) {
+        if (condition.controls.locationKind.value === kind && condition.controls.locationTagId.value === tagId) {
+          condition.controls.locationKind.setValue('Any');
+          condition.controls.locationTagId.setValue('');
+        }
+      }
+    }
+  }
+
+  private namedCatalogItems(items: readonly { controls: { id: FormControl<string>; name: FormControl<string> } }[]): {
+    id: string;
+    name: string;
+  }[] {
+    return items.flatMap((item) => {
+      const name = item.controls.name.value.trim();
+      return name ? [{ id: item.controls.id.value, name }] : [];
+    });
+  }
+
+  private subfactionTagDraftKey(factionId: string, subfaction: string): string {
+    return `${factionId}:${subfaction}`;
+  }
+
+  private forceStatusConditionFingerprint(condition: ForceStatusConditionGroup): string {
+    return [
+      condition.controls.trigger.value,
+      String(condition.controls.occurrences.value),
+      condition.controls.locationKind.value || 'Any',
+      condition.controls.locationTypeId.value,
+      condition.controls.locationTagId.value,
+    ].join('|');
+  }
+
+  private toForceStatusConditionPayload(condition: {
+    id: string;
+    trigger: string;
+    occurrences: number;
+    locationKind: string;
+    locationTypeId: string;
+    locationTagId: string;
+  }): ForceStatusCondition {
+    const kind = (condition.locationKind || 'Any') as ConditionLocationKind;
+    return {
+      id: condition.id,
+      trigger: condition.trigger,
+      occurrences: Number(condition.occurrences),
+      locationKind: kind,
+      locationTypeId: kind === 'TerrainType' || kind === 'StructureType' ? condition.locationTypeId || null : null,
+      locationTagId: kind === 'TerrainTag' || kind === 'StructureTag' ? condition.locationTagId || null : null,
+    };
+  }
+
+  private toCatalogTagPayloads(tags: readonly { id: string; name: string }[]): CatalogTag[] {
+    return tags.filter((tag) => tag.name.trim().length > 0).map((tag) => ({ id: tag.id, name: tag.name.trim() }));
   }
 
   private refreshPhases(): void {
@@ -3816,6 +4503,10 @@ export class CampaignSetupPage {
         subfactionSpecialRules: Object.entries(faction.subfactionSpecialRuleIds)
           .filter(([name]) => faction.subfactions.some((item) => item.name.trim() === name))
           .map(([name, specialRuleIds]) => ({ name, specialRuleIds })),
+        tagIds: faction.tagIds,
+        subfactionTags: Object.entries(faction.subfactionTagIds)
+          .filter(([name]) => faction.subfactions.some((item) => item.name.trim() === name))
+          .map(([name, tagIds]) => ({ name, tagIds })),
       };
     });
     const links = value.links
@@ -3826,7 +4517,7 @@ export class CampaignSetupPage {
       name: type.name.trim(),
       color: type.color,
       campaignPoints: 0,
-      isWaterFeature: type.isWaterFeature,
+      tagIds: type.tagIds,
       supplyPoints: this.catalogSupplyPoints(type.supplyPoints),
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
@@ -3845,6 +4536,7 @@ export class CampaignSetupPage {
       supplyPoints: this.catalogSupplyPoints(type.supplyPoints),
       pillageSupplyPoints: this.catalogSupplyPoints(type.pillageSupplyPoints),
       destroySupplyPoints: this.catalogSupplyPoints(type.destroySupplyPoints),
+      tagIds: type.tagIds,
       missions: type.missions
         .filter((mission) => mission.name.trim().length > 0 || mission.url.trim().length > 0)
         .map((mission) => this.toAttachedMissionPayload(mission)),
@@ -3893,14 +4585,8 @@ export class CampaignSetupPage {
         id: status.id,
         name: status.name.trim(),
         effects: status.effects.trim() || null,
-        enableConditions: status.enableConditions.map((condition) => ({
-          trigger: condition.trigger,
-          occurrences: Number(condition.occurrences),
-        })),
-        clearConditions: status.clearConditions.map((condition) => ({
-          trigger: condition.trigger,
-          occurrences: Number(condition.occurrences),
-        })),
+        enableConditions: status.enableConditions.map((condition) => this.toForceStatusConditionPayload(condition)),
+        clearConditions: status.clearConditions.map((condition) => this.toForceStatusConditionPayload(condition)),
         enableTrigger: status.enableConditions[0]?.trigger,
         clearTrigger: status.clearConditions[0]?.trigger,
         enableOccurrences: status.enableConditions[0] ? Number(status.enableConditions[0].occurrences) : undefined,
@@ -3939,6 +4625,8 @@ export class CampaignSetupPage {
         statusMatchKind: type.statusMatchKind || null,
         prerequisiteForceStatusTypeId: type.prerequisiteForceStatusTypeId.trim() || null,
         prerequisiteWasLost: type.prerequisiteWasLost,
+        structureTagId: type.structureTagId.trim() || null,
+        terrainTagId: type.terrainTagId.trim() || null,
       }));
     const publicObjectiveTypes = value.publicObjectiveTypes
       .filter((type) => type.name.trim().length > 0)
@@ -3977,6 +4665,10 @@ export class CampaignSetupPage {
           campaignPoints: Number(question.campaignPoints) || 0,
         })),
       missions: this.mergedMissionPayloads(value),
+      terrainTags: this.toCatalogTagPayloads(value.terrainTags),
+      structureTags: this.toCatalogTagPayloads(value.structureTags),
+      factionTags: this.toCatalogTagPayloads(value.factionTags),
+      missionTags: this.toCatalogTagPayloads(value.missionTags),
       forceStatuses,
       privateObjectiveTypes,
       publicObjectiveTypes,
@@ -3993,6 +4685,10 @@ export class CampaignSetupPage {
       mostStructurePointsCampaignPoints: Number(value.mostStructurePointsCampaignPoints) || 0,
       pointsPerTerritoryCampaignPoints: Number(value.pointsPerTerritoryCampaignPoints) || 0,
       alliedRelicControlCampaignPoints: Number(value.alliedRelicControlCampaignPoints) || 0,
+      mostTerritoriesTerrainTagId: value.mostTerritoriesTerrainTagId.trim() || null,
+      longestTerritoryChainTerrainTagId: value.longestTerritoryChainTerrainTagId.trim() || null,
+      mostStructurePointsStructureTagId: value.mostStructurePointsStructureTagId.trim() || null,
+      pointsPerTerritoryTerrainTagId: value.pointsPerTerritoryTerrainTagId.trim() || null,
       splitForceSupplyPenaltyPercent: Number(value.splitForceSupplyPenaltyPercent) || 0,
       splitForceSupplyPenaltyIsPercent: Boolean(value.splitForceSupplyPenaltyIsPercent),
       roundEscalations: value.roundEscalations.map((row) => ({
@@ -4043,6 +4739,7 @@ export class CampaignSetupPage {
     hasSupplyPointsAdvantage?: boolean;
     supplyPointsAdvantageSide?: string;
     supplyPointsAdvantageAmount?: number;
+    tagIds?: string[];
   }): SaveMissionPayload {
     const hasPendingFile = this.missionFiles.has(mission.id);
     return {
@@ -4077,6 +4774,7 @@ export class CampaignSetupPage {
       hasSupplyPointsAdvantage: Boolean(mission.hasSupplyPointsAdvantage),
       supplyPointsAdvantageSide: mission.supplyPointsAdvantageSide ?? 'Defender',
       supplyPointsAdvantageAmount: Number(mission.supplyPointsAdvantageAmount) || 0,
+      tagIds: mission.tagIds ?? [],
     };
   }
 

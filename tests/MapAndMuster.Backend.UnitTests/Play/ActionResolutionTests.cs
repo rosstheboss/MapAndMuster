@@ -119,6 +119,12 @@ public sealed class ActionResolutionTests
         Assert.Equal(StructureCondition.Pillaged, resolved.Map.Territory(Midland)!.StructureCondition);
         Assert.Equal(TownId, resolved.Map.Territory(Midland)!.StructureTypeId);
         Assert.Empty(resolved.State.Battles);
+        var betrayalLog = Assert.Single(resolved.State.Log, item => item.Kind == PlayLogKind.AllianceBetrayed);
+        Assert.True(PlayLogFacts.TryReadBetrayal(betrayalLog.Message, out var kind, out _, out var factionId, out var structure));
+        Assert.Equal(PlayLogFacts.BetrayalPillage, kind);
+        Assert.Equal(South, factionId);
+        Assert.Equal("Town", structure);
+        Assert.DoesNotContain(resolved.State.Log, item => item.Kind == PlayLogKind.ResolvedAction && item.ActionKind == ActionKind.Backstab);
     }
 
     [Fact]
@@ -146,6 +152,8 @@ public sealed class ActionResolutionTests
         var first = Resolve(State(force, Pillage(force.Id)), Map(midlandStructureId: TownId, midlandStructureName: "Town"));
         Assert.Equal(StructureCondition.Pillaged, first.Map.Territory(Midland)!.StructureCondition);
 
+        Assert.Equal("Town", Assert.Single(first.State.Log, item => item.Kind == PlayLogKind.ResolvedAction).Message);
+
         var second = Resolve(
             State(force, Pillage(force.Id)),
             Map(
@@ -155,6 +163,9 @@ public sealed class ActionResolutionTests
                 midlandDestructible: true));
         Assert.Null(second.Map.Territory(Midland)!.StructureTypeId);
         Assert.Equal(StructureCondition.Operational, second.Map.Territory(Midland)!.StructureCondition);
+        Assert.Equal(
+            PlayLogFacts.DestroyedStructure("Town"),
+            Assert.Single(second.State.Log, item => item.Kind == PlayLogKind.ResolvedAction).Message);
     }
 
     [Fact]
@@ -186,6 +197,7 @@ public sealed class ActionResolutionTests
                 midlandCondition: StructureCondition.Pillaged));
         Assert.Equal(StructureCondition.Operational, resolved.Map.Territory(Midland)!.StructureCondition);
         Assert.Equal(North, resolved.Map.Territory(Midland)!.OwnerFactionId);
+        Assert.Equal("Town", Assert.Single(resolved.State.Log, item => item.Kind == PlayLogKind.ResolvedAction).Message);
     }
 
     [Fact]
@@ -198,6 +210,7 @@ public sealed class ActionResolutionTests
         Assert.Equal(FortId, resolved.Map.Territory(Midland)!.StructureTypeId);
         Assert.Equal(StructureCondition.Operational, resolved.Map.Territory(Midland)!.StructureCondition);
         Assert.Equal(North, resolved.Map.Territory(Midland)!.OwnerFactionId);
+        Assert.Equal("Fortification", Assert.Single(resolved.State.Log, item => item.Kind == PlayLogKind.ResolvedAction).Message);
     }
 
     [Fact]
@@ -208,6 +221,8 @@ public sealed class ActionResolutionTests
         Assert.Equal(2, resolved.State.Forces.Count);
         Assert.Contains(resolved.State.Forces, item => item.TerritoryId == NorthSpawn && item.Id == force.Id);
         Assert.Contains(resolved.State.Forces, item => item.TerritoryId == Midland && item.Id != force.Id);
+        Assert.Equal(ActionKind.Split, Assert.Single(resolved.State.Log, item => item.Kind == PlayLogKind.ResolvedAction).ActionKind);
+        Assert.Equal(Midland, Assert.Single(resolved.State.Log, item => item.Kind == PlayLogKind.ResolvedAction).TargetTerritoryId);
         Assert.All(resolved.State.Forces, item => Assert.Equal(PlayerOne, item.ControllerUserId));
     }
 
@@ -292,6 +307,11 @@ public sealed class ActionResolutionTests
         Assert.Null(betrayal.BetrayedSubfaction);
         Assert.Null(betrayal.BetrayedUserId);
         Assert.Contains(resolved.State.Log, item => item.Kind == PlayLogKind.AllianceBetrayed);
+        var claim = Assert.Single(resolved.State.Log, item => item.Kind == PlayLogKind.AllianceBetrayed);
+        Assert.True(PlayLogFacts.TryReadBetrayal(claim.Message, out var kind, out _, out var factionId, out _));
+        Assert.Equal(PlayLogFacts.BetrayalClaim, kind);
+        Assert.Equal(South, factionId);
+        Assert.DoesNotContain(resolved.State.Log, item => item.Kind == PlayLogKind.ResolvedAction && item.ActionKind == ActionKind.Backstab);
     }
 
     [Fact]
@@ -308,6 +328,11 @@ public sealed class ActionResolutionTests
         var betrayal = Assert.Single(resolved.State.AllyBetrayals);
         Assert.Equal(PlayerTwo, betrayal.BetrayedUserId);
         Assert.Single(resolved.State.Battles);
+        var attack = Assert.Single(resolved.State.Log, item => item.Kind == PlayLogKind.AllianceBetrayed);
+        Assert.True(PlayLogFacts.TryReadBetrayal(attack.Message, out var kind, out var victim, out var factionId, out _));
+        Assert.Equal(PlayLogFacts.BetrayalAttack, kind);
+        Assert.Equal(PlayerTwo, victim);
+        Assert.Equal(South, factionId);
     }
 
     [Fact]

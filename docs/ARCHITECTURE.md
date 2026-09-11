@@ -72,6 +72,8 @@ Modules may initially share a database and process. Keep public module interacti
   returns the current campaign instead of a concurrency conflict. Play mutations retry a few
   times on a revision conflict. A commit that still races a closing window then returns the
   current play state so the client can show the next phase instead of asking the player to reload.
+  Ending a campaign writes against the current stored revision rather than the client's last-seen
+  revision, and retries a few times if a concurrent play-advance persist wins first.
 - Store timestamps as UTC instants.
 - Store current state in normal relational tables and immutable history in audit/revision tables.
 - Public site chat and site-chat blocks live in their own tables, never on campaign play-log JSON.
@@ -127,6 +129,8 @@ Modules may initially share a database and process. Keep public module interacti
 - Publish OpenAPI from the API.
 - Generate the TypeScript client; do not hand-edit generated output.
 - Separate public, participant-private, and staff response shapes to prevent over-fetching.
+- GET play returns 204 No Content while the campaign is still scheduled; play mutations still
+  fail with `play.not_started`.
 - Use stable identifiers and machine-readable error codes.
 - Mutating requests that may be retried use idempotency or concurrency protection as needed.
 

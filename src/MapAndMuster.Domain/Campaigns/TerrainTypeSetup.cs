@@ -12,15 +12,15 @@ public sealed class TerrainTypeSetup
     /// <param name="name">The terrain type name.</param>
     /// <param name="color">The unique #RRGGBB overlay color.</param>
     /// <param name="missions">The missions for this terrain type.</param>
-    /// <param name="isWaterFeature">Whether this terrain is a water feature.</param>
     /// <param name="supplyPoints">Supply points granted by a controlled territory of this terrain.</param>
+    /// <param name="tagIds">Terrain-catalog tags assigned to this type.</param>
     public TerrainTypeSetup(
         Guid id,
         string name,
         string color,
         IReadOnlyList<MissionSetup> missions,
-        bool isWaterFeature = false,
-        int supplyPoints = HuntInEstaliaDefaults.SupplyPoints)
+        int supplyPoints = HuntInEstaliaDefaults.SupplyPoints,
+        IReadOnlyList<Guid>? tagIds = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(color);
@@ -30,8 +30,8 @@ public sealed class TerrainTypeSetup
         Name = name;
         Color = color;
         Missions = missions;
-        IsWaterFeature = isWaterFeature;
         SupplyPoints = supplyPoints;
+        TagIds = DistinctIds(tagIds);
     }
 
     /// <summary>Gets the terrain type identifier.</summary>
@@ -46,9 +46,19 @@ public sealed class TerrainTypeSetup
     /// <summary>Gets the missions.</summary>
     public IReadOnlyList<MissionSetup> Missions { get; }
 
-    /// <summary>Gets whether this terrain is a water feature.</summary>
-    public bool IsWaterFeature { get; }
-
     /// <summary>Gets supply points granted by a controlled territory of this terrain.</summary>
     public int SupplyPoints { get; }
+
+    /// <summary>Gets terrain-catalog tags assigned to this type.</summary>
+    public IReadOnlyList<Guid> TagIds { get; }
+
+    private static IReadOnlyList<Guid> DistinctIds(IReadOnlyList<Guid>? ids)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            return [];
+        }
+
+        return [.. ids.Where(static id => id != Guid.Empty).Distinct()];
+    }
 }

@@ -309,6 +309,7 @@ public static class CampaignEndpoints
         group.MapGet("/{campaignId:guid}/play", GetPlayAsync)
             .WithName("GetCampaignPlay")
             .Produces<CampaignPlayResponse>()
+            .Produces(StatusCodes.Status204NoContent)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
@@ -576,6 +577,10 @@ public static class CampaignEndpoints
                     StandardBattleResultQuestions = CampaignResponses.ToStandardBattleResultQuestionInputs(
                         request.StandardBattleResultQuestions),
                     Missions = CampaignResponses.ToMissionInputs(request.Missions),
+                    TerrainTags = CampaignResponses.ToTagInputs(request.TerrainTags),
+                    StructureTags = CampaignResponses.ToTagInputs(request.StructureTags),
+                    FactionTags = CampaignResponses.ToTagInputs(request.FactionTags),
+                    MissionTags = CampaignResponses.ToTagInputs(request.MissionTags),
                     ForceStatuses = CampaignResponses.ToForceStatusInputs(request.ForceStatuses),
                     PrivateObjectiveTypes = CampaignResponses.ToPrivateObjectiveTypeInputs(request.PrivateObjectiveTypes),
                     PointsPerBattleWon = request.PointsPerBattleWon,
@@ -591,6 +596,10 @@ public static class CampaignEndpoints
                     MostStructurePointsCampaignPoints = request.MostStructurePointsCampaignPoints,
                     PointsPerTerritoryCampaignPoints = request.PointsPerTerritoryCampaignPoints,
                     AlliedRelicControlCampaignPoints = request.AlliedRelicControlCampaignPoints,
+                    MostTerritoriesTerrainTagId = request.MostTerritoriesTerrainTagId,
+                    LongestTerritoryChainTerrainTagId = request.LongestTerritoryChainTerrainTagId,
+                    MostStructurePointsStructureTagId = request.MostStructurePointsStructureTagId,
+                    PointsPerTerritoryTerrainTagId = request.PointsPerTerritoryTerrainTagId,
                     SplitForceSupplyPenaltyPercent = request.SplitForceSupplyPenaltyPercent,
                     SplitForceSupplyPenaltyIsPercent = request.SplitForceSupplyPenaltyIsPercent,
                 },
@@ -986,6 +995,10 @@ public static class CampaignEndpoints
                     StandardBattleResultQuestions = CampaignResponses.ToStandardBattleResultQuestionInputs(
                         request.StandardBattleResultQuestions),
                     Missions = CampaignResponses.ToMissionInputs(request.Missions),
+                    TerrainTags = CampaignResponses.ToTagInputs(request.TerrainTags),
+                    StructureTags = CampaignResponses.ToTagInputs(request.StructureTags),
+                    FactionTags = CampaignResponses.ToTagInputs(request.FactionTags),
+                    MissionTags = CampaignResponses.ToTagInputs(request.MissionTags),
                     ForceStatuses = CampaignResponses.ToForceStatusInputs(request.ForceStatuses),
                     PrivateObjectiveTypes = CampaignResponses.ToPrivateObjectiveTypeInputs(request.PrivateObjectiveTypes),
                     PointsPerBattleWon = request.PointsPerBattleWon,
@@ -1001,6 +1014,10 @@ public static class CampaignEndpoints
                     MostStructurePointsCampaignPoints = request.MostStructurePointsCampaignPoints,
                     PointsPerTerritoryCampaignPoints = request.PointsPerTerritoryCampaignPoints,
                     AlliedRelicControlCampaignPoints = request.AlliedRelicControlCampaignPoints,
+                    MostTerritoriesTerrainTagId = request.MostTerritoriesTerrainTagId,
+                    LongestTerritoryChainTerrainTagId = request.LongestTerritoryChainTerrainTagId,
+                    MostStructurePointsStructureTagId = request.MostStructurePointsStructureTagId,
+                    PointsPerTerritoryTerrainTagId = request.PointsPerTerritoryTerrainTagId,
                     SplitForceSupplyPenaltyPercent = request.SplitForceSupplyPenaltyPercent,
                     SplitForceSupplyPenaltyIsPercent = request.SplitForceSupplyPenaltyIsPercent,
                 },
@@ -2030,6 +2047,11 @@ public static class CampaignEndpoints
         var result = await handler
             .HandleAsync(campaignId, userId.Value, principal.IsAdministrator(), cancellationToken)
             .ConfigureAwait(false);
+        if (result.ErrorCode == ErrorCodes.PlayNotStarted)
+        {
+            return Results.NoContent();
+        }
+
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);

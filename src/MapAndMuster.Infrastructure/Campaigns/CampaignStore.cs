@@ -103,23 +103,7 @@ public sealed class CampaignStore : ICampaignStore
 
         // Apply scalars and replace children in SQL. Graph-replace through the change tracker
         // raises false concurrency conflicts on faction rows.
-        var catalogJson = CatalogJson.Serialize(
-            campaign.TerrainTypes,
-            campaign.StructureTypes,
-            campaign.ItemObjectiveTypes,
-            campaign.PublicObjectiveTypes,
-            campaign.BattleScoring,
-            campaign.RankingObjectivePoints,
-            campaign.SpecialRules,
-            campaign.PrivateObjectiveTypes,
-            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds),
-            campaign.ForceStatuses,
-            campaign.SplitForceSupplyPenaltyPercent,
-            campaign.SplitForceSupplyPenaltyIsPercent,
-            campaign.StandardBattleResultQuestions,
-            campaign.ArmyEscalations,
-            campaign.Missions,
-            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules));
+        var catalogJson = CatalogJson.Serialize(campaign);
         var playJson = PlayStateJson.Serialize(campaign.PlayState);
         var mapGraphJson = campaign.MapGraph is null ? null : MapGraphJson.Serialize(campaign.MapGraph);
         var affected = await _dbContext.Campaigns
@@ -518,23 +502,7 @@ public sealed class CampaignStore : ICampaignStore
             MapStorageKey = campaign.MapStorageKey,
             MapGraphJson = campaign.MapGraph is null ? null : MapGraphJson.Serialize(campaign.MapGraph),
             PlayStateJson = PlayStateJson.Serialize(campaign.PlayState),
-            CatalogJson = CatalogJson.Serialize(
-                campaign.TerrainTypes,
-                campaign.StructureTypes,
-                campaign.ItemObjectiveTypes,
-                campaign.PublicObjectiveTypes,
-                campaign.BattleScoring,
-                campaign.RankingObjectivePoints,
-                campaign.SpecialRules,
-                campaign.PrivateObjectiveTypes,
-                campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds),
-                campaign.ForceStatuses,
-                campaign.SplitForceSupplyPenaltyPercent,
-                campaign.SplitForceSupplyPenaltyIsPercent,
-                campaign.StandardBattleResultQuestions,
-                campaign.ArmyEscalations,
-                campaign.Missions,
-                campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules)),
+            CatalogJson = CatalogJson.Serialize(campaign),
             Revision = campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
@@ -687,7 +655,7 @@ public sealed class CampaignStore : ICampaignStore
 
     private static StoredCampaign ToStored(CampaignRecord record)
     {
-        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions) = CatalogJson.Deserialize(record.CatalogJson);
+        var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions, TerrainTags, StructureTags, FactionTags, MissionTags, FactionTagIds, SubfactionTagIds) = CatalogJson.Deserialize(record.CatalogJson);
         return new StoredCampaign
         {
             Id = record.Id,
@@ -710,6 +678,10 @@ public sealed class CampaignStore : ICampaignStore
             PlayState = PlayStateJson.Deserialize(record.PlayStateJson),
             TerrainTypes = TerrainTypes,
             StructureTypes = StructureTypes,
+            TerrainTags = TerrainTags,
+            StructureTags = StructureTags,
+            FactionTags = FactionTags,
+            MissionTags = MissionTags,
             ItemObjectiveTypes = ItemObjectiveTypes,
             PublicObjectiveTypes = PublicObjectiveTypes,
             SpecialRules = SpecialRules,
@@ -780,6 +752,8 @@ public sealed class CampaignStore : ICampaignStore
                         TintFlagImage = faction.TintFlagImage,
                         SpecialRuleIds = FactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
                         SubfactionSpecialRules = SubfactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
+                        TagIds = FactionTagIds.GetValueOrDefault(faction.Id) ?? [],
+                        SubfactionTags = SubfactionTagIds.GetValueOrDefault(faction.Id) ?? [],
                     }),
             ],
             Links =

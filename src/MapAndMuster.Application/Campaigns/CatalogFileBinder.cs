@@ -54,6 +54,15 @@ internal static class CatalogFileBinder
                             SpecialRuleIds = item.SpecialRuleIds,
                         })
                         .ToArray(),
+                    TagIds = faction.TagIds,
+                    SubfactionTags =
+                    [
+                        .. faction.SubfactionTags.Select(static item => new StoredSubfactionTags
+                        {
+                            Name = item.Name,
+                            TagIds = item.TagIds,
+                        }),
+                    ],
                 };
             }),
         ];
@@ -75,7 +84,7 @@ internal static class CatalogFileBinder
                 Color = type.Color,
                 Missions = BindMissions(type.Missions, previousMissions),
                 CampaignPoints = 0,
-                IsWaterFeature = type.IsWaterFeature,
+                TagIds = type.TagIds,
                 SupplyPoints = type.SupplyPoints,
             }),
         ];
@@ -111,6 +120,7 @@ internal static class CatalogFileBinder
                     SupplyPoints = type.SupplyPoints,
                     PillageSupplyPoints = type.PillageSupplyPoints,
                     DestroySupplyPoints = type.DestroySupplyPoints,
+                    TagIds = type.TagIds,
                 };
             }),
         ];
@@ -285,8 +295,10 @@ internal static class CatalogFileBinder
                     && Enum.IsDefined(trigger))
                 .Select(static condition => new ForceStatusEnableCondition(
                     Enum.Parse<ForceStatusEnableTrigger>(condition.Trigger, true),
-                    ForceStatusOccurrences.Normalize(condition.Occurrences)))
-                .DistinctBy(static condition => condition.Trigger),
+                    ForceStatusOccurrences.Normalize(condition.Occurrences),
+                    condition.Id,
+                    ParseLocation(condition)))
+                .DistinctBy(static condition => condition.Fingerprint()),
         ];
     }
 
@@ -313,8 +325,10 @@ internal static class CatalogFileBinder
                     && Enum.IsDefined(trigger))
                 .Select(static condition => new ForceStatusClearCondition(
                     Enum.Parse<ForceStatusClearTrigger>(condition.Trigger, true),
-                    ForceStatusOccurrences.Normalize(condition.Occurrences)))
-                .DistinctBy(static condition => condition.Trigger),
+                    ForceStatusOccurrences.Normalize(condition.Occurrences),
+                    condition.Id,
+                    ParseLocation(condition)))
+                .DistinctBy(static condition => condition.Fingerprint()),
         ];
     }
 
@@ -323,11 +337,11 @@ internal static class CatalogFileBinder
     {
         return
         [
-            .. conditions.Select(static condition => new StoredForceStatusCondition
-            {
-                Trigger = condition.Trigger.ToString(),
-                Occurrences = condition.Occurrences,
-            }),
+            .. conditions.Select(static condition => BindCondition(
+                condition.Id,
+                condition.Trigger.ToString(),
+                condition.Occurrences,
+                condition.Location)),
         ];
     }
 
@@ -336,12 +350,40 @@ internal static class CatalogFileBinder
     {
         return
         [
-            .. conditions.Select(static condition => new StoredForceStatusCondition
-            {
-                Trigger = condition.Trigger.ToString(),
-                Occurrences = condition.Occurrences,
-            }),
+            .. conditions.Select(static condition => BindCondition(
+                condition.Id,
+                condition.Trigger.ToString(),
+                condition.Occurrences,
+                condition.Location)),
         ];
+    }
+
+    private static StoredForceStatusCondition BindCondition(
+        Guid id,
+        string trigger,
+        int occurrences,
+        ConditionLocation location)
+    {
+        return new StoredForceStatusCondition
+        {
+            Id = id,
+            Trigger = trigger,
+            Occurrences = occurrences,
+            LocationKind = location.Kind.ToString(),
+            LocationTypeId = location.TypeId,
+            LocationTagId = location.TagId,
+        };
+    }
+
+    private static ConditionLocation ParseLocation(StoredForceStatusCondition condition)
+    {
+        if (!Enum.TryParse<ConditionLocationKind>(condition.LocationKind, true, out var kind)
+            || !Enum.IsDefined(kind))
+        {
+            return ConditionLocation.Any;
+        }
+
+        return new ConditionLocation(kind, condition.LocationTypeId, condition.LocationTagId);
     }
 
     public static IReadOnlyList<StoredPrivateObjectiveType> BindPrivateObjectives(
@@ -371,6 +413,8 @@ internal static class CatalogFileBinder
                 StatusMatchKind = type.StatusMatchKind.ToString(),
                 PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
                 PrerequisiteWasLost = type.PrerequisiteWasLost,
+                StructureTagId = type.StructureTagId,
+                TerrainTagId = type.TerrainTagId,
             }),
         ];
     }
@@ -559,7 +603,21 @@ internal static class CatalogFileBinder
                             LeaveUnchanged = change.LeaveUnchanged,
                         }),
                     ],
+                    TagIds = mission.TagIds,
                 };
+            }),
+        ];
+    }
+
+    public static IReadOnlyList<StoredCatalogTag> BindTags(IReadOnlyList<CatalogTag> tags)
+    {
+        ArgumentNullException.ThrowIfNull(tags);
+        return
+        [
+            .. tags.Select(static tag => new StoredCatalogTag
+            {
+                Id = tag.Id,
+                Name = tag.Name,
             }),
         ];
     }

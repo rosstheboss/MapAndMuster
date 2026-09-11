@@ -131,6 +131,8 @@ public static class CampaignMapper
                         SpecialRuleIds = item.SpecialRuleIds,
                     })
                     .ToArray(),
+                TagIds = faction.TagIds,
+                SubfactionTags = faction.SubfactionTags,
                 SubfactionAppearances = faction.SubfactionAppearances
                     .Select(static item => new SubfactionAppearanceDetail
                     {
@@ -149,7 +151,7 @@ public static class CampaignMapper
                 Color = type.Color,
                 Missions = [.. type.Missions.Select(ToMission)],
                 CampaignPoints = type.CampaignPoints,
-                IsWaterFeature = type.IsWaterFeature,
+                TagIds = type.TagIds,
                 SupplyPoints = type.SupplyPoints,
             })],
             StructureTypes = [.. campaign.StructureTypes.Select(static type => new StructureTypeDetail
@@ -167,6 +169,7 @@ public static class CampaignMapper
                 SupplyPoints = type.SupplyPoints,
                 PillageSupplyPoints = type.PillageSupplyPoints,
                 DestroySupplyPoints = type.DestroySupplyPoints,
+                TagIds = type.TagIds,
             })],
             ItemObjectiveTypes = [.. campaign.ItemObjectiveTypes.Select(type => ToItemObjectiveType(type, canStaff))],
             PublicObjectiveTypes = [.. campaign.PublicObjectiveTypes.Select(static type => new PublicObjectiveTypeDetail
@@ -184,6 +187,10 @@ public static class CampaignMapper
                 EffectKey = rule.EffectKey,
             })],
             Missions = [.. CatalogMissions(campaign).Select(ToMission)],
+            TerrainTags = [.. campaign.TerrainTags.Select(ToTag)],
+            StructureTags = [.. campaign.StructureTags.Select(ToTag)],
+            FactionTags = [.. campaign.FactionTags.Select(ToTag)],
+            MissionTags = [.. campaign.MissionTags.Select(ToTag)],
             ForceStatuses = [.. campaign.ForceStatuses.Select(static status => new ForceStatusDetail
             {
                 Id = status.Id,
@@ -214,6 +221,10 @@ public static class CampaignMapper
             MostStructurePointsCampaignPoints = campaign.RankingObjectivePoints.MostStructurePoints,
             PointsPerTerritoryCampaignPoints = campaign.RankingObjectivePoints.PointsPerTerritory,
             AlliedRelicControlCampaignPoints = campaign.RankingObjectivePoints.AlliedRelicControlPoints,
+            MostTerritoriesTerrainTagId = campaign.RankingObjectivePoints.MostTerritoriesTerrainTagId,
+            LongestTerritoryChainTerrainTagId = campaign.RankingObjectivePoints.LongestTerritoryChainTerrainTagId,
+            MostStructurePointsStructureTagId = campaign.RankingObjectivePoints.MostStructurePointsStructureTagId,
+            PointsPerTerritoryTerrainTagId = campaign.RankingObjectivePoints.PointsPerTerritoryTerrainTagId,
             SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = campaign.SplitForceSupplyPenaltyIsPercent,
             StandardBattleResultQuestions =
@@ -329,7 +340,7 @@ public static class CampaignMapper
             return false;
         }
 
-        return play.Commitments.Any(item => item.WindowId == window.Id && item.UserId == viewerUserId);
+        return play.IsActionCommitted(window.Id, viewerUserId);
     }
 
     /// <summary>
@@ -438,6 +449,8 @@ public static class CampaignMapper
                         StatusMatchKind = visible ? type.StatusMatchKind : nameof(PrivateObjectiveStatusMatchKind.None),
                         PrerequisiteForceStatusTypeId = visible ? type.PrerequisiteForceStatusTypeId : null,
                         PrerequisiteWasLost = visible && type.PrerequisiteWasLost,
+                        StructureTagId = visible ? type.StructureTagId : null,
+                        TerrainTagId = visible ? type.TerrainTagId : null,
                     };
                 }),
         ];
@@ -458,11 +471,18 @@ public static class CampaignMapper
         }
 
         var types = campaign.PrivateObjectiveTypes.ToDictionary(static type => type.Id);
+        var playRules = CampaignPlayCatalog.PrivateTypes(campaign).ToDictionary(static type => type.Id);
+        var map = CampaignLifecycle.ToPlayMap(campaign);
+        var territories = CampaignPlayCatalog.Territories(map);
+        var factionByPlayer = CampaignPlayCatalog.FactionByPlayer(campaign);
+        var allyGroupByFaction = CampaignPlayCatalog.AllyGroupByFaction(campaign);
+        var brokenAllyFactionIds = play.BrokenAllyFactionIds.ToHashSet();
         return
         [
             .. play.PrivateObjectives.Select(assignment =>
             {
                 types.TryGetValue(assignment.TypeId, out var type);
+                playRules.TryGetValue(assignment.TypeId, out var rules);
                 var visible = PrivateObjectiveRules.CanViewDetails(
                     assignment,
                     viewerUserId,
@@ -470,6 +490,17 @@ public static class CampaignMapper
                     viewerAllyGroupId,
                     staffView,
                     campaignCompleted);
+                var progress = visible && rules is not null
+                    ? PrivateObjectiveRules.AutomaticProgress(
+                        assignment,
+                        rules,
+                        play,
+                        territories,
+                        factionByPlayer,
+                        allyGroupByFaction,
+                        brokenAllyFactionIds,
+                        map)
+                    : null;
                 return new PrivateObjectiveAssignmentDetail
                 {
                     Id = assignment.Id,
@@ -481,6 +512,8 @@ public static class CampaignMapper
                     Name = visible ? type?.Name : null,
                     Description = visible ? type?.Description : null,
                     CampaignPoints = visible ? type?.CampaignPoints : null,
+                    CurrentCount = visible ? progress?.Current : null,
+                    RequiredCount = visible ? progress?.Required : null,
                     CanClaim = assignment.ScoringKind == PrivateObjectiveScoringKind.Manual
                         && assignment.Status == PrivateObjectiveAssignmentStatus.Assigned
                         && IsHolder(assignment, viewerUserId, viewerFactionId, viewerAllyGroupId),
@@ -657,6 +690,16 @@ public static class CampaignMapper
                     LeaveUnchanged = change.LeaveUnchanged,
                 }),
             ],
+            TagIds = mission.TagIds,
+        };
+    }
+
+    private static CatalogTagDetail ToTag(StoredCatalogTag tag)
+    {
+        return new CatalogTagDetail
+        {
+            Id = tag.Id,
+            Name = tag.Name,
         };
     }
 
@@ -671,8 +714,14 @@ public static class CampaignMapper
             [
                 .. listed.Select(static condition => new ForceStatusConditionDetail
                 {
+                    Id = condition.Id,
                     Trigger = condition.Trigger,
                     Occurrences = ForceStatusOccurrences.Normalize(condition.Occurrences),
+                    LocationKind = string.IsNullOrWhiteSpace(condition.LocationKind)
+                        ? nameof(ConditionLocationKind.Any)
+                        : condition.LocationKind,
+                    LocationTypeId = condition.LocationTypeId,
+                    LocationTagId = condition.LocationTagId,
                 }),
             ];
         }

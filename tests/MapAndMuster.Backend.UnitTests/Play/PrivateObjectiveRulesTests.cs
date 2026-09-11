@@ -522,6 +522,146 @@ public sealed class PrivateObjectiveRulesTests
     }
 
     [Fact]
+    public void AutomaticStructureTagMatchesAnyStructureWithThatTag()
+    {
+        var tag = Guid.NewGuid();
+        var type = new PrivateObjectiveTypePlayRules(
+            Guid.NewGuid(),
+            "Hold tagged keeps",
+            3,
+            [PrivateObjectiveHolderKind.Faction],
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAutomaticKind.ControlStructureType,
+            requiredCount: 1,
+            structureTypeId: null,
+            [],
+            structureTagId: tag);
+        var faction = Guid.NewGuid();
+        var player = Guid.NewGuid();
+        var assignment = new PrivateObjectiveAssignment(
+            Guid.NewGuid(),
+            type.Id,
+            PrivateObjectiveHolderKind.Faction,
+            faction,
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            DateTimeOffset.UtcNow);
+        var state = CampaignPlayState.Empty.With(privateObjectives: [assignment]);
+        var next = PrivateObjectiveRules.EvaluateAutomatic(
+            state,
+            [type],
+            [
+                new PrivateObjectiveTerritory(
+                    Guid.NewGuid(),
+                    faction,
+                    Guid.NewGuid(),
+                    StructureCondition.Operational,
+                    StructureTagIds: [tag]),
+            ],
+            new Dictionary<Guid, Guid> { [player] = faction },
+            new Dictionary<Guid, Guid?>(),
+            new HashSet<Guid>(),
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Revealed, next.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void AutomaticAnyStructureTypeCompletesWhenAnyStructureIsHeld()
+    {
+        var type = new PrivateObjectiveTypePlayRules(
+            Guid.NewGuid(),
+            "Hold any structure",
+            2,
+            [PrivateObjectiveHolderKind.Faction],
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAutomaticKind.ControlStructureType,
+            requiredCount: 1,
+            structureTypeId: null,
+            [],
+            matchesAnyStructureType: true);
+        var faction = Guid.NewGuid();
+        var player = Guid.NewGuid();
+        var assignment = new PrivateObjectiveAssignment(
+            Guid.NewGuid(),
+            type.Id,
+            PrivateObjectiveHolderKind.Faction,
+            faction,
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            DateTimeOffset.UtcNow);
+        var revealed = PrivateObjectiveRules.EvaluateAutomatic(
+            CampaignPlayState.Empty.With(privateObjectives: [assignment]),
+            [type],
+            [
+                new PrivateObjectiveTerritory(
+                    Guid.NewGuid(),
+                    faction,
+                    Guid.NewGuid(),
+                    StructureCondition.Operational),
+            ],
+            new Dictionary<Guid, Guid> { [player] = faction },
+            new Dictionary<Guid, Guid?>(),
+            new HashSet<Guid>(),
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Revealed, revealed.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void AutomaticTerritoryCountCanFilterByTerrainTag()
+    {
+        var tag = Guid.NewGuid();
+        var type = new PrivateObjectiveTypePlayRules(
+            Guid.NewGuid(),
+            "Hold water",
+            2,
+            [PrivateObjectiveHolderKind.Faction],
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAutomaticKind.ControlTerritoryCount,
+            requiredCount: 1,
+            structureTypeId: null,
+            [],
+            terrainTagId: tag);
+        var faction = Guid.NewGuid();
+        var player = Guid.NewGuid();
+        var assignment = new PrivateObjectiveAssignment(
+            Guid.NewGuid(),
+            type.Id,
+            PrivateObjectiveHolderKind.Faction,
+            faction,
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            DateTimeOffset.UtcNow);
+        var missed = PrivateObjectiveRules.EvaluateAutomatic(
+            CampaignPlayState.Empty.With(privateObjectives: [assignment]),
+            [type],
+            [new PrivateObjectiveTerritory(Guid.NewGuid(), faction, null, StructureCondition.Operational)],
+            new Dictionary<Guid, Guid> { [player] = faction },
+            new Dictionary<Guid, Guid?>(),
+            new HashSet<Guid>(),
+            DateTimeOffset.UtcNow);
+        var matched = PrivateObjectiveRules.EvaluateAutomatic(
+            CampaignPlayState.Empty.With(privateObjectives: [assignment]),
+            [type],
+            [
+                new PrivateObjectiveTerritory(
+                    Guid.NewGuid(),
+                    faction,
+                    null,
+                    StructureCondition.Operational,
+                    TerrainTagIds: [tag]),
+            ],
+            new Dictionary<Guid, Guid> { [player] = faction },
+            new Dictionary<Guid, Guid?>(),
+            new HashSet<Guid>(),
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Assigned, missed.PrivateObjectives[0].Status);
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Revealed, matched.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
     public void AutomaticDuplicatesCompleteOnlyForTheHolderWhoMeetsTheCriterion()
     {
         var type = new PrivateObjectiveTypePlayRules(
@@ -856,6 +996,36 @@ public sealed class PrivateObjectiveRulesTests
         var next = Evaluate(state, type, []);
 
         Assert.Equal(PrivateObjectiveAssignmentStatus.Revealed, next.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void AutomaticProgressReportsControlTerritoryCountWithoutCompleting()
+    {
+        var type = Automatic("Hold land", PrivateObjectiveAutomaticKind.ControlTerritoryCount, requiredCount: 5);
+        var player = Guid.NewGuid();
+        var faction = Guid.NewGuid();
+        var assignment = Assigned(type, PrivateObjectiveHolderKind.Player, player);
+        var state = CampaignPlayState.Empty.With(privateObjectives: [assignment]);
+        var territories = new PrivateObjectiveTerritory[]
+        {
+            new(Guid.NewGuid(), faction, null, StructureCondition.Operational),
+            new(Guid.NewGuid(), faction, null, StructureCondition.Operational),
+            new(Guid.NewGuid(), Guid.NewGuid(), null, StructureCondition.Operational),
+        };
+
+        var progress = PrivateObjectiveRules.AutomaticProgress(
+            assignment,
+            type,
+            state,
+            territories,
+            new Dictionary<Guid, Guid> { [player] = faction },
+            new Dictionary<Guid, Guid?>(),
+            new HashSet<Guid>());
+
+        Assert.Equal((2, 5), progress);
+        Assert.Equal(
+            PrivateObjectiveAssignmentStatus.Assigned,
+            Evaluate(state, type, territories, new Dictionary<Guid, Guid> { [player] = faction }).PrivateObjectives[0].Status);
     }
 
     private static PrivateObjectiveTypePlayRules Manual(string name, params PrivateObjectiveHolderKind[] kinds)

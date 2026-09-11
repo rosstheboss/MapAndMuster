@@ -649,24 +649,75 @@
                     <fieldset class="field">
                       <legend>Enable when</legend>
                       <p class="muted">
-                        Add at least one condition. Any listed trigger that happens that many times in a row gains the
-                        status. Battle triggers count consecutive battles; water and Hold triggers count consecutive
-                        action phases.
+                        Add at least one condition. Listed conditions are OR. The same trigger may be added more than
+                        once when the location filter differs. Battle triggers count consecutive battles; occupying
+                        triggers count consecutive action phases.
                       </p>
                       <div class="nested-row">
                         <div class="field grow">
                           <label [attr.for]="'force-status-enable-' + index">Trigger</label>
-                          <select
-                            [id]="'force-status-enable-' + index"
-                            formControlName="enablePick"
-                            [attr.disabled]="availableForceStatusEnableOptions(status).length === 0 ? true : null"
-                          >
+                          <select [id]="'force-status-enable-' + index" formControlName="enablePick">
                             <option value="">Select a trigger</option>
-                            @for (option of availableForceStatusEnableOptions(status); track option.id) {
+                            @for (option of availableForceStatusEnableOptions(); track option.id) {
                               <option [value]="option.id">{{ option.label }}</option>
                             }
                           </select>
                         </div>
+                        <div class="field">
+                          <label [attr.for]="'force-status-enable-location-' + index">Location</label>
+                          <select
+                            [id]="'force-status-enable-location-' + index"
+                            formControlName="enablePickLocationKind"
+                          >
+                            @for (option of conditionLocationOptions(); track option.id) {
+                              <option [value]="option.id">{{ option.label }}</option>
+                            }
+                          </select>
+                        </div>
+                        @if (status.controls.enablePickLocationKind.value === 'TerrainType') {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-enable-type-' + index">Terrain type</label>
+                            <select [id]="'force-status-enable-type-' + index" formControlName="enablePickTypeId">
+                              <option value="">Select a terrain type</option>
+                              @for (option of namedTerrainTypes(); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
+                        @if (status.controls.enablePickLocationKind.value === 'StructureType') {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-enable-stype-' + index">Structure type</label>
+                            <select [id]="'force-status-enable-stype-' + index" formControlName="enablePickTypeId">
+                              <option value="">Select a structure type</option>
+                              @for (option of namedStructureTypes(); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
+                        @if (status.controls.enablePickLocationKind.value === 'TerrainTag') {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-enable-tag-' + index">Terrain tag</label>
+                            <select [id]="'force-status-enable-tag-' + index" formControlName="enablePickTagId">
+                              <option value="">Select a terrain tag</option>
+                              @for (option of namedTerrainTags(); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
+                        @if (status.controls.enablePickLocationKind.value === 'StructureTag') {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-enable-stag-' + index">Structure tag</label>
+                            <select [id]="'force-status-enable-stag-' + index" formControlName="enablePickTagId">
+                              <option value="">Select a structure tag</option>
+                              @for (option of namedStructureTags(); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
                         <div class="field">
                           <label [attr.for]="'force-status-enable-count-' + index">Consecutive occurrences</label>
                           <input
@@ -691,13 +742,14 @@
                         <ul class="cancel-status-list" [id]="'force-status-enable-list-' + index">
                           @for (
                             condition of status.controls.enableConditions.controls;
-                            track condition;
+                            track condition.controls.id.value;
                             let item = $index
                           ) {
                             <li class="cancel-status-row">
                               <span>
                                 {{ forceStatusEnableOptionLabel(condition.controls.trigger.value) }} ×
-                                {{ condition.controls.occurrences.value }}
+                                {{ condition.controls.occurrences.value }} at
+                                {{ forceStatusLocationLabel(condition) }}
                               </span>
                               <button
                                 type="button"
@@ -719,23 +771,71 @@
                     <fieldset class="field">
                       <legend>Clear when</legend>
                       <p class="muted">
-                        Add at least one condition. Any listed trigger that happens that many times in a row returns the
-                        force to no status.
+                        Add at least one condition. Listed conditions are OR. The same trigger may be added more than
+                        once when the location filter differs.
                       </p>
                       <div class="nested-row">
                         <div class="field grow">
                           <label [attr.for]="'force-status-clear-' + index">Trigger</label>
-                          <select
-                            [id]="'force-status-clear-' + index"
-                            formControlName="clearPick"
-                            [attr.disabled]="availableForceStatusClearOptions(status).length === 0 ? true : null"
-                          >
+                          <select [id]="'force-status-clear-' + index" formControlName="clearPick">
                             <option value="">Select a trigger</option>
-                            @for (option of availableForceStatusClearOptions(status); track option.id) {
+                            @for (option of availableForceStatusClearOptions(); track option.id) {
                               <option [value]="option.id">{{ option.label }}</option>
                             }
                           </select>
                         </div>
+                        <div class="field">
+                          <label [attr.for]="'force-status-clear-location-' + index">Location</label>
+                          <select [id]="'force-status-clear-location-' + index" formControlName="clearPickLocationKind">
+                            @for (option of conditionLocationOptions(); track option.id) {
+                              <option [value]="option.id">{{ option.label }}</option>
+                            }
+                          </select>
+                        </div>
+                        @if (status.controls.clearPickLocationKind.value === 'TerrainType') {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-clear-type-' + index">Terrain type</label>
+                            <select [id]="'force-status-clear-type-' + index" formControlName="clearPickTypeId">
+                              <option value="">Select a terrain type</option>
+                              @for (option of namedTerrainTypes(); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
+                        @if (status.controls.clearPickLocationKind.value === 'StructureType') {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-clear-stype-' + index">Structure type</label>
+                            <select [id]="'force-status-clear-stype-' + index" formControlName="clearPickTypeId">
+                              <option value="">Select a structure type</option>
+                              @for (option of namedStructureTypes(); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
+                        @if (status.controls.clearPickLocationKind.value === 'TerrainTag') {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-clear-tag-' + index">Terrain tag</label>
+                            <select [id]="'force-status-clear-tag-' + index" formControlName="clearPickTagId">
+                              <option value="">Select a terrain tag</option>
+                              @for (option of namedTerrainTags(); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
+                        @if (status.controls.clearPickLocationKind.value === 'StructureTag') {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-clear-stag-' + index">Structure tag</label>
+                            <select [id]="'force-status-clear-stag-' + index" formControlName="clearPickTagId">
+                              <option value="">Select a structure tag</option>
+                              @for (option of namedStructureTags(); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
                         <div class="field">
                           <label [attr.for]="'force-status-clear-count-' + index">Consecutive occurrences</label>
                           <input
@@ -760,13 +860,14 @@
                         <ul class="cancel-status-list" [id]="'force-status-clear-list-' + index">
                           @for (
                             condition of status.controls.clearConditions.controls;
-                            track condition;
+                            track condition.controls.id.value;
                             let item = $index
                           ) {
                             <li class="cancel-status-row">
                               <span>
                                 {{ forceStatusClearOptionLabel(condition.controls.trigger.value) }} ×
-                                {{ condition.controls.occurrences.value }}
+                                {{ condition.controls.occurrences.value }} at
+                                {{ forceStatusLocationLabel(condition) }}
                               </span>
                               <button
                                 type="button"
@@ -869,6 +970,15 @@
                     formControlName="mostTerritoriesCampaignPoints"
                   />
                 </div>
+                <div class="field grow">
+                  <label for="mostTerritoriesTerrainTagId">Optional terrain tag filter</label>
+                  <select id="mostTerritoriesTerrainTagId" formControlName="mostTerritoriesTerrainTagId">
+                    <option value="">Any terrain</option>
+                    @for (tag of namedTerrainTags(); track tag.id) {
+                      <option [value]="tag.id">{{ tag.name }}</option>
+                    }
+                  </select>
+                </div>
                 <div class="field">
                   <label for="longestTerritoryChainCampaignPoints">Longest unbroken territory chain</label>
                   <input
@@ -878,6 +988,15 @@
                     max="999"
                     formControlName="longestTerritoryChainCampaignPoints"
                   />
+                </div>
+                <div class="field grow">
+                  <label for="longestTerritoryChainTerrainTagId">Optional terrain tag filter</label>
+                  <select id="longestTerritoryChainTerrainTagId" formControlName="longestTerritoryChainTerrainTagId">
+                    <option value="">Any terrain</option>
+                    @for (tag of namedTerrainTags(); track tag.id) {
+                      <option [value]="tag.id">{{ tag.name }}</option>
+                    }
+                  </select>
                 </div>
                 <div class="field">
                   <label for="mostBattlesWonCampaignPoints">Most battles won</label>
@@ -898,6 +1017,15 @@
                     max="999"
                     formControlName="mostStructurePointsCampaignPoints"
                   />
+                </div>
+                <div class="field grow">
+                  <label for="mostStructurePointsStructureTagId">Optional structure tag filter</label>
+                  <select id="mostStructurePointsStructureTagId" formControlName="mostStructurePointsStructureTagId">
+                    <option value="">Any structure</option>
+                    @for (tag of namedStructureTags(); track tag.id) {
+                      <option [value]="tag.id">{{ tag.name }}</option>
+                    }
+                  </select>
                 </div>
               </div>
               <p class="muted">
@@ -921,6 +1049,15 @@
                     max="999"
                     formControlName="pointsPerTerritoryCampaignPoints"
                   />
+                </div>
+                <div class="field grow">
+                  <label for="pointsPerTerritoryTerrainTagId">Optional terrain tag filter</label>
+                  <select id="pointsPerTerritoryTerrainTagId" formControlName="pointsPerTerritoryTerrainTagId">
+                    <option value="">Any terrain</option>
+                    @for (tag of namedTerrainTags(); track tag.id) {
+                      <option [value]="tag.id">{{ tag.name }}</option>
+                    }
+                  </select>
                 </div>
                 <div class="field">
                   <label for="alliedRelicControlCampaignPoints">Points if an ally or faction-mate holds a relic</label>
@@ -1209,34 +1346,60 @@
                             formControlName="requiredCount"
                           />
                         </div>
-                        @if (
-                          item.controls.automaticKind.value === 'ControlStructureType' ||
-                          item.controls.automaticKind.value === 'PillageStructureType' ||
-                          item.controls.automaticKind.value === 'DestroyStructureType' ||
-                          item.controls.automaticKind.value === 'BuildStructureType' ||
-                          item.controls.automaticKind.value === 'RepairStructureType'
-                        ) {
+                        @if (privateObjectiveUsesStructure(item)) {
                           <div class="field grow">
-                            <label [attr.for]="'private-objective-structure-' + index">Structure type</label>
-                            <select [id]="'private-objective-structure-' + index" formControlName="structureTypeId">
-                              <option value="">Select a structure type</option>
-                              @for (structure of structureTypes.controls; track structure.controls.id.value) {
-                                @if (structure.controls.name.value.trim()) {
-                                  <option [value]="structure.controls.id.value">
-                                    {{ structure.controls.name.value }}
-                                  </option>
+                            <label [attr.for]="'private-objective-structure-match-' + index">Structure match</label>
+                            <select
+                              [id]="'private-objective-structure-match-' + index"
+                              [value]="privateObjectiveStructureMatchMode(item)"
+                              (change)="onPrivateObjectiveStructureMatchChange(item, $event)"
+                            >
+                              <option value="any">Any structure type</option>
+                              <option value="type">Specific structure type</option>
+                              <option value="tag">Structure tag</option>
+                            </select>
+                          </div>
+                          @if (privateObjectiveStructureMatchMode(item) === 'type') {
+                            <div class="field grow">
+                              <label [attr.for]="'private-objective-structure-' + index">Structure type</label>
+                              <select [id]="'private-objective-structure-' + index" formControlName="structureTypeId">
+                                <option value="">Select a structure type</option>
+                                @for (structure of structureTypes.controls; track structure.controls.id.value) {
+                                  @if (structure.controls.name.value.trim()) {
+                                    <option [value]="structure.controls.id.value">
+                                      {{ structure.controls.name.value }}
+                                    </option>
+                                  }
                                 }
+                              </select>
+                            </div>
+                          }
+                          @if (privateObjectiveStructureMatchMode(item) === 'tag') {
+                            <div class="field grow">
+                              <label [attr.for]="'private-objective-structure-tag-' + index">Structure tag</label>
+                              <select
+                                [id]="'private-objective-structure-tag-' + index"
+                                formControlName="structureTagId"
+                              >
+                                <option value="">Select a structure tag</option>
+                                @for (tag of namedStructureTags(); track tag.id) {
+                                  <option [value]="tag.id">{{ tag.name }}</option>
+                                }
+                              </select>
+                            </div>
+                          }
+                        }
+                        @if (privateObjectiveUsesTerrainTag(item)) {
+                          <div class="field grow">
+                            <label [attr.for]="'private-objective-terrain-tag-' + index">
+                              Optional terrain tag filter
+                            </label>
+                            <select [id]="'private-objective-terrain-tag-' + index" formControlName="terrainTagId">
+                              <option value="">Any terrain</option>
+                              @for (tag of namedTerrainTags(); track tag.id) {
+                                <option [value]="tag.id">{{ tag.name }}</option>
                               }
                             </select>
-                            @if (
-                              item.controls.automaticKind.value === 'BuildStructureType' ||
-                              item.controls.automaticKind.value === 'RepairStructureType'
-                            ) {
-                              <label class="choice-row">
-                                <input type="checkbox" formControlName="matchesAnyStructureType" />
-                                Any structure type
-                              </label>
-                            }
                           </div>
                         }
                       </div>
@@ -1488,6 +1651,48 @@
               preset itself is not changed. Each faction has a unique color. Named subfactions may inherit that color
               and flag or choose their own color, a color flag, and/or an uploaded logo.
             </p>
+            <div class="nested-card stack">
+              <p class="subsection-heading">Faction tags</p>
+              <p class="muted">
+                Tags do nothing unless a status or objective references them. Subfactions use this catalog and keep
+                parent faction tags plus any extras.
+              </p>
+              <div class="nested-row">
+                <div class="field grow">
+                  <label for="faction-tag-draft">New tag name</label>
+                  <input
+                    id="faction-tag-draft"
+                    [formControl]="factionTagDraft"
+                    maxlength="60"
+                    (keydown)="onCatalogTagKey($event, factionTags, factionTagDraft)"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="button-secondary"
+                  (click)="addCatalogTagFromDraft(factionTags, factionTagDraft)"
+                >
+                  Add
+                </button>
+              </div>
+              @if (factionTags.length > 0) {
+                <ul class="tag-chip-list">
+                  @for (tag of factionTags.controls; track tag.controls.id.value; let tagIndex = $index) {
+                    <li class="tag-chip">
+                      <span>{{ tag.controls.name.value }}</span>
+                      <button
+                        type="button"
+                        class="button-danger icon-button"
+                        [attr.aria-label]="'Remove tag ' + tag.controls.name.value"
+                        (click)="removeCatalogTag(factionTags, tagIndex, 'faction')"
+                      >
+                        <app-icon name="x" />
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
             <div class="nested-row">
               <div class="field grow">
                 <label for="factionPreset">Faction preset</label>
@@ -1550,6 +1755,39 @@
                       <input type="checkbox" formControlName="requiresSubfaction" />
                       Players who choose this faction must pick a subfaction
                     </label>
+                    <div class="field">
+                      <label [attr.for]="'faction-tags-' + index">Tags</label>
+                      <ul class="tag-chip-list">
+                        @for (tag of assignedCatalogTags(faction.controls.tagIds, factionTags); track tag.id) {
+                          <li class="tag-chip">
+                            <span>{{ tag.name }}</span>
+                            <button
+                              type="button"
+                              class="button-danger icon-button"
+                              [attr.aria-label]="'Remove tag ' + tag.name"
+                              (click)="removeAssignedTag(faction.controls.tagIds, tag.id)"
+                            >
+                              <app-icon name="x" />
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                      <app-filterable-combobox
+                        [inputId]="'faction-tags-' + index"
+                        [options]="unassignedTagNames(faction.controls.tagIds.value, factionTags)"
+                        [maxLength]="60"
+                        formControlName="tagDraft"
+                        (optionChosen)="
+                          assignDefinedTag(faction.controls.tagIds, factionTags, faction.controls.tagDraft)
+                        "
+                        (keydown)="
+                          onItemTagKey($event, faction.controls.tagIds, factionTags, faction.controls.tagDraft)
+                        "
+                      />
+                      <p class="muted">
+                        Choose a defined tag or type its name, then press Enter or comma. Unknown names are not created.
+                      </p>
+                    </div>
                     @if (allyGroups.length > 0) {
                       <div class="field">
                         <label [attr.for]="'faction-ally-' + index">Ally group (optional)</label>
@@ -1586,6 +1824,53 @@
                               Remove
                             </button>
                           </div>
+                          @if (subfaction.controls.name.value.trim()) {
+                            <div class="field">
+                              <p class="muted">Inherited faction tags</p>
+                              <ul class="tag-chip-list">
+                                @for (tag of inheritedFactionTags(faction); track tag.id) {
+                                  <li class="tag-chip tag-chip-readonly">
+                                    <span>{{ tag.name }}</span>
+                                  </li>
+                                }
+                              </ul>
+                              <label [attr.for]="'subfaction-tags-' + index + '-' + subIndex">Extra tags</label>
+                              <ul class="tag-chip-list">
+                                @for (
+                                  tag of assignedSubfactionTags(faction, subfaction.controls.name.value.trim());
+                                  track tag.id
+                                ) {
+                                  <li class="tag-chip">
+                                    <span>{{ tag.name }}</span>
+                                    <button
+                                      type="button"
+                                      class="button-danger icon-button"
+                                      [attr.aria-label]="'Remove tag ' + tag.name"
+                                      (click)="
+                                        removeSubfactionTag(faction, subfaction.controls.name.value.trim(), tag.id)
+                                      "
+                                    >
+                                      <app-icon name="x" />
+                                    </button>
+                                  </li>
+                                }
+                              </ul>
+                              <app-filterable-combobox
+                                [inputId]="'subfaction-tags-' + index + '-' + subIndex"
+                                [options]="unassignedSubfactionTagNames(faction, subfaction.controls.name.value.trim())"
+                                [maxLength]="60"
+                                [formControl]="
+                                  subfactionTagDraftControl(faction, subfaction.controls.name.value.trim())
+                                "
+                                (optionChosen)="assignSubfactionTag(faction, subfaction.controls.name.value.trim())"
+                                (keydown)="onSubfactionTagKey($event, faction, subfaction.controls.name.value.trim())"
+                              />
+                              <p class="muted">
+                                Choose a defined tag or type its name, then press Enter or comma. Unknown names are not
+                                created.
+                              </p>
+                            </div>
+                          }
                           @if (faction.controls.requiresSubfaction.value) {
                             <div class="field color-field">
                               <label [attr.for]="'subfaction-color-' + index + '-' + subIndex">Color</label>
@@ -1997,6 +2282,45 @@
               settings. Terrain and structure lists then pick a catalog mission or a one-off name. Unassigned catalog
               missions are kept. Up to 80 missions.
             </p>
+            <div class="nested-card stack">
+              <p class="subsection-heading">Mission tags</p>
+              <p class="muted">Tags do nothing unless another rule references them.</p>
+              <div class="nested-row">
+                <div class="field grow">
+                  <label for="mission-tag-draft">New tag name</label>
+                  <input
+                    id="mission-tag-draft"
+                    [formControl]="missionTagDraft"
+                    maxlength="60"
+                    (keydown)="onCatalogTagKey($event, missionTags, missionTagDraft)"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="button-secondary"
+                  (click)="addCatalogTagFromDraft(missionTags, missionTagDraft)"
+                >
+                  Add
+                </button>
+              </div>
+              @if (missionTags.length > 0) {
+                <ul class="tag-chip-list">
+                  @for (tag of missionTags.controls; track tag.controls.id.value; let tagIndex = $index) {
+                    <li class="tag-chip">
+                      <span>{{ tag.controls.name.value }}</span>
+                      <button
+                        type="button"
+                        class="button-danger icon-button"
+                        [attr.aria-label]="'Remove tag ' + tag.controls.name.value"
+                        (click)="removeCatalogTag(missionTags, tagIndex, 'mission')"
+                      >
+                        <app-icon name="x" />
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
             <div formArrayName="missions" class="stack">
               @for (mission of missions.controls; track mission; let index = $index) {
                 <div class="nested-card stack" [formGroupName]="index">
@@ -2018,6 +2342,39 @@
                       <button type="button" class="button-secondary" (click)="removeCatalogMission(index)">
                         Remove
                       </button>
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'catalog-mission-tags-' + index">Tags</label>
+                      <ul class="tag-chip-list">
+                        @for (tag of assignedCatalogTags(mission.controls.tagIds, missionTags); track tag.id) {
+                          <li class="tag-chip">
+                            <span>{{ tag.name }}</span>
+                            <button
+                              type="button"
+                              class="button-danger icon-button"
+                              [attr.aria-label]="'Remove tag ' + tag.name"
+                              (click)="removeAssignedTag(mission.controls.tagIds, tag.id)"
+                            >
+                              <app-icon name="x" />
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                      <app-filterable-combobox
+                        [inputId]="'catalog-mission-tags-' + index"
+                        [options]="unassignedTagNames(mission.controls.tagIds.value, missionTags)"
+                        [maxLength]="60"
+                        formControlName="tagDraft"
+                        (optionChosen)="
+                          assignDefinedTag(mission.controls.tagIds, missionTags, mission.controls.tagDraft)
+                        "
+                        (keydown)="
+                          onItemTagKey($event, mission.controls.tagIds, missionTags, mission.controls.tagDraft)
+                        "
+                      />
+                      <p class="muted">
+                        Choose a defined tag or type its name, then press Enter or comma. Unknown names are not created.
+                      </p>
                     </div>
                     <div class="field">
                       <label [attr.for]="'catalog-mission-url-' + index">Mission URL (optional)</label>
@@ -2329,6 +2686,48 @@
               catalog mission or type a one-off name with an optional file. Adding a preset replaces the current terrain
               list with a copy you can then edit. The preset itself is not changed.
             </p>
+            <div class="nested-card stack">
+              <p class="subsection-heading">Terrain tags</p>
+              <p class="muted">
+                Tags do nothing unless a status or objective references them. The standard preset defines Water and
+                assigns it to Beach, Lake, Riverlands, Sea, and Swamp.
+              </p>
+              <div class="nested-row">
+                <div class="field grow">
+                  <label for="terrain-tag-draft">New tag name</label>
+                  <input
+                    id="terrain-tag-draft"
+                    [formControl]="terrainTagDraft"
+                    maxlength="60"
+                    (keydown)="onCatalogTagKey($event, terrainTags, terrainTagDraft)"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="button-secondary"
+                  (click)="addCatalogTagFromDraft(terrainTags, terrainTagDraft)"
+                >
+                  Add
+                </button>
+              </div>
+              @if (terrainTags.length > 0) {
+                <ul class="tag-chip-list">
+                  @for (tag of terrainTags.controls; track tag.controls.id.value; let tagIndex = $index) {
+                    <li class="tag-chip">
+                      <span>{{ tag.controls.name.value }}</span>
+                      <button
+                        type="button"
+                        class="button-danger icon-button"
+                        [attr.aria-label]="'Remove tag ' + tag.controls.name.value"
+                        (click)="removeCatalogTag(terrainTags, tagIndex, 'terrain')"
+                      >
+                        <app-icon name="x" />
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
             <div class="nested-row">
               <div class="field grow">
                 <label for="terrainPreset">Terrain preset</label>
@@ -2383,10 +2782,39 @@
                         </button>
                       }
                     </div>
-                    <label class="choice-row">
-                      <input type="checkbox" formControlName="isWaterFeature" />
-                      Water feature (reminder for faction special rules)
-                    </label>
+                    <div class="field">
+                      <label [attr.for]="'terrain-tags-' + index">Tags</label>
+                      <ul class="tag-chip-list">
+                        @for (tag of assignedCatalogTags(terrain.controls.tagIds, terrainTags); track tag.id) {
+                          <li class="tag-chip">
+                            <span>{{ tag.name }}</span>
+                            <button
+                              type="button"
+                              class="button-danger icon-button"
+                              [attr.aria-label]="'Remove tag ' + tag.name"
+                              (click)="removeAssignedTag(terrain.controls.tagIds, tag.id)"
+                            >
+                              <app-icon name="x" />
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                      <app-filterable-combobox
+                        [inputId]="'terrain-tags-' + index"
+                        [options]="unassignedTagNames(terrain.controls.tagIds.value, terrainTags)"
+                        [maxLength]="60"
+                        formControlName="tagDraft"
+                        (optionChosen)="
+                          assignDefinedTag(terrain.controls.tagIds, terrainTags, terrain.controls.tagDraft)
+                        "
+                        (keydown)="
+                          onItemTagKey($event, terrain.controls.tagIds, terrainTags, terrain.controls.tagDraft)
+                        "
+                      />
+                      <p class="muted">
+                        Choose a defined tag or type its name, then press Enter or comma. Unknown names are not created.
+                      </p>
+                    </div>
                     <div class="field">
                       <label [attr.for]="'terrain-supply-' + index">Supply points</label>
                       <input
@@ -2498,6 +2926,45 @@
               Adding a preset replaces the current structure list with a copy you can then edit. The preset itself is
               not changed.
             </p>
+            <div class="nested-card stack">
+              <p class="subsection-heading">Structure tags</p>
+              <p class="muted">Tags do nothing unless a status or objective references them.</p>
+              <div class="nested-row">
+                <div class="field grow">
+                  <label for="structure-tag-draft">New tag name</label>
+                  <input
+                    id="structure-tag-draft"
+                    [formControl]="structureTagDraft"
+                    maxlength="60"
+                    (keydown)="onCatalogTagKey($event, structureTags, structureTagDraft)"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="button-secondary"
+                  (click)="addCatalogTagFromDraft(structureTags, structureTagDraft)"
+                >
+                  Add
+                </button>
+              </div>
+              @if (structureTags.length > 0) {
+                <ul class="tag-chip-list">
+                  @for (tag of structureTags.controls; track tag.controls.id.value; let tagIndex = $index) {
+                    <li class="tag-chip">
+                      <span>{{ tag.controls.name.value }}</span>
+                      <button
+                        type="button"
+                        class="button-danger icon-button"
+                        [attr.aria-label]="'Remove tag ' + tag.controls.name.value"
+                        (click)="removeCatalogTag(structureTags, tagIndex, 'structure')"
+                      >
+                        <app-icon name="x" />
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
             <div class="nested-row">
               <div class="field grow">
                 <label for="structurePreset">Structure preset</label>
@@ -2538,6 +3005,39 @@
                       <button type="button" class="button-secondary" (click)="removeStructureType(index)">
                         Remove
                       </button>
+                    </div>
+                    <div class="field">
+                      <label [attr.for]="'structure-tags-' + index">Tags</label>
+                      <ul class="tag-chip-list">
+                        @for (tag of assignedCatalogTags(structure.controls.tagIds, structureTags); track tag.id) {
+                          <li class="tag-chip">
+                            <span>{{ tag.name }}</span>
+                            <button
+                              type="button"
+                              class="button-danger icon-button"
+                              [attr.aria-label]="'Remove tag ' + tag.name"
+                              (click)="removeAssignedTag(structure.controls.tagIds, tag.id)"
+                            >
+                              <app-icon name="x" />
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                      <app-filterable-combobox
+                        [inputId]="'structure-tags-' + index"
+                        [options]="unassignedTagNames(structure.controls.tagIds.value, structureTags)"
+                        [maxLength]="60"
+                        formControlName="tagDraft"
+                        (optionChosen)="
+                          assignDefinedTag(structure.controls.tagIds, structureTags, structure.controls.tagDraft)
+                        "
+                        (keydown)="
+                          onItemTagKey($event, structure.controls.tagIds, structureTags, structure.controls.tagDraft)
+                        "
+                      />
+                      <p class="muted">
+                        Choose a defined tag or type its name, then press Enter or comma. Unknown names are not created.
+                      </p>
                     </div>
                     <div class="field">
                       <label [attr.for]="'structure-points-' + index">Campaign points</label>

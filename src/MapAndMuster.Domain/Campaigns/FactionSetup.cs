@@ -19,6 +19,8 @@ public sealed class FactionSetup
     /// <param name="specialRuleIds">Special rules assigned to this faction.</param>
     /// <param name="subfactionSpecialRules">Special rules assigned to named subfactions.</param>
     /// <param name="subfactionAppearances">Color, flag, and logo choices for named subfactions.</param>
+    /// <param name="tagIds">Faction-catalog tags assigned to this faction.</param>
+    /// <param name="subfactionTags">Extra faction-catalog tags for named subfactions.</param>
     public FactionSetup(
         Guid id,
         string name,
@@ -30,7 +32,9 @@ public sealed class FactionSetup
         bool tintFlagImage = false,
         IReadOnlyList<Guid>? specialRuleIds = null,
         IReadOnlyList<SubfactionSpecialRulesSetup>? subfactionSpecialRules = null,
-        IReadOnlyList<SubfactionAppearanceSetup>? subfactionAppearances = null)
+        IReadOnlyList<SubfactionAppearanceSetup>? subfactionAppearances = null,
+        IReadOnlyList<Guid>? tagIds = null,
+        IReadOnlyList<SubfactionTagsSetup>? subfactionTags = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(color);
@@ -46,6 +50,8 @@ public sealed class FactionSetup
         SpecialRuleIds = specialRuleIds ?? [];
         SubfactionSpecialRules = subfactionSpecialRules ?? [];
         SubfactionAppearances = subfactionAppearances ?? [];
+        TagIds = DistinctIds(tagIds);
+        SubfactionTags = subfactionTags ?? [];
     }
 
     /// <summary>Gets the faction identifier.</summary>
@@ -80,4 +86,40 @@ public sealed class FactionSetup
 
     /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
     public IReadOnlyList<SubfactionAppearanceSetup> SubfactionAppearances { get; }
+
+    /// <summary>Gets faction-catalog tags assigned to this faction.</summary>
+    public IReadOnlyList<Guid> TagIds { get; }
+
+    /// <summary>Gets extra faction-catalog tags for named subfactions.</summary>
+    public IReadOnlyList<SubfactionTagsSetup> SubfactionTags { get; }
+
+    /// <summary>
+    /// Returns parent faction tags unioned with extra tags for <paramref name="subfactionName"/>.
+    /// </summary>
+    public IReadOnlyList<Guid> EffectiveTagIds(string? subfactionName)
+    {
+        if (string.IsNullOrWhiteSpace(subfactionName))
+        {
+            return TagIds;
+        }
+
+        var extra = SubfactionTags.FirstOrDefault(item =>
+            string.Equals(item.Name, subfactionName.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (extra is null || extra.TagIds.Count == 0)
+        {
+            return TagIds;
+        }
+
+        return [.. TagIds.Concat(extra.TagIds).Distinct()];
+    }
+
+    private static IReadOnlyList<Guid> DistinctIds(IReadOnlyList<Guid>? ids)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            return [];
+        }
+
+        return [.. ids.Where(static id => id != Guid.Empty).Distinct()];
+    }
 }

@@ -11,12 +11,6 @@ namespace MapAndMuster.Domain.Play;
 /// </summary>
 public static class ForceStatusRules
 {
-    /// <summary>Consecutive water-feature actions that inflict Diseased.</summary>
-    public const int ConsecutiveWaterActionsToInfect = 3;
-
-    /// <summary>Consecutive water-feature actions that inflict Diseased on a pre-battle surrender.</summary>
-    public const int ConsecutiveWaterActionsToInfectOnSurrender = 2;
-
     /// <summary>
     /// Resolution facts used to enable or clear a force status.
     /// </summary>
@@ -35,7 +29,15 @@ public static class ForceStatusRules
             bool surrendered = false,
             bool lostOnWater = false,
             bool skipActionResolution = false,
-            bool updateWaterStreak = true)
+            bool updateWaterStreak = true,
+            Guid? terrainTypeId = null,
+            IReadOnlyList<Guid>? terrainTagIds = null,
+            Guid? structureTypeId = null,
+            IReadOnlyList<Guid>? structureTagIds = null,
+            bool built = false,
+            bool pillaged = false,
+            bool repaired = false,
+            bool destroyed = false)
         {
             Held = held;
             Moved = moved;
@@ -49,6 +51,14 @@ public static class ForceStatusRules
             LostOnWater = lostOnWater;
             SkipActionResolution = skipActionResolution;
             UpdateWaterStreak = updateWaterStreak;
+            TerrainTypeId = terrainTypeId;
+            TerrainTagIds = terrainTagIds ?? [];
+            StructureTypeId = structureTypeId;
+            StructureTagIds = structureTagIds ?? [];
+            Built = built;
+            Pillaged = pillaged;
+            Repaired = repaired;
+            Destroyed = destroyed;
         }
 
         /// <summary>Gets whether the force Held.</summary>
@@ -84,8 +94,35 @@ public static class ForceStatusRules
         /// <summary>Gets whether action-window catalog and water-streak updates should be skipped.</summary>
         public bool SkipActionResolution { get; }
 
-        /// <summary>Gets whether this pass counts as a consecutive water-feature action.</summary>
+        /// <summary>Gets whether this pass counts as a consecutive occupying action phase.</summary>
         public bool UpdateWaterStreak { get; }
+
+        /// <summary>Gets the current or battle terrain type.</summary>
+        public Guid? TerrainTypeId { get; }
+
+        /// <summary>Gets terrain-catalog tags for the current or battle territory.</summary>
+        public IReadOnlyList<Guid> TerrainTagIds { get; }
+
+        /// <summary>Gets the current structure type when it is not destroyed.</summary>
+        public Guid? StructureTypeId { get; }
+
+        /// <summary>Gets structure-catalog tags for the current structure when it is not destroyed.</summary>
+        public IReadOnlyList<Guid> StructureTagIds { get; }
+
+        /// <summary>Gets whether the force successfully Built this action phase.</summary>
+        public bool Built { get; }
+
+        /// <summary>Gets whether the force successfully Pillaged without destroying this action phase.</summary>
+        public bool Pillaged { get; }
+
+        /// <summary>Gets whether the force successfully Repaired this action phase.</summary>
+        public bool Repaired { get; }
+
+        /// <summary>Gets whether the force successfully destroyed a structure this action phase.</summary>
+        public bool Destroyed { get; }
+
+        /// <summary>Gets whether this resolution is an action phase rather than a battle window.</summary>
+        public bool IsActionPhase => UpdateWaterStreak;
     }
 
     /// <summary>
@@ -208,7 +245,6 @@ public static class ForceStatusRules
                 statuses,
                 catalogByName,
                 facts,
-                hasDisease,
                 rules);
             var updated = withStreak.WithStatus(status);
             if (!string.Equals(updated.StatusName, withStreak.StatusName, StringComparison.Ordinal))
@@ -636,7 +672,12 @@ public static class ForceStatusRules
         ActionKind? kind,
         bool occupiesWater,
         bool occupiesCureSettlement = false,
-        bool skipActionResolution = false)
+        bool skipActionResolution = false,
+        PlayTerritory? territory = null,
+        bool built = false,
+        bool pillaged = false,
+        bool repaired = false,
+        bool destroyed = false)
     {
         var held = kind is null or ActionKind.Hold;
         var moved = kind is ActionKind.Move or ActionKind.Split or ActionKind.Retreat;
@@ -651,7 +692,16 @@ public static class ForceStatusRules
             occupiesCureSettlement,
             surrendered: false,
             lostOnWater: false,
-            skipActionResolution);
+            skipActionResolution,
+            updateWaterStreak: true,
+            territory?.TerrainTypeId,
+            territory?.TerrainTagIds,
+            destroyed ? null : territory?.StructureTypeId,
+            destroyed ? [] : territory?.StructureTagIds,
+            built,
+            pillaged,
+            repaired,
+            destroyed);
     }
 
     /// <summary>
@@ -664,7 +714,8 @@ public static class ForceStatusRules
         bool retreated,
         bool occupiesWater,
         bool surrendered = false,
-        bool lostOnWater = false)
+        bool lostOnWater = false,
+        PlayTerritory? territory = null)
     {
         return new Facts(
             false,
@@ -678,7 +729,11 @@ public static class ForceStatusRules
             surrendered,
             lostOnWater,
             skipActionResolution: false,
-            updateWaterStreak: false);
+            updateWaterStreak: false,
+            territory?.TerrainTypeId,
+            territory?.TerrainTagIds,
+            territory?.StructureTypeId,
+            territory?.StructureTagIds);
     }
 
     /// <summary>
@@ -733,53 +788,28 @@ public static class ForceStatusRules
         IReadOnlyList<ForceStatusSetup> statuses,
         Dictionary<string, ForceStatusSetup> catalogByName,
         Facts facts,
-        bool hasDisease,
         SpecialRuleContext rules)
     {
-        var diseased = ForceStatusNames.IsDiseased(force.StatusName);
-        if (hasDisease && diseased && facts.Held && facts.OccupiesCureSettlement)
-        {
-            var needed = catalogByName.TryGetValue(ForceStatusNames.Diseased, out var settlementDiseased)
-                ? SettlementHoldClearOccurrences(settlementDiseased)
-                : ForceStatusOccurrences.Default;
-            if (needed <= ForceStatusOccurrences.Default
-                || EnableStreakValue(force.ClearStreaks, ForceStatusStreakKeys.Clear(ForceStatusClearTrigger.HoldAtSettlement), force.ClearStreak) >= needed)
-            {
-                return (null, new Attribution(ForceStatusChangeSource.SettlementHold));
-            }
-        }
-
         var starting = force.StatusName is { } name && catalogByName.TryGetValue(name, out var startingSetup)
             ? startingSetup
             : null;
         var startingCleared = starting is not null && starting.ClearConditions.Any(condition =>
             ShouldEvaluateClear(condition.Trigger, facts)
-            && MatchesClear(condition.Trigger, facts)
+            && MatchesClear(condition, facts)
             && EnableStreakValue(
                 force.ClearStreaks,
-                ForceStatusStreakKeys.Clear(condition.Trigger),
+                ForceStatusStreakKeys.Clear(condition.Id),
                 force.ClearStreak) >= condition.Occurrences);
         var incoming = new List<ForceStatusSetup>();
         foreach (var candidate in statuses)
         {
-            if (ForceStatusNames.IsDiseased(candidate.Name)
-                || !candidate.EnableConditions.Any(condition => IsEnableReady(force, candidate, condition, facts))
+            if (!candidate.EnableConditions.Any(condition => IsEnableReady(force, candidate, condition, facts))
                 || !FactionSpecialRulePolicies.AllowsStatus(force, candidate.Name, rules))
             {
                 continue;
             }
 
             incoming.Add(candidate);
-        }
-
-        Attribution? diseaseAttribution = null;
-        if (hasDisease
-            && catalogByName.TryGetValue(ForceStatusNames.Diseased, out var diseasedSetup)
-            && FactionSpecialRulePolicies.AllowsStatus(force, ForceStatusNames.Diseased, rules)
-            && TryInfect(force, facts, out var diseaseSource))
-        {
-            incoming.Add(diseasedSetup);
-            diseaseAttribution = diseaseSource;
         }
 
         var cancelled = new HashSet<Guid>();
@@ -845,43 +875,7 @@ public static class ForceStatusRules
             return (winner.Name, null);
         }
 
-        if (diseaseAttribution is not null && ForceStatusNames.IsDiseased(winner.Name))
-        {
-            return (winner.Name, diseaseAttribution);
-        }
-
         return (winner.Name, new Attribution(ForceStatusChangeSource.Catalog, winner.Name));
-    }
-
-    private static bool TryInfect(CampaignForce force, Facts facts, out Attribution attribution)
-    {
-        if (facts.LostOnWater)
-        {
-            attribution = new Attribution(ForceStatusChangeSource.WaterBattleDefeat);
-            return true;
-        }
-
-        if (facts.Surrendered && force.ConsecutiveWaterActions >= ConsecutiveWaterActionsToInfectOnSurrender)
-        {
-            attribution = new Attribution(ForceStatusChangeSource.WaterSurrender);
-            return true;
-        }
-
-        if (facts.UpdateWaterStreak && force.ConsecutiveWaterActions >= ConsecutiveWaterActionsToInfect)
-        {
-            attribution = new Attribution(ForceStatusChangeSource.ConsecutiveWater);
-            return true;
-        }
-
-        attribution = default;
-        return false;
-    }
-
-    private static int SettlementHoldClearOccurrences(ForceStatusSetup diseased)
-    {
-        var settlement = diseased.ClearConditions.FirstOrDefault(static condition =>
-            condition.Trigger == ForceStatusClearTrigger.HoldAtSettlement);
-        return settlement?.Occurrences ?? ForceStatusOccurrences.Default;
     }
 
     private static bool IsEnableReady(
@@ -890,11 +884,21 @@ public static class ForceStatusRules
         ForceStatusEnableCondition condition,
         Facts facts)
     {
+        if (condition.Trigger == ForceStatusEnableTrigger.Surrender)
+        {
+            return facts.Surrendered
+                && MatchesLocation(condition.Location, facts)
+                && EnableStreakValue(
+                    force.EnableStreaks,
+                    ForceStatusStreakKeys.Enable(status.Id, condition.Id),
+                    LegacyEnableStreak(force, status.Id)) >= condition.Occurrences;
+        }
+
         return ShouldEvaluateEnable(condition.Trigger, facts)
-            && MatchesEnable(condition.Trigger, facts)
+            && MatchesEnable(condition, facts)
             && EnableStreakValue(
                 force.EnableStreaks,
-                ForceStatusStreakKeys.Enable(status.Id, condition.Trigger),
+                ForceStatusStreakKeys.Enable(status.Id, condition.Id),
                 LegacyEnableStreak(force, status.Id)) >= condition.Occurrences;
     }
 
@@ -919,7 +923,7 @@ public static class ForceStatusRules
         string? gained,
         IReadOnlyList<ForceStatusSetup> statuses)
     {
-        if (ForceStatusStreakKeys.TryParseEnable(key, out var statusId, out var trigger))
+        if (ForceStatusStreakKeys.TryParseEnable(key, out var statusId, out var conditionId))
         {
             var setup = statuses.FirstOrDefault(candidate => candidate.Id == statusId);
             if (setup is null)
@@ -932,7 +936,7 @@ public static class ForceStatusRules
                 return false;
             }
 
-            var condition = setup.EnableConditions.FirstOrDefault(item => item.Trigger == trigger);
+            var condition = setup.EnableConditions.FirstOrDefault(item => item.Id == conditionId);
             return condition is not null && streak < condition.Occurrences;
         }
 
@@ -966,8 +970,30 @@ public static class ForceStatusRules
             var legacy = LegacyEnableStreak(force, status.Id);
             foreach (var condition in status.EnableConditions)
             {
-                var key = ForceStatusStreakKeys.Enable(status.Id, condition.Trigger);
+                var key = ForceStatusStreakKeys.Enable(status.Id, condition.Id);
                 var previous = EnableStreakValue(force.EnableStreaks, key, legacy);
+                if (TracksOccupying(condition.Trigger))
+                {
+                    if (!facts.IsActionPhase)
+                    {
+                        if (previous > 0)
+                        {
+                            next[key] = previous;
+                        }
+
+                        continue;
+                    }
+
+                    var occupying = OccupyingMatchesEnable(condition, facts);
+                    var streak = occupying ? Math.Min(previous + 1, ForceStatusOccurrences.Max) : 0;
+                    if (streak > 0)
+                    {
+                        next[key] = streak;
+                    }
+
+                    continue;
+                }
+
                 if (!ShouldEvaluateEnable(condition.Trigger, facts))
                 {
                     if (previous > 0)
@@ -978,12 +1004,12 @@ public static class ForceStatusRules
                     continue;
                 }
 
-                var streak = MatchesEnable(condition.Trigger, facts)
+                var battleStreak = MatchesEnable(condition, facts)
                     ? Math.Min(previous + 1, ForceStatusOccurrences.Max)
                     : 0;
-                if (streak > 0)
+                if (battleStreak > 0)
                 {
-                    next[key] = streak;
+                    next[key] = battleStreak;
                 }
             }
         }
@@ -1012,8 +1038,31 @@ public static class ForceStatusRules
         var legacy = force.ClearStreaks.Count == 0 ? force.ClearStreak : 0;
         foreach (var condition in starting.ClearConditions)
         {
-            var key = ForceStatusStreakKeys.Clear(condition.Trigger);
+            var key = ForceStatusStreakKeys.Clear(condition.Id);
             var previous = EnableStreakValue(force.ClearStreaks, key, legacy);
+            if (TracksOccupying(condition.Trigger))
+            {
+                if (!facts.IsActionPhase)
+                {
+                    if (previous > 0)
+                    {
+                        next[key] = previous;
+                    }
+
+                    continue;
+                }
+
+                var occupying = MatchesLocation(condition.Location, facts)
+                    && MatchesClearTrigger(condition.Trigger, facts);
+                var occupyingStreak = occupying ? Math.Min(previous + 1, ForceStatusOccurrences.Max) : 0;
+                if (occupyingStreak > 0)
+                {
+                    next[key] = occupyingStreak;
+                }
+
+                continue;
+            }
+
             if (!ShouldEvaluateClear(condition.Trigger, facts))
             {
                 if (previous > 0)
@@ -1024,7 +1073,7 @@ public static class ForceStatusRules
                 continue;
             }
 
-            var streak = MatchesClear(condition.Trigger, facts)
+            var streak = MatchesClear(condition, facts)
                 ? Math.Min(previous + 1, ForceStatusOccurrences.Max)
                 : 0;
             if (streak > 0)
@@ -1045,7 +1094,14 @@ public static class ForceStatusRules
 
         return trigger switch
         {
-            ForceStatusEnableTrigger.Hold or ForceStatusEnableTrigger.OccupyingWater => facts.UpdateWaterStreak,
+            ForceStatusEnableTrigger.Hold
+                or ForceStatusEnableTrigger.OccupyingWater
+                or ForceStatusEnableTrigger.ConsecutiveActions
+                or ForceStatusEnableTrigger.Build
+                or ForceStatusEnableTrigger.Pillage
+                or ForceStatusEnableTrigger.Repair
+                or ForceStatusEnableTrigger.Destroy
+                or ForceStatusEnableTrigger.Surrender => facts.UpdateWaterStreak,
             ForceStatusEnableTrigger.AfterBattle
                 or ForceStatusEnableTrigger.BattleWon
                 or ForceStatusEnableTrigger.BattleLostOrRetreat => !facts.UpdateWaterStreak,
@@ -1065,13 +1121,32 @@ public static class ForceStatusRules
             ForceStatusClearTrigger.Hold
                 or ForceStatusClearTrigger.AfterMove
                 or ForceStatusClearTrigger.HoldWhileNotWater
-                or ForceStatusClearTrigger.HoldAtSettlement => facts.UpdateWaterStreak,
+                or ForceStatusClearTrigger.HoldAtSettlement
+                or ForceStatusClearTrigger.ConsecutiveActions
+                or ForceStatusClearTrigger.Build
+                or ForceStatusClearTrigger.Pillage
+                or ForceStatusClearTrigger.Repair
+                or ForceStatusClearTrigger.Destroy
+                or ForceStatusClearTrigger.Surrender => facts.UpdateWaterStreak,
             ForceStatusClearTrigger.AfterBattle
                 or ForceStatusClearTrigger.BattleWon
                 or ForceStatusClearTrigger.BattleLostOrRetreat => !facts.UpdateWaterStreak,
             ForceStatusClearTrigger.AfterMoveOrBattle => true,
             _ => false,
         };
+    }
+
+    private static bool TracksOccupying(ForceStatusEnableTrigger trigger)
+    {
+        return trigger is ForceStatusEnableTrigger.ConsecutiveActions
+            or ForceStatusEnableTrigger.OccupyingWater
+            or ForceStatusEnableTrigger.Surrender;
+    }
+
+    private static bool TracksOccupying(ForceStatusClearTrigger trigger)
+    {
+        return trigger is ForceStatusClearTrigger.ConsecutiveActions
+            or ForceStatusClearTrigger.Surrender;
     }
 
     private static bool CurrentStatusMatches(string? current, string required)
@@ -1084,21 +1159,60 @@ public static class ForceStatusRules
         return string.Equals(current, required, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool MatchesEnable(ForceStatusEnableTrigger trigger, Facts facts)
+    private static bool MatchesEnable(ForceStatusEnableCondition condition, Facts facts)
+    {
+        return MatchesEnableTrigger(condition.Trigger, facts) && MatchesLocation(condition.Location, facts);
+    }
+
+    private static bool MatchesClear(ForceStatusClearCondition condition, Facts facts)
+    {
+        return MatchesClearTrigger(condition.Trigger, facts) && MatchesLocation(condition.Location, facts);
+    }
+
+    private static bool OccupyingMatchesEnable(ForceStatusEnableCondition condition, Facts facts)
+    {
+        if (!MatchesLocation(condition.Location, facts))
+        {
+            return false;
+        }
+
+        return condition.Trigger != ForceStatusEnableTrigger.OccupyingWater || facts.OccupiesWater;
+    }
+
+    private static bool MatchesLocation(ConditionLocation location, Facts facts)
+    {
+        if (location.Kind == ConditionLocationKind.TerrainTag
+            && location.TagId is not null
+            && facts.TerrainTagIds.Count == 0
+            && (facts.OccupiesWater || facts.LostOnWater))
+        {
+            return true;
+        }
+
+        return location.Matches(facts.TerrainTypeId, facts.TerrainTagIds, facts.StructureTypeId, facts.StructureTagIds);
+    }
+
+    private static bool MatchesEnableTrigger(ForceStatusEnableTrigger trigger, Facts facts)
     {
         return trigger switch
         {
             ForceStatusEnableTrigger.Hold => facts.Held,
             ForceStatusEnableTrigger.AfterBattle => facts.FoughtBattle,
             ForceStatusEnableTrigger.BattleWon => facts.Won,
-            ForceStatusEnableTrigger.BattleLostOrRetreat => facts.Lost || facts.Retreated,
+            ForceStatusEnableTrigger.BattleLostOrRetreat => facts.Lost || facts.Retreated || facts.LostOnWater,
             ForceStatusEnableTrigger.OccupyingWater => facts.OccupiesWater,
+            ForceStatusEnableTrigger.ConsecutiveActions => facts.IsActionPhase,
+            ForceStatusEnableTrigger.Surrender => facts.Surrendered,
+            ForceStatusEnableTrigger.Build => facts.Built,
+            ForceStatusEnableTrigger.Pillage => facts.Pillaged,
+            ForceStatusEnableTrigger.Repair => facts.Repaired,
+            ForceStatusEnableTrigger.Destroy => facts.Destroyed,
             ForceStatusEnableTrigger.Disease => false,
             _ => false,
         };
     }
 
-    private static bool MatchesClear(ForceStatusClearTrigger trigger, Facts facts)
+    private static bool MatchesClearTrigger(ForceStatusClearTrigger trigger, Facts facts)
     {
         return trigger switch
         {
@@ -1110,6 +1224,12 @@ public static class ForceStatusRules
             ForceStatusClearTrigger.BattleLostOrRetreat => facts.Lost || facts.Retreated,
             ForceStatusClearTrigger.HoldWhileNotWater => facts.Held && !facts.OccupiesWater,
             ForceStatusClearTrigger.HoldAtSettlement => facts.Held && facts.OccupiesCureSettlement,
+            ForceStatusClearTrigger.ConsecutiveActions => facts.IsActionPhase,
+            ForceStatusClearTrigger.Surrender => facts.Surrendered,
+            ForceStatusClearTrigger.Build => facts.Built,
+            ForceStatusClearTrigger.Pillage => facts.Pillaged,
+            ForceStatusClearTrigger.Repair => facts.Repaired,
+            ForceStatusClearTrigger.Destroy => facts.Destroyed,
             _ => false,
         };
     }

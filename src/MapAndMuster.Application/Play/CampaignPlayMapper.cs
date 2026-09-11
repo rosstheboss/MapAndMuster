@@ -254,12 +254,12 @@ internal static class CampaignPlayMapper
         {
             return
             [
-                .. play.RequiredOrderPlayers(window.Id)
+                .. play.ActionRosterPlayers()
                     .Select(userId => new PlayCommitmentDetail
                     {
                         UserId = userId,
                         Username = names.GetValueOrDefault(userId),
-                        IsCommitted = play.Commitments.Any(item => item.WindowId == window.Id && item.UserId == userId),
+                        IsCommitted = play.IsActionCommitted(window.Id, userId),
                     }),
             ];
         }
@@ -285,7 +285,7 @@ internal static class CampaignPlayMapper
     {
         if (window is { Kind: RoundPhaseKind.Action, Status: PhaseWindowStatus.Open })
         {
-            return play.Commitments.Any(item => item.WindowId == window.Id && item.UserId == viewerUserId);
+            return play.IsActionCommitted(window.Id, viewerUserId);
         }
 
         if (window is { Kind: RoundPhaseKind.Battle, Status: PhaseWindowStatus.Open }
@@ -969,10 +969,7 @@ internal static class CampaignPlayMapper
             PlayLogKind.ConflictingBuildHold =>
                 $"Competing structure actions in {territory} became Hold for {actor}.",
             PlayLogKind.ResolvedAction =>
-                $"{actor} resolved {action} in {territory}"
-                    + (entry.TargetTerritoryId is null || entry.TargetTerritoryId == entry.TerritoryId
-                        ? "."
-                        : $" toward {target}."),
+                FormatResolvedAction(entry, actor, territory, target),
             PlayLogKind.BattleCreated =>
                 $"A battle started in {territory} between {participants}.",
             PlayLogKind.BattleFinalized =>
@@ -994,7 +991,7 @@ internal static class CampaignPlayMapper
                     ? $"{actor} overrode the battle result in {territory}. Winner: {ForceController(play, gmWinner, names)}."
                     : $"{actor} overrode the battle result in {territory} as a draw.",
             PlayLogKind.PlayerRetreat =>
-                $"{actor} retreated from {territory} to {target}.",
+                $"{actor} retreated force at {territory} to {target}.",
             PlayLogKind.PlayerSurrendered =>
                 $"{actor} surrendered in {territory} and retreated to {target}.",
             PlayLogKind.RetreatCollisionResolved =>
@@ -1022,11 +1019,9 @@ internal static class CampaignPlayMapper
             PlayLogKind.CampaignStarted =>
                 "The campaign started.",
             PlayLogKind.ScheduleExtended =>
-                actor == "A force"
-                    ? "A manager lengthened remaining phases or added rounds."
-                    : $"{actor} lengthened remaining phases or added rounds.",
+                ScheduleExtendedSummary(actor, entry.Message),
             PlayLogKind.ForcesRejoined =>
-                $"{actor}'s forces rejoined in {territory} and now share one action.",
+                $"{actor} merged forces at {territory}.",
             PlayLogKind.PlayerChat =>
                 entry.Message ?? string.Empty,
             PlayLogKind.DebugEntered =>
@@ -1060,9 +1055,105 @@ internal static class CampaignPlayMapper
                     ? $"{ForceController(play, statusForce, names)}: {entry.Message ?? "status changed."}"
                     : entry.Message ?? $"{actor} recorded a force status change.",
             PlayLogKind.AllianceBetrayed =>
-                $"{actor} betrayed an ally in {territory}.",
+                FormatAllianceBetrayed(entry, actor, territory, campaign, play, names),
             _ => $"{actor} recorded a campaign change in {territory}.",
         };
+    }
+
+    private static string ScheduleExtendedSummary(string actor, string? message)
+    {
+        var body = string.IsNullOrWhiteSpace(message)
+            ? "lengthened remaining phases or added rounds."
+            : message.Trim();
+        var who = actor == "A force" ? "A manager" : actor;
+        return $"{who} {body}";
+    }
+
+    private static string FormatResolvedAction(PlayLogEntry entry, string actor, string territory, string target)
+    {
+        var structure = PlayLogFacts.TryReadDestroyedStructure(entry.Message, out var destroyed)
+            ? destroyed
+            : string.IsNullOrWhiteSpace(entry.Message) ? "structure" : entry.Message;
+        return entry.ActionKind switch
+        {
+            ActionKind.Move => $"{actor} moved force at {territory} to {target}.",
+            ActionKind.Hold => $"{actor} held in {territory}.",
+            ActionKind.Split => $"{actor} split force at {territory} into {target}.",
+            ActionKind.Build => $"{actor} built a {structure} at {territory}.",
+            ActionKind.Repair => $"{actor} repaired the {structure} at {territory}.",
+            ActionKind.Pillage when PlayLogFacts.TryReadDestroyedStructure(entry.Message, out _) =>
+                $"{actor} destroyed {structure} at {territory}.",
+            ActionKind.Pillage => $"{actor} pillaged {structure} at {territory}.",
+            ActionKind.Retreat => $"{actor} retreated force at {territory} to {target}.",
+            _ => $"{actor} resolved {entry.ActionKind?.ToString() ?? "Hold"} in {territory}"
+                + (entry.TargetTerritoryId is null || entry.TargetTerritoryId == entry.TerritoryId
+                    ? "."
+                    : $" toward {target}."),
+        };
+    }
+
+    private static string FormatAllianceBetrayed(
+        PlayLogEntry entry,
+        string actor,
+        string territory,
+        StoredCampaign campaign,
+        CampaignPlayState play,
+        IReadOnlyDictionary<Guid, string> names)
+    {
+        if (!PlayLogFacts.TryReadBetrayal(entry.Message, out var kind, out var victimUserId, out var factionId, out var structureName)
+            && entry.RelatedForceIds.Count > 0)
+        {
+            var victimForce = play.Forces.FirstOrDefault(item => item.Id == entry.RelatedForceIds[0]);
+            kind = PlayLogFacts.BetrayalAttack;
+            victimUserId = victimForce?.ControllerUserId;
+            factionId = victimForce?.FactionId ?? default;
+            structureName = null;
+        }
+
+        if (kind is null)
+        {
+            return $"{actor} betrayed an ally in {territory}.";
+        }
+
+        var victim = victimUserId is { } id
+            ? ActorName(id, names)
+            : PlayerOfFaction(campaign, play, factionId, names);
+        var faction = FactionName(campaign, factionId);
+        var structure = string.IsNullOrWhiteSpace(structureName) ? "structure" : structureName;
+        return kind switch
+        {
+            PlayLogFacts.BetrayalAttack =>
+                $"Treachery! {actor} launched a surprise attack against {victim} at {territory}. They are now locked in battle. {actor} is no longer allies with {faction}.",
+            PlayLogFacts.BetrayalPillage =>
+                $"Treachery! {actor} betrayed {victim} and pillaged the {structure} at {territory}. {actor} is no longer allies with {faction}.",
+            PlayLogFacts.BetrayalDestroy =>
+                $"Treachery! {actor} betrayed {victim} and destroyed the {structure} at {territory}. {actor} is no longer allies with {faction}.",
+            PlayLogFacts.BetrayalClaim =>
+                $"Treachery! {actor} claimed the land held by their ally {victim}. {actor} is no longer allies with {faction}.",
+            _ => $"{actor} betrayed an ally in {territory}.",
+        };
+    }
+
+    private static string FactionName(StoredCampaign campaign, Guid factionId)
+    {
+        var faction = campaign.Factions.FirstOrDefault(item => item.Id == factionId);
+        return string.IsNullOrWhiteSpace(faction?.Name) ? "a faction" : faction.Name;
+    }
+
+    private static string PlayerOfFaction(
+        StoredCampaign campaign,
+        CampaignPlayState play,
+        Guid factionId,
+        IReadOnlyDictionary<Guid, string> names)
+    {
+        var member = campaign.Memberships.FirstOrDefault(item => item.FactionId == factionId);
+        if (member is not null)
+        {
+            return ActorName(member.UserId, names);
+        }
+
+        var force = play.Forces.FirstOrDefault(item => item.FactionId == factionId);
+        return ActorName(force?.ControllerUserId, names);
     }
 
     private static string ActorName(Guid? userId, IReadOnlyDictionary<Guid, string> names)

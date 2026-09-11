@@ -863,6 +863,19 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task GetPlayRejectsWhenTheCampaignHasNotStarted()
+    {
+        var campaign = StoredCampaignFor(UserId);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var viewed = await new GetCampaignPlayHandler(store, new FakeClock(), new FakeAccounts())
+            .HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+
+        Assert.False(viewed.IsSuccess);
+        Assert.Equal(ErrorCodes.PlayNotStarted, viewed.ErrorCode);
+        Assert.Null(store.Updated);
+    }
+
+    [Fact]
     public async Task GetPlaySeedsForcesAndHidesOtherPlayersDrafts()
     {
         var northSpawn = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -994,6 +1007,173 @@ public sealed class CampaignHandlerTests
         Assert.Empty(otherView.Value!.MyDrafts);
         Assert.Empty(otherView.Value.Orders);
         Assert.DoesNotContain(otherView.Value.Commitments, item => item.IsCommitted);
+    }
+
+    [Fact]
+    public async Task GetPlayMarksPlayersWithOnlyInBattleForcesAsCommitted()
+    {
+        var campaign = WithCopied(
+            PlayableInProgressCampaign(),
+            memberships:
+            [
+                new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                },
+                new StoredCampaignMembership
+                {
+                    UserId = OtherUserId,
+                    IsGameMaster = false,
+                    IsPlayer = true,
+                    FactionId = SouthFactionId,
+                },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var accounts = new FakeAccounts();
+        var get = new GetCampaignPlayHandler(store, new FakeClock(), accounts);
+        var seeded = await get.HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+        Assert.True(seeded.IsSuccess);
+        Assert.NotNull(seeded.Value);
+        var play = store.Existing!.PlayState!;
+        var north = play.Forces.Single(force => force.ControllerUserId == UserId);
+        var south = play.Forces.Single(force => force.ControllerUserId == OtherUserId);
+        store.Existing = WithCopied(
+            store.Existing,
+            playState: play.With(forces: [north.With(inBattle: true), south]));
+
+        var viewed = await get.HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+
+        Assert.True(viewed.IsSuccess);
+        Assert.NotNull(viewed.Value);
+        Assert.True(viewed.Value.IsCommitted);
+        Assert.Contains(viewed.Value.Commitments, item => item.UserId == UserId && item.IsCommitted);
+        Assert.Contains(viewed.Value.Commitments, item => item.UserId == OtherUserId && !item.IsCommitted);
+        Assert.Equal(PhaseWindowStatus.Open, store.Existing.PlayState!.CurrentWindow()!.Status);
+    }
+
+    [Fact]
+    public async Task GetCampaignReturnsAutomaticPrivateObjectiveProgressOnlyToHolders()
+    {
+        var typeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa10");
+        var assignmentId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb10");
+        var northSpawn = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var southSpawn = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var midland = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var plainsId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var windowId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+        var graph = new StoredMapGraph
+        {
+            Territories =
+            [
+                SquareTerritory(northSpawn, 1, 0.05, 0.05, 0.2, NorthFactionId, plainsId, owner: NorthFactionId),
+                SquareTerritory(midland, 2, 0.30, 0.05, 0.2, null, plainsId, owner: NorthFactionId),
+                SquareTerritory(southSpawn, 3, 0.55, 0.05, 0.2, SouthFactionId, plainsId, owner: SouthFactionId),
+            ],
+            Adjacencies = [],
+        };
+        var assignment = new PrivateObjectiveAssignment(
+            assignmentId,
+            typeId,
+            PrivateObjectiveHolderKind.Player,
+            UserId,
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            Now);
+        var play = new CampaignPlayState(
+            [
+                new PhaseWindow(
+                    windowId,
+                    1,
+                    1,
+                    RoundPhaseKind.Action,
+                    3,
+                    DurationUnit.Days,
+                    Now.AddHours(-2),
+                    Now.AddDays(1),
+                    PhaseWindowStatus.Open),
+            ],
+            [
+                new CampaignForce(Guid.NewGuid(), UserId, NorthFactionId, northSpawn, false),
+                new CampaignForce(Guid.NewGuid(), OtherUserId, SouthFactionId, southSpawn, false),
+            ],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            privateObjectives: [assignment]);
+        var campaign = WithCopied(
+            StoredCampaignFor(UserId),
+            memberships:
+            [
+                new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                },
+                new StoredCampaignMembership
+                {
+                    UserId = OtherUserId,
+                    IsGameMaster = false,
+                    IsPlayer = true,
+                    FactionId = SouthFactionId,
+                },
+            ],
+            startsUtc: Now.AddHours(-1),
+            endsUtc: Now.AddDays(40),
+            mapGraph: graph,
+            terrainTypes:
+            [
+                new StoredTerrainType
+                {
+                    Id = plainsId,
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [],
+                },
+            ],
+            playState: play,
+            privateObjectiveTypes:
+            [
+                new StoredPrivateObjectiveType
+                {
+                    Id = typeId,
+                    Name = "Hold five territories",
+                    Description = "Control five territories.",
+                    CampaignPoints = 4,
+                    AllowedHolderKinds = ["Player"],
+                    ScoringKind = "Automatic",
+                    AutomaticKind = "ControlTerritoryCount",
+                    RequiredCount = 5,
+                },
+            ]);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new GetCampaignHandler(store, new FakeClock(), new FakeAccounts());
+
+        var holder = await handler.HandleAsync(campaign.Id, UserId, CancellationToken.None);
+        Assert.True(holder.IsSuccess);
+        var holderAssignment = Assert.Single(holder.Value!.PrivateObjectives);
+        Assert.Equal("Control five territories.", holderAssignment.Description);
+        Assert.Equal(2, holderAssignment.CurrentCount);
+        Assert.Equal(5, holderAssignment.RequiredCount);
+
+        var other = await handler.HandleAsync(campaign.Id, OtherUserId, CancellationToken.None);
+        Assert.True(other.IsSuccess);
+        var hidden = Assert.Single(other.Value!.PrivateObjectives);
+        Assert.Null(hidden.Name);
+        Assert.Null(hidden.Description);
+        Assert.Null(hidden.CurrentCount);
+        Assert.Null(hidden.RequiredCount);
     }
 
     [Fact]
@@ -1352,6 +1532,84 @@ public sealed class CampaignHandlerTests
         Assert.True(ended.IsSuccess);
         Assert.Null(store.Updated);
         Assert.False(store.Deleted);
+    }
+
+    [Fact]
+    public async Task EndClosesAgainstTheCurrentRevisionWhenTheClientRevisionIsStale()
+    {
+        var campaign = WithCopied(StoredCampaignFor(UserId), revision: 6);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new EndCampaignHandler(
+            store,
+            new FakeClock(),
+            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()),
+            new FakeAccounts());
+
+        var ended = await handler.HandleAsync(
+            new EndCampaignCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+
+        Assert.True(ended.IsSuccess);
+        Assert.Equal(Now, store.Updated!.ClosedUtc);
+    }
+
+    [Fact]
+    public async Task EndRetriesWhenAnotherWriteMovesTheRevision()
+    {
+        var campaign = StoredCampaignFor(UserId);
+        var store = new FakeCampaignStore { Existing = campaign, UpdateConflictsRemaining = 1 };
+        var handler = new EndCampaignHandler(
+            store,
+            new FakeClock(),
+            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()),
+            new FakeAccounts());
+
+        var ended = await handler.HandleAsync(
+            new EndCampaignCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+
+        Assert.True(ended.IsSuccess);
+        Assert.Equal(Now, store.Updated!.ClosedUtc);
+        Assert.Equal(0, store.UpdateConflictsRemaining);
+    }
+
+    [Fact]
+    public async Task EndReturnsConflictAfterRepeatedRevisionMoves()
+    {
+        var campaign = StoredCampaignFor(UserId);
+        var store = new FakeCampaignStore { Existing = campaign, UpdateConflictsRemaining = 3 };
+        var handler = new EndCampaignHandler(
+            store,
+            new FakeClock(),
+            new CampaignNotificationPublisher(new FakeNoticeStore(), new FakeAccounts(), new FakeEmailOutbox(), new FakeClock()),
+            new FakeAccounts());
+
+        var ended = await handler.HandleAsync(
+            new EndCampaignCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+                ExpectedRevision = 1,
+            },
+            CancellationToken.None);
+
+        Assert.False(ended.IsSuccess);
+        Assert.Equal(ErrorCodes.ConcurrencyConflict, ended.ErrorCode);
+        Assert.Null(store.Updated);
+        Assert.Equal(0, store.UpdateConflictsRemaining);
     }
 
     [Fact]
@@ -2194,7 +2452,8 @@ public sealed class CampaignHandlerTests
         IReadOnlyList<StoredTerrainType>? terrainTypes = null,
         IReadOnlyList<StoredItemObjectiveType>? itemObjectiveTypes = null,
         MapAndMuster.Domain.Play.CampaignPlayState? playState = null,
-        int? revision = null)
+        int? revision = null,
+        IReadOnlyList<StoredPrivateObjectiveType>? privateObjectiveTypes = null)
     {
         return new StoredCampaign
         {
@@ -2234,6 +2493,7 @@ public sealed class CampaignHandlerTests
             BattleScoring = campaign.BattleScoring,
             RankingObjectivePoints = campaign.RankingObjectivePoints,
             PlayState = playState ?? campaign.PlayState,
+            PrivateObjectiveTypes = privateObjectiveTypes ?? campaign.PrivateObjectiveTypes,
         };
     }
 
@@ -2498,6 +2758,28 @@ public sealed class CampaignHandlerTests
             int expectedRevision,
             CancellationToken cancellationToken)
         {
+            if (Existing is not null && Existing.Id == campaign.Id && UpdateConflictsRemaining > 0)
+            {
+                UpdateConflictsRemaining--;
+                Existing = WithCopied(Existing, revision: Existing.Revision + 1);
+                return Task.FromResult(new UpdateStoredCampaignOutcome
+                {
+                    IsSuccess = false,
+                    ErrorCode = ErrorCodes.ConcurrencyConflict,
+                    Message = "The campaign was changed by another request. Reload and try again.",
+                });
+            }
+
+            if (Existing is not null && Existing.Id == campaign.Id && Existing.Revision != expectedRevision)
+            {
+                return Task.FromResult(new UpdateStoredCampaignOutcome
+                {
+                    IsSuccess = false,
+                    ErrorCode = ErrorCodes.ConcurrencyConflict,
+                    Message = "The campaign was changed by another request. Reload and try again.",
+                });
+            }
+
             Updated = campaign;
             Existing = campaign;
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = campaign });
@@ -2603,6 +2885,8 @@ public sealed class CampaignHandlerTests
         }
 
         public int PlayUpdateConflictsRemaining { get; set; }
+
+        public int UpdateConflictsRemaining { get; set; }
 
         public Task<UpdateStoredCampaignOutcome> UpdatePlayStateAsync(
             Guid campaignId,

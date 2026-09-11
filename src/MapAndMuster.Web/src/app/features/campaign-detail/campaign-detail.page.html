@@ -263,12 +263,11 @@
             </button>
           </h2>
           @if (isOpen('orders')) {
-            <p>
-              Choose an action for each of your forces from the map or the list below. Commit is available after every
-              force that is not in battle has a saved draft. Missing drafts become Hold if time runs out.
-            </p>
-            @if (commitmentSummary(); as summary) {
-              <p class="commitment-summary">{{ summary.text }}</p>
+            @if (orderableForces().length > 0) {
+              <p>
+                Choose an action for each of your forces from the map or the list below. Commit is available after every
+                force that is not in battle has a saved draft. Missing drafts become Hold if time runs out.
+              </p>
             }
             @if (play.isCommitted) {
               @if (canUncommit()) {
@@ -277,6 +276,11 @@
                   closes they resolve and cannot be backed out.
                 </p>
                 <button type="button" class="button-secondary" (click)="uncommit()">Uncommit</button>
+              } @else if (orderableForces().length === 0) {
+                <p>
+                  You have no actions to commit this phase. Players whose forces are locked in battle, or who otherwise
+                  have nothing to order, are committed automatically.
+                </p>
               } @else {
                 <p>Your actions are committed. The phase has closed and the orders are resolving.</p>
               }
@@ -317,8 +321,10 @@
                     }
                   </ul>
                 }
-                @if (draftKindsFor(force).length === 0) {
-                  <p class="muted">This force is in battle and does not need an action until the battle is resolved.</p>
+                @if (force.inBattle) {
+                  <p class="muted">{{ battleLockCaption(force) }}</p>
+                } @else if (draftKindsFor(force).length === 0) {
+                  <p class="muted">This force has no actions to commit this phase.</p>
                 } @else {
                   <div class="force-draft-row">
                     <div class="field grow">
@@ -470,30 +476,41 @@
                 }
               </fieldset>
             }
-            <h3 #commitmentsBlock>Commitments</h3>
+            <h3 #commitmentsBlock>
+              <button
+                type="button"
+                class="section-toggle"
+                [attr.aria-expanded]="commitmentsRosterOpen()"
+                (click)="toggleCommitmentsRoster()"
+              >
+                Commitments
+              </button>
+            </h3>
             @if (commitmentSummary(); as summary) {
               <p class="commitment-summary">{{ summary.text }}</p>
             }
-            <ul class="plain-list commitment-roster">
-              @for (item of play.commitments; track item.userId) {
-                <li>
-                  @if (item.username; as username) {
-                    <a class="profile-link" [routerLink]="['/users', username]" [queryParams]="profileFrom()">{{
-                      username
-                    }}</a>
-                  } @else {
-                    {{ item.userId }}
-                  }
-                  <span
-                    class="status-chip"
-                    [class.is-committed]="item.isCommitted"
-                    [class.is-drafting]="!item.isCommitted"
-                  >
-                    {{ item.isCommitted ? 'Committed' : 'Drafting' }}
-                  </span>
-                </li>
-              }
-            </ul>
+            @if (commitmentsRosterOpen()) {
+              <ul class="plain-list commitment-roster">
+                @for (item of play.commitments; track item.userId) {
+                  <li>
+                    @if (item.username; as username) {
+                      <a class="profile-link" [routerLink]="['/users', username]" [queryParams]="profileFrom()">{{
+                        username
+                      }}</a>
+                    } @else {
+                      {{ item.userId }}
+                    }
+                    <span
+                      class="status-chip"
+                      [class.is-committed]="item.isCommitted"
+                      [class.is-drafting]="!item.isCommitted"
+                    >
+                      {{ item.isCommitted ? 'Committed' : 'Drafting' }}
+                    </span>
+                  </li>
+                }
+              </ul>
+            }
           }
         </div>
       }
@@ -2344,8 +2361,8 @@
       @if (!isViewerPrivateAssignment(assignment)) {
         <span class="muted"> · {{ privateObjectiveHolderCaption(assignment) }}</span>
       }
-      @if (assignment.description) {
-        <p>{{ assignment.description }}</p>
+      @if (privateObjectiveSummary(assignment); as summary) {
+        <p>{{ summary }}</p>
       }
       @if (assignment.canClaim) {
         <button type="button" class="button" (click)="claimPrivateObjective(assignment.id)">

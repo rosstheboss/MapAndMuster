@@ -142,6 +142,105 @@ public sealed class FactionSpecialRulePoliciesTests
     }
 
     [Fact]
+    public void UndergroundNetworkPrefersUnoccupiedNeutralTownThenOwnedThenOccupied()
+    {
+        var skaven = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa06");
+        var rules = Context(skaven, SpecialRuleEffectKeys.UndergroundNetwork);
+        var town = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var city = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        var capital = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        var plains = Guid.Parse("88888888-8888-8888-8888-888888888888");
+        PlayTerritory Territory(Guid id, int number, Guid? owner, string name, Guid? spawn = null) =>
+            new(id, number, owner, spawn, Guid.NewGuid(), name, StructureCondition.Operational);
+
+        var map = new PlayMap(
+            [
+                Territory(plains, 1, null, "Plains"),
+                Territory(city, 2, Bretonnia, "City"),
+                Territory(capital, 3, ChaosDwarfs, "Capital City"),
+                Territory(town, 4, null, "Town"),
+            ],
+            []);
+        var occupiedCity = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, city, false);
+
+        var neutral = FactionSpecialRulePolicies.StartingPlacement(map, skaven, null, [], rules, static _ => 0);
+        Assert.Equal((town, true), neutral);
+
+        var owned = FactionSpecialRulePolicies.StartingPlacement(
+            map,
+            skaven,
+            null,
+            [new CampaignForce(Guid.NewGuid(), Player, skaven, town, false)],
+            rules,
+            static _ => 0);
+        Assert.Equal((city, true), owned);
+
+        var last = FactionSpecialRulePolicies.StartingPlacement(
+            map,
+            skaven,
+            null,
+            [
+                new CampaignForce(Guid.NewGuid(), Player, skaven, town, false),
+                occupiedCity,
+                new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), ChaosDwarfs, capital, false),
+            ],
+            rules,
+            static _ => 0);
+        Assert.Equal((city, false), last);
+    }
+
+    [Fact]
+    public void UndergroundNetworkDoesNotCaptureSpawnOrCapitalAndPlacesWhenEveryTownIsOccupied()
+    {
+        var skaven = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa06");
+        var rules = Context(skaven, SpecialRuleEffectKeys.UndergroundNetwork);
+        var spawnTown = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var capital = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        var map = new PlayMap(
+            [
+                new PlayTerritory(spawnTown, 1, Bretonnia, Bretonnia, Guid.NewGuid(), "Town", StructureCondition.Operational),
+                new PlayTerritory(capital, 2, ChaosDwarfs, null, Guid.NewGuid(), "Capital City", StructureCondition.Operational),
+            ],
+            []);
+
+        var spawn = FactionSpecialRulePolicies.StartingPlacement(map, skaven, null, [], rules, static _ => 0);
+        Assert.Equal((spawnTown, false), spawn);
+
+        var occupied = FactionSpecialRulePolicies.StartingPlacement(
+            map,
+            skaven,
+            null,
+            [
+                new CampaignForce(Guid.NewGuid(), Player, Bretonnia, spawnTown, false),
+                new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), ChaosDwarfs, capital, false),
+            ],
+            rules,
+            static _ => 0);
+        Assert.Equal((spawnTown, false), occupied);
+
+        var blocked = FactionSpecialRulePolicies.ForcedSpawnPlacement(
+            map,
+            skaven,
+            null,
+            [],
+            rules,
+            static _ => 0,
+            new HashSet<Guid> { spawnTown });
+        Assert.Equal((capital, false), blocked);
+
+        var empty = FactionSpecialRulePolicies.StartingPlacement(
+            new PlayMap(
+                [new PlayTerritory(Origin, 1, null, null, null, null, StructureCondition.Operational)],
+                []),
+            skaven,
+            null,
+            [],
+            rules,
+            static _ => 0);
+        Assert.Null(empty);
+    }
+
+    [Fact]
     public void OptionalSubfactionBetrayalTurnsTheWholeFactionAgainstTheTraitorOnly()
     {
         var traitorId = Guid.NewGuid();

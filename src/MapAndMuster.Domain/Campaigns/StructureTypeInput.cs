@@ -43,4 +43,7 @@ public sealed class StructureTypeInput
 
     /// <summary>Gets temporary supply awarded when this structure is destroyed. Defaults to 1.</summary>
     public int? DestroySupplyPoints { get; init; }
+
+    /// <summary>Gets structure-catalog tag identifiers assigned to this type.</summary>
+    public IReadOnlyList<Guid>? TagIds { get; init; }
 }

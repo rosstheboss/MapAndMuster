@@ -21,6 +21,7 @@ public sealed class StructureTypeSetup
     /// <param name="supplyPoints">Ongoing map supply while this structure is operational.</param>
     /// <param name="pillageSupplyPoints">Temporary supply awarded when this structure is pillaged.</param>
     /// <param name="destroySupplyPoints">Temporary supply awarded when this structure is destroyed.</param>
+    /// <param name="tagIds">Structure-catalog tags assigned to this type.</param>
     public StructureTypeSetup(
         Guid id,
         string name,
@@ -34,7 +35,8 @@ public sealed class StructureTypeSetup
         int campaignPoints = 0,
         int supplyPoints = HuntInEstaliaDefaults.SupplyPoints,
         int pillageSupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
-        int destroySupplyPoints = HuntInEstaliaDefaults.SupplyPoints)
+        int destroySupplyPoints = HuntInEstaliaDefaults.SupplyPoints,
+        IReadOnlyList<Guid>? tagIds = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(missions);
@@ -55,6 +57,7 @@ public sealed class StructureTypeSetup
         SupplyPoints = supplyPoints;
         PillageSupplyPoints = pillageSupplyPoints;
         DestroySupplyPoints = destroySupplyPoints;
+        TagIds = DistinctIds(tagIds);
     }
 
     /// <summary>Gets the structure type identifier.</summary>
@@ -95,4 +98,17 @@ public sealed class StructureTypeSetup
 
     /// <summary>Gets temporary supply awarded when this structure is destroyed.</summary>
     public int DestroySupplyPoints { get; }
+
+    /// <summary>Gets structure-catalog tags assigned to this type.</summary>
+    public IReadOnlyList<Guid> TagIds { get; }
+
+    private static IReadOnlyList<Guid> DistinctIds(IReadOnlyList<Guid>? ids)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            return [];
+        }
+
+        return [.. ids.Where(static id => id != Guid.Empty).Distinct()];
+    }
 }

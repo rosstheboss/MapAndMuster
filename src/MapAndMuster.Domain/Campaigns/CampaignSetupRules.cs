@@ -252,6 +252,14 @@ public static class CampaignSetupRules
     /// <param name="splitForceSupplyPenaltyIsPercent">Whether the split-force penalty is a percent of map supply. The default is a raw amount.</param>
     /// <param name="standardBattleResultQuestions">Reusable battle-result question inputs. Omitted or empty means none.</param>
     /// <param name="missions">Reusable mission catalog inputs. Omitted means nested terrain and structure missions only.</param>
+    /// <param name="terrainTags">Terrain-catalog tag inputs.</param>
+    /// <param name="structureTags">Structure-catalog tag inputs.</param>
+    /// <param name="factionTags">Faction-catalog tag inputs shared with subfactions.</param>
+    /// <param name="missionTags">Mission-catalog tag inputs.</param>
+    /// <param name="mostTerritoriesTerrainTagId">Optional terrain tag that limits most-territories scoring.</param>
+    /// <param name="longestTerritoryChainTerrainTagId">Optional terrain tag that limits longest-chain scoring.</param>
+    /// <param name="mostStructurePointsStructureTagId">Optional structure tag that limits most-structure-points scoring.</param>
+    /// <param name="pointsPerTerritoryTerrainTagId">Optional terrain tag that limits points-per-territory scoring.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
@@ -303,7 +311,15 @@ public static class CampaignSetupRules
         int? splitForceSupplyPenaltyPercent = null,
         bool? splitForceSupplyPenaltyIsPercent = null,
         IReadOnlyList<StandardBattleResultQuestionInput>? standardBattleResultQuestions = null,
-        IReadOnlyList<MissionInput>? missions = null)
+        IReadOnlyList<MissionInput>? missions = null,
+        IReadOnlyList<CatalogTagInput>? terrainTags = null,
+        IReadOnlyList<CatalogTagInput>? structureTags = null,
+        IReadOnlyList<CatalogTagInput>? factionTags = null,
+        IReadOnlyList<CatalogTagInput>? missionTags = null,
+        Guid? mostTerritoriesTerrainTagId = null,
+        Guid? longestTerritoryChainTerrainTagId = null,
+        Guid? mostStructurePointsStructureTagId = null,
+        Guid? pointsPerTerritoryTerrainTagId = null)
     {
         var collected = new List<DomainError>();
         setup = null;
@@ -353,14 +369,23 @@ public static class CampaignSetupRules
         var missionIndex = new MissionIndex();
         var parsedSpecialRules = ParseSpecialRules(specialRules, usedIds, collected);
         var parsedStandardQuestions = ParseStandardBattleResultQuestions(standardBattleResultQuestions, usedIds, collected);
-        var parsedForceStatuses = ParseForceStatuses(forceStatuses, usedIds, collected);
-        var knownForceStatusNames = parsedForceStatuses
-            .Select(static status => status.Name)
+        var parsedTerrainTags = CatalogTagRules.Parse(terrainTags, CatalogTagKind.Terrain, usedIds, collected);
+        var parsedStructureTags = CatalogTagRules.Parse(structureTags, CatalogTagKind.Structure, usedIds, collected);
+        var parsedFactionTags = CatalogTagRules.Parse(factionTags, CatalogTagKind.Faction, usedIds, collected);
+        var parsedMissionTags = CatalogTagRules.Parse(missionTags, CatalogTagKind.Mission, usedIds, collected);
+        var terrainInputs = terrainTypes ?? CampaignCatalogDefaults.TerrainTypes();
+        var waterTagId = CatalogTagRules.EnsureWaterTag(parsedTerrainTags, terrainInputs, usedIds);
+        var knownForceStatusNames = (forceStatuses ?? [])
+            .Select(static status => status.Name?.Trim())
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Cast<string>()
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var specialRuleIds = parsedSpecialRules.Select(static rule => rule.Id).ToHashSet();
-        var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, specialRuleIds, collected);
+        var factionTagIds = parsedFactionTags.Select(static tag => tag.Id).ToHashSet();
+        var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, specialRuleIds, factionTagIds, collected);
         ValidateAllyMembership(parsedFactions, parsedGroups, collected);
         var parsedLinks = ParseLinks(links, collected);
+        var missionTagIds = parsedMissionTags.Select(static tag => tag.Id).ToHashSet();
         _ = ParseMissions(
             missions,
             usedIds,
@@ -371,9 +396,36 @@ public static class CampaignSetupRules
             collected,
             maxCount: MaxMissionCatalogCount,
             standardQuestions: parsedStandardQuestions,
-            knownForceStatusNames: knownForceStatusNames);
-        var parsedTerrain = ParseTerrainTypes(terrainTypes, usedIds, missionIndex, parsedStandardQuestions, collected, knownForceStatusNames);
-        var parsedStructures = ParseStructureTypes(structureTypes, usedIds, missionIndex, parsedStandardQuestions, collected, knownForceStatusNames);
+            knownForceStatusNames: knownForceStatusNames,
+            knownTagIds: missionTagIds);
+        var parsedTerrain = ParseTerrainTypes(
+            terrainInputs,
+            usedIds,
+            missionIndex,
+            parsedStandardQuestions,
+            collected,
+            knownForceStatusNames,
+            parsedTerrainTags.Select(static tag => tag.Id).ToHashSet(),
+            waterTagId,
+            missionTagIds);
+        var parsedStructures = ParseStructureTypes(
+            structureTypes,
+            usedIds,
+            missionIndex,
+            parsedStandardQuestions,
+            collected,
+            knownForceStatusNames,
+            parsedStructureTags.Select(static tag => tag.Id).ToHashSet(),
+            missionTagIds);
+        var parsedForceStatuses = ParseForceStatuses(
+            forceStatuses,
+            usedIds,
+            collected,
+            waterTagId,
+            parsedTerrain,
+            parsedStructures,
+            parsedTerrainTags,
+            parsedStructureTags);
         var structureTypeIds = parsedStructures.Select(static type => type.Id).ToHashSet();
         var knownItemObjectiveTypeIds = (itemObjectiveTypes ?? [])
             .Select(static item => item.Id)
@@ -388,7 +440,9 @@ public static class CampaignSetupRules
             parsedForceStatuses.Select(static status => status.Id).ToHashSet(),
             parsedFactions.Select(static faction => faction.Id).ToHashSet(),
             parsedGroups.Select(static group => group.Id).ToHashSet(),
-            collected);
+            collected,
+            parsedStructureTags.Select(static tag => tag.Id).ToHashSet(),
+            parsedTerrainTags.Select(static tag => tag.Id).ToHashSet());
         var privateObjectiveIds = parsedPrivate.Select(static type => type.Id).ToHashSet();
         var parsedItems = ParseItemObjectiveTypes(
             itemObjectiveTypes,
@@ -414,7 +468,13 @@ public static class CampaignSetupRules
             mostStructurePointsCampaignPoints,
             pointsPerTerritoryCampaignPoints,
             alliedRelicControlCampaignPoints,
-            collected);
+            collected,
+            mostTerritoriesTerrainTagId,
+            longestTerritoryChainTerrainTagId,
+            mostStructurePointsStructureTagId,
+            pointsPerTerritoryTerrainTagId,
+            parsedTerrainTags.Select(static tag => tag.Id).ToHashSet(),
+            parsedStructureTags.Select(static tag => tag.Id).ToHashSet());
         var parsedSchedule = ParseSchedule(schedule, collected);
         var parsedSplitForce = ParseSplitForcePenalty(splitForceSupplyPenaltyPercent, collected);
 
@@ -451,7 +511,11 @@ public static class CampaignSetupRules
             parsedSplitForce,
             splitForceSupplyPenaltyIsPercent ?? HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent,
             parsedStandardQuestions,
-            [.. missionIndex.ById.Values]);
+            [.. missionIndex.ById.Values],
+            parsedTerrainTags,
+            parsedStructureTags,
+            parsedFactionTags,
+            parsedMissionTags);
         errors = collected;
         return true;
     }
@@ -621,6 +685,7 @@ public static class CampaignSetupRules
         IReadOnlyList<AllyGroupSetup> allyGroups,
         HashSet<Guid> usedIds,
         HashSet<Guid> knownSpecialRuleIds,
+        HashSet<Guid> knownFactionTagIds,
         List<DomainError> errors)
     {
         var parsed = new List<FactionSetup>();
@@ -723,7 +788,13 @@ public static class CampaignSetupRules
                     knownSpecialRuleIds,
                     index,
                     errors),
-                appearances));
+                appearances,
+                CatalogTagRules.ParseAssigned(
+                    faction.TagIds,
+                    knownFactionTagIds,
+                    $"factions[{index}].tagIds",
+                    errors),
+                ParseSubfactionTags(faction.SubfactionTags, subfactions, knownFactionTagIds, index, errors)));
         }
 
         return parsed;
@@ -882,7 +953,10 @@ public static class CampaignSetupRules
         MissionIndex missions,
         IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
         List<DomainError> errors,
-        HashSet<string> knownForceStatusNames)
+        HashSet<string> knownForceStatusNames,
+        HashSet<Guid> knownTerrainTagIds,
+        Guid waterTagId,
+        HashSet<Guid> knownMissionTagIds)
     {
         var supplied = terrainTypes is null || terrainTypes.Count == 0
             ? CampaignCatalogDefaults.TerrainTypes()
@@ -934,7 +1008,8 @@ public static class CampaignSetupRules
                 requireAtLeastOne: true,
                 errors,
                 standardQuestions: standardQuestions,
-                knownForceStatusNames: knownForceStatusNames);
+                knownForceStatusNames: knownForceStatusNames,
+                knownTagIds: knownMissionTagIds);
             if (name is null || color is null)
             {
                 continue;
@@ -954,8 +1029,16 @@ public static class CampaignSetupRules
                 name,
                 color,
                 missionsForType,
-                input.IsWaterFeature ?? TerrainCatalog.IsWaterFeature(name),
-                ParseCatalogSupplyPoints(input.SupplyPoints)));
+                ParseCatalogSupplyPoints(input.SupplyPoints),
+                CatalogTagRules.WithWaterMigration(
+                    CatalogTagRules.ParseAssigned(
+                        input.TagIds,
+                        knownTerrainTagIds,
+                        $"terrainTypes[{index}].tagIds",
+                        errors),
+                    name,
+                    input.IsWaterFeature,
+                    waterTagId)));
         }
 
         return parsed;
@@ -967,7 +1050,9 @@ public static class CampaignSetupRules
         MissionIndex missions,
         IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
         List<DomainError> errors,
-        HashSet<string> knownForceStatusNames)
+        HashSet<string> knownForceStatusNames,
+        HashSet<Guid> knownStructureTagIds,
+        HashSet<Guid> knownMissionTagIds)
     {
         var supplied = structureTypes is null
             ? CampaignCatalogDefaults.StructureTypes()
@@ -1011,7 +1096,8 @@ public static class CampaignSetupRules
                 requireAtLeastOne: false,
                 errors,
                 standardQuestions: standardQuestions,
-                knownForceStatusNames: knownForceStatusNames);
+                knownForceStatusNames: knownForceStatusNames,
+                knownTagIds: knownMissionTagIds);
             if (name is null)
             {
                 continue;
@@ -1044,7 +1130,12 @@ public static class CampaignSetupRules
                     errors),
                 ParseCatalogSupplyPoints(input.SupplyPoints),
                 ParseCatalogSupplyPoints(input.PillageSupplyPoints),
-                ParseCatalogSupplyPoints(input.DestroySupplyPoints)));
+                ParseCatalogSupplyPoints(input.DestroySupplyPoints),
+                CatalogTagRules.ParseAssigned(
+                    input.TagIds,
+                    knownStructureTagIds,
+                    $"structureTypes[{index}].tagIds",
+                    errors)));
         }
 
         return parsed;
@@ -1320,7 +1411,13 @@ public static class CampaignSetupRules
         int? mostStructurePoints,
         int? pointsPerTerritory,
         int? alliedRelicControlPoints,
-        List<DomainError> errors)
+        List<DomainError> errors,
+        Guid? mostTerritoriesTerrainTagId,
+        Guid? longestTerritoryChainTerrainTagId,
+        Guid? mostStructurePointsStructureTagId,
+        Guid? pointsPerTerritoryTerrainTagId,
+        HashSet<Guid> knownTerrainTagIds,
+        HashSet<Guid> knownStructureTagIds)
     {
         return new GeneralPublicObjectivePoints(
             ParseCampaignPoints(
@@ -1352,7 +1449,31 @@ public static class CampaignSetupRules
                 alliedRelicControlPoints,
                 "alliedRelicControlCampaignPoints",
                 "Allied relic control campaign points",
-                errors));
+                errors),
+            OptionalKnownId(mostTerritoriesTerrainTagId, knownTerrainTagIds, "mostTerritoriesTerrainTagId", errors),
+            OptionalKnownId(longestTerritoryChainTerrainTagId, knownTerrainTagIds, "longestTerritoryChainTerrainTagId", errors),
+            OptionalKnownId(mostStructurePointsStructureTagId, knownStructureTagIds, "mostStructurePointsStructureTagId", errors),
+            OptionalKnownId(pointsPerTerritoryTerrainTagId, knownTerrainTagIds, "pointsPerTerritoryTerrainTagId", errors));
+    }
+
+    private static Guid? OptionalKnownId(
+        Guid? id,
+        HashSet<Guid> knownIds,
+        string field,
+        List<DomainError> errors)
+    {
+        if (id is not { } value || value == Guid.Empty)
+        {
+            return null;
+        }
+
+        if (!knownIds.Contains(value))
+        {
+            errors.Add(new DomainError($"{field}.invalid", "Choose a tag from this campaign.", field));
+            return null;
+        }
+
+        return value;
     }
 
     private static decimal ParseDifferentialMultiplier(decimal? value, List<DomainError> errors)
@@ -1819,7 +1940,8 @@ public static class CampaignSetupRules
         List<DomainError> errors,
         int? maxCount = null,
         IReadOnlyList<StandardBattleResultQuestionSetup>? standardQuestions = null,
-        HashSet<string>? knownForceStatusNames = null)
+        HashSet<string>? knownForceStatusNames = null,
+        HashSet<Guid>? knownTagIds = null)
     {
         var supplied = missions?
             .Where(static mission =>
@@ -1921,12 +2043,17 @@ public static class CampaignSetupRules
                     $"{field}[{missionIndex}].supplyPointsAdvantageSide",
                     errors),
                 mission.SupplyPointsAdvantageAmount,
-                ParseMissionStatusChanges(
+                    ParseMissionStatusChanges(
                     mission.StatusChanges,
                     usedIds,
                     knownForceStatusNames ?? [],
                     $"{field}[{missionIndex}].statusChanges",
                     $"{ownerLabel} mission {missionIndex + 1}",
+                    errors),
+                CatalogTagRules.ParseAssigned(
+                    mission.TagIds,
+                    knownTagIds ?? [],
+                    $"{field}[{missionIndex}].tagIds",
                     errors));
             index.ById[id] = created;
             index.Names[name] = id;
@@ -2590,7 +2717,12 @@ public static class CampaignSetupRules
     private static List<ForceStatusSetup> ParseForceStatuses(
         IReadOnlyList<ForceStatusInput>? forceStatuses,
         HashSet<Guid> usedIds,
-        List<DomainError> errors)
+        List<DomainError> errors,
+        Guid waterTagId,
+        IReadOnlyList<TerrainTypeSetup> terrainTypes,
+        IReadOnlyList<StructureTypeSetup> structureTypes,
+        IReadOnlyList<CatalogTag> terrainTags,
+        IReadOnlyList<CatalogTag> structureTags)
     {
         var supplied = forceStatuses ?? [];
         var parsed = new List<ForceStatusSetup>();
@@ -2643,10 +2775,31 @@ public static class CampaignSetupRules
                 $"forceStatuses[{index}].effects",
                 $"Force status {index + 1} effects",
                 errors) ?? string.Empty;
-            var enables = ParseEnableConditions(input, index, errors);
-            var clears = ParseClearConditions(input, index, errors);
+            var locationCatalog = new ForceStatusLocationCatalog(
+                waterTagId,
+                terrainTypes,
+                structureTypes,
+                terrainTags,
+                structureTags);
+            var enables = ParseEnableConditions(input, index, usedIds, locationCatalog, errors);
+            var clears = ParseClearConditions(input, index, usedIds, locationCatalog, errors);
             if (enables is null || clears is null)
             {
+                continue;
+            }
+
+            var (collapsedEnables, collapsedClears) = ForceStatusConditionCollapse.Collapse(
+                enables,
+                clears,
+                locationCatalog.TagsForType);
+            if (collapsedEnables.Count == 0 || collapsedClears.Count == 0)
+            {
+                errors.Add(new DomainError(
+                    collapsedEnables.Count == 0 ? "forceStatuses.enable.required" : "forceStatuses.clear.required",
+                    "Each force status needs at least one enable condition and one clear condition after overlapping filters are removed.",
+                    collapsedEnables.Count == 0
+                        ? $"forceStatuses[{index}].enableConditions"
+                        : $"forceStatuses[{index}].clearConditions"));
                 continue;
             }
 
@@ -2670,8 +2823,8 @@ public static class CampaignSetupRules
                 ResolveId(input.Id, usedIds, $"forceStatuses[{index}].id", errors),
                 name,
                 effects,
-                enables,
-                clears,
+                collapsedEnables,
+                collapsedClears,
                 priority,
                 input.CancelsStatusIds ?? []));
         }
@@ -2747,12 +2900,13 @@ public static class CampaignSetupRules
     private static List<ForceStatusEnableCondition>? ParseEnableConditions(
         ForceStatusInput input,
         int index,
+        HashSet<Guid> usedIds,
+        ForceStatusLocationCatalog catalog,
         List<DomainError> errors)
     {
         if (input.EnableConditions is { Count: > 0 } listed)
         {
             var parsed = new List<ForceStatusEnableCondition>();
-            var seen = new HashSet<ForceStatusEnableTrigger>();
             for (var item = 0; item < listed.Count; item++)
             {
                 if (!TryParseForceStatusEnable(listed[item].Trigger, out var trigger))
@@ -2760,15 +2914,6 @@ public static class CampaignSetupRules
                     errors.Add(new DomainError(
                         "forceStatuses.enable.invalid",
                         "Choose how this force status is enabled.",
-                        $"forceStatuses[{index}].enableConditions[{item}].trigger"));
-                    return null;
-                }
-
-                if (!seen.Add(trigger))
-                {
-                    errors.Add(new DomainError(
-                        "forceStatuses.enable.duplicate",
-                        "Enable conditions must use distinct triggers.",
                         $"forceStatuses[{index}].enableConditions[{item}].trigger"));
                     return null;
                 }
@@ -2788,10 +2933,21 @@ public static class CampaignSetupRules
                     occurrences = supplied;
                 }
 
-                parsed.Add(new ForceStatusEnableCondition(trigger, occurrences));
+                var location = ParseConditionLocation(
+                    listed[item],
+                    $"forceStatuses[{index}].enableConditions[{item}]",
+                    catalog,
+                    errors);
+                parsed.AddRange(ExpandLegacyEnable(
+                    trigger,
+                    occurrences,
+                    listed[item].Id,
+                    location,
+                    usedIds,
+                    catalog));
             }
 
-            return parsed;
+            return parsed.Count == 0 ? null : parsed;
         }
 
         if (!TryParseForceStatusEnable(input.EnableTrigger, out var enable))
@@ -2818,18 +2974,19 @@ public static class CampaignSetupRules
             singleOccurrences = suppliedEnableOccurrences;
         }
 
-        return [new ForceStatusEnableCondition(enable, singleOccurrences)];
+        return ExpandLegacyEnable(enable, singleOccurrences, null, ConditionLocation.Any, usedIds, catalog);
     }
 
     private static List<ForceStatusClearCondition>? ParseClearConditions(
         ForceStatusInput input,
         int index,
+        HashSet<Guid> usedIds,
+        ForceStatusLocationCatalog catalog,
         List<DomainError> errors)
     {
         if (input.ClearConditions is { Count: > 0 } listed)
         {
             var parsed = new List<ForceStatusClearCondition>();
-            var seen = new HashSet<ForceStatusClearTrigger>();
             for (var item = 0; item < listed.Count; item++)
             {
                 if (!TryParseForceStatusClear(listed[item].Trigger, out var trigger))
@@ -2837,15 +2994,6 @@ public static class CampaignSetupRules
                     errors.Add(new DomainError(
                         "forceStatuses.clear.invalid",
                         "Choose how this force status is cleared.",
-                        $"forceStatuses[{index}].clearConditions[{item}].trigger"));
-                    return null;
-                }
-
-                if (!seen.Add(trigger))
-                {
-                    errors.Add(new DomainError(
-                        "forceStatuses.clear.duplicate",
-                        "Clear conditions must use distinct triggers.",
                         $"forceStatuses[{index}].clearConditions[{item}].trigger"));
                     return null;
                 }
@@ -2865,10 +3013,21 @@ public static class CampaignSetupRules
                     occurrences = supplied;
                 }
 
-                parsed.Add(new ForceStatusClearCondition(trigger, occurrences));
+                var location = ParseConditionLocation(
+                    listed[item],
+                    $"forceStatuses[{index}].clearConditions[{item}]",
+                    catalog,
+                    errors);
+                parsed.AddRange(ExpandLegacyClear(
+                    trigger,
+                    occurrences,
+                    listed[item].Id,
+                    location,
+                    usedIds,
+                    catalog));
             }
 
-            return parsed;
+            return parsed.Count == 0 ? null : parsed;
         }
 
         if (!TryParseForceStatusClear(input.ClearTrigger, out var clear))
@@ -2895,7 +3054,173 @@ public static class CampaignSetupRules
             singleOccurrences = suppliedClearOccurrences;
         }
 
-        return [new ForceStatusClearCondition(clear, singleOccurrences)];
+        return ExpandLegacyClear(clear, singleOccurrences, null, ConditionLocation.Any, usedIds, catalog);
+    }
+
+    private static ConditionLocation ParseConditionLocation(
+        ForceStatusConditionInput input,
+        string field,
+        ForceStatusLocationCatalog catalog,
+        List<DomainError> errors)
+    {
+        if (string.IsNullOrWhiteSpace(input.LocationKind)
+            || !Enum.TryParse(input.LocationKind.Trim(), ignoreCase: true, out ConditionLocationKind kind)
+            || !Enum.IsDefined(kind)
+            || kind == ConditionLocationKind.Any)
+        {
+            return ConditionLocation.Any;
+        }
+
+        if (kind is ConditionLocationKind.TerrainType)
+        {
+            if (input.LocationTypeId is not { } terrainId || !catalog.TerrainTypeIds.Contains(terrainId))
+            {
+                errors.Add(new DomainError(
+                    $"{field}.locationTypeId.invalid",
+                    "Choose a terrain type from this campaign.",
+                    $"{field}.locationTypeId"));
+                return ConditionLocation.Any;
+            }
+
+            return new ConditionLocation(kind, terrainId, null);
+        }
+
+        if (kind is ConditionLocationKind.StructureType)
+        {
+            if (input.LocationTypeId is not { } structureId || !catalog.StructureTypeIds.Contains(structureId))
+            {
+                errors.Add(new DomainError(
+                    $"{field}.locationTypeId.invalid",
+                    "Choose a structure type from this campaign.",
+                    $"{field}.locationTypeId"));
+                return ConditionLocation.Any;
+            }
+
+            return new ConditionLocation(kind, structureId, null);
+        }
+
+        if (kind is ConditionLocationKind.TerrainTag)
+        {
+            if (input.LocationTagId is not { } terrainTag || !catalog.TerrainTagIds.Contains(terrainTag))
+            {
+                errors.Add(new DomainError(
+                    $"{field}.locationTagId.invalid",
+                    "Choose a terrain tag from this campaign.",
+                    $"{field}.locationTagId"));
+                return ConditionLocation.Any;
+            }
+
+            return new ConditionLocation(kind, null, terrainTag);
+        }
+
+        if (input.LocationTagId is not { } structureTag || !catalog.StructureTagIds.Contains(structureTag))
+        {
+            errors.Add(new DomainError(
+                $"{field}.locationTagId.invalid",
+                "Choose a structure tag from this campaign.",
+                $"{field}.locationTagId"));
+            return ConditionLocation.Any;
+        }
+
+        return new ConditionLocation(kind, null, structureTag);
+    }
+
+    private static List<ForceStatusEnableCondition> ExpandLegacyEnable(
+        ForceStatusEnableTrigger trigger,
+        int occurrences,
+        Guid? id,
+        ConditionLocation location,
+        HashSet<Guid> usedIds,
+        ForceStatusLocationCatalog catalog)
+    {
+        var water = catalog.WaterTagId == Guid.Empty
+            ? location
+            : new ConditionLocation(ConditionLocationKind.TerrainTag, null, catalog.WaterTagId);
+        if (trigger == ForceStatusEnableTrigger.Disease)
+        {
+            return [.. ForceStatusCatalog.DiseasedEnableConditions(catalog.WaterTagId == Guid.Empty ? Guid.NewGuid() : catalog.WaterTagId)
+                .Select(condition => new ForceStatusEnableCondition(
+                    condition.Trigger,
+                    condition.Occurrences,
+                    ResolveId(null, usedIds, "forceStatuses.condition.id", []),
+                    condition.Location))];
+        }
+
+        if (trigger == ForceStatusEnableTrigger.OccupyingWater)
+        {
+            return
+            [
+                new ForceStatusEnableCondition(
+                    ForceStatusEnableTrigger.ConsecutiveActions,
+                    occurrences,
+                    ResolveId(id, usedIds, "forceStatuses.condition.id", []),
+                    location.Kind == ConditionLocationKind.Any ? water : location),
+            ];
+        }
+
+        return
+        [
+            new ForceStatusEnableCondition(
+                trigger,
+                occurrences,
+                ResolveId(id, usedIds, "forceStatuses.condition.id", []),
+                location),
+        ];
+    }
+
+    private static List<ForceStatusClearCondition> ExpandLegacyClear(
+        ForceStatusClearTrigger trigger,
+        int occurrences,
+        Guid? id,
+        ConditionLocation location,
+        HashSet<Guid> usedIds,
+        ForceStatusLocationCatalog catalog)
+    {
+        if (trigger == ForceStatusClearTrigger.HoldAtSettlement)
+        {
+            var expanded = ForceStatusCatalog.DiseasedClearConditions(catalog.StructureIdsByName);
+            if (expanded.Count == 0)
+            {
+                return
+                [
+                    new ForceStatusClearCondition(
+                        ForceStatusClearTrigger.Hold,
+                        occurrences,
+                        ResolveId(id, usedIds, "forceStatuses.condition.id", []),
+                        location),
+                ];
+            }
+
+            return
+            [
+                .. expanded.Select(condition => new ForceStatusClearCondition(
+                    condition.Trigger,
+                    occurrences,
+                    ResolveId(null, usedIds, "forceStatuses.condition.id", []),
+                    condition.Location)),
+            ];
+        }
+
+        if (trigger == ForceStatusClearTrigger.HoldWhileNotWater)
+        {
+            return
+            [
+                new ForceStatusClearCondition(
+                    ForceStatusClearTrigger.Hold,
+                    occurrences,
+                    ResolveId(id, usedIds, "forceStatuses.condition.id", []),
+                    ConditionLocation.Any),
+            ];
+        }
+
+        return
+        [
+            new ForceStatusClearCondition(
+                trigger,
+                occurrences,
+                ResolveId(id, usedIds, "forceStatuses.condition.id", []),
+                location),
+        ];
     }
 
     private static bool TryParseForceStatusEnable(string? raw, out ForceStatusEnableTrigger trigger)
@@ -2922,7 +3247,9 @@ public static class CampaignSetupRules
         HashSet<Guid> knownForceStatusTypeIds,
         HashSet<Guid> knownFactionIds,
         HashSet<Guid> knownAllyGroupIds,
-        List<DomainError> errors)
+        List<DomainError> errors,
+        HashSet<Guid> knownStructureTagIds,
+        HashSet<Guid> knownTerrainTagIds)
     {
         var supplied = privateObjectiveTypes ?? [];
         var parsed = new List<PrivateObjectiveTypeSetup>();
@@ -2993,26 +3320,34 @@ public static class CampaignSetupRules
                 requiredCount = 1;
             }
 
-            var matchesAnyStructureType = input.MatchesAnyStructureType
-                && automaticKind is PrivateObjectiveAutomaticKind.BuildStructureType
-                    or PrivateObjectiveAutomaticKind.RepairStructureType;
-            var structureTypeId = input.StructureTypeId;
             var requiresStructure = automaticKind is PrivateObjectiveAutomaticKind.ControlStructureType
                 or PrivateObjectiveAutomaticKind.PillageStructureType
                 or PrivateObjectiveAutomaticKind.DestroyStructureType
                 or PrivateObjectiveAutomaticKind.BuildStructureType
                 or PrivateObjectiveAutomaticKind.RepairStructureType;
+            var matchesAnyStructureType = input.MatchesAnyStructureType && requiresStructure;
+            var structureTypeId = input.StructureTypeId;
+            Guid? structureTagId = null;
             if (requiresStructure)
             {
                 if (matchesAnyStructureType)
                 {
                     structureTypeId = null;
                 }
-                else if (structureTypeId is not { } structureId || !knownStructureTypeIds.Contains(structureId))
+                else if (input.StructureTagId is { } tagId && knownStructureTagIds.Contains(tagId))
+                {
+                    structureTagId = tagId;
+                    structureTypeId = null;
+                }
+                else if (structureTypeId is { } structureId && knownStructureTypeIds.Contains(structureId))
+                {
+                    structureTypeId = structureId;
+                }
+                else
                 {
                     errors.Add(new DomainError(
                         $"privateObjectiveTypes[{index}].structureTypeId.invalid",
-                        $"Private objective {index + 1} must name a structure type from this campaign.",
+                        $"Private objective {index + 1} must name a structure type, a structure tag, or any structure type.",
                         $"privateObjectiveTypes[{index}].structureTypeId"));
                     structureTypeId = null;
                 }
@@ -3021,6 +3356,23 @@ public static class CampaignSetupRules
             {
                 structureTypeId = null;
                 matchesAnyStructureType = false;
+            }
+
+            Guid? terrainTagId = null;
+            if (automaticKind is PrivateObjectiveAutomaticKind.ControlTerritoryCount
+                or PrivateObjectiveAutomaticKind.ControlNamedTerritories)
+            {
+                if (input.TerrainTagId is { } terrainTag && knownTerrainTagIds.Contains(terrainTag))
+                {
+                    terrainTagId = terrainTag;
+                }
+                else if (input.TerrainTagId is { } invalidTerrain && invalidTerrain != Guid.Empty)
+                {
+                    errors.Add(new DomainError(
+                        $"privateObjectiveTypes[{index}].terrainTagId.invalid",
+                        $"Private objective {index + 1} terrain tag must be from this campaign.",
+                        $"privateObjectiveTypes[{index}].terrainTagId"));
+                }
             }
 
             var territoryIds = (input.TerritoryIds ?? [])
@@ -3162,7 +3514,9 @@ public static class CampaignSetupRules
                 forceStatusTypeIds,
                 statusMatchKind,
                 prerequisiteForceStatusTypeId,
-                prerequisiteWasLost));
+                prerequisiteWasLost,
+                structureTagId,
+                terrainTagId));
         }
 
         return parsed;
@@ -3349,6 +3703,63 @@ public static class CampaignSetupRules
             }
 
             parsed.Add(id);
+        }
+
+        return parsed;
+    }
+
+    private static List<SubfactionTagsSetup> ParseSubfactionTags(
+        IReadOnlyList<SubfactionTagsInput>? assignments,
+        IReadOnlyList<string> subfactions,
+        HashSet<Guid> knownFactionTagIds,
+        int factionIndex,
+        List<DomainError> errors)
+    {
+        if (assignments is null || assignments.Count == 0)
+        {
+            return [];
+        }
+
+        var knownNames = subfactions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var parsed = new List<SubfactionTagsSetup>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < assignments.Count; index++)
+        {
+            var input = assignments[index];
+            var field = $"factions[{factionIndex}].subfactionTags[{index}].name";
+            var name = ParseRequiredName(
+                input.Name,
+                field,
+                $"Faction {factionIndex + 1} subfaction tag assignment {index + 1}",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!knownNames.Contains(name))
+            {
+                errors.Add(new DomainError(
+                    $"{field}.unknown",
+                    $"Faction {factionIndex + 1} subfaction tags reference a subfaction that was not listed.",
+                    field));
+                continue;
+            }
+
+            if (!seen.Add(name))
+            {
+                continue;
+            }
+
+            parsed.Add(new SubfactionTagsSetup(
+                name,
+                CatalogTagRules.ParseAssigned(
+                    input.TagIds,
+                    knownFactionTagIds,
+                    $"factions[{factionIndex}].subfactionTags[{index}].tagIds",
+                    errors)));
         }
 
         return parsed;

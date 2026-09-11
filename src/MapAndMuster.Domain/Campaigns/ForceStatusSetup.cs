@@ -66,14 +66,16 @@ public sealed class ForceStatusSetup
             throw new ArgumentException("At least one clear condition is required.", nameof(clearConditions));
         }
 
-        if (enableConditions.Select(static condition => condition.Trigger).Distinct().Count() != enableConditions.Count)
+        if (enableConditions.Select(static condition => condition.Fingerprint()).Distinct(StringComparer.Ordinal).Count()
+            != enableConditions.Count)
         {
-            throw new ArgumentException("Enable triggers must be unique.", nameof(enableConditions));
+            throw new ArgumentException("Enable conditions must be unique.", nameof(enableConditions));
         }
 
-        if (clearConditions.Select(static condition => condition.Trigger).Distinct().Count() != clearConditions.Count)
+        if (clearConditions.Select(static condition => condition.Fingerprint()).Distinct(StringComparer.Ordinal).Count()
+            != clearConditions.Count)
         {
-            throw new ArgumentException("Clear triggers must be unique.", nameof(clearConditions));
+            throw new ArgumentException("Clear conditions must be unique.", nameof(clearConditions));
         }
 
         Id = id;

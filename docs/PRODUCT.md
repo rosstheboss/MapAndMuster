@@ -43,9 +43,10 @@ Player and Game Master in the same campaign.
 - Administrators can save campaign settings and map data as named reusable presets, and can download
   or upload a portable preset package (catalog, overlay, map image, and uploaded logos) between hosts.
 - Campaign-point, supply-line, temporary-supply, status, objective, and relic tracking.
-- Configurable force statuses with one or more enable and clear conditions (each a trigger plus a consecutive occurrence count from 1 to 10; at least one of each), unique priorities, optional cancel-out, and display-only tabletop effects.
-  Named Diseased uses consecutive water-feature actions, water battles, contagion, rejoin, and
+- Configurable force statuses with one or more enable and clear conditions (each a trigger, a consecutive occurrence count from 1 to 10, and an optional location filter for any place, a type, or a tag; at least one of each after overlapping filters collapse). Unique priorities, optional cancel-out, and display-only tabletop effects.
+  Named Diseased uses Water-tag catalog conditions, settlement Holds, contagion, rejoin, and
   plague-bearing wins; missions, item results, and staff assignment can also set status.
+  Campaign catalogs may define unused tags on terrain, structures, factions/subfactions, and missions.
 - Public faction rules and private player/faction/alliance objectives.
 - Multiple GMs, ephemeral ringer battles, campaign extension, corrections, revision history, and audit.
 - Manager add/kick of players, promotion of a player to campaign manager, bringing in a user as

@@ -46,6 +46,26 @@ public sealed class SupplyRulesTests
     }
 
     [Fact]
+    public void IsWaterFeatureUsesTheWaterTerrainTag()
+    {
+        var water = Guid.NewGuid();
+        var wet = new PlayTerritory(
+            Spawn,
+            1,
+            Faction,
+            Faction,
+            null,
+            null,
+            StructureCondition.Operational,
+            terrainTagIds: [water]);
+        var dry = new PlayTerritory(Adjacent, 2, Faction, null, null, null, StructureCondition.Operational);
+        var map = new PlayMap([wet, dry], [(Spawn, Adjacent)], waterTerrainTagId: water);
+
+        Assert.True(map.IsWaterFeature(wet));
+        Assert.False(map.IsWaterFeature(dry));
+    }
+
+    [Fact]
     public void MapSupplyCountsConnectedAlliedTerrainAndOperationalStructures()
     {
         var ally = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");

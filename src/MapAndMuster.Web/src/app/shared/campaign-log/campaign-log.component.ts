@@ -11,6 +11,7 @@ import {
   filterChatRecipients,
   formatLogTimeLabel,
   formatLogTimestamp,
+  localizeLogInstants,
   matchChatRecipient,
   mentionQuery,
   recipientFieldLabel,
@@ -262,7 +263,11 @@ export class CampaignLogComponent {
     target?.scrollIntoView({ block: 'center' });
   }
 
-  protected parts(summary: string): { text: string; mention: boolean; username?: string | null }[] {
+  protected parts(entry: PlayLogEntry): { text: string; mention: boolean; username?: string | null }[] {
+    const summary =
+      entry.kind === 'ScheduleExtended'
+        ? localizeLogInstants(entry.summary, this.timeZoneId(), this.auth.currentUser()?.dateTimeDisplayFormat)
+        : entry.summary;
     return splitLogMessage(summary, this.members());
   }
 

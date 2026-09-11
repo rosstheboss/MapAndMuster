@@ -46,4 +46,7 @@ public sealed class MissionInput
 
     /// <summary>Gets ordered win/lose status-change conditions.</summary>
     public IReadOnlyList<MissionStatusChangeInput>? StatusChanges { get; init; }
+
+    /// <summary>Gets mission-catalog tag identifiers assigned to this mission.</summary>
+    public IReadOnlyList<Guid>? TagIds { get; init; }
 }

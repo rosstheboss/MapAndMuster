@@ -22,6 +22,7 @@ public sealed class MissionSetup
     /// <param name="supplyPointsAdvantageSide">Which role receives the supply-point adjustment.</param>
     /// <param name="supplyPointsAdvantageAmount">Signed raw supply-point change.</param>
     /// <param name="statusChanges">Ordered win/lose status-change conditions. First match applies.</param>
+    /// <param name="tagIds">Mission-catalog tags assigned to this mission.</param>
     public MissionSetup(
         Guid id,
         string name,
@@ -36,7 +37,8 @@ public sealed class MissionSetup
         bool hasSupplyPointsAdvantage = false,
         MissionAdvantageSide supplyPointsAdvantageSide = MissionAdvantageSide.Defender,
         int supplyPointsAdvantageAmount = 0,
-        IReadOnlyList<MissionStatusChangeSetup>? statusChanges = null)
+        IReadOnlyList<MissionStatusChangeSetup>? statusChanges = null,
+        IReadOnlyList<Guid>? tagIds = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Id = id;
@@ -53,6 +55,7 @@ public sealed class MissionSetup
         SupplyPointsAdvantageSide = supplyPointsAdvantageSide;
         SupplyPointsAdvantageAmount = supplyPointsAdvantageAmount;
         StatusChanges = statusChanges ?? [];
+        TagIds = DistinctIds(tagIds);
     }
 
     /// <summary>Gets the mission identifier.</summary>
@@ -96,4 +99,17 @@ public sealed class MissionSetup
 
     /// <summary>Gets ordered win/lose status-change conditions. The first matching condition applies.</summary>
     public IReadOnlyList<MissionStatusChangeSetup> StatusChanges { get; }
+
+    /// <summary>Gets mission-catalog tags assigned to this mission.</summary>
+    public IReadOnlyList<Guid> TagIds { get; }
+
+    private static IReadOnlyList<Guid> DistinctIds(IReadOnlyList<Guid>? ids)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            return [];
+        }
+
+        return [.. ids.Where(static id => id != Guid.Empty).Distinct()];
+    }
 }

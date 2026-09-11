@@ -62,11 +62,14 @@ internal static class CampaignLifecycle
                 type.IsDestructible,
                 type.SupplyPoints,
                 type.PillageSupplyPoints,
-                type.DestroySupplyPoints))
+                type.DestroySupplyPoints,
+                type.TagIds))
             .ToArray();
         var names = catalog.ToDictionary(type => type.Id, type => type.Name);
         var rulesById = catalog.ToDictionary(static type => type.Id);
-        var waterByTerrain = campaign.TerrainTypes.ToDictionary(static type => type.Id, static type => type.IsWaterFeature);
+        var terrainTagsById = campaign.TerrainTypes.ToDictionary(static type => type.Id, static type => type.TagIds);
+        var structureTagsById = campaign.StructureTypes.ToDictionary(static type => type.Id, static type => type.TagIds);
+        var waterTagId = campaign.TerrainTags.FirstOrDefault(static tag => CatalogTags.IsWater(tag.Name))?.Id;
         var conditions = campaign.PlayState?.Structures.ToDictionary(item => item.TerritoryId) ?? [];
         var territories = graph.Territories.Select(territory =>
         {
@@ -78,7 +81,8 @@ internal static class CampaignLifecycle
                 ?? ParseCondition(territory.StructureCondition)
                 ?? StructureCondition.Operational;
             var intact = structureTypeId is not null && condition != StructureCondition.Destroyed;
-            waterByTerrain.TryGetValue(territory.TerrainTypeId, out var isWater);
+            terrainTagsById.TryGetValue(territory.TerrainTypeId, out var terrainTags);
+            structureTagsById.TryGetValue(structureTypeId ?? Guid.Empty, out var structureTags);
             return new PlayTerritory(
                 territory.Id,
                 territory.DisplayNumber,
@@ -89,14 +93,15 @@ internal static class CampaignLifecycle
                 intact ? condition : StructureCondition.Operational,
                 intact && (rules?.IsPillageable ?? false),
                 intact && (rules?.IsDestructible ?? false),
-                isWater,
                 territory.TerrainTypeId,
-                territory.SpawnSubfaction);
+                territory.SpawnSubfaction,
+                terrainTags ?? [],
+                intact ? structureTags ?? [] : []);
         }).ToArray();
         var edges = graph.Adjacencies
             .Select(edge => (edge.TerritoryAId, edge.TerritoryBId))
             .ToArray();
-        return new PlayMap(territories, edges, catalog);
+        return new PlayMap(territories, edges, catalog, waterTagId);
     }
 
     /// <summary>

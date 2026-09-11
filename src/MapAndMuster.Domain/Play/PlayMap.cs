@@ -18,9 +18,10 @@ public sealed class PlayTerritory
         StructureCondition structureCondition,
         bool isPillageable = true,
         bool isDestructible = true,
-        bool isWaterFeature = false,
         Guid? terrainTypeId = null,
-        string? spawnSubfaction = null)
+        string? spawnSubfaction = null,
+        IReadOnlyList<Guid>? terrainTagIds = null,
+        IReadOnlyList<Guid>? structureTagIds = null)
     {
         Id = id;
         DisplayNumber = displayNumber;
@@ -31,9 +32,10 @@ public sealed class PlayTerritory
         StructureCondition = structureCondition;
         IsPillageable = isPillageable;
         IsDestructible = isDestructible;
-        IsWaterFeature = isWaterFeature;
         TerrainTypeId = terrainTypeId;
         SpawnSubfaction = spawnFactionId is null ? null : spawnSubfaction;
+        TerrainTagIds = terrainTagIds ?? [];
+        StructureTagIds = structureTagIds ?? [];
     }
 
     /// <summary>Gets the territory identifier.</summary>
@@ -66,14 +68,17 @@ public sealed class PlayTerritory
     /// <summary>Gets whether a second Pillage may destroy and remove the occupying structure.</summary>
     public bool IsDestructible { get; }
 
-    /// <summary>Gets whether this territory's terrain is a water feature.</summary>
-    public bool IsWaterFeature { get; }
-
     /// <summary>Gets the terrain type, when known.</summary>
     public Guid? TerrainTypeId { get; }
 
     /// <summary>Gets the spawn required subfaction, when spawn is subfaction-specific.</summary>
     public string? SpawnSubfaction { get; }
+
+    /// <summary>Gets terrain-catalog tags from the occupying terrain type.</summary>
+    public IReadOnlyList<Guid> TerrainTagIds { get; }
+
+    /// <summary>Gets structure-catalog tags from the occupying structure type when it is not destroyed.</summary>
+    public IReadOnlyList<Guid> StructureTagIds { get; }
 
     /// <summary>
     /// Returns a copy with updated ownership and structure fields.
@@ -98,9 +103,10 @@ public sealed class PlayTerritory
             clearStructure ? StructureCondition.Operational : structureCondition ?? StructureCondition,
             !clearStructure && (isPillageable ?? IsPillageable),
             !clearStructure && (isDestructible ?? IsDestructible),
-            IsWaterFeature,
             TerrainTypeId,
-            SpawnSubfaction);
+            SpawnSubfaction,
+            TerrainTagIds,
+            clearStructure ? [] : StructureTagIds);
     }
 }
 
@@ -118,15 +124,18 @@ public sealed class PlayMap
     /// <param name="territories">The territories.</param>
     /// <param name="adjacencies">Undirected adjacency pairs.</param>
     /// <param name="structureTypes">Catalog flags used to validate Build and structure effects.</param>
+    /// <param name="waterTerrainTagId">The Water terrain tag, when the campaign defines one.</param>
     public PlayMap(
         IReadOnlyList<PlayTerritory> territories,
         IReadOnlyList<(Guid A, Guid B)> adjacencies,
-        IReadOnlyList<StructureTypePlayRules>? structureTypes = null)
+        IReadOnlyList<StructureTypePlayRules>? structureTypes = null,
+        Guid? waterTerrainTagId = null)
     {
         ArgumentNullException.ThrowIfNull(territories);
         ArgumentNullException.ThrowIfNull(adjacencies);
         Territories = territories;
         StructureTypes = structureTypes ?? [];
+        WaterTerrainTagId = waterTerrainTagId is { } water && water != Guid.Empty ? water : null;
         _territories = territories.ToDictionary(static territory => territory.Id);
         _adjacent = [];
         foreach (var (left, right) in adjacencies)
@@ -141,6 +150,18 @@ public sealed class PlayMap
 
     /// <summary>Gets catalog flags for structure types in this campaign.</summary>
     public IReadOnlyList<StructureTypePlayRules> StructureTypes { get; }
+
+    /// <summary>Gets the Water terrain tag identifier, when defined.</summary>
+    public Guid? WaterTerrainTagId { get; }
+
+    /// <summary>
+    /// Returns whether the territory's terrain has the Water tag.
+    /// </summary>
+    public bool IsWaterFeature(PlayTerritory territory)
+    {
+        ArgumentNullException.ThrowIfNull(territory);
+        return WaterTerrainTagId is { } water && territory.TerrainTagIds.Contains(water);
+    }
 
     /// <summary>
     /// Returns a territory by identifier.
@@ -211,7 +232,7 @@ public sealed class PlayMap
         var edges = _adjacent
             .SelectMany(pair => pair.Value.Where(other => other.CompareTo(pair.Key) > 0).Select(other => (pair.Key, other)))
             .ToArray();
-        return new PlayMap(territories, edges, StructureTypes);
+        return new PlayMap(territories, edges, StructureTypes, WaterTerrainTagId);
     }
 
     /// <summary>

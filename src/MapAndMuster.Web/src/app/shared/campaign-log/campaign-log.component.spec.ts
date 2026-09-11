@@ -52,6 +52,30 @@ describe('CampaignLogComponent', () => {
     expect(compiled.querySelector<HTMLInputElement>('#chat-recipient')?.value).toBe('Everyone');
   });
 
+  it('shows how long a manager lengthened a phase and the localized new end', () => {
+    const fixture = TestBed.createComponent(CampaignLogComponent);
+    fixture.componentRef.setInput('timeZoneId', 'America/New_York');
+    fixture.componentRef.setInput('entries', [
+      {
+        id: 'log-extend',
+        occurredUtc: '2026-08-15T20:45:23-04:00',
+        kind: 'ScheduleExtended',
+        originator: 'Campaign',
+        originatorUsername: null,
+        summary: 'northplayer lengthened Action 1 of round 1 by 2 days (now ends 2026-08-15T20:00:00.000Z).',
+        territoryId: null,
+        forceId: null,
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+    ]);
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'northplayer lengthened Action 1 of round 1 by 2 days (now ends August 15, 2026, 4:00:00 PM EDT).',
+    );
+  });
+
   it('links chat originators and mentions to public profiles', () => {
     const fixture = TestBed.createComponent(CampaignLogComponent);
     fixture.componentRef.setInput('members', [

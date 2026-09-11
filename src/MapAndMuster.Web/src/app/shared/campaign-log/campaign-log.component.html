@@ -127,7 +127,7 @@
               @if (channelBadge(entry); as badge) {
                 <span class="channel-badge">{{ badge }}</span>
               }
-              @for (part of parts(entry.summary); track $index) {
+              @for (part of parts(entry); track $index) {
                 @if (part.mention && part.username) {
                   <a class="profile-link" [routerLink]="['/users', part.username]" [queryParams]="profileQuery()"
                     ><strong>{{ part.text }}</strong></a

@@ -53,7 +53,9 @@ internal static class CampaignPlayCatalog
                     ? statusMatch
                     : PrivateObjectiveStatusMatchKind.None,
                 type.PrerequisiteForceStatusTypeId,
-                type.PrerequisiteWasLost)),
+                type.PrerequisiteWasLost,
+                type.StructureTagId,
+                type.TerrainTagId)),
         ];
     }
 
@@ -145,7 +147,9 @@ internal static class CampaignPlayCatalog
                 territory.Id,
                 territory.OwnerFactionId,
                 territory.StructureTypeId,
-                territory.StructureCondition)),
+                territory.StructureCondition,
+                territory.TerrainTagIds,
+                territory.StructureTagIds)),
         ];
     }
 
@@ -303,8 +307,8 @@ internal static class CampaignPlayCatalog
                 type.Name,
                 type.Color,
                 [.. type.Missions.Select(ToMissionSetup)],
-                type.IsWaterFeature,
-                type.SupplyPoints)),
+                type.SupplyPoints,
+                type.TagIds)),
         ];
     }
 
@@ -326,7 +330,8 @@ internal static class CampaignPlayCatalog
                 type.CampaignPoints,
                 type.SupplyPoints,
                 type.PillageSupplyPoints,
-                type.DestroySupplyPoints)),
+                type.DestroySupplyPoints,
+                type.TagIds)),
         ];
     }
 

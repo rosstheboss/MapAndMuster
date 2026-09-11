@@ -6,6 +6,7 @@ import {
   formatLogTimeLabel,
   formatLogTimestamp,
   latestDelinquencyEntryForUser,
+  localizeLogInstants,
   matchChatRecipient,
   mentionQuery,
   mergeCampaignLog,
@@ -21,6 +22,15 @@ describe('campaign log formatting', () => {
     expect(formatLogTimestamp('2026-08-15T20:45:23-04:00', 'America/New_York')).toBe(
       '(August 15, 2026, 8:45:23 PM EDT)',
     );
+  });
+
+  it('localizes ISO instants inside a schedule-extension summary', () => {
+    expect(
+      localizeLogInstants(
+        'lengthened Action 1 of round 1 by 2 days (now ends 2026-08-15T20:00:00.000Z).',
+        'America/New_York',
+      ),
+    ).toBe('lengthened Action 1 of round 1 by 2 days (now ends August 15, 2026, 4:00:00 PM EDT).');
   });
 
   it('uses relative labels for recent log times', () => {

@@ -28,7 +28,9 @@ public sealed class PrivateObjectiveTypeSetup
         IReadOnlyList<Guid>? forceStatusTypeIds = null,
         PrivateObjectiveStatusMatchKind statusMatchKind = PrivateObjectiveStatusMatchKind.None,
         Guid? prerequisiteForceStatusTypeId = null,
-        bool prerequisiteWasLost = false)
+        bool prerequisiteWasLost = false,
+        Guid? structureTagId = null,
+        Guid? terrainTagId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(allowedHolderKinds);
@@ -55,6 +57,8 @@ public sealed class PrivateObjectiveTypeSetup
         StatusMatchKind = statusMatchKind;
         PrerequisiteForceStatusTypeId = prerequisiteForceStatusTypeId;
         PrerequisiteWasLost = prerequisiteWasLost;
+        StructureTagId = structureTagId;
+        TerrainTagId = terrainTagId;
     }
 
     /// <summary>Gets the catalog identifier.</summary>
@@ -116,6 +120,12 @@ public sealed class PrivateObjectiveTypeSetup
 
     /// <summary>Gets whether GainedAfter waits for the prerequisite to have been lost.</summary>
     public bool PrerequisiteWasLost { get; }
+
+    /// <summary>Gets the structure-catalog tag for structure-based automatic criteria.</summary>
+    public Guid? StructureTagId { get; }
+
+    /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
+    public Guid? TerrainTagId { get; }
 
     /// <summary>Gets whether this catalog entry may be assigned to <paramref name="kind"/>.</summary>
     public bool Allows(PrivateObjectiveHolderKind kind)

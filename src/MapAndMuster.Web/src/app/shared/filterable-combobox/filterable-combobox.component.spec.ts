@@ -16,6 +16,24 @@ class HostComponent {
   readonly options = ['Canada', 'United States', 'Australia'];
 }
 
+@Component({
+  imports: [ReactiveFormsModule, FilterableComboboxComponent],
+  template: `
+    <label for="tag">Tag</label>
+    <app-filterable-combobox
+      inputId="tag"
+      [formControl]="control"
+      [options]="options"
+      (optionChosen)="chosen = $event"
+    />
+  `,
+})
+class ChosenHostComponent {
+  readonly control = new FormControl('', { nonNullable: true });
+  readonly options = ['Water', 'Coastal'];
+  chosen = '';
+}
+
 describe('FilterableComboboxComponent', () => {
   it('filters options as the user types', async () => {
     await TestBed.configureTestingModule({
@@ -37,5 +55,26 @@ describe('FilterableComboboxComponent', () => {
     const options = [...compiled.querySelectorAll('[role="option"]')].map((item) => item.textContent.trim());
     expect(options).toEqual(['United States']);
     expect(fixture.componentInstance.control.value).toBe('uni');
+  });
+
+  it('emits optionChosen when an option is selected', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ChosenHostComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ChosenHostComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLInputElement>('#tag')!.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    const coastal = [...compiled.querySelectorAll('[role="option"]')].find(
+      (item) => item.textContent.trim() === 'Coastal',
+    );
+    expect(coastal).toBeTruthy();
+    coastal!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.chosen).toBe('Coastal');
+    expect(fixture.componentInstance.control.value).toBe('Coastal');
   });
 });

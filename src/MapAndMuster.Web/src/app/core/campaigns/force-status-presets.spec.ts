@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   committedForceStatusPriority,
+  diseasedClearConditions,
+  diseasedEnableConditions,
   forceStatusClearConditions,
   forceStatusEnableConditions,
   forceStatusesFromStandardPreset,
@@ -23,17 +25,29 @@ describe('force-status-presets', () => {
     ]);
   });
 
-  it('defaults consecutive occurrences to one', () => {
-    expect(
-      STANDARD_FORCE_STATUSES.every((status) =>
-        status.enableConditions.every((condition) => condition.occurrences === 1),
-      ),
-    ).toBe(true);
-    expect(
-      STANDARD_FORCE_STATUSES.every((status) =>
-        status.clearConditions.every((condition) => condition.occurrences === 1),
-      ),
-    ).toBe(true);
+  it('uses Water and settlement location filters for Diseased', () => {
+    const water = 'water-tag';
+    const structures = {
+      'Capital City': 'capital',
+      City: 'city',
+      'Supply Depot': 'depot',
+      Town: 'town',
+    };
+    const copy = forceStatusesFromStandardPreset(water, structures);
+    const diseased = copy.find((status) => status.name === 'Diseased');
+    expect(diseasedEnableConditions(water)).toEqual([
+      { trigger: 'ConsecutiveActions', occurrences: 3, locationKind: 'TerrainTag', locationTagId: water },
+      { trigger: 'BattleLostOrRetreat', occurrences: 1, locationKind: 'TerrainTag', locationTagId: water },
+      { trigger: 'Surrender', occurrences: 2, locationKind: 'TerrainTag', locationTagId: water },
+    ]);
+    expect(diseasedClearConditions(structures).map((condition) => condition.locationTypeId)).toEqual([
+      'capital',
+      'city',
+      'depot',
+      'town',
+    ]);
+    expect(diseased?.enableConditions[0]?.trigger).toBe('ConsecutiveActions');
+    expect(diseased?.clearConditions).toHaveLength(4);
   });
 
   it('reads listed conditions and wraps a legacy single trigger', () => {
@@ -41,12 +55,20 @@ describe('force-status-presets', () => {
       forceStatusEnableConditions({
         enableConditions: [{ trigger: 'BattleLostOrRetreat', occurrences: 1 }],
       }),
-    ).toEqual([{ trigger: 'BattleLostOrRetreat', occurrences: 1 }]);
+    ).toEqual([
+      {
+        trigger: 'BattleLostOrRetreat',
+        occurrences: 1,
+        locationKind: 'Any',
+        locationTypeId: null,
+        locationTagId: null,
+      },
+    ]);
     expect(forceStatusEnableConditions({ enableTrigger: 'Hold', enableOccurrences: 3, enableConditions: [] })).toEqual([
-      { trigger: 'Hold', occurrences: 3 },
+      { trigger: 'Hold', occurrences: 3, locationKind: 'Any' },
     ]);
     expect(forceStatusClearConditions({ clearTrigger: 'BattleWon' })).toEqual([
-      { trigger: 'BattleWon', occurrences: 1 },
+      { trigger: 'BattleWon', occurrences: 1, locationKind: 'Any' },
     ]);
   });
 
@@ -54,8 +76,8 @@ describe('force-status-presets', () => {
     const copy = forceStatusesFromStandardPreset();
     copy[0].name = 'Changed';
     expect(STANDARD_FORCE_STATUSES[0].name).toBe('Diseased');
-    expect(STANDARD_FORCE_STATUSES[0].enableConditions[0]?.trigger).toBe('Disease');
-    expect(STANDARD_FORCE_STATUSES[0].clearConditions[0]?.trigger).toBe('HoldAtSettlement');
+    expect(STANDARD_FORCE_STATUSES[0].enableConditions[0]?.trigger).toBe('ConsecutiveActions');
+    expect(STANDARD_FORCE_STATUSES[0].clearConditions[0]?.trigger).toBe('Hold');
     expect(copy.find((status) => status.name === 'Well Rested')?.enableConditions[0]?.trigger).toBe('Hold');
     expect(STANDARD_FORCE_STATUSES.find((status) => status.name === 'Exhausted')?.cancelsStatusNames).toEqual([
       'Well Rested',

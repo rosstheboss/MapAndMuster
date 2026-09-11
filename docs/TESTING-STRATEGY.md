@@ -14,16 +14,25 @@ useful.
 Required early suites:
 
 - Required-participant calculation and final-commit race behavior.
+- Ending a campaign against a stale client revision and retrying when another write moves the revision.
 - Commit, uncommit only while the action window is open, deadline auto-submit, and default Hold.
+  Players whose forces are all in battle (or otherwise owe no order) appear as committed on the
+  action roster; Actions names the locked battle's territory and opponents.
 - Action validity and precedence, especially Battle overriding later actions.
 - Move adjacency, spawn restrictions, split/rejoin with a play-log entry, backstab, pillage/repair, and retreat.
+  `UndergroundNetwork` uses the same Town/City pick for initial placement and a missing or
+  ineligible retreat (or collision fallback) that would otherwise send the force to spawn.
 - Supply graph traversal, alliance inclusion, temporary supply, and split forces.
 - Status transitions and faction exceptions, including configured force-status enable/clear
-  condition lists, consecutive occurrence counts, unique priorities when more than one trigger matches,
-  and optional cancel-out pairs.
+  condition lists, location filters (any, type, or tag), consecutive occurrence counts, unique
+  priorities when more than one trigger matches, save-time duplicate/redundancy collapse, and
+  optional cancel-out pairs. Named Diseased catalog conditions plus remaining contagion/rejoin/
+  plague/immunity engine behavior. Catalog tags (uniqueness, scoped assignment, subfaction union,
+  Water replacing the former water-feature flag). Private and public objective tag filters.
 - Public/private objective visibility, completion, manager approval of private claims, automatic
-  private-objective scoring, and launch assignment (unique draws per holder-kind pool, then
-  reshuffled duplicates until every holder in a non-empty pool has an independent assignment).
+  private-objective scoring and live `(current/required)` progress for authorized holders, and launch
+  assignment (unique draws per holder-kind pool, then reshuffled duplicates until every holder in a
+  non-empty pool has an independent assignment).
 - Relic discovery, transfer, drop, choice resolution, destroy-and-replace, tie-breaking, and secrecy.
 - Campaign-point components and graph objectives.
 - Public-objective award/revoke facts and hidden item-objective standings secrecy.
@@ -60,7 +69,9 @@ Cover:
   countdown, commit, remaining setup) and sits above Notifications and News.
 - Manager add and kick of players (including private campaigns without the join password), promoting a
   player to campaign manager, adding a manager-only member, staff faction assignment, ending a
-  campaign while keeping its final state, and administrator impersonation of seeded test accounts.
+  campaign while keeping its final state (including a stale client revision after play has advanced),
+  GET play returning no content before the start instant,
+  and administrator impersonation of seeded test accounts.
 - Administrator save-as-preset copies the map file, overlay graph, and uploaded catalog logos;
   applying onto another campaign remaps overlay terrain identifiers onto that campaign's catalog
   and copies matching logos.
@@ -74,9 +85,9 @@ Use Angular's Vitest integration.
 
 Cover components/services for:
 
-- Order drafting from the map menu or force-panel **Save draft**, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed.
+- Order drafting from the map menu or force-panel **Save draft**, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed. The Actions Commitments player list starts collapsed and keeps the "X of Y players committed. Waiting on …" summary under the Commitments heading.
 - Campaign-page status bar (round/phase, throttled countdown live region, viewer commit chip, compact commitment count, Go to your orders). While a campaign is running, Actions, Chat, and Standings are open by default; other sections stay collapsed and the last set is stored in a per-campaign cookie. Staff tools are under collapsed Manage campaign. Battle, campaign, phase, and force-status enums use display labels. A hidden-relic notice and each battle reminder render once. The campaign log summary shows unread mention and private counts from `GET /log` without marking the log read on load. Log timestamps sit after the entry text (relative when under 24 hours).
-- Create/edit campaign starts with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded; optional sections start collapsed. The sticky toolbar shows remaining required sections, nested mission groups have unique names, and Edit map is hidden after a campaign starts. Force-status cancel-out is a dropdown that adds named statuses to a removable list. Enable and clear each have a consecutive-occurrence integer from 1 to 10.
+- Create/edit campaign starts with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded; optional sections start collapsed. The sticky toolbar shows remaining required sections, nested mission groups have unique names, and Edit map is hidden after a campaign starts. Force-status cancel-out is a dropdown that adds named statuses to a removable list. Enable and clear each have a consecutive-occurrence integer from 1 to 10, a location filter (any, type, or tag), and Add that does not hide a trigger already in the list. Each catalog section has a tag subpanel whose name field adds on Enter or comma without saving, and item chip comboboxes that suggest unassigned defined tags.
 - Countdown display without treating the browser clock as authoritative.
 - Map territory selection, force markers, polygon editing including Close Territory enclose and
   shared-border versus overlapping-interior checks, move drop validity, keyboard alternatives,

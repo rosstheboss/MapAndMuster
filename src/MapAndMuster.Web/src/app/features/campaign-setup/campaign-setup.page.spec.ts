@@ -124,6 +124,99 @@ describe('CampaignSetupPage', () => {
     TestBed.inject(HttpTestingController).verify();
   });
 
+  it('defines catalog tags, assigns chips, and allows the same trigger with different locations', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      addCatalogTagFromDraft: (catalog: unknown, draft: { setValue: (value: string) => void; value: string }) => void;
+      terrainTags: { controls: readonly { controls: { id: { value: string }; name: { value: string } } }[] };
+      terrainTagDraft: { setValue: (value: string) => void; value: string };
+      terrainTypes: {
+        at: (index: number) => {
+          controls: {
+            id: { value: string };
+            tagIds: { value: string[] };
+            tagDraft: { setValue: (value: string) => void; value: string };
+          };
+        };
+      };
+      assignDefinedTag: (
+        control: { value: string[] },
+        catalog: unknown,
+        draft: { setValue: (value: string) => void; value: string },
+      ) => boolean;
+      addForceStatus: () => void;
+      forceStatuses: {
+        at: (index: number) => {
+          controls: {
+            enablePick: { setValue: (value: string) => void };
+            enablePickLocationKind: { setValue: (value: string) => void };
+            enablePickTypeId: { setValue: (value: string) => void };
+            enableConditions: { length: number };
+          };
+        };
+      };
+      addForceStatusEnableCondition: (status: unknown) => void;
+    };
+
+    expect(compiled.querySelector('#terrain-tag-draft')).toBeTruthy();
+    page.terrainTagDraft.setValue('Coastal');
+    fixture.detectChanges();
+    compiled
+      .querySelector('#terrain-tag-draft')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    expect(page.terrainTags.controls.some((tag) => tag.controls.name.value === 'Coastal')).toBe(true);
+    expect(page.terrainTagDraft.value).toBe('');
+    expect(compiled.querySelector('[role="alert"]')).toBeNull();
+
+    const coastal = page.terrainTags.controls.find((tag) => tag.controls.name.value === 'Coastal');
+    expect(coastal).toBeTruthy();
+    const inventedDraft = { value: 'Invented', setValue: () => undefined };
+    expect(page.assignDefinedTag(page.terrainTypes.at(0).controls.tagIds, page.terrainTags, inventedDraft)).toBe(false);
+    expect(page.terrainTypes.at(0).controls.tagIds.value).toHaveLength(1);
+
+    compiled.querySelector('#terrain-tags-0')?.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const tagOptions = [...compiled.querySelectorAll('#terrain-tags-0-list [role="option"]')].map((item) =>
+      item.textContent.trim(),
+    );
+    expect(tagOptions).toContain('Coastal');
+    expect(tagOptions).not.toContain('Water');
+
+    page.terrainTypes.at(0).controls.tagDraft.setValue('Coastal');
+    expect(
+      page.assignDefinedTag(
+        page.terrainTypes.at(0).controls.tagIds,
+        page.terrainTags,
+        page.terrainTypes.at(0).controls.tagDraft,
+      ),
+    ).toBe(true);
+    expect(page.terrainTypes.at(0).controls.tagIds.value).toContain(coastal!.controls.id.value);
+
+    const forceToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
+      button.textContent.trim().startsWith('Force statuses'),
+    );
+    forceToggle?.click();
+    fixture.detectChanges();
+    page.addForceStatus();
+    fixture.detectChanges();
+    const status = page.forceStatuses.at(0);
+    status.controls.enablePick.setValue('Hold');
+    status.controls.enablePickLocationKind.setValue('Any');
+    page.addForceStatusEnableCondition(status);
+    status.controls.enablePick.setValue('Hold');
+    status.controls.enablePickLocationKind.setValue('TerrainType');
+    status.controls.enablePickTypeId.setValue(page.terrainTypes.at(0).controls.id.value);
+    page.addForceStatusEnableCondition(status);
+    expect(status.controls.enableConditions.length).toBe(2);
+    TestBed.inject(HttpTestingController).verify();
+  });
+
   it('lets an administrator look up The Hunt in Estalia when saving a preset', async () => {
     const fixture = TestBed.createComponent(CampaignSetupPage);
     TestBed.inject(AuthService).currentUser.set(administratorProfile());
@@ -579,13 +672,20 @@ describe('CampaignSetupPage', () => {
     fixture.detectChanges();
     expect(compiled.querySelector<HTMLInputElement>('#terrain-name-0')?.value).toBe('Beach');
     expect(TERRAIN_PRESETS[0]?.terrainTypes[0]?.name).toBe('Beach');
+    const waterTagId = (
+      fixture.componentInstance as unknown as {
+        terrainTags: { controls: readonly { controls: { id: { value: string }; name: { value: string } } }[] };
+        terrainTypes: { at: (index: number) => { controls: { tagIds: { value: string[] } } } };
+      }
+    ).terrainTags.controls.find((tag) => tag.controls.name.value === 'Water')?.controls.id.value;
+    expect(waterTagId).toBeTruthy();
     expect(
       (
         fixture.componentInstance as unknown as {
-          terrainTypes: { at: (index: number) => { controls: { isWaterFeature: { value: boolean } } } };
+          terrainTypes: { at: (index: number) => { controls: { tagIds: { value: string[] } } } };
         }
-      ).terrainTypes.at(0).controls.isWaterFeature.value,
-    ).toBe(true);
+      ).terrainTypes.at(0).controls.tagIds.value,
+    ).toContain(waterTagId);
 
     page.structurePresetId.setValue(STANDARD_STRUCTURES_PRESET_ID);
     page.applySelectedStructurePreset();
@@ -608,15 +708,13 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector<HTMLInputElement>('#force-status-enable-count-0')?.value).toBe('1');
     expect(compiled.querySelector<HTMLInputElement>('#force-status-clear-count-0')?.value).toBe('1');
     expect(compiled.querySelector('#force-status-enable-list-0')?.textContent).toContain(
-      'Named Diseased engine (water, contagion, rejoin)',
+      'After consecutive action phases',
     );
-    expect(compiled.querySelector('#force-status-clear-list-0')?.textContent).toContain(
-      'After Hold at a Capital City, City, Supply Depot, or Town',
-    );
+    expect(compiled.querySelector('#force-status-enable-list-0')?.textContent).toContain('terrain tag Water');
+    expect(compiled.querySelector('#force-status-clear-list-0')?.textContent).toContain('After Hold');
+    expect(compiled.querySelector('#force-status-clear-list-0')?.textContent).toContain('structure Capital City');
     expect(
-      compiled.querySelector(
-        '[aria-label="Remove Named Diseased engine (water, contagion, rejoin) from enable conditions"]',
-      ),
+      compiled.querySelector('[aria-label="Remove After consecutive action phases from enable conditions"]'),
     ).toBeTruthy();
     const forceStatuses = (
       fixture.componentInstance as unknown as {
@@ -1169,7 +1267,7 @@ describe('CampaignSetupPage', () => {
     page.applyStandardForceStatuses();
     page.addForceStatus();
     fixture.detectChanges();
-    expect(page.forceStatuses.at(0).controls.enableConditions.at(0).controls.occurrences.value).toBe(1);
+    expect(page.forceStatuses.at(0).controls.enableConditions.at(0).controls.occurrences.value).toBe(3);
     expect(page.forceStatuses.at(0).controls.clearConditions.at(0).controls.occurrences.value).toBe(1);
     expect(page.forceStatuses.at(5).controls.priority.value).toBe(5);
     expect(page.forceStatuses.at(5).controls.enableConditions.length).toBe(0);
@@ -1752,6 +1850,36 @@ describe('CampaignSetupPage edit', () => {
     expect(compiled.querySelector('.save-status.is-failure')).toBeTruthy();
     expect(compiled.querySelector('[aria-label="Campaign save failed"]')).toBeTruthy();
     expect(compiled.textContent).toContain('Last saved');
+    http.verify();
+  });
+
+  it('does not recreate setup lists after saving a start time change', async () => {
+    HTMLElement.prototype.scrollIntoView = () => undefined;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    const campaign = scheduledEditCampaign(campaignId);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      form: { controls: { startsAtLocal: { setValue(value: string): void } } };
+      save: () => Promise<void>;
+    };
+    page.form.controls.startsAtLocal.setValue('2099-02-01T12:00');
+    fixture.detectChanges();
+    const saving = page.save();
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      ...campaign,
+      startsAtLocal: '2099-02-01T12:00',
+      revision: campaign.revision + 1,
+    });
+    await saving;
+    fixture.detectChanges();
+
+    expect(warn.mock.calls.filter((call) => String(call[0]).includes('NG0956'))).toEqual([]);
+    warn.mockRestore();
     http.verify();
   });
 

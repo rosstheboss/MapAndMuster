@@ -32,7 +32,13 @@ internal static class CatalogJson
         IReadOnlyList<StoredStandardBattleResultQuestion>? standardBattleResultQuestions = null,
         IReadOnlyList<RoundArmyEscalationSetup>? armyEscalations = null,
         IReadOnlyList<StoredMission>? missions = null,
-        IReadOnlyDictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>? subfactionSpecialRules = null)
+        IReadOnlyDictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>? subfactionSpecialRules = null,
+        IReadOnlyList<StoredCatalogTag>? terrainTags = null,
+        IReadOnlyList<StoredCatalogTag>? structureTags = null,
+        IReadOnlyList<StoredCatalogTag>? factionTags = null,
+        IReadOnlyList<StoredCatalogTag>? missionTags = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? factionTagIds = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionTags>>? subfactionTagIds = null)
     {
         ArgumentNullException.ThrowIfNull(terrainTypes);
         ArgumentNullException.ThrowIfNull(structureTypes);
@@ -73,13 +79,66 @@ internal static class CatalogJson
                 MostStructurePointsCampaignPoints = ranking.MostStructurePoints,
                 PointsPerTerritoryCampaignPoints = ranking.PointsPerTerritory,
                 AlliedRelicControlCampaignPoints = ranking.AlliedRelicControlPoints,
+                MostTerritoriesTerrainTagId = ranking.MostTerritoriesTerrainTagId,
+                LongestTerritoryChainTerrainTagId = ranking.LongestTerritoryChainTerrainTagId,
+                MostStructurePointsStructureTagId = ranking.MostStructurePointsStructureTagId,
+                PointsPerTerritoryTerrainTagId = ranking.PointsPerTerritoryTerrainTagId,
                 SplitForceSupplyPenaltyPercent = splitForceSupplyPenaltyPercent,
                 SplitForceSupplyPenaltyIsPercent = splitForceSupplyPenaltyIsPercent,
                 StandardBattleResultQuestions = [.. (standardBattleResultQuestions ?? []).Select(ToDocument)],
                 ArmyEscalations = [.. (armyEscalations ?? []).Select(ToDocument)],
                 Missions = [.. (missions ?? []).Select(ToDocument)],
+                TerrainTags = [.. (terrainTags ?? []).Select(ToDocument)],
+                StructureTags = [.. (structureTags ?? []).Select(ToDocument)],
+                FactionTags = [.. (factionTags ?? []).Select(ToDocument)],
+                MissionTags = [.. (missionTags ?? []).Select(ToDocument)],
+                FactionTagsAssignments =
+                [
+                    .. (factionTagIds ?? new Dictionary<Guid, IReadOnlyList<Guid>>()).Select(static pair =>
+                        new FactionTagsDocument
+                        {
+                            FactionId = pair.Key,
+                            TagIds = [.. pair.Value],
+                        }),
+                    .. (subfactionTagIds ?? new Dictionary<Guid, IReadOnlyList<StoredSubfactionTags>>())
+                        .SelectMany(static pair => pair.Value.Select(item =>
+                            new FactionTagsDocument
+                            {
+                                FactionId = pair.Key,
+                                SubfactionName = item.Name,
+                                TagIds = [.. item.TagIds],
+                            })),
+                ],
             },
             Options);
+    }
+
+    public static string Serialize(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        return Serialize(
+            campaign.TerrainTypes,
+            campaign.StructureTypes,
+            campaign.ItemObjectiveTypes,
+            campaign.PublicObjectiveTypes,
+            campaign.BattleScoring,
+            campaign.RankingObjectivePoints,
+            campaign.SpecialRules,
+            campaign.PrivateObjectiveTypes,
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SpecialRuleIds),
+            campaign.ForceStatuses,
+            campaign.SplitForceSupplyPenaltyPercent,
+            campaign.SplitForceSupplyPenaltyIsPercent,
+            campaign.StandardBattleResultQuestions,
+            campaign.ArmyEscalations,
+            campaign.Missions,
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionSpecialRules),
+            campaign.TerrainTags,
+            campaign.StructureTags,
+            campaign.FactionTags,
+            campaign.MissionTags,
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.TagIds),
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionTags));
     }
 
     public static (
@@ -98,7 +157,13 @@ internal static class CatalogJson
         bool SplitForceSupplyPenaltyIsPercent,
         IReadOnlyList<StoredStandardBattleResultQuestion> StandardBattleResultQuestions,
         IReadOnlyList<RoundArmyEscalationSetup> ArmyEscalations,
-        IReadOnlyList<StoredMission> Missions)
+        IReadOnlyList<StoredMission> Missions,
+        IReadOnlyList<StoredCatalogTag> TerrainTags,
+        IReadOnlyList<StoredCatalogTag> StructureTags,
+        IReadOnlyList<StoredCatalogTag> FactionTags,
+        IReadOnlyList<StoredCatalogTag> MissionTags,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> FactionTagIds,
+        IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionTags>> SubfactionTagIds)
         Deserialize(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -113,11 +178,16 @@ internal static class CatalogJson
         }
 
         var terrains = document.TerrainTypes.Select(FromDocument).ToArray();
+        var terrainTags = MigrateWaterTags(
+            (document.TerrainTags ?? []).Select(FromDocument).ToArray(),
+            terrains,
+            document.TerrainTypes);
         var structures = document.StructureTypes.Select(FromDocument).ToArray();
         var catalogMissions = MergeMissions(
             (document.Missions ?? []).Select(FromDocument),
             terrains.SelectMany(static type => type.Missions).Concat(structures.SelectMany(static type => type.Missions)));
         var factionRules = document.FactionSpecialRules ?? [];
+        var factionTagsAssignments = document.FactionTagsAssignments ?? [];
         return (
             terrains,
             structures,
@@ -130,7 +200,11 @@ internal static class CatalogJson
                 Math.Max(0, document.MostBattlesWonCampaignPoints),
                 Math.Max(0, document.MostStructurePointsCampaignPoints),
                 Math.Max(0, document.PointsPerTerritoryCampaignPoints),
-                Math.Max(0, document.AlliedRelicControlCampaignPoints)),
+                Math.Max(0, document.AlliedRelicControlCampaignPoints),
+                document.MostTerritoriesTerrainTagId,
+                document.LongestTerritoryChainTerrainTagId,
+                document.MostStructurePointsStructureTagId,
+                document.PointsPerTerritoryTerrainTagId),
             [.. (document.SpecialRules ?? []).Select(FromDocument)],
             [.. (document.PrivateObjectiveTypes ?? []).Select(FromDocument)],
             factionRules
@@ -156,7 +230,29 @@ internal static class CatalogJson
             ReadSplitForcePenaltyIsPercent(document),
             ReadStandardBattleResultQuestions(document, catalogMissions),
             ArmyEscalationsFrom(document),
-            catalogMissions);
+            catalogMissions,
+            terrainTags,
+            [.. (document.StructureTags ?? []).Select(FromDocument)],
+            [.. (document.FactionTags ?? []).Select(FromDocument)],
+            [.. (document.MissionTags ?? []).Select(FromDocument)],
+            factionTagsAssignments
+                .Where(static item => string.IsNullOrWhiteSpace(item.SubfactionName))
+                .GroupBy(static item => item.FactionId)
+                .ToDictionary(
+                    static group => group.Key,
+                    static group => (IReadOnlyList<Guid>)group.SelectMany(static item => item.TagIds).Distinct().ToArray()),
+            factionTagsAssignments
+                .Where(static item => !string.IsNullOrWhiteSpace(item.SubfactionName))
+                .GroupBy(static item => item.FactionId)
+                .ToDictionary(
+                    static group => group.Key,
+                    static group => (IReadOnlyList<StoredSubfactionTags>)group
+                        .Select(static item => new StoredSubfactionTags
+                        {
+                            Name = item.SubfactionName!,
+                            TagIds = item.TagIds,
+                        })
+                        .ToArray()));
     }
 
     private static (
@@ -175,9 +271,60 @@ internal static class CatalogJson
         bool,
         IReadOnlyList<StoredStandardBattleResultQuestion>,
         IReadOnlyList<RoundArmyEscalationSetup>,
-        IReadOnlyList<StoredMission>) EmptyCatalog()
+        IReadOnlyList<StoredMission>,
+        IReadOnlyList<StoredCatalogTag>,
+        IReadOnlyList<StoredCatalogTag>,
+        IReadOnlyList<StoredCatalogTag>,
+        IReadOnlyList<StoredCatalogTag>,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>,
+        IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionTags>>) EmptyCatalog()
     {
-        return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue, HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent, [], [], []);
+        return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue, HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent, [], [], [], [], [], [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, IReadOnlyList<StoredSubfactionTags>>());
+    }
+
+    private static List<StoredCatalogTag> MigrateWaterTags(
+        IReadOnlyList<StoredCatalogTag> tags,
+        StoredTerrainType[] terrains,
+        List<TerrainDocument> documents)
+    {
+        var tagList = tags.ToList();
+        var water = tagList.FirstOrDefault(static tag => CatalogTags.IsWater(tag.Name));
+        for (var index = 0; index < terrains.Length; index++)
+        {
+            var isWater = index < documents.Count && documents[index].IsWaterFeature;
+            if (!isWater)
+            {
+                continue;
+            }
+
+            if (water is null)
+            {
+                water = new StoredCatalogTag
+                {
+                    Id = Guid.NewGuid(),
+                    Name = CatalogTags.WaterName,
+                };
+                tagList.Add(water);
+            }
+
+            if (terrains[index].TagIds.Contains(water.Id))
+            {
+                continue;
+            }
+
+            terrains[index] = new StoredTerrainType
+            {
+                Id = terrains[index].Id,
+                Name = terrains[index].Name,
+                Color = terrains[index].Color,
+                Missions = terrains[index].Missions,
+                CampaignPoints = terrains[index].CampaignPoints,
+                SupplyPoints = terrains[index].SupplyPoints,
+                TagIds = [.. terrains[index].TagIds, water.Id],
+            };
+        }
+
+        return tagList;
     }
 
     private static int ReadSplitForcePenaltyValue(CatalogDocument document)
@@ -221,8 +368,8 @@ internal static class CatalogJson
             Color = type.Color,
             Missions = [.. type.Missions.Select(ToDocument)],
             CampaignPoints = type.CampaignPoints,
-            IsWaterFeature = type.IsWaterFeature,
             SupplyPoints = type.SupplyPoints,
+            TagIds = [.. type.TagIds],
         };
     }
 
@@ -243,6 +390,7 @@ internal static class CatalogJson
             SupplyPoints = type.SupplyPoints,
             PillageSupplyPoints = type.PillageSupplyPoints,
             DestroySupplyPoints = type.DestroySupplyPoints,
+            TagIds = [.. type.TagIds],
         };
     }
 
@@ -275,6 +423,25 @@ internal static class CatalogJson
                     LeaveUnchanged = change.LeaveUnchanged,
                 }),
             ],
+            TagIds = [.. mission.TagIds],
+        };
+    }
+
+    private static CatalogTagDocument ToDocument(StoredCatalogTag tag)
+    {
+        return new CatalogTagDocument
+        {
+            Id = tag.Id,
+            Name = tag.Name,
+        };
+    }
+
+    private static StoredCatalogTag FromDocument(CatalogTagDocument tag)
+    {
+        return new StoredCatalogTag
+        {
+            Id = tag.Id == Guid.Empty ? Guid.NewGuid() : tag.Id,
+            Name = tag.Name?.Trim() ?? string.Empty,
         };
     }
 
@@ -287,8 +454,8 @@ internal static class CatalogJson
             Color = type.Color,
             Missions = [.. type.Missions.Select(FromDocument)],
             CampaignPoints = type.CampaignPoints,
-            IsWaterFeature = type.IsWaterFeature,
             SupplyPoints = Math.Max(0, type.SupplyPoints),
+            TagIds = type.TagIds ?? [],
         };
     }
 
@@ -310,6 +477,7 @@ internal static class CatalogJson
             SupplyPoints = Math.Max(0, type.SupplyPoints),
             PillageSupplyPoints = Math.Max(0, type.PillageSupplyPoints),
             DestroySupplyPoints = Math.Max(0, type.DestroySupplyPoints),
+            TagIds = type.TagIds ?? [],
         };
     }
 
@@ -346,6 +514,7 @@ internal static class CatalogJson
                     LeaveUnchanged = change.LeaveUnchanged,
                 }),
             ],
+            TagIds = mission.TagIds ?? [],
         };
     }
 
@@ -432,8 +601,12 @@ internal static class CatalogJson
             [
                 .. listed.Select(static condition => new ForceStatusConditionDocument
                 {
+                    Id = condition.Id,
                     Trigger = condition.Trigger,
                     Occurrences = condition.Occurrences,
+                    LocationKind = condition.LocationKind,
+                    LocationTypeId = condition.LocationTypeId,
+                    LocationTagId = condition.LocationTagId,
                 }),
             ];
         }
@@ -449,6 +622,7 @@ internal static class CatalogJson
             {
                 Trigger = trigger,
                 Occurrences = occurrences,
+                LocationKind = nameof(ConditionLocationKind.Any),
             },
         ];
     }
@@ -464,8 +638,14 @@ internal static class CatalogJson
             [
                 .. listed.Select(static condition => new StoredForceStatusCondition
                 {
+                    Id = condition.Id,
                     Trigger = condition.Trigger ?? string.Empty,
                     Occurrences = ForceStatusOccurrences.Normalize(condition.Occurrences),
+                    LocationKind = string.IsNullOrWhiteSpace(condition.LocationKind)
+                        ? nameof(ConditionLocationKind.Any)
+                        : condition.LocationKind,
+                    LocationTypeId = condition.LocationTypeId,
+                    LocationTagId = condition.LocationTagId,
                 }),
             ];
         }
@@ -509,6 +689,8 @@ internal static class CatalogJson
             StatusMatchKind = type.StatusMatchKind,
             PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
             PrerequisiteWasLost = type.PrerequisiteWasLost,
+            StructureTagId = type.StructureTagId,
+            TerrainTagId = type.TerrainTagId,
         };
     }
 
@@ -676,6 +858,8 @@ internal static class CatalogJson
             StatusMatchKind = string.IsNullOrWhiteSpace(type.StatusMatchKind) ? "None" : type.StatusMatchKind,
             PrerequisiteForceStatusTypeId = type.PrerequisiteForceStatusTypeId,
             PrerequisiteWasLost = type.PrerequisiteWasLost,
+            StructureTagId = type.StructureTagId,
+            TerrainTagId = type.TerrainTagId,
         };
     }
 
@@ -949,6 +1133,24 @@ internal static class CatalogJson
         public List<ArmyEscalationDocument>? ArmyEscalations { get; set; }
 
         public List<MissionDocument>? Missions { get; set; }
+
+        public Guid? MostTerritoriesTerrainTagId { get; set; }
+
+        public Guid? LongestTerritoryChainTerrainTagId { get; set; }
+
+        public Guid? MostStructurePointsStructureTagId { get; set; }
+
+        public Guid? PointsPerTerritoryTerrainTagId { get; set; }
+
+        public List<CatalogTagDocument>? TerrainTags { get; set; }
+
+        public List<CatalogTagDocument>? StructureTags { get; set; }
+
+        public List<CatalogTagDocument>? FactionTags { get; set; }
+
+        public List<CatalogTagDocument>? MissionTags { get; set; }
+
+        public List<FactionTagsDocument>? FactionTagsAssignments { get; set; }
     }
 
     private sealed class BattleScoringDocument
@@ -983,6 +1185,8 @@ internal static class CatalogJson
         public bool IsWaterFeature { get; set; }
 
         public int SupplyPoints { get; set; } = HuntInEstaliaDefaults.SupplyPoints;
+
+        public List<Guid>? TagIds { get; set; }
     }
 
     private sealed class StructureDocument
@@ -1012,6 +1216,8 @@ internal static class CatalogJson
         public int PillageSupplyPoints { get; set; } = HuntInEstaliaDefaults.SupplyPoints;
 
         public int DestroySupplyPoints { get; set; } = HuntInEstaliaDefaults.SupplyPoints;
+
+        public List<Guid>? TagIds { get; set; }
     }
 
     private sealed class ItemObjectiveDocument
@@ -1083,6 +1289,8 @@ internal static class CatalogJson
         public int SupplyPointsAdvantageAmount { get; set; }
 
         public List<MissionStatusChangeDocument>? StatusChanges { get; set; }
+
+        public List<Guid>? TagIds { get; set; }
     }
 
     private sealed class MissionStatusChangeDocument
@@ -1201,9 +1409,17 @@ internal static class CatalogJson
 
     private sealed class ForceStatusConditionDocument
     {
+        public Guid Id { get; set; }
+
         public string? Trigger { get; set; }
 
         public int? Occurrences { get; set; }
+
+        public string? LocationKind { get; set; }
+
+        public Guid? LocationTypeId { get; set; }
+
+        public Guid? LocationTagId { get; set; }
     }
 
     private sealed class PrivateObjectiveDocument
@@ -1247,6 +1463,10 @@ internal static class CatalogJson
         public Guid? PrerequisiteForceStatusTypeId { get; set; }
 
         public bool PrerequisiteWasLost { get; set; }
+
+        public Guid? StructureTagId { get; set; }
+
+        public Guid? TerrainTagId { get; set; }
     }
 
     private sealed class FactionSpecialRulesDocument
@@ -1256,5 +1476,21 @@ internal static class CatalogJson
         public string? SubfactionName { get; set; }
 
         public List<Guid> SpecialRuleIds { get; set; } = [];
+    }
+
+    private sealed class CatalogTagDocument
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class FactionTagsDocument
+    {
+        public Guid FactionId { get; set; }
+
+        public string? SubfactionName { get; set; }
+
+        public List<Guid> TagIds { get; set; } = [];
     }
 }

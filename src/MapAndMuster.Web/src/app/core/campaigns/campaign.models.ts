@@ -82,6 +82,10 @@ export interface CampaignDetail {
   specialRules?: CampaignSpecialRule[];
   standardBattleResultQuestions?: StandardBattleResultQuestion[];
   missions?: CampaignMission[];
+  terrainTags?: CatalogTag[];
+  structureTags?: CatalogTag[];
+  factionTags?: CatalogTag[];
+  missionTags?: CatalogTag[];
   forceStatuses?: CampaignForceStatus[];
   privateObjectiveTypes?: CampaignPrivateObjectiveType[];
   privateObjectives?: PrivateObjectiveAssignment[];
@@ -99,6 +103,10 @@ export interface CampaignDetail {
   mostStructurePointsCampaignPoints?: number;
   pointsPerTerritoryCampaignPoints?: number;
   alliedRelicControlCampaignPoints?: number;
+  mostTerritoriesTerrainTagId?: string | null;
+  longestTerritoryChainTerrainTagId?: string | null;
+  mostStructurePointsStructureTagId?: string | null;
+  pointsPerTerritoryTerrainTagId?: string | null;
   splitForceSupplyPenaltyPercent?: number;
   splitForceSupplyPenaltyIsPercent?: boolean;
   roundEscalations?: RoundArmyEscalation[];
@@ -126,6 +134,8 @@ export interface CampaignFaction {
   tintFlagImage?: boolean;
   specialRuleIds?: string[];
   subfactionSpecialRules?: SubfactionSpecialRules[];
+  tagIds?: string[];
+  subfactionTags?: SubfactionTags[];
   subfactionAppearances?: SubfactionAppearance[];
 }
 
@@ -142,6 +152,16 @@ export interface SubfactionAppearance {
 export interface SubfactionSpecialRules {
   name: string;
   specialRuleIds: string[];
+}
+
+export interface SubfactionTags {
+  name: string;
+  tagIds: string[];
+}
+
+export interface CatalogTag {
+  id: string;
+  name: string;
 }
 
 export interface CampaignAllyGroup {
@@ -179,6 +199,7 @@ export interface CampaignMission {
   hasSupplyPointsAdvantage?: boolean;
   supplyPointsAdvantageSide?: string;
   supplyPointsAdvantageAmount?: number;
+  tagIds?: string[];
 }
 
 export interface MissionResultQuestion {
@@ -212,7 +233,7 @@ export interface CampaignTerrainType {
   color: string;
   missions: CampaignMission[];
   campaignPoints?: number;
-  isWaterFeature?: boolean;
+  tagIds?: string[];
   supplyPoints?: number;
 }
 
@@ -230,6 +251,7 @@ export interface CampaignStructureType {
   supplyPoints?: number;
   pillageSupplyPoints?: number;
   destroySupplyPoints?: number;
+  tagIds?: string[];
 }
 
 export interface CampaignItemObjectiveType {
@@ -312,6 +334,8 @@ export interface CampaignPrivateObjectiveType {
   statusMatchKind?: string | null;
   prerequisiteForceStatusTypeId?: string | null;
   prerequisiteWasLost?: boolean;
+  structureTagId?: string | null;
+  terrainTagId?: string | null;
 }
 
 export interface PrivateObjectiveAssignment {
@@ -324,6 +348,8 @@ export interface PrivateObjectiveAssignment {
   name?: string | null;
   description?: string | null;
   campaignPoints?: number | null;
+  currentCount?: number | null;
+  requiredCount?: number | null;
   canClaim?: boolean;
   canModerate?: boolean;
 }
@@ -416,6 +442,10 @@ export interface SaveCampaignPayload {
   specialRules?: SaveSpecialRulePayload[];
   standardBattleResultQuestions?: SaveStandardBattleResultQuestionPayload[];
   missions?: SaveMissionPayload[];
+  terrainTags?: CatalogTag[];
+  structureTags?: CatalogTag[];
+  factionTags?: CatalogTag[];
+  missionTags?: CatalogTag[];
   forceStatuses?: SaveForceStatusPayload[];
   privateObjectiveTypes?: SavePrivateObjectiveTypePayload[];
   pointsPerBattleWon?: number;
@@ -431,6 +461,10 @@ export interface SaveCampaignPayload {
   mostStructurePointsCampaignPoints?: number;
   pointsPerTerritoryCampaignPoints?: number;
   alliedRelicControlCampaignPoints?: number;
+  mostTerritoriesTerrainTagId?: string | null;
+  longestTerritoryChainTerrainTagId?: string | null;
+  mostStructurePointsStructureTagId?: string | null;
+  pointsPerTerritoryTerrainTagId?: string | null;
   splitForceSupplyPenaltyPercent?: number;
   splitForceSupplyPenaltyIsPercent?: boolean;
   roundEscalations?: RoundArmyEscalation[];
@@ -455,6 +489,8 @@ export interface SaveFactionPayload {
   tintFlagImage?: boolean;
   specialRuleIds?: string[];
   subfactionSpecialRules?: SubfactionSpecialRules[];
+  tagIds?: string[];
+  subfactionTags?: SubfactionTags[];
   subfactionAppearances?: SaveSubfactionAppearancePayload[];
 }
 
@@ -483,7 +519,7 @@ export interface SaveTerrainTypePayload {
   color: string;
   missions: SaveMissionPayload[];
   campaignPoints?: number;
-  isWaterFeature?: boolean;
+  tagIds?: string[];
   supplyPoints?: number;
 }
 
@@ -501,6 +537,7 @@ export interface SaveStructureTypePayload {
   supplyPoints?: number;
   pillageSupplyPoints?: number;
   destroySupplyPoints?: number;
+  tagIds?: string[];
 }
 
 export interface SaveItemObjectiveTypePayload {
@@ -591,6 +628,8 @@ export interface SavePrivateObjectiveTypePayload {
   statusMatchKind?: string | null;
   prerequisiteForceStatusTypeId?: string | null;
   prerequisiteWasLost?: boolean;
+  structureTagId?: string | null;
+  terrainTagId?: string | null;
 }
 
 export interface SaveMissionPayload {
@@ -608,6 +647,7 @@ export interface SaveMissionPayload {
   hasSupplyPointsAdvantage?: boolean;
   supplyPointsAdvantageSide?: string;
   supplyPointsAdvantageAmount?: number;
+  tagIds?: string[];
 }
 
 export interface SaveMissionResultQuestionPayload {

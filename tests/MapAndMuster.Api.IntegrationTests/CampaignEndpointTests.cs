@@ -1548,6 +1548,50 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task GetPlayReturnsNoContentWhenTheCampaignHasNotStarted()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("wait");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Waiting War"));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        Assert.Equal("Scheduled", created.Status);
+
+        using var play = await client.GetAsync($"/api/campaigns/{created.Id}/play");
+        Assert.Equal(HttpStatusCode.NoContent, play.StatusCode);
+    }
+
+    [Fact]
+    public async Task EndClosesAnInProgressCampaignWhenTheClientRevisionIsStale()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("endplay");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+        var started = DateTime.UtcNow.AddHours(-1);
+        using var createdResponse = await client.PostAsJsonAsync(
+            "/api/campaigns",
+            ValidCampaignBody("Old Live War", startsAtLocal: started.ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture)));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        var play = await client.GetFromJsonAsync<CampaignPlayResponse>($"/api/campaigns/{created.Id}/play", JsonOptions);
+        Assert.NotNull(play);
+        Assert.True(play.Revision > created.Revision);
+
+        using var ended = await client.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/end",
+            new EndCampaignRequest { Revision = created.Revision });
+        Assert.Equal(HttpStatusCode.NoContent, ended.StatusCode);
+
+        var closed = await client.GetFromJsonAsync<CampaignDetailResponse>($"/api/campaigns/{created.Id}", JsonOptions);
+        Assert.NotNull(closed);
+        Assert.Equal("Completed", closed.Status);
+    }
+
+    [Fact]
     public async Task ManagerCanAssignForceStatusAndPlayersCannot()
     {
         using var client = _factory.CreateClient();
@@ -1635,8 +1679,50 @@ public sealed class CampaignEndpointTests
                         Name = type.Name,
                         Color = type.Color,
                         CampaignPoints = type.CampaignPoints,
-                        IsWaterFeature = type.IsWaterFeature,
                         SupplyPoints = type.SupplyPoints,
+                        TagIds = type.TagIds,
+                        Missions =
+                        [
+                            .. type.Missions.Select(static mission => new MissionRequest
+                            {
+                                Id = mission.Id,
+                                Name = mission.Name,
+                                Url = mission.Url,
+                            }),
+                        ],
+                    }),
+                ],
+                TerrainTags =
+                [
+                    .. mapped.TerrainTags.Select(static tag => new CatalogTagRequest
+                    {
+                        Id = tag.Id,
+                        Name = tag.Name,
+                    }),
+                ],
+                StructureTags =
+                [
+                    .. mapped.StructureTags.Select(static tag => new CatalogTagRequest
+                    {
+                        Id = tag.Id,
+                        Name = tag.Name,
+                    }),
+                ],
+                StructureTypes =
+                [
+                    .. mapped.StructureTypes.Select(static type => new StructureTypeRequest
+                    {
+                        Id = type.Id,
+                        Name = type.Name,
+                        BuiltinSymbol = type.BuiltinSymbol,
+                        IsBuildable = type.IsBuildable,
+                        IsPillageable = type.IsPillageable,
+                        IsDestructible = type.IsDestructible,
+                        CampaignPoints = type.CampaignPoints,
+                        SupplyPoints = type.SupplyPoints,
+                        PillageSupplyPoints = type.PillageSupplyPoints,
+                        DestroySupplyPoints = type.DestroySupplyPoints,
+                        TagIds = type.TagIds,
                         Missions =
                         [
                             .. type.Missions.Select(static mission => new MissionRequest
@@ -1657,6 +1743,32 @@ public sealed class CampaignEndpointTests
                         Effects = status.Effects,
                         EnableTrigger = status.EnableTrigger,
                         ClearTrigger = status.ClearTrigger,
+                        EnableOccurrences = status.EnableOccurrences,
+                        ClearOccurrences = status.ClearOccurrences,
+                        EnableConditions =
+                        [
+                            .. status.EnableConditions.Select(static condition => new ForceStatusConditionRequest
+                            {
+                                Id = condition.Id,
+                                Trigger = condition.Trigger,
+                                Occurrences = condition.Occurrences,
+                                LocationKind = condition.LocationKind,
+                                LocationTypeId = condition.LocationTypeId,
+                                LocationTagId = condition.LocationTagId,
+                            }),
+                        ],
+                        ClearConditions =
+                        [
+                            .. status.ClearConditions.Select(static condition => new ForceStatusConditionRequest
+                            {
+                                Id = condition.Id,
+                                Trigger = condition.Trigger,
+                                Occurrences = condition.Occurrences,
+                                LocationKind = condition.LocationKind,
+                                LocationTypeId = condition.LocationTypeId,
+                                LocationTagId = condition.LocationTagId,
+                            }),
+                        ],
                     }),
                 ],
             });

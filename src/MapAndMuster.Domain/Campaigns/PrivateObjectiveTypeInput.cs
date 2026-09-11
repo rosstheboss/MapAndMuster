@@ -64,4 +64,10 @@ public sealed class PrivateObjectiveTypeInput
 
     /// <summary>Gets whether GainedAfter waits for the prerequisite to have been lost.</summary>
     public bool PrerequisiteWasLost { get; init; }
+
+    /// <summary>Gets the structure-catalog tag for structure-based automatic criteria.</summary>
+    public Guid? StructureTagId { get; init; }
+
+    /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
+    public Guid? TerrainTagId { get; init; }
 }

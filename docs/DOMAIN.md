@@ -145,12 +145,12 @@ Named public objectives live in their own setup section (name, optional descript
 Private objectives are a separate optional catalog (at most 50). Each private objective has a
 name, optional description, campaign points, one or more holder kinds (player, faction, ally
 group, and/or Traitor), and either Manual or Automatic scoring. Automatic objectives name a criterion:
-control a number of territories; control listed territories; control, pillage, or destroy a
-number of a chosen structure type; win or lose a number of finalized battles; record a number of
+control a number of territories (optionally filtered by a terrain tag); control listed territories
+(same optional terrain tag); control, pillage, destroy, build, or repair structures matching a
+specific type, any type, or a structure tag; win or lose a number of finalized battles; record a number of
 player-chosen retreats (orders submitted by a player; delinquency defaults and staff corrections
 do not count); occupy the same territory as a relic or a territory with a direct map connection
-to it (any relic, or a named catalog item); build or repair a number of structures of a chosen
-type, or of any type; control a relic (any, or a named catalog item); defeat an opponent in
+to it (any relic, or a named catalog item); control a relic (any, or a named catalog item); defeat an opponent in
 battle (any, one random opponent chosen at assignment, or a specific faction or ally group);
 or gain a force status a number of times, cause another force to gain a status, or gain a status
 after gaining or losing another status. At launch, occupying players, factions, and ally groups each
@@ -208,9 +208,12 @@ Named Hunt effect keys the engine enforces or calculates (matched by key, not di
 - `DefendersOfTheHomeland`: unowned Towns and Cities count as depots regardless of path. Allies
   still need a connected supply line.
 - `GreatCityOfMagritta`: the force starts at and captures the Capital City.
-- `UndergroundNetwork`: no spawn. The force is placed at random into an empty Town or City (or
-  the Capital City if none are empty), capturing an empty Town or City that is not a spawn or
-  capital. Occupying a spawn with another faction does not start a battle until they leave.
+- `UndergroundNetwork`: no spawn. The force is placed at random into a Town, City, or Capital
+  City: an unoccupied Neutral settlement first, an unoccupied owned settlement second, or an
+  occupied settlement if those are gone. Empty land that is not a spawn or Capital City is
+  captured. Occupying a spawn with another faction does not start a battle until they leave.
+  A missing retreat or other assignment that would send the force to spawn uses that same
+  Town or City pick.
 - `CalledByTheRelic`: after a relic is revealed, Move destinations are only those that reduce
   distance to the closest revealed relic (ties allowed) until the relic is captured or battle is
   forced.
@@ -238,9 +241,11 @@ status and is not shown as a named status in the UI. Setup can copy the standard
 Shaken, Confident, Exhausted, and Well Rested, with priorities 0, 1, 2, 3, and 4 in that list order.
 A newly added status defaults to the lowest unused priority. Any listed enable or clear condition
 whose trigger matches that many times in a row can gain or clear the status. Battle triggers count
-consecutive battles (a Hold does not break a battle-loss streak; a win does). Water and Hold triggers count
-consecutive action phases (a battle window does not break an occupying-water streak; leaving water
-does). Priority and cancel-out still apply when the Nth matching event fires. When a force would
+consecutive battles (a Hold does not break a battle-loss streak; a win does). Occupying triggers
+(consecutive actions, surrender, and legacy water occupancy) count consecutive action phases (a
+battle window does not break them; leaving the matching location does). The same trigger may appear
+more than once when the location filter differs. Enable and clear lists are OR. Priority and
+cancel-out still apply when the Nth matching event fires. When a force would
 gain a status while it already has one, or two effects would apply at the same time, the lower
 priority number remains. If the incoming status lists the current (or simultaneous) status as a
 cancel-out, both are removed and the force has no status. Exhausted cancels Well Rested in the
@@ -249,20 +254,13 @@ Effect text is display-only; the app does not resolve tabletop modifiers. Named 
 keys can refuse a status: `Undead` never Shaken, Diseased, Well Rested, or Confident;
 `BringersOfThePlague` never Diseased or Well Rested; `ToughGuts` never Diseased.
 
-Named Diseased is an engine status matched by name, not by the OccupyingWater trigger. OccupyingWater
-remains available for custom statuses. Diseased is gained when a force completes three consecutive
-resolved actions in water-feature territories (the territories may differ), loses a fought battle
-on a water-feature territory, surrenders before fighting after two consecutive water-feature
-actions, shares a territory or a battle in the same phase with another faction that is Diseased,
-or is forced back together with a Diseased split of the same player. A plague-bearing combat win
-(`BringersOfThePlague`) inflicts Diseased on the loser anywhere, including when that loser is
-Shaken, unless a higher-priority status remains or a cancel-out clears both. Standard Diseased is
-priority 0, so it outranks other catalog statuses. While Diseased, Hold does not apply Well Rested
-or other catalog statuses. Hold on a Capital City, City, Supply Depot, or Town (not Castle; not a
-destroyed structure) clears Diseased to Normal. If a listed clear condition is Hold at a settlement
-and that condition's count is greater than 1, that many consecutive settlement Holds are required;
-otherwise one settlement Hold still cures. Missions, item-objective results, special rules,
-and staff assignment may still replace Diseased. Immune factions skip engine and contagion
+Named Diseased keeps engine behavior only for contagion, rejoin, plague-bearing wins, and immunity.
+Water occupancy, a fought defeat on Water, surrender after two consecutive Water actions, and
+settlement Hold are ordinary catalog conditions: ConsecutiveActions on the Water terrain tag ×3,
+BattleLostOrRetreat on Water ×1, Surrender on Water ×2, and Hold at Capital City, City, Supply Depot,
+and Town (not Castle; destroyed structures do not match). Standard Diseased is
+priority 0, so it outranks other catalog statuses. Missions, item-objective results, special rules,
+and staff assignment may still replace Diseased. Immune factions skip contagion
 infection; a manager or administrator assignment ignores immunity.
 
 Missions may list ordered win/lose status-change conditions. The first matching row for that
@@ -309,12 +307,14 @@ draw points (default 1). When differential scoring is off, a win awards configur
 (default 2) and a draw still awards draw points. The loser receives negative points only when
 that option is enabled. Public Objectives include manager-awarded named catalog items (award
 and revoke are append-only facts; originals are never overwritten) plus ranking objectives
-that currently award points to every player tied for first: most territories controlled,
-longest unbroken chain of the player's own territories, most battle wins (draws break
+that currently award points to every player tied for first: most territories controlled
+(optionally only those with a terrain tag), longest unbroken chain of the player's own territories
+(optional terrain tag), most battle wins (draws break
 win-count ties), and most structure campaign points from currently owned non-destroyed
-structures. Running public objectives add configured campaign points for each currently owned
-territory, and for each revealed relic currently held by another player of the same faction or
-a current (not backstabbed) ally. Relics the scoring player holds stay in Other. A named,
+structures (optional structure tag). Running public objectives add configured campaign points for each currently owned
+territory (optional terrain tag), and for each revealed relic currently held by another player of the same faction or
+a current (not backstabbed) ally. Relics the scoring player holds stay in Other. Named public objectives remain
+manager-awarded. A named,
 ranking, or running objective configured at 0 campaign points is ignored.
 The panel also shows a top five for each enabled public objective that is not an item objective:
 ranking objectives, points per territory when that running objective is configured above 0, and
@@ -426,15 +426,17 @@ end is start plus round length applied once per round.
 The campaign state machine is derived from the server clock:
 
 1. `Scheduled`: before the start instant, unless a manager has already closed the campaign.
+   GET play returns no content until that start instant.
 2. `InProgress`: inside a configured round and phase. The current round number, phase, and
    phase window are included on the campaign page.
 3. `Completed`: at or after the computed end instant, or immediately when a campaign manager or
    administrator ends the campaign.
 
 A manager or administrator may end a campaign from the campaign page or Edit campaign. Ending
-closes play immediately and keeps the campaign stored in its final state: remaining orders are
-not resolved, files are kept, and members can still open logs, standings, and duplicate the
-campaign. Ended campaigns appear in the Completed group. All current members are notified in-app
+closes play immediately against the current stored revision (a stale client revision does not
+block the close) and retries if a concurrent play-advance write moves the revision first. The
+campaign stays stored in its final state: remaining orders are not resolved, files are kept, and
+members can still open logs, standings, and duplicate the campaign. Ended campaigns appear in the Completed group. All current members are notified in-app
 and by email. The original scheduled end instant is left unchanged; list ordering for completed
 campaigns uses the close instant when one is recorded.
 
@@ -447,7 +449,9 @@ structures, missions, private-objective catalog, or most other setup. They may s
 catalog private objectives and approve or deny claims. They may increase the number of rounds, not below the current round and not
 above 52. They may lengthen the current round by adding time to the current or remaining action
 and battle windows; a window cannot be shortened below the duration already in effect for that
-window. Added rounds use the original phase template and make the campaign longer.
+window. Added rounds use the original phase template and make the campaign longer. The campaign
+log records how much time was added and the new phase expiration, how many rounds were added, or
+both when those happen together.
 
 Each action window and battle phase has an "End phase early if able to resolve" checkbox,
 default on. When it is on, a window that can resolve closes immediately and the next window
@@ -484,7 +488,10 @@ may uncommit a committed order back to draft. At the deadline, the latest valid 
 submitted. Missing slots become `Hold`. After the window closes, orders resolve and cannot be
 returned to draft. Loading or mutating play state advances every overdue window in one pass, so a
 campaign that sat idle past several deadlines catches up without a reload. Each force requires an action unless it is already in battle; same-player forces that occupy one territory
-rejoin into one surviving force and therefore one later action. Only users/forces that owe an
+rejoin into one surviving force and therefore one later action. A force locked in battle is named in
+Actions with its territory and opponents. Players whose forces all owe no action (locked in battle,
+or otherwise nothing to order) are listed as committed and do not block the remaining players.
+Only users/forces that owe an
 order participate in the early-close calculation. If every remaining force is in battle, nobody
 owes an action and the window closes early when that setting is on. An action window with no
 forces at all waits for the deadline.
@@ -501,7 +508,7 @@ faction cannot be changed. Each player force starts at that faction's spawn terr
 when the campaign launches or when they join play later; required subfactions use that
 subfaction's spawn when one is assigned, otherwise the parent faction spawn, unless a
 named effect key relocates them (`GreatCityOfMagritta` to the Capital City,
-`UndergroundNetwork` to a random empty Town or City).
+`UndergroundNetwork` to a random Town or City).
 
 Orders resolve simultaneously against the window's starting map state. Processing order is
 movement and splits, then backstab alliance breaks, then battles from enemy co-location, then
@@ -619,7 +626,8 @@ allowance plus the round bonus, then from the player's temporary pool.
   eligible, and a force cannot retreat onto a hex occupied by an enemy. Friendly occupation of
   owned or allied land is allowed (rejoin). `ArtOfWar` may also enter any other non-enemy-spawn
   territory and may capture it. A missing retreat, or a force with no remaining eligible
-  destination, is assigned to that force's spawn. If two or more enemy forces would
+  destination, is assigned to that force's spawn (`UndergroundNetwork` uses the same Town or
+  City pick as its initial placement). If two or more enemy forces would
   occupy the same territory after retreat, the strongest stays and the others are sent to the
   next safest eligible destination. Strongest is most current campaign points, then most
   territories, then most structures, then most supply including remaining temporary supply;
@@ -743,12 +751,17 @@ the shortest gap between its territories so adjacent arrows do not cross. The ar
 and Erase. Visible connection arrows are black and keep their resting size and outline. Hovering an
 arrow in those tools glows both connected territories without washing the rest of the map.
 
-Campaign setup owns the terrain-type and structure catalogs. The initial terrain types,
+Campaign setup owns the terrain-type and structure catalogs. Each of Factions, Missions, Terrain,
+and Structures has its own tag catalog (at most 9999 tags, unique case-insensitive names of 1–60
+characters). Tags do nothing unless a status condition or objective references them. Items only
+receive tags defined in that section. Subfactions use the faction catalog and union parent faction
+tags with their own extras. The initial terrain types,
 alphabetically, are Beach, Cave, Desert, Forest, Highlands, Jungle, Lake, Mountain, Plains, Riverlands, Sea,
 and Swamp.
-Each has a unique color, a symbol, at least one mission, and a Water feature flag. Beach, Lake,
-Riverlands, Sea, and Swamp start as water features. Setup starts each terrain type with one
-empty mission row. Hovering a territory shows whether its terrain is a water feature. The initial structures, alphabetically, are Capital City, Castle, City, Fortification, Supply
+Each has a unique color, a symbol, at least one mission, and optional terrain-catalog tags. The
+standard preset defines a Water tag and assigns it to Beach, Lake, Riverlands, Sea, and Swamp.
+Setup starts each terrain type with one
+empty mission row. Hovering a territory shows whether its terrain has the Water tag. The initial structures, alphabetically, are Capital City, Castle, City, Fortification, Supply
 Depot, and Town. Town, Capital City, City, and Castle are not buildable; Supply Depot and
 Fortification are. Capital City is not pillageable. Capital City, City, and Castle are not
 destructible. Each structure uses either a built-in icon or an uploaded logo image, not both.
@@ -952,9 +965,10 @@ Completed campaigns are ordered by most recently finished.
   Confident in the standard catalog), subject to faction exceptions. No named status means
   Normal, which is not shown as a status in the UI. Lower unique priority numbers outrank
   higher ones; a configured cancel-out pair becomes no status. Standard Diseased is priority 0.
-  Enable and clear each require 1 to 10 consecutive matching triggers (default 1). Named Diseased
-  enable stays the engine; a settlement-Hold clear count greater than 1 waits for that many
-  consecutive settlement Holds.
+  Enable and clear each require 1 to 10 consecutive matching triggers (default 1), optionally
+  limited to any location, a terrain or structure type, or a terrain or structure tag. Named Diseased
+  uses catalog Water and settlement Hold conditions; contagion, rejoin, plague-bearing wins, and
+  immunity remain engine behavior.
   A no-result forced retreat (neither side submitted) does not apply Shaken. Staff and campaign
   managers may assign any catalog status. Every change is logged with its source.
 - Neutral territories are unowned land. They are not armies.
@@ -1058,7 +1072,8 @@ Private objectives are a campaign catalog assigned to a player, a faction, an al
 traitor (a player who successfully resolved Backstab). A player may score each catalog type only
 once. Unrevealed text and criteria are omitted from unauthorized payloads. The campaign page lists the
 viewer's own private objectives at the top of Private objectives and reiterates still-unclaimed
-ones in Summary. Other players' claimed or revealed private objectives appear in a collapsed
+ones in Summary, with automatic assignments showing live progress as `(current/required)` next to
+the description. Other players' claimed or revealed private objectives appear in a collapsed
 subpanel ordered by faction name. Unclaimed private objectives for other holders are not listed.
 Manual private objectives are claimed by an authorized holder (the player, or any
 player in that faction or ally group) who reveals them to a manager. A manager or administrator
@@ -1157,8 +1172,10 @@ before launch, during play, and after the campaign ends. That file is the same p
 outbound sender would use. Private chats are omitted from the download even when the caller can
 see them on screen. The log records campaign start, campaign end with final scores and remaining revealed item
 objectives (a later manager score or item adjustment appends an updated final snapshot),
-manager extensions of remaining phases or rounds, resolved
-actions after an action window closes (including Hold for every force), attempted actions that
+manager extensions of remaining phases or rounds (the extra duration and new window end, and/or
+how many rounds were added), resolved
+actions after an action window closes in natural language (move, hold, split, merge, build, pillage,
+destroy, repair, retreat, and treachery when Backstab breaks an alliance), attempted actions that
 were invalid or conflicted and became Hold, battles created or finalized, manager battle-result
 overrides, debug enter/exit and debug order corrections, player retreats, automatic force rejoins when the same player's forces occupy one
 territory, and automatic substitutions: missing orders become Hold, deadline-submitted drafts,
