@@ -1638,7 +1638,13 @@ export class CampaignDetailPage {
   }
 
   protected privateObjectiveProgress(assignment: PrivateObjectiveAssignment): string | null {
-    if (assignment.scoringKind !== 'Automatic' || assignment.currentCount == null || assignment.requiredCount == null) {
+    if (
+      assignment.scoringKind !== 'Automatic' ||
+      assignment.currentCount === null ||
+      assignment.currentCount === undefined ||
+      assignment.requiredCount === null ||
+      assignment.requiredCount === undefined
+    ) {
       return null;
     }
 
