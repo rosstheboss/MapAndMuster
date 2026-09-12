@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 
 const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
@@ -151,6 +151,23 @@ async function mockSession(page: Page, profile: typeof player): Promise<void> {
   await page.route('**/api/auth/external-providers', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
+  await mockUpdateStreams(page);
+}
+
+/** EventSource hits these as soon as a campaign or site-chat page loads. Without a mock, Vite logs ECONNREFUSED. */
+async function mockUpdateStreams(page: Page): Promise<void> {
+  const heartbeat = 'event: heartbeat\ndata: {}\n\n';
+  const fulfillStream = async (route: Route): Promise<void> => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      headers: { 'cache-control': 'no-cache, no-store', 'x-accel-buffering': 'no' },
+      body: heartbeat,
+    });
+  };
+
+  await page.route('**/api/campaigns/*/stream', fulfillStream);
+  await page.route('**/api/site-chat/stream', fulfillStream);
 }
 
 async function mockMapImage(page: Page): Promise<void> {

@@ -31,8 +31,9 @@
 }
 
 .update-stream-status.is-reconnect {
-  border-color: var(--color-dirty);
-  color: var(--color-dirty);
+  /* --color-dirty is 3.1:1 on the page background. Mix it with text so 0.85rem type meets WCAG AA. */
+  border-color: color-mix(in srgb, var(--color-dirty) 45%, var(--color-text));
+  color: color-mix(in srgb, var(--color-dirty) 45%, var(--color-text));
 }
 
 @media (prefers-reduced-motion: no-preference) {
