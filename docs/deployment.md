@@ -350,11 +350,18 @@ case — headers arrive, the browser reports `open`, and no events follow. The c
 seconds without a `heartbeat` or update as dead and falls back to that poll. Users stay correct
 either way; a flapping or buffered stream is a cost regression to look for, not an outage.
 
-To check it, sign in, copy the session cookie, and watch the stream through the public origin.
-`-N` disables curl's own buffering:
+To check it, sign in and copy the `mapandmuster.auth` cookie from DevTools → Application →
+Cookies (name and value). Watch the stream through the public origin. `-N` disables curl's own
+buffering.
+
+On Windows PowerShell, `curl` is `Invoke-WebRequest`. Call `curl.exe` so `-N` and `-H` work:
+
+```powershell
+curl.exe -N -H "Cookie: mapandmuster.auth=<COOKIE_VALUE>" https://mapandmuster.com/api/campaigns/<CAMPAIGN_ID>/stream
+```
 
 ```bash
-curl -N -H 'Cookie: <SESSION_COOKIE>' https://mapandmuster.com/api/campaigns/<CAMPAIGN_ID>/stream
+curl -N -H 'Cookie: mapandmuster.auth=<COOKIE_VALUE>' https://mapandmuster.com/api/campaigns/<CAMPAIGN_ID>/stream
 ```
 
 - An `event: heartbeat` frame on connect, then another about every 20 seconds of idle: streaming
