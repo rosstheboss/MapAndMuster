@@ -40,4 +40,7 @@ public enum SupplyContributionKind
 
     /// <summary>A mission attacker/defender supply adjustment for a specific battle.</summary>
     MissionAdvantage,
+
+    /// <summary>A held item-objective supply adjustment.</summary>
+    ItemObjective,
 }

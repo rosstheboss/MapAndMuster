@@ -1,8 +1,10 @@
 using MapAndMuster.Application;
+using MapAndMuster.Application.Play;
 using MapAndMuster.Application.Ports;
 using MapAndMuster.Infrastructure.Campaigns;
 using MapAndMuster.Infrastructure.Email;
 using MapAndMuster.Infrastructure.Identity;
+using MapAndMuster.Infrastructure.Notifications;
 using MapAndMuster.Infrastructure.Persistence;
 using MapAndMuster.Infrastructure.Security;
 using MapAndMuster.Infrastructure.Storage;
@@ -52,6 +54,7 @@ public static class InfrastructureServiceCollectionExtensions
         RegisterEmailDelivery(services, configuration);
 
         services.AddDbContext<CampaignDbContext>(options => options.UseNpgsql(connectionString));
+        RegisterPhaseDeadlineWorker(services, configuration);
         services
             .AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
             {
@@ -71,6 +74,10 @@ public static class InfrastructureServiceCollectionExtensions
             .AddDefaultTokenProviders();
 
         services.AddSingleton<IClock, SystemClock>();
+
+        // Singleton: subscribers outlive the request scope that publishes to them.
+        services.AddSingleton<ICampaignUpdateBroadcaster, InProcessCampaignUpdateBroadcaster>();
+        services.AddSingleton<CampaignDeadlineSignal>();
         services.AddScoped<IUserAccountStore, UserAccountStore>();
         services.AddScoped<IdentityMaintenance>();
         services.AddScoped<LocalTestCampaignSeeder>();
@@ -81,6 +88,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IUserNotificationStore, UserNotificationStore>();
         services.AddScoped<INewsStore, NewsStore>();
         services.AddScoped<ISiteChatStore, SiteChatStore>();
+        services.AddSingleton<OutboxSignal>();
         services.AddScoped<IEmailOutbox, EmailOutbox>();
         services.AddSingleton<ISecretHasher, Pbkdf2SecretHasher>();
         services.AddSingleton<IAvatarImageProcessor, AvatarImageProcessor>();
@@ -92,6 +100,29 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<ICampaignDocumentProcessor, CampaignDocumentProcessor>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers the deadline worker unless a host opts out.
+    /// </summary>
+    /// <remarks>
+    /// Integration tests set <c>Campaigns:RunPhaseDeadlineWorker</c> to <c>false</c> and drive
+    /// <see cref="AdvanceDueCampaignsHandler"/> directly, so a background pass cannot race a test
+    /// that is asserting on database state or statement counts.
+    /// </remarks>
+    private static void RegisterPhaseDeadlineWorker(IServiceCollection services, IConfiguration configuration)
+    {
+        if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("Campaign")))
+        {
+            return;
+        }
+
+        if (!configuration.GetValue("Campaigns:RunPhaseDeadlineWorker", defaultValue: true))
+        {
+            return;
+        }
+
+        services.AddHostedService<PhaseDeadlineWorker>();
     }
 
     private static void RegisterEmailDelivery(IServiceCollection services, IConfiguration configuration)

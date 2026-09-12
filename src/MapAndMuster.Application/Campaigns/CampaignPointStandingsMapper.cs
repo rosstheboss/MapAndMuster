@@ -59,7 +59,8 @@ internal static class CampaignPointStandingsMapper
                     intact ? structureTypeId : null,
                     intact ? condition : StructureCondition.Operational,
                     terrainTags ?? [],
-                    intact ? structureTags ?? [] : []);
+                    intact ? structureTags ?? [] : [],
+                    territory.OwnerSubfaction);
             })];
         var adjacencies = graph is null
             ? Array.Empty<CampaignPointAdjacency>()
@@ -71,7 +72,7 @@ internal static class CampaignPointStandingsMapper
             [
                 .. campaign.Memberships
                     .Where(static member => member.IsPlayer)
-                    .Select(static member => new CampaignPointPlayer(member.UserId, member.FactionId)),
+                    .Select(static member => new CampaignPointPlayer(member.UserId, member.FactionId, member.Subfaction)),
             ],
             Territories = territories,
             Adjacencies = adjacencies,

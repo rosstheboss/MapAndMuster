@@ -14,15 +14,38 @@ namespace MapAndMuster.Infrastructure.Campaigns;
 public sealed class CampaignStore : ICampaignStore
 {
     private readonly CampaignDbContext _dbContext;
+    private readonly ICampaignUpdateBroadcaster _updates;
+    private readonly CampaignDeadlineSignal _deadlines;
 
     /// <summary>
     /// Initializes a new store.
     /// </summary>
     /// <param name="dbContext">The database context.</param>
-    public CampaignStore(CampaignDbContext dbContext)
+    /// <param name="updates">Broadcaster notified after a committed write.</param>
+    /// <param name="deadlines">Deadline worker wake signal, raised after a committed write.</param>
+    public CampaignStore(
+        CampaignDbContext dbContext,
+        ICampaignUpdateBroadcaster updates,
+        CampaignDeadlineSignal deadlines)
     {
         ArgumentNullException.ThrowIfNull(dbContext);
+        ArgumentNullException.ThrowIfNull(updates);
+        ArgumentNullException.ThrowIfNull(deadlines);
         _dbContext = dbContext;
+        _updates = updates;
+        _deadlines = deadlines;
+    }
+
+    /// <summary>
+    /// Announces a committed campaign write to connected clients and to the deadline worker.
+    /// </summary>
+    private void AnnounceWrite(StoredCampaign campaign, CampaignUpdateKind kind)
+    {
+        _updates.Publish(campaign.Id, kind, campaign.Revision);
+
+        // A write may have created, extended, or early-closed a window, so the worker needs to
+        // recompute when it should next wake.
+        _deadlines.Notify();
     }
 
     /// <inheritdoc />
@@ -45,6 +68,83 @@ public sealed class CampaignStore : ICampaignStore
             .FirstOrDefaultAsync(campaign => campaign.Id == campaignId, cancellationToken)
             .ConfigureAwait(false);
         return record is null ? null : ToStored(record);
+    }
+
+    /// <inheritdoc />
+    public async Task<CampaignAccessSnapshot?> FindForAccessCheckAsync(
+        Guid campaignId,
+        CancellationToken cancellationToken)
+    {
+        // One statement, and deliberately no MapGraphJson, CatalogJson, or PlayStateJson.
+        var row = await _dbContext.Campaigns
+            .AsNoTracking()
+            .Where(campaign => campaign.Id == campaignId)
+            .Select(campaign => new
+            {
+                campaign.Id,
+                campaign.Revision,
+                campaign.IsPubliclyViewable,
+                Memberships = campaign.Memberships
+                    .Select(membership => new
+                    {
+                        membership.UserId,
+                        membership.IsGameMaster,
+                        membership.IsPlayer,
+                        membership.FactionId,
+                        membership.Subfaction,
+                    })
+                    .ToList(),
+            })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (row is null)
+        {
+            return null;
+        }
+
+        return new CampaignAccessSnapshot
+        {
+            Id = row.Id,
+            Revision = row.Revision,
+            IsPubliclyViewable = row.IsPubliclyViewable,
+            Memberships =
+            [
+                .. row.Memberships.Select(membership => new StoredCampaignMembership
+                {
+                    UserId = membership.UserId,
+                    IsGameMaster = membership.IsGameMaster,
+                    IsPlayer = membership.IsPlayer,
+                    FactionId = membership.FactionId,
+                    Subfaction = membership.Subfaction,
+                }),
+            ],
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<CampaignTransitionCandidate>> ListTransitionCandidatesAsync(
+        CancellationToken cancellationToken)
+    {
+        var rows = await _dbContext.Campaigns
+            .AsNoTracking()
+            .Where(campaign => campaign.ClosedUtc == null)
+            .Select(campaign => new
+            {
+                campaign.Id,
+                campaign.StartsUtc,
+                campaign.PlayStateJson,
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return
+        [
+            .. rows.Select(row => new CampaignTransitionCandidate
+            {
+                Id = row.Id,
+                StartsUtc = row.StartsUtc,
+                PlayState = PlayStateJson.Deserialize(row.PlayStateJson),
+            }),
+        ];
     }
 
     /// <inheritdoc />
@@ -192,10 +292,12 @@ public sealed class CampaignStore : ICampaignStore
 
         _dbContext.ChangeTracker.Clear();
         var stored = await FindByIdAsync(campaign.Id, cancellationToken).ConfigureAwait(false);
+        var updated = stored ?? throw new InvalidOperationException("The campaign was not found after it was updated.");
+        AnnounceWrite(updated, CampaignUpdateKind.Setup);
         return new UpdateStoredCampaignOutcome
         {
             IsSuccess = true,
-            Campaign = stored ?? throw new InvalidOperationException("The campaign was not found after it was updated."),
+            Campaign = updated,
         };
     }
 
@@ -289,10 +391,13 @@ public sealed class CampaignStore : ICampaignStore
         }
 
         var stored = await FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        var updated = stored
+            ?? throw new InvalidOperationException("The campaign was not found after the map graph was saved.");
+        AnnounceWrite(updated, CampaignUpdateKind.Setup);
         return new UpdateStoredCampaignOutcome
         {
             IsSuccess = true,
-            Campaign = stored ?? throw new InvalidOperationException("The campaign was not found after the map graph was saved."),
+            Campaign = updated,
         };
     }
 
@@ -365,10 +470,16 @@ public sealed class CampaignStore : ICampaignStore
         }
 
         var stored = await FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        var updated = stored
+            ?? throw new InvalidOperationException("The campaign was not found after play state was saved.");
+
+        // Chat, orders, resolutions, and automatic advances all land here, so this is the single
+        // publication point that cannot miss a play or log change.
+        AnnounceWrite(updated, CampaignUpdateKind.Play);
         return new UpdateStoredCampaignOutcome
         {
             IsSuccess = true,
-            Campaign = stored ?? throw new InvalidOperationException("The campaign was not found after play state was saved."),
+            Campaign = updated,
         };
     }
 
@@ -656,6 +767,7 @@ public sealed class CampaignStore : ICampaignStore
     private static StoredCampaign ToStored(CampaignRecord record)
     {
         var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions, TerrainTags, StructureTags, FactionTags, MissionTags, FactionTagIds, SubfactionTagIds) = CatalogJson.Deserialize(record.CatalogJson);
+        var (FactionSpeeds, SubfactionSpeeds) = CatalogJson.DeserializeMovementSpeeds(record.CatalogJson);
         return new StoredCampaign
         {
             Id = record.Id,
@@ -754,6 +866,8 @@ public sealed class CampaignStore : ICampaignStore
                         SubfactionSpecialRules = SubfactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
                         TagIds = FactionTagIds.GetValueOrDefault(faction.Id) ?? [],
                         SubfactionTags = SubfactionTagIds.GetValueOrDefault(faction.Id) ?? [],
+                        ForceMovementSpeed = FactionSpeeds.GetValueOrDefault(faction.Id, 1),
+                        SubfactionMovementSpeeds = SubfactionSpeeds.GetValueOrDefault(faction.Id) ?? [],
                     }),
             ],
             Links =

@@ -96,7 +96,8 @@ internal static class CampaignLifecycle
                 territory.TerrainTypeId,
                 territory.SpawnSubfaction,
                 terrainTags ?? [],
-                intact ? structureTags ?? [] : []);
+                intact ? structureTags ?? [] : [],
+                territory.OwnerSubfaction);
         }).ToArray();
         var edges = graph.Adjacencies
             .Select(edge => (edge.TerritoryAId, edge.TerritoryBId))
@@ -133,7 +134,7 @@ internal static class CampaignLifecycle
                 StructureCondition = play.StructureCondition.ToString(),
                 OverlayColor = territory.OverlayColor,
                 OwnerFactionId = play.OwnerFactionId,
-                OwnerSubfaction = play.OwnerFactionId == territory.OwnerFactionId ? territory.OwnerSubfaction : null,
+                OwnerSubfaction = play.OwnerFactionId is null ? null : play.OwnerSubfaction,
                 SpawnFactionId = territory.SpawnFactionId,
                 SpawnSubfaction = territory.SpawnSubfaction,
             };

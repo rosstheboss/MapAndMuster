@@ -26,18 +26,22 @@ public sealed class EmailOutbox : IEmailOutbox
 
     private readonly CampaignDbContext _dbContext;
     private readonly IClock _clock;
+    private readonly OutboxSignal _signal;
 
     /// <summary>
     /// Initializes a new outbox.
     /// </summary>
     /// <param name="dbContext">The database context.</param>
     /// <param name="clock">The clock.</param>
-    public EmailOutbox(CampaignDbContext dbContext, IClock clock)
+    /// <param name="signal">Wake signal for the outbox processor.</param>
+    public EmailOutbox(CampaignDbContext dbContext, IClock clock, OutboxSignal signal)
     {
         ArgumentNullException.ThrowIfNull(dbContext);
         ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(signal);
         _dbContext = dbContext;
         _clock = clock;
+        _signal = signal;
     }
 
     /// <inheritdoc />
@@ -84,6 +88,7 @@ public sealed class EmailOutbox : IEmailOutbox
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _signal.Notify();
     }
 
     private async Task QueueAsync(
@@ -112,6 +117,7 @@ public sealed class EmailOutbox : IEmailOutbox
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _signal.Notify();
     }
 }
 

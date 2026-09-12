@@ -15,19 +15,6 @@ export const OLD_WORLD_SPECIAL_RULES: readonly SpecialRulePreset[] = [
     description: 'Beastmen Ambushers gain a +1 to Ambushing rolls.',
   },
   {
-    name: 'Crusaders',
-    effectKey: 'Crusaders',
-    description:
-      'During the Move action, a Bretonnian force can move up to two adjacent territories in one action. ' +
-      'The player must place the Move order to state what territory they will go first and then the territory they will ' +
-      'land in. The second territory does not need to be adjacent to the origin territory, just to the first territory ' +
-      'the Bretonnian force moves into. For example, a Move order will look like this “Force at A Moves to B and then C.” ' +
-      'If along the way, the Bretonnian player encounters another opponent faction’s force, they will stop and do battle. ' +
-      'The Bretonnian player who moves two territories does not claim the first territory they move through, regardless of ' +
-      'its state. They also cannot move through the opposing player’s spawn location. Split forces are only rejoined if ' +
-      'both forces are moved into the same location.',
-  },
-  {
     name: 'Safe in Water',
     effectKey: 'SafeInWater',
     description:
@@ -192,20 +179,22 @@ export const OLD_WORLD_SPECIAL_RULES: readonly SpecialRulePreset[] = [
     name: 'Called by the Relic',
     effectKey: 'CalledByTheRelic',
     description:
-      'If a Relic is found, the Tomb Kings players must make Move actions and travel to the closest territory (or choose ' +
-      'from equal choices) until they capture the Relic or they are forced to do battle.',
+      'If a Relic is found but no Tomb Kings players owns a Relic, Tomb Kings forces gain an extra movement speed. ' +
+      'If a Tomb Kings force has a Relic, all Tomb Kings forces lose the speed bonus but that force may gain +2 to a ' +
+      'casting or dispelling roll once per battle (even on a Fated Dispel or Bound spell). Tomb Kings do not suffer from ' +
+      'being Shaken, Exhausted, or Diseased, but also are never Well Rested or Confident.',
   },
   {
     name: 'Relic of a Past Age',
     effectKey: 'RelicOfAPastAge',
     description:
-      'If they have a relic, they may gain +2 to a casting or dispelling roll once per battle (even on a Fated Dispel).',
+      'If they have a relic, they may gain +2 to a casting or dispelling roll once per battle (even on a Fated Dispel or Bound spell).',
   },
   {
     name: 'Undead',
     effectKey: 'Undead',
     description:
-      'Undead forces do not suffer from being Shaken or Diseased, but also are never Well Rested or Confident.',
+      'Vampire Counts do not suffer from being Shaken, Exhausted, or Diseased, but also are never Well Rested or Confident.',
   },
   {
     name: 'Fresh Corpses',
@@ -234,7 +223,7 @@ export const OLD_WORLD_SPECIAL_RULES: readonly SpecialRulePreset[] = [
 
 export const OLD_WORLD_FACTION_SPECIAL_RULES: Readonly<Record<string, readonly string[]>> = {
   'Beastmen Brayherds': ['Expert Ambushers'],
-  'Kingdom of Bretonnia': ['Crusaders', 'Safe in Water'],
+  'Kingdom of Bretonnia': ['Safe in Water'],
   'Chaos Dwarfs': ['Slavers'],
   'Daemons of Chaos': ['Divided We Stand'],
   'Dark Elves': ['Treacherous'],
@@ -247,7 +236,7 @@ export const OLD_WORLD_FACTION_SPECIAL_RULES: Readonly<Record<string, readonly s
   'Orc & Goblin Tribes': ['The Green Tide'],
   'Renegade Crowns': ['Defenders of the Homeland', 'The Great City of Magritta'],
   Skaven: ['The Underground Network'],
-  'Tomb Kings of Khemri': ['Called by the Relic', 'Relic of a Past Age', 'Undead'],
+  'Tomb Kings of Khemri': ['Called by the Relic'],
   'Vampire Counts': ['Fresh Corpses', 'Undead'],
   'Warriors of Chaos': ['Northern Raiders'],
   'Wood Elf Realms': ['Navigators of the Forests', 'Healed by Nature'],

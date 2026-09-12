@@ -160,6 +160,11 @@
   background: var(--color-nested);
 }
 
+.map-loading-dots {
+  font-size: 3em;
+  letter-spacing: 0.05em;
+}
+
 .map-loading-dots span {
   animation: map-loading-dot 1.2s infinite;
 }
@@ -319,12 +324,42 @@
     0 0 0 4px rgb(254 243 226 / 90%);
 }
 
+.force-action-mark {
+  position: absolute;
+
+  /* Center on the circular pin's top-right edge so half the mark overlaps it. */
+  top: 14.645%;
+  left: 85.355%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 50%;
+  height: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  background: #15803d;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #15803d;
+  pointer-events: none;
+}
+
+.force-action-mark app-icon {
+  width: 70%;
+  height: 70%;
+}
+
 .force-held-items {
   position: absolute;
   right: -0.2rem;
   top: -0.2rem;
   display: flex;
   gap: 0.1rem;
+}
+
+.force-pin.has-action .force-held-items {
+  right: auto;
+  left: -0.2rem;
 }
 
 .held-item,

@@ -48,8 +48,13 @@ export class AppDialogComponent implements OnDestroy {
       this.registered = true;
       this.attachToBody();
       afterNextRender(() => this.focusInitial(), { injector: this.injector });
+      const onKeydown = (event: KeyboardEvent): void => {
+        this.onDialogKeydown(event);
+      };
+      document.addEventListener('keydown', onKeydown);
 
       onCleanup(() => {
+        document.removeEventListener('keydown', onKeydown);
         this.release();
         this.restoreFocus();
       });
@@ -66,17 +71,38 @@ export class AppDialogComponent implements OnDestroy {
     }
   }
 
-  protected onKeydown(event: KeyboardEvent): void {
+  private onDialogKeydown(event: KeyboardEvent): void {
+    if (!this.open() || event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+
     if (event.key === 'Escape') {
       event.preventDefault();
       this.cancelled.emit();
       return;
     }
 
-    if (event.key !== 'Tab') {
+    if (event.key === 'Enter' && this.dialogRole() === 'alertdialog') {
+      if (this.isTypingTarget(event.target)) {
+        return;
+      }
+
+      const confirm = this.confirmButton();
+      if (!confirm) {
+        return;
+      }
+
+      event.preventDefault();
+      confirm.click();
       return;
     }
 
+    if (event.key === 'Tab') {
+      this.trapTab(event);
+    }
+  }
+
+  private trapTab(event: KeyboardEvent): void {
     const focusable = this.focusableElements();
     if (focusable.length === 0) {
       event.preventDefault();
@@ -86,13 +112,38 @@ export class AppDialogComponent implements OnDestroy {
 
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !focusable.includes(active)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+      return;
+    }
+
+    if (event.shiftKey && active === first) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
+    } else if (!event.shiftKey && active === last) {
       event.preventDefault();
       first.focus();
     }
+  }
+
+  private confirmButton(): HTMLButtonElement | null {
+    const panel = this.panel()?.nativeElement;
+    if (!panel) {
+      return null;
+    }
+
+    return panel.querySelector<HTMLButtonElement>('button:not([data-dialog-safe]):not(:disabled)');
+  }
+
+  private isTypingTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
   }
 
   private attachToBody(): void {

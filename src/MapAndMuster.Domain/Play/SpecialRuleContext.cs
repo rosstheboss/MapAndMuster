@@ -14,7 +14,12 @@ public sealed class SpecialRuleContext
         IReadOnlyList<SpecialRuleSetup> catalog,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> factionRuleIds,
         IReadOnlyDictionary<(Guid FactionId, string Subfaction), IReadOnlyList<Guid>> subfactionRuleIds,
-        IReadOnlySet<Guid>? requiresSubfactionFactionIds = null)
+        IReadOnlySet<Guid>? requiresSubfactionFactionIds = null,
+        IReadOnlyDictionary<Guid, int>? factionMovementSpeeds = null,
+        IReadOnlyDictionary<(Guid FactionId, string Subfaction), int>? subfactionMovementSpeeds = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? forceItemRuleIds = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<ItemObjectiveEffectSetup>>? itemEffectsByTypeId = null,
+        IReadOnlyDictionary<Guid, string>? forceStatusNames = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(factionRuleIds);
@@ -23,6 +28,11 @@ public sealed class SpecialRuleContext
         FactionRuleIds = factionRuleIds;
         SubfactionRuleIds = subfactionRuleIds;
         RequiresSubfactionFactionIds = requiresSubfactionFactionIds ?? new HashSet<Guid>();
+        FactionMovementSpeeds = factionMovementSpeeds ?? new Dictionary<Guid, int>();
+        SubfactionMovementSpeeds = subfactionMovementSpeeds ?? new Dictionary<(Guid, string), int>();
+        ForceItemRuleIds = forceItemRuleIds ?? new Dictionary<Guid, IReadOnlyList<Guid>>();
+        ItemEffectsByTypeId = itemEffectsByTypeId ?? new Dictionary<Guid, IReadOnlyList<ItemObjectiveEffectSetup>>();
+        ForceStatusNames = forceStatusNames ?? new Dictionary<Guid, string>();
         EffectById = catalog
             .Where(static rule => SpecialRuleEffectKeys.IsKnown(rule.EffectKey))
             .ToDictionary(static rule => rule.Id, static rule => rule.EffectKey!, EqualityComparer<Guid>.Default);
@@ -46,6 +56,21 @@ public sealed class SpecialRuleContext
     /// <summary>Gets factions that must choose a named subfaction.</summary>
     public IReadOnlySet<Guid> RequiresSubfactionFactionIds { get; }
 
+    /// <summary>Gets faction movement speeds. Missing entries use the default of 1.</summary>
+    public IReadOnlyDictionary<Guid, int> FactionMovementSpeeds { get; }
+
+    /// <summary>Gets subfaction movement-speed overrides.</summary>
+    public IReadOnlyDictionary<(Guid FactionId, string Subfaction), int> SubfactionMovementSpeeds { get; }
+
+    /// <summary>Gets special-rule identifiers granted by items each force currently holds.</summary>
+    public IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> ForceItemRuleIds { get; }
+
+    /// <summary>Gets parameterized effects keyed by item-objective type.</summary>
+    public IReadOnlyDictionary<Guid, IReadOnlyList<ItemObjectiveEffectSetup>> ItemEffectsByTypeId { get; }
+
+    /// <summary>Gets catalog force-status names keyed by type identifier.</summary>
+    public IReadOnlyDictionary<Guid, string> ForceStatusNames { get; }
+
     private IReadOnlyDictionary<Guid, string> EffectById { get; }
 
     /// <summary>Returns whether the faction must take a subfaction.</summary>
@@ -58,7 +83,53 @@ public sealed class SpecialRuleContext
     public bool Has(CampaignForce force, string effectKey)
     {
         ArgumentNullException.ThrowIfNull(force);
-        return Has(force.FactionId, force.Subfaction, effectKey);
+        if (Has(force.FactionId, force.Subfaction, effectKey))
+        {
+            return true;
+        }
+
+        if (!ForceItemRuleIds.TryGetValue(force.Id, out var itemIds))
+        {
+            return false;
+        }
+
+        foreach (var id in itemIds)
+        {
+            if (EffectById.TryGetValue(id, out var key)
+                && string.Equals(key, effectKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Configured movement speed for the force before item and Called by the Relic bonuses.</summary>
+    public int MovementSpeedFor(CampaignForce force)
+    {
+        ArgumentNullException.ThrowIfNull(force);
+        if (!string.IsNullOrWhiteSpace(force.Subfaction)
+            && TrySubfactionSpeed(force.FactionId, force.Subfaction, out var subSpeed))
+        {
+            return subSpeed;
+        }
+
+        return FactionMovementSpeeds.TryGetValue(force.FactionId, out var speed)
+            ? Math.Clamp(speed, ForceMovementSpeeds.Min, ForceMovementSpeeds.Max)
+            : ForceMovementSpeeds.Default;
+    }
+
+    /// <summary>Parameterized effects configured on an item-objective type.</summary>
+    public IReadOnlyList<ItemObjectiveEffectSetup> EffectsForItemType(Guid typeId)
+    {
+        return ItemEffectsByTypeId.TryGetValue(typeId, out var effects) ? effects : [];
+    }
+
+    /// <summary>Catalog status name for a force-status type identifier.</summary>
+    public string? ForceStatusName(Guid statusTypeId)
+    {
+        return ForceStatusNames.TryGetValue(statusTypeId, out var name) ? name : null;
     }
 
     /// <summary>Returns whether a faction, optionally with a subfaction, has a mechanical special rule.</summary>
@@ -89,7 +160,8 @@ public sealed class SpecialRuleContext
         ArgumentException.ThrowIfNullOrWhiteSpace(effectKey);
         return EffectById.Values.Any(key => string.Equals(key, effectKey, StringComparison.OrdinalIgnoreCase))
             && (FactionRuleIds.Values.SelectMany(static ids => ids).Any(EffectById.ContainsKey)
-                || SubfactionRuleIds.Values.SelectMany(static ids => ids).Any(EffectById.ContainsKey));
+                || SubfactionRuleIds.Values.SelectMany(static ids => ids).Any(EffectById.ContainsKey)
+                || ForceItemRuleIds.Values.SelectMany(static ids => ids).Any(EffectById.ContainsKey));
     }
 
     /// <summary>Returns whether any player in the campaign is assigned For Hire.</summary>
@@ -103,6 +175,28 @@ public sealed class SpecialRuleContext
             }
         }
 
+        return false;
+    }
+
+    private bool TrySubfactionSpeed(Guid factionId, string subfaction, out int speed)
+    {
+        if (SubfactionMovementSpeeds.TryGetValue((factionId, subfaction), out speed))
+        {
+            speed = Math.Clamp(speed, ForceMovementSpeeds.Min, ForceMovementSpeeds.Max);
+            return true;
+        }
+
+        foreach (var pair in SubfactionMovementSpeeds)
+        {
+            if (pair.Key.FactionId == factionId
+                && string.Equals(pair.Key.Subfaction, subfaction, StringComparison.OrdinalIgnoreCase))
+            {
+                speed = Math.Clamp(pair.Value, ForceMovementSpeeds.Min, ForceMovementSpeeds.Max);
+                return true;
+            }
+        }
+
+        speed = ForceMovementSpeeds.Default;
         return false;
     }
 
@@ -148,11 +242,22 @@ public sealed class SpecialRuleContext
 }
 
 /// <summary>
-/// One extra Move hop for a two-territory Crusaders order.
+/// One extra Move hop for a multi-territory Move.
 /// </summary>
 /// <param name="ViaTerritoryId">The first territory entered.</param>
 /// <param name="TargetTerritoryId">The territory the force intends to end in.</param>
-public sealed record MoveHop(Guid ViaTerritoryId, Guid TargetTerritoryId);
+/// <param name="IntermediateTerritoryIds">Hops between the first via and the destination when speed is greater than 2.</param>
+public sealed record MoveHop(
+    Guid ViaTerritoryId,
+    Guid TargetTerritoryId,
+    IReadOnlyList<Guid> IntermediateTerritoryIds)
+{
+    /// <summary>A two-territory hop with no extra intermediates.</summary>
+    public MoveHop(Guid viaTerritoryId, Guid targetTerritoryId)
+        : this(viaTerritoryId, targetTerritoryId, [])
+    {
+    }
+}
 
 /// <summary>
 /// A daemon-god or other subfaction that left its implicit alliance.

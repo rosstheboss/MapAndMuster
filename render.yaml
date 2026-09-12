@@ -27,7 +27,10 @@ services:
     dockerfilePath: ./src/MapAndMuster.Api/Dockerfile
     dockerContext: .
     branch: master
-    healthCheckPath: /health
+    # Process-only probe. /health and /health/ready also check PostgreSQL; Render probes
+    # frequently, so pointing the platform probe at those would query the database
+    # continuously regardless of traffic.
+    healthCheckPath: /health/live
     autoDeployTrigger: checksPass
     disk:
       name: mapandmuster-uploads
@@ -36,6 +39,11 @@ services:
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      # Workstation GC. Server GC reserves per-core heaps and collects lazily, which on a
+      # small single-instance plan inflates resident memory without indicating a leak.
+      # Set here rather than in the csproj so it can be reverted from the Dashboard.
+      - key: DOTNET_gcServer
+        value: '0'
       - key: Database__ApplyMigrationsOnStartup
         value: 'false'
       - key: ForwardedHeaders__Enabled
@@ -84,6 +92,22 @@ services:
       - path: /*
         name: Referrer-Policy
         value: strict-origin-when-cross-origin
+      # Angular emits content-hashed file names (outputHashing: all), so a changed bundle is a
+      # changed URL. Caching them forever removes a round trip per file on every repeat visit.
+      - path: /*.js
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /*.css
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      # index.html and the runtime config are not hashed. They must revalidate or a deploy would
+      # never reach a returning visitor.
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+      - path: /config.json
+        name: Cache-Control
+        value: no-cache
     routes:
       - type: rewrite
         source: /*

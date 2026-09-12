@@ -20,6 +20,7 @@ public sealed class ItemObjectiveTypeSetup
     /// <param name="flavorText">Optional flavor or lore text shown to the holder.</param>
     /// <param name="choices">Holder choices configured for this item.</param>
     /// <param name="specialRuleIds">Special rules assigned to this item.</param>
+    /// <param name="effects"></param>
     public ItemObjectiveTypeSetup(
         Guid id,
         string name,
@@ -32,7 +33,8 @@ public sealed class ItemObjectiveTypeSetup
         int campaignPoints = 0,
         string? flavorText = null,
         IReadOnlyList<ItemObjectiveChoiceSetup>? choices = null,
-        IReadOnlyList<Guid>? specialRuleIds = null)
+        IReadOnlyList<Guid>? specialRuleIds = null,
+        IReadOnlyList<ItemObjectiveEffectSetup>? effects = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentOutOfRangeException.ThrowIfNegative(campaignPoints);
@@ -48,6 +50,7 @@ public sealed class ItemObjectiveTypeSetup
         FlavorText = flavorText;
         Choices = choices ?? [];
         SpecialRuleIds = specialRuleIds ?? [];
+        Effects = effects ?? [];
     }
 
     /// <summary>Gets the type identifier.</summary>
@@ -85,4 +88,7 @@ public sealed class ItemObjectiveTypeSetup
 
     /// <summary>Gets special rules assigned to this item.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; }
+
+    /// <summary>Gets parameterized effects granted to a force that holds this item.</summary>
+    public IReadOnlyList<ItemObjectiveEffectSetup> Effects { get; }
 }

@@ -17,9 +17,9 @@ public sealed class FactionSpecialRulePoliciesTests
     private static readonly Guid EnemySpawn = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     [Fact]
-    public void CrusadersAllowsATwoTerritoryMoveAndSkipsClaimingTheVia()
+    public void FactionSpeedTwoAllowsATwoTerritoryMoveAndSkipsClaimingTheVia()
     {
-        var rules = Context(Bretonnia, SpecialRuleEffectKeys.Crusaders);
+        var rules = SpeedContext(Bretonnia, 2);
         var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Origin, false);
         var map = Map();
 
@@ -60,8 +60,10 @@ public sealed class FactionSpecialRulePoliciesTests
         var undead = Context(TombKings, SpecialRuleEffectKeys.Undead);
         var force = new CampaignForce(Guid.NewGuid(), Player, TombKings, Origin, false);
         Assert.False(FactionSpecialRulePolicies.AllowsStatus(force, "Shaken", undead));
+        Assert.False(FactionSpecialRulePolicies.AllowsStatus(force, "Exhausted", undead));
+        Assert.False(FactionSpecialRulePolicies.AllowsStatus(force, "Diseased", undead));
         Assert.False(FactionSpecialRulePolicies.AllowsStatus(force, "Well Rested", undead));
-        Assert.True(FactionSpecialRulePolicies.AllowsStatus(force, "Exhausted", undead));
+        Assert.False(FactionSpecialRulePolicies.AllowsStatus(force, "Confident", undead));
     }
 
     [Fact]
@@ -93,8 +95,11 @@ public sealed class FactionSpecialRulePoliciesTests
         var retreats = CampaignPlayRules.EligibleRetreats(map, cathay, art);
         Assert.Contains(Dest, retreats);
         Assert.DoesNotContain(EnemySpawn, retreats);
-        Assert.Equal([Via], CampaignPlayRules.EligibleMoves(map, tomb, [item], relic));
-        Assert.Equal([Via], FactionSpecialRulePolicies.RelicPursuitTargets(map, tomb, [item], relic));
+        var moves = CampaignPlayRules.EligibleMoves(map, tomb, [item], relic, [tomb]);
+        Assert.Contains(Via, moves);
+        Assert.Contains(Dest, moves);
+        Assert.Equal(1, FactionSpecialRulePolicies.CalledByTheRelicSpeedBonus(tomb, [tomb], [item], relic));
+        Assert.False(FactionSpecialRulePolicies.AllowsStatus(tomb, "Exhausted", relic));
     }
 
     [Fact]
@@ -299,6 +304,21 @@ public sealed class FactionSpecialRulePoliciesTests
             betrayals));
     }
 
+    [Fact]
+    public void CapturePlantsARequiredSubfactionFlag()
+    {
+        var rules = new SpecialRuleContext(
+            [],
+            new Dictionary<Guid, IReadOnlyList<Guid>>(),
+            new Dictionary<(Guid, string), IReadOnlyList<Guid>>(),
+            requiresSubfactionFactionIds: new HashSet<Guid> { Bretonnia });
+        var captured = FactionSpecialRulePolicies.Capture(Map(), Via, Bretonnia, "Khorne", rules);
+
+        Assert.Equal(Bretonnia, captured.Territory(Via)!.OwnerFactionId);
+        Assert.Equal("Khorne", captured.Territory(Via)!.OwnerSubfaction);
+        Assert.Null(FactionSpecialRulePolicies.Capture(Map(), Via, Bretonnia, "Khorne").Territory(Via)!.OwnerSubfaction);
+    }
+
     private static SpecialRuleContext Context(Guid factionId, string effectKey)
     {
         var ruleId = Guid.NewGuid();
@@ -306,6 +326,15 @@ public sealed class FactionSpecialRulePoliciesTests
             [new SpecialRuleSetup(ruleId, effectKey, "Rule text.", effectKey)],
             new Dictionary<Guid, IReadOnlyList<Guid>> { [factionId] = [ruleId] },
             new Dictionary<(Guid, string), IReadOnlyList<Guid>>());
+    }
+
+    private static SpecialRuleContext SpeedContext(Guid factionId, int speed)
+    {
+        return new SpecialRuleContext(
+            [],
+            new Dictionary<Guid, IReadOnlyList<Guid>>(),
+            new Dictionary<(Guid, string), IReadOnlyList<Guid>>(),
+            factionMovementSpeeds: new Dictionary<Guid, int> { [factionId] = speed });
     }
 
     private static PlayMap Map()

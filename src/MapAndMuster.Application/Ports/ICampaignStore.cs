@@ -26,6 +26,46 @@ public interface ICampaignStore
     Task<StoredCampaign?> FindByIdAsync(Guid campaignId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Loads only the fields needed to decide whether a caller may view a campaign.
+    /// </summary>
+    /// <param name="campaignId">The campaign identifier.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The access snapshot, or <see langword="null"/> when the campaign does not exist.</returns>
+    /// <remarks>
+    /// Prefer this over <see cref="FindByIdAsync"/> when the caller only authorizes and does not
+    /// render campaign state. <see cref="FindByIdAsync"/> loads the overlay graph, catalog, and
+    /// play-state JSON, which is wasted work for a permission check or a long-lived stream.
+    /// </remarks>
+    async Task<CampaignAccessSnapshot?> FindForAccessCheckAsync(Guid campaignId, CancellationToken cancellationToken)
+    {
+        var campaign = await FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        return campaign is null
+            ? null
+            : new CampaignAccessSnapshot
+            {
+                Id = campaign.Id,
+                Revision = campaign.Revision,
+                IsPubliclyViewable = campaign.IsPubliclyViewable,
+                Memberships = campaign.Memberships,
+            };
+    }
+
+    /// <summary>
+    /// Lists open campaigns with just enough state to decide when each next needs a
+    /// time-based transition.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Every campaign that has not been closed.</returns>
+    /// <remarks>
+    /// Used by the deadline worker so it can sleep until the next real deadline instead of
+    /// loading campaigns on a timer. Closed campaigns never transition again and are excluded.
+    /// </remarks>
+    Task<IReadOnlyList<CampaignTransitionCandidate>> ListTransitionCandidatesAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IReadOnlyList<CampaignTransitionCandidate>>([]);
+    }
+
+    /// <summary>
     /// Lists campaigns the user manages or participates in.
     /// </summary>
     /// <param name="userId">The user identifier.</param>

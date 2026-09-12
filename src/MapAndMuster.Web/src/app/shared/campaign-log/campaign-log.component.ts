@@ -22,11 +22,13 @@ import {
   type CampaignLogMember,
 } from '../../core/campaigns/campaign-log';
 
+import type { UpdateStreamState } from '../../core/campaigns/update-stream';
 import { AppDialogComponent } from '../dialog/dialog.component';
+import { UpdateStreamStatusComponent } from '../update-stream-status/update-stream-status.component';
 
 @Component({
   selector: 'app-campaign-log',
-  imports: [FormsModule, RouterLink, AppDialogComponent],
+  imports: [FormsModule, RouterLink, AppDialogComponent, UpdateStreamStatusComponent],
   templateUrl: './campaign-log.component.html',
   styleUrl: './campaign-log.component.css',
 })
@@ -48,6 +50,7 @@ export class CampaignLogComponent {
   readonly initialChannelKey = input('Public:');
   readonly initialScrollTop = input<number | null>(null);
   readonly scrollToEntryId = input<string | null>(null);
+  readonly streamState = input<UpdateStreamState | null>(null);
 
   readonly send = output<CampaignChatSend>();
   readonly downloadLog = output<CampaignLogExportRequest>();

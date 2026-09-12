@@ -29,6 +29,23 @@ public interface ICampaignMapStorage
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The file, or <see langword="null"/> when it does not exist.</returns>
     Task<StoredCampaignMap?> OpenReadAsync(string storageKey, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Opens a stored map as a stream so a response can be written without buffering it.
+    /// </summary>
+    /// <param name="storageKey">The storage key.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The open file, or <see langword="null"/> when it does not exist.</returns>
+    /// <remarks>
+    /// The default implementation buffers through <see cref="OpenReadAsync"/>. Implementations
+    /// backed by a file system should override it; a campaign map can be several megabytes and
+    /// buffering one lands on the large object heap.
+    /// </remarks>
+    async Task<StoredCampaignFile?> OpenStreamAsync(string storageKey, CancellationToken cancellationToken)
+    {
+        var file = await OpenReadAsync(storageKey, cancellationToken).ConfigureAwait(false);
+        return file is null ? null : StoredCampaignFile.FromBytes(file.Content, file.ContentType);
+    }
 }
 
 /// <summary>
@@ -67,6 +84,22 @@ public interface ICampaignAssetStorage
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The file, or <see langword="null"/> when it does not exist.</returns>
     Task<StoredCampaignAsset?> OpenReadAsync(string storageKey, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Opens a stored asset as a stream so a response can be written without buffering it.
+    /// </summary>
+    /// <param name="storageKey">The storage key.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The open file, or <see langword="null"/> when it does not exist.</returns>
+    /// <remarks>
+    /// The default implementation buffers through <see cref="OpenReadAsync"/> so existing test
+    /// doubles keep working. Real storage should override it.
+    /// </remarks>
+    async Task<StoredCampaignFile?> OpenStreamAsync(string storageKey, CancellationToken cancellationToken)
+    {
+        var file = await OpenReadAsync(storageKey, cancellationToken).ConfigureAwait(false);
+        return file is null ? null : StoredCampaignFile.FromBytes(file.Content, file.ContentType, file.DownloadName);
+    }
 }
 
 /// <summary>
@@ -83,6 +116,29 @@ public sealed record StoredCampaignAsset(byte[] Content, string ContentType, str
 /// <param name="Content">The file bytes.</param>
 /// <param name="ContentType">The content type to serve.</param>
 public sealed record StoredCampaignMap(byte[] Content, string ContentType);
+
+/// <summary>
+/// A stored file opened for reading. The caller owns <see cref="Content"/> and must dispose it.
+/// </summary>
+/// <param name="Content">The open, readable stream positioned at the start of the file.</param>
+/// <param name="ContentType">The content type to serve.</param>
+/// <param name="Length">The file length in bytes.</param>
+/// <param name="DownloadName">The original file name, when known.</param>
+public sealed record StoredCampaignFile(Stream Content, string ContentType, long Length, string? DownloadName = null)
+{
+    /// <summary>
+    /// Wraps already-buffered bytes, for storage implementations that cannot stream.
+    /// </summary>
+    /// <param name="content">The file bytes.</param>
+    /// <param name="contentType">The content type to serve.</param>
+    /// <param name="downloadName">The original file name, when known.</param>
+    /// <returns>A file backed by a read-only view over the bytes.</returns>
+    public static StoredCampaignFile FromBytes(byte[] content, string contentType, string? downloadName = null)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        return new StoredCampaignFile(new MemoryStream(content, writable: false), contentType, content.Length, downloadName);
+    }
+}
 
 /// <summary>
 /// Validates, re-encodes, and strips metadata from uploaded raster campaign maps.

@@ -251,19 +251,16 @@ public sealed class CampaignNotificationPublisher
         string dedupeKey,
         CancellationToken cancellationToken)
     {
-        foreach (var membership in campaign.Memberships.Where(static member => member.IsGameMaster))
-        {
-            await NotifyAsync(
-                    membership.UserId,
-                    kind,
-                    campaign,
-                    title,
-                    body,
-                    path,
-                    $"{dedupeKey}:{membership.UserId:N}",
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
+        await NotifyManyAsync(
+                [.. campaign.Memberships.Where(static member => member.IsGameMaster).Select(static member => member.UserId)],
+                kind,
+                campaign,
+                title,
+                body,
+                path,
+                dedupeKey,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task NotifyMembersAsync(
@@ -275,16 +272,82 @@ public sealed class CampaignNotificationPublisher
         string dedupePrefix,
         CancellationToken cancellationToken)
     {
-        foreach (var membership in campaign.Memberships)
+        await NotifyManyAsync(
+                [.. campaign.Memberships.Select(static member => member.UserId)],
+                kind,
+                campaign,
+                title,
+                body,
+                path,
+                dedupePrefix,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Notifies a whole membership list with one account read and one notification write.
+    /// </summary>
+    /// <remarks>
+    /// Emails still go through the outbox one at a time, which is correct: each recipient gets a
+    /// separately addressed message and delivery must not depend on the others succeeding.
+    /// </remarks>
+    private async Task NotifyManyAsync(
+        IReadOnlyList<Guid> userIds,
+        NotificationKind kind,
+        StoredCampaign campaign,
+        string title,
+        string body,
+        string path,
+        string dedupePrefix,
+        CancellationToken cancellationToken)
+    {
+        if (userIds.Count == 0)
         {
-            await NotifyAsync(
-                    membership.UserId,
-                    kind,
-                    campaign,
+            return;
+        }
+
+        var accounts = await _accounts.FindManyByIdAsync(userIds, cancellationToken).ConfigureAwait(false);
+        var notices = new List<NewUserNotification>(userIds.Count);
+        foreach (var userId in userIds)
+        {
+            if (!accounts.ContainsKey(userId))
+            {
+                continue;
+            }
+
+            notices.Add(new NewUserNotification
+            {
+                UserId = userId,
+                Kind = kind,
+                CampaignId = campaign.Id,
+                CampaignName = campaign.Name,
+                Title = title,
+                Body = body,
+                Path = path,
+                DedupeKey = $"{dedupePrefix}:{userId:N}",
+            });
+        }
+
+        var accepted = await _notifications.TryAddManyAsync(notices, _clock.UtcNow, cancellationToken).ConfigureAwait(false);
+        foreach (var notice in notices)
+        {
+            if (!accepted.Contains(notice.DedupeKey))
+            {
+                continue;
+            }
+
+            var account = accounts[notice.UserId];
+            if (!account.EmailNotificationsEnabled || account.IsTestAccount)
+            {
+                continue;
+            }
+
+            await _outbox.QueueUserNoticeAsync(
+                    account.Email,
+                    notice.UserId,
                     title,
-                    body,
+                    $"{body} Sign in to open the campaign.",
                     path,
-                    $"{dedupePrefix}:{membership.UserId:N}",
                     cancellationToken)
                 .ConfigureAwait(false);
         }

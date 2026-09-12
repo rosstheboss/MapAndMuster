@@ -50,6 +50,17 @@ describe('CampaignLogComponent', () => {
     expect(compiled.textContent).toContain('Private chats');
     expect(compiled.textContent).toContain('Game log');
     expect(compiled.querySelector<HTMLInputElement>('#chat-recipient')?.value).toBe('Everyone');
+    expect(compiled.querySelector('app-update-stream-status')).toBeNull();
+  });
+
+  it('shows Live on the summary when the stream is open', () => {
+    const fixture = TestBed.createComponent(CampaignLogComponent);
+    fixture.componentRef.setInput('streamState', 'open');
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('summary')?.textContent).toContain('Live');
+    expect(compiled.querySelector('app-update-stream-status')?.textContent).toContain('Live');
   });
 
   it('shows how long a manager lengthened a phase and the localized new end', () => {

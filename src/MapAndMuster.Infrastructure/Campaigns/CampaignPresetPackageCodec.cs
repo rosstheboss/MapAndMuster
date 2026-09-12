@@ -35,6 +35,10 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
     private const string OverlaySvgEntry = "overlay.svg";
     private const string MapEntry = "map.png";
     private const string AssetsPrefix = "assets/";
+    private const int StreamBufferBytes = 64 * 1024;
+
+    /// <summary>Size of an empty ZIP: the end-of-central-directory record alone.</summary>
+    private const int MinArchiveBytes = 22;
 
     private static readonly JsonSerializerOptions ManifestOptions = new()
     {
@@ -43,66 +47,80 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
     };
 
     /// <inheritdoc />
-    public byte[] Write(StoredCampaign campaign, IReadOnlyDictionary<string, byte[]> files)
+    public async Task WriteAsync(
+        Stream destination,
+        StoredCampaign campaign,
+        IReadOnlyList<string> storageKeys,
+        CampaignPresetFileOpener openFile,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(campaign);
-        ArgumentNullException.ThrowIfNull(files);
+        ArgumentNullException.ThrowIfNull(storageKeys);
+        ArgumentNullException.ThrowIfNull(openFile);
 
-        using var output = new MemoryStream();
-        using (var zip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        // ZipArchive flushes each entry's compression buffer, and the central directory, on
+        // disposal using synchronous writes, which a response body rejects. Assembling on a
+        // temporary file satisfies that and still keeps memory flat: a 64 MB package buffered in
+        // memory would be one large-object-heap allocation per concurrent export.
+        var spool = CreateSpoolFile();
+        await using (spool.ConfigureAwait(false))
         {
-            WriteEntry(
-                zip,
-                ManifestEntry,
-                JsonSerializer.SerializeToUtf8Bytes(
-                    new ManifestDocument { Format = FormatName, Version = FormatVersion, Name = campaign.Name },
-                    ManifestOptions));
-            WriteEntry(
-                zip,
-                CatalogEntry,
-                Encoding.UTF8.GetBytes(
-                    CatalogJson.Serialize(campaign)));
-            WriteEntry(zip, SettingsEntry, Encoding.UTF8.GetBytes(CampaignPresetSettingsJson.Serialize(campaign)));
-            if (campaign.MapGraph is not null)
+            // leaveOpen so the copy below still has the finished archive to read.
+            using (var zip = new ZipArchive(spool, ZipArchiveMode.Create, leaveOpen: true))
             {
-                WriteEntry(zip, OverlayJsonEntry, Encoding.UTF8.GetBytes(MapGraphJson.Serialize(campaign.MapGraph)));
-                WriteEntry(zip, OverlaySvgEntry, Encoding.UTF8.GetBytes(WriteOverlaySvg(campaign.MapGraph)));
-            }
-
-            if (!string.IsNullOrWhiteSpace(campaign.MapStorageKey)
-                && files.TryGetValue(campaign.MapStorageKey, out var mapBytes))
-            {
-                WriteEntry(zip, MapEntry, mapBytes);
-            }
-
-            foreach (var (key, bytes) in files)
-            {
-                if (string.Equals(key, campaign.MapStorageKey, StringComparison.Ordinal))
+                WriteEntry(
+                    zip,
+                    ManifestEntry,
+                    JsonSerializer.SerializeToUtf8Bytes(
+                        new ManifestDocument { Format = FormatName, Version = FormatVersion, Name = campaign.Name },
+                        ManifestOptions));
+                WriteEntry(zip, CatalogEntry, Encoding.UTF8.GetBytes(CatalogJson.Serialize(campaign)));
+                WriteEntry(zip, SettingsEntry, Encoding.UTF8.GetBytes(CampaignPresetSettingsJson.Serialize(campaign)));
+                if (campaign.MapGraph is not null)
                 {
-                    continue;
+                    WriteEntry(zip, OverlayJsonEntry, Encoding.UTF8.GetBytes(MapGraphJson.Serialize(campaign.MapGraph)));
+                    WriteEntry(zip, OverlaySvgEntry, Encoding.UTF8.GetBytes(WriteOverlaySvg(campaign.MapGraph)));
                 }
 
-                WriteEntry(zip, AssetsPrefix + key, bytes);
+                foreach (var key in storageKeys)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var isMap = string.Equals(key, campaign.MapStorageKey, StringComparison.Ordinal);
+                    await CopyEntryAsync(zip, isMap ? MapEntry : AssetsPrefix + key, key, openFile, cancellationToken)
+                        .ConfigureAwait(false);
+                }
             }
-        }
 
-        return output.ToArray();
+            spool.Position = 0;
+            await spool.CopyToAsync(destination, StreamBufferBytes, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
-    public OperationResult<CampaignPresetPackageContents> Read(ReadOnlyMemory<byte> content)
+    public OperationResult<CampaignPresetPackageContents> Read(Stream content)
     {
-        if (content.Length == 0)
-        {
-            return OperationResults.Failure<CampaignPresetPackageContents>(
-                ErrorCodes.CampaignPresetPackageInvalid,
-                "Upload a Map & Muster campaign preset file.");
-        }
+        ArgumentNullException.ThrowIfNull(content);
 
         try
         {
-            using var input = new MemoryStream(content.ToArray(), writable: false);
-            using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+            using var seekable = EnsureSeekable(content);
+            if (seekable.Length == 0)
+            {
+                return OperationResults.Failure<CampaignPresetPackageContents>(
+                    ErrorCodes.CampaignPresetPackageInvalid,
+                    "Upload a Map & Muster campaign preset file.");
+            }
+
+            // Rejected before ZipArchive sees it: locating the end-of-central-directory record
+            // seeks backwards from the end, and a shorter body would seek past the start rather
+            // than report a malformed archive.
+            if (seekable.Length < MinArchiveBytes)
+            {
+                return InvalidPackage();
+            }
+
+            using var zip = new ZipArchive(seekable, ZipArchiveMode.Read);
             if (zip.Entries.Count == 0 || zip.Entries.Count > MaxEntries)
             {
                 return InvalidPackage();
@@ -125,11 +143,16 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
                         "The campaign preset file is too large.");
                 }
 
-                using var stream = entry.Open();
-                using var copy = new MemoryStream();
-                stream.CopyTo(copy);
-                total += copy.Length;
-                entries[name] = copy.ToArray();
+                // The declared length bounds the buffer, so each entry is materialized once
+                // instead of growing a MemoryStream and then copying it again with ToArray.
+                var bytes = new byte[entry.Length];
+                using (var stream = entry.Open())
+                {
+                    stream.ReadExactly(bytes);
+                }
+
+                total += bytes.Length;
+                entries[name] = bytes;
             }
 
             if (!entries.TryGetValue(ManifestEntry, out var manifestBytes)
@@ -242,6 +265,7 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
         var settingsJson = Encoding.UTF8.GetString(settingsBytes);
         var overlayJson = overlayBytes is null ? null : Encoding.UTF8.GetString(overlayBytes);
         var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions, TerrainTags, StructureTags, FactionTags, MissionTags, FactionTagIds, SubfactionTagIds) = CatalogJson.Deserialize(catalogJson);
+        var (FactionSpeeds, SubfactionSpeeds) = CatalogJson.DeserializeMovementSpeeds(catalogJson);
         var settings = CampaignPresetSettingsJson.Deserialize(settingsJson);
         var created = DateTimeOffset.UnixEpoch;
         return new StoredCampaign
@@ -280,6 +304,12 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
                         : SubfactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
                     TagIds = FactionTagIds.GetValueOrDefault(faction.Id) ?? [],
                     SubfactionTags = SubfactionTagIds.GetValueOrDefault(faction.Id) ?? [],
+                    ForceMovementSpeed = faction.ForceMovementSpeed > 0
+                        ? faction.ForceMovementSpeed
+                        : FactionSpeeds.GetValueOrDefault(faction.Id, 1),
+                    SubfactionMovementSpeeds = faction.SubfactionMovementSpeeds.Count > 0
+                        ? faction.SubfactionMovementSpeeds
+                        : SubfactionSpeeds.GetValueOrDefault(faction.Id) ?? [],
                 }),
             ],
             AllyGroups = settings.AllyGroups,
@@ -318,6 +348,93 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
         var entry = zip.CreateEntry(name, CompressionLevel.Fastest);
         using var stream = entry.Open();
         stream.Write(bytes, 0, bytes.Length);
+    }
+
+    private static async Task CopyEntryAsync(
+        ZipArchive zip,
+        string entryName,
+        string storageKey,
+        CampaignPresetFileOpener openFile,
+        CancellationToken cancellationToken)
+    {
+        var source = await openFile(storageKey, cancellationToken).ConfigureAwait(false);
+        if (source is null)
+        {
+            return;
+        }
+
+        await using (source.ConfigureAwait(false))
+        {
+            var entry = zip.CreateEntry(entryName, CompressionLevel.Fastest);
+            var entryStream = entry.Open();
+            await using (entryStream.ConfigureAwait(false))
+            {
+                await source.CopyToAsync(entryStream, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns a seekable view of the upload, spooling to a temporary file when necessary.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ZipArchive"/> reading requires seeking. ASP.NET Core buffers form files, so the
+    /// request stream is normally already seekable and no copy happens. The spool path exists so
+    /// a non-buffered caller degrades to disk rather than to a 64 MB allocation.
+    /// </remarks>
+    private static Stream EnsureSeekable(Stream content)
+    {
+        if (content.CanSeek)
+        {
+            content.Position = 0;
+            return new NonClosingStream(content);
+        }
+
+        var spool = CreateSpoolFile();
+        content.CopyTo(spool);
+        spool.Position = 0;
+        return spool;
+    }
+
+    /// <summary>Creates a self-deleting temporary file used to assemble or buffer an archive.</summary>
+    private static FileStream CreateSpoolFile() => new(
+        Path.GetTempFileName(),
+        FileMode.Create,
+        FileAccess.ReadWrite,
+        FileShare.None,
+        StreamBufferBytes,
+        FileOptions.DeleteOnClose | FileOptions.SequentialScan);
+
+    /// <summary>Wraps a caller-owned stream so disposing the archive does not close it.</summary>
+    private sealed class NonClosingStream : Stream
+    {
+        private readonly Stream _inner;
+
+        public NonClosingStream(Stream inner) => _inner = inner;
+
+        public override bool CanRead => _inner.CanRead;
+
+        public override bool CanSeek => _inner.CanSeek;
+
+        public override bool CanWrite => false;
+
+        public override long Length => _inner.Length;
+
+        public override long Position
+        {
+            get => _inner.Position;
+            set => _inner.Position = value;
+        }
+
+        public override void Flush() => _inner.Flush();
+
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private static string? NormalizeEntryName(string fullName)

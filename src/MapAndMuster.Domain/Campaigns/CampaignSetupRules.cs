@@ -85,6 +85,9 @@ public static class CampaignSetupRules
     /// <summary>Maximum results on one item-objective choice.</summary>
     public const int MaxItemObjectiveChoiceResultCount = 12;
 
+    /// <summary>Maximum parameterized effects on one item objective.</summary>
+    public const int MaxItemObjectiveEffectCount = 12;
+
     /// <summary>Maximum missions nested under one terrain type or structure.</summary>
     public const int MaxMissionsPerCatalogItem = 20;
 
@@ -450,6 +453,7 @@ public static class CampaignSetupRules
             specialRuleIds,
             privateObjectiveIds,
             knownForceStatusNames,
+            parsedForceStatuses.Select(static status => status.Id).ToHashSet(),
             collected);
         var parsedPublic = ParsePublicObjectiveTypes(publicObjectiveTypes, usedIds, collected);
         var parsedBattleScoring = ParseBattleScoring(
@@ -794,7 +798,13 @@ public static class CampaignSetupRules
                     knownFactionTagIds,
                     $"factions[{index}].tagIds",
                     errors),
-                ParseSubfactionTags(faction.SubfactionTags, subfactions, knownFactionTagIds, index, errors)));
+                ParseSubfactionTags(faction.SubfactionTags, subfactions, knownFactionTagIds, index, errors),
+                ParseForceMovementSpeed(
+                    faction.ForceMovementSpeed,
+                    $"factions[{index}].forceMovementSpeed",
+                    $"Faction {index + 1} movement speed",
+                    errors),
+                ParseSubfactionMovementSpeeds(faction.SubfactionMovementSpeeds, subfactions, index, errors)));
         }
 
         return parsed;
@@ -1147,6 +1157,7 @@ public static class CampaignSetupRules
         HashSet<Guid> knownSpecialRuleIds,
         HashSet<Guid> knownPrivateObjectiveIds,
         HashSet<string> knownForceStatusNames,
+        HashSet<Guid> knownForceStatusTypeIds,
         List<DomainError> errors)
     {
         var supplied = itemObjectiveTypes ?? [];
@@ -1232,6 +1243,12 @@ public static class CampaignSetupRules
                     knownSpecialRuleIds,
                     $"itemObjectiveTypes[{index}].specialRuleIds",
                     $"Item objective {index + 1}",
+                    errors),
+                ParseItemObjectiveEffects(
+                    input.Effects,
+                    usedIds,
+                    knownForceStatusTypeIds,
+                    index,
                     errors)));
         }
 
@@ -3842,6 +3859,187 @@ public static class CampaignSetupRules
         }
 
         return key;
+    }
+
+    private static int ParseForceMovementSpeed(int? value, string field, string label, List<DomainError> errors)
+    {
+        if (value is null)
+        {
+            return ForceMovementSpeeds.Default;
+        }
+
+        if (value < ForceMovementSpeeds.Min || value > ForceMovementSpeeds.Max)
+        {
+            errors.Add(new DomainError(
+                $"{field}.invalid",
+                $"{label} must be between {ForceMovementSpeeds.Min} and {ForceMovementSpeeds.Max}.",
+                field));
+            return ForceMovementSpeeds.Default;
+        }
+
+        return value.Value;
+    }
+
+    private static List<SubfactionMovementSpeedSetup> ParseSubfactionMovementSpeeds(
+        IReadOnlyList<SubfactionMovementSpeedInput>? assignments,
+        IReadOnlyList<string> subfactions,
+        int factionIndex,
+        List<DomainError> errors)
+    {
+        if (assignments is null || assignments.Count == 0)
+        {
+            return [];
+        }
+
+        var knownNames = subfactions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var parsed = new List<SubfactionMovementSpeedSetup>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < assignments.Count; index++)
+        {
+            var input = assignments[index];
+            var field = $"factions[{factionIndex}].subfactionMovementSpeeds[{index}].name";
+            var name = ParseRequiredName(
+                input.Name,
+                field,
+                $"Faction {factionIndex + 1} subfaction movement-speed assignment {index + 1}",
+                minLength: 1,
+                NamedItemMaxLength,
+                errors);
+            if (name is null)
+            {
+                continue;
+            }
+
+            if (!knownNames.Contains(name))
+            {
+                errors.Add(new DomainError(
+                    $"{field}.unknown",
+                    $"Faction {factionIndex + 1} subfaction movement speed references a subfaction that was not listed.",
+                    field));
+                continue;
+            }
+
+            if (!seen.Add(name) || input.Speed is null)
+            {
+                continue;
+            }
+
+            var canonical = subfactions.First(item => string.Equals(item, name, StringComparison.OrdinalIgnoreCase));
+            parsed.Add(new SubfactionMovementSpeedSetup(
+                canonical,
+                ParseForceMovementSpeed(
+                    input.Speed,
+                    $"factions[{factionIndex}].subfactionMovementSpeeds[{index}].speed",
+                    $"Faction {factionIndex + 1} subfaction {canonical} movement speed",
+                    errors)));
+        }
+
+        return parsed;
+    }
+
+    private static List<ItemObjectiveEffectSetup> ParseItemObjectiveEffects(
+        IReadOnlyList<ItemObjectiveEffectInput>? effects,
+        HashSet<Guid> usedIds,
+        HashSet<Guid> knownForceStatusTypeIds,
+        int itemIndex,
+        List<DomainError> errors)
+    {
+        var supplied = effects ?? [];
+        if (supplied.Count > MaxItemObjectiveEffectCount)
+        {
+            errors.Add(new DomainError(
+                $"itemObjectiveTypes[{itemIndex}].effects.invalid",
+                $"Item objective {itemIndex + 1} may have at most {MaxItemObjectiveEffectCount} effects.",
+                $"itemObjectiveTypes[{itemIndex}].effects"));
+            return [];
+        }
+
+        var parsed = new List<ItemObjectiveEffectSetup>();
+        for (var index = 0; index < supplied.Count; index++)
+        {
+            var input = supplied[index];
+            var kindField = $"itemObjectiveTypes[{itemIndex}].effects[{index}].kind";
+            if (!Enum.TryParse<ItemObjectiveEffectKind>(input.Kind, true, out var kind))
+            {
+                errors.Add(new DomainError(
+                    $"{kindField}.invalid",
+                    $"Item objective {itemIndex + 1} effect {index + 1} kind is not recognized.",
+                    kindField));
+                continue;
+            }
+
+            var amount = input.Amount ?? 0;
+            if (kind is ItemObjectiveEffectKind.AddMovementSpeed
+                && (amount < -ForceMovementSpeeds.Max || amount > ForceMovementSpeeds.Max))
+            {
+                errors.Add(new DomainError(
+                    $"itemObjectiveTypes[{itemIndex}].effects[{index}].amount.invalid",
+                    $"Item objective {itemIndex + 1} movement-speed bonus must be between -{ForceMovementSpeeds.Max} and {ForceMovementSpeeds.Max}.",
+                    $"itemObjectiveTypes[{itemIndex}].effects[{index}].amount"));
+                amount = 0;
+            }
+
+            if ((kind is ItemObjectiveEffectKind.ModifySupply or ItemObjectiveEffectKind.ModifyArmyPoints)
+                && (amount < -MaxCampaignPoints || amount > MaxCampaignPoints))
+            {
+                errors.Add(new DomainError(
+                    $"itemObjectiveTypes[{itemIndex}].effects[{index}].amount.invalid",
+                    $"Item objective {itemIndex + 1} effect {index + 1} amount must be between -{MaxCampaignPoints} and {MaxCampaignPoints}.",
+                    $"itemObjectiveTypes[{itemIndex}].effects[{index}].amount"));
+                amount = 0;
+            }
+
+            var statusIds = (input.StatusTypeIds ?? [])
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToArray();
+            if (kind is ItemObjectiveEffectKind.InflictStatusWhileHeld
+                or ItemObjectiveEffectKind.InflictStatusOnSharedTerritory
+                or ItemObjectiveEffectKind.ImmuneToStatuses)
+            {
+                if (kind != ItemObjectiveEffectKind.ImmuneToStatuses || !input.ImmuneToAllStatuses)
+                {
+                    if (statusIds.Length == 0 || statusIds.Any(id => !knownForceStatusTypeIds.Contains(id)))
+                    {
+                        errors.Add(new DomainError(
+                            $"itemObjectiveTypes[{itemIndex}].effects[{index}].statusTypeIds.invalid",
+                            $"Item objective {itemIndex + 1} effect {index + 1} must name catalog force statuses.",
+                            $"itemObjectiveTypes[{itemIndex}].effects[{index}].statusTypeIds"));
+                    }
+                }
+            }
+
+            var customText = ParseOptionalCatalogText(
+                input.CustomText,
+                $"itemObjectiveTypes[{itemIndex}].effects[{index}].customText",
+                $"Item objective {itemIndex + 1} effect {index + 1} custom text",
+                errors);
+            if (kind == ItemObjectiveEffectKind.Custom && string.IsNullOrWhiteSpace(customText))
+            {
+                errors.Add(new DomainError(
+                    $"itemObjectiveTypes[{itemIndex}].effects[{index}].customText.required",
+                    $"Item objective {itemIndex + 1} custom effect {index + 1} needs reminder text.",
+                    $"itemObjectiveTypes[{itemIndex}].effects[{index}].customText"));
+            }
+
+            parsed.Add(new ItemObjectiveEffectSetup(
+                ResolveId(input.Id, usedIds, $"itemObjectiveTypes[{itemIndex}].effects[{index}].id", errors),
+                kind,
+                amount,
+                input.AmountIsPercent,
+                statusIds,
+                input.ImmuneToAllStatuses,
+                input.SuspendCurrentAllyGroup,
+                input.ForcedAllyGroupName,
+                [
+                    .. (input.AlliedFactions ?? [])
+                        .Where(static target => target.FactionId != Guid.Empty)
+                        .Select(static target => new ItemObjectiveAllianceTarget(target.FactionId, target.Subfaction)),
+                ],
+                customText));
+        }
+
+        return parsed;
     }
 
     private static List<ItemObjectiveChoiceSetup> ParseItemObjectiveChoices(

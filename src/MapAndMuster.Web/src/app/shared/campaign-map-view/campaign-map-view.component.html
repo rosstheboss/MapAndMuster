@@ -31,6 +31,30 @@
     >
       {{ fullscreen() ? 'Exit full screen' : 'Full screen' }}
     </button>
+    @if (ownForces().length) {
+      <button
+        type="button"
+        class="button-secondary"
+        (click)="cycleOwnForces()"
+        title="Cycle through your forces (Y)"
+        aria-label="Cycle through your forces"
+        aria-keyshortcuts="Y"
+      >
+        Cycle forces
+      </button>
+    }
+    @if (showCommit()) {
+      <button
+        type="button"
+        [class]="showUncommit() ? 'button-secondary' : 'button'"
+        (click)="emitCommit()"
+        [disabled]="!commitButtonEnabled()"
+        [title]="commitButtonTitle()"
+        [attr.aria-keyshortcuts]="commitButtonEnabled() ? 'C' : null"
+      >
+        {{ commitButtonLabel() }}
+      </button>
+    }
     <label class="layer-toggle" title="Show names (N)">
       <input type="checkbox" [checked]="showNames()" (change)="onShowNamesChange($event)" aria-keyshortcuts="N" />
       Show names
@@ -65,6 +89,12 @@
           '1 or 0 sets 100 percent. Hold right-click or middle-click and drag to pan. ' +
           'Arrow keys and space-drag also pan when the image is larger than the panel. Left-click does not pan. ' +
           'Pinch with two fingers to zoom, and drag with two fingers to pan. M toggles full screen. ' +
+          (ownForces().length ? 'Y cycles your forces. ' : '') +
+          (showCommit()
+            ? showUncommit()
+              ? 'C uncommits your actions. '
+              : 'C commits actions when that button is enabled. '
+            : '') +
           'N toggles territory names. ' +
           'Tab to a territory and press Enter or Space to select it. Zoom up to 800 percent to trace fine coasts. ' +
           'Drawing requires a pointer.'
@@ -311,6 +341,7 @@
                     [class.is-mine]="pin.force.isMine"
                     [class.is-battle]="pin.force.inBattle"
                     [class.is-emphasized]="pin.emphasized"
+                    [class.has-action]="!!pin.force.isMine && !!pin.force.action"
                     [style.left.%]="pin.fit.x * 100"
                     [style.top.%]="pin.fit.y * 100"
                     [style.width.px]="markerSize(pin.fit).width"
@@ -322,6 +353,11 @@
                     [attr.aria-label]="forceLabel(pin.force)"
                     [title]="forceLabel(pin.force)"
                   >
+                    @if (pin.force.isMine && pin.force.action) {
+                      <span class="force-action-mark" aria-hidden="true">
+                        <app-icon name="check" />
+                      </span>
+                    }
                     @if (pin.force.heldItems?.length) {
                       <div class="force-held-items">
                         @for (held of pin.force.heldItems; track held.name) {

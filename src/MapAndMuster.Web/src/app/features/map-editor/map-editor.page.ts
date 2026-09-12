@@ -134,7 +134,6 @@ export class MapEditorPage {
   protected readonly showConnections = signal(true);
   protected readonly editorFieldsCollapsed = signal(false);
   protected readonly territoryListCollapsed = signal(false);
-  protected readonly mapImageRevision = signal(0);
   protected readonly drawingActive = signal(false);
   protected readonly movePlacement = signal<'valid' | 'invalid' | null>(null);
   protected readonly confirmingDownload = signal(false);
@@ -172,7 +171,7 @@ export class MapEditorPage {
   });
   protected readonly mapSrc = computed(() => {
     const campaign = this.campaign();
-    return campaign?.hasMap ? this.campaignsApi.mapUrl(campaign.id, this.mapImageRevision()) : null;
+    return campaign?.hasMap ? this.campaignsApi.mapUrl(campaign.id, campaign.assetTags) : null;
   });
   protected readonly selected = computed(() => {
     const id = this.selectedId();
@@ -973,7 +972,7 @@ export class MapEditorPage {
 
     if (pillaged) {
       return structure.hasPillagedImage
-        ? this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.revision, true)
+        ? this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.assetTags, true)
         : null;
     }
 
@@ -981,7 +980,7 @@ export class MapEditorPage {
       return null;
     }
 
-    return this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.revision);
+    return this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.assetTags);
   };
 
   protected flagImageUrl = (factionId: string, subfaction?: string | null): string | null => {
@@ -996,7 +995,7 @@ export class MapEditorPage {
       return null;
     }
 
-    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.revision, subfaction);
+    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.assetTags, subfaction);
   };
 
   protected missionFileUrl(mission: CampaignMission): string | null {
@@ -1354,7 +1353,6 @@ export class MapEditorPage {
       }
 
       this.campaign.set(campaign);
-      this.mapImageRevision.set(campaign.revision);
       this.revision = graph.revision;
       const loaded = fromApi(graph);
       this.graph.set(loaded);

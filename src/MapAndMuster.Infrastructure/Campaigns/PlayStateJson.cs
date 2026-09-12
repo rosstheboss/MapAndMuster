@@ -63,6 +63,7 @@ internal static class PlayStateJson
                 StructureTypeId = draft.StructureTypeId,
                 UpdatedUtc = draft.UpdatedUtc,
                 ViaTerritoryId = draft.ViaTerritoryId,
+                ViaPath = [.. draft.ViaPath],
                 DestroyImmediately = draft.DestroyImmediately,
             })],
             Submissions = [.. state.Submissions.Select(static item => new SubmissionDocument
@@ -77,6 +78,7 @@ internal static class PlayStateJson
                 SubmittedUtc = item.SubmittedUtc,
                 ActorUserId = item.ActorUserId,
                 ViaTerritoryId = item.ViaTerritoryId,
+                ViaPath = [.. item.ViaPath],
                 DestroyImmediately = item.DestroyImmediately,
             })],
             Commitments = [.. state.Commitments.Select(static item => new CommitmentDocument
@@ -327,7 +329,8 @@ internal static class PlayStateJson
                 draft.StructureTypeId,
                 draft.UpdatedUtc,
                 draft.ViaTerritoryId,
-                draft.DestroyImmediately))],
+                draft.DestroyImmediately,
+                draft.ViaPath))],
             [.. document.Submissions.Select(static item => new OrderSubmission(
                 item.Id,
                 item.WindowId,
@@ -339,7 +342,8 @@ internal static class PlayStateJson
                 item.SubmittedUtc,
                 item.ActorUserId,
                 item.ViaTerritoryId,
-                item.DestroyImmediately))],
+                item.DestroyImmediately,
+                item.ViaPath))],
             [.. document.Commitments.Select(static item => new PlayerCommitment(item.WindowId, item.UserId, item.CommittedUtc))],
             [.. document.Battles.Select(static battle => new CampaignBattle(
                 battle.Id,
@@ -683,6 +687,7 @@ internal static class PlayStateJson
         public Guid? StructureTypeId { get; set; }
         public DateTimeOffset UpdatedUtc { get; set; }
         public Guid? ViaTerritoryId { get; set; }
+        public List<Guid>? ViaPath { get; set; }
         public bool DestroyImmediately { get; set; }
     }
 
@@ -698,6 +703,7 @@ internal static class PlayStateJson
         public DateTimeOffset SubmittedUtc { get; set; }
         public Guid ActorUserId { get; set; }
         public Guid? ViaTerritoryId { get; set; }
+        public List<Guid>? ViaPath { get; set; }
         public bool DestroyImmediately { get; set; }
     }
 

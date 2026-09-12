@@ -24,12 +24,48 @@ public sealed class PostgresConnectionStringTests
     }
 
     [Fact]
-    public void KeywordStringsPassThrough()
+    public void KeywordStringsKeepTheirValuesAndGainPoolDefaults()
     {
         const string keyword =
             "Host=localhost;Port=5432;Database=mapandmuster;Username=mapandmuster;Password=mapandmuster";
 
-        Assert.Equal(keyword, PostgresConnectionString.Normalize(keyword));
+        var builder = new NpgsqlConnectionStringBuilder(PostgresConnectionString.Normalize(keyword));
+
+        Assert.Equal("localhost", builder.Host);
+        Assert.Equal("mapandmuster", builder.Database);
+        Assert.Equal("mapandmuster", builder.Username);
+        Assert.Equal("mapandmuster", builder.Password);
+        Assert.Equal(20, builder.MaxPoolSize);
+        Assert.Equal(1, builder.MinPoolSize);
+        Assert.Equal(15, builder.Timeout);
+        Assert.Equal(30, builder.CommandTimeout);
+    }
+
+    [Fact]
+    public void AConfiguredPoolSizeIsNotOverwritten()
+    {
+        const string keyword =
+            "Host=localhost;Database=mapandmuster;Username=mapandmuster;Password=mapandmuster;"
+            + "Maximum Pool Size=6;Command Timeout=90";
+
+        var builder = new NpgsqlConnectionStringBuilder(PostgresConnectionString.Normalize(keyword));
+
+        Assert.Equal(6, builder.MaxPoolSize);
+        Assert.Equal(90, builder.CommandTimeout);
+
+        // The keywords the operator did not set still get a default.
+        Assert.Equal(15, builder.Timeout);
+    }
+
+    [Fact]
+    public void ARenderUriAlsoGainsPoolDefaults()
+    {
+        const string uri = "postgresql://my_user:secret@dpg-example-a/mapandmuster?sslmode=require";
+
+        var builder = new NpgsqlConnectionStringBuilder(PostgresConnectionString.Normalize(uri));
+
+        Assert.Equal(20, builder.MaxPoolSize);
+        Assert.Equal(30, builder.CommandTimeout);
     }
 
     [Fact]

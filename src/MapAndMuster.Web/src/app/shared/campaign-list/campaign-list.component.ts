@@ -47,6 +47,8 @@ export class CampaignListComponent {
   private readonly openCampaigns = signal<ReadonlySet<string>>(new Set());
   private readonly closedGroups = signal<ReadonlySet<string>>(new Set());
   protected readonly joiningCampaign = signal<CampaignListItem | null>(null);
+  protected readonly duplicatingCampaign = signal<CampaignListItem | null>(null);
+  protected readonly deletingCampaign = signal<CampaignListItem | null>(null);
   protected readonly joinPassword = signal('');
   protected readonly actionError = signal<string | null>(null);
   protected readonly timeZoneId = computed(() => this.auth.currentUser()?.timeZoneId ?? 'UTC');
@@ -117,6 +119,8 @@ export class CampaignListComponent {
   }
 
   protected requestJoin(campaign: CampaignListItem): void {
+    this.duplicatingCampaign.set(null);
+    this.deletingCampaign.set(null);
     this.actionError.set(null);
     if (campaign.isPrivate) {
       this.joiningCampaign.set(campaign);
@@ -156,14 +160,64 @@ export class CampaignListComponent {
     }
   }
 
-  protected async duplicate(campaign: CampaignListItem): Promise<void> {
+  protected requestDuplicate(campaign: CampaignListItem): void {
+    this.actionError.set(null);
+    this.joiningCampaign.set(null);
+    this.deletingCampaign.set(null);
+    this.duplicatingCampaign.set(campaign);
+  }
+
+  protected cancelDuplicate(): void {
+    this.duplicatingCampaign.set(null);
+  }
+
+  protected async confirmDuplicate(): Promise<void> {
+    const campaign = this.duplicatingCampaign();
+    if (!campaign) {
+      return;
+    }
+
     this.actionError.set(null);
     try {
       const created = await this.overlay.run(() => this.campaignsApi.duplicate(campaign.id));
+      this.duplicatingCampaign.set(null);
       this.membershipChanged.emit();
       await this.router.navigate(['/campaigns', created.id, 'edit']);
     } catch (error: unknown) {
+      this.duplicatingCampaign.set(null);
       this.actionError.set(readApiError(error, 'Unable to duplicate this campaign.'));
+    }
+  }
+
+  protected canDelete(campaign: CampaignListItem): boolean {
+    return campaign.canManage && campaign.status === 'Completed';
+  }
+
+  protected requestDelete(campaign: CampaignListItem): void {
+    this.actionError.set(null);
+    this.joiningCampaign.set(null);
+    this.duplicatingCampaign.set(null);
+    this.deletingCampaign.set(campaign);
+  }
+
+  protected cancelDelete(): void {
+    this.deletingCampaign.set(null);
+  }
+
+  protected async confirmDelete(): Promise<void> {
+    const campaign = this.deletingCampaign();
+    if (!campaign) {
+      return;
+    }
+
+    this.actionError.set(null);
+    try {
+      await this.overlay.run(() => this.campaignsApi.delete(campaign.id));
+      this.deletingCampaign.set(null);
+      this.membershipChanged.emit();
+    } catch (error: unknown) {
+      this.deletingCampaign.set(null);
+      this.actionError.set(readApiError(error, 'Unable to delete this campaign.'));
     }
   }
 

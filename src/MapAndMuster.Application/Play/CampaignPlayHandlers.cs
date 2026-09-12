@@ -142,7 +142,8 @@ public sealed class SaveOrderDraftHandler
                     out var error,
                     viaTerritoryId: command.ViaTerritoryId,
                     destroyImmediately: command.DestroyImmediately,
-                    specialRules: CampaignPlayCatalog.SpecialRules(campaign)))
+                    specialRules: CampaignPlayCatalog.SpecialRules(campaign),
+                    viaPath: command.ViaPath))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -1206,7 +1207,8 @@ public sealed class DebugCorrectOrderHandler
                     command.ReResolvePrevious,
                     command.ViaTerritoryId,
                     command.DestroyImmediately,
-                    CampaignPlayCatalog.SpecialRules(campaign)))
+                    CampaignPlayCatalog.SpecialRules(campaign),
+                    command.ViaPath))
                 {
                     return PlayMutation.Fail(error);
                 }

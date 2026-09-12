@@ -10,14 +10,19 @@ namespace MapAndMuster.Infrastructure.Persistence;
 public sealed class SiteChatStore : ISiteChatStore
 {
     private readonly CampaignDbContext _dbContext;
+    private readonly ICampaignUpdateBroadcaster _updates;
 
     /// <summary>
     /// Initializes a store.
     /// </summary>
-    public SiteChatStore(CampaignDbContext dbContext)
+    /// <param name="dbContext">The database context.</param>
+    /// <param name="updates">Broadcaster notified after a committed write.</param>
+    public SiteChatStore(CampaignDbContext dbContext, ICampaignUpdateBroadcaster updates)
     {
         ArgumentNullException.ThrowIfNull(dbContext);
+        ArgumentNullException.ThrowIfNull(updates);
         _dbContext = dbContext;
+        _updates = updates;
     }
 
     /// <inheritdoc />
@@ -53,6 +58,7 @@ public sealed class SiteChatStore : ISiteChatStore
             TargetDisplayName = message.TargetDisplayName,
         });
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _updates.PublishSiteChat();
     }
 
     /// <inheritdoc />
@@ -60,6 +66,18 @@ public sealed class SiteChatStore : ISiteChatStore
     {
         var records = await _dbContext.SiteChatBlocks
             .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return [.. records.Select(static item => new SiteChatBlock(item.BlockerUserId, item.BlockedUserId))];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SiteChatBlock>> ListBlocksForUserAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var records = await _dbContext.SiteChatBlocks
+            .AsNoTracking()
+            .Where(item => item.BlockerUserId == userId || item.BlockedUserId == userId)
+            .Select(item => new { item.BlockerUserId, item.BlockedUserId })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return [.. records.Select(static item => new SiteChatBlock(item.BlockerUserId, item.BlockedUserId))];

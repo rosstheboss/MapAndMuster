@@ -15,6 +15,7 @@ export interface FactionPresetFaction {
   specialRuleNames?: readonly string[];
   subfactionSpecialRules?: Readonly<Record<string, readonly string[]>>;
   subfactionAppearances?: readonly FactionPresetSubfactionAppearance[];
+  forceMovementSpeed?: number;
 }
 
 export interface FactionPreset {
@@ -99,6 +100,7 @@ const WARHAMMER_OLD_WORLD_FACTIONS: readonly FactionPresetFaction[] = [
     color: '#1E40AF',
     subfactions: ['Errantry Crusade', 'Bretonnian Exiles'],
     requiresSubfaction: false,
+    forceMovementSpeed: 2,
   },
   { name: 'Ogre Kingdoms', color: '#D6A05A', subfactions: [], requiresSubfaction: false },
   {
@@ -152,6 +154,7 @@ export function sortedPresetFactions(factions: readonly FactionPresetFaction[]):
       subfactionAppearances: [...(faction.subfactionAppearances ?? [])]
         .map((appearance) => ({ ...appearance }))
         .sort((left, right) => compareNames(left.name, right.name)),
+      forceMovementSpeed: faction.forceMovementSpeed ?? 1,
       specialRuleNames: [...(faction.specialRuleNames ?? specialRuleNamesForFaction(faction.name))],
       subfactionSpecialRules: Object.fromEntries(
         [...faction.subfactions].map((name) => [

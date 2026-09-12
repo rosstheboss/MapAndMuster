@@ -107,6 +107,7 @@ public static class CampaignMapper
             Region = campaign.Region,
             Country = campaign.Country,
             HasMap = HasMapData(campaign),
+            AssetTags = CampaignAssetTagMap.Build(campaign),
             CanManage = membership?.IsGameMaster == true || isAdministrator,
             IsParticipant = membership?.IsPlayer == true,
             Revision = campaign.Revision,
@@ -143,6 +144,8 @@ public static class CampaignMapper
                         TintFlagImage = item.TintFlagImage,
                     })
                     .ToArray(),
+                ForceMovementSpeed = faction.ForceMovementSpeed,
+                SubfactionMovementSpeeds = faction.SubfactionMovementSpeeds,
             })],
             TerrainTypes = [.. campaign.TerrainTypes.Select(static type => new TerrainTypeDetail
             {
@@ -390,6 +393,29 @@ public static class CampaignMapper
                 })]
                 : [],
             SpecialRuleIds = type.SpecialRuleIds,
+            Effects =
+            [
+                .. type.Effects.Select(static effect => new ItemObjectiveEffectDetail
+                {
+                    Id = effect.Id,
+                    Kind = effect.Kind,
+                    Amount = effect.Amount,
+                    AmountIsPercent = effect.AmountIsPercent,
+                    StatusTypeIds = effect.StatusTypeIds,
+                    ImmuneToAllStatuses = effect.ImmuneToAllStatuses,
+                    SuspendCurrentAllyGroup = effect.SuspendCurrentAllyGroup,
+                    ForcedAllyGroupName = effect.ForcedAllyGroupName,
+                    AlliedFactions =
+                    [
+                        .. effect.AlliedFactions.Select(static target => new ItemObjectiveAllianceTargetDetail
+                        {
+                            FactionId = target.FactionId,
+                            Subfaction = target.Subfaction,
+                        }),
+                    ],
+                    CustomText = effect.CustomText,
+                }),
+            ],
         };
     }
 

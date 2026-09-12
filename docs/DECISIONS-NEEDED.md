@@ -86,6 +86,13 @@ in an ADR or the relevant domain document and update tests.
     is Resend, and background work stays in the API process. Object storage is still local disk.
     See `docs/adr/0003-production-hosting-stack.md`.
 19. Decide registration anti-abuse policy and campaign invitation/join-code workflow.
+19a. Decide how orphaned-asset retention should look up storage keys. `IsStorageKeyInUseAsync`
+    currently substring-scans every `CatalogJson` and `SettingsJson` document, which no index can
+    serve. The two candidates are a reference table of referenced keys maintained on every catalog
+    write, or storing referenced keys in a dedicated array column with a GIN index. Both change the
+    write path, and a stale index would delete an asset a live campaign still uses, so neither
+    should be adopted without direction. The call happens only when an asset is replaced or
+    removed, so it is not on a request-serving hot path.
 20. Resolved: keep custom dialogs and confirm buttons; do not add a CSS framework, component
     library, or client state library. Angular signals remain the UI state approach. See
     `docs/UI-AUDIT-2026-08.md` step 2 (`UI-C3`, `UI-C4`, `UI-M4`), implemented 2026-08-30.
@@ -111,12 +118,13 @@ in an ADR or the relevant domain document and update tests.
     open/closed campaign-page sections stay in a per-campaign cookie; the UI audit forbids an
     API contract change for this presentation-only step. Chat unread is a summary badge on the
     log heading; the campaign page does not auto-call `POST /log/read`.
-24. Resolved: managers and administrators end a campaign rather than deleting it. The campaign
-    stays stored in its final state (closed / Completed), remaining orders are not resolved,
-    members can still open logs and duplicate it, and all current members are notified in-app
-    and by email. End campaign is available on the campaign page and Edit campaign. Staff may
-    promote a player to campaign manager or add a user as manager-only or as manager and
-    player. See `docs/DOMAIN.md`.
+24. Resolved: managers and administrators end a campaign rather than deleting it while it is
+    still open. The campaign stays stored in its final state (closed / Completed), remaining
+    orders are not resolved, members can still open logs and duplicate it, and all current
+    members are notified in-app and by email. End campaign is available on the campaign page
+    and Edit campaign. After a campaign is completed, a manager or administrator may
+    permanently delete it (with confirmation). Staff may promote a player to campaign manager
+    or add a user as manager-only or as manager and player. See `docs/DOMAIN.md`.
 25. Decide whether play/participant contracts should expose a per-force missed-order offence
     count so Participants can show the running tally. `UI-M14` shipped a **May be kicked** badge
     and a Delinquency log filter without that field.

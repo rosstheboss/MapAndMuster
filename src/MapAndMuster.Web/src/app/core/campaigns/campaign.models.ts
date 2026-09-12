@@ -43,6 +43,8 @@ export interface CampaignDetail {
   region: string | null;
   country: string | null;
   hasMap: boolean;
+  /** Opaque cache tags for stored files, keyed by the helpers in `campaign-asset-tags`. */
+  assetTags: Record<string, string>;
   canManage: boolean;
   isParticipant: boolean;
   revision: number;
@@ -137,6 +139,13 @@ export interface CampaignFaction {
   tagIds?: string[];
   subfactionTags?: SubfactionTags[];
   subfactionAppearances?: SubfactionAppearance[];
+  forceMovementSpeed?: number;
+  subfactionMovementSpeeds?: SubfactionMovementSpeed[];
+}
+
+export interface SubfactionMovementSpeed {
+  name: string;
+  speed: number;
 }
 
 export type SubfactionFlagSource = 'inherit' | 'color' | 'image';
@@ -267,6 +276,39 @@ export interface CampaignItemObjectiveType {
   flavorText?: string | null;
   choices?: ItemObjectiveChoice[];
   specialRuleIds?: string[];
+  effects?: ItemObjectiveEffect[];
+}
+
+export const ITEM_OBJECTIVE_EFFECT_KINDS = [
+  { id: 'PushDefeatedOpponentToSpawn', label: 'Push a defeated opponent to spawn' },
+  { id: 'AddMovementSpeed', label: 'Add force movement speed' },
+  { id: 'ModifySupply', label: 'Add or subtract supply (minimum 1)' },
+  { id: 'TeleportToRandomEmptyNonSpawn', label: 'Teleport to a random empty non-spawn territory' },
+  { id: 'InflictStatusWhileHeld', label: 'Inflict a status while holding this item' },
+  { id: 'ImmuneToStatuses', label: 'Immune to statuses' },
+  { id: 'InflictStatusOnSharedTerritory', label: 'Inflict statuses on forces sharing the territory' },
+  { id: 'NullifyAdjacentItemObjectives', label: 'Nullify adjacent item objectives' },
+  { id: 'ModifyArmyPoints', label: 'Add army points (amount or percent)' },
+  { id: 'OverrideAlliances', label: 'Override alliances while held' },
+  { id: 'Custom', label: 'Custom battle reminder' },
+] as const;
+
+export interface ItemObjectiveEffect {
+  id: string;
+  kind: string;
+  amount?: number;
+  amountIsPercent?: boolean;
+  statusTypeIds?: string[];
+  immuneToAllStatuses?: boolean;
+  suspendCurrentAllyGroup?: boolean;
+  forcedAllyGroupName?: string | null;
+  alliedFactions?: ItemObjectiveAllianceTarget[];
+  customText?: string | null;
+}
+
+export interface ItemObjectiveAllianceTarget {
+  factionId: string;
+  subfaction?: string | null;
 }
 
 export interface CampaignPublicObjectiveType {
@@ -492,6 +534,8 @@ export interface SaveFactionPayload {
   tagIds?: string[];
   subfactionTags?: SubfactionTags[];
   subfactionAppearances?: SaveSubfactionAppearancePayload[];
+  forceMovementSpeed?: number;
+  subfactionMovementSpeeds?: SubfactionMovementSpeed[];
 }
 
 export interface SaveSubfactionAppearancePayload {
@@ -553,6 +597,20 @@ export interface SaveItemObjectiveTypePayload {
   flavorText?: string | null;
   specialRuleIds?: string[];
   choices?: SaveItemObjectiveChoicePayload[];
+  effects?: SaveItemObjectiveEffectPayload[];
+}
+
+export interface SaveItemObjectiveEffectPayload {
+  id?: string;
+  kind: string;
+  amount?: number;
+  amountIsPercent?: boolean;
+  statusTypeIds?: string[];
+  immuneToAllStatuses?: boolean;
+  suspendCurrentAllyGroup?: boolean;
+  forcedAllyGroupName?: string | null;
+  alliedFactions?: ItemObjectiveAllianceTarget[];
+  customText?: string | null;
 }
 
 export interface SavePublicObjectiveTypePayload {
@@ -740,6 +798,8 @@ export interface CampaignPlayDetail {
   currentPhaseEndsUtc: string | null;
   currentWindowId: string | null;
   hasMap: boolean;
+  /** Opaque cache tags for stored files, keyed by the helpers in `campaign-asset-tags`. */
+  assetTags: Record<string, string>;
   factionId: string | null;
   canChooseFaction: boolean;
   isCommitted: boolean;
@@ -774,6 +834,7 @@ export interface CampaignPlayDetail {
 export interface PlayMapTerritory {
   id: string;
   ownerFactionId: string | null;
+  ownerSubfaction?: string | null;
   structureTypeId?: string | null;
   structureCondition?: string | null;
 }
@@ -802,6 +863,7 @@ export interface PlayForce {
   statusEffects?: string | null;
   subfaction?: string | null;
   canMoveTwoTerritories?: boolean;
+  movementSpeed?: number;
   canDestroyImmediately?: boolean;
   canUseExtraBlackPowder?: boolean;
   canUseMagicalSupply?: boolean;
@@ -813,6 +875,7 @@ export interface PlayForce {
 export interface PlayMoveHop {
   viaTerritoryId: string;
   targetTerritoryId: string;
+  intermediateTerritoryIds?: string[];
 }
 
 export interface PlayItemObjective {
@@ -838,6 +901,7 @@ export interface PlayDraft {
   targetTerritoryId: string | null;
   structureTypeId: string | null;
   viaTerritoryId?: string | null;
+  viaPath?: string[] | null;
   destroyImmediately?: boolean;
 }
 
@@ -1050,6 +1114,7 @@ export interface SaveOrderDraftPayload {
   targetTerritoryId?: string | null;
   structureTypeId?: string | null;
   viaTerritoryId?: string | null;
+  viaPath?: string[] | null;
   destroyImmediately?: boolean;
   reResolvePrevious?: boolean;
 }

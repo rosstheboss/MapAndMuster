@@ -1,7 +1,6 @@
 import { formatInstant } from '../time/date-time-display';
 import type { ChatChannel, PlayLogEntry } from './campaign.models';
 
-export const CAMPAIGN_LOG_POLL_MS = 3_000;
 export const CAMPAIGN_LOG_COMPOSER_MIN_LINES = 1;
 export const CAMPAIGN_LOG_COMPOSER_MAX_LINES = 5;
 

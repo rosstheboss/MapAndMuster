@@ -254,7 +254,8 @@ public sealed class OrderDraft
         Guid? structureTypeId,
         DateTimeOffset updatedUtc,
         Guid? viaTerritoryId = null,
-        bool destroyImmediately = false)
+        bool destroyImmediately = false,
+        IReadOnlyList<Guid>? viaPath = null)
     {
         WindowId = windowId;
         ForceId = forceId;
@@ -264,6 +265,7 @@ public sealed class OrderDraft
         UpdatedUtc = updatedUtc;
         ViaTerritoryId = viaTerritoryId;
         DestroyImmediately = destroyImmediately;
+        ViaPath = viaPath ?? [];
     }
 
     /// <summary>Gets the action window.</summary>
@@ -289,6 +291,9 @@ public sealed class OrderDraft
 
     /// <summary>Gets whether a Pillage should destroy the structure in one action.</summary>
     public bool DestroyImmediately { get; }
+
+    /// <summary>Gets extra hops between the first via and the destination when speed is greater than 2.</summary>
+    public IReadOnlyList<Guid> ViaPath { get; }
 }
 
 /// <summary>
@@ -310,7 +315,8 @@ public sealed class OrderSubmission
         DateTimeOffset submittedUtc,
         Guid actorUserId,
         Guid? viaTerritoryId = null,
-        bool destroyImmediately = false)
+        bool destroyImmediately = false,
+        IReadOnlyList<Guid>? viaPath = null)
     {
         Id = id;
         WindowId = windowId;
@@ -323,6 +329,7 @@ public sealed class OrderSubmission
         ActorUserId = actorUserId;
         ViaTerritoryId = viaTerritoryId;
         DestroyImmediately = destroyImmediately;
+        ViaPath = viaPath ?? [];
     }
 
     /// <summary>Gets the submission identifier.</summary>
@@ -357,6 +364,9 @@ public sealed class OrderSubmission
 
     /// <summary>Gets whether a Pillage should destroy the structure in one action.</summary>
     public bool DestroyImmediately { get; }
+
+    /// <summary>Gets extra hops between the first via and the destination when speed is greater than 2.</summary>
+    public IReadOnlyList<Guid> ViaPath { get; }
 }
 
 /// <summary>

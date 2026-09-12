@@ -1,3 +1,6 @@
+using System.Data.Common;
+using Npgsql;
+
 namespace MapAndMuster.Infrastructure.Persistence;
 
 /// <summary>
@@ -7,6 +10,23 @@ namespace MapAndMuster.Infrastructure.Persistence;
 /// </summary>
 public static class PostgresConnectionString
 {
+    /// <summary>
+    /// Upper bound on pooled connections. Hosted PostgreSQL plans allow far fewer connections than
+    /// Npgsql's default of 100, so leaving the default in place means the pool is willing to open
+    /// more connections than the server will accept and the failure arrives as a refused
+    /// connection under load rather than as a queued request.
+    /// </summary>
+    private const int DefaultMaxPoolSize = 20;
+
+    /// <summary>Kept above zero so an idle instance does not pay the TLS handshake on its first request.</summary>
+    private const int DefaultMinPoolSize = 1;
+
+    /// <summary>Seconds to wait for a connection, including time spent queued behind the pool limit.</summary>
+    private const int DefaultConnectTimeoutSeconds = 15;
+
+    /// <summary>Seconds a single statement may run before it is cancelled.</summary>
+    private const int DefaultCommandTimeoutSeconds = 30;
+
     /// <summary>
     /// Returns a keyword-form connection string. Existing <c>Host=...</c> values pass through after trimming.
     /// </summary>
@@ -26,7 +46,7 @@ public static class PostgresConnectionString
         if (!trimmed.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
             && !trimmed.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
         {
-            return trimmed;
+            return ApplyPoolDefaults(trimmed);
         }
 
         if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
@@ -65,7 +85,56 @@ public static class PostgresConnectionString
         // in the official aspnet images that no longer ship that library.
         parts.Add("GSS Encryption Mode=Disable");
 
-        return string.Join(';', parts);
+        return ApplyPoolDefaults(string.Join(';', parts));
+    }
+
+    /// <summary>
+    /// Fills in pool and timeout keywords the caller left unset.
+    /// </summary>
+    /// <remarks>
+    /// Only absent keywords are filled, so an operator can still tune any of these per environment
+    /// through the configured connection string.
+    /// </remarks>
+    private static string ApplyPoolDefaults(string keywordForm)
+    {
+        // Presence is read from a plain builder because NpgsqlConnectionStringBuilder reports every
+        // keyword it knows about as present, whether the caller wrote it or not.
+        var provided = new DbConnectionStringBuilder { ConnectionString = keywordForm };
+        var builder = new NpgsqlConnectionStringBuilder(keywordForm);
+        if (!WasProvided(provided, "Maximum Pool Size", "MaxPoolSize"))
+        {
+            builder.MaxPoolSize = DefaultMaxPoolSize;
+        }
+
+        if (!WasProvided(provided, "Minimum Pool Size", "MinPoolSize"))
+        {
+            builder.MinPoolSize = DefaultMinPoolSize;
+        }
+
+        if (!WasProvided(provided, "Timeout"))
+        {
+            builder.Timeout = DefaultConnectTimeoutSeconds;
+        }
+
+        if (!WasProvided(provided, "Command Timeout", "CommandTimeout"))
+        {
+            builder.CommandTimeout = DefaultCommandTimeoutSeconds;
+        }
+
+        return builder.ConnectionString;
+    }
+
+    private static bool WasProvided(DbConnectionStringBuilder provided, params string[] keywords)
+    {
+        foreach (var keyword in keywords)
+        {
+            if (provided.ContainsKey(keyword))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string? ReadSslMode(string query)

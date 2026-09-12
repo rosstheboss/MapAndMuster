@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MapAndMuster.Api.Contracts;
 using MapAndMuster.Application.Chat;
 using MapAndMuster.Application.Common;
+using MapAndMuster.Application.Ports;
 
 namespace MapAndMuster.Api.Endpoints;
 
@@ -33,6 +34,36 @@ public static class SiteChatEndpoints
             .Produces<SiteChatBoardResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized);
+        group.MapGet("/stream", StreamAsync)
+            .WithName("StreamSiteChat")
+            .ExcludeFromDescription();
+    }
+
+    /// <summary>
+    /// Streams site-chat change notifications. Events carry no message content; the client
+    /// refetches the board through <c>GET /api/site-chat</c>, which applies block filtering.
+    /// </summary>
+    /// <remarks>
+    /// Holds no scoped service for the connection lifetime. See
+    /// <c>docs/adr/0004-server-sent-events-for-campaign-updates.md</c>.
+    /// </remarks>
+    private static async Task StreamAsync(
+        HttpContext context,
+        ClaimsPrincipal principal,
+        ICampaignUpdateBroadcaster broadcaster,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(broadcaster);
+        if (principal.GetUserId() is null)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        await ServerSentEvents
+            .WriteStreamAsync(context, broadcaster.SubscribeSiteChat(), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task<IResult> GetBoardAsync(

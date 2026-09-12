@@ -1825,6 +1825,24 @@
                             </button>
                           </div>
                           @if (subfaction.controls.name.value.trim()) {
+                            <label class="choice-row">
+                              <input type="checkbox" formControlName="inheritMovementSpeed" />
+                              Use faction movement speed
+                            </label>
+                            @if (!subfaction.controls.inheritMovementSpeed.value) {
+                              <div class="field">
+                                <label [attr.for]="'subfaction-movement-speed-' + index + '-' + subIndex"
+                                  >Force movement speed</label
+                                >
+                                <input
+                                  [id]="'subfaction-movement-speed-' + index + '-' + subIndex"
+                                  type="number"
+                                  min="1"
+                                  max="10"
+                                  formControlName="movementSpeed"
+                                />
+                              </div>
+                            }
                             <div class="field">
                               <p class="muted">Inherited faction tags</p>
                               <ul class="tag-chip-list">
@@ -2017,6 +2035,20 @@
                         Add subfaction
                       </button>
                     </fieldset>
+                    <div class="field">
+                      <label [attr.for]="'faction-movement-speed-' + index">Force movement speed</label>
+                      <input
+                        [id]="'faction-movement-speed-' + index"
+                        type="number"
+                        min="1"
+                        max="10"
+                        formControlName="forceMovementSpeed"
+                      />
+                      <p class="muted">
+                        How many adjacent territories this faction may Move in one action. Only the final destination is
+                        claimed. Default is 1.
+                      </p>
+                    </div>
                     <fieldset class="field">
                       <legend>Faction special rules</legend>
                       <p class="muted">
@@ -3453,6 +3485,178 @@
                           Add
                         </button>
                       </div>
+                    </fieldset>
+                    <fieldset class="field" formArrayName="effects">
+                      <legend>Item effects</legend>
+                      <p class="muted">
+                        Mechanical effects granted to the force holding this item. Multiple effects can apply at once.
+                        Custom text is shown as a battle reminder and is not executed by the map.
+                      </p>
+                      @for (effect of item.controls.effects.controls; track effect; let effectIndex = $index) {
+                        <div class="nested-card stack" [formGroupName]="effectIndex">
+                          <div class="nested-row">
+                            <div class="field grow">
+                              <label [attr.for]="'item-effect-kind-' + index + '-' + effectIndex">Effect</label>
+                              <select [id]="'item-effect-kind-' + index + '-' + effectIndex" formControlName="kind">
+                                @for (kind of itemObjectiveEffectKinds; track kind.id) {
+                                  <option [value]="kind.id">{{ kind.label }}</option>
+                                }
+                              </select>
+                            </div>
+                            <button
+                              type="button"
+                              class="button-secondary"
+                              (click)="removeItemEffect(item, effectIndex)"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          @if (itemEffectNeedsAmount(effect.controls.kind.value)) {
+                            <div class="field">
+                              <label [attr.for]="'item-effect-amount-' + index + '-' + effectIndex">Amount</label>
+                              <input
+                                [id]="'item-effect-amount-' + index + '-' + effectIndex"
+                                type="number"
+                                formControlName="amount"
+                              />
+                            </div>
+                          }
+                          @if (itemEffectNeedsPercent(effect.controls.kind.value)) {
+                            <label class="choice-row">
+                              <input type="checkbox" formControlName="amountIsPercent" />
+                              Amount is a percent of the round army-point cap
+                            </label>
+                          }
+                          @if (itemEffectNeedsStatuses(effect.controls.kind.value)) {
+                            @if (effect.controls.kind.value === 'ImmuneToStatuses') {
+                              <label class="choice-row">
+                                <input type="checkbox" formControlName="immuneToAllStatuses" />
+                                Immune to every force status
+                              </label>
+                            }
+                            @if (
+                              effect.controls.kind.value !== 'ImmuneToStatuses' ||
+                              !effect.controls.immuneToAllStatuses.value
+                            ) {
+                              <div class="field">
+                                <p class="muted">Statuses</p>
+                                @for (status of assignedEffectStatuses(effect); track status.id) {
+                                  <div class="nested-row">
+                                    <p class="grow">{{ status.name }}</p>
+                                    <button
+                                      type="button"
+                                      class="button-secondary"
+                                      (click)="removeItemEffectStatus(effect, status.id)"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                }
+                                <label [attr.for]="'item-effect-status-' + index + '-' + effectIndex">Add status</label>
+                                <select
+                                  [id]="'item-effect-status-' + index + '-' + effectIndex"
+                                  (change)="onItemEffectStatusPicked(effect, $event)"
+                                >
+                                  <option value="">Select a status</option>
+                                  @for (status of namedForceStatuses(); track status.id) {
+                                    <option [value]="status.id">{{ status.name }}</option>
+                                  }
+                                </select>
+                              </div>
+                            }
+                          }
+                          @if (itemEffectNeedsAlliance(effect.controls.kind.value)) {
+                            <label class="choice-row">
+                              <input type="checkbox" formControlName="suspendCurrentAllyGroup" />
+                              Ignore this force's current ally group while the item is held
+                            </label>
+                            <div class="field">
+                              <label [attr.for]="'item-effect-forced-group-' + index + '-' + effectIndex"
+                                >Treat as this ally group</label
+                              >
+                              <input
+                                [id]="'item-effect-forced-group-' + index + '-' + effectIndex"
+                                formControlName="forcedAllyGroupName"
+                                maxlength="60"
+                              />
+                            </div>
+                            <div class="field" formArrayName="alliedFactions">
+                              <p class="muted">Also treat these factions as allied</p>
+                              @for (
+                                target of effect.controls.alliedFactions.controls;
+                                track target;
+                                let targetIndex = $index
+                              ) {
+                                <div class="nested-row" [formGroupName]="targetIndex">
+                                  <div class="field grow">
+                                    <label
+                                      [attr.for]="'item-effect-ally-' + index + '-' + effectIndex + '-' + targetIndex"
+                                      >Faction</label
+                                    >
+                                    <select
+                                      [id]="'item-effect-ally-' + index + '-' + effectIndex + '-' + targetIndex"
+                                      formControlName="factionId"
+                                    >
+                                      <option value="">Select a faction</option>
+                                      @for (ally of factions.controls; track ally.controls.id.value) {
+                                        @if (ally.controls.name.value.trim()) {
+                                          <option [value]="ally.controls.id.value">
+                                            {{ ally.controls.name.value }}
+                                          </option>
+                                        }
+                                      }
+                                    </select>
+                                  </div>
+                                  <div class="field grow">
+                                    <label
+                                      [attr.for]="
+                                        'item-effect-ally-sub-' + index + '-' + effectIndex + '-' + targetIndex
+                                      "
+                                      >Subfaction (optional)</label
+                                    >
+                                    <input
+                                      [id]="'item-effect-ally-sub-' + index + '-' + effectIndex + '-' + targetIndex"
+                                      formControlName="subfaction"
+                                      maxlength="60"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    class="button-secondary"
+                                    (click)="removeItemEffectAlliance(effect, targetIndex)"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              }
+                              <button type="button" class="button-secondary" (click)="addItemEffectAlliance(effect)">
+                                Add allied faction
+                              </button>
+                            </div>
+                          }
+                          @if (itemEffectNeedsCustom(effect.controls.kind.value)) {
+                            <div class="field">
+                              <label [attr.for]="'item-effect-custom-' + index + '-' + effectIndex"
+                                >Battle reminder</label
+                              >
+                              <textarea
+                                [id]="'item-effect-custom-' + index + '-' + effectIndex"
+                                formControlName="customText"
+                                maxlength="2000"
+                                rows="3"
+                              ></textarea>
+                            </div>
+                          }
+                        </div>
+                      }
+                      <button
+                        type="button"
+                        class="button-secondary"
+                        (click)="addItemEffect(item)"
+                        [disabled]="item.controls.effects.length >= 12"
+                      >
+                        Add effect
+                      </button>
                     </fieldset>
                     <div class="field" formArrayName="choices">
                       <p class="muted">

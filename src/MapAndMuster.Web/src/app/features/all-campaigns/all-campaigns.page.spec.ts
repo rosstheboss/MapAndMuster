@@ -67,6 +67,7 @@ describe('AllCampaignsPage', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('All campaigns');
     expect(compiled.querySelector('#all-campaigns-list-heading')?.textContent).toContain('Campaigns');
     expect(compiled.textContent).toContain('Site chat');
+    expect(compiled.querySelector('app-update-stream-status')).toBeTruthy();
     const campaignsHeading = compiled.querySelector('#all-campaigns-list-heading');
     const siteChat = compiled.querySelector('app-site-chat');
     expect(campaignsHeading && siteChat).toBeTruthy();

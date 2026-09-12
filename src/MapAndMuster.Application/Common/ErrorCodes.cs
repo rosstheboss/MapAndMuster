@@ -92,6 +92,9 @@ public static class ErrorCodes
     /// <summary>The campaign has launched and the requested setup field is locked.</summary>
     public const string CampaignLocked = "campaign.locked";
 
+    /// <summary>Only a completed campaign can be permanently deleted.</summary>
+    public const string CampaignNotCompleted = "campaign.not_completed";
+
     /// <summary>Play has not started because the campaign is still scheduled.</summary>
     public const string PlayNotStarted = "play.not_started";
 

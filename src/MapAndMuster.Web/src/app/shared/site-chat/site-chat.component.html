@@ -1,5 +1,10 @@
 <details class="site-chat" [open]="expanded()" (toggle)="onToggle($event)">
-  <summary>Site chat</summary>
+  <summary>
+    Site chat
+    @if (streamState(); as state) {
+      <app-update-stream-status [state]="state" />
+    }
+  </summary>
   <p class="muted">
     Public messages for everyone on this site. They are separate from campaign logs. You can tag any account.
   </p>

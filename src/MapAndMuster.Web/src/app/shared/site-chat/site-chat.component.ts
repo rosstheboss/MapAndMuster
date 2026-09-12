@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../core/auth/auth.service';
+import type { UpdateStreamState } from '../../core/campaigns/update-stream';
+import { UpdateStreamStatusComponent } from '../update-stream-status/update-stream-status.component';
 import { CHAT_LANGUAGES, type ChatLanguage } from '../../core/chat/chat-languages';
 import type { SiteChatMember, SiteChatMessage, SiteChatSend } from '../../core/chat/site-chat.models';
 import {
@@ -16,7 +18,7 @@ import {
 
 @Component({
   selector: 'app-site-chat',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, UpdateStreamStatusComponent],
   templateUrl: './site-chat.component.html',
   styleUrl: './site-chat.component.css',
 })
@@ -35,6 +37,7 @@ export class SiteChatComponent {
   readonly expanded = input(true);
   readonly composeLanguage = input<ChatLanguage>('English');
   readonly visibleLanguages = input<readonly ChatLanguage[]>(CHAT_LANGUAGES);
+  readonly streamState = input<UpdateStreamState | null>(null);
 
   readonly send = output<SiteChatSend>();
   readonly expandedChange = output<boolean>();

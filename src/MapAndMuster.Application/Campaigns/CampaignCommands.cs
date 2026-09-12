@@ -508,3 +508,18 @@ public sealed class EndCampaignCommand
     /// </summary>
     public int? ExpectedRevision { get; init; }
 }
+
+/// <summary>
+/// Command for a manager or administrator to permanently delete a completed campaign.
+/// </summary>
+public sealed class DeleteCompletedCampaignCommand
+{
+    /// <summary>Gets the authenticated staff user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is a system administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+}

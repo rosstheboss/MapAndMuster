@@ -24,10 +24,21 @@ describe('campaign presets', () => {
     expect(copy!.structureTypes.some((entry) => entry.name === 'Town')).toBe(true);
     expect(copy!.itemObjectives).toEqual([]);
     expect(copy!.specialRules.length).toBeGreaterThan(0);
-    expect(copy!.specialRules.some((rule) => rule.name === 'Crusaders')).toBe(true);
-    expect(copy!.specialRules.find((rule) => rule.name === 'Crusaders')?.description).toContain(
-      'two adjacent territories',
+    expect(copy!.specialRules.some((rule) => rule.name === 'Called by the Relic')).toBe(true);
+    expect(copy!.specialRules.find((rule) => rule.name === 'Called by the Relic')?.description).toContain(
+      'extra movement speed',
     );
+    expect(copy!.specialRules.find((rule) => rule.name === 'Undead')?.description).toContain('Exhausted');
+    expect(copy!.factions.find((faction) => faction.name === 'Kingdom of Bretonnia')?.specialRuleNames).toEqual([
+      'Safe in Water',
+    ]);
+    expect(copy!.factions.find((faction) => faction.name === 'Tomb Kings of Khemri')?.specialRuleNames).toEqual([
+      'Called by the Relic',
+    ]);
+    expect(copy!.factions.find((faction) => faction.name === 'Vampire Counts')?.specialRuleNames).toEqual([
+      'Fresh Corpses',
+      'Undead',
+    ]);
     expect(copy!.forceStatuses.map((status) => status.name)).toEqual([
       'Diseased',
       'Shaken',

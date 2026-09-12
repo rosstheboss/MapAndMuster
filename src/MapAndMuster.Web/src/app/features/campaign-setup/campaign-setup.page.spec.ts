@@ -394,11 +394,11 @@ describe('CampaignSetupPage', () => {
       };
     };
 
-    page.specialRulePresetPick.setValue('Crusaders');
+    page.specialRulePresetPick.setValue('Safe in Water');
     page.addPickedSpecialRule();
     fixture.detectChanges();
-    expect(page.specialRules.at(0).controls.name.value).toBe('Crusaders');
-    expect(page.specialRules.at(0).controls.text.value).toContain('two adjacent territories');
+    expect(page.specialRules.at(0).controls.name.value).toBe('Safe in Water');
+    expect(page.specialRules.at(0).controls.text.value).toContain('dangerous terrain');
     expect((fixture.nativeElement as HTMLElement).querySelector('#specialRulePreset')).toBeTruthy();
     expect((fixture.nativeElement as HTMLElement).querySelector('#faction-special-rule-0')).toBeTruthy();
     expect(
@@ -408,7 +408,7 @@ describe('CampaignSetupPage', () => {
     ).toBe('Description');
 
     const factionId = page.factions.at(0).controls.id.value;
-    page.pickControl(factionId).setValue('Crusaders');
+    page.pickControl(factionId).setValue('Safe in Water');
     page.assignSpecialRuleByName(page.factions.at(0).controls.specialRuleIds, factionId);
     expect(page.factions.at(0).controls.specialRuleIds.value).toEqual([page.specialRules.at(0).controls.id.value]);
   });
@@ -533,6 +533,11 @@ describe('CampaignSetupPage', () => {
     expect(daemonsGroup.controls.subfactionSpecialRuleIds.value['Nurgle'].length).toBeGreaterThan(0);
     expect(daemonsGroup.controls.subfactionSpecialRuleIds.value['Slaanesh'].length).toBeGreaterThan(0);
     expect(daemonsGroup.controls.subfactionSpecialRuleIds.value['Tzeentch'].length).toBeGreaterThan(0);
+    const bretonniaIndex = names.indexOf('Kingdom of Bretonnia');
+    expect(bretonniaIndex).toBeGreaterThan(-1);
+    expect(compiled.querySelector<HTMLInputElement>(`#faction-movement-speed-${bretonniaIndex}`)?.value).toBe('2');
+    const empireIndex = names.indexOf('Empire of Man');
+    expect(compiled.querySelector<HTMLInputElement>(`#faction-movement-speed-${empireIndex}`)?.value).toBe('1');
     expect(compiled.querySelector('#terrain-name-0')).toBeTruthy();
     expect(compiled.querySelector<HTMLInputElement>('#terrain-name-0')?.value).toBe('Beach');
     const terrainNames = [...compiled.querySelectorAll<HTMLInputElement>('input[id^="terrain-name-"]')].map(
@@ -1382,6 +1387,7 @@ describe('CampaignSetupPage edit', () => {
       region: null,
       country: null,
       hasMap: true,
+      assetTags: { map: 'd00dfeed1234abcd' },
       canManage: true,
       isParticipant: true,
       revision: 2,
@@ -1463,8 +1469,10 @@ describe('CampaignSetupPage edit', () => {
     expect(save?.disabled).toBe(true);
     expect(discard?.disabled).toBe(true);
     expect(toolbar ? getComputedStyle(toolbar).position : '').toBe('sticky');
+    // The map URL carries the asset tag, not the campaign revision, so editing anything else
+    // about the campaign does not force the browser to download the map again.
     expect(compiled.querySelector('app-campaign-map-preview img')?.getAttribute('src')).toContain(
-      `/api/campaigns/${campaignId}/map?v=2`,
+      `/api/campaigns/${campaignId}/map?t=d00dfeed1234abcd`,
     );
     http.verify();
   });
@@ -1701,6 +1709,7 @@ describe('CampaignSetupPage edit', () => {
       region: null,
       country: null,
       hasMap: true,
+      assetTags: { map: 'd00dfeed1234abcd' },
       canManage: true,
       isParticipant: true,
       revision: 2,
@@ -2025,6 +2034,7 @@ describe('CampaignSetupPage edit', () => {
       region: null,
       country: null,
       hasMap: true,
+      assetTags: { map: 'd00dfeed1234abcd' },
       canManage: true,
       isParticipant: true,
       revision: 2,
@@ -2117,6 +2127,7 @@ describe('CampaignSetupPage edit', () => {
       region: null,
       country: null,
       hasMap: true,
+      assetTags: { map: 'd00dfeed1234abcd' },
       canManage: true,
       isParticipant: true,
       revision: 2,
@@ -2238,6 +2249,7 @@ function scheduledEditCampaign(campaignId: string): CampaignDetail {
     id: campaignId,
     name: 'Border War',
     description: 'A contested frontier.',
+    assetTags: { map: 'd00dfeed1234abcd' },
     playerSlotCount: 8,
     occupiedPlayerSlots: 1,
     isPrivate: false,

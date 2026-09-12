@@ -34,6 +34,9 @@ public enum ActionKind
 
     /// <summary>Leave an engagement and retreat; once committed it cannot be withdrawn.</summary>
     Surrender = 9,
+
+    /// <summary>Move to a random empty non-spawn territory while holding a teleport item.</summary>
+    Teleport = 10,
 }
 
 /// <summary>

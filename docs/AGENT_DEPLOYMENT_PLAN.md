@@ -1,5 +1,9 @@
 # Old World Campaign — Deployment & Production Readiness Agent Plan
 
+<!-- markdownlint-disable-file MD025 -->
+<!-- The 27 numbered stages below are top-level headings by design; this is a completed plan and
+     renumbering its structure to satisfy a single-H1 rule would be churn with no reader benefit. -->
+
 ## Purpose
 
 This document is an implementation specification for an AI coding agent working in the existing **Old World Campaign** repository.
@@ -71,7 +75,7 @@ Do not treat class-library projects as individually deployed services.
 Expected deployed workloads:
 
 | Repository component | Production deployment |
-|---|---|
+| --- | --- |
 | Angular application | Static site |
 | ASP.NET Core API | Docker web service |
 | .NET Worker | Docker background worker |

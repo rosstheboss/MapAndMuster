@@ -29,7 +29,7 @@ require same-origin `/api` on `https://staging.mapandmuster.com`.
 Staging must have all of the following, none shared with production:
 
 | Concern | Staging | Production |
-|---|---|---|
+| --- | --- | --- |
 | PostgreSQL | Own Render database | `mapandmuster-db` |
 | `ConnectionStrings__Campaign` | Staging URI only | Production URI only |
 | Resend API key | Staging key or test domain | Production key |

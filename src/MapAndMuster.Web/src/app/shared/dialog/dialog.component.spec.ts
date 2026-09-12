@@ -21,7 +21,7 @@ import { AppDialogService } from './dialog.service';
     >
       <h2 id="dlg-title">Delete this campaign?</h2>
       <p id="dlg-desc">This cannot be undone.</p>
-      <button type="button" class="button-danger">Delete</button>
+      <button type="button" class="button-danger" (click)="confirmed.set(true)">Delete</button>
       <button type="button" class="button-secondary" data-dialog-safe (click)="open.set(false)">Cancel</button>
     </app-dialog>
   `,
@@ -29,6 +29,7 @@ import { AppDialogService } from './dialog.service';
 class HostComponent {
   readonly dialogs = inject(AppDialogService);
   readonly open = signal(false);
+  readonly confirmed = signal(false);
 }
 
 describe('AppDialogComponent', () => {
@@ -81,6 +82,21 @@ describe('AppDialogComponent', () => {
     expect(document.querySelector('[role="alertdialog"]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(TestBed.inject(AppDialogService).hasOpen()).toBe(false);
+  });
+
+  it('confirms an alertdialog on Enter even when the safe action is focused', async () => {
+    const fixture = TestBed.createComponent(HostComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector('button')?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(document.activeElement?.textContent.trim()).toBe('Cancel');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.confirmed()).toBe(true);
   });
 
   it('closes when the backdrop is clicked', async () => {

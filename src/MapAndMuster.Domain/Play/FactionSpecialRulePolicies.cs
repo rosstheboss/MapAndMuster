@@ -8,7 +8,7 @@ namespace MapAndMuster.Domain.Play;
 public static class FactionSpecialRulePolicies
 {
     /// <summary>
-    /// Returns whether a one- or two-territory Move is legal for this force.
+    /// Returns whether a one- or multi-territory Move is legal for this force.
     /// </summary>
     public static bool IsValidMove(
         PlayMap map,
@@ -16,33 +16,11 @@ public static class FactionSpecialRulePolicies
         Guid? targetId,
         Guid? viaId,
         IReadOnlyList<CampaignItemObjective> items,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        IReadOnlyList<Guid>? viaPath = null,
+        IReadOnlyList<CampaignForce>? occupyingForces = null)
     {
-        ArgumentNullException.ThrowIfNull(map);
-        ArgumentNullException.ThrowIfNull(force);
-        ArgumentNullException.ThrowIfNull(items);
-        ArgumentNullException.ThrowIfNull(rules);
-        if (targetId is null || targetId == force.TerritoryId)
-        {
-            return false;
-        }
-
-        if (viaId is { } via && via != Guid.Empty && via != force.TerritoryId && via != targetId)
-        {
-            if (!rules.Has(force, SpecialRuleEffectKeys.Crusaders))
-            {
-                return false;
-            }
-
-            return IsLegalStep(map, force, force.TerritoryId, via) && IsLegalStep(map, force, via, targetId.Value);
-        }
-
-        if (map.AreAdjacent(force.TerritoryId, targetId.Value) && IsLegalStep(map, force, force.TerritoryId, targetId.Value))
-        {
-            return true;
-        }
-
-        return RelicAdjacentMoveTargets(map, force, items, rules).Contains(targetId.Value);
+        return ForceMovementRules.IsValidMove(map, force, targetId, viaId, items, rules, viaPath, occupyingForces);
     }
 
     /// <summary>
@@ -115,7 +93,7 @@ public static class FactionSpecialRulePolicies
     }
 
     /// <summary>
-    /// Stops a Crusaders two-hop Move at the first territory when an enemy is encountered there.
+    /// Stops a multi-hop Move at the first territory when an enemy is encountered there.
     /// </summary>
     public static Guid ResolveMoveDestination(
         PlayMap map,
@@ -127,49 +105,36 @@ public static class FactionSpecialRulePolicies
         IReadOnlyCollection<Guid> brokenFactions,
         IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
         SpecialRuleContext rules,
-        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
+        IReadOnlyList<Guid>? viaPath = null)
     {
-        if (viaId is not { } via || via == Guid.Empty || via == targetId || via == force.TerritoryId)
-        {
-            return targetId;
-        }
-
-        if (!rules.Has(force, SpecialRuleEffectKeys.Crusaders))
-        {
-            return targetId;
-        }
-
-        if (HasEnemy(
-            startingForces,
-            via,
+        return ForceMovementRules.ResolveDestination(
+            map,
             force,
+            targetId,
+            viaId,
+            startingForces,
             factionAllyGroups,
             brokenFactions,
             brokenSubfactions,
             rules,
-            allyBetrayals))
-        {
-            return via;
-        }
-
-        return targetId;
+            allyBetrayals,
+            viaPath);
     }
 
-    /// <summary>Returns whether a two-hop Move should skip claiming the via territory.</summary>
+    /// <summary>Returns whether a multi-hop Move should skip claiming an intermediate territory.</summary>
     public static bool SkipClaiming(
         CampaignForce force,
         Guid territoryId,
         Guid originId,
         Guid destinationId,
         Guid? viaId,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        IReadOnlyList<Guid>? viaPath = null)
     {
-        if (!rules.Has(force, SpecialRuleEffectKeys.Crusaders) || viaId is not { } via)
-        {
-            return false;
-        }
-
-        return territoryId == via && via != originId && via != destinationId;
+        _ = force;
+        _ = rules;
+        return ForceMovementRules.SkipClaiming(territoryId, originId, destinationId, viaId, viaPath);
     }
 
     /// <summary>Returns whether two forces are enemies, including daemon-god identity.</summary>
@@ -180,7 +145,9 @@ public static class FactionSpecialRulePolicies
         IReadOnlyCollection<Guid> brokenFactions,
         IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
         SpecialRuleContext rules,
-        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
+        PlayMap? map = null,
+        IReadOnlyList<CampaignItemObjective>? items = null)
     {
         if (left.Id == right.Id || left.ControllerUserId == right.ControllerUserId)
         {
@@ -190,6 +157,13 @@ public static class FactionSpecialRulePolicies
         if (AllyBetrayalRules.AreHostile(left, right, allyBetrayals ?? []))
         {
             return true;
+        }
+
+        if (map is not null
+            && items is not null
+            && ItemObjectiveEffectRules.ForcesAlliedByItem(left, right, map, items, rules))
+        {
+            return false;
         }
 
         if (AreDividedGods(left, right, rules))
@@ -202,7 +176,7 @@ public static class FactionSpecialRulePolicies
             return IsGodBroken(left, brokenSubfactions) || IsGodBroken(right, brokenSubfactions);
         }
 
-        return ActionResolution.AreEnemies(left.FactionId, right.FactionId, factionAllyGroups, brokenFactions);
+        return ActionResolution.AreEnemies(left.FactionId, right.FactionId, EffectiveAllyGroups(left, right, factionAllyGroups, map, items, rules), brokenFactions);
     }
 
     /// <summary>Returns whether two forces are allied, including implicit daemon-god alliances.</summary>
@@ -213,7 +187,9 @@ public static class FactionSpecialRulePolicies
         IReadOnlyCollection<Guid> brokenFactions,
         IReadOnlyList<BrokenAllySubfaction> brokenSubfactions,
         SpecialRuleContext rules,
-        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
+        PlayMap? map = null,
+        IReadOnlyList<CampaignItemObjective>? items = null)
     {
         if (left.ControllerUserId == right.ControllerUserId)
         {
@@ -225,6 +201,13 @@ public static class FactionSpecialRulePolicies
             return false;
         }
 
+        if (map is not null
+            && items is not null
+            && ItemObjectiveEffectRules.ForcesAlliedByItem(left, right, map, items, rules))
+        {
+            return true;
+        }
+
         if (AreDividedGods(left, right, rules))
         {
             return !SameGod(left, right)
@@ -232,7 +215,8 @@ public static class FactionSpecialRulePolicies
                 && !IsGodBroken(right, brokenSubfactions);
         }
 
-        return ActionResolution.AreAllies(left.FactionId, right.FactionId, factionAllyGroups, brokenFactions);
+        var groups = EffectiveAllyGroups(left, right, factionAllyGroups, map, items, rules);
+        return ActionResolution.AreAllies(left.FactionId, right.FactionId, groups, brokenFactions);
     }
 
     /// <summary>Returns whether occupying forces start a battle, skipping Skaven spawn fights.</summary>
@@ -317,29 +301,37 @@ public static class FactionSpecialRulePolicies
         return rules.Has(force, SpecialRuleEffectKeys.OnlyBloodSatisfies);
     }
 
-    /// <summary>Returns whether Crusaders split forces should rejoin when co-located.</summary>
+    /// <summary>Returns whether co-located same-player split forces should rejoin.</summary>
     public static bool ShouldRejoin(
         CampaignForce left,
         CampaignForce right,
         IReadOnlyDictionary<Guid, ActionKind> arrivalKinds,
         SpecialRuleContext rules)
     {
-        if (!rules.Has(left, SpecialRuleEffectKeys.Crusaders) && !rules.Has(right, SpecialRuleEffectKeys.Crusaders))
-        {
-            return true;
-        }
-
-        var leftKind = arrivalKinds.GetValueOrDefault(left.Id, ActionKind.Hold);
-        var rightKind = arrivalKinds.GetValueOrDefault(right.Id, ActionKind.Hold);
-        return leftKind is ActionKind.Move or ActionKind.Split or ActionKind.Retreat
-            && rightKind is ActionKind.Move or ActionKind.Split or ActionKind.Retreat;
+        _ = left;
+        _ = right;
+        _ = arrivalKinds;
+        _ = rules;
+        return true;
     }
 
     /// <summary>Returns whether a named status may apply to this force.</summary>
-    public static bool AllowsStatus(CampaignForce force, string statusName, SpecialRuleContext rules)
+    public static bool AllowsStatus(
+        CampaignForce force,
+        string statusName,
+        SpecialRuleContext rules,
+        PlayMap? map = null,
+        IReadOnlyList<CampaignItemObjective>? items = null)
     {
-        if (rules.Has(force, SpecialRuleEffectKeys.Undead)
-            && MatchesAny(statusName, "Shaken", "Diseased", "Well Rested", "Confident"))
+        if (map is not null
+            && items is not null
+            && ItemObjectiveEffectRules.IsImmuneToStatus(force, statusName, map, items, rules))
+        {
+            return false;
+        }
+
+        if (HasUndeadStatusImmunity(force, rules)
+            && MatchesAny(statusName, "Shaken", "Exhausted", "Diseased", "Well Rested", "Confident"))
         {
             return false;
         }
@@ -406,83 +398,41 @@ public static class FactionSpecialRulePolicies
         return false;
     }
 
-    /// <summary>Move destinations that reduce distance to a revealed relic.</summary>
-    public static IReadOnlyList<Guid> RelicPursuitTargets(
-        PlayMap map,
+    /// <summary>
+    /// +1 Move speed while a revealed, non-destroyed item exists and no force of this faction holds one.
+    /// </summary>
+    public static int CalledByTheRelicSpeedBonus(
         CampaignForce force,
+        IReadOnlyList<CampaignForce> occupyingForces,
         IReadOnlyList<CampaignItemObjective> items,
         SpecialRuleContext rules)
     {
+        ArgumentNullException.ThrowIfNull(force);
+        ArgumentNullException.ThrowIfNull(occupyingForces);
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(rules);
         if (!rules.Has(force, SpecialRuleEffectKeys.CalledByTheRelic))
-        {
-            return [];
-        }
-
-        var revealed = items
-            .Where(static item => item.IsRevealed && item.TerritoryId is not null)
-            .Select(static item => item.TerritoryId!.Value)
-            .Distinct()
-            .ToArray();
-        if (revealed.Length == 0)
-        {
-            return [];
-        }
-
-        var current = revealed.Min(id => Distance(map, force.TerritoryId, id));
-        if (current == 0)
-        {
-            return [];
-        }
-
-        var closer = new List<Guid>();
-        foreach (var neighbor in map.Neighbors(force.TerritoryId))
-        {
-            if (!CanEnter(map, force, neighbor))
-            {
-                continue;
-            }
-
-            var next = revealed.Min(id => Distance(map, neighbor, id));
-            if (next < current)
-            {
-                closer.Add(neighbor);
-            }
-        }
-
-        return closer;
-    }
-
-    /// <summary>Breadth-first distance, or a large number when unreachable.</summary>
-    public static int Distance(PlayMap map, Guid from, Guid to)
-    {
-        if (from == to)
         {
             return 0;
         }
 
-        var seen = new HashSet<Guid> { from };
-        var queue = new Queue<(Guid Id, int Cost)>();
-        queue.Enqueue((from, 0));
-        while (queue.Count > 0)
+        var live = items.Where(static item => !item.IsDestroyed).ToArray();
+        if (!live.Any(static item => item.IsRevealed))
         {
-            var (id, cost) = queue.Dequeue();
-            foreach (var neighbor in map.Neighbors(id))
-            {
-                if (!seen.Add(neighbor))
-                {
-                    continue;
-                }
-
-                if (neighbor == to)
-                {
-                    return cost + 1;
-                }
-
-                queue.Enqueue((neighbor, cost + 1));
-            }
+            return 0;
         }
 
-        return 1000;
+        var factionForceIds = occupyingForces
+            .Where(other => other.FactionId == force.FactionId)
+            .Select(static other => other.Id)
+            .ToHashSet();
+        factionForceIds.Add(force.Id);
+        if (live.Any(item => item.PossessorForceId is Guid possessorId && factionForceIds.Contains(possessorId)))
+        {
+            return 0;
+        }
+
+        return 1;
     }
 
     private static bool IsLegalStep(PlayMap map, CampaignForce force, Guid from, Guid to)
@@ -504,6 +454,40 @@ public static class FactionSpecialRulePolicies
             force.TerritoryId == territoryId
             && force.Id != mover.Id
             && AreEnemies(mover, force, factionAllyGroups, brokenFactions, brokenSubfactions, rules, allyBetrayals));
+    }
+
+    private static IReadOnlyDictionary<Guid, string?> EffectiveAllyGroups(
+        CampaignForce left,
+        CampaignForce right,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        PlayMap? map,
+        IReadOnlyList<CampaignItemObjective>? items,
+        SpecialRuleContext rules)
+    {
+        if (map is null || items is null)
+        {
+            return factionAllyGroups;
+        }
+
+        var next = new Dictionary<Guid, string?>(factionAllyGroups);
+        Apply(left);
+        Apply(right);
+        return next;
+
+        void Apply(CampaignForce force)
+        {
+            var forced = ItemObjectiveEffectRules.ForcedAllyGroupName(force, map, items, rules);
+            if (!string.IsNullOrWhiteSpace(forced))
+            {
+                next[force.FactionId] = forced;
+                return;
+            }
+
+            if (ItemObjectiveEffectRules.SuspendsAllyGroup(force, map, items, rules))
+            {
+                next[force.FactionId] = null;
+            }
+        }
     }
 
     private static bool AreDividedGods(CampaignForce left, CampaignForce right, SpecialRuleContext rules)
@@ -528,6 +512,12 @@ public static class FactionSpecialRulePolicies
         return broken.Any(item =>
             item.FactionId == force.FactionId
             && string.Equals(item.Subfaction, force.Subfaction, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool HasUndeadStatusImmunity(CampaignForce force, SpecialRuleContext rules)
+    {
+        return rules.Has(force, SpecialRuleEffectKeys.Undead)
+            || rules.Has(force, SpecialRuleEffectKeys.CalledByTheRelic);
     }
 
     private static bool MatchesAny(string? statusName, params string[] names)
@@ -658,14 +648,27 @@ public static class FactionSpecialRulePolicies
         return (territory.Id, capture);
     }
 
-    /// <summary>Assigns territory ownership to a faction.</summary>
-    public static PlayMap Capture(PlayMap map, Guid territoryId, Guid factionId)
+    /// <summary>Assigns territory ownership to a faction, and to a required subfaction when one applies.</summary>
+    public static PlayMap Capture(
+        PlayMap map,
+        Guid territoryId,
+        Guid factionId,
+        string? ownerSubfaction = null,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(map);
+        var rules = specialRules ?? SpecialRuleContext.None;
+        var subfaction = rules.FactionRequiresSubfaction(factionId) ? ownerSubfaction : null;
         return map.WithTerritories(
         [
             .. map.Territories.Select(territory =>
-                territory.Id == territoryId ? territory.With(ownerFactionId: factionId, assignOwner: true) : territory),
+                territory.Id == territoryId
+                    ? territory.With(
+                        ownerFactionId: factionId,
+                        assignOwner: true,
+                        ownerSubfaction: subfaction,
+                        assignOwnerSubfaction: true)
+                    : territory),
         ]);
     }
 }

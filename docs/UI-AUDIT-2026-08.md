@@ -1,5 +1,9 @@
 # UI Audit — August 2026
 
+<!-- markdownlint-disable-file MD025 -->
+<!-- Critical / High / Medium / Polish are top-level dividers by design, so the severity of a
+     finding is visible from the outline rather than from its nesting depth. -->
+
 A usability, accessibility, and visual-design audit of `MapAndMuster.Web` for the three
 audiences in `PRODUCT.md`: administrators, campaign managers (GMs), and players.
 
@@ -244,7 +248,7 @@ territory and scrolls the map into view, so the existing behavior is not lost du
 ## UI-C3 — Dialogs are not modal, Escape does not close them, and focus is not trapped
 
 **Status:** implemented (2026-08-30). Shared `AppDialogComponent` with `aria-modal`, focus trap,
-Escape/backdrop cancel, and inert on `.app-shell`.
+Escape/backdrop cancel, Enter to confirm alertdialogs, and inert on `.app-shell`.
 
 **Areas:** Accessibility, Error prevention, Consistency
 
@@ -280,7 +284,7 @@ the behavior, then convert all six call sites to it. The component should:
 Default focus must land on the **safe** action. In the delete dialog, focus currently lands on
 the red `button-danger`; it should land on Cancel.
 
-**Verify:** Vitest coverage on `AppDialogComponent` (Escape, Tab cycle, focus restore, backdrop
+**Verify:** Vitest coverage on `AppDialogComponent` (Escape, Enter confirm, Tab cycle, focus restore, backdrop
 click) plus conversion assertions on each of the six call sites. A Playwright pass over a live
 dialog remains useful when the axe suite is expanded in step 3.
 
@@ -524,7 +528,7 @@ each string once.
 
 `campaign-detail.page.html` renders the same two pieces of information twice in each force card:
 
-```
+```text
 775  @if (force.hiddenRelicNearby) { <p …>A hidden relic is in an adjacent territory.</p> }
 778  @if (force.battleReminders?.length) { <ul> … <li …>{{ reminder }}</li> … </ul> }
 785  @if (force.hiddenRelicNearby) { <p …>A hidden relic is in an adjacent territory.</p> }

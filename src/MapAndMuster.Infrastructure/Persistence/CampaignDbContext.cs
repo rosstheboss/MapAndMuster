@@ -102,6 +102,13 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(message => message.Type).HasMaxLength(128).IsRequired();
             entity.Property(message => message.Payload).IsRequired();
             entity.HasIndex(message => message.ProcessedUtc);
+
+            // The delivery loop only ever asks for the oldest unprocessed messages. A partial index
+            // on that predicate stays the size of the backlog rather than the size of the history,
+            // so a table that only grows does not make each poll more expensive.
+            entity.HasIndex(message => message.CreatedUtc)
+                .HasDatabaseName("IX_OutboxMessages_Pending")
+                .HasFilter("\"ProcessedUtc\" IS NULL");
         });
 
         builder.Entity<CampaignRecord>(entity =>
@@ -122,6 +129,15 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(campaign => campaign.RoundLengthUnit).HasMaxLength(16).IsRequired();
             entity.Property(campaign => campaign.Revision).IsConcurrencyToken().ValueGeneratedNever();
             entity.HasIndex(campaign => campaign.CreatedByUserId);
+
+            // Every campaign list is ordered newest-first, so this index lets the sort be an index
+            // scan instead of loading and sorting the whole table.
+            entity.HasIndex(campaign => campaign.UpdatedUtc)
+                .IsDescending();
+
+            // The signed-out and non-member listing filters on visibility, then on a not-yet-started
+            // campaign being previewable. Both columns in one index keeps that a single lookup.
+            entity.HasIndex(campaign => new { campaign.IsPubliclyViewable, campaign.StartsUtc });
             entity.HasMany(campaign => campaign.Memberships)
                 .WithOne(membership => membership.Campaign)
                 .HasForeignKey(membership => membership.CampaignId)

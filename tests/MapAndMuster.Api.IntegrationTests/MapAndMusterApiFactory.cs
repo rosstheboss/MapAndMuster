@@ -44,6 +44,10 @@ public sealed class MapAndMusterApiFactory : WebApplicationFactory<Program>, IAs
         builder.UseSetting("Email:Provider", "Smtp");
         builder.UseSetting("Storage:RootPath", _storagePath);
         builder.UseSetting("PublicWeb:Origin", "http://localhost");
+
+        // Tests drive AdvanceDueCampaignsHandler directly. A background pass would otherwise race
+        // assertions on database state and on per-request statement counts.
+        builder.UseSetting("Campaigns:RunPhaseDeadlineWorker", "false");
     }
 }
 

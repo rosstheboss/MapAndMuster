@@ -39,19 +39,7 @@ public sealed class UserNotificationStore : IUserNotificationStore
             return false;
         }
 
-        _dbContext.UserNotifications.Add(new UserNotificationRecord
-        {
-            Id = Guid.NewGuid(),
-            UserId = notification.UserId,
-            Kind = notification.Kind.ToString(),
-            CampaignId = notification.CampaignId,
-            CampaignName = notification.CampaignName,
-            Title = notification.Title,
-            Body = notification.Body,
-            Path = notification.Path,
-            DedupeKey = notification.DedupeKey,
-            CreatedUtc = utcNow,
-        });
+        _dbContext.UserNotifications.Add(ToRecord(notification, utcNow));
 
         try
         {
@@ -60,7 +48,78 @@ public sealed class UserNotificationStore : IUserNotificationStore
         }
         catch (DbUpdateException)
         {
+            _dbContext.ChangeTracker.Clear();
             return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<string>> TryAddManyAsync(
+        IReadOnlyList<NewUserNotification> notifications,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(notifications);
+        var accepted = new HashSet<string>(StringComparer.Ordinal);
+        if (notifications.Count == 0)
+        {
+            return accepted;
+        }
+
+        var userIds = notifications.Select(static item => item.UserId).Distinct().ToArray();
+        var dedupeKeys = notifications.Select(static item => item.DedupeKey).Distinct(StringComparer.Ordinal).ToArray();
+        var existing = await _dbContext.UserNotifications
+            .AsNoTracking()
+            .Where(item => userIds.Contains(item.UserId) && dedupeKeys.Contains(item.DedupeKey))
+            .Select(item => new { item.UserId, item.DedupeKey })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var seen = existing.Select(item => DedupeIdentity(item.UserId, item.DedupeKey)).ToHashSet(StringComparer.Ordinal);
+        var pending = new List<NewUserNotification>();
+        foreach (var notification in notifications)
+        {
+            if (seen.Add(DedupeIdentity(notification.UserId, notification.DedupeKey)))
+            {
+                pending.Add(notification);
+            }
+        }
+
+        if (pending.Count == 0)
+        {
+            return accepted;
+        }
+
+        foreach (var notification in pending)
+        {
+            _dbContext.UserNotifications.Add(ToRecord(notification, utcNow));
+        }
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var notification in pending)
+            {
+                accepted.Add(notification.DedupeKey);
+            }
+
+            return accepted;
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent fan-out inserted one of these first. The batch is all-or-nothing, so
+            // fall back to per-notice inserts rather than dropping the ones that would have
+            // succeeded.
+            _dbContext.ChangeTracker.Clear();
+            foreach (var notification in pending)
+            {
+                if (await TryAddAsync(notification, utcNow, cancellationToken).ConfigureAwait(false))
+                {
+                    accepted.Add(notification.DedupeKey);
+                }
+            }
+
+            return accepted;
         }
     }
 
@@ -103,21 +162,31 @@ public sealed class UserNotificationStore : IUserNotificationStore
     /// <inheritdoc />
     public async Task<int> MarkAllReadAsync(Guid userId, DateTimeOffset utcNow, CancellationToken cancellationToken)
     {
-        var records = await _dbContext.UserNotifications
+        // One UPDATE. Loading each unread notice only to stamp one column made a long-unread
+        // history cost proportional to its size.
+        return await _dbContext.UserNotifications
             .Where(item => item.UserId == userId && item.ReadUtc == null)
-            .ToListAsync(cancellationToken)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ReadUtc, utcNow), cancellationToken)
             .ConfigureAwait(false);
-        foreach (var record in records)
-        {
-            record.ReadUtc = utcNow;
-        }
+    }
 
-        if (records.Count > 0)
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
+    private static string DedupeIdentity(Guid userId, string dedupeKey) => $"{userId:N}|{dedupeKey}";
 
-        return records.Count;
+    private static UserNotificationRecord ToRecord(NewUserNotification notification, DateTimeOffset utcNow)
+    {
+        return new UserNotificationRecord
+        {
+            Id = Guid.NewGuid(),
+            UserId = notification.UserId,
+            Kind = notification.Kind.ToString(),
+            CampaignId = notification.CampaignId,
+            CampaignName = notification.CampaignName,
+            Title = notification.Title,
+            Body = notification.Body,
+            Path = notification.Path,
+            DedupeKey = notification.DedupeKey,
+            CreatedUtc = utcNow,
+        };
     }
 
     private static UserNotification Map(UserNotificationRecord record)

@@ -4,6 +4,7 @@ using MapAndMuster.Application.Campaigns;
 using MapAndMuster.Application.Common;
 using MapAndMuster.Application.Maps;
 using MapAndMuster.Application.Play;
+using MapAndMuster.Application.Ports;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
@@ -51,6 +52,10 @@ public static class CampaignEndpoints
             .WithName("MarkCampaignLogRead")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/stream", StreamAsync)
+            .WithName("StreamCampaignUpdates")
+            .ExcludeFromDescription();
 
         group.MapPost("/{campaignId:guid}/chat", PostChatAsync)
             .WithName("PostCampaignChat")
@@ -115,6 +120,9 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
         group.MapGet("/{campaignId:guid}/preset-package", ExportCampaignPresetPackageAsync)
+            // Building a package reads every stored file for the campaign. Rate limit it like an
+            // upload so one administrator cannot saturate a small instance's disk and CPU.
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
             .WithName("ExportCampaignPresetPackage")
             .Produces(StatusCodes.Status200OK)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
@@ -156,6 +164,7 @@ public static class CampaignEndpoints
             .Produces(StatusCodes.Status200OK)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
         presets.MapGet("/{presetId:guid}/package", ExportNamedPresetPackageAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
             .WithName("ExportNamedCampaignPresetPackage")
             .Produces(StatusCodes.Status200OK)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
@@ -189,9 +198,10 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
 
-        group.MapDelete("/{campaignId:guid}", EndWithoutRevisionAsync)
-            .WithName("EndCampaignLegacy")
+        group.MapDelete("/{campaignId:guid}", DeleteCompletedAsync)
+            .WithName("DeleteCompletedCampaign")
             .Produces(StatusCodes.Status204NoContent)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
@@ -1032,13 +1042,33 @@ public static class CampaignEndpoints
         return Results.Ok(CampaignResponses.FromDetail(result.Value));
     }
 
-    private static Task<IResult> EndWithoutRevisionAsync(
+    private static async Task<IResult> DeleteCompletedAsync(
         Guid campaignId,
         ClaimsPrincipal principal,
-        EndCampaignHandler handler,
+        DeleteCompletedCampaignHandler handler,
         CancellationToken cancellationToken)
     {
-        return EndCoreAsync(campaignId, null, principal, handler, cancellationToken);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new DeleteCompletedCampaignCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.NoContent();
     }
 
     private static Task<IResult> EndAsync(
@@ -1149,10 +1179,11 @@ public static class CampaignEndpoints
         Guid presetId,
         Guid factionId,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetCampaignPresetAssetHandler handler,
         CancellationToken cancellationToken)
     {
-        return GetPresetAssetAsync(presetId, factionId, CampaignPresetAssetKind.FactionFlag, principal, handler, cancellationToken);
+        return GetPresetAssetAsync(presetId, factionId, CampaignPresetAssetKind.FactionFlag, principal, context, handler, cancellationToken);
     }
 
     private static Task<IResult> GetPresetSubfactionFlagAsync(
@@ -1160,6 +1191,7 @@ public static class CampaignEndpoints
         Guid factionId,
         string subfactionName,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetCampaignPresetAssetHandler handler,
         CancellationToken cancellationToken)
     {
@@ -1168,6 +1200,7 @@ public static class CampaignEndpoints
             factionId,
             CampaignPresetAssetKind.FactionFlag,
             principal,
+            context,
             handler,
             cancellationToken,
             subfactionName);
@@ -1177,16 +1210,18 @@ public static class CampaignEndpoints
         Guid presetId,
         Guid structureTypeId,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetCampaignPresetAssetHandler handler,
         CancellationToken cancellationToken)
     {
-        return GetPresetAssetAsync(presetId, structureTypeId, CampaignPresetAssetKind.StructureImage, principal, handler, cancellationToken);
+        return GetPresetAssetAsync(presetId, structureTypeId, CampaignPresetAssetKind.StructureImage, principal, context, handler, cancellationToken);
     }
 
     private static Task<IResult> GetPresetStructurePillagedImageAsync(
         Guid presetId,
         Guid structureTypeId,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetCampaignPresetAssetHandler handler,
         CancellationToken cancellationToken)
     {
@@ -1195,6 +1230,7 @@ public static class CampaignEndpoints
             structureTypeId,
             CampaignPresetAssetKind.StructurePillagedImage,
             principal,
+            context,
             handler,
             cancellationToken);
     }
@@ -1203,6 +1239,7 @@ public static class CampaignEndpoints
         Guid presetId,
         Guid itemObjectiveTypeId,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetCampaignPresetAssetHandler handler,
         CancellationToken cancellationToken)
     {
@@ -1211,6 +1248,7 @@ public static class CampaignEndpoints
             itemObjectiveTypeId,
             CampaignPresetAssetKind.ItemObjectiveImage,
             principal,
+            context,
             handler,
             cancellationToken);
     }
@@ -1220,6 +1258,7 @@ public static class CampaignEndpoints
         Guid catalogId,
         CampaignPresetAssetKind kind,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetCampaignPresetAssetHandler handler,
         CancellationToken cancellationToken,
         string? subfactionName = null)
@@ -1230,14 +1269,20 @@ public static class CampaignEndpoints
         }
 
         var result = await handler
-            .HandleAsync(presetId, catalogId, kind, cancellationToken, subfactionName)
+            .HandleAsync(
+                presetId,
+                catalogId,
+                kind,
+                cancellationToken,
+                subfactionName,
+                CampaignAssetResults.IfNoneMatch(context.Request))
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);
         }
 
-        return Results.File(result.Value.Content, result.Value.ContentType);
+        return CampaignAssetResults.File(context.Response, result.Value);
     }
 
     private static async Task<IResult> SavePresetAsync(
@@ -1276,6 +1321,7 @@ public static class CampaignEndpoints
         Guid campaignId,
         ClaimsPrincipal principal,
         ExportCampaignPresetHandler handler,
+        CampaignPackageGate gate,
         CancellationToken cancellationToken)
     {
         return await ExportPresetPackageAsync(
@@ -1287,6 +1333,7 @@ public static class CampaignEndpoints
                 },
                 principal,
                 handler,
+                gate,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -1295,6 +1342,7 @@ public static class CampaignEndpoints
         Guid presetId,
         ClaimsPrincipal principal,
         ExportCampaignPresetHandler handler,
+        CampaignPackageGate gate,
         CancellationToken cancellationToken)
     {
         return await ExportPresetPackageAsync(
@@ -1306,6 +1354,7 @@ public static class CampaignEndpoints
                 },
                 principal,
                 handler,
+                gate,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -1314,6 +1363,7 @@ public static class CampaignEndpoints
         ExportCampaignPresetCommand command,
         ClaimsPrincipal principal,
         ExportCampaignPresetHandler handler,
+        CampaignPackageGate gate,
         CancellationToken cancellationToken)
     {
         if (principal.GetUserId() is null)
@@ -1327,16 +1377,24 @@ public static class CampaignEndpoints
             return IdentityHttp.Problem(result);
         }
 
-        return Results.File(
-            result.Value.Content,
+        var package = result.Value;
+        return Results.Stream(
+            async stream =>
+            {
+                // Held across the write because that is when the disk reads and compression
+                // happen, not during the handler call above.
+                using var slot = await gate.EnterAsync(cancellationToken).ConfigureAwait(false);
+                await package.WriteToAsync(stream, cancellationToken).ConfigureAwait(false);
+            },
             CampaignPresetPackageFile.ContentType,
-            result.Value.DownloadName);
+            package.DownloadName);
     }
 
     private static async Task<IResult> ImportPresetPackageAsync(
         ClaimsPrincipal principal,
         HttpRequest request,
         ImportCampaignPresetHandler handler,
+        CampaignPackageGate gate,
         CancellationToken cancellationToken)
     {
         var userId = principal.GetUserId();
@@ -1363,14 +1421,17 @@ public static class CampaignEndpoints
             return IdentityHttp.Problem(ErrorCodes.UploadTooLarge, "The campaign preset file is too large.");
         }
 
-        await using var buffer = new MemoryStream();
-        await file.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+        // The form file is already buffered by the host, so the handler reads it directly rather
+        // than copying up to 64 MB into memory and then copying that array again.
+        await using var upload = file.OpenReadStream();
+        using var slot = await gate.EnterAsync(cancellationToken).ConfigureAwait(false);
         var result = await handler.HandleAsync(
                 new ImportCampaignPresetCommand
                 {
                     UserId = userId.Value,
                     IsAdministrator = principal.IsAdministrator(),
-                    Content = buffer.ToArray(),
+                    Content = upload,
+                    Length = file.Length,
                     FileName = file.FileName,
                 },
                 cancellationToken)
@@ -1428,9 +1489,55 @@ public static class CampaignEndpoints
         return Results.Ok(CampaignResponses.FromDetail(result.Value));
     }
 
+    /// <summary>
+    /// Streams campaign change notifications to an authorized viewer.
+    /// </summary>
+    /// <remarks>
+    /// This connection lives as long as the browser tab, so it must not retain any scoped
+    /// service. A scoped <c>CampaignDbContext</c> resolved here would pin a pooled Npgsql
+    /// connection for the whole stream and exhaust the pool. Authorization therefore runs inside
+    /// an explicit child scope that is disposed before the event loop starts, and nothing scoped
+    /// is touched afterwards.
+    /// </remarks>
+    private static async Task StreamAsync(
+        Guid campaignId,
+        HttpContext context,
+        ClaimsPrincipal principal,
+        IServiceScopeFactory scopeFactory,
+        ICampaignUpdateBroadcaster broadcaster,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        bool canView;
+        await using (var scope = scopeFactory.CreateAsyncScope())
+        {
+            var campaigns = scope.ServiceProvider.GetRequiredService<ICampaignStore>();
+            var campaign = await campaigns.FindForAccessCheckAsync(campaignId, cancellationToken).ConfigureAwait(false);
+            canView = campaign is not null
+                && CampaignAccess.CanView(campaign, userId.Value, principal.IsAdministrator());
+        }
+
+        if (!canView)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        await ServerSentEvents
+            .WriteStreamAsync(context, broadcaster.Subscribe(campaignId), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private static async Task<IResult> GetMapAsync(
         Guid campaignId,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetCampaignMapHandler handler,
         CancellationToken cancellationToken)
     {
@@ -1444,14 +1551,15 @@ public static class CampaignEndpoints
                 campaignId,
                 userId.Value,
                 cancellationToken,
-                principal.IsAdministrator())
+                principal.IsAdministrator(),
+                CampaignAssetResults.IfNoneMatch(context.Request))
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);
         }
 
-        return Results.File(result.Value.Content, result.Value.ContentType);
+        return CampaignAssetResults.File(context.Response, result.Value);
     }
 
     private static async Task<IResult> UploadMapAsync(
@@ -1577,10 +1685,11 @@ public static class CampaignEndpoints
         Guid campaignId,
         Guid structureTypeId,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetStructureImageHandler handler,
         CancellationToken cancellationToken)
     {
-        return GetStructureImageCoreAsync(campaignId, structureTypeId, principal, handler, pillaged: false, cancellationToken);
+        return GetStructureImageCoreAsync(campaignId, structureTypeId, principal, context, handler, pillaged: false, cancellationToken);
     }
 
     private static Task<IResult> UploadStructureImageAsync(
@@ -1598,10 +1707,11 @@ public static class CampaignEndpoints
         Guid campaignId,
         Guid structureTypeId,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetStructureImageHandler handler,
         CancellationToken cancellationToken)
     {
-        return GetStructureImageCoreAsync(campaignId, structureTypeId, principal, handler, pillaged: true, cancellationToken);
+        return GetStructureImageCoreAsync(campaignId, structureTypeId, principal, context, handler, pillaged: true, cancellationToken);
     }
 
     private static Task<IResult> UploadPillagedStructureImageAsync(
@@ -1619,6 +1729,7 @@ public static class CampaignEndpoints
         Guid campaignId,
         Guid structureTypeId,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetStructureImageHandler handler,
         bool pillaged,
         CancellationToken cancellationToken)
@@ -1635,14 +1746,15 @@ public static class CampaignEndpoints
                 userId.Value,
                 cancellationToken,
                 principal.IsAdministrator(),
-                pillaged)
+                pillaged,
+                CampaignAssetResults.IfNoneMatch(context.Request))
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);
         }
 
-        return Results.File(result.Value.Content, result.Value.ContentType);
+        return CampaignAssetResults.File(context.Response, result.Value);
     }
 
     private static async Task<IResult> UploadStructureImageCoreAsync(
@@ -1704,6 +1816,7 @@ public static class CampaignEndpoints
         Guid campaignId,
         Guid itemObjectiveTypeId,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetItemObjectiveImageHandler handler,
         CancellationToken cancellationToken)
     {
@@ -1718,14 +1831,15 @@ public static class CampaignEndpoints
                 itemObjectiveTypeId,
                 userId.Value,
                 cancellationToken,
-                principal.IsAdministrator())
+                principal.IsAdministrator(),
+                CampaignAssetResults.IfNoneMatch(context.Request))
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);
         }
 
-        return Results.File(result.Value.Content, result.Value.ContentType);
+        return CampaignAssetResults.File(context.Response, result.Value);
     }
 
     private static async Task<IResult> UploadItemObjectiveImageAsync(
@@ -1785,35 +1899,7 @@ public static class CampaignEndpoints
         Guid campaignId,
         Guid factionId,
         ClaimsPrincipal principal,
-        GetFactionFlagHandler handler,
-        CancellationToken cancellationToken)
-    {
-        var userId = principal.GetUserId();
-        if (userId is null)
-        {
-            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
-        }
-
-        var result = await handler.HandleAsync(
-                campaignId,
-                factionId,
-                userId.Value,
-                cancellationToken,
-                principal.IsAdministrator())
-            .ConfigureAwait(false);
-        if (!result.IsSuccess || result.Value is null)
-        {
-            return IdentityHttp.Problem(result);
-        }
-
-        return Results.File(result.Value.Content, result.Value.ContentType);
-    }
-
-    private static async Task<IResult> GetSubfactionFlagAsync(
-        Guid campaignId,
-        Guid factionId,
-        string subfactionName,
-        ClaimsPrincipal principal,
+        HttpContext context,
         GetFactionFlagHandler handler,
         CancellationToken cancellationToken)
     {
@@ -1829,14 +1915,47 @@ public static class CampaignEndpoints
                 userId.Value,
                 cancellationToken,
                 principal.IsAdministrator(),
-                subfactionName)
+                subfactionName: null,
+                CampaignAssetResults.IfNoneMatch(context.Request))
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);
         }
 
-        return Results.File(result.Value.Content, result.Value.ContentType);
+        return CampaignAssetResults.File(context.Response, result.Value);
+    }
+
+    private static async Task<IResult> GetSubfactionFlagAsync(
+        Guid campaignId,
+        Guid factionId,
+        string subfactionName,
+        ClaimsPrincipal principal,
+        HttpContext context,
+        GetFactionFlagHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                factionId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator(),
+                subfactionName,
+                CampaignAssetResults.IfNoneMatch(context.Request))
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return CampaignAssetResults.File(context.Response, result.Value);
     }
 
     private static async Task<IResult> UploadFactionFlagAsync(
@@ -1951,6 +2070,7 @@ public static class CampaignEndpoints
         Guid campaignId,
         Guid missionId,
         ClaimsPrincipal principal,
+        HttpContext context,
         GetMissionFileHandler handler,
         CancellationToken cancellationToken)
     {
@@ -1965,17 +2085,15 @@ public static class CampaignEndpoints
                 missionId,
                 userId.Value,
                 cancellationToken,
-                principal.IsAdministrator())
+                principal.IsAdministrator(),
+                CampaignAssetResults.IfNoneMatch(context.Request))
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
             return IdentityHttp.Problem(result);
         }
 
-        return Results.File(
-            result.Value.Content,
-            result.Value.ContentType,
-            result.Value.DownloadName);
+        return CampaignAssetResults.File(context.Response, result.Value);
     }
 
     private static async Task<IResult> UploadMissionFileAsync(
@@ -2141,6 +2259,7 @@ public static class CampaignEndpoints
                     TargetTerritoryId = request.TargetTerritoryId,
                     StructureTypeId = request.StructureTypeId,
                     ViaTerritoryId = request.ViaTerritoryId,
+                    ViaPath = request.ViaPath,
                     DestroyImmediately = request.DestroyImmediately,
                 },
                 cancellationToken)
@@ -2491,6 +2610,7 @@ public static class CampaignEndpoints
                     TargetTerritoryId = request.TargetTerritoryId,
                     StructureTypeId = request.StructureTypeId,
                     ViaTerritoryId = request.ViaTerritoryId,
+                    ViaPath = request.ViaPath,
                     DestroyImmediately = request.DestroyImmediately,
                     ReResolvePrevious = request.ReResolvePrevious,
                 },

@@ -46,4 +46,10 @@ public sealed class FactionInput
 
     /// <summary>Gets extra faction-catalog tags for named subfactions.</summary>
     public IReadOnlyList<SubfactionTagsInput>? SubfactionTags { get; init; }
+
+    /// <summary>Gets how many adjacent territories this faction may Move in one action. Defaults to 1.</summary>
+    public int? ForceMovementSpeed { get; init; }
+
+    /// <summary>Gets movement-speed overrides for named subfactions.</summary>
+    public IReadOnlyList<SubfactionMovementSpeedInput>? SubfactionMovementSpeeds { get; init; }
 }

@@ -51,6 +51,8 @@ internal static class CampaignPresetKeyRemap
                     SubfactionSpecialRules = faction.SubfactionSpecialRules,
                     TagIds = faction.TagIds,
                     SubfactionTags = faction.SubfactionTags,
+                    ForceMovementSpeed = faction.ForceMovementSpeed,
+                    SubfactionMovementSpeeds = faction.SubfactionMovementSpeeds,
                 }),
             ],
             AllyGroups = campaign.AllyGroups,
@@ -136,6 +138,7 @@ internal static class CampaignPresetKeyRemap
             FlavorText = type.FlavorText,
             Choices = type.Choices,
             SpecialRuleIds = type.SpecialRuleIds,
+            Effects = type.Effects,
         };
     }
 

@@ -8,6 +8,9 @@ namespace MapAndMuster.Domain.Play;
 /// Ranking public objectives award their configured points to every player currently tied for first.
 /// Running public objectives add points per owned territory and per revealed relic held by an ally
 /// or faction-mate other than the scoring player. Named public objectives with 0 campaign points are ignored.
+/// Map holdings are scored per player: a shared faction total is never copied onto every co-faction
+/// player. A territory counts for a player when that player's force occupies it, when it is stamped
+/// with that player's subfaction, or when they are the only player of the owning faction.
 /// Leaderboards cover each enabled public objective that is not an item objective;
 /// allied relic control is omitted. At most five rows are listed; a tied group that would
 /// exceed five becomes a summary of how many players share that value.
@@ -135,39 +138,14 @@ public static class CampaignPointStandingsRules
             }
         }
 
-        var captureByFaction = new Dictionary<Guid, int>();
-        var territoriesByFaction = new Dictionary<Guid, List<CampaignPointTerritory>>();
-        foreach (var territory in state.Territories)
-        {
-            if (territory.OwnerFactionId is not { } factionId)
-            {
-                continue;
-            }
-
-            if (!territoriesByFaction.TryGetValue(factionId, out var owned))
-            {
-                owned = [];
-                territoriesByFaction[factionId] = owned;
-            }
-
-            owned.Add(territory);
-            if (territory.StructureTypeId is { } structureId
-                && territory.StructureCondition != StructureCondition.Destroyed)
-            {
-                captureByFaction[factionId] =
-                    captureByFaction.GetValueOrDefault(factionId) + structurePoints.GetValueOrDefault(structureId);
-            }
-        }
-
+        var territoriesByPlayer = TerritoriesByPlayer(state);
         var territoryCountByPlayer = new Dictionary<Guid, int>();
         var chainByPlayer = new Dictionary<Guid, int>();
         var structurePointsByPlayer = new Dictionary<Guid, int>();
         var pointsPerTerritoryCountByPlayer = new Dictionary<Guid, int>();
         foreach (var player in state.Players)
         {
-            var owned = player.FactionId is { } factionId
-                ? territoriesByFaction.GetValueOrDefault(factionId) ?? []
-                : [];
+            var owned = territoriesByPlayer.GetValueOrDefault(player.UserId) ?? [];
             var mostTerritoryOwned = FilterByTerrainTag(owned, ranking.MostTerritoriesTerrainTagId);
             var chainOwned = FilterByTerrainTag(owned, ranking.LongestTerritoryChainTerrainTagId);
             var perTerritoryOwned = FilterByTerrainTag(owned, ranking.PointsPerTerritoryTerrainTagId);
@@ -175,9 +153,21 @@ public static class CampaignPointStandingsRules
             chainByPlayer[player.UserId] = TerritoryChainRules.LongestOwnedChain(
                 [.. chainOwned.Select(static item => item.TerritoryId)],
                 state.Adjacencies);
-            structurePointsByPlayer[player.UserId] = player.FactionId is { } ownedFaction
-                ? StructurePointsFor(owned, structurePoints, ranking.MostStructurePointsStructureTagId, captureByFaction.GetValueOrDefault(ownedFaction))
-                : 0;
+            var structureTotal = 0;
+            foreach (var territory in owned)
+            {
+                if (territory.StructureTypeId is { } structureId
+                    && territory.StructureCondition != StructureCondition.Destroyed)
+                {
+                    structureTotal += structurePoints.GetValueOrDefault(structureId);
+                }
+            }
+
+            structurePointsByPlayer[player.UserId] = StructurePointsFor(
+                owned,
+                structurePoints,
+                ranking.MostStructurePointsStructureTagId,
+                structureTotal);
             pointsPerTerritoryCountByPlayer[player.UserId] = perTerritoryOwned.Count;
         }
 
@@ -305,6 +295,75 @@ public static class CampaignPointStandingsRules
                 .. NamedPublicObjectiveLeaderboards(state, activeAwards),
             ],
         };
+    }
+
+    private static Dictionary<Guid, List<CampaignPointTerritory>> TerritoriesByPlayer(CampaignPointScoringState state)
+    {
+        var credited = new Dictionary<Guid, List<CampaignPointTerritory>>();
+        foreach (var player in state.Players)
+        {
+            credited[player.UserId] = [];
+        }
+
+        var playersByFaction = state.Players
+            .Where(static player => player.FactionId is not null)
+            .GroupBy(static player => player.FactionId!.Value)
+            .ToDictionary(static group => group.Key, static group => group.ToArray());
+        var occupiersByTerritory = state.Forces
+            .GroupBy(static force => force.TerritoryId)
+            .ToDictionary(static group => group.Key, static group => group.ToArray());
+
+        foreach (var territory in state.Territories)
+        {
+            if (territory.OwnerFactionId is not { } factionId
+                || !playersByFaction.TryGetValue(factionId, out var factionPlayers))
+            {
+                continue;
+            }
+
+            var owner = CreditOwner(territory, factionPlayers, occupiersByTerritory);
+            if (owner is { } playerId && credited.TryGetValue(playerId, out var owned))
+            {
+                owned.Add(territory);
+            }
+        }
+
+        return credited;
+    }
+
+    private static Guid? CreditOwner(
+        CampaignPointTerritory territory,
+        CampaignPointPlayer[] factionPlayers,
+        Dictionary<Guid, CampaignForce[]> occupiersByTerritory)
+    {
+        if (factionPlayers.Length == 1)
+        {
+            return factionPlayers[0].UserId;
+        }
+
+        occupiersByTerritory.TryGetValue(territory.TerritoryId, out var occupants);
+        var occupyingOwners = (occupants ?? [])
+            .Where(force => force.FactionId == territory.OwnerFactionId
+                && factionPlayers.Any(player => player.UserId == force.ControllerUserId))
+            .Select(static force => force.ControllerUserId)
+            .Distinct()
+            .ToArray();
+        if (occupyingOwners.Length == 1)
+        {
+            return occupyingOwners[0];
+        }
+
+        if (string.IsNullOrWhiteSpace(territory.OwnerSubfaction))
+        {
+            return null;
+        }
+
+        var matching = factionPlayers
+            .Where(player => string.Equals(player.Subfaction, territory.OwnerSubfaction, StringComparison.OrdinalIgnoreCase))
+            .Select(static player => player.UserId)
+            .Distinct()
+            .ToArray();
+        return matching.Length == 1 ? matching[0] : null;
     }
 
     private static List<CampaignPointTerritory> FilterByTerrainTag(
@@ -546,7 +605,7 @@ public static class CampaignPointStandingsRules
 /// </summary>
 public static class GeneralPublicObjectiveKinds
 {
-    /// <summary>Most territories currently controlled by the player's faction.</summary>
+    /// <summary>Most territories currently credited to the player.</summary>
     public const string MostTerritories = "MostTerritories";
 
     /// <summary>Longest unbroken chain of the player's own territories.</summary>
@@ -684,7 +743,8 @@ public sealed class CampaignPointScoringState
 /// </summary>
 /// <param name="UserId">The player's user identifier.</param>
 /// <param name="FactionId">The chosen faction, when one is selected.</param>
-public readonly record struct CampaignPointPlayer(Guid UserId, Guid? FactionId);
+/// <param name="Subfaction">The chosen subfaction, when one is selected.</param>
+public readonly record struct CampaignPointPlayer(Guid UserId, Guid? FactionId, string? Subfaction = null);
 
 /// <summary>
 /// A named catalog public objective included on standings leaderboards.
@@ -703,13 +763,15 @@ public readonly record struct CampaignNamedPublicObjective(Guid Id, string Name,
 /// <param name="StructureCondition">The structure condition.</param>
 /// <param name="TerrainTagIds">Terrain-catalog tags on the occupying terrain type.</param>
 /// <param name="StructureTagIds">Structure-catalog tags on the occupying structure type.</param>
+/// <param name="OwnerSubfaction">The owning required subfaction, when ownership is subfaction-specific.</param>
 public readonly record struct CampaignPointTerritory(
     Guid TerritoryId,
     Guid? OwnerFactionId,
     Guid? StructureTypeId,
     StructureCondition StructureCondition,
     IReadOnlyList<Guid>? TerrainTagIds = null,
-    IReadOnlyList<Guid>? StructureTagIds = null);
+    IReadOnlyList<Guid>? StructureTagIds = null,
+    string? OwnerSubfaction = null);
 
 /// <summary>
 /// One player's current campaign-point breakdown. The five component totals add up to <see cref="Total"/>.

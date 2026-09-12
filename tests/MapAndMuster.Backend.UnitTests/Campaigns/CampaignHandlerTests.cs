@@ -1613,6 +1613,89 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task DeleteCompletedRemovesCampaignForManagersAndAdministrators()
+    {
+        var campaign = WithCopied(
+            WithMemberships(
+                StoredCampaignFor(UserId),
+                [
+                    new StoredCampaignMembership { UserId = UserId, IsGameMaster = true, IsPlayer = true },
+                    new StoredCampaignMembership { UserId = OtherUserId, IsGameMaster = false, IsPlayer = true },
+                ]),
+            closedUtc: Now,
+            mapStorageKey: "maps/abc.png");
+        var store = new FakeCampaignStore { Existing = campaign };
+        var maps = new FakeMapStorage();
+        var handler = CreateDeleteHandler(store, maps);
+
+        var forbidden = await handler.HandleAsync(
+            new DeleteCompletedCampaignCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+            },
+            CancellationToken.None);
+        Assert.False(forbidden.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignForbidden, forbidden.ErrorCode);
+        Assert.False(store.Deleted);
+
+        var deleted = await handler.HandleAsync(
+            new DeleteCompletedCampaignCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+            },
+            CancellationToken.None);
+        Assert.True(deleted.IsSuccess);
+        Assert.True(store.Deleted);
+        Assert.Null(store.Existing);
+        Assert.Contains("maps/abc.png", maps.DeletedKeys);
+    }
+
+    [Fact]
+    public async Task DeleteCompletedAllowsAdministratorsWithoutMembership()
+    {
+        var campaign = WithCopied(StoredCampaignFor(UserId), closedUtc: Now);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = CreateDeleteHandler(store);
+
+        var admin = await handler.HandleAsync(
+            new DeleteCompletedCampaignCommand
+            {
+                UserId = OtherUserId,
+                IsAdministrator = true,
+                CampaignId = campaign.Id,
+            },
+            CancellationToken.None);
+        Assert.True(admin.IsSuccess);
+        Assert.True(store.Deleted);
+        Assert.Null(store.Existing);
+    }
+
+    [Fact]
+    public async Task DeleteCompletedRejectsCampaignsThatAreStillOpen()
+    {
+        var campaign = StoredCampaignFor(UserId);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = CreateDeleteHandler(store);
+
+        var result = await handler.HandleAsync(
+            new DeleteCompletedCampaignCommand
+            {
+                UserId = UserId,
+                IsAdministrator = false,
+                CampaignId = campaign.Id,
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignNotCompleted, result.ErrorCode);
+        Assert.False(store.Deleted);
+    }
+
+    [Fact]
     public async Task DuplicateCopiesSetupSharesAssetsAndStartsInOneWeek()
     {
         var plainsId = Guid.Parse("eeeeee01-eeee-eeee-eeee-eeeeeeeeeeee");
@@ -2448,6 +2531,7 @@ public sealed class CampaignHandlerTests
         DateTimeOffset? startsUtc = null,
         DateTimeOffset? endsUtc = null,
         DateTimeOffset? closedUtc = null,
+        string? mapStorageKey = null,
         StoredMapGraph? mapGraph = null,
         IReadOnlyList<StoredTerrainType>? terrainTypes = null,
         IReadOnlyList<StoredItemObjectiveType>? itemObjectiveTypes = null,
@@ -2468,7 +2552,7 @@ public sealed class CampaignHandlerTests
             City = campaign.City,
             Region = campaign.Region,
             Country = campaign.Country,
-            MapStorageKey = campaign.MapStorageKey,
+            MapStorageKey = mapStorageKey ?? campaign.MapStorageKey,
             Revision = revision ?? campaign.Revision,
             CreatedUtc = campaign.CreatedUtc,
             UpdatedUtc = campaign.UpdatedUtc,
@@ -2537,6 +2621,19 @@ public sealed class CampaignHandlerTests
     private static object? GetHashProperty(CampaignDetail detail)
     {
         return detail.GetType().GetProperty("JoinPasswordHash")?.GetValue(detail);
+    }
+
+    private static DeleteCompletedCampaignHandler CreateDeleteHandler(
+        FakeCampaignStore store,
+        FakeMapStorage? maps = null,
+        FakeAssetStorage? assets = null)
+    {
+        return new DeleteCompletedCampaignHandler(
+            store,
+            new FakeClock(),
+            maps ?? new FakeMapStorage(),
+            assets ?? new FakeAssetStorage(),
+            new FakePresetStore());
     }
 
     private sealed class FakeClock : IClock
@@ -2788,6 +2885,11 @@ public sealed class CampaignHandlerTests
         public Task<bool> DeleteAsync(Guid campaignId, CancellationToken cancellationToken)
         {
             Deleted = Existing is not null && Existing.Id == campaignId;
+            if (Deleted)
+            {
+                Existing = null;
+            }
+
             return Task.FromResult(Deleted);
         }
 

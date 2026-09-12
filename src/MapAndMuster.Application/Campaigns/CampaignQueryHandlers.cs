@@ -134,9 +134,10 @@ public sealed class GetCampaignHandler
             return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
-        var names = await CampaignPlayMapper.UsernamesAsync(campaign, _accounts, cancellationToken).ConfigureAwait(false);
-        var participants = await CampaignPlayMapper.ParticipantsAsync(campaign, _accounts, cancellationToken)
+        var accountContext = await CampaignPlayMapper.ResolveAccountsAsync(campaign, _accounts, cancellationToken)
             .ConfigureAwait(false);
+        var names = CampaignPlayMapper.Usernames(accountContext);
+        var participants = CampaignPlayMapper.Participants(campaign, accountContext);
         var members = CampaignPlayMapper.ToChatMembers(participants);
         var inspect = CampaignChatContext.CanInspectPrivateChat(isAdministrator, userId, campaign.PlayState);
         var membership = CampaignMapper.MembershipFor(campaign, userId);
@@ -201,9 +202,10 @@ public sealed class GetCampaignLogHandler
             return OperationResults.Failure<CampaignLogDetail>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
-        var names = await CampaignPlayMapper.UsernamesAsync(campaign, _accounts, cancellationToken).ConfigureAwait(false);
-        var participants = await CampaignPlayMapper.ParticipantsAsync(campaign, _accounts, cancellationToken)
+        var accountContext = await CampaignPlayMapper.ResolveAccountsAsync(campaign, _accounts, cancellationToken)
             .ConfigureAwait(false);
+        var names = CampaignPlayMapper.Usernames(accountContext);
+        var participants = CampaignPlayMapper.Participants(campaign, accountContext);
         var members = CampaignPlayMapper.ToChatMembers(participants);
         var inspect = CampaignChatContext.CanInspectPrivateChat(isAdministrator, userId, campaign.PlayState);
         var membership = CampaignMapper.MembershipFor(campaign, userId);
@@ -266,7 +268,9 @@ public sealed class MarkCampaignLogReadHandler
         CancellationToken cancellationToken,
         bool isAdministrator = false)
     {
-        var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        // Marking a log read only authorizes; it never renders campaign state, so it uses the
+        // narrow snapshot rather than loading the overlay graph, catalog, and play state.
+        var campaign = await _campaigns.FindForAccessCheckAsync(campaignId, cancellationToken).ConfigureAwait(false);
         if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
             return OperationResult.Failure(ErrorCodes.CampaignNotFound, "The campaign was not found.");
@@ -519,31 +523,32 @@ public sealed class GetCampaignMapHandler
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <param name="ifNoneMatch">The caller's cached asset tag, if any.</param>
     /// <returns>The stored map.</returns>
-    public async Task<OperationResult<StoredCampaignMap>> HandleAsync(
+    public async Task<OperationResult<CampaignAssetRead>> HandleAsync(
         Guid campaignId,
         Guid userId,
         CancellationToken cancellationToken,
-        bool isAdministrator = false)
+        bool isAdministrator = false,
+        string? ifNoneMatch = null)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
         if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
-            return OperationResults.Failure<StoredCampaignMap>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
         if (string.IsNullOrWhiteSpace(campaign.MapStorageKey))
         {
-            return OperationResults.Failure<StoredCampaignMap>(ErrorCodes.CampaignNotFound, "The campaign map was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The campaign map was not found.");
         }
 
-        var file = await _maps.OpenReadAsync(campaign.MapStorageKey, cancellationToken).ConfigureAwait(false);
-        if (file is null)
-        {
-            return OperationResults.Failure<StoredCampaignMap>(ErrorCodes.CampaignNotFound, "The campaign map was not found.");
-        }
-
-        return OperationResults.Success(file);
+        var read = await CampaignAssetReader
+            .ReadAsync(_maps.OpenStreamAsync, campaign.MapStorageKey, ifNoneMatch, downloadName: null, cancellationToken)
+            .ConfigureAwait(false);
+        return read is null
+            ? OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The campaign map was not found.")
+            : OperationResults.Success(read);
     }
 }
 

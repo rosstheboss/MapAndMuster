@@ -1,0 +1,49 @@
+:host {
+  display: inline-flex;
+}
+
+.update-stream-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.5rem;
+  padding: 0.1rem 0.55rem 0.1rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.update-stream-status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.update-stream-status.is-live {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.update-stream-status.is-connecting {
+  color: var(--color-muted);
+}
+
+.update-stream-status.is-reconnect {
+  border-color: var(--color-dirty);
+  color: var(--color-dirty);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .update-stream-status.is-reconnect .update-stream-status-dot,
+  .update-stream-status.is-connecting .update-stream-status-dot {
+    animation: update-stream-status-pulse 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes update-stream-status-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

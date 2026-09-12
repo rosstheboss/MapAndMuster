@@ -10,7 +10,7 @@ then store credentials as environment variables.
 ## Configuration keys
 
 | Provider | Id | Secret |
-|---|---|---|
+| --- | --- | --- |
 | Google | `Authentication__Google__ClientId` | `Authentication__Google__ClientSecret` |
 | Facebook | `Authentication__Facebook__AppId` | `Authentication__Facebook__AppSecret` |
 | Discord | `Authentication__Discord__ClientId` | `Authentication__Discord__ClientSecret` |
@@ -18,7 +18,7 @@ then store credentials as environment variables.
 Callback paths (scheme and host come from the incoming request, including forwarded headers):
 
 | Provider | Path |
-|---|---|
+| --- | --- |
 | Google | `/api/auth/external/google/callback` |
 | Facebook | `/api/auth/external/facebook/callback` |
 | Discord | `/api/auth/external/discord/callback` |
@@ -50,7 +50,7 @@ cookie authentication across two origins is not configured in this phase.
 ## Scopes requested
 
 | Provider | Scopes / fields |
-|---|---|
+| --- | --- |
 | Google | ASP.NET Core defaults: `openid`, `profile`, `email` |
 | Facebook | `email`, plus fields `first_name`, `last_name`, `picture` |
 | Discord | `identify`, `email` |

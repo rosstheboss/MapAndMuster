@@ -99,6 +99,8 @@ public sealed class DuplicateCampaignHandler
                     TintFlagImage = faction.TintFlagImage,
                     SpecialRuleIds = faction.SpecialRuleIds,
                     SubfactionSpecialRules = faction.SubfactionSpecialRules,
+                    ForceMovementSpeed = faction.ForceMovementSpeed,
+                    SubfactionMovementSpeeds = faction.SubfactionMovementSpeeds,
                 }),
             ],
             AllyGroups =

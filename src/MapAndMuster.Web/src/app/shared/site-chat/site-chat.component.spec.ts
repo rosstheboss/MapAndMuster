@@ -42,6 +42,7 @@ describe('SiteChatComponent', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Site chat');
+    expect(compiled.querySelector('app-update-stream-status')).toBeNull();
     expect(compiled.textContent).toContain('Hello from the public board.');
     expect(compiled.textContent).toContain('English');
     expect(compiled.querySelector('textarea')).toBeTruthy();
@@ -54,6 +55,16 @@ describe('SiteChatComponent', () => {
     expect(Boolean(send && options && send.compareDocumentPosition(options) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(
       true,
     );
+  });
+
+  it('shows Live on the summary when the stream is open', () => {
+    const fixture = TestBed.createComponent(SiteChatComponent);
+    fixture.componentRef.setInput('streamState', 'open');
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('summary')?.textContent).toContain('Live');
+    expect(compiled.querySelector('app-update-stream-status')?.textContent).toContain('Live');
   });
 
   it('exposes mention suggestions as a combobox', () => {

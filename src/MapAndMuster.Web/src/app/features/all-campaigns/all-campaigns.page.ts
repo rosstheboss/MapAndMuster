@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
-import { CAMPAIGN_LOG_POLL_MS } from '../../core/campaigns/campaign-log';
+import { UpdateStreamService, type UpdateStreamSubscription } from '../../core/campaigns/update-stream.service';
 import { CHAT_LANGUAGES, type ChatLanguage } from '../../core/chat/chat-languages';
 import { SiteChatPrefsService } from '../../core/chat/site-chat-prefs.service';
 import { SiteChatService } from '../../core/chat/site-chat.service';
@@ -22,6 +22,7 @@ export class AllCampaignsPage {
   private readonly campaignsApi = inject(CampaignService);
   private readonly siteChatApi = inject(SiteChatService);
   private readonly siteChatPrefs = inject(SiteChatPrefsService);
+  private readonly updates = inject(UpdateStreamService);
   private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly loading = signal(true);
@@ -35,7 +36,7 @@ export class AllCampaignsPage {
   protected readonly chatExpanded = signal(false);
   protected readonly composeLanguage = signal<ChatLanguage>('English');
   protected readonly visibleLanguages = signal<ChatLanguage[]>([...CHAT_LANGUAGES]);
-  private chatPollStarted = false;
+  protected readonly chatStream = signal<UpdateStreamSubscription | null>(null);
 
   constructor() {
     const prefs = this.siteChatPrefs.read(this.auth.currentUser()?.preferredChatLanguage);
@@ -116,7 +117,7 @@ export class AllCampaignsPage {
     this.chatLoadError.set(null);
     try {
       this.chat.set(await this.siteChatApi.getBoard());
-      this.startChatPolling();
+      this.startChatStream();
     } catch (error: unknown) {
       this.chatLoadError.set(readApiError(error, 'Unable to load public chat.'));
     } finally {
@@ -124,14 +125,23 @@ export class AllCampaignsPage {
     }
   }
 
-  private startChatPolling(): void {
-    if (this.chatPollStarted) {
+  private startChatStream(): void {
+    if (this.chatStream()) {
       return;
     }
 
-    this.chatPollStarted = true;
-    const timer = globalThis.setInterval(() => void this.refreshChat(), CAMPAIGN_LOG_POLL_MS);
-    this.destroyRef.onDestroy(() => globalThis.clearInterval(timer));
+    // Site-chat events carry no message content, so a push always means "refetch the board",
+    // which reapplies this viewer's block filtering server-side.
+    this.chatStream.set(
+      this.updates.watchSiteChat({
+        onUpdate: () => void this.refreshChat(),
+        onFallbackPoll: () => void this.refreshChat(),
+      }),
+    );
+    this.destroyRef.onDestroy(() => {
+      this.chatStream()?.close();
+      this.chatStream.set(null);
+    });
   }
 
   private async refreshChat(): Promise<void> {

@@ -31,6 +31,29 @@ public static class CampaignAccess
     }
 
     /// <summary>
+    /// Whether the caller may open the campaign page, using only the narrow access snapshot.
+    /// </summary>
+    /// <param name="campaign">The campaign access snapshot.</param>
+    /// <param name="userId">The viewing user's identifier.</param>
+    /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <returns><see langword="true"/> when the campaign may be viewed.</returns>
+    public static bool CanView(CampaignAccessSnapshot campaign, Guid userId, bool isAdministrator)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        if (isAdministrator)
+        {
+            return true;
+        }
+
+        if (campaign.Memberships.Any(membership => membership.UserId == userId))
+        {
+            return true;
+        }
+
+        return campaign.IsPubliclyViewable;
+    }
+
+    /// <summary>
     /// Whether the campaign belongs on the All Campaigns list for this caller.
     /// Upcoming campaigns are listed so players can join. Active and completed campaigns
     /// are listed only when publicly viewable, or when the caller is a member or administrator.

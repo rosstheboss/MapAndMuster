@@ -13,12 +13,15 @@
 }
 
 .campaign-log > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
   cursor: pointer;
   font-weight: 700;
 }
 
 .log-unread {
-  margin-left: 0.45rem;
   font-weight: 600;
 }
 

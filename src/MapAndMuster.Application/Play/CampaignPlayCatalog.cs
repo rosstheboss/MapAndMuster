@@ -109,7 +109,8 @@ internal static class CampaignPlayCatalog
                                 result.SetForceStatusName)),
                         ])),
                 ],
-                type.SpecialRuleIds)),
+                type.SpecialRuleIds,
+                CatalogFileBinder.ToEffectSetups(type.Effects))),
         ];
     }
 
@@ -242,7 +243,62 @@ internal static class CampaignPlayCatalog
             catalog,
             factionIds,
             subfactionIds,
-            campaign.Factions.Where(static faction => faction.RequiresSubfaction).Select(static faction => faction.Id).ToHashSet());
+            campaign.Factions.Where(static faction => faction.RequiresSubfaction).Select(static faction => faction.Id).ToHashSet(),
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.ForceMovementSpeed),
+            SubfactionSpeeds(campaign),
+            ForceItemRuleIds(campaign),
+            campaign.ItemObjectiveTypes.ToDictionary(
+                static type => type.Id,
+                static type => CatalogFileBinder.ToEffectSetups(type.Effects)),
+            campaign.ForceStatuses.ToDictionary(static status => status.Id, static status => status.Name));
+    }
+
+    private static Dictionary<(Guid FactionId, string Subfaction), int> SubfactionSpeeds(StoredCampaign campaign)
+    {
+        var speeds = new Dictionary<(Guid, string), int>();
+        foreach (var faction in campaign.Factions)
+        {
+            foreach (var assignment in faction.SubfactionMovementSpeeds)
+            {
+                speeds[(faction.Id, assignment.Name)] = assignment.Speed;
+            }
+        }
+
+        return speeds;
+    }
+
+    private static Dictionary<Guid, IReadOnlyList<Guid>> ForceItemRuleIds(StoredCampaign campaign)
+    {
+        var play = campaign.PlayState;
+        if (play is null)
+        {
+            return new Dictionary<Guid, IReadOnlyList<Guid>>();
+        }
+
+        var typeRules = campaign.ItemObjectiveTypes.ToDictionary(static type => type.Id, static type => type.SpecialRuleIds);
+        var byForce = new Dictionary<Guid, List<Guid>>();
+        foreach (var item in play.ItemObjectives)
+        {
+            if (item.IsDestroyed || item.PossessorForceId is not { } forceId)
+            {
+                continue;
+            }
+
+            if (!typeRules.TryGetValue(item.TypeId, out var ids) || ids.Count == 0)
+            {
+                continue;
+            }
+
+            if (!byForce.TryGetValue(forceId, out var list))
+            {
+                list = [];
+                byForce[forceId] = list;
+            }
+
+            list.AddRange(ids);
+        }
+
+        return byForce.ToDictionary(static pair => pair.Key, static pair => (IReadOnlyList<Guid>)pair.Value);
     }
 
     public static IReadOnlyDictionary<Guid, string?> SubfactionsByPlayer(StoredCampaign campaign)

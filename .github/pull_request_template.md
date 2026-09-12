@@ -1,3 +1,6 @@
+<!-- markdownlint-disable-file MD041 -->
+<!-- GitHub renders this into the pull request body, where the PR title is the heading. -->
+
 ## Summary
 
 What behavior changes, and why?

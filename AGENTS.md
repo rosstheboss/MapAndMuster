@@ -55,7 +55,13 @@ npm --prefix src/MapAndMuster.Web ci
 npm --prefix src/MapAndMuster.Web run verify
 npm --prefix tests/MapAndMuster.Web.E2E ci
 npm --prefix tests/MapAndMuster.Web.E2E test
+npm ci
+npm run lint:md
 ```
+
+The last two lint Markdown across the repository with the version pinned in the root
+`package.json`. `npm run lint:md:fix` corrects the mechanical findings, mostly table formatting.
+Rule configuration and the reason for each relaxation are in `.markdownlint-cli2.jsonc`.
 
 Use repository scripts when present. Never weaken analyzers, lint rules, compiler strictness,
 or tests merely to make a check pass. A suppression requires a narrow scope and explanation.

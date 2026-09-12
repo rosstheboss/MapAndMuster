@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using MapAndMuster.Application.Common;
 using MapAndMuster.Application.Ports;
 using MapAndMuster.Domain.Campaigns;
@@ -56,21 +57,17 @@ public sealed class ExportCampaignPresetHandler
                 "The campaign preset was not found.");
         }
 
-        var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-        foreach (var key in CatalogFileBinder.CollectCampaignStorageKeys(source).Distinct(StringComparer.Ordinal))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var bytes = await ReadFileAsync(key, cancellationToken).ConfigureAwait(false);
-            if (bytes is not null)
-            {
-                files[key] = bytes;
-            }
-        }
+        var storageKeys = CatalogFileBinder.CollectCampaignStorageKeys(source)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
+        // The archive is written straight to the caller's stream when the result is executed, so
+        // neither the files nor the finished package are ever fully buffered.
         return OperationResults.Success(
             new CampaignPresetPackageFile
             {
-                Content = _codec.Write(source, files),
+                WriteToAsync = (destination, token) =>
+                    _codec.WriteAsync(destination, source, storageKeys, OpenFileAsync, token),
                 DownloadName = $"{CampaignLogExport.FileSlug(source.Name)}-preset.mapandmuster-preset",
             });
     }
@@ -98,15 +95,15 @@ public sealed class ExportCampaignPresetHandler
         return campaign;
     }
 
-    private async Task<byte[]?> ReadFileAsync(string storageKey, CancellationToken cancellationToken)
+    private async Task<Stream?> OpenFileAsync(string storageKey, CancellationToken cancellationToken)
     {
         if (storageKey.StartsWith("maps/", StringComparison.Ordinal))
         {
-            var map = await _maps.OpenReadAsync(storageKey, cancellationToken).ConfigureAwait(false);
+            var map = await _maps.OpenStreamAsync(storageKey, cancellationToken).ConfigureAwait(false);
             return map?.Content;
         }
 
-        var asset = await _assets.OpenReadAsync(storageKey, cancellationToken).ConfigureAwait(false);
+        var asset = await _assets.OpenStreamAsync(storageKey, cancellationToken).ConfigureAwait(false);
         return asset?.Content;
     }
 }
@@ -170,11 +167,11 @@ public sealed class ImportCampaignPresetHandler
                 "Only administrators can upload a campaign preset.");
         }
 
-        if (command.Content.Length == 0 || command.Content.Length > MaxPackageBytes)
+        if (command.Length is { } length && (length == 0 || length > MaxPackageBytes))
         {
             return OperationResults.Failure<CampaignPresetListItem>(
-                command.Content.Length == 0 ? ErrorCodes.CampaignPresetPackageInvalid : ErrorCodes.UploadTooLarge,
-                command.Content.Length == 0
+                length == 0 ? ErrorCodes.CampaignPresetPackageInvalid : ErrorCodes.UploadTooLarge,
+                length == 0
                     ? "Upload a Map & Muster campaign preset file."
                     : "The campaign preset file is too large.");
         }
@@ -228,39 +225,44 @@ public sealed class ImportCampaignPresetHandler
         return OperationResults.Success(saved);
     }
 
-    private async Task<StoredCampaign?> FindExistingByNameAsync(string name, CancellationToken cancellationToken)
+    private Task<StoredCampaign?> FindExistingByNameAsync(string name, CancellationToken cancellationToken)
     {
-        var key = CampaignSetupRules.UniqueNameKey(name);
-        var listed = await _presets.ListAsync(cancellationToken).ConfigureAwait(false);
-        var match = listed.FirstOrDefault(item => CampaignSetupRules.UniqueNameKey(item.Name) == key);
-        return match is null
-            ? null
-            : await _presets.FindByIdAsync(match.Id, cancellationToken).ConfigureAwait(false);
+        return _presets.FindByNameAsync(name, cancellationToken);
     }
 
-    private async Task<IReadOnlyList<(string Key, byte[] Bytes)>> LoadExistingFilesAsync(
+    /// <summary>
+    /// Fingerprints the files an existing preset of the same name already stores.
+    /// </summary>
+    /// <remarks>
+    /// Re-importing a preset usually changes only a few files. Comparing SHA-256 hashes streamed
+    /// from disk avoids holding every existing file in memory at once, which for a preset with a
+    /// large map and many logos was the peak allocation of the whole import.
+    /// </remarks>
+    private async Task<IReadOnlyList<StoredFileFingerprint>> LoadExistingFilesAsync(
         StoredCampaign existing,
         CancellationToken cancellationToken)
     {
-        var files = new List<(string Key, byte[] Bytes)>();
+        var files = new List<StoredFileFingerprint>();
         foreach (var key in CatalogFileBinder.CollectCampaignStorageKeys(existing).Distinct(StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            byte[]? bytes = null;
-            if (key.StartsWith("maps/", StringComparison.Ordinal))
+            var file = key.StartsWith("maps/", StringComparison.Ordinal)
+                ? await _maps.OpenStreamAsync(key, cancellationToken).ConfigureAwait(false)
+                : await _assets.OpenStreamAsync(key, cancellationToken).ConfigureAwait(false);
+            if (file is null)
             {
-                var map = await _maps.OpenReadAsync(key, cancellationToken).ConfigureAwait(false);
-                bytes = map?.Content;
-            }
-            else
-            {
-                var asset = await _assets.OpenReadAsync(key, cancellationToken).ConfigureAwait(false);
-                bytes = asset?.Content;
+                continue;
             }
 
-            if (bytes is { Length: > 0 })
+            await using (file.Content.ConfigureAwait(false))
             {
-                files.Add((key, bytes));
+                if (file.Length == 0)
+                {
+                    continue;
+                }
+
+                var hash = await SHA256.HashDataAsync(file.Content, cancellationToken).ConfigureAwait(false);
+                files.Add(new StoredFileFingerprint(key, hash));
             }
         }
 
@@ -270,30 +272,35 @@ public sealed class ImportCampaignPresetHandler
     private static string? FindReusableKey(
         string oldKey,
         byte[] bytes,
-        IReadOnlyList<(string Key, byte[] Bytes)> existingFiles)
+        IReadOnlyList<StoredFileFingerprint> existingFiles)
     {
-        if (!CatalogFileBinder.IsUserUploadedFileKey(oldKey) || bytes.Length == 0)
+        if (!CatalogFileBinder.IsUserUploadedFileKey(oldKey) || bytes.Length == 0 || existingFiles.Count == 0)
         {
             return null;
         }
 
         var slash = oldKey.IndexOf('/', StringComparison.Ordinal);
         var prefix = oldKey[..(slash + 1)];
-        foreach (var (key, stored) in existingFiles)
+        var hash = SHA256.HashData(bytes);
+        foreach (var candidate in existingFiles)
         {
-            if (key.StartsWith(prefix, StringComparison.Ordinal) && stored.AsSpan().SequenceEqual(bytes))
+            if (candidate.Key.StartsWith(prefix, StringComparison.Ordinal)
+                && candidate.Hash.AsSpan().SequenceEqual(hash))
             {
-                return key;
+                return candidate.Key;
             }
         }
 
         return null;
     }
 
+    /// <summary>A stored file identified by content hash rather than by its bytes.</summary>
+    private sealed record StoredFileFingerprint(string Key, byte[] Hash);
+
     private async Task<OperationResult<string>> StoreFileAsync(
         string oldKey,
         byte[] bytes,
-        IReadOnlyList<(string Key, byte[] Bytes)> existingFiles,
+        IReadOnlyList<StoredFileFingerprint> existingFiles,
         CancellationToken cancellationToken)
     {
         if (!CatalogFileBinder.IsUserUploadedFileKey(oldKey))

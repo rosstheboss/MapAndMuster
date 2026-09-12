@@ -138,6 +138,59 @@ public sealed class ActionResolutionTests
     }
 
     [Fact]
+    public void RequiredSubfactionClaimPlantsTheSubfactionFlag()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false, subfaction: "Khorne");
+        var resolved = Resolve(
+            State(force, Submit(force.Id, ActionKind.Hold)),
+            Map(),
+            UnalignedGroups(),
+            RequiresSubfaction(North));
+
+        Assert.Equal(North, resolved.Map.Territory(Midland)!.OwnerFactionId);
+        Assert.Equal("Khorne", resolved.Map.Territory(Midland)!.OwnerSubfaction);
+    }
+
+    [Fact]
+    public void OptionalSubfactionClaimDoesNotPlantASubfactionFlag()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false, subfaction: "Exiles");
+        var resolved = Resolve(State(force, Submit(force.Id, ActionKind.Hold)), Map());
+
+        Assert.Equal(North, resolved.Map.Territory(Midland)!.OwnerFactionId);
+        Assert.Null(resolved.Map.Territory(Midland)!.OwnerSubfaction);
+    }
+
+    [Fact]
+    public void AlliedRequiredSubfactionDoesNotReplaceTheOwnerFlag()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false, subfaction: "Nurgle");
+        var map = new PlayMap(
+            [
+                new PlayTerritory(NorthSpawn, 1, North, North, null, null, StructureCondition.Operational),
+                new PlayTerritory(
+                    Midland,
+                    2,
+                    North,
+                    null,
+                    null,
+                    null,
+                    StructureCondition.Operational,
+                    ownerSubfaction: "Khorne"),
+                new PlayTerritory(SouthSpawn, 3, South, South, null, null, StructureCondition.Operational),
+            ],
+            [(NorthSpawn, Midland), (Midland, SouthSpawn)]);
+        var resolved = Resolve(
+            State(force, Submit(force.Id, ActionKind.Hold)),
+            map,
+            UnalignedGroups(),
+            RequiresSubfaction(North));
+
+        Assert.Equal(North, resolved.Map.Territory(Midland)!.OwnerFactionId);
+        Assert.Equal("Khorne", resolved.Map.Territory(Midland)!.OwnerSubfaction);
+    }
+
+    [Fact]
     public void EligibleActionsAreSurrenderWhileTheForceIsInBattle()
     {
         var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, true);
@@ -638,5 +691,14 @@ public sealed class ActionResolutionTests
             [North] = "Coalition",
             [South] = "Coalition",
         };
+    }
+
+    private static SpecialRuleContext RequiresSubfaction(Guid factionId)
+    {
+        return new SpecialRuleContext(
+            [],
+            new Dictionary<Guid, IReadOnlyList<Guid>>(),
+            new Dictionary<(Guid, string), IReadOnlyList<Guid>>(),
+            requiresSubfactionFactionIds: new HashSet<Guid> { factionId });
     }
 }

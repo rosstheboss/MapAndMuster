@@ -192,6 +192,17 @@ describe('CampaignService', () => {
     http.verify();
   });
 
+  it('deletes a completed campaign', async () => {
+    const service = TestBed.inject(CampaignService);
+    const http = TestBed.inject(HttpTestingController);
+    const pending = service.delete('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    const request = http.expectOne('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    expect(request.request.method).toBe('DELETE');
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await pending;
+    http.verify();
+  });
+
   it('adds a campaign manager without occupying a player slot', async () => {
     const service = TestBed.inject(CampaignService);
     const http = TestBed.inject(HttpTestingController);

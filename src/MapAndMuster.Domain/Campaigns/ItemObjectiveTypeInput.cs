@@ -40,4 +40,7 @@ public sealed class ItemObjectiveTypeInput
 
     /// <summary>Gets special-rule identifiers assigned to this item.</summary>
     public IReadOnlyList<Guid>? SpecialRuleIds { get; init; }
+
+    /// <summary>Gets parameterized effects granted while a force holds this item.</summary>
+    public IReadOnlyList<ItemObjectiveEffectInput>? Effects { get; init; }
 }

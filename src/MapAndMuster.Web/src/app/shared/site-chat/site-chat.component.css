@@ -13,6 +13,10 @@
 }
 
 .site-chat > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
   cursor: pointer;
   font-weight: 700;
 }

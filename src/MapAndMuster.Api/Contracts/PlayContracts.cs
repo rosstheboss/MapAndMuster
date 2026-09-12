@@ -70,6 +70,12 @@ public sealed class CampaignPlayResponse
     /// <summary>Gets whether a map image exists.</summary>
     public required bool HasMap { get; init; }
 
+    /// <summary>
+    /// Gets opaque cache tags for the campaign's stored files, keyed by asset key.
+    /// </summary>
+    /// <remarks>See <see cref="Contracts.CampaignDetailResponse.AssetTags"/> for the key scheme.</remarks>
+    public IReadOnlyDictionary<string, string> AssetTags { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
     /// <summary>Gets the viewer's faction.</summary>
     public Guid? FactionId { get; init; }
 
@@ -167,6 +173,9 @@ public sealed class PlayMapTerritoryResponse
     /// <summary>Gets the owning faction, or null when Neutral.</summary>
     public Guid? OwnerFactionId { get; init; }
 
+    /// <summary>Gets the owning required subfaction, when the owner faction requires one.</summary>
+    public string? OwnerSubfaction { get; init; }
+
     /// <summary>Gets the structure type when one is present.</summary>
     public Guid? StructureTypeId { get; init; }
 
@@ -229,7 +238,7 @@ public sealed class PlayForceResponse
     /// <summary>Gets adjacent eligible move destinations.</summary>
     public required IReadOnlyList<Guid> MoveTargets { get; init; }
 
-    /// <summary>Gets two-territory Move hops when Crusaders applies.</summary>
+    /// <summary>Gets two-territory Move hops when the force can travel more than one territory.</summary>
     public IReadOnlyList<PlayMoveHopResponse> MoveHops { get; init; } = [];
 
     /// <summary>Gets player-submittable action kinds available for this force.</summary>
@@ -240,6 +249,9 @@ public sealed class PlayForceResponse
 
     /// <summary>Gets whether this force may Move through an intermediate territory.</summary>
     public bool CanMoveTwoTerritories { get; init; }
+
+    /// <summary>Gets how many adjacent territories this force may Move in one action.</summary>
+    public int MovementSpeed { get; init; }
 
     /// <summary>Gets whether Pillage may destroy the structure in one action.</summary>
     public bool CanDestroyImmediately { get; init; }
@@ -268,6 +280,9 @@ public sealed class PlayMoveHopResponse
 
     /// <summary>Gets the intended destination.</summary>
     public required Guid TargetTerritoryId { get; init; }
+
+    /// <summary>Gets extra hops between the first via and the destination when speed is greater than 2.</summary>
+    public IReadOnlyList<Guid> IntermediateTerritoryIds { get; init; } = [];
 }
 
 /// <summary>A visible item objective.</summary>
@@ -333,6 +348,9 @@ public sealed class PlayDraftResponse
 
     /// <summary>Gets the first hop for a two-territory Move.</summary>
     public Guid? ViaTerritoryId { get; init; }
+
+    /// <summary>Gets extra hops between the first via and the destination when speed is greater than 2.</summary>
+    public IReadOnlyList<Guid> ViaPath { get; init; } = [];
 
     /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
     public bool DestroyImmediately { get; init; }
@@ -609,6 +627,9 @@ public sealed class SaveOrderDraftRequest
 
     /// <summary>Gets the first hop for a two-territory Move.</summary>
     public Guid? ViaTerritoryId { get; init; }
+
+    /// <summary>Gets extra hops between the first via and the destination when speed is greater than 2.</summary>
+    public IReadOnlyList<Guid>? ViaPath { get; init; }
 
     /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
     public bool DestroyImmediately { get; init; }
@@ -1008,6 +1029,7 @@ public static class PlayResponses
             CurrentPhaseEndsUtc = detail.CurrentPhaseEndsUtc,
             CurrentWindowId = detail.CurrentWindowId,
             HasMap = detail.HasMap,
+            AssetTags = detail.AssetTags,
             FactionId = detail.FactionId,
             CanChooseFaction = detail.CanChooseFaction,
             IsCommitted = detail.IsCommitted,
@@ -1227,11 +1249,13 @@ public static class PlayResponses
                         {
                             ViaTerritoryId = hop.ViaTerritoryId,
                             TargetTerritoryId = hop.TargetTerritoryId,
+                            IntermediateTerritoryIds = hop.IntermediateTerritoryIds,
                         }),
                     ],
                     AvailableActions = force.AvailableActions,
                     Subfaction = force.Subfaction,
                     CanMoveTwoTerritories = force.CanMoveTwoTerritories,
+                    MovementSpeed = force.MovementSpeed,
                     CanDestroyImmediately = force.CanDestroyImmediately,
                     CanUseExtraBlackPowder = force.CanUseExtraBlackPowder,
                     CanUseMagicalSupply = force.CanUseMagicalSupply,
@@ -1249,6 +1273,7 @@ public static class PlayResponses
                     TargetTerritoryId = draft.TargetTerritoryId,
                     StructureTypeId = draft.StructureTypeId,
                     ViaTerritoryId = draft.ViaTerritoryId,
+                    ViaPath = draft.ViaPath,
                     DestroyImmediately = draft.DestroyImmediately,
                 }),
             ],
@@ -1271,6 +1296,7 @@ public static class PlayResponses
                     TargetTerritoryId = draft.TargetTerritoryId,
                     StructureTypeId = draft.StructureTypeId,
                     ViaTerritoryId = draft.ViaTerritoryId,
+                    ViaPath = draft.ViaPath,
                     DestroyImmediately = draft.DestroyImmediately,
                 }),
             ],
@@ -1355,6 +1381,7 @@ public static class PlayResponses
                 {
                     Id = territory.Id,
                     OwnerFactionId = territory.OwnerFactionId,
+                    OwnerSubfaction = territory.OwnerSubfaction,
                     StructureTypeId = territory.StructureTypeId,
                     StructureCondition = territory.StructureCondition,
                 }),

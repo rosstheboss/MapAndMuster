@@ -54,6 +54,35 @@ public interface IUserAccountStore
     Task<UserAccount?> FindByIdAsync(Guid userId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds every requested account in one round trip. Identifiers with no account are omitted.
+    /// </summary>
+    /// <param name="userIds">The account identifiers.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The matching accounts keyed by identifier.</returns>
+    /// <remarks>
+    /// Read paths that resolve a whole membership list must use this instead of calling
+    /// <see cref="FindByIdAsync"/> per user. The default implementation falls back to per-user
+    /// lookups so test doubles keep working.
+    /// </remarks>
+    async Task<IReadOnlyDictionary<Guid, UserAccount>> FindManyByIdAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(userIds);
+        var accounts = new Dictionary<Guid, UserAccount>();
+        foreach (var userId in userIds.Distinct())
+        {
+            var account = await FindByIdAsync(userId, cancellationToken).ConfigureAwait(false);
+            if (account is not null)
+            {
+                accounts[userId] = account;
+            }
+        }
+
+        return accounts;
+    }
+
+    /// <summary>
     /// Finds an account by username.
     /// </summary>
     /// <param name="username">The username.</param>

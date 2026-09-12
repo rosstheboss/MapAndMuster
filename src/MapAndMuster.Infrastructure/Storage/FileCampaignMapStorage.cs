@@ -18,6 +18,9 @@ public sealed class FileCampaignMapStorage : ICampaignMapStorage, ICampaignAsset
         "items",
     };
 
+    /// <summary>Stream buffer size. Large enough to keep syscalls down, small enough to stay off the large object heap.</summary>
+    private const int StreamBufferBytes = 64 * 1024;
+
     private readonly string _rootPath;
 
     /// <summary>
@@ -68,7 +71,21 @@ public sealed class FileCampaignMapStorage : ICampaignMapStorage, ICampaignAsset
             : $".{fileExtension.ToLowerInvariant()}";
         var key = $"{folder}/{Guid.NewGuid():N}{extension}";
         var path = GetFullPath(key);
-        await File.WriteAllBytesAsync(path, content.ToArray(), cancellationToken).ConfigureAwait(false);
+
+        // Write the memory directly. ToArray() would copy the whole upload a second time, which
+        // for a 20 MB map means another large object heap allocation per upload.
+        var stream = new FileStream(
+            path,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            StreamBufferBytes,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using (stream.ConfigureAwait(false))
+        {
+            await stream.WriteAsync(content, cancellationToken).ConfigureAwait(false);
+        }
+
         return key;
     }
 
@@ -110,6 +127,39 @@ public sealed class FileCampaignMapStorage : ICampaignMapStorage, ICampaignAsset
 
         var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
         return new StoredCampaignAsset(bytes, ContentTypeFor(storageKey));
+    }
+
+    /// <inheritdoc />
+    async Task<StoredCampaignFile?> ICampaignMapStorage.OpenStreamAsync(string storageKey, CancellationToken cancellationToken)
+    {
+        return await OpenStreamCoreAsync(storageKey, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    async Task<StoredCampaignFile?> ICampaignAssetStorage.OpenStreamAsync(string storageKey, CancellationToken cancellationToken)
+    {
+        return await OpenStreamCoreAsync(storageKey, cancellationToken).ConfigureAwait(false);
+    }
+
+    private Task<StoredCampaignFile?> OpenStreamCoreAsync(string storageKey, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
+        cancellationToken.ThrowIfCancellationRequested();
+        var path = GetFullPath(storageKey);
+        if (!File.Exists(path))
+        {
+            return Task.FromResult<StoredCampaignFile?>(null);
+        }
+
+        var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            StreamBufferBytes,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        return Task.FromResult<StoredCampaignFile?>(
+            new StoredCampaignFile(stream, ContentTypeFor(storageKey), stream.Length));
     }
 
     private string GetFullPath(string storageKey)

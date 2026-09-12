@@ -18,9 +18,12 @@ describe('special rule presets', () => {
       expect(rule.effectKey).toBeTruthy();
     }
 
-    const crusaders = OLD_WORLD_SPECIAL_RULES.find((rule) => rule.name === 'Crusaders');
-    expect(crusaders?.description).toContain('two adjacent territories');
-    expect(crusaders?.effectKey).toBe('Crusaders');
+    const calledByTheRelic = OLD_WORLD_SPECIAL_RULES.find((rule) => rule.name === 'Called by the Relic');
+    expect(calledByTheRelic?.description).toContain('extra movement speed');
+    expect(calledByTheRelic?.effectKey).toBe('CalledByTheRelic');
+    const undead = OLD_WORLD_SPECIAL_RULES.find((rule) => rule.name === 'Undead');
+    expect(undead?.description).toContain('Exhausted');
+    expect(undead?.effectKey).toBe('Undead');
 
     const copy = specialRulesFromOldWorldPreset();
     expect(copy).toHaveLength(OLD_WORLD_SPECIAL_RULES.length);

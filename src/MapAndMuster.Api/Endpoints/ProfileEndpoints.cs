@@ -4,6 +4,7 @@ using MapAndMuster.Application.Common;
 using MapAndMuster.Application.Identity;
 using MapAndMuster.Application.Ports;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Net.Http.Headers;
 
 namespace MapAndMuster.Api.Endpoints;
 
@@ -12,6 +13,12 @@ namespace MapAndMuster.Api.Endpoints;
 /// </summary>
 public static class ProfileEndpoints
 {
+    /// <summary>
+    /// Freshness window for a public avatar. Short because the URL is keyed by username, so a
+    /// user who changes their picture must not be stuck behind a stale shared cache for long.
+    /// </summary>
+    private const int AvatarMaxAgeSeconds = 300;
+
     /// <summary>
     /// Maps profile routes.
     /// </summary>
@@ -198,8 +205,17 @@ public static class ProfileEndpoints
         return Results.Ok(ProfileResponses.FromPublic(result.Value));
     }
 
+    /// <summary>
+    /// Serves a public avatar.
+    /// </summary>
+    /// <remarks>
+    /// The URL is keyed by username rather than by content, so this cannot be immutable the way
+    /// campaign assets are. It is still cacheable by shared caches because the response is the
+    /// same for every caller, and the entity tag turns a repeat view into a 304 with no disk read.
+    /// </remarks>
     private static async Task<IResult> GetAvatarAsync(
         string username,
+        HttpContext context,
         IUserAccountStore accounts,
         IAvatarStorage storage,
         CancellationToken cancellationToken)
@@ -210,12 +226,47 @@ public static class ProfileEndpoints
             return Results.NotFound();
         }
 
+        var tag = AssetTags.For(account.AvatarStorageKey);
+        if (tag is null)
+        {
+            return Results.NotFound();
+        }
+
+        context.Response.Headers.CacheControl = $"public, max-age={AvatarMaxAgeSeconds}";
+        var entityTag = AssetTags.ToEntityTag(tag);
+        if (MatchesEntityTag(context.Request, tag))
+        {
+            context.Response.Headers.ETag = entityTag;
+            return Results.StatusCode(StatusCodes.Status304NotModified);
+        }
+
         var file = await storage.OpenReadAsync(account.AvatarStorageKey, cancellationToken).ConfigureAwait(false);
         if (file is null)
         {
             return Results.NotFound();
         }
 
-        return Results.File(file.Content, file.ContentType);
+        return Results.File(file.Content, file.ContentType, entityTag: EntityTagHeaderValue.Parse(entityTag));
+    }
+
+    private static bool MatchesEntityTag(HttpRequest request, string tag)
+    {
+        var header = request.Headers.IfNoneMatch;
+        if (header.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var candidate in header.ToString()
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var normalized = candidate.StartsWith("W/", StringComparison.Ordinal) ? candidate[2..] : candidate;
+            if (string.Equals(normalized.Trim('"'), tag, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

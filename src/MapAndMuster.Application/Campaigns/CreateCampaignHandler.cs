@@ -387,6 +387,8 @@ internal static class CampaignPersistenceFactory
                         SubfactionSpecialRules = faction.SubfactionSpecialRules,
                         TagIds = faction.TagIds,
                         SubfactionTags = faction.SubfactionTags,
+                        ForceMovementSpeed = faction.ForceMovementSpeed,
+                        SubfactionMovementSpeeds = faction.SubfactionMovementSpeeds,
                     };
                 }),
             ];

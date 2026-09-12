@@ -299,6 +299,45 @@ public sealed class CampaignEndpointTests
     }
 
     [Fact]
+    public async Task OnlyStaffCanDeleteACompletedCampaign()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("host");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+        using var createdResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Finished War"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        using var tooEarly = await owner.DeleteAsync($"/api/campaigns/{created.Id}");
+        Assert.Equal(HttpStatusCode.BadRequest, tooEarly.StatusCode);
+        var tooEarlyBody = await tooEarly.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.Equal("campaign.not_completed", tooEarlyBody?.Code);
+
+        using var player = _factory.CreateClient();
+        var playerName = UniqueName("joiner");
+        await RegisterConfirmAndLoginAsync(player, $"{playerName}@example.test", playerName);
+        using var joined = await player.PostAsJsonAsync($"/api/campaigns/{created.Id}/join", new JoinCampaignRequest());
+        Assert.Equal(HttpStatusCode.OK, joined.StatusCode);
+
+        using var ended = await owner.PostAsJsonAsync(
+            $"/api/campaigns/{created.Id}/end",
+            new EndCampaignRequest { Revision = created.Revision });
+        Assert.Equal(HttpStatusCode.NoContent, ended.StatusCode);
+
+        using var playerDelete = await player.DeleteAsync($"/api/campaigns/{created.Id}");
+        Assert.Equal(HttpStatusCode.Forbidden, playerDelete.StatusCode);
+
+        using var stillThere = await owner.GetAsync($"/api/campaigns/{created.Id}");
+        Assert.Equal(HttpStatusCode.OK, stillThere.StatusCode);
+
+        using var deleted = await owner.DeleteAsync($"/api/campaigns/{created.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+
+        using var missing = await owner.GetAsync($"/api/campaigns/{created.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
     public async Task CreatedCampaignUsesHuntInEstaliaSupplyDefaults()
     {
         using var client = _factory.CreateClient();
@@ -678,6 +717,18 @@ public sealed class CampaignEndpointTests
         Assert.NotNull(imported);
         Assert.Equal("Portable Border", imported.Name);
         Assert.True(imported.HasMap);
+
+        // Importing again must find the existing preset by its normalized name rather than adding
+        // a second row, which is what the indexed name lookup is for.
+        using var reimportContent = new MultipartFormDataContent();
+        var repeatPackage = new ByteArrayContent(packageBytes);
+        repeatPackage.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+        reimportContent.Add(repeatPackage, "package", "portable-border-preset.mapandmuster-preset");
+        using var reimportedResponse = await client.PostAsync("/api/campaign-presets/package", reimportContent);
+        Assert.Equal(HttpStatusCode.Created, reimportedResponse.StatusCode);
+        var reimported = await reimportedResponse.Content.ReadFromJsonAsync<CampaignPresetListItemResponse>(JsonOptions);
+        Assert.NotNull(reimported);
+        Assert.Equal(imported.Id, reimported.Id);
 
         using var namedExport = await client.GetAsync($"/api/campaign-presets/{imported.Id}/package");
         Assert.Equal(HttpStatusCode.OK, namedExport.StatusCode);
@@ -1981,7 +2032,62 @@ public sealed class CampaignEndpointTests
         Assert.Contains("could not be parsed", failed.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task RegisterConfirmAndLoginAsync(HttpClient client, string email, string username)
+    [Fact]
+    public async Task MemberSearchFindsAPlayerByTheNameTheyChoseToShow()
+    {
+        using var owner = _factory.CreateClient();
+        var ownerName = UniqueName("searchgm");
+        await RegisterConfirmAndLoginAsync(owner, $"{ownerName}@example.test", ownerName);
+
+        using var createdResponse = await owner.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Search Border"));
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+
+        // A surname is only searchable when the player shows their full name, so this covers the
+        // name-column path through the database filter rather than the username path.
+        using var player = _factory.CreateClient();
+        var playerName = UniqueName("searchp");
+        const string surname = "Ashdown";
+        await RegisterConfirmAndLoginAsync(
+            player,
+            $"{playerName}@example.test",
+            playerName,
+            lastName: surname,
+            displayNameMode: "FullName");
+        var profile = await player.GetFromJsonAsync<OwnProfileResponse>("/api/auth/me", JsonOptions);
+        Assert.NotNull(profile);
+
+        var bySurname = await owner.GetFromJsonAsync<UserSearchHitResponse[]>(
+            $"/api/campaigns/{created.Id}/members/search?q={Uri.EscapeDataString(surname)}",
+            JsonOptions);
+        Assert.NotNull(bySurname);
+        Assert.Contains(bySurname, hit => hit.UserId == profile.Id);
+
+        var byFullName = await owner.GetFromJsonAsync<UserSearchHitResponse[]>(
+            $"/api/campaigns/{created.Id}/members/search?q={Uri.EscapeDataString($"Ada {surname}")}",
+            JsonOptions);
+        Assert.NotNull(byFullName);
+        Assert.Contains(byFullName, hit => hit.UserId == profile.Id);
+
+        var byUsername = await owner.GetFromJsonAsync<UserSearchHitResponse[]>(
+            $"/api/campaigns/{created.Id}/members/search?q={Uri.EscapeDataString(playerName)}",
+            JsonOptions);
+        Assert.NotNull(byUsername);
+        Assert.Contains(byUsername, hit => hit.UserId == profile.Id);
+
+        var byNothing = await owner.GetFromJsonAsync<UserSearchHitResponse[]>(
+            $"/api/campaigns/{created.Id}/members/search?q={Uri.EscapeDataString(UniqueName("nobody"))}",
+            JsonOptions);
+        Assert.NotNull(byNothing);
+        Assert.DoesNotContain(byNothing, hit => hit.UserId == profile.Id);
+    }
+
+    private async Task RegisterConfirmAndLoginAsync(
+        HttpClient client,
+        string email,
+        string username,
+        string lastName = "Lovelace",
+        string displayNameMode = "Username")
     {
         using var registerResponse = await client.PostAsJsonAsync("/api/auth/register", new
         {
@@ -1989,12 +2095,12 @@ public sealed class CampaignEndpointTests
             username,
             password = ValidPassword,
             firstName = "Ada",
-            lastName = "Lovelace",
+            lastName,
             city = "Halifax",
             region = "Nova Scotia",
             country = "Canada",
             timeZoneId = "America/Halifax",
-            displayNameMode = "Username",
+            displayNameMode,
         });
         Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
         await ConfirmEmailAsync(email);

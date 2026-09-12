@@ -25,6 +25,7 @@
       [expanded]="chatExpanded()"
       [composeLanguage]="composeLanguage()"
       [visibleLanguages]="visibleLanguages()"
+      [streamState]="chatStream()?.state() ?? null"
       (send)="postChat($event)"
       (expandedChange)="onChatExpanded($event)"
       (composeLanguageChange)="onComposeLanguage($event)"

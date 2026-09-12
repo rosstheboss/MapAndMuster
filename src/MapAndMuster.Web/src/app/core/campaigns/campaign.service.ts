@@ -2,6 +2,14 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
+import {
+  MAP_ASSET_KEY,
+  assetTagQuery,
+  factionAssetKey,
+  itemAssetKey,
+  structureAssetKey,
+  type CampaignAssetTags,
+} from './campaign-asset-tags';
 import type {
   CampaignDetail,
   CampaignListItem,
@@ -155,6 +163,12 @@ export class CampaignService {
     );
   }
 
+  async delete(campaignId: string): Promise<void> {
+    await firstValueFrom(
+      this.http.delete(`/api/campaigns/${encodeURIComponent(campaignId)}`, { withCredentials: true }),
+    );
+  }
+
   async uploadMap(campaignId: string, file: File, revision: number): Promise<CampaignDetail> {
     const form = new FormData();
     form.set('map', file);
@@ -166,8 +180,8 @@ export class CampaignService {
     );
   }
 
-  mapUrl(campaignId: string, revision: number): string {
-    return `/api/campaigns/${encodeURIComponent(campaignId)}/map?v=${revision}`;
+  mapUrl(campaignId: string, tags: CampaignAssetTags | undefined): string {
+    return `/api/campaigns/${encodeURIComponent(campaignId)}/map${assetTagQuery(tags, MAP_ASSET_KEY)}`;
   }
 
   async getMapGraph(campaignId: string): Promise<MapGraphDetail> {
@@ -186,38 +200,62 @@ export class CampaignService {
     );
   }
 
-  structureImageUrl(campaignId: string, structureTypeId: string, revision: number, pillaged = false): string {
+  structureImageUrl(
+    campaignId: string,
+    structureTypeId: string,
+    tags: CampaignAssetTags | undefined,
+    pillaged = false,
+  ): string {
     const kind = pillaged ? 'pillaged-image' : 'image';
-    return `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/${kind}?v=${revision}`;
+    const query = assetTagQuery(tags, structureAssetKey(structureTypeId, pillaged));
+    return `/api/campaigns/${encodeURIComponent(campaignId)}/structures/${encodeURIComponent(structureTypeId)}/${kind}${query}`;
   }
 
-  itemObjectiveImageUrl(campaignId: string, itemObjectiveTypeId: string, revision: number): string {
-    return `/api/campaigns/${encodeURIComponent(campaignId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image?v=${revision}`;
+  itemObjectiveImageUrl(campaignId: string, itemObjectiveTypeId: string, tags: CampaignAssetTags | undefined): string {
+    const query = assetTagQuery(tags, itemAssetKey(itemObjectiveTypeId));
+    return `/api/campaigns/${encodeURIComponent(campaignId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image${query}`;
   }
 
-  flagImageUrl(campaignId: string, factionId: string, revision: number, subfaction?: string | null): string {
+  flagImageUrl(
+    campaignId: string,
+    factionId: string,
+    tags: CampaignAssetTags | undefined,
+    subfaction?: string | null,
+  ): string {
     const factionPath = `/api/campaigns/${encodeURIComponent(campaignId)}/factions/${encodeURIComponent(factionId)}`;
     const flagPath = subfaction?.trim()
       ? `${factionPath}/subfactions/${encodeURIComponent(subfaction.trim())}/flag`
       : `${factionPath}/flag`;
-    return `${flagPath}?v=${revision}`;
+    return `${flagPath}${assetTagQuery(tags, factionAssetKey(factionId, subfaction))}`;
   }
 
-  presetFlagImageUrl(presetId: string, factionId: string, subfaction?: string | null): string {
+  presetFlagImageUrl(
+    presetId: string,
+    factionId: string,
+    subfaction?: string | null,
+    tags?: CampaignAssetTags,
+  ): string {
     const factionPath = `/api/campaign-presets/${encodeURIComponent(presetId)}/factions/${encodeURIComponent(factionId)}`;
     const flagPath = subfaction?.trim()
       ? `${factionPath}/subfactions/${encodeURIComponent(subfaction.trim())}/flag`
       : `${factionPath}/flag`;
-    return flagPath;
+    return `${flagPath}${assetTagQuery(tags, factionAssetKey(factionId, subfaction))}`;
   }
 
-  presetStructureImageUrl(presetId: string, structureTypeId: string, pillaged = false): string {
+  presetStructureImageUrl(
+    presetId: string,
+    structureTypeId: string,
+    pillaged = false,
+    tags?: CampaignAssetTags,
+  ): string {
     const kind = pillaged ? 'pillaged-image' : 'image';
-    return `/api/campaign-presets/${encodeURIComponent(presetId)}/structures/${encodeURIComponent(structureTypeId)}/${kind}`;
+    const query = assetTagQuery(tags, structureAssetKey(structureTypeId, pillaged));
+    return `/api/campaign-presets/${encodeURIComponent(presetId)}/structures/${encodeURIComponent(structureTypeId)}/${kind}${query}`;
   }
 
-  presetItemObjectiveImageUrl(presetId: string, itemObjectiveTypeId: string): string {
-    return `/api/campaign-presets/${encodeURIComponent(presetId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image`;
+  presetItemObjectiveImageUrl(presetId: string, itemObjectiveTypeId: string, tags?: CampaignAssetTags): string {
+    const query = assetTagQuery(tags, itemAssetKey(itemObjectiveTypeId));
+    return `/api/campaign-presets/${encodeURIComponent(presetId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image${query}`;
   }
 
   missionFileUrl(campaignId: string, missionId: string): string {

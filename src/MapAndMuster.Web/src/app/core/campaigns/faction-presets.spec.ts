@@ -50,6 +50,11 @@ describe('faction presets', () => {
     expect(factions!.find((faction) => faction.name === 'Beastmen Brayherds')?.specialRuleNames).toEqual([
       'Expert Ambushers',
     ]);
+    expect(factions!.find((faction) => faction.name === 'Kingdom of Bretonnia')?.specialRuleNames).toEqual([
+      'Safe in Water',
+    ]);
+    expect(factions!.find((faction) => faction.name === 'Kingdom of Bretonnia')?.forceMovementSpeed).toBe(2);
+    expect(factions!.find((faction) => faction.name === 'Empire of Man')?.forceMovementSpeed).toBe(1);
     expect(factions!.find((faction) => faction.name === 'Warriors of Chaos')?.subfactions).toEqual([
       'Heralds of Darkness',
       'Hordes of Chaos',

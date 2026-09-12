@@ -95,7 +95,12 @@ public static class ActionResolution
                 continue;
             }
 
-            var destination = order.Kind is ActionKind.Move or ActionKind.Retreat
+            var destination = order.Kind == ActionKind.Teleport
+                ? ItemObjectiveEffectRules.PickTeleportDestination(
+                    map,
+                    state.Forces,
+                    pickIndex ?? (static count => 0)) ?? force.TerritoryId
+                : order.Kind is ActionKind.Move or ActionKind.Retreat
                 ? FactionSpecialRulePolicies.ResolveMoveDestination(
                     map,
                     force,
@@ -106,9 +111,10 @@ public static class ActionResolution
                     state.BrokenAllyFactionIds,
                     state.BrokenAllySubfactions,
                     rules,
-                    state.AllyBetrayals)
+                    state.AllyBetrayals,
+                    order.ViaPath)
                 : force.TerritoryId;
-            if (order.Kind is ActionKind.Move or ActionKind.Retreat && destination != force.TerritoryId)
+            if (order.Kind is ActionKind.Move or ActionKind.Retreat or ActionKind.Teleport && destination != force.TerritoryId)
             {
                 moveOrigins[force.Id] = force.TerritoryId;
             }
@@ -117,18 +123,22 @@ public static class ActionResolution
             nextForces.Add(moved);
             AddOccupied(occupied, destination, moved.Id);
             arrivalKinds[force.Id] = order.Kind;
-            if (order.Kind == ActionKind.Move
-                && order.ViaTerritoryId is { } via
-                && via != destination
-                && FactionSpecialRulePolicies.SkipClaiming(
-                    force,
-                    via,
-                    force.TerritoryId,
-                    destination,
-                    via,
-                    rules))
+            if (order.Kind == ActionKind.Move)
             {
-                skipClaimTerritories.Add(via);
+                foreach (var hop in IntermediateHops(force.TerritoryId, destination, order.ViaTerritoryId, order.ViaPath))
+                {
+                    if (FactionSpecialRulePolicies.SkipClaiming(
+                        force,
+                        hop,
+                        force.TerritoryId,
+                        destination,
+                        order.ViaTerritoryId,
+                        rules,
+                        order.ViaPath))
+                    {
+                        skipClaimTerritories.Add(hop);
+                    }
+                }
             }
         }
 
@@ -283,6 +293,7 @@ public static class ActionResolution
 
         var items = ItemObjectiveRules.DropCarriedByMovers(state.ItemObjectives, moveOrigins, utcNow, log);
         items = ItemObjectiveRules.PickUpUnpossessed(items, nextForces, utcNow, log);
+        nextForces = [.. ItemObjectiveEffectRules.ApplyStatuses(nextForces, map, items, rules)];
 
         var nextMap = ApplyTerritoryEffects(
             map,
@@ -311,7 +322,7 @@ public static class ActionResolution
 
     /// <summary>
     /// Player-submittable actions available for a force in an open action window, in documented order:
-    /// Hold, Move, Build, Pillage, Repair, Split, then Backstab.
+    /// Hold, Move, Teleport when granted, Build, Pillage, Repair, Split, then Backstab.
     /// Kinds that are not legal for the force's current territory are omitted.
     /// </summary>
     public static IReadOnlyList<ActionKind> EligibleActions(
@@ -333,10 +344,16 @@ public static class ActionResolution
         }
 
         var kinds = new List<ActionKind> { ActionKind.Hold };
-        var moves = CampaignPlayRules.EligibleMoves(map, force, state.ItemObjectives, rules);
+        var moves = CampaignPlayRules.EligibleMoves(map, force, state.ItemObjectives, rules, state.Forces);
         if (moves.Count > 0)
         {
             kinds.Add(ActionKind.Move);
+        }
+
+        if (ItemObjectiveEffectRules.CanTeleport(force, map, state.ItemObjectives, rules)
+            && ItemObjectiveEffectRules.TeleportDestinations(map, state.Forces).Count > 0)
+        {
+            kinds.Add(ActionKind.Teleport);
         }
 
         if (map.HasBuildableStructure && CanBuildInTerritory(map, force))
@@ -392,20 +409,26 @@ public static class ActionResolution
         IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         IReadOnlyCollection<Guid> broken,
         Func<int, int> pickIndex,
-        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
+        SpecialRuleContext? specialRules = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(forces);
         ArgumentNullException.ThrowIfNull(factionAllyGroups);
         ArgumentNullException.ThrowIfNull(broken);
         ArgumentNullException.ThrowIfNull(pickIndex);
+        var rules = specialRules ?? SpecialRuleContext.None;
         var next = map.Territories.ToDictionary(static territory => territory.Id);
         var inBattle = forces.Where(static force => force.InBattle).Select(static force => force.Id).ToHashSet();
         foreach (var territory in next.Values.ToArray())
         {
             if (territory.IsSpawn)
             {
-                next[territory.Id] = territory.With(ownerFactionId: territory.SpawnFactionId);
+                next[territory.Id] = territory.With(
+                    ownerFactionId: territory.SpawnFactionId,
+                    assignOwner: true,
+                    ownerSubfaction: territory.SpawnSubfaction,
+                    assignOwnerSubfaction: true);
                 continue;
             }
 
@@ -425,10 +448,7 @@ public static class ActionResolution
                 broken.ToHashSet(),
                 pickIndex,
                 allyBetrayals);
-            if (claimed != territory.OwnerFactionId)
-            {
-                next[territory.Id] = next[territory.Id].With(ownerFactionId: claimed, assignOwner: true);
-            }
+            next[territory.Id] = WithClaim(territory, claimed, occupants, rules);
         }
 
         return map.WithTerritories([.. next.Values.OrderBy(static territory => territory.DisplayNumber)]);
@@ -447,14 +467,22 @@ public static class ActionResolution
         var target = submission?.TargetTerritoryId;
         var structureTypeId = submission?.StructureTypeId;
         var via = submission?.ViaTerritoryId;
+        var viaPath = submission?.ViaPath;
         var destroyImmediately = submission?.DestroyImmediately == true;
         if (kind == ActionKind.Move
-            && !FactionSpecialRulePolicies.IsValidMove(map, force, target, via, state.ItemObjectives, rules))
+            && !FactionSpecialRulePolicies.IsValidMove(map, force, target, via, state.ItemObjectives, rules, viaPath, state.Forces))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
-        if (kind == ActionKind.Split && !IsValidSplit(state, map, force, target, rules))
+        if (kind == ActionKind.Split && !IsValidSplit(state, map, force, target, rules, via, viaPath))
+        {
+            return Hold(force, OrderAdjustment.InvalidOrder);
+        }
+
+        if (kind == ActionKind.Teleport
+            && (!ItemObjectiveEffectRules.CanTeleport(force, map, state.ItemObjectives, rules)
+                || ItemObjectiveEffectRules.TeleportDestinations(map, state.Forces).Count == 0))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
@@ -512,7 +540,7 @@ public static class ActionResolution
                 destroyImmediately && FactionSpecialRulePolicies.CanDestroyImmediately(force, rules));
         }
 
-        return new ResolvedOrder(force.Id, kind, target, structureTypeId, OrderAdjustment.None, via);
+        return new ResolvedOrder(force.Id, kind, target, structureTypeId, OrderAdjustment.None, via, false, viaPath);
     }
 
     private static void DisallowConflictingStructureActions(Dictionary<Guid, ResolvedOrder> resolved)
@@ -544,14 +572,16 @@ public static class ActionResolution
         PlayMap map,
         CampaignForce force,
         Guid? targetId,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        Guid? viaId = null,
+        IReadOnlyList<Guid>? viaPath = null)
     {
         if (state.Forces.Count(item => item.ControllerUserId == force.ControllerUserId) >= MaxForcesPerPlayer)
         {
             return false;
         }
 
-        return FactionSpecialRulePolicies.IsValidMove(map, force, targetId, viaId: null, state.ItemObjectives, rules);
+        return FactionSpecialRulePolicies.IsValidMove(map, force, targetId, viaId, state.ItemObjectives, rules, viaPath, state.Forces);
     }
 
     internal static bool CanBuildInTerritory(PlayMap map, CampaignForce force)
@@ -872,7 +902,7 @@ public static class ActionResolution
         IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null,
         IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
     {
-        _ = specialRules;
+        var rules = specialRules ?? SpecialRuleContext.None;
         _ = brokenSubfactions;
         var next = map.Territories.ToDictionary(static territory => territory.Id);
         var originalOwners = map.Territories.ToDictionary(static territory => territory.Id, static territory => territory.OwnerFactionId);
@@ -892,14 +922,17 @@ public static class ActionResolution
             var territory = next[force.TerritoryId];
             if (order.Kind == ActionKind.Build && order.StructureTypeId is { } structureTypeId)
             {
-                var rules = map.StructureRules(structureTypeId);
+                var structureRules = map.StructureRules(structureTypeId);
                 next[territory.Id] = territory.With(
                     ownerFactionId: force.FactionId,
+                    assignOwner: true,
+                    ownerSubfaction: ClaimOwnerSubfaction(territory, force.FactionId, [force], rules),
+                    assignOwnerSubfaction: true,
                     structureTypeId: structureTypeId,
-                    structureName: rules?.Name,
+                    structureName: structureRules?.Name,
                     structureCondition: StructureCondition.Operational,
-                    isPillageable: rules?.IsPillageable ?? territory.IsPillageable,
-                    isDestructible: rules?.IsDestructible ?? territory.IsDestructible);
+                    isPillageable: structureRules?.IsPillageable ?? territory.IsPillageable,
+                    isDestructible: structureRules?.IsDestructible ?? territory.IsDestructible);
             }
             else if (order.Kind == ActionKind.Pillage)
             {
@@ -951,10 +984,7 @@ public static class ActionResolution
                 broken,
                 pickIndex,
                 allyBetrayals);
-            if (claimed != territory.OwnerFactionId)
-            {
-                next[territory.Id] = next[territory.Id].With(ownerFactionId: claimed, assignOwner: true);
-            }
+            next[territory.Id] = WithClaim(territory, claimed, occupants, rules);
         }
 
         foreach (var order in resolved.Values)
@@ -1044,6 +1074,57 @@ public static class ActionResolution
             },
             pickIndex);
         return ranked[0];
+    }
+
+    private static PlayTerritory WithClaim(
+        PlayTerritory territory,
+        Guid? claimed,
+        CampaignForce[] occupants,
+        SpecialRuleContext rules)
+    {
+        var subfaction = ClaimOwnerSubfaction(territory, claimed, occupants, rules);
+        if (claimed == territory.OwnerFactionId
+            && string.Equals(subfaction, territory.OwnerSubfaction, StringComparison.OrdinalIgnoreCase))
+        {
+            return territory;
+        }
+
+        return territory.With(
+            ownerFactionId: claimed,
+            assignOwner: true,
+            ownerSubfaction: subfaction,
+            assignOwnerSubfaction: true);
+    }
+
+    private static string? ClaimOwnerSubfaction(
+        PlayTerritory territory,
+        Guid? claimedFactionId,
+        IReadOnlyList<CampaignForce> occupants,
+        SpecialRuleContext rules)
+    {
+        if (claimedFactionId is null || !rules.FactionRequiresSubfaction(claimedFactionId.Value))
+        {
+            return null;
+        }
+
+        if (claimedFactionId == territory.OwnerFactionId && !string.IsNullOrWhiteSpace(territory.OwnerSubfaction))
+        {
+            return territory.OwnerSubfaction;
+        }
+
+        var names = occupants
+            .Where(force => force.FactionId == claimedFactionId)
+            .Select(static force => force.Subfaction)
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (names.Length == 0)
+        {
+            return claimedFactionId == territory.OwnerFactionId ? territory.OwnerSubfaction : null;
+        }
+
+        return names[0];
     }
 
     private static bool SameAllyGroup(
@@ -1258,6 +1339,34 @@ public static class ActionResolution
             message);
     }
 
+    private static List<Guid> IntermediateHops(
+        Guid originId,
+        Guid destinationId,
+        Guid? viaId,
+        IReadOnlyList<Guid>? viaPath)
+    {
+        var hops = new List<Guid>();
+        if (viaId is { } via && via != Guid.Empty && via != originId && via != destinationId)
+        {
+            hops.Add(via);
+        }
+
+        if (viaPath is not null)
+        {
+            foreach (var hop in viaPath)
+            {
+                if (hop == Guid.Empty || hop == originId || hop == destinationId || hops.Contains(hop))
+                {
+                    continue;
+                }
+
+                hops.Add(hop);
+            }
+        }
+
+        return hops;
+    }
+
     private static ResolvedOrder Hold(CampaignForce force, OrderAdjustment adjustment)
     {
         return new ResolvedOrder(force.Id, ActionKind.Hold, force.TerritoryId, null, adjustment);
@@ -1270,7 +1379,8 @@ public static class ActionResolution
         Guid? StructureTypeId,
         OrderAdjustment Adjustment = OrderAdjustment.None,
         Guid? ViaTerritoryId = null,
-        bool DestroyImmediately = false);
+        bool DestroyImmediately = false,
+        IReadOnlyList<Guid>? ViaPath = null);
 
     private enum OrderAdjustment
     {

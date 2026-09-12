@@ -63,6 +63,15 @@ internal static class CatalogFileBinder
                             TagIds = item.TagIds,
                         }),
                     ],
+                    ForceMovementSpeed = faction.ForceMovementSpeed,
+                    SubfactionMovementSpeeds =
+                    [
+                        .. faction.SubfactionMovementSpeeds.Select(static item => new StoredSubfactionMovementSpeed
+                        {
+                            Name = item.Name,
+                            Speed = item.Speed,
+                        }),
+                    ],
                 };
             }),
         ];
@@ -171,8 +180,60 @@ internal static class CatalogFileBinder
                         }),
                     ],
                     SpecialRuleIds = type.SpecialRuleIds,
+                    Effects = BindEffects(type.Effects),
                 };
             }),
+        ];
+    }
+
+    public static IReadOnlyList<StoredItemObjectiveEffect> BindEffects(IReadOnlyList<ItemObjectiveEffectSetup> effects)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        return
+        [
+            .. effects.Select(static effect => new StoredItemObjectiveEffect
+            {
+                Id = effect.Id,
+                Kind = effect.Kind.ToString(),
+                Amount = effect.Amount,
+                AmountIsPercent = effect.AmountIsPercent,
+                StatusTypeIds = effect.StatusTypeIds,
+                ImmuneToAllStatuses = effect.ImmuneToAllStatuses,
+                SuspendCurrentAllyGroup = effect.SuspendCurrentAllyGroup,
+                ForcedAllyGroupName = effect.ForcedAllyGroupName,
+                AlliedFactions =
+                [
+                    .. effect.AlliedFactions.Select(static target => new StoredItemObjectiveAllianceTarget
+                    {
+                        FactionId = target.FactionId,
+                        Subfaction = target.Subfaction,
+                    }),
+                ],
+                CustomText = effect.CustomText,
+            }),
+        ];
+    }
+
+    public static IReadOnlyList<ItemObjectiveEffectSetup> ToEffectSetups(IReadOnlyList<StoredItemObjectiveEffect>? effects)
+    {
+        return
+        [
+            .. (effects ?? []).Select(static effect => new ItemObjectiveEffectSetup(
+                effect.Id,
+                Enum.TryParse<ItemObjectiveEffectKind>(effect.Kind, true, out var kind)
+                    ? kind
+                    : ItemObjectiveEffectKind.Custom,
+                effect.Amount,
+                effect.AmountIsPercent,
+                effect.StatusTypeIds,
+                effect.ImmuneToAllStatuses,
+                effect.SuspendCurrentAllyGroup,
+                effect.ForcedAllyGroupName,
+                [
+                    .. effect.AlliedFactions.Select(static target =>
+                        new ItemObjectiveAllianceTarget(target.FactionId, target.Subfaction)),
+                ],
+                effect.CustomText)),
         ];
     }
 

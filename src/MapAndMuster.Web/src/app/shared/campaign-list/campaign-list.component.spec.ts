@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
 import { CampaignListComponent } from './campaign-list.component';
@@ -114,6 +114,118 @@ describe('CampaignListComponent', () => {
     compiled.querySelector<HTMLButtonElement>('button.campaign-toggle')?.click();
     fixture.detectChanges();
     expect(compiled.textContent).toContain('Duplicate campaign');
+    expect(compiled.textContent).not.toContain('Delete campaign');
+  });
+
+  it('confirms before duplicating a campaign', async () => {
+    const fixture = TestBed.createComponent(CampaignListComponent);
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    fixture.componentRef.setInput('allowDuplicate', true);
+    fixture.componentRef.setInput('campaigns', [
+      item({
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        name: 'Border War',
+        canManage: true,
+        isParticipant: true,
+        canView: true,
+        status: 'Scheduled',
+        startsUtc: '2099-01-05T12:00:00+00:00',
+        endsUtc: '2099-03-02T12:00:00+00:00',
+      }),
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('button.campaign-toggle')?.click();
+    fixture.detectChanges();
+    [...compiled.querySelectorAll('button')]
+      .find((button) => button.textContent.trim() === 'Duplicate campaign')
+      ?.click();
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectNone('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/duplicate');
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain('Duplicate Border War?');
+    [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')]
+      .find((button) => button.textContent.trim() === 'Duplicate campaign')
+      ?.click();
+
+    const request = http.expectOne('/api/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/duplicate');
+    expect(request.request.method).toBe('POST');
+    request.flush({
+      id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      name: 'Border War',
+      revision: 1,
+      status: 'Scheduled',
+    });
+    await fixture.whenStable();
+    fixture.destroy();
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    http.verify();
+  });
+
+  it('confirms before deleting a completed campaign the viewer manages', async () => {
+    const fixture = TestBed.createComponent(CampaignListComponent);
+    fixture.componentRef.setInput('campaigns', [
+      item({
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        name: 'Border War',
+        canManage: true,
+        isParticipant: true,
+        canView: true,
+        status: 'Scheduled',
+        startsUtc: '2099-01-05T12:00:00+00:00',
+        endsUtc: '2099-03-02T12:00:00+00:00',
+      }),
+      item({
+        id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        name: 'Finished War',
+        canManage: true,
+        isParticipant: true,
+        canView: true,
+        status: 'Completed',
+        startsUtc: '2097-01-01T12:00:00+00:00',
+        endsUtc: '2098-12-01T12:00:00+00:00',
+      }),
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const toggles = compiled.querySelectorAll<HTMLButtonElement>('button.campaign-toggle');
+    toggles.forEach((toggle) => toggle.click());
+    fixture.detectChanges();
+
+    expect(
+      [...compiled.querySelectorAll('button')].some(
+        (button) => button.textContent.trim() === 'Delete campaign' && !button.closest('[role="alertdialog"]'),
+      ),
+    ).toBe(true);
+    [...compiled.querySelectorAll('li')].forEach((card) => {
+      if (card.textContent.includes('Border War')) {
+        expect(card.textContent).not.toContain('Delete campaign');
+      }
+    });
+
+    [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Delete campaign')?.click();
+    fixture.detectChanges();
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectNone('/api/campaigns/dddddddd-dddd-dddd-dddd-dddddddddddd');
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain('Delete Finished War?');
+    [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')]
+      .find((button) => button.textContent.trim() === 'Delete campaign')
+      ?.click();
+
+    const request = http.expectOne('/api/campaigns/dddddddd-dddd-dddd-dddd-dddddddddddd');
+    expect(request.request.method).toBe('DELETE');
+    request.flush(null, { status: 204, statusText: 'No Content' });
+    await fixture.whenStable();
+    fixture.destroy();
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    http.verify();
   });
 
   it('collapses a campaign group without removing the group heading', async () => {

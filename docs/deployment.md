@@ -80,7 +80,7 @@ Local run of the API container is documented at the end of this file.
 `render.yaml` defines:
 
 | Resource | Render name | Role |
-|---|---|---|
+| --- | --- | --- |
 | Postgres 17 | `mapandmuster-db` | Authoritative store |
 | Docker web service | `mapandmuster-api` | API, Identity, health, email outbox, uploads disk |
 | Static site | `mapandmuster-web` | Angular `dist/mapandmuster-web/browser` |
@@ -98,7 +98,7 @@ Auto-deploy is `checksPass`: Render deploys `master` only after GitHub checks pa
 ### Values to enter at apply time
 
 | Render key | What to type | Where to get it |
-|---|---|---|
+| --- | --- | --- |
 | `PublicWeb__Origin` | `https://mapandmuster.com` | The public site origin after Cloudflare is live. Until then you may use `https://<WEB_RENDER_HOST>` for a first bring-up, then change it. Production rejects a hostname with a `staging` DNS label. |
 | `Email__FromAddress` | `noreply@mapandmuster.com` | Address on a domain you will verify in Resend |
 | `Email__Resend__ApiKey` | `<RESEND_API_KEY>` | Resend dashboard → API Keys |
@@ -149,10 +149,26 @@ bundle. Prefer additive schema changes; see expand/contract below. Do not commit
 Postgres uses password authentication and TLS, not Kerberos; disabling GSS avoids a missing
 `libgssapi_krb5.so.2` error in the official ASP.NET container images.
 
+### Connection pool sizing
+
+`PostgresConnectionString.Normalize` fills in `Maximum Pool Size=20`, `Minimum Pool Size=1`,
+`Timeout=15`, and `Command Timeout=30` when the configured connection string does not set them.
+Npgsql's own default maximum is 100, which is more connections than the smaller Render PostgreSQL
+plans accept, so under load the pool would open connections the server refuses instead of queueing
+requests behind the limit. To tune any of these per environment, include the keyword in the
+connection string and the default is left alone.
+
+EF Core `DbContext` pooling (`AddDbContextPool`) was evaluated and **not** adopted. The remaining
+per-request cost after the query changes above is in the statements themselves rather than in
+context construction, and pooling constrains how the context may take dependencies. Revisit it only
+with a before-and-after measurement from the Render metrics graphs.
+
 ## API service
 
 - Dockerfile: `src/MapAndMuster.Api/Dockerfile` (context is the repository root).
-- Health check: `GET /health` (same checks as `/health/ready`; `/health/live` is process-only).
+- Health check: `GET /health/live` (process-only). `/health` and `/health/ready` also check
+  PostgreSQL and stay available for operators, but the platform probe deliberately avoids them
+  so frequent probing does not query the database continuously.
 - Listens on Render `PORT`.
 - Persistent disk mounted at `/app/app-data` (`Storage__RootPath`). Uploads are **not**
   object storage yet (`docs/DECISIONS-NEEDED.md` item 18).
@@ -161,7 +177,8 @@ Postgres uses password authentication and TLS, not Kerberos; disabling GSS avoid
 - `Database__ApplyMigrationsOnStartup=false`.
 
 First-boot order: database exists → apply EF bundle → confirm `/health` returns
-`{"status":"Healthy"}`.
+`{"status":"Healthy"}`. Use `/health` (not `/health/live`) for that confirmation, because only
+the ready checks prove PostgreSQL is reachable.
 
 ## Angular static site
 
@@ -192,10 +209,10 @@ that contains a `staging` label, and a Staging origin that does not.
 ## Health checks
 
 | Path | Meaning |
-|---|---|
-| `GET /health/live` | Process is running |
+| --- | --- |
+| `GET /health/live` | Process is running. Used by the Render platform probe |
 | `GET /health/ready` | PostgreSQL is reachable when a connection string is configured |
-| `GET /health` | Same checks as ready (Render and load balancers) |
+| `GET /health` | Same checks as ready (operators and load balancers) |
 
 Responses are `{"status":"Healthy"}` or an equivalent status string. They omit connection
 strings, exceptions, and check details. Unhealthy ready checks use HTTP 503.
@@ -302,6 +319,55 @@ The Worker 301s `www` to the apex so cookies and OAuth stay on `https://mapandmu
 6. `PublicWeb__Origin` on the API must be `https://mapandmuster.com` (no trailing slash).
 
 Confirm HTTPS in the browser with no certificate warnings.
+
+### Verifying the update stream through Cloudflare
+
+`GET /api/campaigns/{id}/stream` is a `text/event-stream` response that stays open indefinitely
+and writes a few bytes only when a campaign revision changes. It replaced a 3-second poll, so it
+is the reason a busy campaign no longer costs thousands of requests an hour. See
+`docs/adr/0004-server-sent-events-for-campaign-updates.md`.
+
+A proxy can break a long-lived response in two ways, and neither is reproducible on localhost
+because nothing sits between the browser and Kestrel there. Check this once after the Worker is
+live, and again after any edit to the Worker.
+
+**Buffering.** Proxies normally accumulate a response body and forward it in efficient chunks.
+That is invisible for an ordinary request and fatal for a stream, because each event waits in the
+buffer for more data that may not arrive for an hour. The API sets `X-Accel-Buffering: no` and
+disables Kestrel's own buffering, and the Worker above streams correctly because it returns its
+`fetch` result directly. A Worker that reads the body first — `await response.text()` to adjust
+something, for example — buffers the stream instead, with no error anywhere.
+
+**Idle timeout.** Cloudflare closes a proxied connection when too long passes with no bytes
+moving, surfacing as Cloudflare error 524. For a streaming response the limit applies between
+bytes rather than to total duration, which is why the API writes a named `heartbeat` event every
+20 seconds. Confirm the current limit for your plan rather than assuming the documented default
+still applies.
+
+A killed connection is not silent: `EventSource` errors, the client reconnects with backoff, and
+the 60-second safety-net poll runs while it is down. A **buffered** connection is the silent
+case — headers arrive, the browser reports `open`, and no events follow. The client treats 45
+seconds without a `heartbeat` or update as dead and falls back to that poll. Users stay correct
+either way; a flapping or buffered stream is a cost regression to look for, not an outage.
+
+To check it, sign in, copy the session cookie, and watch the stream through the public origin.
+`-N` disables curl's own buffering:
+
+```bash
+curl -N -H 'Cookie: <SESSION_COOKIE>' https://mapandmuster.com/api/campaigns/<CAMPAIGN_ID>/stream
+```
+
+- An `event: heartbeat` frame on connect, then another about every 20 seconds of idle: streaming
+  works end to end.
+- Heartbeats arriving in clumps: something in the path is buffering.
+- The connection dropping: the heartbeat is not beating the idle timeout.
+
+Leave it open for more than two minutes. A 30-second check cannot say anything about a timeout
+measured in hundreds of seconds. Then run the same request against `https://<API_RENDER_HOST>`
+directly; a stream that behaves there but not through `mapandmuster.com` isolates the fault to
+Cloudflare rather than the application. The browser equivalent is a request that stays pending
+indefinitely with `heartbeat` frames listed under the EventStream tab — if that request reappears
+on a fixed interval, the beat is not holding the connection open.
 
 ## Email (Resend)
 

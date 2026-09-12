@@ -1,6 +1,9 @@
 <details class="campaign-log" [open]="expanded()" (toggle)="onToggle($event)">
   <summary>
     Campaign log
+    @if (streamState(); as state) {
+      <app-update-stream-status [state]="state" />
+    }
     @if (unreadMentionCount() > 0 || unreadPrivateCount() > 0) {
       <span class="log-unread">
         @if (unreadMentionCount() > 0) {

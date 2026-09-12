@@ -155,6 +155,66 @@ test('signed-in players can browse all campaigns', async ({ page }) => {
   expect(chatBox!.y).toBeLessThan(campaignsBox!.y);
 });
 
+test('a site-chat push refetches the board instead of polling for it', async ({ page }) => {
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profile) });
+  });
+  await page.route('**/api/campaigns/all', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+
+  let boardReads = 0;
+  await page.route('**/api/site-chat', async (route) => {
+    boardReads += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        messages:
+          boardReads === 1
+            ? []
+            : [
+                {
+                  id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+                  authorUserId: '22222222-2222-2222-2222-222222222222',
+                  authorUsername: 'brannoch',
+                  authorDisplayName: 'brannoch',
+                  body: 'Muster at the ford.',
+                  language: 'English',
+                  kind: 'Public',
+                  postedUtc: '2026-09-01T00:00:00+00:00',
+                  canBlockAuthor: true,
+                  targetUserId: null,
+                  targetUsername: null,
+                  targetDisplayName: null,
+                },
+              ],
+        mentionableUsers: [],
+        blockedUsers: [],
+        languages: ['English', 'Spanish'],
+        preferredLanguage: 'English',
+        canChat: true,
+        canSendAdminMessages: false,
+      }),
+    });
+  });
+
+  // The event carries only a revision, so the client must refetch to learn the message. That is
+  // what keeps hidden content out of the stream.
+  await page.route('**/api/site-chat/stream', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: 'event: site-chat\ndata: {"revision":1}\n\n',
+    });
+  });
+
+  await page.goto('/campaigns/all');
+  await page.getByText('Site chat').click();
+  await expect(page.getByText('Muster at the ford.')).toBeVisible();
+  expect(boardReads).toBeGreaterThan(1);
+});
+
 test('managers can open the map editor after setup', async ({ page }) => {
   const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   await page.route('**/api/auth/me', async (route) => {
@@ -401,6 +461,8 @@ test('players can duplicate a campaign from Your campaigns', async ({ page }) =>
   await expect(page.getByRole('link', { name: 'Open Border War' })).toBeVisible();
   await page.getByRole('button', { name: 'Border War' }).click();
   await page.getByRole('button', { name: 'Duplicate campaign' }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('Duplicate Border War?');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Duplicate campaign' }).click();
   await expect(page).toHaveURL(`/campaigns/${copyId}/edit`);
 });
 

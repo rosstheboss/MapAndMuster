@@ -298,6 +298,9 @@ public sealed class CampaignPresetHandlerTests
         Assert.True(result.IsSuccess);
         Assert.NotNull(result.Value);
         Assert.EndsWith(".mapandmuster-preset", result.Value.DownloadName, StringComparison.Ordinal);
+
+        // The handler now defers to the response stream, so nothing is packed until it is written.
+        await result.Value.WriteToAsync(Stream.Null, CancellationToken.None);
         Assert.Equal("maps/border.png", codec.WrittenCampaign?.MapStorageKey);
         Assert.Equal(new byte[] { 7, 8, 9 }, codec.WrittenFiles["maps/border.png"]);
         Assert.Equal("Northmarch", codec.WrittenCampaign?.MapGraph?.Territories[0].Name);
@@ -331,6 +334,8 @@ public sealed class CampaignPresetHandlerTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        await result.Value.WriteToAsync(Stream.Null, CancellationToken.None);
         Assert.Equal(new byte[] { 1, 2, 3 }, codec.WrittenFiles["flags/north.png"]);
         Assert.Equal(new byte[] { 4, 5, 6 }, codec.WrittenFiles["structures/town.png"]);
         Assert.Equal(new byte[] { 10, 11, 12 }, codec.WrittenFiles["items/crown.png"]);
@@ -353,7 +358,7 @@ public sealed class CampaignPresetHandlerTests
             {
                 UserId = Guid.NewGuid(),
                 IsAdministrator = false,
-                Content = [1, 2, 3],
+                Content = new MemoryStream([1, 2, 3], writable: false),
             },
             CancellationToken.None);
 
@@ -391,7 +396,7 @@ public sealed class CampaignPresetHandlerTests
             {
                 UserId = Guid.NewGuid(),
                 IsAdministrator = true,
-                Content = [1, 2, 3],
+                Content = new MemoryStream([1, 2, 3], writable: false),
             },
             CancellationToken.None);
 
@@ -439,7 +444,7 @@ public sealed class CampaignPresetHandlerTests
             {
                 UserId = Guid.NewGuid(),
                 IsAdministrator = true,
-                Content = [1, 2, 3],
+                Content = new MemoryStream([1, 2, 3], writable: false),
             },
             CancellationToken.None);
 
@@ -484,7 +489,7 @@ public sealed class CampaignPresetHandlerTests
             {
                 UserId = Guid.NewGuid(),
                 IsAdministrator = true,
-                Content = [1, 2, 3],
+                Content = new MemoryStream([1, 2, 3], writable: false),
             },
             CancellationToken.None);
 
@@ -510,7 +515,8 @@ public sealed class CampaignPresetHandlerTests
             {
                 UserId = Guid.NewGuid(),
                 IsAdministrator = true,
-                Content = [],
+                Content = new MemoryStream(),
+                Length = 0,
             },
             CancellationToken.None);
 
@@ -548,7 +554,9 @@ public sealed class CampaignPresetHandlerTests
             {
                 UserId = Guid.NewGuid(),
                 IsAdministrator = true,
-                Content = new byte[(24 * 1024 * 1024) + 1],
+                Content = new MemoryStream(),
+                // Over the 24 MB host limit for ordinary uploads but under the preset ceiling.
+                Length = (24L * 1024 * 1024) + 1,
             },
             CancellationToken.None);
 
@@ -588,7 +596,7 @@ public sealed class CampaignPresetHandlerTests
         {
             UserId = Guid.NewGuid(),
             IsAdministrator = true,
-            Content = [1, 2, 3],
+            Content = new MemoryStream([1, 2, 3], writable: false),
         };
 
         var first = await handler.HandleAsync(command, CancellationToken.None);
@@ -633,7 +641,7 @@ public sealed class CampaignPresetHandlerTests
         {
             UserId = Guid.NewGuid(),
             IsAdministrator = true,
-            Content = [1, 2, 3],
+            Content = new MemoryStream([1, 2, 3], writable: false),
         };
 
         var first = await handler.HandleAsync(command, CancellationToken.None);
@@ -1234,14 +1242,36 @@ file sealed class RecordingPackageCodec : ICampaignPresetPackageCodec
 
     public CampaignPresetPackageContents? Contents { get; set; }
 
-    public byte[] Write(StoredCampaign campaign, IReadOnlyDictionary<string, byte[]> files)
+    public async Task WriteAsync(
+        Stream destination,
+        StoredCampaign campaign,
+        IReadOnlyList<string> storageKeys,
+        CampaignPresetFileOpener openFile,
+        CancellationToken cancellationToken)
     {
         WrittenCampaign = campaign;
-        WrittenFiles = files;
-        return [1, 2, 3];
+        var written = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var key in storageKeys)
+        {
+            var source = await openFile(key, cancellationToken);
+            if (source is null)
+            {
+                continue;
+            }
+
+            await using (source)
+            {
+                using var buffer = new MemoryStream();
+                await source.CopyToAsync(buffer, cancellationToken);
+                written[key] = buffer.ToArray();
+            }
+        }
+
+        WrittenFiles = written;
+        await destination.WriteAsync(new byte[] { 1, 2, 3 }, cancellationToken);
     }
 
-    public OperationResult<CampaignPresetPackageContents> Read(ReadOnlyMemory<byte> content)
+    public OperationResult<CampaignPresetPackageContents> Read(Stream content)
     {
         if (Contents is null)
         {

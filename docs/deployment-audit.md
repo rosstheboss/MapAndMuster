@@ -22,7 +22,7 @@ They are not Visual Studio solution projects.
 ## Executable services
 
 | Component | Role | Production deployment |
-|---|---|---|
+| --- | --- | --- |
 | `MapAndMuster.Api` | ASP.NET Core HTTP host, Identity, OpenAPI, health checks, EF migrations, hosted email outbox processor | Docker web service |
 | `MapAndMuster.Web` | Angular 22 static UI | Static site |
 | PostgreSQL 17 | Authoritative store | Managed PostgreSQL |
@@ -80,7 +80,7 @@ No production connection strings, OAuth secrets, or email API keys are committed
 ## Hard-coded development URLs and ports
 
 | Port / URL | Use |
-|---|---|
+| --- | --- |
 | `http://localhost:5219` | API HTTP launch profile and Angular proxy |
 | `https://localhost:7247` | API HTTPS launch profile (not used with the Angular proxy) |
 | `http://localhost:4200` | Angular dev server / `PublicWeb:Origin` default |

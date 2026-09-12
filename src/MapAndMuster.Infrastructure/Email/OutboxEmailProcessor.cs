@@ -14,9 +14,16 @@ namespace MapAndMuster.Infrastructure.Email;
 /// </summary>
 public sealed partial class OutboxEmailProcessor : BackgroundService
 {
+    /// <summary>Batch size for a single pending-message read.</summary>
+    private const int BatchSize = 20;
+
+    private static readonly TimeSpan MinIdleDelay = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan MaxIdleDelay = TimeSpan.FromSeconds(60);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IOptions<EmailOptions> _emailOptions;
     private readonly IOptions<PublicWebOptions> _webOptions;
+    private readonly OutboxSignal _signal;
     private readonly ILogger<OutboxEmailProcessor> _logger;
 
     /// <summary>
@@ -25,20 +32,24 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
     /// <param name="scopeFactory">The scope factory.</param>
     /// <param name="emailOptions">Email options.</param>
     /// <param name="webOptions">Public web origin options.</param>
+    /// <param name="signal">Wake signal raised when a message is queued.</param>
     /// <param name="logger">The logger.</param>
     public OutboxEmailProcessor(
         IServiceScopeFactory scopeFactory,
         IOptions<EmailOptions> emailOptions,
         IOptions<PublicWebOptions> webOptions,
+        OutboxSignal signal,
         ILogger<OutboxEmailProcessor> logger)
     {
         ArgumentNullException.ThrowIfNull(scopeFactory);
         ArgumentNullException.ThrowIfNull(emailOptions);
         ArgumentNullException.ThrowIfNull(webOptions);
+        ArgumentNullException.ThrowIfNull(signal);
         ArgumentNullException.ThrowIfNull(logger);
         _scopeFactory = scopeFactory;
         _emailOptions = emailOptions;
         _webOptions = webOptions;
+        _signal = signal;
         _logger = logger;
     }
 
@@ -50,11 +61,13 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
             return;
         }
 
+        var idleDelay = MinIdleDelay;
         while (!stoppingToken.IsCancellationRequested)
         {
+            var delivered = 0;
             try
             {
-                await ProcessBatchAsync(stoppingToken).ConfigureAwait(false);
+                delivered = await ProcessBatchAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -67,11 +80,36 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
                 LogBatchFailure(_logger, exception);
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
+            // A full batch of successful deliveries means more mail is probably queued, so drain
+            // without waiting. Anything else idles. Backing off on failure also stops a message
+            // the provider keeps rejecting from being retried in a tight loop.
+            if (delivered == BatchSize)
+            {
+                idleDelay = MinIdleDelay;
+                continue;
+            }
+
+            idleDelay = delivered > 0
+                ? MinIdleDelay
+                : TimeSpan.FromTicks(Math.Min(idleDelay.Ticks * 2, MaxIdleDelay.Ticks));
+
+            try
+            {
+                await _signal.WaitAsync(idleDelay, stoppingToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 
-    private async Task ProcessBatchAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Delivers one batch of pending messages.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The number of messages delivered successfully.</returns>
+    private async Task<int> ProcessBatchAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CampaignDbContext>();
@@ -81,10 +119,11 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
         var pending = await dbContext.OutboxMessages
             .Where(message => message.ProcessedUtc == null)
             .OrderBy(message => message.CreatedUtc)
-            .Take(20)
+            .Take(BatchSize)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        var delivered = 0;
         foreach (var message in pending)
         {
             try
@@ -95,6 +134,7 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
                 await emailSender.SendAsync(mail, cancellationToken).ConfigureAwait(false);
                 message.ProcessedUtc = clock.UtcNow;
                 message.LastError = null;
+                delivered++;
             }
 #pragma warning disable CA1031
             catch (Exception exception)
@@ -109,6 +149,8 @@ public sealed partial class OutboxEmailProcessor : BackgroundService
         {
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
+
+        return delivered;
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "The email outbox processor failed a batch.")]

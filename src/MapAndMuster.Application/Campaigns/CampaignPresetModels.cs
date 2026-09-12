@@ -59,8 +59,14 @@ public sealed class ApplyCampaignPresetCommand
 /// </summary>
 public sealed class CampaignPresetPackageFile
 {
-    /// <summary>Gets the ZIP bytes.</summary>
-    public required byte[] Content { get; init; }
+    /// <summary>
+    /// Gets the callback that writes the ZIP to a destination stream.
+    /// </summary>
+    /// <remarks>
+    /// The archive is produced while the response is being written rather than buffered first,
+    /// so a large export never occupies memory proportional to its size.
+    /// </remarks>
+    public required Func<Stream, CancellationToken, Task> WriteToAsync { get; init; }
 
     /// <summary>Gets the download file name.</summary>
     public required string DownloadName { get; init; }
@@ -98,8 +104,11 @@ public sealed class ImportCampaignPresetCommand
     /// <summary>Gets whether the caller is a system administrator.</summary>
     public required bool IsAdministrator { get; init; }
 
-    /// <summary>Gets the uploaded package bytes.</summary>
-    public required byte[] Content { get; init; }
+    /// <summary>Gets the uploaded package stream. The handler reads it but does not own it.</summary>
+    public required Stream Content { get; init; }
+
+    /// <summary>Gets the uploaded size in bytes, when the caller knows it.</summary>
+    public long? Length { get; init; }
 
     /// <summary>Gets the original file name, when known.</summary>
     public string? FileName { get; init; }

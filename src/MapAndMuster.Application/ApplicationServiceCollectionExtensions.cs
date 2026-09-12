@@ -46,6 +46,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<KickCampaignMemberHandler>();
         services.AddScoped<AssignPlayerFactionHandler>();
         services.AddScoped<EndCampaignHandler>();
+        services.AddScoped<DeleteCompletedCampaignHandler>();
         services.AddScoped<DuplicateCampaignHandler>();
         services.AddScoped<ListCampaignPresetsHandler>();
         services.AddScoped<GetCampaignPresetHandler>();
@@ -53,6 +54,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<ApplyCampaignPresetHandler>();
         services.AddScoped<ExportCampaignPresetHandler>();
         services.AddScoped<ImportCampaignPresetHandler>();
+
+        // Singleton: the bound is per process, not per request.
+        services.AddSingleton<CampaignPackageGate>();
         services.AddScoped<UploadCampaignMapHandler>();
         services.AddScoped<GetCampaignMapHandler>();
         services.AddScoped<GetCampaignMapGraphHandler>();
@@ -67,6 +71,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<UploadMissionFileHandler>();
         services.AddScoped<GetMissionFileHandler>();
         services.AddScoped<GetCampaignPlayHandler>();
+        services.AddScoped<AdvanceDueCampaignsHandler>();
         services.AddScoped<SaveOrderDraftHandler>();
         services.AddScoped<CommitOrdersHandler>();
         services.AddScoped<UncommitOrdersHandler>();

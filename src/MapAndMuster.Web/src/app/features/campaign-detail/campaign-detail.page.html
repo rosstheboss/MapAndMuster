@@ -21,6 +21,9 @@
           <strong>{{ heading }}</strong>
         }
         <span>{{ statusText(campaign.status) }}</span>
+        @if (updateStream(); as stream) {
+          <app-update-stream-status [state]="stream.state()" />
+        }
         @if (campaign.currentPhaseEndsUtc; as endsUtc) {
           <p
             class="phase-timer"
@@ -96,6 +99,7 @@
         [unreadMentionCount]="board.unreadMentionCount ?? 0"
         [unreadPrivateCount]="board.unreadPrivateCount ?? 0"
         [scrollToEntryId]="logScrollEntryId()"
+        [streamState]="updateStream()?.state() ?? null"
         (expandedChange)="setSection('log', $event)"
         (channelChange)="onChatChannelChange($event)"
         (scrollChange)="onChatScrollChange($event)"
@@ -341,22 +345,6 @@
                       </select>
                     </div>
                     @if (draftFor(force.id).kind === 'Move' || draftFor(force.id).kind === 'Split') {
-                      @if (force.canMoveTwoTerritories) {
-                        <div class="field grow">
-                          <label [attr.for]="'via-' + force.id">First territory</label>
-                          <select
-                            [id]="'via-' + force.id"
-                            [ngModel]="draftFor(force.id).viaTerritoryId"
-                            (ngModelChange)="onDraftVia(force.id, $event)"
-                            [name]="'via-' + force.id"
-                          >
-                            <option value="">Direct move</option>
-                            @for (target of viaTargets(force); track target) {
-                              <option [value]="target">{{ territoryName(target) }}</option>
-                            }
-                          </select>
-                        </div>
-                      }
                       <div class="field grow">
                         <label [attr.for]="'target-' + force.id">Destination</label>
                         <select
@@ -366,11 +354,30 @@
                           [name]="'target-' + force.id"
                         >
                           <option value="">Select a territory</option>
-                          @for (target of destinationsForVia(force, draftFor(force.id).viaTerritoryId); track target) {
+                          @for (target of force.moveTargets; track target) {
                             <option [value]="target">{{ territoryName(target) }}</option>
                           }
                         </select>
                       </div>
+                      @if (viasForDestination(force, draftFor(force.id).targetTerritoryId).length > 1) {
+                        <div class="field grow">
+                          <label [attr.for]="'via-' + force.id">Move through</label>
+                          <select
+                            [id]="'via-' + force.id"
+                            [ngModel]="draftFor(force.id).viaTerritoryId"
+                            (ngModelChange)="onDraftVia(force.id, $event)"
+                            [name]="'via-' + force.id"
+                          >
+                            <option value="">Select a territory</option>
+                            @for (
+                              target of viasForDestination(force, draftFor(force.id).targetTerritoryId);
+                              track target
+                            ) {
+                              <option [value]="target">{{ territoryName(target) }}</option>
+                            }
+                          </select>
+                        </div>
+                      }
                     }
                     @if (draftFor(force.id).kind === 'Build') {
                       <div class="field grow">
@@ -579,9 +586,14 @@
                 [brokenAllyFactionIds]="campaign.brokenAllyFactionIds ?? play()?.brokenAllyFactionIds ?? []"
                 [itemImageUrl]="itemObjectiveImageUrl"
                 [focusSelectedTerritories]="true"
+                [showCommit]="showMapCommit()"
+                [canCommit]="canCommitActions()"
+                [commitClosesPhase]="isFinalRequiredCommitment()"
+                [showUncommit]="canUncommit()"
                 (territoryHover)="hoveredTerritoryId.set($event)"
                 (territorySelect)="onTerritorySelect($event)"
                 (backgroundSelect)="onMapBackgroundSelect()"
+                (commit)="onMapCommit()"
               >
                 <aside class="map-meta panel stack" mapDetails aria-live="polite">
                   @if (mapActionPrompt(); as prompt) {
@@ -1977,6 +1989,25 @@
                           }
                         </select>
                       </div>
+                      @if (viasForDestination(force, debugDraftFor(force.id).targetTerritoryId).length > 1) {
+                        <div class="field">
+                          <label [attr.for]="'debug-via-' + force.id">Move through</label>
+                          <select
+                            [id]="'debug-via-' + force.id"
+                            [ngModel]="debugDraftFor(force.id).viaTerritoryId"
+                            (ngModelChange)="onDebugDraftVia(force.id, $event)"
+                            [name]="'debug-via-' + force.id"
+                          >
+                            <option value="">Select a territory</option>
+                            @for (
+                              target of viasForDestination(force, debugDraftFor(force.id).targetTerritoryId);
+                              track target
+                            ) {
+                              <option [value]="target">{{ territoryName(target) }}</option>
+                            }
+                          </select>
+                        </div>
+                      }
                     }
                     @if (debugDraftFor(force.id).kind === 'Build') {
                       <div class="field">
@@ -2268,6 +2299,26 @@
               }
             </div>
           }
+
+          @if (campaign.canManage && campaign.status === 'Completed') {
+            <div class="panel stack">
+              <h2>
+                <button
+                  type="button"
+                  class="section-toggle"
+                  [attr.aria-expanded]="isOpen('delete')"
+                  (click)="toggleSection('delete')"
+                >
+                  Delete campaign
+                </button>
+              </h2>
+              @if (isOpen('delete')) {
+                <div class="actions">
+                  <button type="button" class="button-danger" (click)="requestDelete()">Delete campaign</button>
+                </div>
+              }
+            </div>
+          }
         }
       </div>
     }
@@ -2323,6 +2374,31 @@
       <div class="actions">
         <button type="button" class="button-danger" (click)="confirmEnd()" [disabled]="ending()">End campaign</button>
         <button type="button" class="button-secondary" data-dialog-safe (click)="cancelEnd()" [disabled]="ending()">
+          Cancel
+        </button>
+      </div>
+    </app-dialog>
+
+    <app-dialog
+      [open]="confirmingDelete()"
+      dialogRole="alertdialog"
+      labelledBy="delete-title"
+      describedBy="delete-desc"
+      (cancelled)="cancelDelete()"
+    >
+      <h2 id="delete-title">Delete this campaign?</h2>
+      <p id="delete-desc">This permanently deletes the campaign and its information. This cannot be undone.</p>
+      <div class="actions">
+        <button type="button" class="button-danger" (click)="confirmDelete()" [disabled]="deleting()">
+          Delete campaign
+        </button>
+        <button
+          type="button"
+          class="button-secondary"
+          data-dialog-safe
+          (click)="cancelDelete()"
+          [disabled]="deleting()"
+        >
           Cancel
         </button>
       </div>

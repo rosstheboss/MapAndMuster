@@ -126,6 +126,8 @@ internal static class CampaignPresetCatalogFiles
             SubfactionSpecialRules = destination.SubfactionSpecialRules,
             TagIds = destination.TagIds,
             SubfactionTags = destination.SubfactionTags,
+            ForceMovementSpeed = destination.ForceMovementSpeed,
+            SubfactionMovementSpeeds = destination.SubfactionMovementSpeeds,
         };
     }
 
@@ -198,6 +200,7 @@ internal static class CampaignPresetCatalogFiles
             FlavorText = destination.FlavorText,
             Choices = destination.Choices,
             SpecialRuleIds = destination.SpecialRuleIds,
+            Effects = destination.Effects,
         };
     }
 

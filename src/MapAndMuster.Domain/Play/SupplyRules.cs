@@ -319,6 +319,30 @@ public static class SupplyRules
         var isSplit = forceCount > 1;
         var contributions = new List<SupplyContribution>();
         var mapSupply = MapSupply(state, map, catalog, userId, originTerritoryId, contributions);
+        var originForce = originTerritoryId is { } origin
+            ? state.Forces.FirstOrDefault(force => force.ControllerUserId == userId && force.TerritoryId == origin)
+            : null;
+        if (originForce is not null)
+        {
+            var before = mapSupply;
+            mapSupply = ItemObjectiveEffectRules.AdjustSupply(
+                mapSupply,
+                originForce,
+                map,
+                state.ItemObjectives,
+                catalog.SpecialRules ?? SpecialRuleContext.None);
+            var delta = mapSupply - before;
+            if (delta != 0)
+            {
+                contributions.Add(
+                    new SupplyContribution(
+                        SupplyContributionKind.ItemObjective,
+                        originForce.TerritoryId,
+                        delta,
+                        "Item objective",
+                        IsAllied: false));
+            }
+        }
         var escalation = EscalationFor(catalog.ArmyEscalations, roundNumber);
         var mapAfterPenalty = isSplit
             ? Math.Max(

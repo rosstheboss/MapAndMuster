@@ -154,32 +154,36 @@ public sealed class GetStructureImageHandler
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <param name="pillaged">Whether to return the pillaged logo instead of the operational logo.</param>
+    /// <param name="ifNoneMatch">The caller's cached asset tag, if any.</param>
     /// <returns>The stored image.</returns>
-    public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
+    public async Task<OperationResult<CampaignAssetRead>> HandleAsync(
         Guid campaignId,
         Guid structureTypeId,
         Guid userId,
         CancellationToken cancellationToken,
         bool isAdministrator = false,
-        bool pillaged = false)
+        bool pillaged = false,
+        string? ifNoneMatch = null)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
         if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
         var structure = campaign.StructureTypes.FirstOrDefault(type => type.Id == structureTypeId);
         var storageKey = pillaged ? structure?.PillagedImageStorageKey : structure?.ImageStorageKey;
         if (structure is null || string.IsNullOrWhiteSpace(storageKey))
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The structure image was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The structure image was not found.");
         }
 
-        var file = await _assets.OpenReadAsync(storageKey, cancellationToken).ConfigureAwait(false);
-        return file is null
-            ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The structure image was not found.")
-            : OperationResults.Success(file);
+        var read = await CampaignAssetReader
+            .ReadAsync(_assets.OpenStreamAsync, storageKey, ifNoneMatch, downloadName: null, cancellationToken)
+            .ConfigureAwait(false);
+        return read is null
+            ? OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The structure image was not found.")
+            : OperationResults.Success(read);
     }
 }
 
@@ -267,6 +271,10 @@ public sealed class UploadItemObjectiveImageHandler
             Color = items[index].Color,
             ImageStorageKey = newKey,
             CampaignPoints = items[index].CampaignPoints,
+            FlavorText = items[index].FlavorText,
+            Choices = items[index].Choices,
+            SpecialRuleIds = items[index].SpecialRuleIds,
+            Effects = items[index].Effects,
         };
 
         var updated = CampaignMapClone.CloneWithCatalogs(
@@ -321,29 +329,32 @@ public sealed class GetItemObjectiveImageHandler
     /// <summary>
     /// Returns the stored item-objective logo for a member.
     /// </summary>
-    public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
+    public async Task<OperationResult<CampaignAssetRead>> HandleAsync(
         Guid campaignId,
         Guid itemObjectiveTypeId,
         Guid userId,
         CancellationToken cancellationToken,
-        bool isAdministrator = false)
+        bool isAdministrator = false,
+        string? ifNoneMatch = null)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
         if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
         var item = campaign.ItemObjectiveTypes.FirstOrDefault(type => type.Id == itemObjectiveTypeId);
         if (item is null || string.IsNullOrWhiteSpace(item.ImageStorageKey))
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The item objective image was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The item objective image was not found.");
         }
 
-        var file = await _assets.OpenReadAsync(item.ImageStorageKey, cancellationToken).ConfigureAwait(false);
-        return file is null
-            ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The item objective image was not found.")
-            : OperationResults.Success(file);
+        var read = await CampaignAssetReader
+            .ReadAsync(_assets.OpenStreamAsync, item.ImageStorageKey, ifNoneMatch, downloadName: null, cancellationToken)
+            .ConfigureAwait(false);
+        return read is null
+            ? OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The item objective image was not found.")
+            : OperationResults.Success(read);
     }
 }
 
@@ -456,6 +467,8 @@ public sealed class UploadFactionFlagHandler
                 TintFlagImage = previous.TintFlagImage,
                 SpecialRuleIds = previous.SpecialRuleIds,
                 SubfactionSpecialRules = previous.SubfactionSpecialRules,
+                ForceMovementSpeed = previous.ForceMovementSpeed,
+                SubfactionMovementSpeeds = previous.SubfactionMovementSpeeds,
             };
         }
 
@@ -514,37 +527,41 @@ public sealed class GetFactionFlagHandler
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <param name="subfactionName">The subfaction name when reading a subfaction logo.</param>
+    /// <param name="ifNoneMatch">The caller's cached asset tag, if any.</param>
     /// <returns>The stored image.</returns>
-    public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
+    public async Task<OperationResult<CampaignAssetRead>> HandleAsync(
         Guid campaignId,
         Guid factionId,
         Guid userId,
         CancellationToken cancellationToken,
         bool isAdministrator = false,
-        string? subfactionName = null)
+        string? subfactionName = null,
+        string? ifNoneMatch = null)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
         if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
         var faction = campaign.Factions.FirstOrDefault(item => item.Id == factionId);
         if (faction is null)
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The faction flag was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The faction flag was not found.");
         }
 
         var key = FactionAppearance.Resolve(faction, subfactionName).FlagImageStorageKey;
         if (string.IsNullOrWhiteSpace(key))
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The faction flag was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The faction flag was not found.");
         }
 
-        var file = await _assets.OpenReadAsync(key, cancellationToken).ConfigureAwait(false);
-        return file is null
-            ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The faction flag was not found.")
-            : OperationResults.Success(file);
+        var read = await CampaignAssetReader
+            .ReadAsync(_assets.OpenStreamAsync, key, ifNoneMatch, downloadName: null, cancellationToken)
+            .ConfigureAwait(false);
+        return read is null
+            ? OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The faction flag was not found.")
+            : OperationResults.Success(read);
     }
 }
 
@@ -789,30 +806,34 @@ public sealed class GetMissionFileHandler
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <param name="ifNoneMatch">The caller's cached asset tag, if any.</param>
     /// <returns>The stored document.</returns>
-    public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
+    public async Task<OperationResult<CampaignAssetRead>> HandleAsync(
         Guid campaignId,
         Guid missionId,
         Guid userId,
         CancellationToken cancellationToken,
-        bool isAdministrator = false)
+        bool isAdministrator = false,
+        string? ifNoneMatch = null)
     {
         var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
         if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
         }
 
         var mission = CampaignPlayCatalog.FindMission(campaign, missionId);
         if (mission is null || string.IsNullOrWhiteSpace(mission.FileStorageKey))
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The mission file was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The mission file was not found.");
         }
 
-        var file = await _assets.OpenReadAsync(mission.FileStorageKey, cancellationToken).ConfigureAwait(false);
-        return file is null
-            ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The mission file was not found.")
-            : OperationResults.Success(new StoredCampaignAsset(file.Content, file.ContentType, mission.FileName));
+        var read = await CampaignAssetReader
+            .ReadAsync(_assets.OpenStreamAsync, mission.FileStorageKey, ifNoneMatch, mission.FileName, cancellationToken)
+            .ConfigureAwait(false);
+        return read is null
+            ? OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The mission file was not found.")
+            : OperationResults.Success(read);
     }
 }
 
@@ -1001,17 +1022,18 @@ public sealed class GetCampaignPresetAssetHandler
     /// <summary>
     /// Returns a preset catalog image for any authenticated user who may list presets.
     /// </summary>
-    public async Task<OperationResult<StoredCampaignAsset>> HandleAsync(
+    public async Task<OperationResult<CampaignAssetRead>> HandleAsync(
         Guid presetId,
         Guid catalogId,
         CampaignPresetAssetKind kind,
         CancellationToken cancellationToken,
-        string? subfactionName = null)
+        string? subfactionName = null,
+        string? ifNoneMatch = null)
     {
         var preset = await _presets.FindByIdAsync(presetId, cancellationToken).ConfigureAwait(false);
         if (preset is null)
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The campaign preset was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The campaign preset was not found.");
         }
 
         string? storageKey = kind switch
@@ -1025,15 +1047,17 @@ public sealed class GetCampaignPresetAssetHandler
                 preset.ItemObjectiveTypes.FirstOrDefault(type => type.Id == catalogId)?.ImageStorageKey,
             _ => null,
         };
-        if (!CatalogFileBinder.IsUserUploadedFileKey(storageKey))
+        if (!CatalogFileBinder.IsUserUploadedFileKey(storageKey) || storageKey is null)
         {
-            return OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The image was not found.");
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The image was not found.");
         }
 
-        var file = await _assets.OpenReadAsync(storageKey, cancellationToken).ConfigureAwait(false);
-        return file is null
-            ? OperationResults.Failure<StoredCampaignAsset>(ErrorCodes.CampaignNotFound, "The image was not found.")
-            : OperationResults.Success(file);
+        var read = await CampaignAssetReader
+            .ReadAsync(_assets.OpenStreamAsync, storageKey, ifNoneMatch, downloadName: null, cancellationToken)
+            .ConfigureAwait(false);
+        return read is null
+            ? OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The image was not found.")
+            : OperationResults.Success(read);
     }
 
     private static string? ResolveFactionFlag(StoredCampaign preset, Guid factionId, string? subfactionName)

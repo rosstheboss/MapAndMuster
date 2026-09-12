@@ -1,0 +1,12 @@
+{
+  "name": "mapandmuster-repo-tools",
+  "private": true,
+  "description": "Repository-wide tooling. Application dependencies live in src/MapAndMuster.Web and tests/MapAndMuster.Web.E2E.",
+  "scripts": {
+    "lint:md": "markdownlint-cli2",
+    "lint:md:fix": "markdownlint-cli2 --fix"
+  },
+  "devDependencies": {
+    "markdownlint-cli2": "0.23.2"
+  }
+}

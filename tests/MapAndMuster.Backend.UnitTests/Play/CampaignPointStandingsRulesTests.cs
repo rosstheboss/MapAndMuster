@@ -38,6 +38,53 @@ public sealed class CampaignPointStandingsRulesTests
     }
 
     [Fact]
+    public void DoesNotCopySharedFactionHoldingsOntoEveryCoFactionPlayer()
+    {
+        var khorne = Guid.NewGuid();
+        var tzeentch = Guid.NewGuid();
+        var faction = Guid.NewGuid();
+        var town = Guid.NewGuid();
+        var khorneTown = Guid.NewGuid();
+        var tzeentchTown = Guid.NewGuid();
+        var emptyKhorne = Guid.NewGuid();
+        var result = CampaignPointStandingsRules.Calculate(new CampaignPointScoringState
+        {
+            Players =
+            [
+                new CampaignPointPlayer(khorne, faction, "Khorne"),
+                new CampaignPointPlayer(tzeentch, faction, "Tzeentch"),
+            ],
+            Territories =
+            [
+                new CampaignPointTerritory(khorneTown, faction, town, StructureCondition.Operational, OwnerSubfaction: "Khorne"),
+                new CampaignPointTerritory(tzeentchTown, faction, town, StructureCondition.Operational, OwnerSubfaction: "Tzeentch"),
+                new CampaignPointTerritory(emptyKhorne, faction, town, StructureCondition.Operational, OwnerSubfaction: "Khorne"),
+            ],
+            StructurePoints = new Dictionary<Guid, int> { [town] = 3 },
+            ItemPoints = new Dictionary<Guid, int>(),
+            PublicObjectivePoints = new Dictionary<Guid, int>(),
+            BattleScoring = BattleScoringSetup.Straight(0),
+            RankingObjectivePoints = new GeneralPublicObjectivePoints(0, 0, 0, pointsPerTerritory: 1),
+            Battles = [],
+            Forces =
+            [
+                new CampaignForce(Guid.NewGuid(), khorne, faction, khorneTown, false, subfaction: "Khorne"),
+                new CampaignForce(Guid.NewGuid(), tzeentch, faction, tzeentchTown, false, subfaction: "Tzeentch"),
+            ],
+            VisibleItems = [],
+            Awards = [],
+        });
+
+        var khorneRow = result.Standings.Single(row => row.UserId == khorne);
+        var tzeentchRow = result.Standings.Single(row => row.UserId == tzeentch);
+        Assert.Equal(6, khorneRow.TerritoryAndStructurePoints);
+        Assert.Equal(2, khorneRow.PublicObjectivePoints);
+        Assert.Equal(3, tzeentchRow.TerritoryAndStructurePoints);
+        Assert.Equal(1, tzeentchRow.PublicObjectivePoints);
+        Assert.NotEqual(khorneRow.Total, tzeentchRow.Total);
+    }
+
+    [Fact]
     public void AwardsConfiguredPointsForFinalizedBattleWins()
     {
         var player = Guid.NewGuid();

@@ -7,23 +7,27 @@ import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../cor
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
 import { AppDialogComponent } from '../../shared/dialog/dialog.component';
+import type { CampaignAssetTags } from '../../core/campaigns/campaign-asset-tags';
 import { CampaignService } from '../../core/campaigns/campaign.service';
-import type {
-  CampaignDetail,
-  CampaignMission,
-  CampaignItemObjectiveType,
-  CampaignPresetListItem,
-  CampaignPrivateObjectiveType,
-  CampaignPublicObjectiveType,
-  CampaignStructureType,
-  CampaignTerrainType,
-  CatalogTag,
-  ItemObjectiveChoice,
-  ItemObjectiveChoiceResult,
-  SaveCampaignPayload,
-  SaveMissionPayload,
-  SubfactionAppearance,
-  SubfactionFlagSource,
+import {
+  ITEM_OBJECTIVE_EFFECT_KINDS,
+  type CampaignDetail,
+  type CampaignMission,
+  type CampaignItemObjectiveType,
+  type CampaignPresetListItem,
+  type CampaignPrivateObjectiveType,
+  type CampaignPublicObjectiveType,
+  type CampaignStructureType,
+  type CampaignTerrainType,
+  type CatalogTag,
+  type ItemObjectiveChoice,
+  type ItemObjectiveChoiceResult,
+  type ItemObjectiveEffect,
+  type SaveCampaignPayload,
+  type SaveMissionPayload,
+  type SubfactionAppearance,
+  type SubfactionFlagSource,
+  type SubfactionMovementSpeed,
 } from '../../core/campaigns/campaign.models';
 import { defaultStructureCatalog, defaultTerrainCatalog } from '../../core/campaigns/catalog-defaults';
 import { campaignFromPreset, campaignPresetApplyOptions } from '../../core/campaigns/campaign-presets';
@@ -110,6 +114,8 @@ type NamedGroup = FormGroup<{
   flagSource: FormControl<'inherit' | 'color' | 'image'>;
   clearFlagImage: FormControl<boolean>;
   tintFlagImage: FormControl<boolean>;
+  inheritMovementSpeed: FormControl<boolean>;
+  movementSpeed: FormControl<number>;
 }>;
 type AllyGroupForm = FormGroup<{ id: FormControl<string>; name: FormControl<string>; color: FormControl<string> }>;
 type LinkGroup = FormGroup<{ label: FormControl<string>; url: FormControl<string> }>;
@@ -172,6 +178,7 @@ type FactionGroup = FormGroup<{
   tagIds: FormControl<string[]>;
   subfactionTagIds: FormControl<Record<string, string[]>>;
   tagDraft: FormControl<string>;
+  forceMovementSpeed: FormControl<number>;
 }>;
 type TerrainGroup = FormGroup<{
   id: FormControl<string>;
@@ -215,7 +222,24 @@ type ItemObjectiveGroup = FormGroup<{
   campaignPoints: FormControl<number>;
   flavorText: FormControl<string>;
   specialRuleIds: FormControl<string[]>;
+  effects: FormArray<ItemEffectGroup>;
   choices: FormArray<ItemChoiceGroup>;
+}>;
+type ItemEffectAllianceGroup = FormGroup<{
+  factionId: FormControl<string>;
+  subfaction: FormControl<string>;
+}>;
+type ItemEffectGroup = FormGroup<{
+  id: FormControl<string>;
+  kind: FormControl<string>;
+  amount: FormControl<number>;
+  amountIsPercent: FormControl<boolean>;
+  statusTypeIds: FormControl<string[]>;
+  immuneToAllStatuses: FormControl<boolean>;
+  suspendCurrentAllyGroup: FormControl<boolean>;
+  forcedAllyGroupName: FormControl<string>;
+  alliedFactions: FormArray<ItemEffectAllianceGroup>;
+  customText: FormControl<string>;
 }>;
 type ItemChoiceGroup = FormGroup<{
   id: FormControl<string>;
@@ -413,6 +437,7 @@ export class CampaignSetupPage {
   private mapFile: File | null = null;
   private mapObjectUrl: string | null = null;
   private revision = 0;
+  private assetTags: CampaignAssetTags = {};
   private readonly structureImages = new Map<string, File>();
   private readonly structurePillagedImages = new Map<string, File>();
   private readonly itemObjectiveImages = new Map<string, File>();
@@ -425,6 +450,7 @@ export class CampaignSetupPage {
   private readonly storedFlagImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedMissionFiles = signal<ReadonlySet<string>>(new Set());
   private pendingPresetMapId: string | null = null;
+  private pendingPresetAssetTags: CampaignAssetTags = {};
   private pendingPresetFactionIds = new Map<string, string>();
   private pendingPresetStructureIds = new Map<string, string>();
   private pendingPresetItemIds = new Map<string, string>();
@@ -467,6 +493,7 @@ export class CampaignSetupPage {
   protected readonly forceStatusClearOptions = FORCE_STATUS_CLEAR_OPTIONS;
   protected readonly forceStatusPriorityMin = FORCE_STATUS_PRIORITY_MIN;
   protected readonly forceStatusPriorityMax = FORCE_STATUS_PRIORITY_MAX;
+  protected readonly itemObjectiveEffectKinds = ITEM_OBJECTIVE_EFFECT_KINDS;
   protected readonly forceStatusOccurrencesMin = FORCE_STATUS_OCCURRENCES_MIN;
   protected readonly forceStatusOccurrencesMax = FORCE_STATUS_OCCURRENCES_MAX;
   protected readonly structureSymbols = STRUCTURE_TYPES;
@@ -1044,6 +1071,7 @@ export class CampaignSetupPage {
             .map((name) => ruleIds.get(name))
             .filter((id): id is string => !!id),
           subfactionSpecialRuleIds: this.subfactionRuleIdsFromNames(faction.subfactionSpecialRules, ruleIds),
+          forceMovementSpeed: faction.forceMovementSpeed ?? 1,
         }),
       ),
     );
@@ -1140,6 +1168,7 @@ export class CampaignSetupPage {
             .map((name) => ruleIds.get(name))
             .filter((id): id is string => !!id),
           subfactionSpecialRuleIds: this.subfactionRuleIdsFromNames(faction.subfactionSpecialRules, ruleIds),
+          forceMovementSpeed: faction.forceMovementSpeed ?? 1,
         }),
       ),
     );
@@ -1185,10 +1214,12 @@ export class CampaignSetupPage {
         this.rememberCatalogFilesFrom(preset);
         const detail = await this.campaignsApi.applyPresetMap(this.campaignId()!, presetId, this.revision);
         this.revision = detail.revision;
+        this.assetTags = detail.assetTags;
         this.hasExistingMap.set(detail.hasMap);
-        this.setStoredMapPreview(detail.id, detail.revision, detail.hasMap);
+        this.setStoredMapPreview(detail.id, detail.assetTags, detail.hasMap);
       } else {
         this.pendingPresetMapId = presetId;
+        this.pendingPresetAssetTags = preset.assetTags;
         this.pendingPresetFactionIds.clear();
         this.pendingPresetStructureIds.clear();
         this.pendingPresetItemIds.clear();
@@ -1284,6 +1315,8 @@ export class CampaignSetupPage {
             subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
             tagIds: faction.tagIds ?? [],
             subfactionTagIds: this.subfactionTagIdsFromDetail(faction.subfactionTags),
+            forceMovementSpeed: faction.forceMovementSpeed ?? 1,
+            subfactionMovementSpeeds: faction.subfactionMovementSpeeds,
           },
         );
       }),
@@ -2182,6 +2215,79 @@ export class CampaignSetupPage {
     );
   }
 
+  protected addItemEffect(item: ItemObjectiveGroup): void {
+    if (item.controls.effects.length >= 12) {
+      return;
+    }
+
+    item.controls.effects.push(this.createItemEffectGroup());
+  }
+
+  protected removeItemEffect(item: ItemObjectiveGroup, index: number): void {
+    item.controls.effects.removeAt(index);
+  }
+
+  protected addItemEffectAlliance(effect: ItemEffectGroup): void {
+    effect.controls.alliedFactions.push(this.createItemEffectAllianceGroup());
+  }
+
+  protected removeItemEffectAlliance(effect: ItemEffectGroup, index: number): void {
+    effect.controls.alliedFactions.removeAt(index);
+  }
+
+  protected addItemEffectStatus(effect: ItemEffectGroup, statusId: string): void {
+    if (!statusId || effect.controls.statusTypeIds.value.includes(statusId)) {
+      return;
+    }
+
+    effect.controls.statusTypeIds.setValue([...effect.controls.statusTypeIds.value, statusId]);
+  }
+
+  protected onItemEffectStatusPicked(effect: ItemEffectGroup, event: Event): void {
+    const select = event.target as HTMLSelectElement | null;
+    this.addItemEffectStatus(effect, select?.value ?? '');
+    if (select) {
+      select.value = '';
+    }
+  }
+
+  protected removeItemEffectStatus(effect: ItemEffectGroup, statusId: string): void {
+    effect.controls.statusTypeIds.setValue(effect.controls.statusTypeIds.value.filter((id) => id !== statusId));
+  }
+
+  protected itemEffectNeedsAmount(kind: string): boolean {
+    return kind === 'AddMovementSpeed' || kind === 'ModifySupply' || kind === 'ModifyArmyPoints';
+  }
+
+  protected itemEffectNeedsPercent(kind: string): boolean {
+    return kind === 'ModifyArmyPoints';
+  }
+
+  protected itemEffectNeedsStatuses(kind: string): boolean {
+    return (
+      kind === 'InflictStatusWhileHeld' || kind === 'ImmuneToStatuses' || kind === 'InflictStatusOnSharedTerritory'
+    );
+  }
+
+  protected itemEffectNeedsAlliance(kind: string): boolean {
+    return kind === 'OverrideAlliances';
+  }
+
+  protected itemEffectNeedsCustom(kind: string): boolean {
+    return kind === 'Custom';
+  }
+
+  protected namedForceStatuses(): { id: string; name: string }[] {
+    return this.forceStatuses.controls
+      .map((status) => ({ id: status.controls.id.value, name: status.controls.name.value.trim() }))
+      .filter((status) => status.name.length > 0);
+  }
+
+  protected assignedEffectStatuses(effect: ItemEffectGroup): { id: string; name: string }[] {
+    const ids = new Set(effect.controls.statusTypeIds.value);
+    return this.namedForceStatuses().filter((status) => ids.has(status.id));
+  }
+
   protected addItemChoice(item: ItemObjectiveGroup): void {
     if (item.controls.choices.length >= 10) {
       return;
@@ -2403,7 +2509,7 @@ export class CampaignSetupPage {
       this.mapFileName.set(null);
       this.revokeMapObjectUrl();
       const id = this.campaignId();
-      this.mapPreviewUrl.set(this.hasExistingMap() && id ? this.campaignsApi.mapUrl(id, this.revision) : null);
+      this.mapPreviewUrl.set(this.hasExistingMap() && id ? this.campaignsApi.mapUrl(id, this.assetTags) : null);
       this.successMessage.set(null);
       this.errorMessages.set(['Campaign maps must be 20 MB or smaller.']);
       return;
@@ -2420,7 +2526,7 @@ export class CampaignSetupPage {
     }
 
     const id = this.campaignId();
-    this.mapPreviewUrl.set(this.hasExistingMap() && id ? this.campaignsApi.mapUrl(id, this.revision) : null);
+    this.mapPreviewUrl.set(this.hasExistingMap() && id ? this.campaignsApi.mapUrl(id, this.assetTags) : null);
   }
 
   private revokeMapObjectUrl(): void {
@@ -2449,9 +2555,9 @@ export class CampaignSetupPage {
     }
   }
 
-  private setStoredMapPreview(campaignId: string, revision: number, hasMap: boolean): void {
+  private setStoredMapPreview(campaignId: string, tags: CampaignAssetTags, hasMap: boolean): void {
     this.revokeMapObjectUrl();
-    this.mapPreviewUrl.set(hasMap ? this.campaignsApi.mapUrl(campaignId, revision) : null);
+    this.mapPreviewUrl.set(hasMap ? this.campaignsApi.mapUrl(campaignId, tags) : null);
   }
 
   protected onStructureImageSelected(structureId: string, event: Event): void {
@@ -2535,7 +2641,12 @@ export class CampaignSetupPage {
     if (this.pendingPresetMapId) {
       const presetFactionId = this.pendingPresetFactionIds.get(formFactionId);
       if (presetFactionId) {
-        return this.campaignsApi.presetFlagImageUrl(this.pendingPresetMapId, presetFactionId, subfaction);
+        return this.campaignsApi.presetFlagImageUrl(
+          this.pendingPresetMapId,
+          presetFactionId,
+          subfaction,
+          this.pendingPresetAssetTags,
+        );
       }
     }
 
@@ -2544,7 +2655,7 @@ export class CampaignSetupPage {
       return null;
     }
 
-    return this.campaignsApi.flagImageUrl(campaignId, formFactionId, this.revision, subfaction);
+    return this.campaignsApi.flagImageUrl(campaignId, formFactionId, this.assetTags, subfaction);
   }
 
   protected onMissionFileSelected(missionId: string, event: Event): void {
@@ -2595,7 +2706,12 @@ export class CampaignSetupPage {
     if (this.pendingPresetMapId) {
       const presetId = this.pendingPresetStructureIds.get(structureId);
       if (presetId) {
-        return this.campaignsApi.presetStructureImageUrl(this.pendingPresetMapId, presetId);
+        return this.campaignsApi.presetStructureImageUrl(
+          this.pendingPresetMapId,
+          presetId,
+          false,
+          this.pendingPresetAssetTags,
+        );
       }
     }
 
@@ -2604,7 +2720,7 @@ export class CampaignSetupPage {
       return null;
     }
 
-    return this.campaignsApi.structureImageUrl(campaignId, structureId, this.revision);
+    return this.campaignsApi.structureImageUrl(campaignId, structureId, this.assetTags);
   }
 
   protected structurePillagedImageUrl(structureId: string): string | null {
@@ -2615,7 +2731,12 @@ export class CampaignSetupPage {
     if (this.pendingPresetMapId) {
       const presetId = this.pendingPresetStructureIds.get(structureId);
       if (presetId) {
-        return this.campaignsApi.presetStructureImageUrl(this.pendingPresetMapId, presetId, true);
+        return this.campaignsApi.presetStructureImageUrl(
+          this.pendingPresetMapId,
+          presetId,
+          true,
+          this.pendingPresetAssetTags,
+        );
       }
     }
 
@@ -2624,7 +2745,7 @@ export class CampaignSetupPage {
       return null;
     }
 
-    return this.campaignsApi.structureImageUrl(campaignId, structureId, this.revision, true);
+    return this.campaignsApi.structureImageUrl(campaignId, structureId, this.assetTags, true);
   }
 
   protected hasStoredItemObjectiveImage(itemId: string): boolean {
@@ -2639,7 +2760,11 @@ export class CampaignSetupPage {
     if (this.pendingPresetMapId) {
       const presetId = this.pendingPresetItemIds.get(itemId);
       if (presetId) {
-        return this.campaignsApi.presetItemObjectiveImageUrl(this.pendingPresetMapId, presetId);
+        return this.campaignsApi.presetItemObjectiveImageUrl(
+          this.pendingPresetMapId,
+          presetId,
+          this.pendingPresetAssetTags,
+        );
       }
     }
 
@@ -2648,7 +2773,7 @@ export class CampaignSetupPage {
       return null;
     }
 
-    return this.campaignsApi.itemObjectiveImageUrl(campaignId, itemId, this.revision);
+    return this.campaignsApi.itemObjectiveImageUrl(campaignId, itemId, this.assetTags);
   }
 
   protected pendingItemObjectiveImageName(itemId: string): string | null {
@@ -2834,6 +2959,7 @@ export class CampaignSetupPage {
     if (this.pendingPresetMapId) {
       detail = await this.campaignsApi.applyPresetMap(detail.id, this.pendingPresetMapId, detail.revision);
       this.pendingPresetMapId = null;
+      this.pendingPresetAssetTags = {};
       this.pendingPresetFactionIds.clear();
       this.pendingPresetStructureIds.clear();
       this.pendingPresetItemIds.clear();
@@ -2970,8 +3096,9 @@ export class CampaignSetupPage {
 
   private applyCampaignMetadata(campaign: CampaignDetail): void {
     this.revision = campaign.revision;
+    this.assetTags = campaign.assetTags;
     this.hasExistingMap.set(campaign.hasMap);
-    this.setStoredMapPreview(campaign.id, campaign.revision, campaign.hasMap);
+    this.setStoredMapPreview(campaign.id, campaign.assetTags, campaign.hasMap);
     this.rememberStoredFiles(campaign);
     this.form.patchValue(
       {
@@ -3043,6 +3170,8 @@ export class CampaignSetupPage {
             subfactionSpecialRuleIds: this.subfactionRuleIdsFromDetail(faction.subfactionSpecialRules),
             tagIds: faction.tagIds ?? [],
             subfactionTagIds: this.subfactionTagIdsFromDetail(faction.subfactionTags),
+            forceMovementSpeed: faction.forceMovementSpeed ?? 1,
+            subfactionMovementSpeeds: faction.subfactionMovementSpeeds,
           }),
         ),
       );
@@ -3141,10 +3270,13 @@ export class CampaignSetupPage {
       subfactionSpecialRuleIds?: Record<string, string[]>;
       tagIds?: readonly string[];
       subfactionTagIds?: Record<string, string[]>;
+      forceMovementSpeed?: number;
+      subfactionMovementSpeeds?: readonly SubfactionMovementSpeed[];
     },
   ): FactionGroup {
     const names = subfactions.length > 0 ? subfactions : [''];
     const appearances = options?.appearances ?? [];
+    const factionSpeed = options?.forceMovementSpeed ?? 1;
     return this.formBuilder.nonNullable.group({
       id: [options?.id ?? crypto.randomUUID()],
       name: [name, [required, maxLength(60)]],
@@ -3157,12 +3289,17 @@ export class CampaignSetupPage {
       subfactions: this.formBuilder.array<NamedGroup>(
         names.map((value) => {
           const appearance = appearances.find((item) => item.name.toLowerCase() === value.trim().toLowerCase());
+          const speedOverride = options?.subfactionMovementSpeeds?.find(
+            (item) => item.name.toLowerCase() === value.trim().toLowerCase(),
+          );
           return this.createNamedGroup(value, {
             color: appearance?.color,
             flagSource: appearance?.flagSource,
             tintFlagImage:
               appearance !== undefined && 'tintFlagImage' in appearance && appearance.tintFlagImage === true,
             requiresSubfaction: options?.requiresSubfaction === true,
+            inheritMovementSpeed: speedOverride === undefined,
+            movementSpeed: speedOverride?.speed ?? factionSpeed,
           });
         }),
       ),
@@ -3175,6 +3312,7 @@ export class CampaignSetupPage {
         options?.subfactionTagIds ? { ...options.subfactionTagIds } : {},
       ),
       tagDraft: [''],
+      forceMovementSpeed: [factionSpeed, [minValue(1), maxValue(10)]],
     });
   }
 
@@ -3185,6 +3323,8 @@ export class CampaignSetupPage {
       flagSource?: SubfactionFlagSource;
       tintFlagImage?: boolean;
       requiresSubfaction?: boolean;
+      inheritMovementSpeed?: boolean;
+      movementSpeed?: number;
     },
   ): NamedGroup {
     const required = options?.requiresSubfaction === true;
@@ -3197,6 +3337,8 @@ export class CampaignSetupPage {
       flagSource: this.formBuilder.nonNullable.control<SubfactionFlagSource>(flagSource),
       clearFlagImage: [flagSource !== 'image'],
       tintFlagImage: [flagSource === 'image' && options?.tintFlagImage === true],
+      inheritMovementSpeed: [options?.inheritMovementSpeed !== false],
+      movementSpeed: [options?.movementSpeed ?? 1, [minValue(1), maxValue(10)]],
     });
   }
 
@@ -3549,6 +3691,9 @@ export class CampaignSetupPage {
       campaignPoints: [extra?.campaignPoints ?? 0, [minValue(0), maxValue(999)]],
       flavorText: [extra?.flavorText ?? '', maxLength(2000)],
       specialRuleIds: [extra?.specialRuleIds ? [...extra.specialRuleIds] : []],
+      effects: this.formBuilder.array<ItemEffectGroup>(
+        (extra?.effects ?? []).map((effect) => this.createItemEffectGroup(effect)),
+      ),
       choices: this.formBuilder.array<ItemChoiceGroup>(
         (extra?.choices ?? []).map((choice) => this.createItemChoiceGroup(choice)),
       ),
@@ -3735,6 +3880,33 @@ export class CampaignSetupPage {
     });
   }
 
+  private createItemEffectGroup(effect?: ItemObjectiveEffect): ItemEffectGroup {
+    return this.formBuilder.nonNullable.group({
+      id: [effect?.id ?? this.newId()],
+      kind: [effect?.kind ?? 'AddMovementSpeed'],
+      amount: [effect?.amount ?? 0, [minValue(-999), maxValue(999)]],
+      amountIsPercent: [effect?.amountIsPercent === true],
+      statusTypeIds: [effect?.statusTypeIds ? [...effect.statusTypeIds] : []],
+      immuneToAllStatuses: [effect?.immuneToAllStatuses === true],
+      suspendCurrentAllyGroup: [effect?.suspendCurrentAllyGroup === true],
+      forcedAllyGroupName: [effect?.forcedAllyGroupName ?? ''],
+      alliedFactions: this.formBuilder.array<ItemEffectAllianceGroup>(
+        (effect?.alliedFactions ?? []).map((target) => this.createItemEffectAllianceGroup(target)),
+      ),
+      customText: [effect?.customText ?? '', maxLength(2000)],
+    });
+  }
+
+  private createItemEffectAllianceGroup(target?: {
+    factionId: string;
+    subfaction?: string | null;
+  }): ItemEffectAllianceGroup {
+    return this.formBuilder.nonNullable.group({
+      factionId: [target?.factionId ?? ''],
+      subfaction: [target?.subfaction ?? ''],
+    });
+  }
+
   private createItemChoiceGroup(choice?: ItemObjectiveChoice): ItemChoiceGroup {
     const results = choice?.results ?? [];
     return this.formBuilder.nonNullable.group({
@@ -3893,6 +4065,7 @@ export class CampaignSetupPage {
     this.mapFile = null;
     this.mapFileName.set(null);
     this.pendingPresetMapId = null;
+    this.pendingPresetAssetTags = {};
     this.pendingPresetFactionIds.clear();
     this.pendingPresetStructureIds.clear();
     this.pendingPresetItemIds.clear();
@@ -4507,6 +4680,10 @@ export class CampaignSetupPage {
         subfactionTags: Object.entries(faction.subfactionTagIds)
           .filter(([name]) => faction.subfactions.some((item) => item.name.trim() === name))
           .map(([name, tagIds]) => ({ name, tagIds })),
+        forceMovementSpeed: faction.forceMovementSpeed,
+        subfactionMovementSpeeds: faction.subfactions
+          .filter((item) => item.name.trim().length > 0 && !item.inheritMovementSpeed)
+          .map((item) => ({ name: item.name.trim(), speed: item.movementSpeed })),
       };
     });
     const links = value.links
@@ -4555,6 +4732,23 @@ export class CampaignSetupPage {
         campaignPoints: Number(type.campaignPoints) || 0,
         flavorText: type.flavorText.trim() || null,
         specialRuleIds: type.specialRuleIds,
+        effects: type.effects.map((effect) => ({
+          id: effect.id,
+          kind: effect.kind,
+          amount: effect.amount,
+          amountIsPercent: effect.amountIsPercent,
+          statusTypeIds: effect.statusTypeIds,
+          immuneToAllStatuses: effect.immuneToAllStatuses,
+          suspendCurrentAllyGroup: effect.suspendCurrentAllyGroup,
+          forcedAllyGroupName: effect.forcedAllyGroupName.trim() || null,
+          alliedFactions: effect.alliedFactions
+            .filter((target) => target.factionId.trim().length > 0)
+            .map((target) => ({
+              factionId: target.factionId,
+              subfaction: target.subfaction.trim() || null,
+            })),
+          customText: effect.customText.trim() || null,
+        })),
         choices: type.choices
           .filter((choice) => choice.name.trim().length > 0)
           .map((choice) => ({

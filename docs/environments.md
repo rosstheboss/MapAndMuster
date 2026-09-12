@@ -6,7 +6,7 @@ hierarchical keys use a double underscore, for example `ConnectionStrings__Campa
 ## Environments
 
 | Name | Typical use |
-|---|---|
+| --- | --- |
 | `Development` | Local `dotnet run` and Docker Compose PostgreSQL/Mailpit |
 | `Testing` | Integration tests |
 | `Staging` | Isolated cloud environment with its own database and secrets |
@@ -21,7 +21,7 @@ Production must not use that label. See `docs/staging.md`.
 ## Backend variables
 
 | Variable | Purpose |
-|---|---|
+| --- | --- |
 | `ASPNETCORE_ENVIRONMENT` | Host environment name |
 | `PORT` | Listen port in containers (Render). Defaults to `8080` |
 | `ConnectionStrings__Campaign` | PostgreSQL connection string. Render injects a `postgres://` URI; the API converts it to Npgsql keyword form and sets `GSS Encryption Mode=Disable`. Local and CI use `Host=...;Database=...`. |

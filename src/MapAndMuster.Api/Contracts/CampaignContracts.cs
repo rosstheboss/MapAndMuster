@@ -252,6 +252,24 @@ public sealed class FactionRequest
 
     /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
     public IReadOnlyList<SubfactionAppearanceRequest>? SubfactionAppearances { get; init; }
+
+    /// <summary>Gets how many adjacent territories this faction may Move in one action.</summary>
+    public int? ForceMovementSpeed { get; init; }
+
+    /// <summary>Gets movement-speed overrides for named subfactions.</summary>
+    public IReadOnlyList<SubfactionMovementSpeedRequest>? SubfactionMovementSpeeds { get; init; }
+}
+
+/// <summary>
+/// Movement-speed override for one named subfaction in a save request.
+/// </summary>
+public sealed class SubfactionMovementSpeedRequest
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the movement speed.</summary>
+    public int? Speed { get; init; }
 }
 
 /// <summary>
@@ -456,6 +474,57 @@ public sealed class ItemObjectiveTypeRequest
 
     /// <summary>Gets special-rule identifiers assigned to this item.</summary>
     public IReadOnlyList<Guid>? SpecialRuleIds { get; init; }
+
+    /// <summary>Gets parameterized effects granted while a force holds this item.</summary>
+    public IReadOnlyList<ItemObjectiveEffectRequest>? Effects { get; init; }
+}
+
+/// <summary>
+/// A parameterized item-objective effect in a save request.
+/// </summary>
+public sealed class ItemObjectiveEffectRequest
+{
+    /// <summary>Gets the client-assigned identifier, when present.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Gets the effect kind name.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the signed amount for speed, supply, or army-point changes.</summary>
+    public int? Amount { get; init; }
+
+    /// <summary>Gets whether the amount is a percent of the round army-point cap.</summary>
+    public bool AmountIsPercent { get; init; }
+
+    /// <summary>Gets catalog status identifiers for inflict or immunity effects.</summary>
+    public IReadOnlyList<Guid>? StatusTypeIds { get; init; }
+
+    /// <summary>Gets whether the holder is immune to every catalog status.</summary>
+    public bool ImmuneToAllStatuses { get; init; }
+
+    /// <summary>Gets whether the holder's campaign ally group is ignored while the item is held.</summary>
+    public bool SuspendCurrentAllyGroup { get; init; }
+
+    /// <summary>Gets an ally-group name the holder is treated as belonging to.</summary>
+    public string? ForcedAllyGroupName { get; init; }
+
+    /// <summary>Gets extra factions treated as allied while the item is held.</summary>
+    public IReadOnlyList<ItemObjectiveAllianceTargetRequest>? AlliedFactions { get; init; }
+
+    /// <summary>Gets display-only reminder text for a custom battle effect.</summary>
+    public string? CustomText { get; init; }
+}
+
+/// <summary>
+/// An alliance target on an item-objective effect in a save request.
+/// </summary>
+public sealed class ItemObjectiveAllianceTargetRequest
+{
+    /// <summary>Gets the faction treated as allied.</summary>
+    public Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction scope, when set.</summary>
+    public string? Subfaction { get; init; }
 }
 
 /// <summary>
@@ -909,6 +978,17 @@ public sealed class CampaignDetailResponse
 
     /// <summary>Gets whether a map image is stored.</summary>
     public required bool HasMap { get; init; }
+
+    /// <summary>
+    /// Gets opaque cache tags for the campaign's stored files, keyed by asset key.
+    /// </summary>
+    /// <remarks>
+    /// Keys are <c>map</c>, <c>structure:{id}</c>, <c>structure-pillaged:{id}</c>,
+    /// <c>item:{id}</c>, <c>faction:{id}</c>, and <c>faction:{id}:{subfaction}</c>. Clients put
+    /// the tag in the asset URL so the URL changes only when the stored file changes. Entries
+    /// whose file is absent are omitted.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> AssetTags { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>Gets whether the current user can manage the campaign.</summary>
     public required bool CanManage { get; init; }
@@ -1410,6 +1490,24 @@ public sealed class FactionResponse
 
     /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
     public IReadOnlyList<SubfactionAppearanceResponse> SubfactionAppearances { get; init; } = [];
+
+    /// <summary>Gets how many adjacent territories this faction may Move in one action.</summary>
+    public int ForceMovementSpeed { get; init; } = 1;
+
+    /// <summary>Gets movement-speed overrides for named subfactions.</summary>
+    public IReadOnlyList<SubfactionMovementSpeedResponse> SubfactionMovementSpeeds { get; init; } = [];
+}
+
+/// <summary>
+/// Movement-speed override for one named subfaction.
+/// </summary>
+public sealed class SubfactionMovementSpeedResponse
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the movement speed.</summary>
+    public required int Speed { get; init; }
 }
 
 /// <summary>
@@ -1614,6 +1712,57 @@ public sealed class ItemObjectiveTypeResponse
 
     /// <summary>Gets special-rule identifiers assigned to this item.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+
+    /// <summary>Gets parameterized effects granted while a force holds this item.</summary>
+    public IReadOnlyList<ItemObjectiveEffectResponse> Effects { get; init; } = [];
+}
+
+/// <summary>
+/// A parameterized item-objective effect in a campaign response.
+/// </summary>
+public sealed class ItemObjectiveEffectResponse
+{
+    /// <summary>Gets the effect identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the effect kind name.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the signed amount for speed, supply, or army-point changes.</summary>
+    public int Amount { get; init; }
+
+    /// <summary>Gets whether the amount is a percent of the round army-point cap.</summary>
+    public bool AmountIsPercent { get; init; }
+
+    /// <summary>Gets catalog status identifiers for inflict or immunity effects.</summary>
+    public IReadOnlyList<Guid> StatusTypeIds { get; init; } = [];
+
+    /// <summary>Gets whether the holder is immune to every catalog status.</summary>
+    public bool ImmuneToAllStatuses { get; init; }
+
+    /// <summary>Gets whether the holder's campaign ally group is ignored while the item is held.</summary>
+    public bool SuspendCurrentAllyGroup { get; init; }
+
+    /// <summary>Gets an ally-group name the holder is treated as belonging to.</summary>
+    public string? ForcedAllyGroupName { get; init; }
+
+    /// <summary>Gets extra factions treated as allied while the item is held.</summary>
+    public IReadOnlyList<ItemObjectiveAllianceTargetResponse> AlliedFactions { get; init; } = [];
+
+    /// <summary>Gets display-only reminder text for a custom battle effect.</summary>
+    public string? CustomText { get; init; }
+}
+
+/// <summary>
+/// An alliance target on an item-objective effect.
+/// </summary>
+public sealed class ItemObjectiveAllianceTargetResponse
+{
+    /// <summary>Gets the faction treated as allied.</summary>
+    public required Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction scope, when set.</summary>
+    public string? Subfaction { get; init; }
 }
 
 /// <summary>
@@ -2351,6 +2500,7 @@ public static class CampaignResponses
             Region = detail.Region,
             Country = detail.Country,
             HasMap = detail.HasMap,
+            AssetTags = detail.AssetTags,
             CanManage = detail.CanManage,
             IsParticipant = detail.IsParticipant,
             Revision = detail.Revision,
@@ -2396,6 +2546,15 @@ public static class CampaignResponses
                             FlagSource = item.FlagSource,
                             HasFlagImage = item.HasFlagImage,
                             TintFlagImage = item.TintFlagImage,
+                        }),
+                    ],
+                    ForceMovementSpeed = faction.ForceMovementSpeed,
+                    SubfactionMovementSpeeds =
+                    [
+                        .. faction.SubfactionMovementSpeeds.Select(static item => new SubfactionMovementSpeedResponse
+                        {
+                            Name = item.Name,
+                            Speed = item.Speed,
                         }),
                     ],
                 }),
@@ -2448,6 +2607,29 @@ public static class CampaignResponses
                     CampaignPoints = type.CampaignPoints,
                     FlavorText = type.FlavorText,
                     SpecialRuleIds = type.SpecialRuleIds,
+                    Effects =
+                    [
+                        .. type.Effects.Select(static effect => new ItemObjectiveEffectResponse
+                        {
+                            Id = effect.Id,
+                            Kind = effect.Kind,
+                            Amount = effect.Amount,
+                            AmountIsPercent = effect.AmountIsPercent,
+                            StatusTypeIds = effect.StatusTypeIds,
+                            ImmuneToAllStatuses = effect.ImmuneToAllStatuses,
+                            SuspendCurrentAllyGroup = effect.SuspendCurrentAllyGroup,
+                            ForcedAllyGroupName = effect.ForcedAllyGroupName,
+                            AlliedFactions =
+                            [
+                                .. effect.AlliedFactions.Select(static target => new ItemObjectiveAllianceTargetResponse
+                                {
+                                    FactionId = target.FactionId,
+                                    Subfaction = target.Subfaction,
+                                }),
+                            ],
+                            CustomText = effect.CustomText,
+                        }),
+                    ],
                     Choices =
                     [
                         .. type.Choices.Select(static choice => new ItemObjectiveChoiceResponse
@@ -2936,6 +3118,14 @@ public static class CampaignResponses
                         TintFlagImage = item.TintFlagImage,
                     })
                     .ToArray(),
+                ForceMovementSpeed = faction.ForceMovementSpeed,
+                SubfactionMovementSpeeds = faction.SubfactionMovementSpeeds?
+                    .Select(static item => new SubfactionMovementSpeedInput
+                    {
+                        Name = item.Name,
+                        Speed = item.Speed,
+                    })
+                    .ToArray(),
             }),
         ];
     }
@@ -3021,6 +3211,27 @@ public static class CampaignResponses
                 CampaignPoints = type.CampaignPoints,
                 FlavorText = type.FlavorText,
                 SpecialRuleIds = type.SpecialRuleIds,
+                Effects = type.Effects?
+                    .Select(static effect => new ItemObjectiveEffectInput
+                    {
+                        Id = effect.Id,
+                        Kind = effect.Kind,
+                        Amount = effect.Amount,
+                        AmountIsPercent = effect.AmountIsPercent,
+                        StatusTypeIds = effect.StatusTypeIds,
+                        ImmuneToAllStatuses = effect.ImmuneToAllStatuses,
+                        SuspendCurrentAllyGroup = effect.SuspendCurrentAllyGroup,
+                        ForcedAllyGroupName = effect.ForcedAllyGroupName,
+                        AlliedFactions = effect.AlliedFactions?
+                            .Select(static target => new ItemObjectiveAllianceTargetInput
+                            {
+                                FactionId = target.FactionId,
+                                Subfaction = target.Subfaction,
+                            })
+                            .ToArray(),
+                        CustomText = effect.CustomText,
+                    })
+                    .ToArray(),
                 Choices = type.Choices?
                     .Select(static choice => new ItemObjectiveChoiceInput
                     {

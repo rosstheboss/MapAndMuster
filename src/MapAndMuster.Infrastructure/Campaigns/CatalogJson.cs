@@ -38,7 +38,9 @@ internal static class CatalogJson
         IReadOnlyList<StoredCatalogTag>? factionTags = null,
         IReadOnlyList<StoredCatalogTag>? missionTags = null,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? factionTagIds = null,
-        IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionTags>>? subfactionTagIds = null)
+        IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionTags>>? subfactionTagIds = null,
+        IReadOnlyDictionary<Guid, int>? factionMovementSpeeds = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionMovementSpeed>>? subfactionMovementSpeeds = null)
     {
         ArgumentNullException.ThrowIfNull(terrainTypes);
         ArgumentNullException.ThrowIfNull(structureTypes);
@@ -54,23 +56,11 @@ internal static class CatalogJson
                 SpecialRules = [.. (specialRules ?? []).Select(ToDocument)],
                 ForceStatuses = [.. (forceStatuses ?? []).Select(ToDocument)],
                 PrivateObjectiveTypes = [.. (privateObjectiveTypes ?? []).Select(ToDocument)],
-                FactionSpecialRules =
-                [
-                    .. (factionSpecialRuleIds ?? new Dictionary<Guid, IReadOnlyList<Guid>>()).Select(static pair =>
-                        new FactionSpecialRulesDocument
-                        {
-                            FactionId = pair.Key,
-                            SpecialRuleIds = [.. pair.Value],
-                        }),
-                    .. (subfactionSpecialRules ?? new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>())
-                        .SelectMany(static pair => pair.Value.Select(item =>
-                            new FactionSpecialRulesDocument
-                            {
-                                FactionId = pair.Key,
-                                SubfactionName = item.Name,
-                                SpecialRuleIds = [.. item.SpecialRuleIds],
-                            })),
-                ],
+                FactionSpecialRules = MergeFactionSpecialRules(
+                    factionSpecialRuleIds,
+                    subfactionSpecialRules,
+                    factionMovementSpeeds,
+                    subfactionMovementSpeeds),
                 PointsPerBattleWon = scoring.PointsPerWin,
                 BattleScoring = ToDocument(scoring),
                 MostTerritoriesCampaignPoints = ranking.MostTerritories,
@@ -138,7 +128,9 @@ internal static class CatalogJson
             campaign.FactionTags,
             campaign.MissionTags,
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.TagIds),
-            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionTags));
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionTags),
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.ForceMovementSpeed),
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionMovementSpeeds));
     }
 
     public static (
@@ -280,6 +272,100 @@ internal static class CatalogJson
         IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionTags>>) EmptyCatalog()
     {
         return ([], [], [], [], BattleScoringSetup.Straight(0), GeneralPublicObjectivePoints.None, [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>(), [], HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue, HuntInEstaliaDefaults.SplitForceSupplyPenaltyIsPercent, [], [], [], [], [], [], [], new Dictionary<Guid, IReadOnlyList<Guid>>(), new Dictionary<Guid, IReadOnlyList<StoredSubfactionTags>>());
+    }
+
+    public static (
+        IReadOnlyDictionary<Guid, int> FactionSpeeds,
+        IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionMovementSpeed>> SubfactionSpeeds)
+        DeserializeMovementSpeeds(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return (new Dictionary<Guid, int>(), new Dictionary<Guid, IReadOnlyList<StoredSubfactionMovementSpeed>>());
+        }
+
+        var document = JsonSerializer.Deserialize<CatalogDocument>(json, Options);
+        var rows = document?.FactionSpecialRules ?? [];
+        var factionSpeeds = rows
+            .Where(static item => string.IsNullOrWhiteSpace(item.SubfactionName) && item.ForceMovementSpeed is not null)
+            .GroupBy(static item => item.FactionId)
+            .ToDictionary(
+                static group => group.Key,
+                static group => Math.Clamp(group.Last().ForceMovementSpeed ?? ForceMovementSpeeds.Default, ForceMovementSpeeds.Min, ForceMovementSpeeds.Max));
+        var subfactionSpeeds = rows
+            .Where(static item => !string.IsNullOrWhiteSpace(item.SubfactionName) && item.ForceMovementSpeed is not null)
+            .GroupBy(static item => item.FactionId)
+            .ToDictionary(
+                static group => group.Key,
+                static group => (IReadOnlyList<StoredSubfactionMovementSpeed>)group
+                    .Select(static item => new StoredSubfactionMovementSpeed
+                    {
+                        Name = item.SubfactionName!,
+                        Speed = Math.Clamp(item.ForceMovementSpeed ?? ForceMovementSpeeds.Default, ForceMovementSpeeds.Min, ForceMovementSpeeds.Max),
+                    })
+                    .ToArray());
+        return (factionSpeeds, subfactionSpeeds);
+    }
+
+    private static List<FactionSpecialRulesDocument> MergeFactionSpecialRules(
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? factionSpecialRuleIds,
+        IReadOnlyDictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>? subfactionSpecialRules,
+        IReadOnlyDictionary<Guid, int>? factionMovementSpeeds,
+        IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionMovementSpeed>>? subfactionMovementSpeeds)
+    {
+        var byKey = new Dictionary<(Guid FactionId, string Subfaction), FactionSpecialRulesDocument>();
+        void Upsert(Guid factionId, string? subfaction, IReadOnlyList<Guid>? ruleIds, int? speed)
+        {
+            var key = (factionId, subfaction ?? "");
+            if (!byKey.TryGetValue(key, out var row))
+            {
+                row = new FactionSpecialRulesDocument
+                {
+                    FactionId = factionId,
+                    SubfactionName = string.IsNullOrWhiteSpace(subfaction) ? null : subfaction,
+                    SpecialRuleIds = [],
+                };
+                byKey[key] = row;
+            }
+
+            if (ruleIds is { Count: > 0 })
+            {
+                row.SpecialRuleIds = [.. ruleIds];
+            }
+
+            if (speed is not null)
+            {
+                row.ForceMovementSpeed = speed;
+            }
+        }
+
+        foreach (var pair in factionSpecialRuleIds ?? new Dictionary<Guid, IReadOnlyList<Guid>>())
+        {
+            Upsert(pair.Key, null, pair.Value, null);
+        }
+
+        foreach (var pair in subfactionSpecialRules ?? new Dictionary<Guid, IReadOnlyList<SubfactionSpecialRulesDetail>>())
+        {
+            foreach (var item in pair.Value)
+            {
+                Upsert(pair.Key, item.Name, item.SpecialRuleIds, null);
+            }
+        }
+
+        foreach (var pair in factionMovementSpeeds ?? new Dictionary<Guid, int>())
+        {
+            Upsert(pair.Key, null, null, pair.Value);
+        }
+
+        foreach (var pair in subfactionMovementSpeeds ?? new Dictionary<Guid, IReadOnlyList<StoredSubfactionMovementSpeed>>())
+        {
+            foreach (var item in pair.Value)
+            {
+                Upsert(pair.Key, item.Name, null, item.Speed);
+            }
+        }
+
+        return [.. byKey.Values];
     }
 
     private static List<StoredCatalogTag> MigrateWaterTags(
@@ -534,6 +620,31 @@ internal static class CatalogJson
             FlavorText = type.FlavorText,
             Choices = [.. type.Choices.Select(ToDocument)],
             SpecialRuleIds = [.. type.SpecialRuleIds],
+            Effects = [.. type.Effects.Select(ToDocument)],
+        };
+    }
+
+    private static ItemEffectDocument ToDocument(StoredItemObjectiveEffect effect)
+    {
+        return new ItemEffectDocument
+        {
+            Id = effect.Id,
+            Kind = effect.Kind,
+            Amount = effect.Amount,
+            AmountIsPercent = effect.AmountIsPercent,
+            StatusTypeIds = [.. effect.StatusTypeIds],
+            ImmuneToAllStatuses = effect.ImmuneToAllStatuses,
+            SuspendCurrentAllyGroup = effect.SuspendCurrentAllyGroup,
+            ForcedAllyGroupName = effect.ForcedAllyGroupName,
+            AlliedFactions =
+            [
+                .. effect.AlliedFactions.Select(static target => new ItemAllianceTargetDocument
+                {
+                    FactionId = target.FactionId,
+                    Subfaction = target.Subfaction,
+                }),
+            ],
+            CustomText = effect.CustomText,
         };
     }
 
@@ -721,6 +832,31 @@ internal static class CatalogJson
             FlavorText = type.FlavorText,
             Choices = [.. (type.Choices ?? []).Select(FromDocument)],
             SpecialRuleIds = type.SpecialRuleIds ?? [],
+            Effects = [.. (type.Effects ?? []).Select(FromDocument)],
+        };
+    }
+
+    private static StoredItemObjectiveEffect FromDocument(ItemEffectDocument effect)
+    {
+        return new StoredItemObjectiveEffect
+        {
+            Id = effect.Id == Guid.Empty ? Guid.NewGuid() : effect.Id,
+            Kind = string.IsNullOrWhiteSpace(effect.Kind) ? nameof(ItemObjectiveEffectKind.Custom) : effect.Kind,
+            Amount = effect.Amount,
+            AmountIsPercent = effect.AmountIsPercent,
+            StatusTypeIds = effect.StatusTypeIds ?? [],
+            ImmuneToAllStatuses = effect.ImmuneToAllStatuses,
+            SuspendCurrentAllyGroup = effect.SuspendCurrentAllyGroup,
+            ForcedAllyGroupName = effect.ForcedAllyGroupName,
+            AlliedFactions =
+            [
+                .. (effect.AlliedFactions ?? []).Select(static target => new StoredItemObjectiveAllianceTarget
+                {
+                    FactionId = target.FactionId,
+                    Subfaction = target.Subfaction,
+                }),
+            ],
+            CustomText = effect.CustomText,
         };
     }
 
@@ -1245,6 +1381,38 @@ internal static class CatalogJson
         public List<ItemChoiceDocument>? Choices { get; set; }
 
         public List<Guid>? SpecialRuleIds { get; set; }
+
+        public List<ItemEffectDocument>? Effects { get; set; }
+    }
+
+    private sealed class ItemEffectDocument
+    {
+        public Guid Id { get; set; }
+
+        public string Kind { get; set; } = string.Empty;
+
+        public int Amount { get; set; }
+
+        public bool AmountIsPercent { get; set; }
+
+        public List<Guid>? StatusTypeIds { get; set; }
+
+        public bool ImmuneToAllStatuses { get; set; }
+
+        public bool SuspendCurrentAllyGroup { get; set; }
+
+        public string? ForcedAllyGroupName { get; set; }
+
+        public List<ItemAllianceTargetDocument>? AlliedFactions { get; set; }
+
+        public string? CustomText { get; set; }
+    }
+
+    private sealed class ItemAllianceTargetDocument
+    {
+        public Guid FactionId { get; set; }
+
+        public string? Subfaction { get; set; }
     }
 
     private sealed class PublicObjectiveDocument
@@ -1476,6 +1644,8 @@ internal static class CatalogJson
         public string? SubfactionName { get; set; }
 
         public List<Guid> SpecialRuleIds { get; set; } = [];
+
+        public int? ForceMovementSpeed { get; set; }
     }
 
     private sealed class CatalogTagDocument

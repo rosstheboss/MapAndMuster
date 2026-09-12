@@ -9,7 +9,10 @@ public static class SpecialRuleEffectKeys
     /// <summary>Beastmen Ambushers gain +1 to Ambushing rolls. Display-only tabletop reminder.</summary>
     public const string ExpertAmbushers = "ExpertAmbushers";
 
-    /// <summary>Two-territory Move with interception, no claim on the first hop, and restricted rejoins.</summary>
+    /// <summary>
+    /// Legacy Hunt key kept so existing campaigns remain valid. Multi-hop Move is faction speed;
+    /// this key is no longer enforced.
+    /// </summary>
     public const string Crusaders = "Crusaders";
 
     /// <summary>No dangerous-terrain rolls on water features for named Bretonnian troops. Battle reminder.</summary>
@@ -75,13 +78,16 @@ public static class SpecialRuleEffectKeys
     /// <summary>No spawn; randomize into a town or city and skip spawn battles.</summary>
     public const string UndergroundNetwork = "UndergroundNetwork";
 
-    /// <summary>Must Move toward a revealed relic until it is captured or battle is forced.</summary>
+    /// <summary>
+    /// +1 Move speed while a revealed relic exists and no force of this faction holds an item;
+    /// also refuses Shaken, Exhausted, Diseased, Well Rested, and Confident.
+    /// </summary>
     public const string CalledByTheRelic = "CalledByTheRelic";
 
     /// <summary>+2 to one casting or dispelling roll while holding a relic. Display-only tabletop reminder.</summary>
     public const string RelicOfAPastAge = "RelicOfAPastAge";
 
-    /// <summary>Never Shaken, Diseased, Well Rested, or Confident.</summary>
+    /// <summary>Never Shaken, Exhausted, Diseased, Well Rested, or Confident.</summary>
     public const string Undead = "Undead";
 
     /// <summary>+D3 Arise wounds in towns, castles, or cities. Battle reminder when those structures apply.</summary>

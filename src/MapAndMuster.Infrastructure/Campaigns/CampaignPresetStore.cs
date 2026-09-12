@@ -50,6 +50,21 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
     }
 
     /// <inheritdoc />
+    public async Task<StoredCampaign?> FindByNameAsync(string name, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var normalized = CampaignSetupRules.UniqueNameKey(CampaignSetupRules.CollapseName(name));
+        var record = await _dbContext.CampaignPresets
+            .AsNoTracking()
+            .Where(preset => preset.NormalizedName == normalized)
+            .OrderByDescending(preset => preset.UpdatedUtc)
+            .ThenByDescending(preset => preset.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return record is null ? null : ToStored(record);
+    }
+
+    /// <inheritdoc />
     public async Task<CampaignPresetListItem> UpsertFromCampaignAsync(
         string name,
         StoredCampaign campaign,
@@ -62,11 +77,15 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
 
         var displayName = CampaignSetupRules.CollapseName(name);
         var normalized = CampaignSetupRules.UniqueNameKey(displayName);
-        var matches = (await _dbContext.CampaignPresets.ToListAsync(cancellationToken).ConfigureAwait(false))
-            .Where(preset => CampaignSetupRules.UniqueNameKey(preset.Name) == normalized)
+
+        // Match on the stored normalized name so the query uses its index. Loading every preset
+        // to normalize in memory made a save cost grow with the size of the whole library.
+        var matches = await _dbContext.CampaignPresets
+            .Where(preset => preset.NormalizedName == normalized)
             .OrderByDescending(preset => preset.UpdatedUtc)
             .ThenByDescending(preset => preset.Id)
-            .ToList();
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
         var record = matches.Count > 0 ? matches[0] : null;
         if (matches.Count > 1)
         {
@@ -124,6 +143,7 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
     private static StoredCampaign ToStored(CampaignPresetRecord record)
     {
         var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions, TerrainTags, StructureTags, FactionTags, MissionTags, FactionTagIds, SubfactionTagIds) = CatalogJson.Deserialize(record.CatalogJson);
+        var (FactionSpeeds, SubfactionSpeeds) = CatalogJson.DeserializeMovementSpeeds(record.CatalogJson);
         var settings = CampaignPresetSettingsJson.Deserialize(record.SettingsJson);
         var created = record.CreatedUtc;
         return new StoredCampaign
@@ -162,6 +182,12 @@ public sealed class CampaignPresetStore : ICampaignPresetStore
                         : SubfactionSpecialRuleIds.GetValueOrDefault(faction.Id) ?? [],
                     TagIds = FactionTagIds.GetValueOrDefault(faction.Id) ?? [],
                     SubfactionTags = SubfactionTagIds.GetValueOrDefault(faction.Id) ?? [],
+                    ForceMovementSpeed = faction.ForceMovementSpeed > 0
+                        ? faction.ForceMovementSpeed
+                        : FactionSpeeds.GetValueOrDefault(faction.Id, 1),
+                    SubfactionMovementSpeeds = faction.SubfactionMovementSpeeds.Count > 0
+                        ? faction.SubfactionMovementSpeeds
+                        : SubfactionSpeeds.GetValueOrDefault(faction.Id) ?? [],
                 }),
             ],
             AllyGroups = settings.AllyGroups,

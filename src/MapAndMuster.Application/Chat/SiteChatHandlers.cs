@@ -49,7 +49,7 @@ public sealed class GetSiteChatHandler
     {
         var members = await SiteChatMembers.LoadAsync(_accounts, cancellationToken).ConfigureAwait(false);
         var messages = await _chat.ListRecentAsync(cancellationToken).ConfigureAwait(false);
-        var blocks = await _chat.ListBlocksAsync(cancellationToken).ConfigureAwait(false);
+        var blocks = await _chat.ListBlocksForUserAsync(account.Id, cancellationToken).ConfigureAwait(false);
         var preferred = ChatLanguages.TryParse(account.PreferredChatLanguage, out _, out var language)
             ? language.ToString()
             : ChatLanguages.Default.ToString();
@@ -128,7 +128,7 @@ public sealed class PostSiteChatHandler
         }
 
         await _chat.AddAsync(posted, cancellationToken).ConfigureAwait(false);
-        var blocks = await _chat.ListBlocksAsync(cancellationToken).ConfigureAwait(false);
+        var blocks = await _chat.ListBlocksForUserAsync(posted.AuthorUserId, cancellationToken).ConfigureAwait(false);
         await _notifications.PublishAsync(posted, members, blocks, cancellationToken).ConfigureAwait(false);
         return OperationResults.Success(await _board.LoadBoardAsync(account, command.IsAdministrator, cancellationToken).ConfigureAwait(false));
     }

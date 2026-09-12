@@ -15,6 +15,7 @@ Required early suites:
 
 - Required-participant calculation and final-commit race behavior.
 - Ending a campaign against a stale client revision and retrying when another write moves the revision.
+  Deleting a completed campaign is limited to managers and administrators; open campaigns are rejected.
 - Commit, uncommit only while the action window is open, deadline auto-submit, and default Hold.
   Players whose forces are all in battle (or otherwise owe no order) appear as committed on the
   action roster; Actions names the locked battle's territory and opponents.
@@ -34,7 +35,8 @@ Required early suites:
   assignment (unique draws per holder-kind pool, then reshuffled duplicates until every holder in a
   non-empty pool has an independent assignment).
 - Relic discovery, transfer, drop, choice resolution, destroy-and-replace, tie-breaking, and secrecy.
-- Campaign-point components and graph objectives.
+- Campaign-point components and graph objectives. Map holdings are attributed to individual
+  players on a shared faction, not copied from a faction-wide total onto every co-faction player.
 - Public-objective award/revoke facts and hidden item-objective standings secrecy.
 - Battle-submission equivalence, single submission, disagreement, and GM resolution.
 - Campaign-preset save copies map image, overlay, and catalog files; apply remaps overlay catalog
@@ -70,6 +72,7 @@ Cover:
 - Manager add and kick of players (including private campaigns without the join password), promoting a
   player to campaign manager, adding a manager-only member, staff faction assignment, ending a
   campaign while keeping its final state (including a stale client revision after play has advanced),
+  deleting a completed campaign (and rejecting delete while the campaign is still open),
   GET play returning no content before the start instant,
   and administrator impersonation of seeded test accounts.
 - Administrator save-as-preset copies the map file, overlay graph, and uploaded catalog logos;
@@ -85,7 +88,7 @@ Use Angular's Vitest integration.
 
 Cover components/services for:
 
-- Order drafting from the map menu or force-panel **Save draft**, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed. The Actions Commitments player list starts collapsed and keeps the "X of Y players committed. Waiting on …" summary under the Commitments heading.
+- Order drafting from the map menu or force-panel **Save draft**, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed. Confirmation alertdialogs trap Tab, confirm on Enter, and cancel on Escape. The Actions Commitments player list starts collapsed and keeps the "X of Y players committed. Waiting on …" summary under the Commitments heading.
 - Campaign-page status bar (round/phase, throttled countdown live region, viewer commit chip, compact commitment count, Go to your orders). While a campaign is running, Actions, Chat, and Standings are open by default; other sections stay collapsed and the last set is stored in a per-campaign cookie. Staff tools are under collapsed Manage campaign. Battle, campaign, phase, and force-status enums use display labels. A hidden-relic notice and each battle reminder render once. The campaign log summary shows unread mention and private counts from `GET /log` without marking the log read on load. Log timestamps sit after the entry text (relative when under 24 hours).
 - Create/edit campaign starts with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded; optional sections start collapsed. The sticky toolbar shows remaining required sections, nested mission groups have unique names, and Edit map is hidden after a campaign starts. Force-status cancel-out is a dropdown that adds named statuses to a removable list. Enable and clear each have a consecutive-occurrence integer from 1 to 10, a location filter (any, type, or tag), and Add that does not hide a trigger already in the list. Each catalog section has a tag subpanel whose name field adds on Enter or comma without saving, and item chip comboboxes that suggest unassigned defined tags.
 - Countdown display without treating the browser clock as authoritative.
@@ -95,7 +98,15 @@ Cover components/services for:
   dimming, black connection arrows without size or outline changes, spawn ownership copy, required-
   subfaction spawn labels, disabled no-fixed-spawn factions, save-status check and X, and metadata forms.
   Map pinch-zoom and two-finger pan, full-screen toggle (M), map-image loading ellipsis, and force
-  markers staying inside their territory are covered in map-view tests. Force dots stay off flags and
+  markers staying inside their territory are covered in map-view tests. Own-force pins show a
+  green-and-white check emblem half the pin's size, centered on the circular pin's top-right
+  edge so half of it overlaps the pin, when that force has a saved draft or committed order, with hover and
+  accessible text naming the action and draft versus committed. Cycle forces sits next to Full
+  screen, selects that force's territory, and zooms to the force, its territory, and reachable Move
+  destinations, or Fit when that frame cannot be computed. Cycle forces uses Y. The same Commit or
+  Uncommit control as Actions sits between Cycle forces and Show names, including last-commit
+  confirmation and a disabled Commit when drafts are incomplete. C commits when that control is
+  enabled, or uncommits when Uncommit is shown. Force dots stay off flags and
   structure logos, shrinking no more than 50%. Subfaction colors, color flags, and uploaded logos follow
   the same uniqueness and tint rules as faction flags.
   Full-screen map mode keeps the image inside the viewport: a fitted map recenters after the panel
@@ -151,7 +162,8 @@ Cover components/services for:
   notices per page, Needs your attention from the campaign list, empty join/create actions, and
   two news articles per page.
 - Campaign cards show status, round, countdown, player count, role, remaining setup, commit
-  state, and Open while collapsed. Empty Your campaigns offers Join campaign. All campaigns
+  state, and Open while collapsed. Duplicate campaign and deleting a completed campaign both
+  require a confirmation dialog. Empty Your campaigns offers Join campaign. All campaigns
   shows collapsed Site chat above the campaign list.
 - API error and concurrency-conflict recovery.
 

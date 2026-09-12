@@ -183,12 +183,14 @@ User-created special rules omit an effect key and stay display-only: they do not
 do not change map resolution. The manager writes the description for a custom rule. Daemons of
 Chaos require a subfaction.
 
-Named Hunt effect keys the engine enforces or calculates (matched by key, not display name):
+Named Hunt effect keys the engine enforces or calculates (matched by key, not display name).
+Faction and subfaction force movement speed (default 1; Kingdom of Bretonnia preset is 2) is how
+many adjacent territories a force may Move or Split in one action. Held item effects can add more.
+The order names the destination and, when more than one legal route exists, the territory moved
+through. An enemy on the path stops the force there for battle. Intermediate hops are not claimed;
+only the landing territory is. The route cannot enter another faction's spawn. Same-player split
+forces rejoin when they occupy the same territory.
 
-- `Crusaders`: a Move may travel two adjacent hops. The order names the first territory and the
-  landing territory. An enemy in the first hop stops the force there for battle. The first hop is
-  not claimed. The route cannot enter another faction's spawn. Split forces rejoin only when both
-  are moved into the same territory.
 - `Slavers`: each owned unpillaged Town or City grants one extra map supply point.
 - `DividedWeStand`: daemon-god subfactions of the same faction count as allies and may backstab
   each other by god. Backstab against one god makes only that god's players enemies of the traitor;
@@ -214,10 +216,12 @@ Named Hunt effect keys the engine enforces or calculates (matched by key, not di
   captured. Occupying a spawn with another faction does not start a battle until they leave.
   A missing retreat or other assignment that would send the force to spawn uses that same
   Town or City pick.
-- `CalledByTheRelic`: after a relic is revealed, Move destinations are only those that reduce
-  distance to the closest revealed relic (ties allowed) until the relic is captured or battle is
-  forced.
-- `Undead`: never Shaken, Diseased, Well Rested, or Confident.
+- `CalledByTheRelic`: while a revealed, non-destroyed item objective exists and no force of this
+  faction holds an item, every force of the faction gains +1 movement speed. When any force of the
+  faction holds an item, the speed bonus ends. The same key also refuses Shaken, Exhausted,
+  Diseased, Well Rested, and Confident. The +2 casting or dispelling reminder for a holder is
+  catalog text (and `RelicOfAPastAge` when assigned).
+- `Undead`: never Shaken, Exhausted, Diseased, Well Rested, or Confident.
 - `NorthernRaiders`: Pillage awards at least two temporary supply points.
 - `PreparedForBattle`: on a battle result, the player may declare Extra Black Powder; that spends
   one extra supply point for the battle.
@@ -251,7 +255,8 @@ priority number remains. If the incoming status lists the current (or simultaneo
 cancel-out, both are removed and the force has no status. Exhausted cancels Well Rested in the
 standard catalog, so a Well Rested force that would become Exhausted has no status instead.
 Effect text is display-only; the app does not resolve tabletop modifiers. Named effect
-keys can refuse a status: `Undead` never Shaken, Diseased, Well Rested, or Confident;
+keys can refuse a status: `Undead` and `CalledByTheRelic` never Shaken, Exhausted, Diseased, Well
+Rested, or Confident;
 `BringersOfThePlague` never Diseased or Well Rested; `ToughGuts` never Diseased.
 
 Named Diseased keeps engine behavior only for contagion, rejoin, plague-bearing wins, and immunity.
@@ -307,8 +312,8 @@ draw points (default 1). When differential scoring is off, a win awards configur
 (default 2) and a draw still awards draw points. The loser receives negative points only when
 that option is enabled. Public Objectives include manager-awarded named catalog items (award
 and revoke are append-only facts; originals are never overwritten) plus ranking objectives
-that currently award points to every player tied for first: most territories controlled
-(optionally only those with a terrain tag), longest unbroken chain of the player's own territories
+that currently award points to every player tied for first: most territories credited to that
+player (optionally only those with a terrain tag), longest unbroken chain of the player's own territories
 (optional terrain tag), most battle wins (draws break
 win-count ties), and most structure campaign points from currently owned non-destroyed
 structures (optional structure tag). Running public objectives add configured campaign points for each currently owned
@@ -316,6 +321,10 @@ territory (optional terrain tag), and for each revealed relic currently held by 
 a current (not backstabbed) ally. Relics the scoring player holds stay in Other. Named public objectives remain
 manager-awarded. A named,
 ranking, or running objective configured at 0 campaign points is ignored.
+Map holdings are scored per player, not copied from a shared faction total onto every co-faction
+player. A territory counts for a player when that player's force occupies it, when it is stamped
+with that player's subfaction, or when they are the only player of the owning faction. Private
+faction awards still count for every current player of that faction.
 The panel also shows a top five for each enabled public objective that is not an item objective:
 ranking objectives, points per territory when that running objective is configured above 0, and
 named catalog public objectives. Allied relic control is scored in Public Objectives but is not
@@ -439,6 +448,11 @@ campaign stays stored in its final state: remaining orders are not resolved, fil
 members can still open logs, standings, and duplicate the campaign. Ended campaigns appear in the Completed group. All current members are notified in-app
 and by email. The original scheduled end instant is left unchanged; list ordering for completed
 campaigns uses the close instant when one is recorded.
+Duplicating a campaign from Your Campaigns asks for confirmation, then copies setup into a new
+campaign that starts in one week.
+A manager or administrator may permanently delete a completed campaign from the campaign page or
+Your Campaigns / All Campaigns. Deletion asks for confirmation, then removes the campaign record
+and unreferenced uploaded files. Open campaigns cannot be deleted; they must be ended first.
 
 A phase boundary belongs to the following phase. After launch, actual phase windows are stored
 and may diverge from the original template when a window closes early or a manager extends it.
@@ -517,7 +531,9 @@ movement and splits, then backstab alliance breaks, then battles from enemy co-l
 another faction's spawn. After movement, enemy forces that occupy the same territory create a
 battle; later action slots for those forces become `Battle`. Same-player forces that share a
 territory rejoin. Uncontested occupation claims a non-spawn territory and plants that faction's
-flag, except: a spawn always keeps its faction's flag; a force cannot claim an ally's territory
+flag, or the required subfaction's flag or logo when the claiming force's faction requires a
+subfaction. A spawn always keeps its faction's flag (and that spawn's required subfaction mark
+when one is assigned); a force cannot claim an ally's territory
 or structure without backstabbing first (the previous owner's flag stays while the ally defends);
 two or more allied factions on Neutral land award the claim to the strongest using the retreat
 collision ranking. Enemy capture leaves the structure operational unless a configured special
@@ -530,9 +546,14 @@ same territory and competing arrivals, become `Hold` rather than an invented win
 Player-submittable actions in an open action window are listed in this order:
 
 - `Hold`: remain and receive applicable resting effects.
-- `Move`: travel to an allowed adjacent territory; invalid move becomes Hold. `Crusaders` may
-  name a first hop and a landing territory two steps away. `ConduitsOfPower` and
-  `CalledByTheRelic` can add or restrict destinations after a relic is involved.
+- `Move`: travel to an allowed adjacent territory; invalid move becomes Hold. Each force has a
+  movement speed of how many adjacent territories it may traverse in one action (default 1).
+  Kingdom of Bretonnia's preset speed is 2. Item objectives can add speed. `CalledByTheRelic` adds
+  +1 speed while a revealed item exists and no force of that faction holds an item. Only the final
+  destination is claimed. When several routes exist, the player names the territory to move through.
+  `ConduitsOfPower` can add destinations after a relic is involved.
+- `Teleport`: available while holding an item that grants a random empty non-spawn teleport. The
+  destination is chosen at resolution from unoccupied non-spawn territories.
 - `Build`: create an allowed structure in a non-spawn territory that has no intact structure.
   Only structure types flagged buildable may be chosen. Town, Capital City, City, and Castle
   start not buildable; Supply Depot and Fortification start buildable.
@@ -843,14 +864,28 @@ top of the right-hand column when collapsed, and the list scrolls inside the map
 expanded. Directory rows use the same bordered layout as the map editor: owning faction mark,
 optional structure symbol, terrain-type symbol, then territory name. Selected-territory details sit under the map in that left column rather than spanning the
 directory. Zoom
-controls sit across the top of the map in this order: zoom percent field, +, -, Fit, 100%, and Full
-screen. Zoom is 10% to 800% of the map image's actual pixel size, in 10% steps. 100% shows the
-image at its native size and centers it. Fit scales the image to the view and recenters it.
-The F key fits the map; 1 (and 0) set 100 percent. N toggles Show names. Zoom defaults to Fit. After the viewer changes
+controls sit across the top of the map in this order: zoom percent field, +, -, Fit, 100%, Full
+screen, Cycle forces when you own at least one force, then the same Commit / Uncommit control as
+Actions (including last-commit confirmation and a disabled Commit when drafts are incomplete), then
+Show names. Zoom is
+10% to 800% of the map image's
+actual pixel size, in 10% steps. 100% shows the image at its native size and centers it. Fit scales
+the image to the view and recenters it.
+The F key fits the map; 1 (and 0) set 100 percent. Y cycles your forces. C commits when that map
+Commit control is enabled, or uncommits when Uncommit is shown. N toggles Show names. Confirmation
+alertdialogs (including last commit) keep Tab inside the dialog, confirm on Enter, and cancel on
+Escape. Zoom defaults to Fit. After the viewer changes
 zoom, that Fit-or-percent choice is restored the next time the same campaign's map opens. M toggles full-screen map mode on the campaign
 page and map editor while the map is shown; Escape exits full screen. Full-screen mode keeps the map
 inside the viewport: a fitted map recenters when the panel size changes, and a zoomed map clamps pan
-so the image cannot sit off-screen. Selecting a territory or group from outside the map (the
+so the image cannot sit off-screen. Cycle forces walks your forces in roster order. Each press
+selects only that force's territory and zooms as tightly as possible to show the force, its territory,
+and every territory that force can Move or Split into. If that frame cannot be computed, the map
+fits the screen. Your force pins show a green-and-white check emblem half the pin's size, centered
+on the circular pin's top-right edge so half of it overlaps the pin, when that force has a saved
+draft or a committed order.
+Hovering the pin names the action and whether it is draft or
+committed. Selecting a territory or group from outside the map (the
 directory, campaign links, or the map editor list) pans to center that selection as far as image
 bounds allow. Zoom changes only when the current scale cannot show the whole selection, and never
 zooms out past Fit. The first time a map view
@@ -1108,6 +1143,13 @@ applies its only result, or one result picked at random when several are configu
 item is gone: it awards no points, cannot be dropped, picked up, or taken as spoils, and is
 omitted from standings. A replacement item, when configured, appears with the possessor or on
 the same territory and uses that catalog type's own flavor, choices, and special rules.
+An item type may also list parameterized effects that apply while a force holds it, including
+several at once: push a defeated opponent to spawn; add movement speed; add or subtract map
+supply (never below 1); teleport to a random empty non-spawn territory; inflict a status while
+held; grant immunity to all or listed statuses; inflict statuses on forces sharing the territory;
+nullify adjacent item objectives; add army points by amount or percent of the round cap; suspend
+the holder's ally group and/or force extra alliances; or custom display-only battle reminder
+text that the map engine does not execute.
 
 ## Corrections
 

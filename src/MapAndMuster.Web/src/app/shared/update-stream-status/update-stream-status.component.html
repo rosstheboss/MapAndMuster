@@ -1,0 +1,11 @@
+<span
+  class="update-stream-status"
+  [class.is-live]="state() === 'open'"
+  [class.is-connecting]="state() === 'connecting'"
+  [class.is-reconnect]="state() === 'disconnected'"
+  [attr.title]="detail()"
+  [attr.aria-label]="label() + '. ' + detail()"
+>
+  <span class="update-stream-status-dot" aria-hidden="true"></span>
+  <span aria-live="polite">{{ label() }}</span>
+</span>

@@ -1,6 +1,27 @@
 {
+  // Linted by `npm run lint:md` from the repository root and by the docs job in CI.
+  // The version is pinned in package.json: markdownlint adds rules in minor releases, and an
+  // unpinned tool would fail CI on a commit that changed no documentation.
+  "globs": ["**/*.md"],
+  "ignores": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/playwright-report/**",
+    "**/test-results/**",
+    "**/TestResults/**",
+  ],
   "config": {
+    // Prose wraps by hand at roughly 100 characters; a hard limit would break tables and URLs.
     "MD013": false,
+    // Ordered lists in the runbooks continue numbering across interleaved code blocks.
     "MD029": false,
+    // Staged plans and runbooks repeat a heading such as "Goal" under each stage. Only a repeat
+    // under the same parent is ambiguous.
+    "MD024": { "siblings_only": true },
+    // Stated rather than inferred per file. The rules matrix has cells hundreds of characters
+    // wide, and padding those columns into alignment would make the source unreadable and every
+    // future edit to one cell rewrite the whole row.
+    "MD060": { "style": "compact" },
   },
 }

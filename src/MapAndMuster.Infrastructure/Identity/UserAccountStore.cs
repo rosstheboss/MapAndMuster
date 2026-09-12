@@ -2,6 +2,7 @@ using MapAndMuster.Application.Common;
 using MapAndMuster.Application.Identity;
 using MapAndMuster.Application.Ports;
 using MapAndMuster.Domain.Identity;
+using MapAndMuster.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,18 +14,22 @@ namespace MapAndMuster.Infrastructure.Identity;
 public sealed class UserAccountStore : IUserAccountStore
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly CampaignDbContext _dbContext;
     private readonly IClock _clock;
 
     /// <summary>
     /// Initializes a new store.
     /// </summary>
     /// <param name="userManager">The Identity user manager.</param>
+    /// <param name="dbContext">The database context, used for set-based role and search queries.</param>
     /// <param name="clock">The clock.</param>
-    public UserAccountStore(UserManager<ApplicationUser> userManager, IClock clock)
+    public UserAccountStore(UserManager<ApplicationUser> userManager, CampaignDbContext dbContext, IClock clock)
     {
         ArgumentNullException.ThrowIfNull(userManager);
+        ArgumentNullException.ThrowIfNull(dbContext);
         ArgumentNullException.ThrowIfNull(clock);
         _userManager = userManager;
+        _dbContext = dbContext;
         _clock = clock;
     }
 
@@ -125,6 +130,27 @@ public sealed class UserAccountStore : IUserAccountStore
         cancellationToken.ThrowIfCancellationRequested();
         var user = await _userManager.FindByIdAsync(userId.ToString()).ConfigureAwait(false);
         return user is null ? null : Map(user);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, UserAccount>> FindManyByIdAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(userIds);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (userIds.Count == 0)
+        {
+            return new Dictionary<Guid, UserAccount>();
+        }
+
+        var wanted = userIds.Distinct().ToArray();
+        var users = await _userManager.Users
+            .AsNoTracking()
+            .Where(user => wanted.Contains(user.Id))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return users.ToDictionary(static user => user.Id, Map);
     }
 
     /// <inheritdoc />
@@ -252,9 +278,18 @@ public sealed class UserAccountStore : IUserAccountStore
             return new HashSet<Guid>();
         }
 
-        var wanted = userIds.ToHashSet();
-        var administrators = await _userManager.GetUsersInRoleAsync("Administrator").ConfigureAwait(false);
-        return administrators.Select(static user => user.Id).Where(wanted.Contains).ToHashSet();
+        // GetUsersInRoleAsync would materialize every administrator account. Join on the role
+        // link table filtered to the requested users instead; callers only need membership flags.
+        var wanted = userIds.Distinct().ToArray();
+        var normalizedRole = _userManager.KeyNormalizer.NormalizeName(IdentityMaintenance.AdministratorRole);
+        var administrators = await _dbContext.UserRoles
+            .AsNoTracking()
+            .Where(link => wanted.Contains(link.UserId)
+                && _dbContext.Roles.Any(role => role.Id == link.RoleId && role.NormalizedName == normalizedRole))
+            .Select(static link => link.UserId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return administrators.ToHashSet();
     }
 
     /// <inheritdoc />
@@ -348,8 +383,22 @@ public sealed class UserAccountStore : IUserAccountStore
             return [];
         }
 
+        // The database narrows to candidates and the display-name rule below decides the actual
+        // matches, so this predicate is deliberately broader than the final one: it covers the
+        // username, either name part, the two joined as they appear in a full display name, and
+        // every test account, whose display name is derived rather than stored. Without it every
+        // account in the table was loaded and mapped on each keystroke.
+        var pattern = $"%{needle.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal)}%";
         var users = await _userManager.Users
             .AsNoTracking()
+            .Where(user =>
+                EF.Functions.ILike(user.UserName!, pattern, "\\")
+                || EF.Functions.ILike(user.FirstName, pattern, "\\")
+                || EF.Functions.ILike(user.LastName, pattern, "\\")
+                || EF.Functions.ILike(user.FirstName + " " + user.LastName, pattern, "\\")
+                || user.IsTestAccount)
             .OrderBy(user => user.UserName)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

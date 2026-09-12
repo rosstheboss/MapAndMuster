@@ -23,10 +23,11 @@ internal static class CampaignPlayMapper
         var specialRules = CampaignPlayCatalog.SpecialRules(campaign);
         var allyGroups = campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName);
         var window = play.CurrentWindow();
-        var names = await UsernamesAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
+        var accountContext = await ResolveAccountsAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
+        var names = Usernames(accountContext);
         var participants = accounts is null
             ? (IReadOnlyList<CampaignParticipantDetail>)[]
-            : await ParticipantsAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
+            : Participants(campaign, accountContext);
         var mentionable = accounts is null
             ? (IReadOnlyList<CampaignLogMemberDetail>)[]
             : ToChatMembers(participants);
@@ -141,6 +142,7 @@ internal static class CampaignPlayMapper
             CurrentPhaseEndsUtc = progress.CurrentPhaseEndsUtc,
             CurrentWindowId = window?.Id,
             HasMap = CampaignMapper.HasMapData(campaign),
+            AssetTags = CampaignAssetTagMap.Build(campaign),
             FactionId = membership?.FactionId,
             CanChooseFaction = CampaignMapper.CanChooseFaction(membership, progress.Status),
             IsCommitted = ViewerIsCommitted(play, window, viewerUserId),
@@ -177,25 +179,27 @@ internal static class CampaignPlayMapper
                         .FirstOrDefault(status => string.Equals(status.Name, force.StatusName, StringComparison.OrdinalIgnoreCase))
                         ?.Effects,
                     MoveTargets = force.ControllerUserId == viewerUserId || staffView
-                        ? CampaignPlayRules.EligibleMoves(map, force, play.ItemObjectives, specialRules)
+                        ? CampaignPlayRules.EligibleMoves(map, force, play.ItemObjectives, specialRules, play.Forces)
                         : [],
                     MoveHops = force.ControllerUserId == viewerUserId || staffView
-                        ? [.. CampaignPlayRules.EligibleMoveHops(map, force, specialRules).Select(static hop => new PlayMoveHopDetail
+                        ? [.. CampaignPlayRules.EligibleMoveHops(map, force, specialRules, play.ItemObjectives, play.Forces).Select(static hop => new PlayMoveHopDetail
                         {
                             ViaTerritoryId = hop.ViaTerritoryId,
                             TargetTerritoryId = hop.TargetTerritoryId,
+                            IntermediateTerritoryIds = hop.IntermediateTerritoryIds,
                         })]
                         : [],
                     AvailableActions = (force.ControllerUserId == viewerUserId || staffView) && !force.InBattle
                         ? [.. ActionResolution.EligibleActions(play, map, force, allyGroups, specialRules).Select(static kind => kind.ToString())]
                         : [],
                     Subfaction = force.Subfaction,
-                    CanMoveTwoTerritories = specialRules.Has(force, SpecialRuleEffectKeys.Crusaders),
+                    CanMoveTwoTerritories = ForceMovementRules.EffectiveSpeed(force, specialRules, map, play.ItemObjectives, play.Forces) >= 2,
+                    MovementSpeed = ForceMovementRules.EffectiveSpeed(force, specialRules, map, play.ItemObjectives, play.Forces),
                     CanDestroyImmediately = FactionSpecialRulePolicies.CanDestroyImmediately(force, specialRules),
                     CanUseExtraBlackPowder = specialRules.Has(force, SpecialRuleEffectKeys.PreparedForBattle),
                     CanUseMagicalSupply = specialRules.Has(force, SpecialRuleEffectKeys.MagicalSupply),
                     HiddenRelicNearby = FactionSpecialRulePolicies.HiddenRelicAdjacent(map, force, play.ItemObjectives, specialRules),
-                    BattleReminders = BattleRemindersFor(campaign, force, specialRules),
+                    BattleReminders = BattleRemindersFor(campaign, force, specialRules, map, play),
                     Supply = force.ControllerUserId == viewerUserId || staffView
                         ? ToForceSupply(play, map, campaign, force, window)
                         : null,
@@ -213,6 +217,7 @@ internal static class CampaignPlayMapper
                             TargetTerritoryId = draft.TargetTerritoryId,
                             StructureTypeId = draft.StructureTypeId,
                             ViaTerritoryId = draft.ViaTerritoryId,
+                            ViaPath = draft.ViaPath,
                             DestroyImmediately = draft.DestroyImmediately,
                         }),
                 ]
@@ -238,6 +243,7 @@ internal static class CampaignPlayMapper
                 {
                     Id = territory.Id,
                     OwnerFactionId = territory.OwnerFactionId,
+                    OwnerSubfaction = territory.OwnerSubfaction,
                     StructureTypeId = territory.StructureTypeId,
                     StructureCondition = territory.StructureCondition.ToString(),
                 }),
@@ -318,6 +324,7 @@ internal static class CampaignPlayMapper
                     TargetTerritoryId = draft.TargetTerritoryId,
                     StructureTypeId = draft.StructureTypeId,
                     ViaTerritoryId = draft.ViaTerritoryId,
+                    ViaPath = draft.ViaPath,
                     DestroyImmediately = draft.DestroyImmediately,
                 }),
             ];
@@ -348,6 +355,7 @@ internal static class CampaignPlayMapper
                     TargetTerritoryId = submission?.TargetTerritoryId,
                     StructureTypeId = submission?.StructureTypeId,
                     ViaTerritoryId = submission?.ViaTerritoryId,
+                    ViaPath = submission?.ViaPath ?? [],
                     DestroyImmediately = submission?.DestroyImmediately == true,
                 };
             }),
@@ -655,18 +663,28 @@ internal static class CampaignPlayMapper
         ];
     }
 
-    internal static async Task<Dictionary<Guid, string>> UsernamesAsync(
+    /// <summary>
+    /// Resolves every account a campaign read needs in two queries: one batch account lookup
+    /// covering memberships and play-log actors, and one administrator role check.
+    /// </summary>
+    /// <remarks>
+    /// Callers that need both usernames and participants must resolve this once and pass it to
+    /// <see cref="Usernames"/> and <see cref="Participants"/>. Resolving per projection is what
+    /// previously issued one query per member, twice per request.
+    /// </remarks>
+    internal static async Task<CampaignAccountContext> ResolveAccountsAsync(
         StoredCampaign campaign,
         IUserAccountStore? accounts,
         CancellationToken cancellationToken)
     {
-        var names = new Dictionary<Guid, string>();
+        ArgumentNullException.ThrowIfNull(campaign);
         if (accounts is null)
         {
-            return names;
+            return CampaignAccountContext.Empty;
         }
 
-        var userIds = campaign.Memberships.Select(static member => member.UserId);
+        var memberIds = campaign.Memberships.Select(static member => member.UserId).ToArray();
+        var userIds = memberIds.AsEnumerable();
         if (campaign.PlayState is { } play)
         {
             userIds = userIds.Concat(
@@ -676,16 +694,34 @@ internal static class CampaignPlayMapper
                     .Select(static id => id!.Value));
         }
 
-        foreach (var userId in userIds.Distinct())
+        var resolved = await accounts
+            .FindManyByIdAsync([.. userIds.Distinct()], cancellationToken)
+            .ConfigureAwait(false);
+        var administratorIds = await accounts
+            .FindAdministratorIdsAsync(memberIds, cancellationToken)
+            .ConfigureAwait(false);
+        return new CampaignAccountContext(resolved, administratorIds);
+    }
+
+    internal static Dictionary<Guid, string> Usernames(CampaignAccountContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var names = new Dictionary<Guid, string>(context.Accounts.Count);
+        foreach (var (userId, account) in context.Accounts)
         {
-            var account = await accounts.FindByIdAsync(userId, cancellationToken).ConfigureAwait(false);
-            if (account is not null)
-            {
-                names[userId] = account.Username;
-            }
+            names[userId] = account.Username;
         }
 
         return names;
+    }
+
+    internal static async Task<Dictionary<Guid, string>> UsernamesAsync(
+        StoredCampaign campaign,
+        IUserAccountStore? accounts,
+        CancellationToken cancellationToken)
+    {
+        var context = await ResolveAccountsAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
+        return Usernames(context);
     }
 
     internal static async Task<IReadOnlyList<CampaignLogMemberDetail>> ChatMembersAsync(
@@ -717,18 +753,27 @@ internal static class CampaignPlayMapper
         IUserAccountStore accounts,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(campaign);
         ArgumentNullException.ThrowIfNull(accounts);
-        var administratorIds = await accounts
-            .FindAdministratorIdsAsync(
-                [.. campaign.Memberships.Select(static membership => membership.UserId)],
-                cancellationToken)
-            .ConfigureAwait(false);
+        var context = await ResolveAccountsAsync(campaign, accounts, cancellationToken).ConfigureAwait(false);
+        return Participants(campaign, context);
+    }
+
+    internal static IReadOnlyList<CampaignParticipantDetail> Participants(
+        StoredCampaign campaign,
+        CampaignAccountContext context)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        ArgumentNullException.ThrowIfNull(context);
+        var administratorIds = context.AdministratorIds;
+
+        // The supply map, round, and catalog are the same for every member. Resolve them once
+        // rather than rebuilding the play map inside the loop.
+        var supplyContext = SupplyContextFor(campaign);
+
         var participants = new List<CampaignParticipantDetail>();
         foreach (var membership in campaign.Memberships)
         {
-            var account = await accounts.FindByIdAsync(membership.UserId, cancellationToken).ConfigureAwait(false);
-            if (account is null)
+            if (!context.Accounts.TryGetValue(membership.UserId, out var account))
             {
                 continue;
             }
@@ -741,12 +786,14 @@ internal static class CampaignPlayMapper
                 ? null
                 : FactionAppearance.Resolve(faction, membership.Subfaction);
             PlayerSupplySnapshot? supply = null;
-            if (campaign.PlayState is { Forces.Count: > 0 } play && membership.IsPlayer)
+            if (supplyContext is { } inputs && membership.IsPlayer)
             {
-                var map = CampaignLifecycle.ToPlayMap(campaign);
-                var round = play.CurrentWindow()?.RoundNumber
-                    ?? (play.Windows.Count > 0 ? play.Windows[^1].RoundNumber : 1);
-                supply = SupplyRules.ForPlayer(play, map, CampaignPlayCatalog.Supply(campaign), membership.UserId, round);
+                supply = SupplyRules.ForPlayer(
+                    inputs.Play,
+                    inputs.Map,
+                    inputs.Catalog,
+                    membership.UserId,
+                    inputs.Round);
             }
 
             participants.Add(new CampaignParticipantDetail
@@ -783,6 +830,23 @@ internal static class CampaignPlayMapper
                 .OrderBy(static participant => participant.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static participant => participant.Username, StringComparer.OrdinalIgnoreCase),
         ];
+    }
+
+    /// <summary>
+    /// Resolves the per-campaign inputs <see cref="SupplyRules.ForPlayer"/> needs, or
+    /// <see langword="null"/> when no player can have supply yet.
+    /// </summary>
+    private static (CampaignPlayState Play, PlayMap Map, SupplyCatalog Catalog, int Round)? SupplyContextFor(
+        StoredCampaign campaign)
+    {
+        if (campaign.PlayState is not { Forces.Count: > 0 } play)
+        {
+            return null;
+        }
+
+        var round = play.CurrentWindow()?.RoundNumber
+            ?? (play.Windows.Count > 0 ? play.Windows[^1].RoundNumber : 1);
+        return (play, CampaignLifecycle.ToPlayMap(campaign), CampaignPlayCatalog.Supply(campaign), round);
     }
 
     private static CampaignParticipantDetail WithTraitorVictims(
@@ -1206,7 +1270,9 @@ internal static class CampaignPlayMapper
     private static IReadOnlyList<string> BattleRemindersFor(
         StoredCampaign campaign,
         CampaignForce force,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        PlayMap map,
+        CampaignPlayState play)
     {
         return
         [
@@ -1215,6 +1281,7 @@ internal static class CampaignPlayMapper
                     && rules.Has(force, rule.EffectKey!)
                     && !string.IsNullOrWhiteSpace(rule.Text))
                 .Select(static rule => $"{rule.Name}: {rule.Text}"),
+            .. ItemObjectiveEffectRules.CustomReminders(force, map, play.ItemObjectives, rules),
         ];
     }
 
@@ -1228,6 +1295,15 @@ internal static class CampaignPlayMapper
         var round = window?.RoundNumber
             ?? (play.Windows.Count > 0 ? play.Windows[^1].RoundNumber : 1);
         var snapshot = SupplyRules.ForForce(play, map, CampaignPlayCatalog.Supply(campaign), force, round);
+        snapshot = snapshot with
+        {
+            MaxArmyPoints = ItemObjectiveEffectRules.AdjustArmyPoints(
+                snapshot.MaxArmyPoints,
+                force,
+                map,
+                play.ItemObjectives,
+                CampaignPlayCatalog.SpecialRules(campaign)),
+        };
         return new PlayerSupplyViewDetail
         {
             CurrentSupplyPoints = snapshot.ForceAllowancePoints,
@@ -1344,4 +1420,18 @@ internal static class CampaignPlayMapper
         var rule = specialNames.GetValueOrDefault(sourceName) ?? sourceName;
         return $"{rule} ({place})";
     }
+}
+
+/// <summary>
+/// Accounts and administrator flags for one campaign read, resolved once per request.
+/// </summary>
+/// <param name="Accounts">Accounts for memberships and play-log actors, keyed by identifier.</param>
+/// <param name="AdministratorIds">Which members hold the system Administrator role.</param>
+internal sealed record CampaignAccountContext(
+    IReadOnlyDictionary<Guid, UserAccount> Accounts,
+    IReadOnlySet<Guid> AdministratorIds)
+{
+    /// <summary>Gets an empty context, used when no account store is available.</summary>
+    public static CampaignAccountContext Empty { get; } =
+        new(new Dictionary<Guid, UserAccount>(), new HashSet<Guid>());
 }

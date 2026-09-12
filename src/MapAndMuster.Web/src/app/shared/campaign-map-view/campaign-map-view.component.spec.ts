@@ -1,8 +1,9 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { CampaignMapViewComponent, TERRITORY_HOVER_INTENT_MS } from './campaign-map-view.component';
 import { MAP_VIEW_ZOOM_STORAGE_PREFIX, writeStoredMapViewZoom } from '../../core/maps/map-view-preferences';
+import { AppDialogService } from '../dialog/dialog.service';
+import { CampaignMapViewComponent, TERRITORY_HOVER_INTENT_MS } from './campaign-map-view.component';
 
 const png =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -108,6 +109,280 @@ describe('CampaignMapViewComponent', () => {
     const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin.is-mine');
     expect(pin).toBeTruthy();
     expect(pin?.getAttribute('aria-label')).toBe('North force in Coast');
+  });
+
+  it('shows a green check on your force when it has a draft or committed action', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.componentRef.setInput('factions', [northFaction()]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'North force in Coast',
+        action: { kind: 'Move', status: 'draft', detail: 'to Ridge' },
+      },
+      {
+        id: 'force-2',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: false,
+        inBattle: false,
+        label: 'South force in Coast',
+        action: { kind: 'Hold', status: 'committed' },
+      },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const mine = compiled.querySelector('.force-pin.is-mine')!;
+    expect(mine.classList.contains('has-action')).toBe(true);
+    expect(mine.querySelector('.force-action-mark')).toBeTruthy();
+    expect(mine.getAttribute('title')).toBe('North force in Coast. Move to Ridge (draft)');
+    expect(mine.getAttribute('aria-label')).toBe('North force in Coast. Move to Ridge (draft)');
+
+    const other = compiled.querySelector('.force-pin:not(.is-mine)');
+    expect(other?.querySelector('.force-action-mark')).toBeNull();
+    expect(other?.getAttribute('title')).toBe('South force in Coast');
+
+    const mark = mine.querySelector('.force-action-mark')!;
+    const markStyles = getComputedStyle(mark);
+    expect(markStyles.position).toBe('absolute');
+    expect(markStyles.top).toBe('14.645%');
+    expect(markStyles.left).toBe('85.355%');
+    expect(markStyles.width).toBe('50%');
+    expect(markStyles.height).toBe('50%');
+    expect(markStyles.transform).toBe('translate(-50%, -50%)');
+  });
+
+  it('hides Cycle forces until you own a force, then cycles selection and zooms to move reach', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      squareTerritory('t1', 0.1, 0.1),
+      squareTerritory('t2', 0.4, 0.1),
+      squareTerritory('t3', 0.7, 0.55),
+    ]);
+    fixture.componentRef.setInput('factions', [northFaction()]);
+    fixture.componentRef.setInput('interactive', true);
+    fixture.componentRef.setInput('focusSelectedTerritories', true);
+    const selected = vi.fn((event: { id: string; source?: string }) => {
+      fixture.componentRef.setInput('selectedTerritoryIds', [event.id]);
+      fixture.detectChanges();
+    });
+    fixture.componentInstance.territorySelect.subscribe(selected);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(
+      [...compiled.querySelectorAll('button')].some((button) => button.textContent.trim() === 'Cycle forces'),
+    ).toBe(false);
+
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'First in t1',
+        moveTargets: ['t2'],
+      },
+      {
+        id: 'force-2',
+        territoryId: 't3',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'Second in t3',
+        moveTargets: [],
+      },
+      {
+        id: 'force-3',
+        territoryId: 't2',
+        factionId: 'north',
+        isMine: false,
+        inBattle: false,
+        label: 'Other in t2',
+        moveTargets: ['t1'],
+      },
+    ]);
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+
+    const cycle = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Cycle forces',
+    );
+    expect(cycle).toBeTruthy();
+    expect(cycle!.getAttribute('title')).toBe('Cycle through your forces (Y)');
+    expect(cycle!.getAttribute('aria-keyshortcuts')).toBe('Y');
+    const view = mapView(fixture.componentInstance);
+
+    cycle!.click();
+    fixture.detectChanges();
+    expect(selected).toHaveBeenCalledWith(expect.objectContaining({ id: 't1', additive: false, source: 'cycle' }));
+    expect(view.fitToPanel()).toBe(false);
+    expect(view.zoom()).toBeCloseTo(0.736, 3);
+    expect(view.zoom()).toBeGreaterThan(Math.min(400 / 1000, 300 / 800));
+    expect(view.panX()).toBeCloseTo(400 / 2 - 0.35 * 1000 * 0.736, 1);
+    expect(view.panY()).toBe(0);
+
+    const keyView = fixture.componentInstance as unknown as { onDocumentKeydown: (event: KeyboardEvent) => void };
+    keyView.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'y' }));
+    fixture.detectChanges();
+    expect(selected).toHaveBeenLastCalledWith(expect.objectContaining({ id: 't3', source: 'cycle' }));
+  });
+
+  it('hides Commit on the map toolbar until the host opts in', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(
+      [...compiled.querySelectorAll('button')].some((button) => button.textContent.trim() === 'Commit Actions'),
+    ).toBe(false);
+
+    fixture.componentRef.setInput('showCommit', true);
+    fixture.detectChanges();
+    const commit = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Commit Actions',
+    );
+    expect(commit).toBeTruthy();
+    expect(commit!.hasAttribute('disabled')).toBe(true);
+    expect(commit!.getAttribute('title')).toBe('Commit Actions (C)');
+    expect(commit!.hasAttribute('aria-keyshortcuts')).toBe(false);
+  });
+
+  it('places Commit between Cycle forces and Show names and emits on C when enabled', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'Mine',
+        moveTargets: [],
+      },
+    ]);
+    fixture.componentRef.setInput('showCommit', true);
+    const committed = vi.fn();
+    fixture.componentInstance.commit.subscribe(committed);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const toolbarItems = [...compiled.querySelector('.map-toolbar')!.children].map((item) =>
+      item.textContent.replace(/\s+/g, ' ').trim(),
+    );
+    const cycleIndex = toolbarItems.indexOf('Cycle forces');
+    expect(cycleIndex).toBeGreaterThan(-1);
+    expect(toolbarItems[cycleIndex + 1]).toBe('Commit Actions');
+    expect(toolbarItems[cycleIndex + 2]).toBe('Show names');
+
+    const view = fixture.componentInstance as unknown as { onDocumentKeydown: (event: KeyboardEvent) => void };
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'c' }));
+    expect(committed).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('canCommit', true);
+    fixture.detectChanges();
+    const commit = [...compiled.querySelectorAll<HTMLButtonElement>('.map-toolbar button')].find(
+      (button) => button.textContent.trim() === 'Commit Actions',
+    );
+    expect(commit!.hasAttribute('disabled')).toBe(false);
+    expect(commit!.getAttribute('aria-keyshortcuts')).toBe('C');
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'c' }));
+    expect(committed).toHaveBeenCalledTimes(1);
+    commit!.click();
+    expect(committed).toHaveBeenCalledTimes(2);
+  });
+
+  it('labels the last-commit map button and ignores C while a dialog is open', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('showCommit', true);
+    fixture.componentRef.setInput('canCommit', true);
+    fixture.componentRef.setInput('commitClosesPhase', true);
+    const committed = vi.fn();
+    fixture.componentInstance.commit.subscribe(committed);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const commit = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Commit Actions and close the phase',
+    );
+    expect(commit).toBeTruthy();
+    expect(commit!.getAttribute('title')).toBe('Commit Actions and close the phase (C)');
+    expect(commit!.getAttribute('aria-keyshortcuts')).toBe('C');
+
+    const view = fixture.componentInstance as unknown as { onDocumentKeydown: (event: KeyboardEvent) => void };
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'C' }));
+    expect(committed).toHaveBeenCalledTimes(1);
+
+    TestBed.inject(AppDialogService).register();
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'c' }));
+    expect(committed).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Uncommit on the map toolbar and emits on C', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('showCommit', true);
+    fixture.componentRef.setInput('showUncommit', true);
+    const committed = vi.fn();
+    fixture.componentInstance.commit.subscribe(committed);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const uncommit = [...compiled.querySelectorAll<HTMLButtonElement>('.map-toolbar button')].find(
+      (button) => button.textContent.trim() === 'Uncommit',
+    );
+    expect(uncommit).toBeTruthy();
+    expect(uncommit!.hasAttribute('disabled')).toBe(false);
+    expect(uncommit!.classList.contains('button-secondary')).toBe(true);
+    expect(uncommit!.getAttribute('title')).toBe('Uncommit (C)');
+    expect(uncommit!.getAttribute('aria-keyshortcuts')).toBe('C');
+
+    const view = fixture.componentInstance as unknown as { onDocumentKeydown: (event: KeyboardEvent) => void };
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'c' }));
+    expect(committed).toHaveBeenCalledTimes(1);
+    uncommit!.click();
+    expect(committed).toHaveBeenCalledTimes(2);
+  });
+
+  it('fits the map when a cycled force has no reachable territory polygons', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', []);
+    fixture.componentRef.setInput('factions', [northFaction()]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 'missing',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'Missing',
+        moveTargets: ['also-missing'],
+      },
+    ]);
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+    const view = mapView(fixture.componentInstance);
+    expect(view.fitToPanel()).toBe(false);
+
+    const cycle = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Cycle forces',
+    );
+    cycle!.click();
+    fixture.detectChanges();
+    expect(view.fitToPanel()).toBe(true);
   });
 
   it('selects a territory when clicking its force, flag, or structure marker', () => {
@@ -229,6 +504,7 @@ describe('CampaignMapViewComponent', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.map-loading')?.textContent).toContain('Loading map');
+    expect(getComputedStyle(compiled.querySelector('.map-loading-dots')!).fontSize).toBe('3em');
     expect(compiled.querySelector('.map-canvas')?.classList.contains('is-pending')).toBe(true);
 
     const view = fixture.componentInstance as unknown as {
@@ -463,6 +739,44 @@ describe('CampaignMapViewComponent', () => {
     const flag = (fixture.nativeElement as HTMLElement).querySelector('.faction-flag');
     expect(flag?.classList.contains('is-tinted')).toBe(true);
     expect(flag?.querySelector('img')).toBeNull();
+  });
+
+  it('uses a required subfaction color flag instead of the parent logo', () => {
+    const owned = { ...territory, ownerFactionId: 'daemons', ownerSubfaction: 'Khorne' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'daemons',
+        name: 'Daemons of Chaos',
+        color: '#AD1457',
+        subfactions: ['Khorne'],
+        allyGroupName: null,
+        requiresSubfaction: true,
+        hasFlagImage: true,
+        subfactionAppearances: [
+          {
+            name: 'Khorne',
+            color: '#B91C1C',
+            flagSource: 'color' as const,
+            hasFlagImage: false,
+            tintFlagImage: false,
+          },
+        ],
+      },
+    ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
+    fixture.componentRef.setInput('colorMode', 'faction');
+    fixture.detectChanges();
+
+    const flag = (fixture.nativeElement as HTMLElement).querySelector('.faction-flag');
+    expect(flag?.querySelector('img')).toBeNull();
+    expect(flag?.classList.contains('has-image')).toBe(false);
+    expect(flag instanceof HTMLElement ? flag.style.background : null).toBe('rgb(185, 28, 28)');
+    expect((fixture.nativeElement as HTMLElement).querySelector('polygon.territory')?.getAttribute('fill')).toBe(
+      '#B91C1C',
+    );
   });
 
   it('shows an uploaded ownership logo without tinting by default', () => {
@@ -1649,6 +1963,26 @@ function squareTerritory(id: string, x: number, y: number): typeof territory {
     overlayColor: '#2563EB',
     ownerFactionId: null,
     spawnFactionId: null,
+  };
+}
+
+function northFaction(): {
+  id: string;
+  name: string;
+  color: string;
+  subfactions: never[];
+  allyGroupName: null;
+  requiresSubfaction: boolean;
+  hasFlagImage: boolean;
+} {
+  return {
+    id: 'north',
+    name: 'North',
+    color: '#2563EB',
+    subfactions: [],
+    allyGroupName: null,
+    requiresSubfaction: false,
+    hasFlagImage: false,
   };
 }
 

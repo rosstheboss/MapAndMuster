@@ -52,6 +52,7 @@ import type { FittedSquare, MapPoint } from '../../core/maps/geometry';
 import { overlayNameLabel } from '../../core/maps/map-labels';
 import { territoryLabel, type MapAdjacency, type MapTerritory } from '../../core/maps/map-graph.models';
 import { territoryHoverTooltip, type TerritoryTooltipBattle } from '../../core/maps/territory-tooltip';
+import { AppDialogService } from '../dialog/dialog.service';
 import { IconComponent } from '../icon/icon.component';
 import { MapLegendComponent } from '../map-legend/map-legend.component';
 import { MapSymbolComponent } from '../map-symbol/map-symbol.component';
@@ -71,6 +72,13 @@ export const TERRITORY_HOVER_MOTION_MS = 200;
 
 export type MovePlacement = 'valid' | 'invalid' | null;
 
+export interface MapForceAction {
+  kind: string;
+  status: 'draft' | 'committed';
+  /** Extra destination or structure text, without the kind or status. */
+  detail?: string | null;
+}
+
 export interface MapForceMarker {
   id: string;
   territoryId: string;
@@ -83,6 +91,10 @@ export interface MapForceMarker {
   /** Force identity for hover tips, without the territory. */
   name?: string;
   heldItems?: readonly MapHeldItem[];
+  /** Own saved draft or committed order, when the viewer can see it. */
+  action?: MapForceAction | null;
+  /** Territories this force can Move or Split into, including multi-hop destinations. */
+  moveTargets?: readonly string[];
 }
 
 export interface MapHeldItem {
@@ -151,12 +163,24 @@ export class CampaignMapViewComponent {
   readonly brokenAllyFactionIds = input<readonly string[]>([]);
   readonly itemImageUrl = input<(typeId: string) => string | null>(() => null);
   readonly emphasizedForceIds = input<readonly string[]>([]);
+  /** Campaign play: show Commit/Uncommit next to Cycle forces. Hidden in the map editor. */
+  readonly showCommit = input(false);
+  readonly canCommit = input(false);
+  readonly commitClosesPhase = input(false);
+  readonly showUncommit = input(false);
 
   readonly mapPoint = output<MapPoint>();
+  readonly commit = output<void>();
   readonly mapHover = output<MapPoint>();
   readonly territoryHover = output<string | null>();
   readonly adjacencyHover = output<string | null>();
-  readonly territorySelect = output<{ id: string; additive: boolean; clientX: number; clientY: number }>();
+  readonly territorySelect = output<{
+    id: string;
+    additive: boolean;
+    clientX: number;
+    clientY: number;
+    source?: 'cycle';
+  }>();
   readonly adjacencySelect = output<string>();
   readonly backgroundSelect = output<void>();
   readonly territoryMarquee = output<{ ids: string[]; additive: boolean }>();
@@ -164,6 +188,7 @@ export class CampaignMapViewComponent {
   readonly territoryMoveEnd = output<void>();
 
   private readonly destroyRef = inject(DestroyRef);
+  private readonly dialogs = inject(AppDialogService);
   private readonly viewport = viewChild<ElementRef<HTMLElement>>('viewport');
   protected readonly zoom = signal(1);
   private readonly fitToPanel = signal(true);
@@ -198,6 +223,7 @@ export class CampaignMapViewComponent {
   private suppressSelectionCamera = false;
   private pendingSelectionFrame = false;
   private selectionCameraFrame = 0;
+  private lastCycledForceId: string | null = null;
 
   constructor() {
     this.destroyRef.onDestroy(() => {
@@ -212,6 +238,17 @@ export class CampaignMapViewComponent {
       untracked(() => this.onSelectedTerritoriesChanged(ids));
     });
   }
+
+  protected readonly ownForces = computed(() => this.forces().filter((force) => force.isMine));
+  protected readonly commitButtonLabel = computed(() => {
+    if (this.showUncommit()) {
+      return 'Uncommit';
+    }
+
+    return this.commitClosesPhase() ? 'Commit Actions and close the phase' : 'Commit Actions';
+  });
+  protected readonly commitButtonTitle = computed(() => `${this.commitButtonLabel()} (C)`);
+  protected readonly commitButtonEnabled = computed(() => this.showUncommit() || this.canCommit());
 
   protected readonly territoryLayouts = computed(() => {
     const image = this.imageSize();
@@ -511,8 +548,17 @@ export class CampaignMapViewComponent {
   }
 
   protected forceLabel(force: MapForceMarker): string {
+    const parts = [force.label];
+    if (force.isMine && force.action) {
+      parts.push(forceActionCaption(force.action));
+    }
+
     const held = force.heldItems?.map((item) => item.name).join(', ');
-    return held ? `${force.label}. Holding ${held}` : force.label;
+    if (held) {
+      parts.push(`Holding ${held}`);
+    }
+
+    return parts.join('. ');
   }
 
   screenToMap(pixels: number): number {
@@ -889,6 +935,34 @@ export class CampaignMapViewComponent {
     this.persistZoom();
   }
 
+  protected emitCommit(): void {
+    if (!this.showCommit() || !this.commitButtonEnabled()) {
+      return;
+    }
+
+    this.commit.emit();
+  }
+
+  protected cycleOwnForces(): void {
+    const mine = this.ownForces();
+    if (mine.length === 0) {
+      return;
+    }
+
+    const from = mine.findIndex((force) => force.id === this.lastCycledForceId);
+    const force = mine[(from + 1) % mine.length];
+    this.lastCycledForceId = force.id;
+    this.armSelectionCameraSuppress();
+    this.territorySelect.emit({
+      id: force.territoryId,
+      additive: false,
+      clientX: 0,
+      clientY: 0,
+      source: 'cycle',
+    });
+    this.frameForceReach(force);
+  }
+
   protected onZoomInput(event: Event): void {
     const value = Number((event.target as HTMLInputElement).value);
     if (Number.isFinite(value)) {
@@ -971,7 +1045,7 @@ export class CampaignMapViewComponent {
 
   @HostListener('document:keydown', ['$event'])
   protected onDocumentKeydown(event: KeyboardEvent): void {
-    if (event.ctrlKey || event.metaKey || event.altKey || this.isTypingTarget(event.target)) {
+    if (event.ctrlKey || event.metaKey || event.altKey || this.isTypingTarget(event.target) || this.dialogs.hasOpen()) {
       return;
     }
 
@@ -990,6 +1064,18 @@ export class CampaignMapViewComponent {
     if (event.key === 'n' || event.key === 'N') {
       event.preventDefault();
       this.toggleShowNames();
+      return;
+    }
+
+    if ((event.key === 'y' || event.key === 'Y') && this.ownForces().length > 0) {
+      event.preventDefault();
+      this.cycleOwnForces();
+      return;
+    }
+
+    if ((event.key === 'c' || event.key === 'C') && this.showCommit() && this.commitButtonEnabled()) {
+      event.preventDefault();
+      this.commit.emit();
     }
   }
 
@@ -1580,6 +1666,49 @@ export class CampaignMapViewComponent {
     this.frameSelection(ids);
   }
 
+  private frameForceReach(force: MapForceMarker): void {
+    this.frameTerritoryIdsTight([force.territoryId, ...(force.moveTargets ?? [])]);
+  }
+
+  private frameTerritoryIdsTight(ids: readonly string[]): void {
+    this.clearHoverMotion();
+    const unique = [...new Set(ids)];
+    const bounds = unionPolygonBounds(
+      this.territories()
+        .filter((territory) => unique.includes(territory.id))
+        .map((territory) => territory.polygon),
+    );
+    const image = this.imageSize();
+    const viewport = this.viewportSize();
+    if (!bounds || viewport.width <= 1 || viewport.height <= 1 || image.width <= 1) {
+      this.fitToPanel.set(true);
+      this.centerImage();
+      return;
+    }
+
+    this.pendingSelectionFrame = false;
+    const bboxWidth = Math.max((bounds.maxX - bounds.minX) * image.width, Number.EPSILON);
+    const bboxHeight = Math.max((bounds.maxY - bounds.minY) * image.height, Number.EPSILON);
+    const availableWidth = Math.max(viewport.width - SELECTION_FRAME_PADDING_PX * 2, 1);
+    const availableHeight = Math.max(viewport.height - SELECTION_FRAME_PADDING_PX * 2, 1);
+    const encapsulateScale = Math.min(availableWidth / bboxWidth, availableHeight / bboxHeight);
+    const fit = this.fitScale();
+    const next = clampZoom(Math.max(encapsulateScale, fit));
+    if (next <= fit + SELECTION_FRAME_SCALE_EPSILON) {
+      this.fitToPanel.set(true);
+    } else {
+      this.fitToPanel.set(false);
+      this.zoom.set(next);
+    }
+
+    const scale = this.currentScale();
+    const centerX = ((bounds.minX + bounds.maxX) / 2) * image.width;
+    const centerY = ((bounds.minY + bounds.maxY) / 2) * image.height;
+    this.panX.set(viewport.width / 2 - centerX * scale);
+    this.panY.set(viewport.height / 2 - centerY * scale);
+    this.clampPan();
+  }
+
   private frameSelection(ids: readonly string[]): void {
     const bounds = unionPolygonBounds(
       this.territories()
@@ -1619,6 +1748,12 @@ export class CampaignMapViewComponent {
     this.panY.set(viewport.height / 2 - centerY * scale);
     this.clampPan();
   }
+}
+
+function forceActionCaption(action: MapForceAction): string {
+  const status = action.status === 'committed' ? 'committed' : 'draft';
+  const detail = action.detail?.trim();
+  return detail ? `${action.kind} ${detail} (${status})` : `${action.kind} (${status})`;
 }
 
 function clampZoom(value: number): number {

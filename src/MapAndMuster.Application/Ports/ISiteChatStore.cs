@@ -23,6 +23,22 @@ public interface ISiteChatStore
     Task<IReadOnlyList<SiteChatBlock>> ListBlocksAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// Returns the directed blocks with this user on either side.
+    /// </summary>
+    /// <param name="userId">The user whose blocks matter.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>Blocks the user placed and blocks placed against the user.</returns>
+    /// <remarks>
+    /// Hiding is decided per viewer, so no caller needs the rest of the table. The default
+    /// implementation filters in memory; real storage should filter in the query.
+    /// </remarks>
+    async Task<IReadOnlyList<SiteChatBlock>> ListBlocksForUserAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var all = await ListBlocksAsync(cancellationToken).ConfigureAwait(false);
+        return [.. all.Where(block => block.BlockerUserId == userId || block.BlockedUserId == userId)];
+    }
+
+    /// <summary>
     /// Adds or removes the viewer's block of another user.
     /// </summary>
     Task SetBlockAsync(Guid blockerUserId, Guid blockedUserId, bool blocked, CancellationToken cancellationToken);

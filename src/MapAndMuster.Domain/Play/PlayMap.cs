@@ -21,7 +21,8 @@ public sealed class PlayTerritory
         Guid? terrainTypeId = null,
         string? spawnSubfaction = null,
         IReadOnlyList<Guid>? terrainTagIds = null,
-        IReadOnlyList<Guid>? structureTagIds = null)
+        IReadOnlyList<Guid>? structureTagIds = null,
+        string? ownerSubfaction = null)
     {
         Id = id;
         DisplayNumber = displayNumber;
@@ -36,6 +37,7 @@ public sealed class PlayTerritory
         SpawnSubfaction = spawnFactionId is null ? null : spawnSubfaction;
         TerrainTagIds = terrainTagIds ?? [];
         StructureTagIds = structureTagIds ?? [];
+        OwnerSubfaction = ownerFactionId is null ? null : ownerSubfaction;
     }
 
     /// <summary>Gets the territory identifier.</summary>
@@ -74,6 +76,9 @@ public sealed class PlayTerritory
     /// <summary>Gets the spawn required subfaction, when spawn is subfaction-specific.</summary>
     public string? SpawnSubfaction { get; }
 
+    /// <summary>Gets the owning required subfaction, when the owner faction requires one.</summary>
+    public string? OwnerSubfaction { get; }
+
     /// <summary>Gets terrain-catalog tags from the occupying terrain type.</summary>
     public IReadOnlyList<Guid> TerrainTagIds { get; }
 
@@ -91,12 +96,33 @@ public sealed class PlayTerritory
         bool clearStructure = false,
         bool assignOwner = false,
         bool? isPillageable = null,
-        bool? isDestructible = null)
+        bool? isDestructible = null,
+        string? ownerSubfaction = null,
+        bool assignOwnerSubfaction = false)
     {
+        var nextOwner = assignOwner ? ownerFactionId : ownerFactionId ?? OwnerFactionId;
+        string? nextSubfaction;
+        if (nextOwner is null)
+        {
+            nextSubfaction = null;
+        }
+        else if (assignOwnerSubfaction)
+        {
+            nextSubfaction = string.IsNullOrWhiteSpace(ownerSubfaction) ? null : ownerSubfaction;
+        }
+        else if (nextOwner != OwnerFactionId)
+        {
+            nextSubfaction = null;
+        }
+        else
+        {
+            nextSubfaction = OwnerSubfaction;
+        }
+
         return new PlayTerritory(
             Id,
             DisplayNumber,
-            assignOwner ? ownerFactionId : ownerFactionId ?? OwnerFactionId,
+            nextOwner,
             SpawnFactionId,
             clearStructure ? null : structureTypeId ?? StructureTypeId,
             clearStructure ? null : structureName ?? StructureName,
@@ -106,7 +132,8 @@ public sealed class PlayTerritory
             TerrainTypeId,
             SpawnSubfaction,
             TerrainTagIds,
-            clearStructure ? [] : StructureTagIds);
+            clearStructure ? [] : StructureTagIds,
+            nextSubfaction);
     }
 }
 

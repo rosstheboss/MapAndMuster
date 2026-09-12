@@ -21,6 +21,8 @@ public sealed class FactionSetup
     /// <param name="subfactionAppearances">Color, flag, and logo choices for named subfactions.</param>
     /// <param name="tagIds">Faction-catalog tags assigned to this faction.</param>
     /// <param name="subfactionTags">Extra faction-catalog tags for named subfactions.</param>
+    /// <param name="forceMovementSpeed"></param>
+    /// <param name="subfactionMovementSpeeds"></param>
     public FactionSetup(
         Guid id,
         string name,
@@ -34,11 +36,15 @@ public sealed class FactionSetup
         IReadOnlyList<SubfactionSpecialRulesSetup>? subfactionSpecialRules = null,
         IReadOnlyList<SubfactionAppearanceSetup>? subfactionAppearances = null,
         IReadOnlyList<Guid>? tagIds = null,
-        IReadOnlyList<SubfactionTagsSetup>? subfactionTags = null)
+        IReadOnlyList<SubfactionTagsSetup>? subfactionTags = null,
+        int forceMovementSpeed = ForceMovementSpeeds.Default,
+        IReadOnlyList<SubfactionMovementSpeedSetup>? subfactionMovementSpeeds = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(color);
         ArgumentNullException.ThrowIfNull(subfactions);
+        ArgumentOutOfRangeException.ThrowIfLessThan(forceMovementSpeed, ForceMovementSpeeds.Min);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(forceMovementSpeed, ForceMovementSpeeds.Max);
         Id = id;
         Name = name;
         Color = color;
@@ -52,6 +58,8 @@ public sealed class FactionSetup
         SubfactionAppearances = subfactionAppearances ?? [];
         TagIds = DistinctIds(tagIds);
         SubfactionTags = subfactionTags ?? [];
+        ForceMovementSpeed = forceMovementSpeed;
+        SubfactionMovementSpeeds = subfactionMovementSpeeds ?? [];
     }
 
     /// <summary>Gets the faction identifier.</summary>
@@ -92,6 +100,12 @@ public sealed class FactionSetup
 
     /// <summary>Gets extra faction-catalog tags for named subfactions.</summary>
     public IReadOnlyList<SubfactionTagsSetup> SubfactionTags { get; }
+
+    /// <summary>Gets how many adjacent territories this faction may Move in one action.</summary>
+    public int ForceMovementSpeed { get; }
+
+    /// <summary>Gets movement-speed overrides for named subfactions.</summary>
+    public IReadOnlyList<SubfactionMovementSpeedSetup> SubfactionMovementSpeeds { get; }
 
     /// <summary>
     /// Returns parent faction tags unioned with extra tags for <paramref name="subfactionName"/>.

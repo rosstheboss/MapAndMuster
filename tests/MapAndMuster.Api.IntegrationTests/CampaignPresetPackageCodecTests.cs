@@ -9,11 +9,39 @@ namespace MapAndMuster.Api.IntegrationTests;
 
 public sealed class CampaignPresetPackageCodecTests
 {
+    /// <summary>Writes a package from an in-memory file table, mirroring what storage supplies.</summary>
+    private static MemoryStream Pack(
+        CampaignPresetPackageCodec codec,
+        StoredCampaign campaign,
+        IReadOnlyDictionary<string, byte[]> files)
+    {
+        var output = new MemoryStream();
+        codec.WriteAsync(
+                output,
+                campaign,
+                [.. files.Keys],
+                (key, _) => Task.FromResult<Stream?>(new MemoryStream(files[key], writable: false)),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        output.Position = 0;
+        return output;
+    }
+
     [Fact]
     public void ReadRejectsAnEmptyArchive()
     {
         var codec = new CampaignPresetPackageCodec();
-        var result = codec.Read(Array.Empty<byte>());
+        var result = codec.Read(new MemoryStream());
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.CampaignPresetPackageInvalid, result.ErrorCode);
+    }
+
+    [Fact]
+    public void ReadRejectsAnArchiveTooShortToHoldADirectory()
+    {
+        var codec = new CampaignPresetPackageCodec();
+        var result = codec.Read(new MemoryStream([1, 2, 3], writable: false));
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorCodes.CampaignPresetPackageInvalid, result.ErrorCode);
     }
@@ -30,7 +58,7 @@ public sealed class CampaignPresetPackageCodecTests
         }
 
         var codec = new CampaignPresetPackageCodec();
-        var result = codec.Read(output.ToArray());
+        var result = codec.Read(output);
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorCodes.CampaignPresetPackageInvalid, result.ErrorCode);
     }
@@ -47,7 +75,7 @@ public sealed class CampaignPresetPackageCodecTests
         }
 
         var codec = new CampaignPresetPackageCodec();
-        var result = codec.Read(output.ToArray());
+        var result = codec.Read(output);
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorCodes.CampaignPresetPackageInvalid, result.ErrorCode);
     }
@@ -132,7 +160,7 @@ public sealed class CampaignPresetPackageCodecTests
         };
 
         var codec = new CampaignPresetPackageCodec();
-        var packed = codec.Write(campaign, files);
+        var packed = Pack(codec, campaign, files);
         var unpacked = codec.Read(packed);
 
         Assert.True(unpacked.IsSuccess, unpacked.Message);
@@ -223,8 +251,8 @@ public sealed class CampaignPresetPackageCodecTests
         };
 
         var codec = new CampaignPresetPackageCodec();
-        var packed = codec.Write(campaign, files);
-        using (var zip = new ZipArchive(new MemoryStream(packed), ZipArchiveMode.Read))
+        var packed = Pack(codec, campaign, files);
+        using (var zip = new ZipArchive(packed, ZipArchiveMode.Read, leaveOpen: true))
         {
             Assert.NotNull(zip.GetEntry("overlay.json"));
             Assert.NotNull(zip.GetEntry("overlay.svg"));

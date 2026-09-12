@@ -55,6 +55,10 @@ Render resource names are `mapandmuster-api`, `mapandmuster-web`, and `mapandmus
 - [ ] SSL/TLS **Full (strict)** after Render certificates exist
       → Cloudflare → **SSL/TLS**
 - [ ] Open `https://mapandmuster.com` and confirm HTTPS with no warnings
+- [ ] Confirm the campaign update stream survives the Worker: keep-alives arrive steadily and the
+      connection stays open past two minutes. A buffered or severed stream silently reverts the
+      app to polling, which is the cost the stream exists to remove
+      → `docs/deployment.md` → **Verifying the update stream through Cloudflare**
 
 ## Database
 

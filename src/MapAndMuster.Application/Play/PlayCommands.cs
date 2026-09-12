@@ -52,6 +52,9 @@ public sealed class SaveOrderDraftCommand
     /// <summary>Gets the first hop for a two-territory Move.</summary>
     public Guid? ViaTerritoryId { get; init; }
 
+    /// <summary>Gets extra hops between the first via and the destination when speed is greater than 2.</summary>
+    public IReadOnlyList<Guid>? ViaPath { get; init; }
+
     /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
     public bool DestroyImmediately { get; init; }
 
@@ -400,6 +403,12 @@ public sealed class CampaignPlayDetail
     /// <summary>Gets whether a map image exists.</summary>
     public required bool HasMap { get; init; }
 
+    /// <summary>
+    /// Gets opaque cache tags for the campaign's stored files, keyed by
+    /// <see cref="Campaigns.CampaignAssetTagMap"/> keys.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> AssetTags { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
     /// <summary>Gets the viewer's faction.</summary>
     public Guid? FactionId { get; init; }
 
@@ -496,6 +505,9 @@ public sealed class PlayMapTerritoryDetail
 
     /// <summary>Gets the owning faction, or null when Neutral.</summary>
     public Guid? OwnerFactionId { get; init; }
+
+    /// <summary>Gets the owning required subfaction, when the owner faction requires one.</summary>
+    public string? OwnerSubfaction { get; init; }
 
     /// <summary>Gets the structure type when one is present.</summary>
     public Guid? StructureTypeId { get; init; }
@@ -605,7 +617,7 @@ public sealed class PlayForceDetail
     /// <summary>Gets adjacent eligible move destinations.</summary>
     public required IReadOnlyList<Guid> MoveTargets { get; init; }
 
-    /// <summary>Gets two-territory Move hops when Crusaders applies.</summary>
+    /// <summary>Gets two-territory Move hops when the force can travel more than one territory.</summary>
     public IReadOnlyList<PlayMoveHopDetail> MoveHops { get; init; } = [];
 
     /// <summary>Gets player-submittable action kinds available for this force.</summary>
@@ -616,6 +628,9 @@ public sealed class PlayForceDetail
 
     /// <summary>Gets whether this force may Move through an intermediate territory.</summary>
     public bool CanMoveTwoTerritories { get; init; }
+
+    /// <summary>Gets how many adjacent territories this force may Move in one action.</summary>
+    public int MovementSpeed { get; init; } = 1;
 
     /// <summary>Gets whether Pillage may destroy the structure in one action.</summary>
     public bool CanDestroyImmediately { get; init; }
@@ -644,6 +659,9 @@ public sealed class PlayMoveHopDetail
 
     /// <summary>Gets the intended destination.</summary>
     public required Guid TargetTerritoryId { get; init; }
+
+    /// <summary>Gets extra hops between the first via and the destination when speed is greater than 2.</summary>
+    public IReadOnlyList<Guid> IntermediateTerritoryIds { get; init; } = [];
 }
 
 /// <summary>The viewer's draft.</summary>
@@ -663,6 +681,9 @@ public sealed class PlayDraftDetail
 
     /// <summary>Gets the first hop for a two-territory Move.</summary>
     public Guid? ViaTerritoryId { get; init; }
+
+    /// <summary>Gets extra hops between the first via and the destination when speed is greater than 2.</summary>
+    public IReadOnlyList<Guid> ViaPath { get; init; } = [];
 
     /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
     public bool DestroyImmediately { get; init; }

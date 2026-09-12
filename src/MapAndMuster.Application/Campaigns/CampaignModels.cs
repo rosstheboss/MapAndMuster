@@ -1,6 +1,7 @@
 using MapAndMuster.Application.Maps;
 using MapAndMuster.Application.Play;
 using MapAndMuster.Domain.Campaigns;
+using MapAndMuster.Domain.Play;
 
 namespace MapAndMuster.Application.Campaigns;
 
@@ -125,6 +126,15 @@ public sealed class CampaignDetail
 
     /// <summary>Gets whether a map image is stored.</summary>
     public required bool HasMap { get; init; }
+
+    /// <summary>
+    /// Gets opaque cache tags for the campaign's stored files, keyed by <see cref="CampaignAssetTagMap"/> keys.
+    /// </summary>
+    /// <remarks>
+    /// Clients put the tag in the asset URL so the URL changes only when the file does. Keys
+    /// whose file is absent are omitted.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> AssetTags { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>Gets whether the current user can manage the campaign.</summary>
     public required bool CanManage { get; init; }
@@ -620,6 +630,12 @@ public sealed class FactionDetail
     /// <summary>Gets extra faction-catalog tags for named subfactions.</summary>
     public IReadOnlyList<StoredSubfactionTags> SubfactionTags { get; init; } = [];
 
+    /// <summary>Gets how many adjacent territories this faction may Move in one action.</summary>
+    public int ForceMovementSpeed { get; init; } = 1;
+
+    /// <summary>Gets movement-speed overrides for named subfactions.</summary>
+    public IReadOnlyList<StoredSubfactionMovementSpeed> SubfactionMovementSpeeds { get; init; } = [];
+
     /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
     public IReadOnlyList<SubfactionAppearanceDetail> SubfactionAppearances { get; init; } = [];
 }
@@ -866,6 +882,41 @@ public sealed class StoredRoundPhase
 }
 
 /// <summary>
+/// An open campaign and the state needed to work out when it next needs a time-based
+/// transition, without the overlay graph or catalog.
+/// </summary>
+public sealed class CampaignTransitionCandidate
+{
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the scheduled start instant.</summary>
+    public required DateTimeOffset StartsUtc { get; init; }
+
+    /// <summary>Gets the launched play state, or <see langword="null"/> before launch.</summary>
+    public CampaignPlayState? PlayState { get; init; }
+}
+
+/// <summary>
+/// The minimum campaign state needed to authorize a viewer, without the overlay graph,
+/// catalog, or play-state JSON.
+/// </summary>
+public sealed class CampaignAccessSnapshot
+{
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the current campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets whether non-members may view the campaign.</summary>
+    public required bool IsPubliclyViewable { get; init; }
+
+    /// <summary>Gets the campaign memberships.</summary>
+    public required IReadOnlyList<StoredCampaignMembership> Memberships { get; init; }
+}
+
+/// <summary>
 /// A persisted campaign membership.
 /// </summary>
 public sealed class StoredCampaignMembership
@@ -929,6 +980,12 @@ public sealed class StoredFaction
 
     /// <summary>Gets extra faction-catalog tags for named subfactions.</summary>
     public IReadOnlyList<StoredSubfactionTags> SubfactionTags { get; init; } = [];
+
+    /// <summary>Gets how many adjacent territories this faction may Move in one action.</summary>
+    public int ForceMovementSpeed { get; init; } = 1;
+
+    /// <summary>Gets movement-speed overrides for named subfactions.</summary>
+    public IReadOnlyList<StoredSubfactionMovementSpeed> SubfactionMovementSpeeds { get; init; } = [];
 }
 
 /// <summary>
@@ -962,6 +1019,18 @@ public sealed class StoredSubfactionTags
 
     /// <summary>Gets extra faction-catalog tag identifiers.</summary>
     public IReadOnlyList<Guid> TagIds { get; init; } = [];
+}
+
+/// <summary>
+/// Movement-speed override for one named subfaction.
+/// </summary>
+public sealed class StoredSubfactionMovementSpeed
+{
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the movement speed for this subfaction.</summary>
+    public required int Speed { get; init; }
 }
 
 /// <summary>
@@ -1139,6 +1208,57 @@ public sealed class ItemObjectiveTypeDetail
 
     /// <summary>Gets special-rule identifiers assigned to this item.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+
+    /// <summary>Gets parameterized effects granted while a force holds this item.</summary>
+    public IReadOnlyList<ItemObjectiveEffectDetail> Effects { get; init; } = [];
+}
+
+/// <summary>
+/// A parameterized item-objective effect in a campaign detail response.
+/// </summary>
+public sealed class ItemObjectiveEffectDetail
+{
+    /// <summary>Gets the effect identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the effect kind name.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the signed amount for speed, supply, or army-point changes.</summary>
+    public int Amount { get; init; }
+
+    /// <summary>Gets whether the amount is a percent of the round army-point cap.</summary>
+    public bool AmountIsPercent { get; init; }
+
+    /// <summary>Gets catalog status identifiers for inflict or immunity effects.</summary>
+    public IReadOnlyList<Guid> StatusTypeIds { get; init; } = [];
+
+    /// <summary>Gets whether the holder is immune to every catalog status.</summary>
+    public bool ImmuneToAllStatuses { get; init; }
+
+    /// <summary>Gets whether the holder's campaign ally group is ignored while the item is held.</summary>
+    public bool SuspendCurrentAllyGroup { get; init; }
+
+    /// <summary>Gets an ally-group name the holder is treated as belonging to.</summary>
+    public string? ForcedAllyGroupName { get; init; }
+
+    /// <summary>Gets extra factions treated as allied while the item is held.</summary>
+    public IReadOnlyList<ItemObjectiveAllianceTargetDetail> AlliedFactions { get; init; } = [];
+
+    /// <summary>Gets display-only reminder text for a custom battle effect.</summary>
+    public string? CustomText { get; init; }
+}
+
+/// <summary>
+/// An alliance target on an item-objective effect.
+/// </summary>
+public sealed class ItemObjectiveAllianceTargetDetail
+{
+    /// <summary>Gets the faction treated as allied.</summary>
+    public required Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction scope, when set.</summary>
+    public string? Subfaction { get; init; }
 }
 
 /// <summary>
@@ -1793,6 +1913,57 @@ public sealed class StoredItemObjectiveType
 
     /// <summary>Gets special-rule identifiers assigned to this item.</summary>
     public IReadOnlyList<Guid> SpecialRuleIds { get; init; } = [];
+
+    /// <summary>Gets parameterized effects granted while a force holds this item.</summary>
+    public IReadOnlyList<StoredItemObjectiveEffect> Effects { get; init; } = [];
+}
+
+/// <summary>
+/// A persisted parameterized item-objective effect.
+/// </summary>
+public sealed class StoredItemObjectiveEffect
+{
+    /// <summary>Gets the effect identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the effect kind name.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Gets the signed amount for speed, supply, or army-point changes.</summary>
+    public int Amount { get; init; }
+
+    /// <summary>Gets whether the amount is a percent of the round army-point cap.</summary>
+    public bool AmountIsPercent { get; init; }
+
+    /// <summary>Gets catalog status identifiers for inflict or immunity effects.</summary>
+    public IReadOnlyList<Guid> StatusTypeIds { get; init; } = [];
+
+    /// <summary>Gets whether the holder is immune to every catalog status.</summary>
+    public bool ImmuneToAllStatuses { get; init; }
+
+    /// <summary>Gets whether the holder's campaign ally group is ignored while the item is held.</summary>
+    public bool SuspendCurrentAllyGroup { get; init; }
+
+    /// <summary>Gets an ally-group name the holder is treated as belonging to.</summary>
+    public string? ForcedAllyGroupName { get; init; }
+
+    /// <summary>Gets extra factions treated as allied while the item is held.</summary>
+    public IReadOnlyList<StoredItemObjectiveAllianceTarget> AlliedFactions { get; init; } = [];
+
+    /// <summary>Gets display-only reminder text for a custom battle effect.</summary>
+    public string? CustomText { get; init; }
+}
+
+/// <summary>
+/// A persisted alliance target on an item-objective effect.
+/// </summary>
+public sealed class StoredItemObjectiveAllianceTarget
+{
+    /// <summary>Gets the faction treated as allied.</summary>
+    public required Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction scope, when set.</summary>
+    public string? Subfaction { get; init; }
 }
 
 /// <summary>
