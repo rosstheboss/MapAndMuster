@@ -99,7 +99,6 @@
         [unreadMentionCount]="board.unreadMentionCount ?? 0"
         [unreadPrivateCount]="board.unreadPrivateCount ?? 0"
         [scrollToEntryId]="logScrollEntryId()"
-        [streamState]="updateStream()?.state() ?? null"
         (expandedChange)="setSection('log', $event)"
         (channelChange)="onChatChannelChange($event)"
         (scrollChange)="onChatScrollChange($event)"
@@ -146,6 +145,18 @@
               }
             </select>
           </div>
+          @if (chosenSpecialRules().length > 0) {
+            <ul class="plain-list">
+              @for (rule of chosenSpecialRules(); track rule.id) {
+                <li>
+                  <strong>{{ rule.name }}</strong>
+                  @if (rule.text) {
+                    — {{ rule.text }}
+                  }
+                </li>
+              }
+            </ul>
+          }
           @if (showSpawnLocation() && spawnLocation(); as spawn) {
             <p>
               Spawn location is at
@@ -184,6 +195,18 @@
               · {{ campaign.subfaction }}
             }
           </p>
+          @if (chosenSpecialRules().length > 0) {
+            <ul class="plain-list">
+              @for (rule of chosenSpecialRules(); track rule.id) {
+                <li>
+                  <strong>{{ rule.name }}</strong>
+                  @if (rule.text) {
+                    — {{ rule.text }}
+                  }
+                </li>
+              }
+            </ul>
+          }
           @if (myForces().length > 0) {
             <ul class="plain-list summary-forces">
               @for (force of myForces(); track force.id) {
@@ -590,6 +613,8 @@
                 [canCommit]="canCommitActions()"
                 [commitClosesPhase]="isFinalRequiredCommitment()"
                 [showUncommit]="canUncommit()"
+                [actionPrompt]="mapActionPrompt()"
+                [promptAvoidTerritoryIds]="mapPromptAvoidIds()"
                 (territoryHover)="hoveredTerritoryId.set($event)"
                 (territorySelect)="onTerritorySelect($event)"
                 (backgroundSelect)="onMapBackgroundSelect()"
@@ -1184,7 +1209,7 @@
             [attr.aria-expanded]="isOpen('standings')"
             (click)="toggleSection('standings')"
           >
-            Campaign points
+            Standings
           </button>
         </h2>
         @if (isOpen('standings')) {
@@ -1273,20 +1298,17 @@
                             [disabled]="!!mapAction()"
                             (click)="focusOnMap('faction', row.factionId)"
                           >
-                            @if (
-                              row.hasFlagImage && flagImageUrl(row.factionId, standingSubfaction(row.userId));
-                              as src
-                            ) {
+                            @if (standingFlagUrl(row); as src) {
                               <app-faction-logo
                                 class="standing-faction-logo"
                                 [src]="src"
-                                [color]="row.factionColor || '#2563EB'"
-                                [tint]="row.tintFlagImage === true"
+                                [color]="standingFlagColor(row)"
+                                [tint]="standingFlagTint(row)"
                               />
-                            } @else if (row.factionColor) {
+                            } @else {
                               <span
                                 class="faction-swatch standing-faction-logo"
-                                [style.background]="row.factionColor"
+                                [style.background]="standingFlagColor(row)"
                                 aria-hidden="true"
                               ></span>
                             }
@@ -1447,18 +1469,18 @@
       </h2>
       @if (isOpen('factions')) {
         <ul class="plain-list">
-          @for (faction of campaign.factions; track faction.id) {
+          @for (entry of listedFactions(); track entry.faction.id) {
             <li>
               <button
                 type="button"
                 class="map-focus-button"
-                [class.is-map-focused]="isMapFocused('faction', faction.id)"
+                [class.is-map-focused]="isMapFocused('faction', entry.faction.id)"
                 [disabled]="!!mapAction()"
-                (click)="focusOnMap('faction', faction.id)"
+                (click)="focusOnMap('faction', entry.faction.id)"
               >
-                <strong>{{ faction.name }}</strong>
+                <strong>{{ entry.faction.name }}</strong>
               </button>
-              @for (place of spawnPlacesFor(faction); track place.territoryId + ':' + place.subfactionLabel) {
+              @for (place of spawnPlacesFor(entry.faction); track place.territoryId + ':' + place.subfactionLabel) {
                 <span class="muted">{{ place.prefix }}{{ place.subfactionLabel }}</span>
                 <button
                   type="button"
@@ -1471,28 +1493,25 @@
                 ></button>
                 <span class="muted">{{ place.suffix }}</span>
               }
-              @if (faction.hasFlagImage && flagImageUrl(faction.id); as src) {
+              @if (entry.faction.hasFlagImage && flagImageUrl(entry.faction.id); as src) {
                 <app-faction-logo
                   class="faction-list-logo"
                   [src]="src"
-                  [color]="faction.color"
-                  [tint]="faction.tintFlagImage === true"
+                  [color]="entry.faction.color"
+                  [tint]="entry.faction.tintFlagImage === true"
                 />
               } @else {
-                <span class="faction-swatch" [style.background]="faction.color" aria-hidden="true"></span>
+                <span class="faction-swatch" [style.background]="entry.faction.color" aria-hidden="true"></span>
               }
-              @if (faction.requiresSubfaction) {
+              @if (entry.faction.requiresSubfaction) {
                 <span class="muted"> · Subfaction required</span>
               }
-              @if (faction.allyGroupName) {
-                <span class="muted"> · Ally group: {{ faction.allyGroupName }}</span>
+              @if (entry.faction.allyGroupName) {
+                <span class="muted"> · Ally group: {{ entry.faction.allyGroupName }}</span>
               }
-              @if (faction.subfactions.length > 0) {
-                <p class="muted">Subfactions: {{ faction.subfactions.join(', ') }}</p>
-              }
-              @if (specialRulesFor(faction.specialRuleIds).length > 0) {
+              @if (entry.specialRules.length > 0) {
                 <ul>
-                  @for (rule of specialRulesFor(faction.specialRuleIds); track rule.id) {
+                  @for (rule of entry.specialRules; track rule.id) {
                     <li>
                       <strong>{{ rule.name }}</strong>
                       @if (rule.text) {
@@ -1502,20 +1521,56 @@
                   }
                 </ul>
               }
-              @for (assignment of faction.subfactionSpecialRules ?? []; track assignment.name) {
-                @if (specialRulesFor(assignment.specialRuleIds).length > 0) {
-                  <p class="muted">{{ assignment.name }}</p>
-                  <ul>
-                    @for (rule of specialRulesFor(assignment.specialRuleIds); track rule.id) {
-                      <li>
-                        <strong>{{ rule.name }}</strong>
-                        @if (rule.text) {
-                          — {{ rule.text }}
-                        }
-                      </li>
-                    }
-                  </ul>
-                }
+              @if (entry.players.length > 0) {
+                <p>
+                  Players:
+                  @for (player of entry.players; track player.userId; let last = $last) {
+                    <button
+                      type="button"
+                      class="map-focus-button"
+                      [class.is-map-focused]="isMapFocused('player', player.userId)"
+                      [disabled]="!!mapAction()"
+                      (click)="focusOnMap('player', player.userId)"
+                    >
+                      {{ player.displayName }}</button
+                    >{{ last ? '' : ', ' }}
+                  }
+                </p>
+              }
+              @for (subfaction of entry.subfactions; track subfaction.name) {
+                <div class="faction-subfaction">
+                  <p>
+                    <strong>{{ subfaction.name }}</strong>
+                  </p>
+                  @if (subfaction.specialRules.length > 0) {
+                    <ul>
+                      @for (rule of subfaction.specialRules; track rule.id) {
+                        <li>
+                          <strong>{{ rule.name }}</strong>
+                          @if (rule.text) {
+                            — {{ rule.text }}
+                          }
+                        </li>
+                      }
+                    </ul>
+                  }
+                  @if (subfaction.players.length > 0) {
+                    <p>
+                      Players:
+                      @for (player of subfaction.players; track player.userId; let last = $last) {
+                        <button
+                          type="button"
+                          class="map-focus-button"
+                          [class.is-map-focused]="isMapFocused('player', player.userId)"
+                          [disabled]="!!mapAction()"
+                          (click)="focusOnMap('player', player.userId)"
+                        >
+                          {{ player.displayName }}</button
+                        >{{ last ? '' : ', ' }}
+                      }
+                    </p>
+                  }
+                </div>
               }
             </li>
           }
@@ -1580,19 +1635,21 @@
       </div>
     }
 
-    @if (campaign.links.length > 0) {
-      <div class="panel stack">
-        <h2>
-          <button
-            type="button"
-            class="section-toggle"
-            [attr.aria-expanded]="isOpen('links')"
-            (click)="toggleSection('links')"
-          >
-            Links
-          </button>
-        </h2>
-        @if (isOpen('links')) {
+    <div class="panel stack">
+      <h2>
+        <button
+          type="button"
+          class="section-toggle"
+          [attr.aria-expanded]="isOpen('links')"
+          (click)="toggleSection('links')"
+        >
+          Links
+        </button>
+      </h2>
+      @if (isOpen('links')) {
+        @if (campaign.links.length === 0) {
+          <p class="muted">No links have been added to this campaign.</p>
+        } @else {
           <ul class="plain-list">
             @for (link of campaign.links; track link.id) {
               <li>
@@ -1601,8 +1658,8 @@
             }
           </ul>
         }
-      </div>
-    }
+      }
+    </div>
 
     @if (play() && (visibleItemObjectives().length > 0 || (canDebug() && isDebugActive()))) {
       <div class="panel stack">
@@ -1825,6 +1882,14 @@
                     [disabled]="!!mapAction()"
                     (click)="focusOnMap('player', participant.userId)"
                   >
+                    @if (participantFlagUrl(participant); as src) {
+                      <app-faction-logo
+                        class="standing-faction-logo"
+                        [src]="src"
+                        [color]="participantFlagColor(participant)"
+                        [tint]="participantFlagTint(participant)"
+                      />
+                    }
                     {{ participant.displayName }}
                   </button>
                   @if ((participant.traitorVictims ?? []).length > 0) {

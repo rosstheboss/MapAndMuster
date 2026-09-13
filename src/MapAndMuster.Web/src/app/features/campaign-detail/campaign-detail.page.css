@@ -246,7 +246,9 @@
 }
 
 .map-focus-button {
-  display: inline;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   min-height: var(--touch-min);
   padding: 0.15rem 0.35rem;
   border: 0;
@@ -517,6 +519,15 @@ app-faction-logo.faction-list-logo {
   width: 1.35rem;
   height: 1.35rem;
   margin-left: 0.4rem;
+}
+
+.faction-subfaction {
+  margin-block: 0.4rem 0;
+  margin-inline-start: 1rem;
+}
+
+.faction-subfaction > p {
+  margin: 0.2rem 0 0;
 }
 
 fieldset {

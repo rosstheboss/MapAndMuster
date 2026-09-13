@@ -77,10 +77,10 @@ public sealed class CampaignPointStandingsRulesTests
 
         var khorneRow = result.Standings.Single(row => row.UserId == khorne);
         var tzeentchRow = result.Standings.Single(row => row.UserId == tzeentch);
-        Assert.Equal(6, khorneRow.TerritoryAndStructurePoints);
-        Assert.Equal(2, khorneRow.PublicObjectivePoints);
-        Assert.Equal(3, tzeentchRow.TerritoryAndStructurePoints);
-        Assert.Equal(1, tzeentchRow.PublicObjectivePoints);
+        Assert.Equal(8, khorneRow.TerritoryAndStructurePoints);
+        Assert.Equal(0, khorneRow.PublicObjectivePoints);
+        Assert.Equal(4, tzeentchRow.TerritoryAndStructurePoints);
+        Assert.Equal(0, tzeentchRow.PublicObjectivePoints);
         Assert.NotEqual(khorneRow.Total, tzeentchRow.Total);
     }
 
@@ -340,6 +340,8 @@ public sealed class CampaignPointStandingsRulesTests
 
         Assert.Equal(4, result.Standings.Single(row => row.UserId == north).PublicObjectivePoints);
         Assert.Equal(0, result.Standings.Single(row => row.UserId == south).PublicObjectivePoints);
+        Assert.Equal(3, result.Standings.Single(row => row.UserId == north).TerritoryAndStructurePoints);
+        Assert.Equal(9, result.Standings.Single(row => row.UserId == south).TerritoryAndStructurePoints);
     }
 
     [Fact]
@@ -357,7 +359,9 @@ public sealed class CampaignPointStandingsRulesTests
             ],
             ranking: new GeneralPublicObjectivePoints(0, 0, 0, pointsPerTerritory: 2)));
 
-        Assert.Equal(4, Assert.Single(result.Standings).PublicObjectivePoints);
+        var row = Assert.Single(result.Standings);
+        Assert.Equal(4, row.TerritoryAndStructurePoints);
+        Assert.Equal(0, row.PublicObjectivePoints);
         var board = Assert.Single(result.Leaderboards);
         Assert.Equal(GeneralPublicObjectiveKinds.PointsPerTerritory, board.Kind);
         Assert.Equal(2, board.AwardPoints);

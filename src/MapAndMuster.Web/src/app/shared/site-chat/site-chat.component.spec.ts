@@ -57,13 +57,13 @@ describe('SiteChatComponent', () => {
     );
   });
 
-  it('shows Live on the summary when the stream is open', () => {
+  it('shows Live on the title when the stream is open', () => {
     const fixture = TestBed.createComponent(SiteChatComponent);
     fixture.componentRef.setInput('streamState', 'open');
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('summary')?.textContent).toContain('Live');
+    expect(compiled.querySelector('.section-toggle')?.textContent).toContain('Live');
     expect(compiled.querySelector('app-update-stream-status')?.textContent).toContain('Live');
   });
 

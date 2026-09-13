@@ -25,6 +25,7 @@ import {
   traceSharedBorder,
   translatePolygon,
   unionPolygonBounds,
+  placeMapActionPrompt,
   type MapPoint,
 } from './geometry';
 import type { MapAdjacency, MapTerritory } from './map-graph.models';
@@ -42,6 +43,17 @@ describe('map geometry', () => {
       maxX: 0.7,
       maxY: 0.4,
     });
+  });
+
+  it('places an action prompt away from occupied territories when possible', () => {
+    const occupied = square(0.35, 0.35, 0.3);
+    const top = placeMapActionPrompt([occupied]);
+    expect(top.x).toBeCloseTo(0.5, 3);
+    expect(top.y).toBeLessThan(0.2);
+
+    const coveringTop = square(0.2, 0, 0.6);
+    const bottom = placeMapActionPrompt([coveringTop]);
+    expect(bottom.y).toBeGreaterThan(0.8);
   });
 
   it('allows a shared border and supplies a midpoint', () => {

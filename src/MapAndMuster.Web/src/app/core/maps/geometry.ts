@@ -110,6 +110,73 @@ export function unionPolygonBounds(polygons: readonly (readonly MapPoint[])[]): 
   return { minX, minY, maxX, maxY };
 }
 
+const DEFAULT_ACTION_PROMPT_WIDTH = 0.32;
+const DEFAULT_ACTION_PROMPT_HEIGHT = 0.1;
+
+/**
+ * Places a map action prompt in normalized image space, preferring the top of the map and
+ * avoiding overlap with the given territory polygons.
+ */
+export function placeMapActionPrompt(
+  avoidPolygons: readonly (readonly MapPoint[])[],
+  promptWidth = DEFAULT_ACTION_PROMPT_WIDTH,
+  promptHeight = DEFAULT_ACTION_PROMPT_HEIGHT,
+): MapPoint {
+  const padding = 0.03;
+  const candidates: readonly MapPoint[] = [
+    { x: 0.5, y: padding + promptHeight / 2 },
+    { x: 0.5, y: 1 - padding - promptHeight / 2 },
+    { x: padding + promptWidth / 2, y: 0.5 },
+    { x: 1 - padding - promptWidth / 2, y: 0.5 },
+    { x: padding + promptWidth / 2, y: padding + promptHeight / 2 },
+    { x: 1 - padding - promptWidth / 2, y: padding + promptHeight / 2 },
+    { x: padding + promptWidth / 2, y: 1 - padding - promptHeight / 2 },
+    { x: 1 - padding - promptWidth / 2, y: 1 - padding - promptHeight / 2 },
+  ];
+
+  let best = candidates[0];
+  let bestOverlap = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    const overlap = actionPromptOverlapArea(candidate, promptWidth, promptHeight, avoidPolygons);
+    if (overlap < bestOverlap) {
+      best = candidate;
+      bestOverlap = overlap;
+      if (overlap === 0) {
+        break;
+      }
+    }
+  }
+
+  return best;
+}
+
+function actionPromptOverlapArea(
+  center: MapPoint,
+  promptWidth: number,
+  promptHeight: number,
+  avoidPolygons: readonly (readonly MapPoint[])[],
+): number {
+  const rect: AxisAlignedBounds = {
+    minX: center.x - promptWidth / 2,
+    maxX: center.x + promptWidth / 2,
+    minY: center.y - promptHeight / 2,
+    maxY: center.y + promptHeight / 2,
+  };
+  let area = 0;
+  for (const polygon of avoidPolygons) {
+    const bounds = unionPolygonBounds([polygon]);
+    if (!bounds) {
+      continue;
+    }
+
+    const overlapWidth = Math.max(0, Math.min(rect.maxX, bounds.maxX) - Math.max(rect.minX, bounds.minX));
+    const overlapHeight = Math.max(0, Math.min(rect.maxY, bounds.maxY) - Math.max(rect.minY, bounds.minY));
+    area += overlapWidth * overlapHeight;
+  }
+
+  return area;
+}
+
 /** A point inside the polygon, used so markers do not sit in a hole or on a neighbor. */
 export function interiorAnchor(polygon: readonly MapPoint[]): MapPoint {
   if (polygon.length === 0) {

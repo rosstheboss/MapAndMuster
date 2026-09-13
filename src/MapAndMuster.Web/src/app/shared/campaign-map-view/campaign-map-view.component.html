@@ -161,9 +161,9 @@
                 <g class="territory-layer">
                   <g
                     class="territory-visual"
-                    [class.is-lifted]="item.lifted"
+                    [class.is-lifted]="isTerritoryLifted(item.territory.id)"
                     [class.is-hover-motion]="isHoverMotion(item.territory.id)"
-                    [attr.transform]="'translate(0 ' + (item.lifted ? item.hoverLift : 0) + ')'"
+                    [attr.transform]="territoryVisualTransform(item.territory.id)"
                   >
                     <polygon
                       class="territory"
@@ -342,17 +342,32 @@
                     [class.is-battle]="pin.force.inBattle"
                     [class.is-emphasized]="pin.emphasized"
                     [class.has-action]="!!pin.force.isMine && !!pin.force.action"
+                    [class.has-image]="!!pin.image"
+                    [class.is-tinted]="!!pin.image && pin.tint"
                     [style.left.%]="pin.fit.x * 100"
                     [style.top.%]="pin.fit.y * 100"
                     [style.width.px]="markerSize(pin.fit).width"
                     [style.height.px]="markerSize(pin.fit).height"
                     [style.margin-left.px]="-markerSize(pin.fit).width / 2"
                     [style.margin-top.px]="-markerSize(pin.fit).height / 2"
-                    [style.background]="pin.color"
+                    [style.background]="flagBackground(pin)"
+                    [style.--logo-mask]="pin.image && pin.tint ? maskUrl(pin.image) : null"
                     role="img"
                     [attr.aria-label]="forceLabel(pin.force)"
                     [title]="forceLabel(pin.force)"
                   >
+                    @if (pin.image && pin.tint) {
+                      <img class="marker-decode" [src]="pin.image" alt="" decoding="async" draggable="false" />
+                    }
+                    @if (pin.image && !pin.tint) {
+                      <img
+                        [src]="pin.image"
+                        alt=""
+                        decoding="async"
+                        draggable="false"
+                        (error)="onFlagImageError(pin.image)"
+                      />
+                    }
                     @if (pin.force.isMine && pin.force.action) {
                       <span class="force-action-mark" aria-hidden="true">
                         <app-icon name="check" />
@@ -415,6 +430,16 @@
                 <app-icon [name]="marker.valid ? 'check' : 'x'" />
               </div>
             }
+          }
+          @if (actionPromptPlacement(); as prompt) {
+            <div
+              class="map-action-prompt"
+              role="status"
+              [style.left.%]="prompt.point.x * 100"
+              [style.top.%]="prompt.point.y * 100"
+            >
+              {{ prompt.text }}
+            </div>
           }
         </div>
         @if (!panning()) {

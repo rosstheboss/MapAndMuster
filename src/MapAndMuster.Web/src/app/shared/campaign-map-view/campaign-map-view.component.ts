@@ -36,6 +36,7 @@ import {
   MAX_ZOOM,
   MIN_ZOOM,
   normalizedFromPixels,
+  placeMapActionPrompt,
   pointOnPolygonBoundary,
   polygonIntersectsRect,
   polygonPointsAttribute,
@@ -168,6 +169,8 @@ export class CampaignMapViewComponent {
   readonly canCommit = input(false);
   readonly commitClosesPhase = input(false);
   readonly showUncommit = input(false);
+  readonly actionPrompt = input<string | null>(null);
+  readonly promptAvoidTerritoryIds = input<readonly string[]>([]);
 
   readonly mapPoint = output<MapPoint>();
   readonly commit = output<void>();
@@ -215,6 +218,9 @@ export class CampaignMapViewComponent {
   private pinchCooldown = false;
   private hoverIntentTimer: ReturnType<typeof setTimeout> | null = null;
   private hoverIntentId: string | null | undefined = undefined;
+  private lastMapHoverPoint: MapPoint | null = null;
+  private tooltipFrame = 0;
+  private pendingTooltip: { x: number; y: number } | null = null;
   private readonly hoverMotionIds = signal<ReadonlySet<string>>(new Set());
   private readonly hoverMotionTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private resizeObserver: ResizeObserver | null = null;
@@ -232,6 +238,7 @@ export class CampaignMapViewComponent {
       this.clearHoverMotion();
       this.releaseFullscreen();
       cancelAnimationFrame(this.selectionCameraFrame);
+      cancelAnimationFrame(this.tooltipFrame);
     });
     effect(() => {
       const ids = this.selectedTerritoryIds();
@@ -296,10 +303,14 @@ export class CampaignMapViewComponent {
         avoided.push(fit);
         const forceOwner = this.factions().find((faction) => faction.id === force.factionId) ?? null;
         const forceAppearance = resolveFactionAppearance(forceOwner, force.subfaction);
+        const forceFlagUrl =
+          forceOwner && forceAppearance.hasFlagImage ? this.flagImageUrl()(force.factionId, force.subfaction) : null;
         return {
           force,
           fit,
           color: forceAppearance.color,
+          image: forceFlagUrl && !this.failedFlagUrls().has(forceFlagUrl) ? forceFlagUrl : null,
+          tint: forceAppearance.tint,
           emphasized: this.emphasizedForceIds().includes(force.id),
         };
       });
@@ -343,7 +354,6 @@ export class CampaignMapViewComponent {
 
   protected readonly overlayTerritories = computed(() => {
     const layouts = this.territoryLayouts();
-    const hoverLift = -this.screenToMap(HOVER_LIFT_SCREEN_PX);
     return layouts.map((layout) => {
       const territory = layout.territory;
       const owner = this.factions().find((faction) => faction.id === territory.ownerFactionId) ?? null;
@@ -356,8 +366,6 @@ export class CampaignMapViewComponent {
         : '#78716c';
       const isSpawn = !!territory.spawnFactionId;
       const stripeColor = fill === 'transparent' ? spawnColor : fill;
-      const hovered = territory.id === this.hoveredTerritoryId();
-      const lifted = hovered && !selected && !this.marqueeBox();
       const glowSource = isSpawn ? stripeColor : fill;
       return {
         ...layout,
@@ -373,8 +381,6 @@ export class CampaignMapViewComponent {
         moveInvalid: selected && this.movePlacement() === 'invalid',
         isSpawn,
         fill: isSpawn ? `url(#${spawnStripePatternId(stripeColor)})` : fill,
-        lifted,
-        hoverLift,
         strokeWidth: this.screenToMap(
           selected
             ? STROKE_FULL_HIGHLIGHT_SCREEN_PX
@@ -444,6 +450,19 @@ export class CampaignMapViewComponent {
 
     const territory = this.territories().find((item) => item.id === id);
     return territory ? this.territoryTooltip(territory) : null;
+  });
+
+  protected readonly actionPromptPlacement = computed(() => {
+    const prompt = this.actionPrompt();
+    if (!prompt) {
+      return null;
+    }
+
+    const avoidIds = new Set(this.promptAvoidTerritoryIds());
+    const avoid = this.territories()
+      .filter((territory) => avoidIds.has(territory.id))
+      .map((territory) => territory.polygon);
+    return { text: prompt, point: placeMapActionPrompt(avoid) };
   });
 
   protected readonly moveDropMarker = computed(() => {
@@ -630,6 +649,12 @@ export class CampaignMapViewComponent {
       return;
     }
 
+    const previous = this.lastMapHoverPoint;
+    if (previous !== null && previous.x === point.x && previous.y === point.y) {
+      return;
+    }
+
+    this.lastMapHoverPoint = point;
     this.mapHover.emit(point);
   }
 
@@ -845,6 +870,10 @@ export class CampaignMapViewComponent {
 
   private emitTerritoryHover(id: string | null): void {
     const previous = this.hoveredTerritoryId();
+    if (previous === id) {
+      return;
+    }
+
     if (previous && previous !== id) {
       this.playHoverMotion(previous);
     }
@@ -860,10 +889,16 @@ export class CampaignMapViewComponent {
     return this.hoverMotionIds().has(id);
   }
 
+  protected isTerritoryLifted(id: string): boolean {
+    return id === this.hoveredTerritoryId() && !this.isSelected(id) && !this.marqueeBox();
+  }
+
+  protected territoryVisualTransform(id: string): string {
+    return this.isTerritoryLifted(id) ? `translate(0 ${-this.screenToMap(HOVER_LIFT_SCREEN_PX)})` : 'translate(0 0)';
+  }
+
   protected markerLiftTransform(id: string): string {
-    const selected = this.isSelected(id);
-    const lifted = id === this.hoveredTerritoryId() && !selected && !this.marqueeBox();
-    if (!lifted) {
+    if (!this.isTerritoryLifted(id)) {
       return '';
     }
 
@@ -1330,14 +1365,34 @@ export class CampaignMapViewComponent {
   }
 
   private trackTooltipPosition(event: PointerEvent): void {
+    if (!this.hoverTooltip()) {
+      return;
+    }
+
     const viewport = this.viewport()?.nativeElement;
     if (!viewport) {
       return;
     }
 
     const rect = viewport.getBoundingClientRect();
-    this.tooltipX.set(Math.min(Math.max(event.clientX - rect.left + 12, 8), Math.max(rect.width - 8, 8)));
-    this.tooltipY.set(Math.min(Math.max(event.clientY - rect.top + 16, 8), Math.max(rect.height - 8, 8)));
+    this.pendingTooltip = {
+      x: Math.min(Math.max(event.clientX - rect.left + 12, 8), Math.max(rect.width - 8, 8)),
+      y: Math.min(Math.max(event.clientY - rect.top + 16, 8), Math.max(rect.height - 8, 8)),
+    };
+    if (this.tooltipFrame !== 0) {
+      return;
+    }
+
+    this.tooltipFrame = requestAnimationFrame(() => {
+      this.tooltipFrame = 0;
+      const pending = this.pendingTooltip;
+      if (!pending || this.destroyed) {
+        return;
+      }
+
+      this.tooltipX.set(pending.x);
+      this.tooltipY.set(pending.y);
+    });
   }
 
   private setFullscreen(on: boolean): void {

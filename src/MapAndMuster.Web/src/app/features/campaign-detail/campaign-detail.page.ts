@@ -71,7 +71,7 @@ import type {
 } from '../../core/campaigns/campaign.models';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { CampaignService } from '../../core/campaigns/campaign.service';
-import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
+import { findSubfactionAppearance, resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import { compareNames } from '../../core/campaigns/faction-presets';
 import { isWaterTagName } from '../../core/campaigns/force-status-presets';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
@@ -135,6 +135,24 @@ interface AllyGroupPlayer {
   displayName: string;
   factionLabel: string;
   traitorVictims: TraitorVictim[];
+}
+
+interface FactionRosterPlayer {
+  userId: string;
+  displayName: string;
+}
+
+interface FactionRosterSubfaction {
+  name: string;
+  specialRules: CampaignSpecialRule[];
+  players: FactionRosterPlayer[];
+}
+
+interface FactionRoster {
+  faction: CampaignFaction;
+  specialRules: CampaignSpecialRule[];
+  players: FactionRosterPlayer[];
+  subfactions: FactionRosterSubfaction[];
 }
 
 interface FactionSpawnPlace {
@@ -356,6 +374,10 @@ export class CampaignDetailPage {
 
     if (flow?.step === 'pick-via') {
       return flow.viaCandidates;
+    }
+
+    if (!flow && this.pendingRetreatTargets().length > 0) {
+      return this.pendingRetreatTargets();
     }
 
     return adjacentTerritoryIds(this.graph().adjacencies, this.selectedIds());
@@ -602,6 +624,51 @@ export class CampaignDetailPage {
           players,
         };
       });
+  });
+  protected readonly listedFactions = computed(() => {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return [];
+    }
+
+    return campaign.factions.map((faction) => factionRoster(campaign, faction, (ids) => this.specialRulesFor(ids)));
+  });
+  protected readonly chosenSpecialRules = computed(() => {
+    const parsed = parseMapFactionOptionValue(this.factionChoice());
+    const campaign = this.campaign();
+    const factionId = parsed.factionId || campaign?.factionId;
+    const subfaction = parsed.factionId ? parsed.subfaction : (campaign?.subfaction ?? null);
+    if (!campaign || !factionId) {
+      return [];
+    }
+
+    const faction = campaign.factions.find((item) => item.id === factionId);
+    if (!faction) {
+      return [];
+    }
+
+    const factionRules = this.specialRulesFor(faction.specialRuleIds);
+    const assigned = subfaction
+      ? faction.subfactionSpecialRules?.find((item) => item.name === subfaction)?.specialRuleIds
+      : undefined;
+    const subRules = this.specialRulesFor(assigned);
+    const seen = new Set(factionRules.map((rule) => rule.id));
+    return [...factionRules, ...subRules.filter((rule) => !seen.has(rule.id))];
+  });
+  protected readonly pendingRetreatTargets = computed(() => {
+    const battles = this.play()?.battles ?? [];
+    const targets = new Set<string>();
+    for (const battle of battles) {
+      if (!battle.needsRetreat) {
+        continue;
+      }
+
+      for (const target of battle.retreatTargets) {
+        targets.add(target);
+      }
+    }
+
+    return [...targets];
   });
   protected readonly leaderboards = computed(
     () => this.play()?.publicObjectiveLeaderboards ?? this.campaign()?.publicObjectiveLeaderboards ?? [],
@@ -1689,11 +1756,55 @@ export class CampaignDetailPage {
       return null;
     }
 
-    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.assetTags, subfaction);
+    const source = findSubfactionAppearance(faction, subfaction)?.flagSource ?? 'inherit';
+    const scopedSubfaction = source === 'image' ? subfaction : null;
+    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.assetTags, scopedSubfaction);
   };
 
   protected standingSubfaction(userId: string): string | null {
     return this.campaign()?.participants?.find((participant) => participant.userId === userId)?.subfaction ?? null;
+  }
+
+  protected standingFlagUrl(row: { userId: string; factionId?: string | null }): string | null {
+    if (!row.factionId) {
+      return null;
+    }
+
+    return this.flagImageUrl(row.factionId, this.standingSubfaction(row.userId));
+  }
+
+  protected standingFlagTint(row: { userId: string; factionId?: string | null; tintFlagImage?: boolean }): boolean {
+    const faction = this.campaign()?.factions.find((item) => item.id === row.factionId);
+    return resolveFactionAppearance(faction, this.standingSubfaction(row.userId)).tint;
+  }
+
+  protected standingFlagColor(row: {
+    userId: string;
+    factionId?: string | null;
+    factionColor?: string | null;
+  }): string {
+    const faction = this.campaign()?.factions.find((item) => item.id === row.factionId);
+    return resolveFactionAppearance(faction, this.standingSubfaction(row.userId)).color;
+  }
+
+  protected participantFlagUrl(participant: CampaignParticipant): string | null {
+    const campaign = this.campaign();
+    const faction = resolveParticipantFaction(participant, campaign?.factions ?? []);
+    if (!campaign || !faction) {
+      return null;
+    }
+
+    return this.flagImageUrl(faction.id, participant.subfaction);
+  }
+
+  protected participantFlagTint(participant: CampaignParticipant): boolean {
+    const faction = resolveParticipantFaction(participant, this.campaign()?.factions ?? []);
+    return resolveFactionAppearance(faction, participant.subfaction).tint;
+  }
+
+  protected participantFlagColor(participant: CampaignParticipant): string {
+    const faction = resolveParticipantFaction(participant, this.campaign()?.factions ?? []);
+    return resolveFactionAppearance(faction, participant.subfaction).color;
   }
 
   protected missionFileUrl(mission: CampaignMission): string | null {
@@ -2787,6 +2898,14 @@ export class CampaignDetailPage {
   protected mapActionPrompt(): string | null {
     const flow = this.mapAction();
     if (flow?.step === 'pick-target') {
+      if (flow.kind === 'Move') {
+        return 'Pick a territory to move to...';
+      }
+
+      if (flow.kind === 'Split') {
+        return 'Pick a territory to split forces to...';
+      }
+
       return `Select a destination for ${flow.kind}.`;
     }
 
@@ -2798,7 +2917,15 @@ export class CampaignDetailPage {
       return 'Select a structure to build.';
     }
 
+    if (!flow && this.pendingRetreatTargets().length > 0) {
+      return 'Pick a territory to retreat to...';
+    }
+
     return null;
+  }
+
+  protected mapPromptAvoidIds(): readonly string[] {
+    return this.adjacentTerritoryIds();
   }
 
   protected confirmActionSummary(): string {
@@ -3883,4 +4010,41 @@ function playerFactionLabel(participant: CampaignParticipant, faction: CampaignF
   const factionName = named && named.length > 0 ? named : faction.name;
   const subfaction = participant.subfaction?.trim();
   return subfaction ? `${factionName}, ${subfaction}` : factionName;
+}
+
+function factionRoster(
+  campaign: CampaignDetail,
+  faction: CampaignFaction,
+  rulesFor: (ids: readonly string[] | undefined) => CampaignSpecialRule[],
+): FactionRoster {
+  const members = (campaign.participants ?? []).filter((participant) => {
+    if (!participant.isPlayer) {
+      return false;
+    }
+
+    return resolveParticipantFaction(participant, campaign.factions)?.id === faction.id;
+  });
+  const subfactionNames = [...faction.subfactions]
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0)
+    .sort(compareNames);
+  return {
+    faction,
+    specialRules: rulesFor(faction.specialRuleIds),
+    players: rosterPlayers(members.filter((participant) => !participant.subfaction?.trim())),
+    subfactions: subfactionNames.map((name) => {
+      const assigned = faction.subfactionSpecialRules?.find((item) => item.name === name)?.specialRuleIds;
+      return {
+        name,
+        specialRules: rulesFor(assigned),
+        players: rosterPlayers(members.filter((participant) => (participant.subfaction?.trim() ?? '') === name)),
+      };
+    }),
+  };
+}
+
+function rosterPlayers(participants: readonly CampaignParticipant[]): FactionRosterPlayer[] {
+  return [...participants]
+    .map((participant) => ({ userId: participant.userId, displayName: participant.displayName }))
+    .sort((left, right) => compareNames(left.displayName, right.displayName));
 }

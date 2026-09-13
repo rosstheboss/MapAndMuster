@@ -268,18 +268,14 @@
   stroke-width: 0.012;
 }
 
-.territory.is-half-highlighted,
 .territory.is-selected {
+  fill-opacity: 0.7;
   filter: drop-shadow(0 0 2px var(--glow-color, var(--color-glow)))
     drop-shadow(0 0 4px var(--glow-color, var(--color-glow)));
 }
 
 .territory.is-half-highlighted {
   fill-opacity: 0.62;
-}
-
-.territory.is-selected {
-  fill-opacity: 0.7;
 }
 
 .territory.is-move-valid {
@@ -415,6 +411,27 @@
   backface-visibility: hidden;
 }
 
+.force-pin.has-image img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.force-pin.has-image.is-tinted {
+  transform: translateZ(0);
+  background: var(--faction-color, currentColor);
+  /* stylelint-disable property-no-vendor-prefix -- Chromium still applies HTML masks through -webkit-mask-* */
+  -webkit-mask-image: var(--logo-mask);
+  mask-image: var(--logo-mask);
+  -webkit-mask-size: 80%;
+  mask-size: 80%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  /* stylelint-enable property-no-vendor-prefix */
+}
+
 .faction-flag {
   clip-path: polygon(0 0, 100% 20%, 70% 50%, 100% 80%, 0 100%);
   box-shadow: 0 0 0 1px rgb(28 25 23 / 35%);
@@ -466,6 +483,22 @@
 .move-drop-marker app-icon {
   width: 70%;
   height: 70%;
+}
+
+.map-action-prompt {
+  position: absolute;
+  z-index: 5;
+  max-width: 32%;
+  padding: 0.4rem 0.65rem;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  color: var(--color-text);
+  background: rgb(255 255 255 / 94%);
+  border: 1px solid var(--color-border);
+  border-radius: 0.45rem;
+  box-shadow: 0 0.15rem 0.4rem rgb(28 25 23 / 18%);
+  font-weight: 700;
+  text-align: center;
 }
 
 .drawing-path {

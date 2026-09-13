@@ -78,7 +78,9 @@ describe('AllCampaignsPage', () => {
         siteChat.compareDocumentPosition(campaignsHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
-    expect(compiled.querySelector<HTMLDetailsElement>('app-site-chat details')?.open).toBe(false);
+    expect(
+      compiled.querySelector<HTMLButtonElement>('app-site-chat .section-toggle')?.getAttribute('aria-expanded'),
+    ).toBe('false');
     expect(compiled.textContent).toContain('Upcoming campaigns');
     expect(compiled.querySelector('button.group-toggle')?.textContent).toContain('Upcoming campaigns');
     const toggle = compiled.querySelector<HTMLButtonElement>('button.campaign-toggle');

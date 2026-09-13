@@ -1,242 +1,258 @@
-<details class="campaign-log" [open]="expanded()" (toggle)="onToggle($event)">
-  <summary>
-    Campaign log
-    @if (streamState(); as state) {
-      <app-update-stream-status [state]="state" />
-    }
-    @if (unreadMentionCount() > 0 || unreadPrivateCount() > 0) {
-      <span class="log-unread">
-        @if (unreadMentionCount() > 0) {
-          {{ unreadMentionCount() }} unread mention{{ unreadMentionCount() === 1 ? '' : 's' }}
-        }
-        @if (unreadMentionCount() > 0 && unreadPrivateCount() > 0) {
-          ·
-        }
-        @if (unreadPrivateCount() > 0) {
-          {{ unreadPrivateCount() }} unread private
+<div class="panel stack campaign-log">
+  <h2>
+    <button type="button" class="section-toggle" [attr.aria-expanded]="expanded()" (click)="toggleExpanded()">
+      <span>
+        Campaign chat
+        @if (unreadMentionCount() > 0 || unreadPrivateCount() > 0) {
+          <span class="log-unread">
+            @if (unreadMentionCount() > 0) {
+              {{ unreadMentionCount() }} unread mention{{ unreadMentionCount() === 1 ? '' : 's' }}
+            }
+            @if (unreadMentionCount() > 0 && unreadPrivateCount() > 0) {
+              ·
+            }
+            @if (unreadPrivateCount() > 0) {
+              {{ unreadPrivateCount() }} unread private
+            }
+          </span>
         }
       </span>
-    }
-  </summary>
-  <fieldset class="log-filters">
-    <legend>Show</legend>
-    <label>
-      <input type="checkbox" [ngModel]="showPublicChat()" (ngModelChange)="showPublicChat.set($event)" />
-      Public chat
-    </label>
-    <label>
-      <input type="checkbox" [ngModel]="showPrivateChat()" (ngModelChange)="showPrivateChat.set($event)" />
-      Private chats
-    </label>
-    <label>
-      <input type="checkbox" [ngModel]="showGameLog()" (ngModelChange)="showGameLog.set($event)" />
-      Game log
-    </label>
-    <label>
-      <input type="checkbox" [ngModel]="showDelinquency()" (ngModelChange)="showDelinquency.set($event)" />
-      Delinquency
-    </label>
-    @if (canExport()) {
-      <button type="button" class="button-secondary log-download" (click)="openExportDialog()" [disabled]="exporting()">
-        Download log
-      </button>
-    }
-  </fieldset>
-  @if (exportOpen()) {
-    <app-dialog
-      [open]="true"
-      labelledBy="download-log-title"
-      describedBy="download-log-desc"
-      (cancelled)="closeExportDialog()"
-    >
-      <h2 id="download-log-title">Download campaign log</h2>
-      <p id="download-log-desc">Save public chat and game-log facts as one file. Private chats are never included.</p>
-      <fieldset class="log-filters">
-        <legend>Include</legend>
-        <label>
-          <input type="checkbox" [ngModel]="exportPublicChat()" (ngModelChange)="exportPublicChat.set($event)" />
-          Public chat
-        </label>
-        <label>
-          <input type="checkbox" [ngModel]="exportGameLog()" (ngModelChange)="exportGameLog.set($event)" />
-          Game log
-        </label>
-      </fieldset>
-      <fieldset class="log-filters">
-        <legend>File type</legend>
-        <label>
-          <input
-            type="radio"
-            name="log-export-format"
-            value="txt"
-            [ngModel]="exportFormat()"
-            (ngModelChange)="setExportFormat($event)"
-          />
-          Text (.txt)
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="log-export-format"
-            value="csv"
-            [ngModel]="exportFormat()"
-            (ngModelChange)="setExportFormat($event)"
-          />
-          CSV (.csv)
-        </label>
-      </fieldset>
-      @if (!canConfirmExport()) {
-        <p class="error" role="alert">Choose public chat, the game log, or both.</p>
-      }
-      <div class="choice-row">
-        <button type="button" class="button" (click)="confirmExport()" [disabled]="!canConfirmExport() || exporting()">
-          Download
-        </button>
+    </button>
+  </h2>
+  @if (expanded()) {
+    <fieldset class="log-filters">
+      <legend>Show</legend>
+      <label>
+        <input type="checkbox" [ngModel]="showPublicChat()" (ngModelChange)="showPublicChat.set($event)" />
+        Public chat
+      </label>
+      <label>
+        <input type="checkbox" [ngModel]="showPrivateChat()" (ngModelChange)="showPrivateChat.set($event)" />
+        Private chats
+      </label>
+      <label>
+        <input type="checkbox" [ngModel]="showGameLog()" (ngModelChange)="showGameLog.set($event)" />
+        Game log
+      </label>
+      <label>
+        <input type="checkbox" [ngModel]="showDelinquency()" (ngModelChange)="showDelinquency.set($event)" />
+        Delinquency
+      </label>
+      @if (canExport()) {
         <button
           type="button"
-          class="button-secondary"
-          data-dialog-safe
-          (click)="closeExportDialog()"
+          class="button-secondary log-download"
+          (click)="openExportDialog()"
           [disabled]="exporting()"
         >
-          Cancel
+          Download log
         </button>
-      </div>
-    </app-dialog>
-  }
-  <div
-    class="log-scroll"
-    #scroller
-    tabindex="0"
-    role="log"
-    aria-live="polite"
-    aria-relevant="additions"
-    (scroll)="onScroll($event)"
-  >
-    @if (visibleEntries().length === 0) {
-      <p class="muted">No messages yet.</p>
-    } @else {
-      <ol class="log-list">
-        @for (entry of visibleEntries(); track entry.id) {
-          <li [id]="'log-entry-' + entry.id" [class.is-highlighted]="scrollToEntryId() === entry.id">
-            <p>
-              @if (entry.originatorUsername; as username) {
-                <a class="profile-link" [routerLink]="['/users', username]" [queryParams]="profileQuery()">{{
-                  originatorText(entry)
-                }}</a>
-              } @else {
-                {{ originatorText(entry) }}
-              }
-              @if (channelBadge(entry); as badge) {
-                <span class="channel-badge">{{ badge }}</span>
-              }
-              @for (part of parts(entry); track $index) {
-                @if (part.mention && part.username) {
-                  <a class="profile-link" [routerLink]="['/users', part.username]" [queryParams]="profileQuery()"
-                    ><strong>{{ part.text }}</strong></a
-                  >
-                } @else if (part.mention) {
-                  <strong>{{ part.text }}</strong>
-                } @else {
-                  {{ part.text }}
-                }
-              }
-              <time class="log-time" [attr.datetime]="entry.occurredUtc" [title]="formatTimestamp(entry.occurredUtc)">{{
-                formatTimeLabel(entry.occurredUtc)
-              }}</time>
-            </p>
-          </li>
+      }
+    </fieldset>
+    @if (exportOpen()) {
+      <app-dialog
+        [open]="true"
+        labelledBy="download-log-title"
+        describedBy="download-log-desc"
+        (cancelled)="closeExportDialog()"
+      >
+        <h2 id="download-log-title">Download campaign log</h2>
+        <p id="download-log-desc">Save public chat and game-log facts as one file. Private chats are never included.</p>
+        <fieldset class="log-filters">
+          <legend>Include</legend>
+          <label>
+            <input type="checkbox" [ngModel]="exportPublicChat()" (ngModelChange)="exportPublicChat.set($event)" />
+            Public chat
+          </label>
+          <label>
+            <input type="checkbox" [ngModel]="exportGameLog()" (ngModelChange)="exportGameLog.set($event)" />
+            Game log
+          </label>
+        </fieldset>
+        <fieldset class="log-filters">
+          <legend>File type</legend>
+          <label>
+            <input
+              type="radio"
+              name="log-export-format"
+              value="txt"
+              [ngModel]="exportFormat()"
+              (ngModelChange)="setExportFormat($event)"
+            />
+            Text (.txt)
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="log-export-format"
+              value="csv"
+              [ngModel]="exportFormat()"
+              (ngModelChange)="setExportFormat($event)"
+            />
+            CSV (.csv)
+          </label>
+        </fieldset>
+        @if (!canConfirmExport()) {
+          <p class="error" role="alert">Choose public chat, the game log, or both.</p>
         }
-      </ol>
+        <div class="choice-row">
+          <button
+            type="button"
+            class="button"
+            (click)="confirmExport()"
+            [disabled]="!canConfirmExport() || exporting()"
+          >
+            Download
+          </button>
+          <button
+            type="button"
+            class="button-secondary"
+            data-dialog-safe
+            (click)="closeExportDialog()"
+            [disabled]="exporting()"
+          >
+            Cancel
+          </button>
+        </div>
+      </app-dialog>
     }
-  </div>
-  @if (canChat()) {
-    <div class="chat-compose">
-      <div class="recipient-combobox" (focusout)="onRecipientFocusOut($event)">
-        <label class="field">
-          Send to
-          <input
-            #recipient
-            id="chat-recipient"
-            type="text"
+    <div
+      class="log-scroll"
+      #scroller
+      tabindex="0"
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions"
+      (scroll)="onScroll($event)"
+    >
+      @if (visibleEntries().length === 0) {
+        <p class="muted">No messages yet.</p>
+      } @else {
+        <ol class="log-list">
+          @for (entry of visibleEntries(); track entry.id) {
+            <li [id]="'log-entry-' + entry.id" [class.is-highlighted]="scrollToEntryId() === entry.id">
+              <p>
+                @if (entry.originatorUsername; as username) {
+                  <a class="profile-link" [routerLink]="['/users', username]" [queryParams]="profileQuery()">{{
+                    originatorText(entry)
+                  }}</a>
+                } @else {
+                  {{ originatorText(entry) }}
+                }
+                @if (channelBadge(entry); as badge) {
+                  <span class="channel-badge">{{ badge }}</span>
+                }
+                @for (part of parts(entry); track $index) {
+                  @if (part.mention && part.username) {
+                    <a class="profile-link" [routerLink]="['/users', part.username]" [queryParams]="profileQuery()"
+                      ><strong>{{ part.text }}</strong></a
+                    >
+                  } @else if (part.mention) {
+                    <strong>{{ part.text }}</strong>
+                  } @else {
+                    {{ part.text }}
+                  }
+                }
+                <time
+                  class="log-time"
+                  [attr.datetime]="entry.occurredUtc"
+                  [title]="formatTimestamp(entry.occurredUtc)"
+                  >{{ formatTimeLabel(entry.occurredUtc) }}</time
+                >
+              </p>
+            </li>
+          }
+        </ol>
+      }
+    </div>
+    @if (canChat()) {
+      <div class="chat-compose">
+        <div class="recipient-combobox" (focusout)="onRecipientFocusOut($event)">
+          <label class="field">
+            Send to
+            <input
+              #recipient
+              id="chat-recipient"
+              type="text"
+              role="combobox"
+              autocomplete="off"
+              [value]="recipientQuery()"
+              (input)="onRecipientDomInput($event)"
+              (focus)="onRecipientFocus()"
+              (keydown)="onRecipientKeydown($event)"
+              [disabled]="sending()"
+              aria-autocomplete="list"
+              aria-controls="chat-recipient-suggest"
+              [attr.aria-expanded]="recipientOpen()"
+              [attr.aria-activedescendant]="recipientOpen() ? 'chat-recipient-option-' + recipientHighlight() : null"
+            />
+          </label>
+          @if (recipientOpen()) {
+            <ul id="chat-recipient-suggest" class="suggest recipient-suggest" role="listbox">
+              @for (channel of recipientSuggestions(); track channelOptionValue(channel); let index = $index) {
+                <li
+                  [id]="'chat-recipient-option-' + index"
+                  role="option"
+                  [class.is-active]="index === recipientHighlight()"
+                  [attr.aria-selected]="index === recipientHighlight()"
+                  (mousedown)="selectRecipient(channel)"
+                >
+                  {{ recipientOptionLabel(channel) }}
+                </li>
+              } @empty {
+                <li class="suggest-empty" role="presentation">No matching recipients</li>
+              }
+            </ul>
+          }
+        </div>
+        <div class="field">
+          <label id="chat-message-label" for="chat-composer">Message</label>
+          <div
+            class="mention-combobox"
             role="combobox"
-            autocomplete="off"
-            [value]="recipientQuery()"
-            (input)="onRecipientDomInput($event)"
-            (focus)="onRecipientFocus()"
-            (keydown)="onRecipientKeydown($event)"
-            [disabled]="sending()"
+            aria-labelledby="chat-message-label"
+            aria-haspopup="listbox"
             aria-autocomplete="list"
-            aria-controls="chat-recipient-suggest"
-            [attr.aria-expanded]="recipientOpen()"
-            [attr.aria-activedescendant]="recipientOpen() ? 'chat-recipient-option-' + recipientHighlight() : null"
-          />
-        </label>
-        @if (recipientOpen()) {
-          <ul id="chat-recipient-suggest" class="suggest recipient-suggest" role="listbox">
-            @for (channel of recipientSuggestions(); track channelOptionValue(channel); let index = $index) {
+            [attr.aria-expanded]="suggestions().length > 0"
+            [attr.aria-controls]="suggestions().length > 0 ? 'chat-suggest' : null"
+          >
+            <textarea
+              #composer
+              id="chat-composer"
+              rows="1"
+              [ngModel]="draft()"
+              (ngModelChange)="onDraftInput($event)"
+              (keydown)="onKeydown($event)"
+              [disabled]="sending()"
+              maxlength="2000"
+              [attr.aria-activedescendant]="suggestions().length > 0 ? 'chat-suggest-option-' + highlight() : null"
+            ></textarea>
+          </div>
+        </div>
+        @if (suggestions().length > 0) {
+          <ul id="chat-suggest" class="suggest" role="listbox">
+            @for (member of suggestions(); track member.userId; let index = $index) {
               <li
-                [id]="'chat-recipient-option-' + index"
+                [id]="'chat-suggest-option-' + index"
                 role="option"
-                [class.is-active]="index === recipientHighlight()"
-                [attr.aria-selected]="index === recipientHighlight()"
-                (mousedown)="selectRecipient(channel)"
+                [class.is-active]="index === highlight()"
+                [attr.aria-selected]="index === highlight()"
+                (mousedown)="complete(member)"
               >
-                {{ recipientOptionLabel(channel) }}
+                {{ suggestionLabel(member) }}
               </li>
-            } @empty {
-              <li class="suggest-empty" role="presentation">No matching recipients</li>
             }
           </ul>
         }
+        @if (sendError()) {
+          <p class="error" role="alert">{{ sendError() }}</p>
+        }
+        <button type="button" class="button" (click)="submit()" [disabled]="sending() || draft().trim().length === 0">
+          Send
+        </button>
       </div>
-      <div class="field">
-        <label id="chat-message-label" for="chat-composer">Message</label>
-        <div
-          class="mention-combobox"
-          role="combobox"
-          aria-labelledby="chat-message-label"
-          aria-haspopup="listbox"
-          aria-autocomplete="list"
-          [attr.aria-expanded]="suggestions().length > 0"
-          [attr.aria-controls]="suggestions().length > 0 ? 'chat-suggest' : null"
-        >
-          <textarea
-            #composer
-            id="chat-composer"
-            rows="1"
-            [ngModel]="draft()"
-            (ngModelChange)="onDraftInput($event)"
-            (keydown)="onKeydown($event)"
-            [disabled]="sending()"
-            maxlength="2000"
-            [attr.aria-activedescendant]="suggestions().length > 0 ? 'chat-suggest-option-' + highlight() : null"
-          ></textarea>
-        </div>
-      </div>
-      @if (suggestions().length > 0) {
-        <ul id="chat-suggest" class="suggest" role="listbox">
-          @for (member of suggestions(); track member.userId; let index = $index) {
-            <li
-              [id]="'chat-suggest-option-' + index"
-              role="option"
-              [class.is-active]="index === highlight()"
-              [attr.aria-selected]="index === highlight()"
-              (mousedown)="complete(member)"
-            >
-              {{ suggestionLabel(member) }}
-            </li>
-          }
-        </ul>
-      }
-      @if (sendError()) {
-        <p class="error" role="alert">{{ sendError() }}</p>
-      }
-      <button type="button" class="button" (click)="submit()" [disabled]="sending() || draft().trim().length === 0">
-        Send
-      </button>
-    </div>
-  } @else {
-    <p class="muted">Join this campaign to chat in the log.</p>
+    } @else {
+      <p class="muted">Join this campaign to chat in the log.</p>
+    }
   }
-</details>
+</div>

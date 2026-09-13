@@ -301,7 +301,9 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('Battle phase · 1 day');
     expect(compiled.textContent).toContain('Choose your faction');
     expect(compiled.querySelector('#faction')).toBeTruthy();
-    expect(compiled.textContent).toContain('Campaign log');
+    expect(compiled.textContent).toContain('Campaign chat');
+    expect(compiled.textContent).toContain('Links');
+    expect(compiled.querySelector('a[href="https://example.test/notes"]')?.textContent).toContain('Notes');
     expect(compiled.textContent).toContain('Participants');
     expect(compiled.textContent).toContain('Add a member');
     expect(compiled.querySelector('a[href^="/users/northplayer"]')?.textContent.trim()).toBe('northplayer');
@@ -310,7 +312,7 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('1 temporary');
     expect(compiled.textContent).toContain("Your force starts at that faction's spawn");
     expect(compiled.querySelector('.standings-table')).toBeNull();
-    expect(compiled.textContent).not.toContain('Campaign points');
+    expect(compiled.textContent).not.toContain('Standings');
     expect(compiled.textContent).toContain('Collapse All');
     expect(compiled.querySelector('a.button')?.textContent).toContain('Edit campaign');
     expect(compiled.textContent).toContain('Edit map');
@@ -628,6 +630,80 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
+  it('lists faction special rules and the players taking each faction or subfaction', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      specialRules: [
+        { id: 'rule-1', name: 'Steady Advance', text: 'May move through hills without delay.' },
+        { id: 'rule-2', name: 'Rider Ambush', text: 'Riders may start hidden.' },
+      ],
+      factions: [
+        {
+          ...campaign.factions[0],
+          specialRuleIds: ['rule-1'],
+          subfactionSpecialRules: [{ name: 'Riders', specialRuleIds: ['rule-2'] }],
+        },
+        campaign.factions[1],
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const factionsPanel = [...compiled.querySelectorAll('.panel')].find((panel) =>
+      (panel.querySelector('h2')?.textContent ?? '').includes('Factions'),
+    );
+    expect(factionsPanel?.textContent).toContain('Steady Advance');
+    expect(factionsPanel?.textContent).toContain('May move through hills without delay.');
+    expect(factionsPanel?.textContent).toContain('Rider Ambush');
+    expect(factionsPanel?.textContent).toContain('northplayer');
+    http.verify();
+  });
+
+  it('shows the selected faction special rules below the faction selector', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      specialRules: [{ id: 'rule-1', name: 'Steady Advance', text: 'May move through hills without delay.' }],
+      factions: [{ ...campaign.factions[0], specialRuleIds: ['rule-1'] }, campaign.factions[1]],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as { factionChoice: { set(value: string): void } };
+    page.factionChoice.set('1');
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const choose = [...compiled.querySelectorAll('.panel')].find((panel) =>
+      (panel.querySelector('h2')?.textContent ?? '').includes('Choose your faction'),
+    );
+    expect(choose?.textContent).toContain('Steady Advance');
+    expect(choose?.textContent).toContain('May move through hills without delay.');
+    http.verify();
+  });
+
   it('lists faction, force location, chain supply, and spendable supply in the Summary panel', async () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
@@ -771,7 +847,7 @@ describe('CampaignDetailPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
-    expect(compiled.textContent).toContain('Campaign log');
+    expect(compiled.textContent).toContain('Campaign chat');
     expect(compiled.textContent).toContain('Chat is ready first.');
     expect(compiled.textContent).not.toContain('Loading campaign chat...');
     expect(compiled.textContent).toContain('Loading campaign…');
@@ -1089,7 +1165,7 @@ describe('CampaignDetailPage', () => {
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.textContent).toContain('Campaign log');
+    expect(compiled.textContent).toContain('Campaign chat');
     expect(compiled.textContent).toContain('The campaign started.');
     expect(compiled.textContent).toContain('Campaign:');
     expect(compiled.textContent).toContain('Phase ends in');
@@ -1099,8 +1175,8 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('Go to your orders');
     expect(compiled.textContent).toContain('Not committed');
     expect(compiled.querySelector('.campaign-status-bar')).toBeTruthy();
-    expect(compiled.querySelectorAll('app-update-stream-status').length).toBe(2);
-    expect(compiled.querySelector('app-campaign-log app-update-stream-status')).toBeTruthy();
+    expect(compiled.querySelectorAll('app-update-stream-status').length).toBe(1);
+    expect(compiled.querySelector('app-campaign-log app-update-stream-status')).toBeNull();
     openSection(fixture, 'faction');
     expect(visibleText(compiled)).toContain('Coast');
     expect(compiled.textContent).not.toContain('Spawn location is at Coast');
@@ -1746,7 +1822,7 @@ describe('CampaignDetailPage', () => {
     page.onMapActionKind('Move');
     fixture.detectChanges();
     expect(page.mapAction()?.step).toBe('pick-target');
-    expect(compiled.textContent).toContain('Select a destination for Move.');
+    expect(compiled.textContent).toContain('Pick a territory to move to...');
 
     page.onTerritorySelect({ id: 't2', additive: false, clientX: 90, clientY: 12 });
     fixture.detectChanges();
@@ -1776,6 +1852,62 @@ describe('CampaignDetailPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(visibleText(compiled)).toContain('Draft: Move to Ridge');
+    http.verify();
+  });
+
+  it('prompts on the map when splitting a force', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    const territories = [squareTerritory('t1', 'Coast', 0.1), squareTerritory('t2', 'Ridge', 0.4)];
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+      currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories,
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        forces: [
+          {
+            ...playState().forces[0],
+            availableActions: ['Hold', 'Move', 'Split'],
+            moveTargets: ['t2'],
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'map');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      onTerritorySelect: (event: { id: string; additive: boolean; clientX: number; clientY: number }) => void;
+      onMapActionKind: (kind: string) => void;
+    };
+    page.onTerritorySelect({ id: 't1', additive: false, clientX: 40, clientY: 12 });
+    page.onMapActionKind('Split');
+    fixture.detectChanges();
+
+    expect(compiled.textContent).toContain('Pick a territory to split forces to...');
+    expect(compiled.querySelector('.map-action-prompt')?.textContent).toContain(
+      'Pick a territory to split forces to...',
+    );
     http.verify();
   });
 
@@ -2166,7 +2298,7 @@ describe('CampaignDetailPage', () => {
     page.onMapActionKind('Move');
     fixture.detectChanges();
     expect(page.mapAction()?.step).toBe('pick-target');
-    expect(compiled.textContent).toContain('Select a destination for Move.');
+    expect(compiled.textContent).toContain('Pick a territory to move to...');
 
     page.onTerritorySelect({ id: 't4', additive: false, clientX: 90, clientY: 12 });
     fixture.detectChanges();
@@ -2699,6 +2831,9 @@ describe('CampaignDetailPage', () => {
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Standings');
+    openSection(fixture, 'links');
+    expect(compiled.querySelector('a[href="https://example.test/notes"]')?.textContent).toContain('Notes');
     const headers = [...compiled.querySelectorAll<HTMLTableCellElement>('.standings-table thead th')];
     expect(headers.every((header) => header.getAttribute('scope') === 'col')).toBe(true);
     expect(
@@ -2751,6 +2886,42 @@ describe('CampaignDetailPage', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.standing-faction app-faction-logo .is-tinted')).toBeTruthy();
     expect(compiled.querySelector('.standing-faction img')).toBeNull();
+    http.verify();
+  });
+
+  it('uses the parent faction logo when a player subfaction inherits', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      factions: [
+        {
+          ...campaign.factions[0],
+          hasFlagImage: true,
+          tintFlagImage: false,
+          subfactionAppearances: [{ name: 'Riders', color: null, flagSource: 'inherit', hasFlagImage: false }],
+        },
+        campaign.factions[1],
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const srcs = [...compiled.querySelectorAll<HTMLImageElement>('app-faction-logo img')].map((image) => image.src);
+    expect(srcs.some((src) => src.includes('/factions/1/flag'))).toBe(true);
+    expect(srcs.every((src) => !src.includes('/subfactions/'))).toBe(true);
     http.verify();
   });
 
@@ -3189,6 +3360,9 @@ describe('CampaignDetailPage', () => {
     submit!.click();
     fixture.detectChanges();
     expect(compiled.textContent).toContain('Choose a retreat destination before submitting.');
+    openSection(fixture, 'map');
+    expect(compiled.textContent).toContain('Pick a territory to retreat to...');
+    expect(compiled.querySelector('.map-action-prompt')?.textContent).toContain('Pick a territory to retreat to...');
 
     const page = fixture.componentInstance as unknown as {
       selectTerritoryOnMap: (id: string) => void;

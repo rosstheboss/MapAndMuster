@@ -141,9 +141,8 @@ export class SiteChatComponent {
     });
   }
 
-  protected onToggle(event: Event): void {
-    const details = event.currentTarget as HTMLDetailsElement;
-    this.expandedChange.emit(details.open);
+  protected toggleExpanded(): void {
+    this.expandedChange.emit(!this.expanded());
   }
 
   protected originatorText(message: SiteChatMessage): string {

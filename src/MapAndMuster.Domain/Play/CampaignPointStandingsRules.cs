@@ -6,8 +6,9 @@ namespace MapAndMuster.Domain.Play;
 /// Calculates current campaign-point standings from configured values and live map, battle, and award state.
 /// Structure points are the current holdings. Battle points are cumulative from resolved results.
 /// Ranking public objectives award their configured points to every player currently tied for first.
-/// Running public objectives add points per owned territory and per revealed relic held by an ally
-/// or faction-mate other than the scoring player. Named public objectives with 0 campaign points are ignored.
+/// Campaign points per owned territory are scored with current structure holdings. Running public
+/// objectives also add points per revealed relic held by an ally or faction-mate other than the
+/// scoring player. Named public objectives with 0 campaign points are ignored.
 /// Map holdings are scored per player: a shared faction total is never copied onto every co-faction
 /// player. A territory counts for a player when that player's force occupies it, when it is stamped
 /// with that player's subfaction, or when they are the only player of the owning faction.
@@ -142,6 +143,7 @@ public static class CampaignPointStandingsRules
         var territoryCountByPlayer = new Dictionary<Guid, int>();
         var chainByPlayer = new Dictionary<Guid, int>();
         var structurePointsByPlayer = new Dictionary<Guid, int>();
+        var unfilteredStructurePointsByPlayer = new Dictionary<Guid, int>();
         var pointsPerTerritoryCountByPlayer = new Dictionary<Guid, int>();
         foreach (var player in state.Players)
         {
@@ -163,6 +165,7 @@ public static class CampaignPointStandingsRules
                 }
             }
 
+            unfilteredStructurePointsByPlayer[player.UserId] = structureTotal;
             structurePointsByPlayer[player.UserId] = StructurePointsFor(
                 owned,
                 structurePoints,
@@ -179,7 +182,7 @@ public static class CampaignPointStandingsRules
         var standings = new List<CampaignPointStanding>(state.Players.Count);
         foreach (var player in state.Players)
         {
-            var capture = structurePointsByPlayer.GetValueOrDefault(player.UserId);
+            var capture = unfilteredStructurePointsByPlayer.GetValueOrDefault(player.UserId);
             var publicTotal = 0;
             foreach (var (playerId, objectiveId) in activeAwards)
             {
@@ -223,15 +226,13 @@ public static class CampaignPointStandingsRules
                 publicTotal += ranking.MostStructurePoints;
             }
 
-            if (ranking.PointsPerTerritory > 0)
-            {
-                publicTotal += ranking.PointsPerTerritory * pointsPerTerritoryCountByPlayer.GetValueOrDefault(player.UserId);
-            }
-
             if (ranking.AlliedRelicControlPoints > 0)
             {
                 publicTotal += ranking.AlliedRelicControlPoints * AlliedRelicCount(player, state, forcesById);
             }
+
+            var territoryTotal = capture
+                + ranking.PointsPerTerritory * pointsPerTerritoryCountByPlayer.GetValueOrDefault(player.UserId);
 
             var privateTotal = PrivateObjectiveRules.PointsForPlayer(
                 state.PrivateObjectives,
@@ -244,7 +245,7 @@ public static class CampaignPointStandingsRules
 
             standings.Add(new CampaignPointStanding(
                 player.UserId,
-                capture,
+                territoryTotal,
                 battlePointsByPlayer.GetValueOrDefault(player.UserId),
                 publicTotal,
                 privateTotal,
@@ -777,9 +778,13 @@ public readonly record struct CampaignPointTerritory(
 /// One player's current campaign-point breakdown. The five component totals add up to <see cref="Total"/>.
 /// </summary>
 /// <param name="UserId">The player.</param>
-/// <param name="TerritoryAndStructurePoints">Points from currently owned non-destroyed structures.</param>
+/// <param name="TerritoryAndStructurePoints">
+/// Points from currently owned non-destroyed structures plus configured campaign points per owned territory.
+/// </param>
 /// <param name="BattlesWonPoints">Points from resolved battles, including draws and differentials.</param>
-/// <param name="PublicObjectivePoints">Points from ranking objectives and currently active named awards.</param>
+/// <param name="PublicObjectivePoints">
+/// Points from ranking objectives, allied relic control, and currently active named awards.
+/// </param>
 /// <param name="PrivateObjectivePoints">Points from revealed or completed private objectives that apply to this player.</param>
 /// <param name="OtherPoints">Points from currently held visible item objectives.</param>
 /// <param name="HeldItemTypeIds">Distinct item-objective types the player currently holds, when visible to the viewer.</param>

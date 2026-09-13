@@ -111,6 +111,54 @@ describe('CampaignMapViewComponent', () => {
     expect(pin?.getAttribute('aria-label')).toBe('North force in Coast');
   });
 
+  it('uses a faction logo on a force pin and inherits when a subfaction has none', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: ['Riders'],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+        subfactionAppearances: [{ name: 'Riders', color: null, flagSource: 'inherit', hasFlagImage: false }],
+      },
+    ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        subfaction: 'Riders',
+        isMine: true,
+        inBattle: false,
+        label: 'North force in Coast',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin.has-image');
+    expect(pin).toBeTruthy();
+    expect(pin?.querySelector('img')?.getAttribute('src')).toBe(png);
+  });
+
+  it('shows a pick-territory prompt on the map away from highlighted destinations', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.35, 0.35), squareTerritory('t2', 0.4, 0.55)]);
+    fixture.componentRef.setInput('actionPrompt', 'Pick a territory to move to...');
+    fixture.componentRef.setInput('promptAvoidTerritoryIds', ['t1', 't2']);
+    fixture.detectChanges();
+
+    const prompt = (fixture.nativeElement as HTMLElement).querySelector('.map-action-prompt');
+    expect(prompt?.textContent).toContain('Pick a territory to move to...');
+    expect(Number.parseFloat(prompt?.getAttribute('style')?.match(/top:\s*([\d.]+)%/)?.[1] ?? '50')).toBeLessThan(20);
+  });
+
   it('shows a green check on your force when it has a draft or committed action', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);

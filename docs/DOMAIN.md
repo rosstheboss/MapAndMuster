@@ -299,13 +299,14 @@ still change their own faction until the campaign starts; after launch only staf
 changes it. A kicked player's forces, drafts, and unresolved battles are removed, and carried
 items drop on the territory they occupied.
 
-Once a campaign is in progress or completed, near the bottom of the campaign page a Campaign points
+Once a campaign is in progress or completed, near the bottom of the campaign page a Standings
 panel lists every player occupying a slot. Upcoming campaigns omit this panel. Default order is
 highest total to lowest, then display name. Columns are display name
-(with currently held visible item-objective logos), faction logo, alliance group, Structures
-captured, Battle points, Public Objectives, Private Objectives, Other, and Total. The five point
-columns sum to Total. The table sorts by any of those columns. Structure points are the current
-holdings (destroyed structures do not count). Battle points are cumulative campaign points from
+(with currently held visible item-objective logos), faction logo, alliance group, Territories and structures,
+Battle points, Public Objectives, Private Objectives, Other, and Total. The five point
+columns sum to Total. The table sorts by any of those columns. Territories and structures is the
+current holdings: campaign points from currently owned non-destroyed structures, plus configured
+campaign points for each currently owned territory (optional terrain tag). Battle points are cumulative campaign points from
 resolved battles: by default the score differential (winner minus loser, times a multiplier,
 clamped to a configured range, default 0 to 10) with draw participants each receiving configured
 draw points (default 1). When differential scoring is off, a win awards configured win points
@@ -316,8 +317,7 @@ that currently award points to every player tied for first: most territories cre
 player (optionally only those with a terrain tag), longest unbroken chain of the player's own territories
 (optional terrain tag), most battle wins (draws break
 win-count ties), and most structure campaign points from currently owned non-destroyed
-structures (optional structure tag). Running public objectives add configured campaign points for each currently owned
-territory (optional terrain tag), and for each revealed relic currently held by another player of the same faction or
+structures (optional structure tag). Running public objectives also add configured campaign points for each revealed relic currently held by another player of the same faction or
 a current (not backstabbed) ally. Relics the scoring player holds stay in Other. Named public objectives remain
 manager-awarded. A named,
 ranking, or running objective configured at 0 campaign points is ignored.
@@ -941,7 +941,10 @@ details under the map. The campaign page Factions section lists each faction nam
 control. When that faction has a fixed spawn territory, the territory name follows in parentheses as
 a map link. Required-subfaction spawns that differ from the parent spawn are included in the same
 parentheses, alphabetically, as `Subfaction: Territory`. Factions with no specific spawn omit that
-parenthetical. The campaign page Ally groups section lists groups alphabetically. Each group name is a map-focus
+parenthetical. Each faction lists its special rules, then the players currently taking that faction
+without a subfaction, then each named subfaction with that subfaction's special rules and the players
+taking it. Choosing a faction (or subfaction) on the campaign page also lists those special rules
+under the selector. The campaign page Ally groups section lists groups alphabetically. Each group name is a map-focus
 control, followed by the current player count in parentheses, then its member factions in
 alphabetical order. Catalog subfactions for a faction appear in parentheses after that faction,
 also alphabetical: `Alpha League (1 player) - Midland (East)`. Players currently in the group appear as
@@ -949,7 +952,8 @@ nested bullets in display-name order, each with their chosen faction and subfact
 one: `Bob (Midland, East)`. Players who have not chosen a faction, non-player members, and
 backstabbed factions are omitted from the count and the nested list. Clicking a player, faction, or
 ally group on the campaign page, while the player is not issuing an order, highlights that party’s
-territories and emphasizes their forces on the map. Force markers stay inside their territory,
+territories and emphasizes their forces on the map. Force markers use that player's faction or
+subfaction logo (inheriting the faction logo when the subfaction has none) and stay inside their territory,
 or as close as possible without sitting on a neighboring territory. Clicking the same party again clears that focus.
 A profile link still opens the user profile. The campaign page and map editor can download a PNG of the latest saved map
 image with the unselected territory overlay rasterized on top. Spawn hatching, structure pins, and
