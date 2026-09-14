@@ -30,7 +30,9 @@ public sealed class PrivateObjectiveTypeSetup
         Guid? prerequisiteForceStatusTypeId = null,
         bool prerequisiteWasLost = false,
         Guid? structureTagId = null,
-        Guid? terrainTagId = null)
+        Guid? terrainTagId = null,
+        IReadOnlyList<Guid>? excludedFactionIds = null,
+        IReadOnlyList<Guid>? excludedAllyGroupIds = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(allowedHolderKinds);
@@ -59,6 +61,8 @@ public sealed class PrivateObjectiveTypeSetup
         PrerequisiteWasLost = prerequisiteWasLost;
         StructureTagId = structureTagId;
         TerrainTagId = terrainTagId;
+        ExcludedFactionIds = excludedFactionIds ?? [];
+        ExcludedAllyGroupIds = excludedAllyGroupIds ?? [];
     }
 
     /// <summary>Gets the catalog identifier.</summary>
@@ -126,6 +130,12 @@ public sealed class PrivateObjectiveTypeSetup
 
     /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
     public Guid? TerrainTagId { get; }
+
+    /// <summary>Gets factions whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid> ExcludedFactionIds { get; }
+
+    /// <summary>Gets ally groups whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid> ExcludedAllyGroupIds { get; }
 
     /// <summary>Gets whether this catalog entry may be assigned to <paramref name="kind"/>.</summary>
     public bool Allows(PrivateObjectiveHolderKind kind)

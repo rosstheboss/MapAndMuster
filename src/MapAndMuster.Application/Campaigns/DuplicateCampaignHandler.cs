@@ -142,6 +142,8 @@ public sealed class DuplicateCampaignHandler
             Missions = [.. source.Missions],
             ForceStatuses = [.. source.ForceStatuses],
             PrivateObjectiveTypes = [.. source.PrivateObjectiveTypes],
+            RivalObjectivesEnabled = source.RivalObjectivesEnabled,
+            RivalObjectiveCampaignPoints = source.RivalObjectiveCampaignPoints,
             BattleScoring = source.BattleScoring,
             RankingObjectivePoints = source.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = source.SplitForceSupplyPenaltyPercent,

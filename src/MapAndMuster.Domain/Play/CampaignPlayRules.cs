@@ -27,7 +27,10 @@ public static class CampaignPlayRules
         IReadOnlyList<Guid>? factionIds = null,
         IReadOnlyList<Guid>? allyGroupIds = null,
         SpecialRuleContext? specialRules = null,
-        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null)
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null,
+        bool rivalObjectivesEnabled = false,
+        int rivalObjectiveCampaignPoints = RivalObjectiveRules.DefaultCampaignPoints,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -39,7 +42,7 @@ public static class CampaignPlayRules
         var seededMap = ApplySpawnFlags(map);
         if (state.Windows.Count > 0)
         {
-            return PlaceMissingStartingForces(
+            var placed = PlaceMissingStartingForces(
                 state,
                 seededMap,
                 players,
@@ -47,6 +50,18 @@ public static class CampaignPlayRules
                 choose,
                 schedule.EndsUtc,
                 schedule.RoundCount);
+            return new PlayOutcome(
+                EnsureRivalObjectives(
+                    placed.State,
+                    players,
+                    utcNow,
+                    choose,
+                    rivalObjectivesEnabled,
+                    rivalObjectiveCampaignPoints,
+                    factionAllyGroups),
+                placed.Map,
+                placed.EndsUtc,
+                placed.RoundCount);
         }
 
         if (utcNow < schedule.StartsUtc)
@@ -109,7 +124,8 @@ public static class CampaignPlayRules
             players
                 .Where(static item => item.FactionId.HasValue)
                 .ToDictionary(static item => item.UserId, static item => item.FactionId!.Value),
-            allyGroupByFaction);
+            allyGroupByFaction,
+            OccupyingRequiredSubfactions(players, rules));
 
         var started = new CampaignPlayState(
             windows,
@@ -137,6 +153,20 @@ public static class CampaignPlayRules
                 null,
                 null,
                 []));
+        if (windows.Count > 0 && windows[0].Status == PhaseWindowStatus.Open)
+        {
+            started = AppendPhaseChange(started, windows[0], utcNow);
+        }
+
+        started = EnsureRivalObjectives(
+            started,
+            players,
+            utcNow,
+            choose,
+            rivalObjectivesEnabled,
+            rivalObjectiveCampaignPoints,
+            factionAllyGroups);
+
         return new PlayOutcome(started, nextMap, schedule.EndsUtc, schedule.RoundCount);
     }
 
@@ -206,6 +236,39 @@ public static class CampaignPlayRules
         }
 
         return new PlayOutcome(nextState, nextMap, endsUtc, roundCount);
+    }
+
+    private static CampaignPlayState EnsureRivalObjectives(
+        CampaignPlayState state,
+        IReadOnlyList<PlayerFactionAssignment> players,
+        DateTimeOffset utcNow,
+        Func<int, int> pickIndex,
+        bool rivalObjectivesEnabled,
+        int rivalObjectiveCampaignPoints,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups)
+    {
+        if (!rivalObjectivesEnabled || state.RivalObjectives.Count > 0)
+        {
+            return state;
+        }
+
+        var occupying = players
+            .Where(static item => item.FactionId.HasValue)
+            .Select(static item => item.UserId)
+            .Distinct()
+            .ToArray();
+        var factionByPlayer = occupying
+            .Select(id => (id, faction: players.First(item => item.UserId == id).FactionId!.Value))
+            .ToDictionary(static item => item.id, static item => item.faction);
+        var assigned = RivalObjectiveRules.SeedInitial(
+            occupying,
+            factionByPlayer,
+            factionAllyGroups ?? new Dictionary<Guid, string?>(),
+            state.BrokenAllyFactionIds,
+            utcNow,
+            pickIndex,
+            rivalObjectiveCampaignPoints);
+        return assigned.Count == 0 ? state : state.With(rivalObjectives: assigned);
     }
 
     /// <summary>
@@ -353,7 +416,7 @@ public static class CampaignPlayRules
         var nextMap = map;
         if (current.Status == PhaseWindowStatus.Pending && utcNow >= current.StartsUtc)
         {
-            nextState = OpenWindow(nextState, current.Id, utcNow);
+            nextState = OpenWindow(nextState, current.Id, utcNow, nextMap, factionAllyGroups, pickIndex);
             current = nextState.Windows.First(window => window.Id == current.Id);
         }
 
@@ -1673,18 +1736,36 @@ public static class CampaignPlayRules
         return changed ? map.WithTerritories(next) : map;
     }
 
-    private static CampaignPlayState OpenWindow(CampaignPlayState state, Guid windowId, DateTimeOffset utcNow)
+    private static CampaignPlayState OpenWindow(
+        CampaignPlayState state,
+        Guid windowId,
+        DateTimeOffset utcNow,
+        PlayMap? map = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        Func<int, int>? pickIndex = null)
     {
         var windows = state.Windows
             .Select(window => window.Id == windowId ? window.With(status: PhaseWindowStatus.Open) : window)
             .ToArray();
         var opened = windows.First(window => window.Id == windowId);
-        if (opened.Kind != RoundPhaseKind.Battle)
+        var next = state.With(windows: windows);
+        next = AppendPhaseChange(next, opened, utcNow);
+        if (map is not null)
         {
-            return state.With(windows: windows);
+            next = RivalObjectiveRules.Replenish(
+                next,
+                map,
+                factionAllyGroups ?? new Dictionary<Guid, string?>(),
+                utcNow,
+                pickIndex ?? (static count => 0));
         }
 
-        var battles = state.Battles
+        if (opened.Kind != RoundPhaseKind.Battle)
+        {
+            return next;
+        }
+
+        var battles = next.Battles
             .Select(battle =>
             {
                 if (battle.Status != BattleStatus.Pending
@@ -1697,8 +1778,25 @@ public static class CampaignPlayRules
                 return battle.With(battleWindowId: windowId, status: BattleStatus.AwaitingResults, assignWindow: true);
             })
             .ToArray();
-        _ = utcNow;
-        return state.With(windows: windows, battles: battles);
+        return next.With(battles: battles);
+    }
+
+    private static CampaignPlayState AppendPhaseChange(CampaignPlayState state, PhaseWindow window, DateTimeOffset utcNow)
+    {
+        var phase = window.Kind == RoundPhaseKind.Battle ? "Battle" : "Action";
+        return state.AppendLog(new PlayLogEntry(
+            Guid.NewGuid(),
+            utcNow,
+            PlayLogKind.PhaseChanged,
+            window.Id,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            [],
+            $"Round {window.RoundNumber} — {phase} phase began."));
     }
 
     /// <summary>
@@ -1827,7 +1925,15 @@ public static class CampaignPlayRules
             .Where(item => item.WindowId == window.Id && item.Source == OrderSource.DeadlineHold)
             .Select(item => item.ForceId);
         resolved = DelinquencyRules.Record(resolved, missing, window, closeAt);
-        return FinishWindow(resolved, resolvedMap, window, closeAt, due, forceStatuses);
+        return FinishWindow(
+            resolved,
+            resolvedMap,
+            window,
+            closeAt,
+            due,
+            forceStatuses,
+            factionAllyGroups,
+            choose);
     }
 
     private static (CampaignPlayState State, PlayMap Map) CloseBattleWindow(
@@ -1962,7 +2068,7 @@ public static class CampaignPlayRules
         next = ApplyRetreats(next, map, window, closeAt, pickIndex ?? (static count => 0), specialRules);
         next = ApplyBattleStatuses(next, map, window, forceStatuses, specialRules, closeAt, missions);
         var claimedMap = ApplyOccupationClaims(next, map, allies, choose, specialRules);
-        return FinishWindow(next, claimedMap, window, closeAt, due, forceStatuses);
+        return FinishWindow(next, claimedMap, window, closeAt, due, forceStatuses, allies, choose);
     }
 
     private static PlayMap ApplyOccupationClaims(
@@ -2151,7 +2257,9 @@ public static class CampaignPlayRules
         PhaseWindow window,
         DateTimeOffset closeAt,
         bool due,
-        IReadOnlyList<ForceStatusSetup>? forceStatuses = null)
+        IReadOnlyList<ForceStatusSetup>? forceStatuses = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        Func<int, int>? pickIndex = null)
     {
         var windows = state.Windows.ToList();
         var index = windows.FindIndex(item => item.Id == window.Id);
@@ -2172,9 +2280,23 @@ public static class CampaignPlayRules
         }
 
         var nextState = state.With(windows: windows);
-        if (index + 1 < windows.Count && windows[index + 1].Kind == RoundPhaseKind.Battle)
+        if (index + 1 < windows.Count)
         {
-            nextState = OpenWindow(nextState, windows[index + 1].Id, closeAt);
+            var opened = windows[index + 1];
+            if (opened.Kind == RoundPhaseKind.Battle)
+            {
+                nextState = OpenWindow(nextState, opened.Id, closeAt, map, factionAllyGroups, pickIndex);
+            }
+            else
+            {
+                nextState = AppendPhaseChange(nextState, opened, closeAt);
+                nextState = RivalObjectiveRules.Replenish(
+                    nextState,
+                    map,
+                    factionAllyGroups ?? new Dictionary<Guid, string?>(),
+                    closeAt,
+                    pickIndex ?? (static count => 0));
+            }
         }
 
         return CloseCompletedBattlePhase(nextState, map, closeAt, forceStatuses);
@@ -3744,6 +3866,7 @@ public static class CampaignPlayRules
         bool parkForNextBattlePhase)
     {
         var spent = SpendReportedSupply(state, resolved, map, catalog);
+        spent = RivalObjectiveRules.ApplyVictories(spent, resolved, utcNow);
         if (resolved.WaitingForceIds.Count == 0 || resolved.IsNoContest)
         {
             return spent;
@@ -4158,6 +4281,27 @@ public static class CampaignPlayRules
                 captured.StructureTypeId is null ? [] : territory.StructureTagIds);
         }).ToArray();
         return map.WithTerritories(next);
+    }
+
+    private static Dictionary<Guid, IReadOnlyList<string>> OccupyingRequiredSubfactions(
+        IReadOnlyList<PlayerFactionAssignment> players,
+        SpecialRuleContext rules)
+    {
+        return players
+            .Where(player =>
+                player.FactionId is { } faction
+                && rules.FactionRequiresSubfaction(faction)
+                && !string.IsNullOrWhiteSpace(player.Subfaction))
+            .GroupBy(static player => player.FactionId!.Value)
+            .ToDictionary(
+                static group => group.Key,
+                static group => (IReadOnlyList<string>)
+                [
+                    .. group
+                        .Select(static player => player.Subfaction!.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase),
+                ]);
     }
 }
 

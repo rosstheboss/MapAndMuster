@@ -262,6 +262,15 @@ export class CampaignLogComponent {
     target?.scrollIntoView({ block: 'center' });
   }
 
+  protected isEmphasized(entry: PlayLogEntry): boolean {
+    return (
+      entry.kind === 'CampaignStarted' ||
+      entry.kind === 'PhaseChanged' ||
+      entry.kind === 'CampaignEnded' ||
+      entry.kind === 'CampaignClosed'
+    );
+  }
+
   protected parts(entry: PlayLogEntry): { text: string; mention: boolean; username?: string | null }[] {
     const summary =
       entry.kind === 'ScheduleExtended'

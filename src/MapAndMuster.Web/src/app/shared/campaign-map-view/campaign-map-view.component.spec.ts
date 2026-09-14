@@ -79,7 +79,7 @@ describe('CampaignMapViewComponent', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it('renders a force marker for a force in a territory', () => {
+  it('renders a force marker as a faction-colored dot', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
     fixture.componentRef.setInput('territories', [territory]);
@@ -91,9 +91,10 @@ describe('CampaignMapViewComponent', () => {
         subfactions: [],
         allyGroupName: null,
         requiresSubfaction: false,
-        hasFlagImage: false,
+        hasFlagImage: true,
       },
     ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
     fixture.componentRef.setInput('forces', [
       {
         id: 'force-1',
@@ -109,22 +110,33 @@ describe('CampaignMapViewComponent', () => {
     const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin.is-mine');
     expect(pin).toBeTruthy();
     expect(pin?.getAttribute('aria-label')).toBe('North force in Coast');
+    expect(pin?.classList.contains('has-image')).toBe(false);
+    expect(pin?.querySelector('img')).toBeNull();
+    expect(pin instanceof HTMLElement ? pin.style.background : null).toBe('rgb(37, 99, 235)');
   });
 
-  it('uses a faction logo on a force pin and inherits when a subfaction has none', () => {
+  it('colors a force pin with the occupying subfaction color', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
     fixture.componentRef.setInput('territories', [territory]);
     fixture.componentRef.setInput('factions', [
       {
-        id: 'north',
-        name: 'North',
-        color: '#2563EB',
-        subfactions: ['Riders'],
+        id: 'daemons',
+        name: 'Daemons of Chaos',
+        color: '#AD1457',
+        subfactions: ['Khorne'],
         allyGroupName: null,
-        requiresSubfaction: false,
+        requiresSubfaction: true,
         hasFlagImage: true,
-        subfactionAppearances: [{ name: 'Riders', color: null, flagSource: 'inherit', hasFlagImage: false }],
+        subfactionAppearances: [
+          {
+            name: 'Khorne',
+            color: '#B91C1C',
+            flagSource: 'color' as const,
+            hasFlagImage: false,
+            tintFlagImage: false,
+          },
+        ],
       },
     ]);
     fixture.componentRef.setInput('flagImageUrl', () => png);
@@ -132,18 +144,19 @@ describe('CampaignMapViewComponent', () => {
       {
         id: 'force-1',
         territoryId: 't1',
-        factionId: 'north',
-        subfaction: 'Riders',
+        factionId: 'daemons',
+        subfaction: 'Khorne',
         isMine: true,
         inBattle: false,
-        label: 'North force in Coast',
+        label: 'Khorne force in Coast',
       },
     ]);
     fixture.detectChanges();
 
-    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin.has-image');
-    expect(pin).toBeTruthy();
-    expect(pin?.querySelector('img')?.getAttribute('src')).toBe(png);
+    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin');
+    expect(pin?.classList.contains('has-image')).toBe(false);
+    expect(pin?.querySelector('img')).toBeNull();
+    expect(pin instanceof HTMLElement ? pin.style.background : null).toBe('rgb(185, 28, 28)');
   });
 
   it('shows a pick-territory prompt on the map away from highlighted destinations', () => {
@@ -827,6 +840,58 @@ describe('CampaignMapViewComponent', () => {
     );
   });
 
+  it('uses the occupying required subfaction flag when ownership omits the subfaction', () => {
+    const owned = { ...territory, ownerFactionId: 'daemons' };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'daemons',
+        name: 'Daemons of Chaos',
+        color: '#AD1457',
+        subfactions: ['Khorne'],
+        allyGroupName: null,
+        requiresSubfaction: true,
+        hasFlagImage: true,
+        subfactionAppearances: [
+          {
+            name: 'Khorne',
+            color: '#B91C1C',
+            flagSource: 'color' as const,
+            hasFlagImage: false,
+            tintFlagImage: false,
+          },
+        ],
+      },
+    ]);
+    fixture.componentRef.setInput('flagImageUrl', () => png);
+    fixture.componentRef.setInput('colorMode', 'faction');
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'daemons',
+        subfaction: 'Khorne',
+        isMine: true,
+        inBattle: false,
+        label: 'Khorne force in Coast',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const flag = (fixture.nativeElement as HTMLElement).querySelector('.faction-flag');
+    expect(flag?.querySelector('img')).toBeNull();
+    expect(flag?.classList.contains('has-image')).toBe(false);
+    expect(flag instanceof HTMLElement ? flag.style.background : null).toBe('rgb(185, 28, 28)');
+    expect((fixture.nativeElement as HTMLElement).querySelector('polygon.territory')?.getAttribute('fill')).toBe(
+      '#B91C1C',
+    );
+    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin');
+    expect(pin?.querySelector('img')).toBeNull();
+    expect(pin instanceof HTMLElement ? pin.style.background : null).toBe('rgb(185, 28, 28)');
+  });
+
   it('shows an uploaded ownership logo without tinting by default', () => {
     const owned = { ...territory, ownerFactionId: 'f1' };
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
@@ -1190,6 +1255,144 @@ describe('CampaignMapViewComponent', () => {
     expect(view.zoom()).toBe(2);
   });
 
+  it('fits by default when initialCamera is fit, even if a zoom is stored', () => {
+    writeStoredMapViewZoom(storedCampaignId, { fit: false, zoom: 2 });
+    globalThis.ResizeObserver = class {
+      observe(): void {
+        return;
+      }
+      disconnect(): void {
+        return;
+      }
+      unobserve(): void {
+        return;
+      }
+    };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('campaignId', storedCampaignId);
+    fixture.componentRef.setInput('initialCamera', 'fit');
+    fixture.detectChanges();
+    const view = fixture.componentInstance as unknown as {
+      viewportSize: { set(value: { width: number; height: number }): void };
+      onImageLoad: (event: Event) => void;
+      zoom: () => number;
+      fitToPanel: () => boolean;
+    };
+    view.viewportSize.set({ width: 400, height: 300 });
+    const image = { naturalWidth: 1000, naturalHeight: 800 } as HTMLImageElement;
+    view.onImageLoad({ target: image } as unknown as Event);
+    expect(view.fitToPanel()).toBe(true);
+    expect(view.zoom()).toBe(1);
+  });
+
+  it('opens on the first owned force when initialCamera is first-force', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('initialCamera', 'first-force');
+    fixture.componentRef.setInput('territories', [
+      squareTerritory('t1', 0.1, 0.1),
+      squareTerritory('t2', 0.4, 0.1),
+      squareTerritory('t3', 0.7, 0.55),
+    ]);
+    fixture.componentRef.setInput('factions', [northFaction()]);
+    fixture.componentRef.setInput('interactive', true);
+    fixture.componentRef.setInput('focusSelectedTerritories', true);
+    const selected = vi.fn((event: { id: string; source?: string }) => {
+      fixture.componentRef.setInput('selectedTerritoryIds', [event.id]);
+      fixture.detectChanges();
+    });
+    fixture.componentInstance.territorySelect.subscribe(selected);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'First in t1',
+        moveTargets: ['t2'],
+      },
+      {
+        id: 'force-2',
+        territoryId: 't3',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'Second in t3',
+        moveTargets: [],
+      },
+    ]);
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+    applyReadyCamera(fixture.componentInstance);
+    fixture.detectChanges();
+    const view = mapView(fixture.componentInstance);
+    expect(selected).toHaveBeenCalledWith(expect.objectContaining({ id: 't1', additive: false, source: 'cycle' }));
+    expect(view.fitToPanel()).toBe(false);
+    expect(view.zoom()).toBeCloseTo(0.736, 3);
+    expect(view.panX()).toBeCloseTo(400 / 2 - 0.35 * 1000 * 0.736, 1);
+    expect(view.panY()).toBe(0);
+  });
+
+  it('fits when initialCamera is first-force but the viewer has no own force', () => {
+    writeStoredMapViewZoom(storedCampaignId, { fit: false, zoom: 2 });
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('campaignId', storedCampaignId);
+    fixture.componentRef.setInput('initialCamera', 'first-force');
+    fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1)]);
+    fixture.componentRef.setInput('factions', [northFaction()]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-other',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: false,
+        inBattle: false,
+        label: 'Other',
+        moveTargets: [],
+      },
+    ]);
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+    applyReadyCamera(fixture.componentInstance);
+    fixture.detectChanges();
+    const view = mapView(fixture.componentInstance);
+    expect(view.fitToPanel()).toBe(true);
+  });
+
+  it('frames the first owned force when it arrives after the map image', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('initialCamera', 'first-force');
+    fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1), squareTerritory('t2', 0.4, 0.1)]);
+    fixture.componentRef.setInput('factions', [northFaction()]);
+    fixture.componentRef.setInput('interactive', true);
+    const selected = vi.fn();
+    fixture.componentInstance.territorySelect.subscribe(selected);
+    fixture.detectChanges();
+    prepareOverflowingMap(fixture.componentInstance);
+    applyReadyCamera(fixture.componentInstance);
+    expect(selected).not.toHaveBeenCalled();
+    expect(mapView(fixture.componentInstance).fitToPanel()).toBe(true);
+
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'First in t1',
+        moveTargets: ['t2'],
+      },
+    ]);
+    fixture.detectChanges();
+    expect(selected).toHaveBeenCalledWith(expect.objectContaining({ id: 't1', source: 'cycle' }));
+    expect(mapView(fixture.componentInstance).fitToPanel()).toBe(false);
+  });
+
   it('fits on F and zooms to actual size on 1', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
@@ -1524,7 +1727,7 @@ describe('CampaignMapViewComponent', () => {
     }
   });
 
-  it('waits before clearing a territory hover and cancels that wait if the pointer returns', () => {
+  it('clears hover details immediately when the pointer leaves a territory', () => {
     vi.useFakeTimers();
     try {
       const fixture = TestBed.createComponent(CampaignMapViewComponent);
@@ -1537,14 +1740,76 @@ describe('CampaignMapViewComponent', () => {
 
       const hit = (fixture.nativeElement as HTMLElement).querySelector('.territory-hit[data-id="t1"]')!;
       hit.dispatchEvent(pointer('pointerleave', { bubbles: false }));
-      expect(hover).not.toHaveBeenCalled();
-      hit.dispatchEvent(pointer('pointerenter', { bubbles: false }));
-      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS);
-      expect(hover).not.toHaveBeenCalled();
-
-      hit.dispatchEvent(pointer('pointerleave', { bubbles: false }));
-      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS);
       expect(hover).toHaveBeenCalledWith(null);
+      hover.mockClear();
+      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS);
+      expect(hover).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hides hover details while moving, then shows the settled territory after the delay', () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(CampaignMapViewComponent);
+      fixture.componentRef.setInput('imageUrl', png);
+      fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1), squareTerritory('t2', 0.4, 0.1)]);
+      fixture.componentRef.setInput('hoveredTerritoryId', 't1');
+      const hover = vi.fn();
+      fixture.componentInstance.territoryHover.subscribe((id) => {
+        hover(id);
+        fixture.componentRef.setInput('hoveredTerritoryId', id);
+      });
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      compiled
+        .querySelector('.territory-hit[data-id="t1"]')!
+        .dispatchEvent(pointer('pointerleave', { bubbles: false }));
+      expect(hover).toHaveBeenCalledWith(null);
+
+      hover.mockClear();
+      compiled
+        .querySelector('.territory-hit[data-id="t2"]')!
+        .dispatchEvent(pointer('pointerenter', { bubbles: false }));
+      expect(hover).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS - 1);
+      expect(hover).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(hover).toHaveBeenCalledWith('t2');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not restore the previous hover after leaving onto empty map', () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = TestBed.createComponent(CampaignMapViewComponent);
+      fixture.componentRef.setInput('imageUrl', png);
+      fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1), squareTerritory('t2', 0.4, 0.1)]);
+      fixture.componentRef.setInput('hoveredTerritoryId', 't1');
+      const hover = vi.fn();
+      fixture.componentInstance.territoryHover.subscribe((id) => {
+        hover(id);
+        fixture.componentRef.setInput('hoveredTerritoryId', id);
+      });
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      compiled
+        .querySelector('.territory-hit[data-id="t1"]')!
+        .dispatchEvent(pointer('pointerleave', { bubbles: false }));
+      compiled
+        .querySelector('.territory-hit[data-id="t2"]')!
+        .dispatchEvent(pointer('pointerenter', { bubbles: false }));
+      compiled
+        .querySelector('.territory-hit[data-id="t2"]')!
+        .dispatchEvent(pointer('pointerleave', { bubbles: false }));
+      hover.mockClear();
+      vi.advanceTimersByTime(TERRITORY_HOVER_INTENT_MS);
+      expect(hover).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -1712,6 +1977,58 @@ describe('CampaignMapViewComponent', () => {
     expect(tip?.textContent).toContain('Terrain: Plains');
     expect(tip?.textContent).toContain('Ada · North');
     expect(tip?.textContent).toContain('Battle');
+  });
+
+  it('places the hover tooltip at the lower right of the cursor and flips at viewport edges', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      return setTimeout(() => callback(0), 0);
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      clearTimeout(id);
+    });
+    try {
+      const fixture = TestBed.createComponent(CampaignMapViewComponent);
+      fixture.componentRef.setInput('imageUrl', png);
+      fixture.componentRef.setInput('territories', [squareTerritory('t1', 0.1, 0.1)]);
+      fixture.componentRef.setInput('hoveredTerritoryId', 't1');
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      const viewport = compiled.querySelector('.map-viewport')!;
+      Object.defineProperty(viewport, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => ({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300 }),
+      });
+      const tip = compiled.querySelector<HTMLElement>('.territory-hover-tip')!;
+      Object.defineProperty(tip, 'offsetWidth', { configurable: true, get: () => 100 });
+      Object.defineProperty(tip, 'offsetHeight', { configurable: true, get: () => 50 });
+
+      const move = async (clientX: number, clientY: number): Promise<void> => {
+        viewport.dispatchEvent(pointer('pointermove', { clientX, clientY }));
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 0);
+        });
+        fixture.detectChanges();
+      };
+
+      await move(20, 30);
+      expect(tip.style.left).toBe('32px');
+      expect(tip.style.top).toBe('46px');
+
+      await move(380, 20);
+      expect(tip.style.left).toBe('268px');
+      expect(tip.style.top).toBe('36px');
+
+      await move(20, 280);
+      expect(tip.style.left).toBe('32px');
+      expect(tip.style.top).toBe('214px');
+
+      await move(380, 280);
+      expect(tip.style.left).toBe('268px');
+      expect(tip.style.top).toBe('214px');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('pans to a territory selected from the directory without changing zoom', () => {
@@ -2070,4 +2387,13 @@ function prepareOverflowingMap(component: CampaignMapViewComponent): void {
   view.zoom.set(1);
   view.panX.set(-200);
   view.panY.set(-200);
+}
+
+function applyReadyCamera(component: CampaignMapViewComponent): void {
+  const view = component as unknown as {
+    imageReady: { set(value: boolean): void };
+    restoreOrFitZoom: () => void;
+  };
+  view.imageReady.set(true);
+  view.restoreOrFitZoom();
 }

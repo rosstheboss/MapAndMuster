@@ -190,7 +190,12 @@
         </h2>
         @if (isOpen('faction')) {
           <p>
-            {{ faction.name }}
+            <a
+              class="territory-link"
+              [attr.href]="'#campaign-faction-' + faction.id"
+              (click)="goToFactionListing(faction.id, $event)"
+              >{{ faction.name }}</a
+            >
             @if (campaign.subfaction) {
               · {{ campaign.subfaction }}
             }
@@ -319,6 +324,18 @@
               <button type="button" class="button" (click)="commit()" [disabled]="!canCommitActions()">
                 Commit Actions
               </button>
+            }
+            @if (chosenSpecialRules().length > 0) {
+              <ul class="plain-list">
+                @for (rule of chosenSpecialRules(); track rule.id) {
+                  <li>
+                    <strong>{{ rule.name }}</strong>
+                    @if (rule.text) {
+                      — {{ rule.text }}
+                    }
+                  </li>
+                }
+              </ul>
             }
             @for (force of myForces(); track force.id) {
               <fieldset class="stack force-card" [style.--force-accent]="forceAccent(force)">
@@ -521,22 +538,9 @@
             }
             @if (commitmentsRosterOpen()) {
               <ul class="plain-list commitment-roster">
-                @for (item of play.commitments; track item.userId) {
+                @for (item of commitmentEntries(); track item.userId) {
                   <li>
-                    @if (item.username; as username) {
-                      <a class="profile-link" [routerLink]="['/users', username]" [queryParams]="profileFrom()">{{
-                        username
-                      }}</a>
-                    } @else {
-                      {{ item.userId }}
-                    }
-                    <span
-                      class="status-chip"
-                      [class.is-committed]="item.isCommitted"
-                      [class.is-drafting]="!item.isCommitted"
-                    >
-                      {{ item.isCommitted ? 'Committed' : 'Drafting' }}
-                    </span>
+                    <ng-container *ngTemplateOutlet="commitmentEntry; context: { $implicit: item }" />
                   </li>
                 }
               </ul>
@@ -615,6 +619,7 @@
                 [showUncommit]="canUncommit()"
                 [actionPrompt]="mapActionPrompt()"
                 [promptAvoidTerritoryIds]="mapPromptAvoidIds()"
+                [initialCamera]="campaign.status === 'InProgress' ? 'first-force' : 'fit'"
                 (territoryHover)="hoveredTerritoryId.set($event)"
                 (territorySelect)="onTerritorySelect($event)"
                 (backgroundSelect)="onMapBackgroundSelect()"
@@ -689,11 +694,30 @@
                       [class.app-glow]="!!territory.ownerFactionId"
                       [style.--glow-color]="territory.overlayColor || null"
                     >
-                      Ownership: {{ factionName(territory.ownerFactionId) }}
+                      Ownership:
+                      @if (territory.ownerFactionId; as ownerId) {
+                        <a
+                          class="territory-link"
+                          [attr.href]="'#campaign-faction-' + ownerId"
+                          (click)="goToFactionListing(ownerId, $event)"
+                          >{{ factionName(ownerId) }}</a
+                        >
+                      } @else {
+                        Neutral
+                      }
                     </p>
                     <p [class.app-glow]="!!territory.spawnFactionId">
                       Spawn location faction:
-                      {{ territory.spawnFactionId ? factionName(territory.spawnFactionId) : 'None' }}
+                      @if (territory.spawnFactionId; as spawnId) {
+                        <a
+                          class="territory-link"
+                          [attr.href]="'#campaign-faction-' + spawnId"
+                          (click)="goToFactionListing(spawnId, $event)"
+                          >{{ factionName(spawnId) }}</a
+                        >
+                      } @else {
+                        None
+                      }
                     </p>
                     <p>Forces: {{ forcesInTerritory(territory.id).join(', ') || 'None' }}</p>
                     <p>
@@ -1296,7 +1320,7 @@
                             class="map-focus-button standing-faction"
                             [class.is-map-focused]="isMapFocused('faction', row.factionId)"
                             [disabled]="!!mapAction()"
-                            (click)="focusOnMap('faction', row.factionId)"
+                            (click)="goToFactionListing(row.factionId)"
                           >
                             @if (standingFlagUrl(row); as src) {
                               <app-faction-logo
@@ -1321,15 +1345,12 @@
                       </td>
                       <td>
                         @if (allyGroupIdByName(row.allyGroupName); as allyId) {
-                          <button
-                            type="button"
-                            class="map-focus-button"
-                            [class.is-map-focused]="isMapFocused('ally', allyId)"
-                            [disabled]="!!mapAction()"
-                            (click)="focusOnMap('ally', allyId)"
+                          <a
+                            class="territory-link"
+                            [attr.href]="'#campaign-ally-' + allyId"
+                            (click)="goToAllyGroupListing(allyId, $event)"
+                            >{{ row.allyGroupName }}</a
                           >
-                            {{ row.allyGroupName }}
-                          </button>
                         } @else {
                           {{ row.allyGroupName || '—' }}
                         }
@@ -1474,6 +1495,7 @@
               <button
                 type="button"
                 class="map-focus-button"
+                [id]="'campaign-faction-' + entry.faction.id"
                 [class.is-map-focused]="isMapFocused('faction', entry.faction.id)"
                 [disabled]="!!mapAction()"
                 (click)="focusOnMap('faction', entry.faction.id)"
@@ -1506,7 +1528,17 @@
               @if (entry.faction.requiresSubfaction) {
                 <span class="muted"> · Subfaction required</span>
               }
-              @if (entry.faction.allyGroupName) {
+              @if (entry.faction.allyGroupId && entry.faction.allyGroupName) {
+                <span class="muted">
+                  · Ally group:
+                  <a
+                    class="territory-link"
+                    [attr.href]="'#campaign-ally-' + entry.faction.allyGroupId"
+                    (click)="goToAllyGroupListing(entry.faction.allyGroupId, $event)"
+                    >{{ entry.faction.allyGroupName }}</a
+                  >
+                </span>
+              } @else if (entry.faction.allyGroupName) {
                 <span class="muted"> · Ally group: {{ entry.faction.allyGroupName }}</span>
               }
               @if (entry.specialRules.length > 0) {
@@ -1597,6 +1629,7 @@
                 <button
                   type="button"
                   class="map-focus-button"
+                  [id]="'campaign-ally-' + entry.group.id"
                   [class.is-map-focused]="isMapFocused('ally', entry.group.id)"
                   [disabled]="!!mapAction()"
                   (click)="focusOnMap('ally', entry.group.id)"
@@ -1604,8 +1637,19 @@
                   {{ entry.group.name }}
                 </button>
                 <span> ({{ entry.players.length === 1 ? '1 player' : entry.players.length + ' players' }})</span>
-                @if (entry.membersLabel) {
-                  <span> - {{ entry.membersLabel }}</span>
+                @if (entry.members.length > 0) {
+                  <span>
+                    -
+                    @for (member of entry.members; track member.faction.id; let last = $last) {
+                      <a
+                        class="territory-link"
+                        [attr.href]="'#campaign-faction-' + member.faction.id"
+                        (click)="goToFactionListing(member.faction.id, $event)"
+                        >{{ member.faction.name }}</a
+                      >{{ member.subfactions.length > 0 ? ' (' + member.subfactions.join(', ') + ')' : ''
+                      }}{{ last ? '' : ', ' }}
+                    }
+                  </span>
                 }
                 @if (entry.players.length > 0) {
                   <ul class="plain-list ally-group-players">
@@ -1623,7 +1667,17 @@
                         @if (player.traitorVictims.length > 0) {
                           <app-traitor-mark [victims]="player.traitorVictims" />
                         }
-                        <span> ({{ player.factionLabel }})</span>
+                        <span> (</span>
+                        <a
+                          class="territory-link"
+                          [attr.href]="'#campaign-faction-' + player.factionId"
+                          (click)="goToFactionListing(player.factionId, $event)"
+                          >{{ player.factionName }}</a
+                        >
+                        @if (player.subfaction) {
+                          <span>, {{ player.subfaction }}</span>
+                        }
+                        <span>)</span>
                       </li>
                     }
                   </ul>
@@ -1741,7 +1795,12 @@
     }
 
     @if (
-      play() && (myPrivateObjectives().length > 0 || othersClaimedPrivateObjectives().length > 0 || campaign.canManage)
+      play() &&
+      (myPrivateObjectives().length > 0 ||
+        myRivalObjectives().length > 0 ||
+        othersClaimedPrivateObjectives().length > 0 ||
+        othersRevealedRivals().length > 0 ||
+        campaign.canManage)
     ) {
       <div class="panel stack">
         <h2>
@@ -1764,13 +1823,32 @@
               }
             </ul>
           }
-          @if (othersClaimedPrivateObjectives().length > 0) {
+          @if (myRivalObjectives().length > 0) {
+            <ul class="stack">
+              @for (assignment of myRivalObjectives(); track assignment.id) {
+                <li>
+                  <ng-container *ngTemplateOutlet="rivalObjectiveItem; context: { $implicit: assignment }" />
+                </li>
+              }
+            </ul>
+          }
+          @if (othersClaimedPrivateObjectives().length > 0 || othersRevealedRivals().length > 0) {
             <details class="claimed-private-objectives">
               <summary>Claimed private objectives</summary>
               <ul class="stack">
                 @for (assignment of othersClaimedPrivateObjectives(); track assignment.id) {
                   <li>
                     <ng-container *ngTemplateOutlet="privateObjectiveItem; context: { $implicit: assignment }" />
+                  </li>
+                }
+                @for (assignment of othersRevealedRivals(); track assignment.id) {
+                  <li>
+                    <strong>Secret rival</strong>
+                    <span class="muted"> · Revealed</span>
+                    <span class="muted"> · {{ rivalHolderCaption(assignment) }}</span>
+                    @if (rivalTargetCaption(assignment); as rival) {
+                      <p>Defeated {{ rival }}</p>
+                    }
                   </li>
                 }
               </ul>
@@ -1901,9 +1979,15 @@
                     [queryParams]="profileFrom()"
                     >{{ participant.username }}</a
                   >
-                  @if (participant.factionName; as faction) {
+                  @if (catalogFaction(participant.factionId, participant.factionName); as faction) {
                     <span>
-                      · {{ faction }}
+                      ·
+                      <a
+                        class="territory-link"
+                        [attr.href]="'#campaign-faction-' + faction.id"
+                        (click)="goToFactionListing(faction.id, $event)"
+                        >{{ faction.name }}</a
+                      >
                       @if (participant.subfaction; as subfaction) {
                         ({{ subfaction }})
                       }
@@ -2483,7 +2567,7 @@
         />
         <p class="muted">Your forces share this pool. Each point can be spent by only one force.</p>
       }
-      @if (myUnclaimedPrivateObjectives().length > 0) {
+      @if (myUnclaimedPrivateObjectives().length > 0 || myActiveRivalObjectives().length > 0) {
         <div class="stack">
           <p>Your unclaimed private objectives</p>
           <ul class="stack">
@@ -2492,8 +2576,73 @@
                 <ng-container *ngTemplateOutlet="privateObjectiveItem; context: { $implicit: assignment }" />
               </li>
             }
+            @for (assignment of myActiveRivalObjectives(); track assignment.id) {
+              <li>
+                <ng-container *ngTemplateOutlet="rivalObjectiveItem; context: { $implicit: assignment }" />
+              </li>
+            }
           </ul>
         </div>
+      }
+    </ng-template>
+    <ng-template #commitmentEntry let-item>
+      <div class="commitment-entry">
+        <p>
+          @if (item.username; as username) {
+            <a class="profile-link" [routerLink]="['/users', username]" [queryParams]="profileFrom()">{{ username }}</a>
+          } @else {
+            {{ item.userId }}
+          }
+          <span class="status-chip" [class.is-committed]="item.isCommitted" [class.is-drafting]="!item.isCommitted">
+            {{ item.isCommitted ? 'Committed' : 'Drafting' }}
+          </span>
+        </p>
+        @if (item.factionName) {
+          <p class="commitment-entry-meta">
+            @if (item.faction) {
+              <a
+                class="territory-link"
+                [attr.href]="'#campaign-faction-' + item.faction.id"
+                (click)="goToFactionListing(item.faction.id, $event)"
+                >{{ item.factionName }}</a
+              >
+            } @else {
+              {{ item.factionName }}
+            }
+            @if (item.subfaction) {
+              - {{ item.subfaction }}
+            }
+          </p>
+        }
+        @if (item.locations.length > 0) {
+          <p class="commitment-entry-meta">
+            @for (place of item.locations; track place.territoryId; let index = $index) {
+              {{ listJoin(index, item.locations.length) }}
+              <button
+                type="button"
+                class="territory-link"
+                [class.is-selected]="selectedIds().includes(place.territoryId)"
+                [disabled]="!!mapAction()"
+                [attr.aria-label]="'Show ' + place.label + ' on the map'"
+                (click)="selectTerritoryOnMap(place.territoryId)"
+              >
+                {{ place.label }}
+              </button>
+            }
+          </p>
+        }
+      </div>
+    </ng-template>
+    <ng-template #rivalObjectiveItem let-assignment>
+      <strong>Secret rival</strong>
+      <span class="muted"> · {{ assignment.status }}</span>
+      @if (rivalTargetCaption(assignment); as rival) {
+        <p>
+          Defeat {{ rival }} in battle or by surrender
+          @if (assignment.campaignPoints !== null && assignment.campaignPoints !== undefined) {
+            ({{ assignment.campaignPoints }} campaign points)
+          }
+        </p>
       }
     </ng-template>
     <ng-template #privateObjectiveItem let-assignment>

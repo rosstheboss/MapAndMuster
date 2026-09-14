@@ -189,6 +189,9 @@ describe('SiteChatComponent', () => {
     expect(compiled.textContent).toContain('Send as administrator');
     expect(compiled.textContent).toContain('Admin');
     expect(compiled.textContent).toContain('Please read the news.');
+    expect(
+      [...compiled.querySelectorAll('strong')].some((node) => node.textContent.includes('Please read the news.')),
+    ).toBe(true);
   });
 
   it('keeps language filters and the block list in a collapsed subpanel below Send', () => {

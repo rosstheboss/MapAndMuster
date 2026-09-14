@@ -91,6 +91,7 @@ internal static class CampaignPointStandingsMapper
             VisibleItems = visibleItems,
             Awards = play.PublicObjectiveAwards,
             PrivateObjectives = play.PrivateObjectives,
+            RivalObjectives = play.RivalObjectives,
             PrivateObjectivePoints = campaign.PrivateObjectiveTypes.ToDictionary(static type => type.Id, static type => type.CampaignPoints),
             AllyGroupByFaction = CampaignPlayCatalog.AllyGroupByFaction(campaign),
             BrokenAllyFactionIds = play.BrokenAllyFactionIds.ToHashSet(),

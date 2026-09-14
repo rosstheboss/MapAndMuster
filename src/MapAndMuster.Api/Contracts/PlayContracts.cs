@@ -121,6 +121,9 @@ public sealed class CampaignPlayResponse
     /// <summary>Gets public unclaimed private-objective counts.</summary>
     public IReadOnlyList<PrivateObjectiveUnclaimedCountResponse> PrivateObjectiveUnclaimedCounts { get; init; } = [];
 
+    /// <summary>Gets assigned rival objectives visible to the viewer.</summary>
+    public IReadOnlyList<RivalObjectiveAssignmentResponse> RivalObjectives { get; init; } = [];
+
     /// <summary>Gets reusable special rules.</summary>
     public IReadOnlyList<SpecialRuleResponse> SpecialRules { get; init; } = [];
 
@@ -1192,6 +1195,20 @@ public static class PlayResponses
                     HolderId = item.HolderId,
                     HolderName = item.HolderName,
                     Count = item.Count,
+                }),
+            ],
+            RivalObjectives =
+            [
+                .. detail.RivalObjectives.Select(static item => new RivalObjectiveAssignmentResponse
+                {
+                    Id = item.Id,
+                    HolderUserId = item.HolderUserId,
+                    Status = item.Status,
+                    RivalUserId = item.RivalUserId,
+                    RivalDisplayName = item.RivalDisplayName,
+                    RivalFactionName = item.RivalFactionName,
+                    RivalSubfaction = item.RivalSubfaction,
+                    CampaignPoints = item.CampaignPoints,
                 }),
             ],
             SpecialRules =

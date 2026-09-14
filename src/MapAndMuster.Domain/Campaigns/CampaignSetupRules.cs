@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using MapAndMuster.Domain.Common;
 using MapAndMuster.Domain.Identity;
 using MapAndMuster.Domain.Maps;
+using MapAndMuster.Domain.Play;
 
 namespace MapAndMuster.Domain.Campaigns;
 
@@ -263,6 +264,8 @@ public static class CampaignSetupRules
     /// <param name="longestTerritoryChainTerrainTagId">Optional terrain tag that limits longest-chain scoring.</param>
     /// <param name="mostStructurePointsStructureTagId">Optional structure tag that limits most-structure-points scoring.</param>
     /// <param name="pointsPerTerritoryTerrainTagId">Optional terrain tag that limits points-per-territory scoring.</param>
+    /// <param name="rivalObjectivesEnabled">Whether occupying players receive a secret rival objective.</param>
+    /// <param name="rivalObjectiveCampaignPoints">Campaign points awarded when a player reveals their rival.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
@@ -322,7 +325,9 @@ public static class CampaignSetupRules
         Guid? mostTerritoriesTerrainTagId = null,
         Guid? longestTerritoryChainTerrainTagId = null,
         Guid? mostStructurePointsStructureTagId = null,
-        Guid? pointsPerTerritoryTerrainTagId = null)
+        Guid? pointsPerTerritoryTerrainTagId = null,
+        bool? rivalObjectivesEnabled = null,
+        int? rivalObjectiveCampaignPoints = null)
     {
         var collected = new List<DomainError>();
         setup = null;
@@ -446,6 +451,7 @@ public static class CampaignSetupRules
             collected,
             parsedStructureTags.Select(static tag => tag.Id).ToHashSet(),
             parsedTerrainTags.Select(static tag => tag.Id).ToHashSet());
+        PrivateObjectiveExclusionRules.ValidateDistribution(parsedPrivate, parsedFactions, parsedGroups, collected);
         var privateObjectiveIds = parsedPrivate.Select(static type => type.Id).ToHashSet();
         var parsedItems = ParseItemObjectiveTypes(
             itemObjectiveTypes,
@@ -481,6 +487,13 @@ public static class CampaignSetupRules
             parsedStructureTags.Select(static tag => tag.Id).ToHashSet());
         var parsedSchedule = ParseSchedule(schedule, collected);
         var parsedSplitForce = ParseSplitForcePenalty(splitForceSupplyPenaltyPercent, collected);
+        var rivalsEnabled = rivalObjectivesEnabled ?? true;
+        var rivalPoints = ParseCampaignPoints(
+            rivalObjectiveCampaignPoints,
+            "rivalObjectiveCampaignPoints",
+            "Rival-objective campaign points",
+            collected,
+            RivalObjectiveRules.DefaultCampaignPoints);
 
         if (collected.Count > 0)
         {
@@ -519,7 +532,9 @@ public static class CampaignSetupRules
             parsedTerrainTags,
             parsedStructureTags,
             parsedFactionTags,
-            parsedMissionTags);
+            parsedMissionTags,
+            rivalsEnabled,
+            rivalPoints);
         errors = collected;
         return true;
     }
@@ -3533,7 +3548,53 @@ public static class CampaignSetupRules
                 prerequisiteForceStatusTypeId,
                 prerequisiteWasLost,
                 structureTagId,
-                terrainTagId));
+                terrainTagId,
+                ParseKnownIds(
+                    input.ExcludedFactionIds,
+                    knownFactionIds,
+                    index,
+                    "excludedFactionIds",
+                    "faction",
+                    errors),
+                ParseKnownIds(
+                    input.ExcludedAllyGroupIds,
+                    knownAllyGroupIds,
+                    index,
+                    "excludedAllyGroupIds",
+                    "ally group",
+                    errors)));
+        }
+
+        return parsed;
+    }
+
+    private static List<Guid> ParseKnownIds(
+        IReadOnlyList<Guid>? ids,
+        HashSet<Guid> knownIds,
+        int index,
+        string fieldName,
+        string ownerLabel,
+        List<DomainError> errors)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            return [];
+        }
+
+        var field = $"privateObjectiveTypes[{index}].{fieldName}";
+        var parsed = new List<Guid>();
+        foreach (var id in ids.Where(static value => value != Guid.Empty).Distinct())
+        {
+            if (!knownIds.Contains(id))
+            {
+                errors.Add(new DomainError(
+                    $"{field}.unknown",
+                    $"Private objective {index + 1} references a {ownerLabel} that was not created.",
+                    field));
+                continue;
+            }
+
+            parsed.Add(id);
         }
 
         return parsed;

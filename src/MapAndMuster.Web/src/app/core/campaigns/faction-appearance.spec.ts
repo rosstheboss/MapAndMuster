@@ -29,8 +29,18 @@ describe('faction appearance', () => {
     });
   });
 
-  it('inherits the parent logo and color when a subfaction has no appearance', () => {
+  it('does not inherit the parent logo for a required subfaction', () => {
     expect(resolveFactionAppearance({ ...faction, subfactionAppearances: [] }, 'Khorne')).toEqual({
+      color: '#AD1457',
+      hasFlagImage: false,
+      tint: false,
+    });
+  });
+
+  it('inherits the parent logo and color when an optional subfaction has no appearance', () => {
+    expect(
+      resolveFactionAppearance({ ...faction, requiresSubfaction: false, subfactionAppearances: [] }, 'Khorne'),
+    ).toEqual({
       color: '#AD1457',
       hasFlagImage: true,
       tint: true,

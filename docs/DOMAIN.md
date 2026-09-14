@@ -156,7 +156,13 @@ or gain a force status a number of times, cause another force to gain a status, 
 after gaining or losing another status. At launch, occupying players, factions, and ally groups each
 receive one secret objective from that holder kind's pool. Traitor-kind objectives are not seeded.
 A holder kind with no configured
-objectives receives none. Assignments in a pool are unique until that pool is exhausted; remaining
+objectives receives none. Factions that require a subfaction receive one faction-pool assignment per
+occupying required subfaction rather than one shared faction assignment. Each catalog entry may list factions and ally groups that cannot receive
+it. A listed faction (or a listed ally group that faction currently belongs to) is skipped for
+player, faction, and ally-group assignment. An entry must remain receivable by at least one
+faction. Unique assignment of player-or-faction catalog entries onto factions must still be
+possible until the catalog is larger than the faction count; the most restrictive eligible
+objectives are assigned first. Assignments in a pool are unique until that pool is exhausted; remaining
 holders then receive duplicates from a newly shuffled copy of the same pool, repeating until
 everyone in the pool has one, except that one player may never hold two assignments of the same
 catalog type. Player-held and Traitor-held assignments share that uniqueness. Faction and ally-group
@@ -169,6 +175,18 @@ launch, a manager may grant a specific catalog objective, or a random one from t
 to a chosen player, faction, or ally group. Managers cannot grant Traitor-kind assignments; those
 arrive only from Backstab. Private-objective catalog
 entries cannot be added after launch.
+
+Secret rival objectives are a separate campaign flag, on by default, with a configurable campaign-point
+reward (default 5). When enabled, each occupying player also receives one extra secret assignment
+targeting a specific enemy player (not an ally). Unique rivals are preferred; duplicates are used
+only when uniqueness is impossible, minimizing how often the same player is targeted. A player
+wins by defeating that rival in a finalized battle or by the rival's surrender. Draws,
+delinquency, no-contest, and ringer battles do not count. Victory awards the configured points,
+reveals the assignment like a private objective, and is logged. At the beginning of a later
+action round that is not the final round, a player who already had a rival and currently has none
+receives a new closest enemy they have not previously been assigned (another player's current
+rival may be reused). Players currently in battle with each other are skipped for replenishment.
+When the flag is off, rival assignments are omitted.
 
 Points per finalized battle win are configured with public objectives (default 0). Battle-point
 difference uses the campaign's configured multiplier and clamp; the application does not copy a
@@ -336,7 +354,7 @@ total of revealed or completed private-objective points that apply to that playe
 player-scoped award counts only for that player; a faction award counts for every current
 player of that faction; an ally-group award counts for every current player whose faction is
 still in that group. Each assignment is scored on its own, including duplicate catalog types.
-Manual private objectives enter this column after a manager approves a
+Revealed rival-objective points are added to the same Private Objectives column. Manual private objectives enter this column after a manager approves a
 claim. Automatic private objectives enter it when their map criterion is met.
 Unclaimed private objectives do not score when the campaign ends. Other is currently held visible
 item-objective points. Destroyed items contribute nothing. Hidden items are omitted from
@@ -344,7 +362,8 @@ unauthorized standings and logos so the columns still add up for that viewer; th
 staff in an active debug session see their own hidden items.
 
 Public knowledge of private objectives is the unclaimed count for each player, faction, and
-ally group that has at least one assigned private objective still unrevealed. Names, text, and
+ally group that has at least one assigned private objective still unrevealed. An unrevealed rival
+counts in that player's public unclaimed total. Names, text, and
 progress of unrevealed private objectives are returned only to authorized holders (the player;
 members of the faction or ally group) and to campaign managers or administrators. Revealed or
 completed private objectives are listed publicly, and their points are included in the Private
@@ -874,8 +893,10 @@ the image to the view and recenters it.
 The F key fits the map; 1 (and 0) set 100 percent. Y cycles your forces. C commits when that map
 Commit control is enabled, or uncommits when Uncommit is shown. N toggles Show names. Confirmation
 alertdialogs (including last commit) keep Tab inside the dialog, confirm on Enter, and cancel on
-Escape. Zoom defaults to Fit. After the viewer changes
-zoom, that Fit-or-percent choice is restored the next time the same campaign's map opens. M toggles full-screen map mode on the campaign
+Escape. On the campaign page, scheduled and completed campaigns open the map at Fit. In-progress
+campaigns open as if Cycle forces had selected the viewer's first owned force; Fit if they have
+none. The map editor still restores the last Fit-or-percent choice after the viewer changes zoom.
+M toggles full-screen map mode on the campaign
 page and map editor while the map is shown; Escape exits full screen. Full-screen mode keeps the map
 inside the viewport: a fitted map recenters when the panel size changes, and a zoomed map clamps pan
 so the image cannot sit off-screen. Cycle forces walks your forces in roster order. Each press
@@ -898,7 +919,9 @@ the polygon is small, and hides a display number when that number would not fit.
 on the map or a row in the Territories list shows a tooltip with the territory name, owner or Neutral,
 structure type and pillaged state when a structure is present (`Town` or `Town (pillaged)`), terrain
 type, forces in the territory, whether a battle is to be had there, and any force still there that
-lost or surrendered and is retreating. When the zoomed image is larger than the panel, it can be panned
+lost or surrendered and is retreating. The tooltip sits at the lower right of the pointer. If it
+would cross the right edge of the map viewport it moves to the lower left; if it would cross the
+bottom edge it moves to the upper right; if it would cross both it moves to the upper left. When the zoomed image is larger than the panel, it can be panned
 but not dragged past the image bounds. Hold a right-click (context-click) or middle-click and drag to
 pan without drawing, erasing, or selecting; the mouse wheel still zooms the same way it does with any
 tool. Left-click drag does not pan. On a touch screen, pinch with two fingers to zoom and drag with
@@ -944,7 +967,10 @@ parentheses, alphabetically, as `Subfaction: Territory`. Factions with no specif
 parenthetical. Each faction lists its special rules, then the players currently taking that faction
 without a subfaction, then each named subfaction with that subfaction's special rules and the players
 taking it. Choosing a faction (or subfaction) on the campaign page also lists those special rules
-under the selector. The campaign page Ally groups section lists groups alphabetically. Each group name is a map-focus
+under the selector, and the Actions panel repeats the viewer's faction powers with the power names
+in bold. Faction and ally-group names elsewhere on the campaign page link to that faction's listing
+in Factions or that group's listing in Ally groups, scrolling the listing name into view below the
+sticky campaign toolbar. The campaign page Ally groups section lists groups alphabetically. Each group name is a map-focus
 control, followed by the current player count in parentheses, then its member factions in
 alphabetical order. Catalog subfactions for a faction appear in parentheses after that faction,
 also alphabetical: `Alpha League (1 player) - Midland (East)`. Players currently in the group appear as
@@ -952,9 +978,11 @@ nested bullets in display-name order, each with their chosen faction and subfact
 one: `Bob (Midland, East)`. Players who have not chosen a faction, non-player members, and
 backstabbed factions are omitted from the count and the nested list. Clicking a player, faction, or
 ally group on the campaign page, while the player is not issuing an order, highlights that party’s
-territories and emphasizes their forces on the map. Force markers use that player's faction or
-subfaction logo (inheriting the faction logo when the subfaction has none) and stay inside their territory,
-or as close as possible without sitting on a neighboring territory. Clicking the same party again clears that focus.
+territories and emphasizes their forces on the map. Force markers are colored dots using that player's
+faction or required-subfaction color and stay inside their territory,
+or as close as possible without sitting on a neighboring territory. Ownership flags and logos stay on the
+territory owner, using the required subfaction's color flag or uploaded logo instead of the parent
+faction's mark. Clicking the same party again clears that focus.
 A profile link still opens the user profile. The campaign page and map editor can download a PNG of the latest saved map
 image with the unselected territory overlay rasterized on top. Spawn hatching, structure pins, and
 faction flags or uploaded logos are included. When logo tinting is enabled, downloaded logos are filled
@@ -1111,10 +1139,12 @@ Private objectives are a campaign catalog assigned to a player, a faction, an al
 traitor (a player who successfully resolved Backstab). A player may score each catalog type only
 once. Unrevealed text and criteria are omitted from unauthorized payloads. The campaign page lists the
 viewer's own private objectives at the top of Private objectives and reiterates still-unclaimed
-ones in Summary, with automatic assignments showing live progress as `(current/required)` next to
+ones in Summary, including Traitor-held assignments and the viewer's active secret rival, with automatic assignments showing live progress as `(current/required)` next to
 the description. Other players' claimed or revealed private objectives appear in a collapsed
 subpanel ordered by faction name. Unclaimed private objectives for other holders are not listed.
-Manual private objectives are claimed by an authorized holder (the player, or any
+When rival objectives are enabled, the viewer's secret rival is listed with their private
+objectives and in Summary, showing the rival's name, faction, and subfaction when one is selected, and revealed rival victories appear in the claimed subpanel. Catalog entries may
+exclude factions and ally groups as described in campaign setup. Manual private objectives are claimed by an authorized holder (the player, or any
 player in that faction or ally group) who reveals them to a manager. A manager or administrator
 approves the claim to reveal it publicly and add its points, or denies it so the holder may
 claim again later. Unclaimed manual objectives do not score at campaign end. Automatic private
@@ -1124,7 +1154,11 @@ count of destroyed structures of a configured type attributed to the holder's fa
 or remaining ally group, finalized battle wins and losses, player-chosen retreats, occupying a
 territory that is the same as or directly adjacent to a relic, completed Build or Repair work
 of a configured structure type or any type, controlling a relic, defeating a configured opponent
-in battle, and force-status facts (gained, caused, or gained after another status). When an
+in battle, and force-status facts (gained, caused, or gained after another status). Player-held
+and Traitor-held automatic objectives count only that player's own credited holdings, actions,
+and forces, not the rest of their faction. Faction-held automatic objectives on a faction that
+requires a subfaction count only that required subfaction's holdings and actions. Optional
+subfactions still share one faction assignment. When an
 automatic criterion is met, the objective is revealed, its
 points are added, and the public log records that the holder scored. Destroyed structures are
 removed from the map, so destroy criteria use append-only destruction facts rather than current
@@ -1193,7 +1227,8 @@ for upcoming, in-progress, and completed campaigns. The log loads independently 
 the campaign page, the same way All Campaigns loads public site chat separately from the campaign
 list: chat can appear while campaign metadata is still loading, and the reverse. Each entry is
 formatted as
-`originator: text` followed by a timestamp. Recent entries (under 24 hours) use a relative label
+`originator: text` followed by a timestamp. Campaign start, named round/phase openings, campaign
+end, and campaign close are shown in bold. Recent entries (under 24 hours) use a relative label
 with the absolute time in the `title` attribute; older entries show the absolute time. On small
 viewports the timestamp sits on a secondary line and the log uses the body font.
 Campaign-generated facts use the originator name `Campaign` and always belong to the public channel.
@@ -1216,7 +1251,8 @@ game log. Game-log facts always go to the public channel. A campaign manager or 
 may download public chat and/or game-log facts as one text or CSV file at any time, including
 before launch, during play, and after the campaign ends. That file is the same payload a later
 outbound sender would use. Private chats are omitted from the download even when the caller can
-see them on screen. The log records campaign start, campaign end with final scores and remaining revealed item
+see them on screen. The log records campaign start, each new round and phase by name (for example
+`Round 1 — Action phase began.`), campaign end with final scores and remaining revealed item
 objectives (a later manager score or item adjustment appends an updated final snapshot),
 manager extensions of remaining phases or rounds (the extra duration and new window end, and/or
 how many rounds were added), resolved
@@ -1224,7 +1260,7 @@ actions after an action window closes in natural language (move, hold, split, me
 destroy, repair, retreat, and treachery when Backstab breaks an alliance), attempted actions that
 were invalid or conflicted and became Hold, battles created or finalized, manager battle-result
 overrides, debug enter/exit and debug order corrections, player retreats, automatic force rejoins when the same player's forces occupy one
-territory, and automatic substitutions: missing orders become Hold, deadline-submitted drafts,
+territory, revealed rival-objective victories, and automatic substitutions: missing orders become Hold, deadline-submitted drafts,
 missing retreats assigned to spawn, no-result forced retreats, ringer battles (including
 voided neither-report fights), and delinquency notices from the third offence onward.
 Unresolved secret orders, including drafts and unrevealed commitments, are never written to or
@@ -1259,7 +1295,7 @@ The block list can be toggled from a message or from the blocked-people list. Ad
 announcements remain visible through blocks.
 
 Administrators may send an administrator message to everyone or to one person. Those messages
-are still public and show an `Admin` or `Admin to {name}` badge. Everyone, or that one person,
+are still public, show an `Admin` or `Admin to {name}` badge, and render their body in bold. Everyone, or that one person,
 is notified in-app and by email. Notification and email bodies omit the chat text and point to
 `/campaigns/all`.
 

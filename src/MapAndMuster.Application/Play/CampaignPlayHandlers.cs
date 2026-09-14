@@ -1040,6 +1040,8 @@ public sealed class ChooseFactionHandler
             Missions = existing.Missions,
             ForceStatuses = existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
+            RivalObjectivesEnabled = existing.RivalObjectivesEnabled,
+            RivalObjectiveCampaignPoints = existing.RivalObjectiveCampaignPoints,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,
@@ -1507,10 +1509,17 @@ public sealed class ClaimPrivateObjectiveHandler
                         membership?.FactionId,
                         allyGroupId,
                         staffView: false,
-                        campaignCompleted: false)
+                        campaignCompleted: false,
+                        membership?.Subfaction)
                     || (assignment.HolderKind is PrivateObjectiveHolderKind.Player or PrivateObjectiveHolderKind.Traitor
                         && assignment.HolderId != command.UserId)
-                    || (assignment.HolderKind == PrivateObjectiveHolderKind.Faction && assignment.HolderId != membership?.FactionId)
+                    || (assignment.HolderKind == PrivateObjectiveHolderKind.Faction
+                        && (assignment.HolderId != membership?.FactionId
+                            || (!string.IsNullOrWhiteSpace(assignment.HolderSubfaction)
+                                && !string.Equals(
+                                    assignment.HolderSubfaction,
+                                    membership?.Subfaction,
+                                    StringComparison.OrdinalIgnoreCase))))
                     || (assignment.HolderKind == PrivateObjectiveHolderKind.AllyGroup && assignment.HolderId != allyGroupId))
                 {
                     return PlayMutation.Fail(new Domain.Common.DomainError(

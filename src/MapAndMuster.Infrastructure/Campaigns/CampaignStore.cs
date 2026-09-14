@@ -768,6 +768,7 @@ public sealed class CampaignStore : ICampaignStore
     {
         var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions, TerrainTags, StructureTags, FactionTags, MissionTags, FactionTagIds, SubfactionTagIds) = CatalogJson.Deserialize(record.CatalogJson);
         var (FactionSpeeds, SubfactionSpeeds) = CatalogJson.DeserializeMovementSpeeds(record.CatalogJson);
+        var rivals = CatalogJson.RivalObjectiveSettings(record.CatalogJson);
         return new StoredCampaign
         {
             Id = record.Id,
@@ -799,6 +800,8 @@ public sealed class CampaignStore : ICampaignStore
             SpecialRules = SpecialRules,
             ForceStatuses = ForceStatuses,
             PrivateObjectiveTypes = PrivateObjectiveTypes,
+            RivalObjectivesEnabled = rivals.Enabled,
+            RivalObjectiveCampaignPoints = rivals.Points,
             BattleScoring = BattleScoring,
             RankingObjectivePoints = RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = SplitForceSupplyPenaltyPercent,

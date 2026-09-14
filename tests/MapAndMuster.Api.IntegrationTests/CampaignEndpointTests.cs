@@ -69,6 +69,8 @@ public sealed class CampaignEndpointTests
         Assert.Null(created.City);
         Assert.True(created.CanChooseFaction);
         Assert.Null(created.FactionId);
+        Assert.True(created.RivalObjectivesEnabled);
+        Assert.Equal(5, created.RivalObjectiveCampaignPoints);
 
         var list = await client.GetFromJsonAsync<CampaignListItemResponse[]>("/api/campaigns", JsonOptions);
         Assert.NotNull(list);
@@ -110,6 +112,71 @@ public sealed class CampaignEndpointTests
         Assert.NotNull(afterEnd);
         var closedList = Assert.Single(afterEnd, item => item.Id == created.Id);
         Assert.Equal("Completed", closedList.Status);
+    }
+
+    [Fact]
+    public async Task UpdatePersistsPrivateObjectiveExcludeLists()
+    {
+        using var client = _factory.CreateClient();
+        var username = UniqueName("gm");
+        await RegisterConfirmAndLoginAsync(client, $"{username}@example.test", username);
+
+        using var createdResponse = await client.PostAsJsonAsync("/api/campaigns", ValidCampaignBody("Exclude War"));
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = await createdResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(created);
+        var south = created.Factions.Single(faction => faction.Name == "South");
+        using var updatedResponse = await client.PutAsJsonAsync(
+            $"/api/campaigns/{created.Id}",
+            new SaveCampaignRequest
+            {
+                Name = created.Name,
+                Description = "A contested frontier.",
+                PlayerCount = created.PlayerSlotCount,
+                IsPrivate = false,
+                IsPubliclyViewable = true,
+                CreatorIsParticipant = true,
+                Factions =
+                [
+                    .. created.Factions.Select(static faction => new FactionRequest
+                    {
+                        Id = faction.Id,
+                        Name = faction.Name,
+                        Subfactions = faction.Subfactions,
+                        Color = faction.Color,
+                        RequiresSubfaction = faction.RequiresSubfaction,
+                    }),
+                ],
+                Revision = created.Revision,
+                TimeZoneId = "UTC",
+                StartsAtLocal = "2099-01-05T12:00",
+                RoundCount = 8,
+                RoundLengthAmount = 1,
+                RoundLengthUnit = "Weeks",
+                Phases =
+                [
+                    new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                    new RoundPhaseRequest { Kind = "Action", DurationAmount = 3, DurationUnit = "Days" },
+                    new RoundPhaseRequest { Kind = "Battle", DurationAmount = 1, DurationUnit = "Days" },
+                ],
+                PrivateObjectiveTypes =
+                [
+                    new PrivateObjectiveTypeRequest
+                    {
+                        Name = "Scout the pass",
+                        CampaignPoints = 3,
+                        AllowedHolderKinds = ["Player"],
+                        ScoringKind = "Manual",
+                        ExcludedFactionIds = [south.Id],
+                    },
+                ],
+            });
+        Assert.Equal(HttpStatusCode.OK, updatedResponse.StatusCode);
+        var updated = await updatedResponse.Content.ReadFromJsonAsync<CampaignDetailResponse>(JsonOptions);
+        Assert.NotNull(updated);
+        var objective = Assert.Single(updated.PrivateObjectiveTypes);
+        Assert.Equal("Scout the pass", objective.Name);
+        Assert.Equal(south.Id, Assert.Single(objective.ExcludedFactionIds));
     }
 
     [Fact]

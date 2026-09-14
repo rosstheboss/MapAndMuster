@@ -70,4 +70,10 @@ public sealed class PrivateObjectiveTypeInput
 
     /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
     public Guid? TerrainTagId { get; init; }
+
+    /// <summary>Gets factions whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid>? ExcludedFactionIds { get; init; }
+
+    /// <summary>Gets ally groups whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid>? ExcludedAllyGroupIds { get; init; }
 }

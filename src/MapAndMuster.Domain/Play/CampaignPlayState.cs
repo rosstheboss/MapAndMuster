@@ -34,7 +34,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<BrokenAllySubfaction>? brokenAllySubfactions = null,
         IReadOnlyList<ForceStatusChangeFact>? forceStatusChanges = null,
         IReadOnlyList<StructureWorkFact>? structureWorks = null,
-        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
+        IReadOnlyList<RivalObjectiveAssignment>? rivalObjectives = null)
     {
         ArgumentNullException.ThrowIfNull(windows);
         ArgumentNullException.ThrowIfNull(forces);
@@ -72,6 +73,7 @@ public sealed class CampaignPlayState
         ForceStatusChanges = forceStatusChanges ?? [];
         StructureWorks = structureWorks ?? [];
         AllyBetrayals = allyBetrayals ?? [];
+        RivalObjectives = rivalObjectives ?? [];
     }
 
     /// <summary>Gets an empty play state.</summary>
@@ -152,6 +154,9 @@ public sealed class CampaignPlayState
     /// </summary>
     public IReadOnlyList<AllyBetrayal> AllyBetrayals { get; }
 
+    /// <summary>Gets secret rival assignments. Unrevealed details are omitted from unauthorized reads.</summary>
+    public IReadOnlyList<RivalObjectiveAssignment> RivalObjectives { get; }
+
     /// <summary>
     /// Returns a copy with replaced collections.
     /// </summary>
@@ -180,7 +185,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<BrokenAllySubfaction>? brokenAllySubfactions = null,
         IReadOnlyList<ForceStatusChangeFact>? forceStatusChanges = null,
         IReadOnlyList<StructureWorkFact>? structureWorks = null,
-        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
+        IReadOnlyList<RivalObjectiveAssignment>? rivalObjectives = null)
     {
         return new CampaignPlayState(
             windows ?? Windows,
@@ -206,7 +212,8 @@ public sealed class CampaignPlayState
             brokenAllySubfactions ?? BrokenAllySubfactions,
             forceStatusChanges ?? ForceStatusChanges,
             structureWorks ?? StructureWorks,
-            allyBetrayals ?? AllyBetrayals);
+            allyBetrayals ?? AllyBetrayals,
+            rivalObjectives ?? RivalObjectives);
     }
 
     /// <summary>

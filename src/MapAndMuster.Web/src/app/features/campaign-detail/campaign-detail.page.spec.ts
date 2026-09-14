@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { of } from 'rxjs';
 
@@ -10,6 +11,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { cookieNameFor, writeStoredPrefs } from '../../core/campaigns/campaign-view-prefs.service';
 import type { CampaignPlayDetail } from '../../core/campaigns/campaign.models';
 import type { MapTerritory } from '../../core/maps/map-graph.models';
+import type { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { CampaignDetailPage } from './campaign-detail.page';
 
 const campaign = {
@@ -1185,6 +1187,8 @@ describe('CampaignDetailPage', () => {
       false,
     );
     openSection(fixture, 'map');
+    const map = fixture.debugElement.query(By.css('app-campaign-map-view'));
+    expect((map.componentInstance as CampaignMapViewComponent).initialCamera()).toBe('first-force');
     const page = fixture.componentInstance as unknown as { hoveredTerritoryId: { set(id: string): void } };
     page.hoveredTerritoryId.set('t1');
     fixture.detectChanges();
@@ -1217,6 +1221,8 @@ describe('CampaignDetailPage', () => {
     expect(compiled.querySelector('app-campaign-map-view')).toBeTruthy();
     expect(compiled.querySelector('app-campaign-map-preview')).toBeNull();
     expect(compiled.textContent).toContain('Download map');
+    const map = fixture.debugElement.query(By.css('app-campaign-map-view'));
+    expect((map.componentInstance as CampaignMapViewComponent).initialCamera()).toBe('fit');
     http.verify();
   });
 
@@ -1653,6 +1659,242 @@ describe('CampaignDetailPage', () => {
     expect([...compiled.querySelectorAll('button')].some((button) => button.textContent.trim() === 'Uncommit')).toBe(
       false,
     );
+    http.verify();
+  });
+
+  it('lists commitments alphabetically in a shared grid with faction and force locations', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      participants: [
+        ...campaign.participants,
+        {
+          userId: 'user-2',
+          username: 'southplayer',
+          displayName: 'Ada',
+          isPlayer: true,
+          isGameMaster: false,
+          isAdministrator: false,
+          factionId: '2',
+          factionName: 'South',
+          subfaction: 'Corsairs',
+          currentSupplyPoints: 1,
+          temporarySupplyPoints: 0,
+          contributions: [],
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [
+        squareTerritory('t1', 'Coast', 0.1),
+        squareTerritory('guanier', 'Guanier', 0.4),
+        squareTerritory('bidouze', 'Bidouze River', 0.7),
+      ],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        commitments: [
+          { userId: 'user-1', username: 'northplayer', isCommitted: false },
+          { userId: 'user-2', username: 'southplayer', isCommitted: true },
+          { userId: 'user-3', username: 'ada', isCommitted: false },
+        ],
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: false,
+            moveTargets: [],
+            availableActions: ['Hold'],
+            subfaction: 'Riders',
+          },
+          {
+            id: 'force-2',
+            controllerUserId: 'user-2',
+            controllerUsername: 'southplayer',
+            factionId: '2',
+            territoryId: 'guanier',
+            isMine: false,
+            inBattle: false,
+            moveTargets: [],
+            availableActions: ['Hold'],
+            subfaction: 'Corsairs',
+          },
+          {
+            id: 'force-3',
+            controllerUserId: 'user-2',
+            controllerUsername: 'southplayer',
+            factionId: '2',
+            territoryId: 'bidouze',
+            isMine: false,
+            inBattle: false,
+            moveTargets: [],
+            availableActions: ['Hold'],
+            subfaction: 'Corsairs',
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const commitmentsToggle = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Commitments',
+    );
+    commitmentsToggle?.click();
+    fixture.detectChanges();
+
+    const roster = compiled.querySelector('.commitment-roster');
+    expect(roster instanceof HTMLElement).toBe(true);
+    if (!(roster instanceof HTMLElement)) {
+      return;
+    }
+
+    expect(roster.querySelector('.commitment-column')).toBeNull();
+    expect([...roster.querySelectorAll('a.profile-link')].map((link) => link.textContent.trim())).toEqual([
+      'ada',
+      'northplayer',
+      'southplayer',
+    ]);
+    expect(visibleText(roster)).toContain('northplayer Drafting');
+    expect(visibleText(roster)).not.toContain('((Drafting))');
+    expect(visibleText(roster)).toContain('North - Riders');
+    expect(visibleText(roster)).toContain('Coast');
+    expect(roster.querySelector('a.profile-link')?.getAttribute('href')).toContain('/users/ada');
+    expect(visibleText(roster)).toContain('southplayer Committed');
+    expect(visibleText(roster)).not.toContain('((Committed))');
+    expect(visibleText(roster)).toContain('South - Corsairs');
+    expect(visibleText(roster)).toContain('Guanier and Bidouze River');
+    expect(
+      [...roster.querySelectorAll('button.territory-link')]
+        .filter((button) => button.textContent.includes('Guanier') || button.textContent.includes('Bidouze'))
+        .map((button) => button.textContent.trim()),
+    ).toEqual(['Guanier', 'Bidouze River']);
+    http.verify();
+  });
+
+  it('bolds faction power names in the Actions panel', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: false,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      specialRules: [{ id: 'rule-1', name: 'Steady Advance', text: 'May move through hills without delay.' }],
+      factions: [{ ...campaign.factions[0], specialRuleIds: ['rule-1'] }, campaign.factions[1]],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(playState({ hasMap: false }));
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const actions = [...compiled.querySelectorAll('.panel')].find((panel) =>
+      (panel.querySelector('h2')?.textContent ?? '').includes('Actions'),
+    );
+    const power = [...(actions?.querySelectorAll('strong') ?? [])].find(
+      (item) => item.textContent.trim() === 'Steady Advance',
+    );
+    expect(power).toBeTruthy();
+    expect(actions?.textContent).toContain('May move through hills without delay.');
+    http.verify();
+  });
+
+  it('jumps faction and ally-group names to their listings', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      factions: [
+        { ...campaign.factions[0], allyGroupId: 'g-north', allyGroupName: 'Northern League' },
+        campaign.factions[1],
+      ],
+      allyGroups: [{ id: 'g-north', name: 'Northern League', color: '#0F172A' }],
+      participants: campaign.participants.map((participant) => ({
+        ...participant,
+        factionId: '1',
+      })),
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      isOpen: (id: string) => boolean;
+      setSection: (id: string, open: boolean) => void;
+    };
+    page.setSection('factions', false);
+    page.setSection('allies', false);
+    fixture.detectChanges();
+    expect(compiled.querySelector('#campaign-faction-1')).toBeNull();
+
+    const factionLink = [...compiled.querySelectorAll('a.territory-link')].find(
+      (link) => link.getAttribute('href') === '#campaign-faction-1',
+    );
+    expect(factionLink?.textContent.trim()).toBe('North');
+    (factionLink as HTMLAnchorElement | undefined)?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(page.isOpen('factions')).toBe(true);
+    const factionTarget = compiled.querySelector('#campaign-faction-1');
+    expect(factionTarget?.tagName).toBe('BUTTON');
+    expect(factionTarget?.textContent.trim()).toBe('North');
+    expect(factionTarget?.closest('li')?.id).toBe('');
+
+    const allyLink = [...compiled.querySelectorAll('a.territory-link')].find(
+      (link) => link.getAttribute('href') === '#campaign-ally-g-north',
+    );
+    expect(allyLink?.textContent.trim()).toBe('Northern League');
+    (allyLink as HTMLAnchorElement | undefined)?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(page.isOpen('allies')).toBe(true);
+    const allyTarget = compiled.querySelector('#campaign-ally-g-north');
+    expect(allyTarget?.tagName).toBe('BUTTON');
+    expect(allyTarget?.textContent.trim()).toBe('Northern League');
+    expect(allyTarget?.closest('li')?.id).toBe('');
     http.verify();
   });
 
@@ -2576,6 +2818,19 @@ describe('CampaignDetailPage', () => {
             canModerate: false,
           },
           {
+            id: 'po-traitor',
+            typeId: 'type-traitor',
+            holderKind: 'Traitor',
+            holderId: 'user-1',
+            status: 'Assigned',
+            scoringKind: 'Manual',
+            name: 'Betray the pact',
+            description: 'Strike your former allies.',
+            campaignPoints: 4,
+            canClaim: true,
+            canModerate: false,
+          },
+          {
             id: 'po-2',
             typeId: 'type-2',
             holderKind: 'Player',
@@ -2603,6 +2858,8 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('Your unclaimed private objectives');
     expect(compiled.textContent).toContain('Hold the pass');
     expect(compiled.textContent).toContain('Control the highland pass.');
+    expect(compiled.textContent).toContain('Betray the pact');
+    expect(compiled.textContent).toContain('Strike your former allies.');
     const privatePanel = [...compiled.querySelectorAll('.panel')].find((panel) =>
       (panel.querySelector('h2')?.textContent ?? '').includes('Private objectives'),
     );
@@ -2637,6 +2894,144 @@ describe('CampaignDetailPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(compiled.textContent).toContain('Approve points');
+    http.verify();
+  });
+
+  it('lists the viewer secret rival and revealed rival victories', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      participants: [
+        ...campaign.participants,
+        {
+          userId: 'user-2',
+          username: 'southplayer',
+          displayName: 'Ada',
+          isPlayer: true,
+          isGameMaster: false,
+          isAdministrator: false,
+          factionName: 'South',
+          subfaction: null,
+          currentSupplyPoints: 1,
+          temporarySupplyPoints: 0,
+          contributions: [],
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        rivalObjectives: [
+          {
+            id: 'rival-1',
+            holderUserId: 'user-1',
+            status: 'Assigned',
+            rivalUserId: 'user-2',
+            rivalDisplayName: 'Ada',
+            rivalFactionName: 'South',
+            rivalSubfaction: 'Corsairs',
+            campaignPoints: 5,
+          },
+          {
+            id: 'rival-2',
+            holderUserId: 'user-2',
+            status: 'Revealed',
+            rivalUserId: 'user-1',
+            rivalDisplayName: 'northplayer',
+            rivalFactionName: 'North',
+            rivalSubfaction: 'Riders',
+            campaignPoints: 5,
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'privateObjectives');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Your unclaimed private objectives');
+    expect(compiled.textContent).toContain('Secret rival');
+    expect(compiled.textContent).toContain('Defeat Ada (South — Corsairs) in battle or by surrender');
+    expect(compiled.textContent).toContain('(5 campaign points)');
+    const claimed = compiled.querySelector('.claimed-private-objectives');
+    expect(claimed).toBeTruthy();
+    expect(claimed?.textContent).toContain('Defeated northplayer (North — Riders)');
+    expect(claimed?.textContent).toContain('Ada');
+    http.verify();
+  });
+
+  it('shows the rival faction from participants when play omits those fields', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      participants: [
+        ...campaign.participants,
+        {
+          userId: 'user-2',
+          username: 'southplayer',
+          displayName: 'Ada',
+          isPlayer: true,
+          isGameMaster: false,
+          isAdministrator: false,
+          factionName: 'South',
+          subfaction: 'Corsairs',
+          currentSupplyPoints: 1,
+          temporarySupplyPoints: 0,
+          contributions: [],
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        rivalObjectives: [
+          {
+            id: 'rival-1',
+            holderUserId: 'user-1',
+            status: 'Assigned',
+            rivalUserId: 'user-2',
+            rivalDisplayName: 'Ada',
+            campaignPoints: 5,
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'privateObjectives');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Your unclaimed private objectives');
+    expect(compiled.textContent).toContain('Defeat Ada (South — Corsairs) in battle or by surrender');
     http.verify();
   });
 
@@ -3283,6 +3678,68 @@ describe('CampaignDetailPage', () => {
     };
     expect(page.graph().territories.find((territory) => territory.id === 't2')?.ownerFactionId).toBe('2');
     expect(page.graph().territories.find((territory) => territory.id === 't2')?.ownerSubfaction).toBe('Khorne');
+    http.verify();
+  });
+
+  it('infers owner subfaction from the occupying force when play overlay omits it', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      factions: [
+        campaign.factions[0],
+        {
+          ...campaign.factions[1],
+          name: 'Daemons of Chaos',
+          requiresSubfaction: true,
+          hasFlagImage: true,
+          subfactions: ['Khorne'],
+          subfactionAppearances: [{ name: 'Khorne', color: '#B91C1C', flagSource: 'color', hasFlagImage: false }],
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [squareTerritory('t2', 'Ridge', 0.4)],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        mapTerritories: [{ id: 't2', ownerFactionId: '2', structureTypeId: null, structureCondition: 'Operational' }],
+        forces: [
+          {
+            id: 'force-2',
+            controllerUserId: 'user-2',
+            controllerUsername: 'southplayer',
+            factionId: '2',
+            territoryId: 't2',
+            subfaction: 'Khorne',
+            isMine: false,
+            inBattle: false,
+            moveTargets: [],
+            availableActions: [],
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      graph: () => { territories: { id: string; ownerFactionId: string | null; ownerSubfaction?: string | null }[] };
+      mapForces: () => { subfaction?: string | null }[];
+    };
+    expect(page.graph().territories.find((territory) => territory.id === 't2')?.ownerSubfaction).toBe('Khorne');
+    expect(page.mapForces()[0]?.subfaction).toBe('Khorne');
     http.verify();
   });
 

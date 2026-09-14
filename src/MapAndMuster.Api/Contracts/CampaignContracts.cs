@@ -160,6 +160,12 @@ public sealed class SaveCampaignRequest
     /// <summary>Gets an optional terrain tag that limits points-per-territory scoring.</summary>
     public Guid? PointsPerTerritoryTerrainTagId { get; init; }
 
+    /// <summary>Gets whether occupying players receive a secret rival objective.</summary>
+    public bool? RivalObjectivesEnabled { get; init; }
+
+    /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
+    public int? RivalObjectiveCampaignPoints { get; init; }
+
     /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int? SplitForceSupplyPenaltyPercent { get; init; }
 
@@ -738,6 +744,12 @@ public sealed class PrivateObjectiveTypeRequest
 
     /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
     public Guid? TerrainTagId { get; init; }
+
+    /// <summary>Gets factions whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid>? ExcludedFactionIds { get; init; }
+
+    /// <summary>Gets ally groups whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid>? ExcludedAllyGroupIds { get; init; }
 }
 
 /// <summary>
@@ -1053,6 +1065,9 @@ public sealed class CampaignDetailResponse
     /// <summary>Gets public unclaimed private-objective counts.</summary>
     public IReadOnlyList<PrivateObjectiveUnclaimedCountResponse> PrivateObjectiveUnclaimedCounts { get; init; } = [];
 
+    /// <summary>Gets assigned rival objectives visible to the viewer.</summary>
+    public IReadOnlyList<RivalObjectiveAssignmentResponse> RivalObjectives { get; init; } = [];
+
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon { get; init; }
 
@@ -1103,6 +1118,12 @@ public sealed class CampaignDetailResponse
 
     /// <summary>Gets an optional terrain tag that limits points-per-territory scoring.</summary>
     public Guid? PointsPerTerritoryTerrainTagId { get; init; }
+
+    /// <summary>Gets whether occupying players receive a secret rival objective.</summary>
+    public bool RivalObjectivesEnabled { get; init; } = true;
+
+    /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
+    public int RivalObjectiveCampaignPoints { get; init; } = 5;
 
     /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int SplitForceSupplyPenaltyPercent { get; init; }
@@ -1976,6 +1997,12 @@ public sealed class PrivateObjectiveTypeResponse
 
     /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
     public Guid? TerrainTagId { get; init; }
+
+    /// <summary>Gets factions whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid> ExcludedFactionIds { get; init; } = [];
+
+    /// <summary>Gets ally groups whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid> ExcludedAllyGroupIds { get; init; } = [];
 }
 
 /// <summary>
@@ -2039,6 +2066,36 @@ public sealed class PrivateObjectiveUnclaimedCountResponse
 
     /// <summary>Gets how many assigned private objectives are still unclaimed.</summary>
     public required int Count { get; init; }
+}
+
+/// <summary>
+/// One assigned rival objective visible to the current viewer.
+/// </summary>
+public sealed class RivalObjectiveAssignmentResponse
+{
+    /// <summary>Gets the assignment identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the player who must defeat the rival.</summary>
+    public required Guid HolderUserId { get; init; }
+
+    /// <summary>Gets Assigned or Revealed.</summary>
+    public required string Status { get; init; }
+
+    /// <summary>Gets the rival player when the viewer may see them.</summary>
+    public Guid? RivalUserId { get; init; }
+
+    /// <summary>Gets the rival display name when the viewer may see it.</summary>
+    public string? RivalDisplayName { get; init; }
+
+    /// <summary>Gets the rival's faction name when the viewer may see it.</summary>
+    public string? RivalFactionName { get; init; }
+
+    /// <summary>Gets the rival's subfaction name when the viewer may see it.</summary>
+    public string? RivalSubfaction { get; init; }
+
+    /// <summary>Gets campaign points when the viewer may see them.</summary>
+    public int? CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -2732,6 +2789,8 @@ public static class CampaignResponses
                     PrerequisiteWasLost = type.PrerequisiteWasLost,
                     StructureTagId = type.StructureTagId,
                     TerrainTagId = type.TerrainTagId,
+                    ExcludedFactionIds = type.ExcludedFactionIds,
+                    ExcludedAllyGroupIds = type.ExcludedAllyGroupIds,
                 }),
             ],
             PrivateObjectives =
@@ -2763,6 +2822,20 @@ public static class CampaignResponses
                     Count = item.Count,
                 }),
             ],
+            RivalObjectives =
+            [
+                .. detail.RivalObjectives.Select(static item => new RivalObjectiveAssignmentResponse
+                {
+                    Id = item.Id,
+                    HolderUserId = item.HolderUserId,
+                    Status = item.Status,
+                    RivalUserId = item.RivalUserId,
+                    RivalDisplayName = item.RivalDisplayName,
+                    RivalFactionName = item.RivalFactionName,
+                    RivalSubfaction = item.RivalSubfaction,
+                    CampaignPoints = item.CampaignPoints,
+                }),
+            ],
             PointsPerBattleWon = detail.PointsPerBattleWon,
             PointsPerBattleDraw = detail.PointsPerBattleDraw,
             UseDifferentialBattleScoring = detail.UseDifferentialBattleScoring,
@@ -2780,6 +2853,8 @@ public static class CampaignResponses
             LongestTerritoryChainTerrainTagId = detail.LongestTerritoryChainTerrainTagId,
             MostStructurePointsStructureTagId = detail.MostStructurePointsStructureTagId,
             PointsPerTerritoryTerrainTagId = detail.PointsPerTerritoryTerrainTagId,
+            RivalObjectivesEnabled = detail.RivalObjectivesEnabled,
+            RivalObjectiveCampaignPoints = detail.RivalObjectiveCampaignPoints,
             SplitForceSupplyPenaltyPercent = detail.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = detail.SplitForceSupplyPenaltyIsPercent,
             RoundEscalations =
@@ -3399,6 +3474,8 @@ public static class CampaignResponses
                 PrerequisiteWasLost = type.PrerequisiteWasLost,
                 StructureTagId = type.StructureTagId,
                 TerrainTagId = type.TerrainTagId,
+                ExcludedFactionIds = type.ExcludedFactionIds,
+                ExcludedAllyGroupIds = type.ExcludedAllyGroupIds,
             })
             .ToArray();
     }

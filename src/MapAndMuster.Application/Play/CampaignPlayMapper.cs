@@ -158,6 +158,7 @@ internal static class CampaignPlayMapper
             PublicObjectiveLeaderboards = scoring.Leaderboards,
             PrivateObjectives = catalog.PrivateObjectives,
             PrivateObjectiveUnclaimedCounts = catalog.PrivateObjectiveUnclaimedCounts,
+            RivalObjectives = catalog.RivalObjectives,
             SpecialRules = catalog.SpecialRules,
             ForceStatuses = catalog.ForceStatuses,
             PointsPerBattleWon = campaign.BattleScoring.PointsPerWin,
@@ -1082,6 +1083,10 @@ internal static class CampaignPlayMapper
                 entry.Message ?? "The campaign ended.",
             PlayLogKind.CampaignStarted =>
                 "The campaign started.",
+            PlayLogKind.PhaseChanged =>
+                entry.Message ?? "A new phase began.",
+            PlayLogKind.RivalObjectiveRevealed =>
+                FormatRivalObjectiveRevealed(entry, actor, names),
             PlayLogKind.ScheduleExtended =>
                 ScheduleExtendedSummary(actor, entry.Message),
             PlayLogKind.ForcesRejoined =>
@@ -1122,6 +1127,19 @@ internal static class CampaignPlayMapper
                 FormatAllianceBetrayed(entry, actor, territory, campaign, play, names),
             _ => $"{actor} recorded a campaign change in {territory}.",
         };
+    }
+
+    private static string FormatRivalObjectiveRevealed(
+        PlayLogEntry entry,
+        string actor,
+        IReadOnlyDictionary<Guid, string> names)
+    {
+        var rivalLabel = Guid.TryParseExact(entry.Message, "N", out var rivalId) || Guid.TryParse(entry.Message, out rivalId)
+            ? ActorName(rivalId, names)
+            : null;
+        return rivalLabel is null
+            ? $"{actor} defeated their secret rival."
+            : $"{actor} defeated their secret rival {rivalLabel}.";
     }
 
     private static string ScheduleExtendedSummary(string actor, string? message)

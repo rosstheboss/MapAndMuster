@@ -92,6 +92,9 @@ export interface CampaignDetail {
   privateObjectiveTypes?: CampaignPrivateObjectiveType[];
   privateObjectives?: PrivateObjectiveAssignment[];
   privateObjectiveUnclaimedCounts?: PrivateObjectiveUnclaimedCount[];
+  rivalObjectives?: RivalObjectiveAssignment[];
+  rivalObjectivesEnabled?: boolean;
+  rivalObjectiveCampaignPoints?: number;
   pointsPerBattleWon?: number;
   pointsPerBattleDraw?: number;
   useDifferentialBattleScoring?: boolean;
@@ -378,6 +381,8 @@ export interface CampaignPrivateObjectiveType {
   prerequisiteWasLost?: boolean;
   structureTagId?: string | null;
   terrainTagId?: string | null;
+  excludedFactionIds?: string[];
+  excludedAllyGroupIds?: string[];
 }
 
 export interface PrivateObjectiveAssignment {
@@ -385,6 +390,7 @@ export interface PrivateObjectiveAssignment {
   typeId: string;
   holderKind: string;
   holderId: string;
+  holderSubfaction?: string | null;
   status: string;
   scoringKind: string;
   name?: string | null;
@@ -401,6 +407,17 @@ export interface PrivateObjectiveUnclaimedCount {
   holderId: string;
   holderName: string;
   count: number;
+}
+
+export interface RivalObjectiveAssignment {
+  id: string;
+  holderUserId: string;
+  status: string;
+  rivalUserId?: string | null;
+  rivalDisplayName?: string | null;
+  rivalFactionName?: string | null;
+  rivalSubfaction?: string | null;
+  campaignPoints?: number | null;
 }
 
 export interface CampaignPointStanding {
@@ -490,6 +507,8 @@ export interface SaveCampaignPayload {
   missionTags?: CatalogTag[];
   forceStatuses?: SaveForceStatusPayload[];
   privateObjectiveTypes?: SavePrivateObjectiveTypePayload[];
+  rivalObjectivesEnabled?: boolean;
+  rivalObjectiveCampaignPoints?: number;
   pointsPerBattleWon?: number;
   pointsPerBattleDraw?: number;
   useDifferentialBattleScoring?: boolean;
@@ -688,6 +707,8 @@ export interface SavePrivateObjectiveTypePayload {
   prerequisiteWasLost?: boolean;
   structureTagId?: string | null;
   terrainTagId?: string | null;
+  excludedFactionIds?: string[];
+  excludedAllyGroupIds?: string[];
 }
 
 export interface SaveMissionPayload {
@@ -815,6 +836,7 @@ export interface CampaignPlayDetail {
   publicObjectiveLeaderboards?: PublicObjectiveLeaderboard[];
   privateObjectives?: PrivateObjectiveAssignment[];
   privateObjectiveUnclaimedCounts?: PrivateObjectiveUnclaimedCount[];
+  rivalObjectives?: RivalObjectiveAssignment[];
   specialRules?: CampaignSpecialRule[];
   forceStatuses?: CampaignForceStatus[];
   pointsPerBattleWon?: number;

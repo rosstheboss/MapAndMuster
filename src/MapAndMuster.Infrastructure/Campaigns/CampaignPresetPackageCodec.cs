@@ -232,6 +232,8 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
                     Missions = campaign.Missions,
                     ForceStatuses = campaign.ForceStatuses,
                     PrivateObjectiveTypes = campaign.PrivateObjectiveTypes,
+                    RivalObjectivesEnabled = campaign.RivalObjectivesEnabled,
+                    RivalObjectiveCampaignPoints = campaign.RivalObjectiveCampaignPoints,
                     BattleScoring = campaign.BattleScoring,
                     RankingObjectivePoints = campaign.RankingObjectivePoints,
                     SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,
@@ -266,6 +268,7 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
         var overlayJson = overlayBytes is null ? null : Encoding.UTF8.GetString(overlayBytes);
         var (TerrainTypes, StructureTypes, ItemObjectiveTypes, PublicObjectiveTypes, BattleScoring, RankingObjectivePoints, SpecialRules, PrivateObjectiveTypes, FactionSpecialRuleIds, SubfactionSpecialRuleIds, ForceStatuses, SplitForceSupplyPenaltyPercent, SplitForceSupplyPenaltyIsPercent, StandardBattleResultQuestions, ArmyEscalations, Missions, TerrainTags, StructureTags, FactionTags, MissionTags, FactionTagIds, SubfactionTagIds) = CatalogJson.Deserialize(catalogJson);
         var (FactionSpeeds, SubfactionSpeeds) = CatalogJson.DeserializeMovementSpeeds(catalogJson);
+        var rivals = CatalogJson.RivalObjectiveSettings(catalogJson);
         var settings = CampaignPresetSettingsJson.Deserialize(settingsJson);
         var created = DateTimeOffset.UnixEpoch;
         return new StoredCampaign
@@ -333,6 +336,8 @@ public sealed class CampaignPresetPackageCodec : ICampaignPresetPackageCodec
             SpecialRules = SpecialRules,
             ForceStatuses = ForceStatuses,
             PrivateObjectiveTypes = PrivateObjectiveTypes,
+            RivalObjectivesEnabled = rivals.Enabled,
+            RivalObjectiveCampaignPoints = rivals.Points,
             BattleScoring = BattleScoring,
             RankingObjectivePoints = RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = SplitForceSupplyPenaltyPercent,

@@ -78,6 +78,8 @@ internal static class CampaignPresetKeyRemap
             Missions = [.. campaign.Missions.Select(mission => RemapMission(mission, keys))],
             ForceStatuses = campaign.ForceStatuses,
             PrivateObjectiveTypes = campaign.PrivateObjectiveTypes,
+            RivalObjectivesEnabled = campaign.RivalObjectivesEnabled,
+            RivalObjectiveCampaignPoints = campaign.RivalObjectiveCampaignPoints,
             BattleScoring = campaign.BattleScoring,
             RankingObjectivePoints = campaign.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,

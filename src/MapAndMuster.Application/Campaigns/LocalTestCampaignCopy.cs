@@ -75,6 +75,32 @@ public static class LocalTestCampaignCopy
     }
 
     /// <summary>
+    /// Whether Development startup should run the initial secret-rival draft on a campaign.
+    /// </summary>
+    /// <param name="name">The campaign name.</param>
+    /// <param name="closedUtc">When a manager closed the campaign, if it is closed.</param>
+    /// <param name="endsUtc">The campaign end instant.</param>
+    /// <param name="utcNow">The current UTC instant.</param>
+    /// <returns>
+    /// <see langword="true"/> for named Estalia test copies, and for any still-open campaign
+    /// whose calendar has not ended.
+    /// </returns>
+    public static bool ShouldBackfillInitialRivalDraft(
+        string name,
+        DateTimeOffset? closedUtc,
+        DateTimeOffset endsUtc,
+        DateTimeOffset utcNow)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        if (name.StartsWith(NamePrefix, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return closedUtc is null && endsUtc >= utcNow;
+    }
+
+    /// <summary>
     /// Applies the local test schedule, player slots, and faction assignments onto a duplicate.
     /// </summary>
     /// <param name="duplicated">The freshly duplicated campaign.</param>
@@ -212,6 +238,10 @@ public static class LocalTestCampaignCopy
             Missions = duplicated.Missions,
             ForceStatuses = duplicated.ForceStatuses,
             PrivateObjectiveTypes = duplicated.PrivateObjectiveTypes,
+            RivalObjectivesEnabled = true,
+            RivalObjectiveCampaignPoints = duplicated.RivalObjectiveCampaignPoints > 0
+                ? duplicated.RivalObjectiveCampaignPoints
+                : 5,
             BattleScoring = duplicated.BattleScoring,
             RankingObjectivePoints = duplicated.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = duplicated.SplitForceSupplyPenaltyPercent,

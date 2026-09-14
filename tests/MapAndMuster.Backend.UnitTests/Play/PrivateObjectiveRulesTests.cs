@@ -74,6 +74,39 @@ public sealed class PrivateObjectiveRulesTests
     }
 
     [Fact]
+    public void SeedSkipsPlayersWhoseFactionIsExcluded()
+    {
+        var north = Guid.NewGuid();
+        var south = Guid.NewGuid();
+        var northPlayer = Guid.NewGuid();
+        var southPlayer = Guid.NewGuid();
+        var type = new PrivateObjectiveTypePlayRules(
+            Guid.Parse("00000000-0000-0000-0000-000000000011"),
+            "South hunt",
+            3,
+            [PrivateObjectiveHolderKind.Player],
+            PrivateObjectiveScoringKind.Manual,
+            PrivateObjectiveAutomaticKind.None,
+            requiredCount: 1,
+            structureTypeId: null,
+            [],
+            excludedFactionIds: [north]);
+
+        var seeded = PrivateObjectiveRules.SeedInitial(
+            [type],
+            [northPlayer, southPlayer],
+            [north, south],
+            [],
+            DateTimeOffset.UtcNow,
+            static _ => 0,
+            new Dictionary<Guid, Guid> { [northPlayer] = north, [southPlayer] = south });
+
+        Assert.Single(seeded);
+        Assert.Equal(southPlayer, seeded[0].HolderId);
+        Assert.Equal(type.Id, seeded[0].TypeId);
+    }
+
+    [Fact]
     public void SeedInitialDoesNotAssignTraitorHolderKinds()
     {
         var traitorType = Manual(
@@ -996,6 +1029,196 @@ public sealed class PrivateObjectiveRulesTests
         var next = Evaluate(state, type, []);
 
         Assert.Equal(PrivateObjectiveAssignmentStatus.Revealed, next.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void PlayerAutomaticControlIgnoresTeammateHoldings()
+    {
+        var structure = Guid.NewGuid();
+        var type = new PrivateObjectiveTypePlayRules(
+            Guid.NewGuid(),
+            "Hold towns",
+            4,
+            [PrivateObjectiveHolderKind.Player],
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAutomaticKind.ControlStructureType,
+            requiredCount: 2,
+            structure,
+            []);
+        var faction = Guid.NewGuid();
+        var player = Guid.NewGuid();
+        var teammate = Guid.NewGuid();
+        var playerLand = Guid.NewGuid();
+        var teammateLand = Guid.NewGuid();
+        var assignment = new PrivateObjectiveAssignment(
+            Guid.NewGuid(),
+            type.Id,
+            PrivateObjectiveHolderKind.Player,
+            player,
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            DateTimeOffset.UtcNow);
+        var territories = new PrivateObjectiveTerritory[]
+        {
+            new(playerLand, faction, structure, StructureCondition.Operational),
+            new(teammateLand, faction, structure, StructureCondition.Operational),
+        };
+        var state = CampaignPlayState.Empty.With(
+            forces:
+            [
+                new CampaignForce(Guid.NewGuid(), player, faction, playerLand, false),
+                new CampaignForce(Guid.NewGuid(), teammate, faction, teammateLand, false),
+            ],
+            privateObjectives: [assignment]);
+
+        Assert.Equal(
+            (1, 2),
+            PrivateObjectiveRules.AutomaticProgress(
+                assignment,
+                type,
+                state,
+                territories,
+                new Dictionary<Guid, Guid> { [player] = faction, [teammate] = faction },
+                new Dictionary<Guid, Guid?>(),
+                new HashSet<Guid>()));
+        var next = PrivateObjectiveRules.EvaluateAutomatic(
+            state,
+            [type],
+            territories,
+            new Dictionary<Guid, Guid> { [player] = faction, [teammate] = faction },
+            new Dictionary<Guid, Guid?>(),
+            new HashSet<Guid>(),
+            DateTimeOffset.UtcNow);
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Assigned, next.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void RequiredSubfactionFactionControlIgnoresOtherSubfactions()
+    {
+        var structure = Guid.NewGuid();
+        var type = new PrivateObjectiveTypePlayRules(
+            Guid.NewGuid(),
+            "Hold towns",
+            4,
+            [PrivateObjectiveHolderKind.Faction],
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAutomaticKind.ControlStructureType,
+            requiredCount: 2,
+            structure,
+            []);
+        var faction = Guid.NewGuid();
+        var khorneLand = Guid.NewGuid();
+        var nurgleLand = Guid.NewGuid();
+        var assignment = new PrivateObjectiveAssignment(
+            Guid.NewGuid(),
+            type.Id,
+            PrivateObjectiveHolderKind.Faction,
+            faction,
+            PrivateObjectiveScoringKind.Automatic,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            DateTimeOffset.UtcNow,
+            holderSubfaction: "Khorne");
+        var khorne = Guid.NewGuid();
+        var nurgle = Guid.NewGuid();
+        var territories = new PrivateObjectiveTerritory[]
+        {
+            new(khorneLand, faction, structure, StructureCondition.Operational, OwnerSubfaction: "Khorne"),
+            new(nurgleLand, faction, structure, StructureCondition.Operational, OwnerSubfaction: "Nurgle"),
+        };
+        var state = CampaignPlayState.Empty.With(
+            forces:
+            [
+                new CampaignForce(Guid.NewGuid(), khorne, faction, khorneLand, false, subfaction: "Khorne"),
+                new CampaignForce(Guid.NewGuid(), nurgle, faction, nurgleLand, false, subfaction: "Nurgle"),
+            ],
+            privateObjectives: [assignment]);
+        var factions = new Dictionary<Guid, Guid> { [khorne] = faction, [nurgle] = faction };
+
+        Assert.Equal(
+            (1, 2),
+            PrivateObjectiveRules.AutomaticProgress(
+                assignment,
+                type,
+                state,
+                territories,
+                factions,
+                new Dictionary<Guid, Guid?>(),
+                new HashSet<Guid>()));
+        var next = PrivateObjectiveRules.EvaluateAutomatic(
+            state,
+            [type],
+            territories,
+            factions,
+            new Dictionary<Guid, Guid?>(),
+            new HashSet<Guid>(),
+            DateTimeOffset.UtcNow);
+        Assert.Equal(PrivateObjectiveAssignmentStatus.Assigned, next.PrivateObjectives[0].Status);
+    }
+
+    [Fact]
+    public void SeedAssignsOneFactionObjectivePerRequiredSubfaction()
+    {
+        var first = Manual(
+            "First hunt",
+            Guid.Parse("00000000-0000-0000-0000-000000000011"),
+            PrivateObjectiveHolderKind.Faction);
+        var second = Manual(
+            "Second hunt",
+            Guid.Parse("00000000-0000-0000-0000-000000000012"),
+            PrivateObjectiveHolderKind.Faction);
+        var faction = Guid.NewGuid();
+
+        var seeded = PrivateObjectiveRules.SeedInitial(
+            [first, second],
+            [],
+            [faction],
+            [],
+            DateTimeOffset.UtcNow,
+            static _ => 0,
+            occupyingRequiredSubfactions: new Dictionary<Guid, IReadOnlyList<string>>
+            {
+                [faction] = ["Khorne", "Nurgle"],
+            });
+
+        Assert.Equal(2, seeded.Count);
+        Assert.Contains(seeded, item => item.HolderSubfaction == "Khorne");
+        Assert.Contains(seeded, item => item.HolderSubfaction == "Nurgle");
+        Assert.Contains(seeded, item => item.TypeId == first.Id);
+        Assert.Contains(seeded, item => item.TypeId == second.Id);
+    }
+
+    [Fact]
+    public void EnsureRequiredSubfactionFactionAssignmentsScopesUnscopedCopies()
+    {
+        var type = Manual(
+            "Faction hunt",
+            Guid.Parse("00000000-0000-0000-0000-000000000013"),
+            PrivateObjectiveHolderKind.Faction);
+        var extra = Manual(
+            "Spare hunt",
+            Guid.Parse("00000000-0000-0000-0000-000000000014"),
+            PrivateObjectiveHolderKind.Faction);
+        var faction = Guid.NewGuid();
+        var unscoped = new PrivateObjectiveAssignment(
+            Guid.NewGuid(),
+            type.Id,
+            PrivateObjectiveHolderKind.Faction,
+            faction,
+            PrivateObjectiveScoringKind.Manual,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            DateTimeOffset.UtcNow);
+        var state = CampaignPlayState.Empty.With(privateObjectives: [unscoped]);
+
+        var next = PrivateObjectiveRules.EnsureRequiredSubfactionFactionAssignments(
+            state,
+            [type, extra],
+            new Dictionary<Guid, IReadOnlyList<string>> { [faction] = ["Khorne", "Nurgle"] },
+            DateTimeOffset.UtcNow,
+            static _ => 0);
+
+        Assert.Equal(2, next.PrivateObjectives.Count);
+        Assert.Contains(next.PrivateObjectives, item => item.HolderSubfaction == "Khorne" && item.TypeId == type.Id);
+        Assert.Contains(next.PrivateObjectives, item => item.HolderSubfaction == "Nurgle");
     }
 
     [Fact]

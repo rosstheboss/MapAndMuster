@@ -214,6 +214,12 @@ public enum PlayLogKind
 
     /// <summary>A player resolved Backstab and is now a traitor toward that ally.</summary>
     AllianceBetrayed = 38,
+
+    /// <summary>A new round or phase opened.</summary>
+    PhaseChanged = 39,
+
+    /// <summary>A player defeated their secret rival in battle or by surrender.</summary>
+    RivalObjectiveRevealed = 40,
 }
 
 /// <summary>

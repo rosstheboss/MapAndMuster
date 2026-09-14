@@ -372,6 +372,47 @@ describe('CampaignSetupPage', () => {
     expect(allies).toBeLessThan(factions);
   });
 
+  it('lets a manager exclude factions from a private objective and configure rival objectives', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      toggleSection: (id: string) => void;
+      addPrivateObjective: () => void;
+      privateObjectiveTypes: {
+        at: (index: number) => {
+          controls: {
+            excludedFactionIds: { value: string[] };
+            excludedAllyGroupIds: { value: string[] };
+          };
+        };
+        length: number;
+      };
+      factions: {
+        at: (index: number) => { controls: { id: { value: string }; name: { value: string } } };
+      };
+      addPrivateObjectiveExclude: (item: unknown, event: Event) => void;
+      form: {
+        controls: { rivalObjectivesEnabled: { value: boolean }; rivalObjectiveCampaignPoints: { value: number } };
+      };
+    };
+    page.toggleSection('privateObjectives');
+    page.addPrivateObjective();
+    fixture.detectChanges();
+
+    expect(page.form.controls.rivalObjectivesEnabled.value).toBe(true);
+    expect(page.form.controls.rivalObjectiveCampaignPoints.value).toBe(5);
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Secret rival objectives');
+    expect(compiled.textContent).toContain('Cannot be received by');
+
+    const item = page.privateObjectiveTypes.at(0);
+    const factionId = page.factions.at(0).controls.id.value;
+    page.addPrivateObjectiveExclude(item, { target: { value: `faction:${factionId}` } } as unknown as Event);
+    expect(item.controls.excludedFactionIds.value).toEqual([factionId]);
+  });
+
   it('adds a pre-configured faction special rule from the autocomplete list', async () => {
     const fixture = TestBed.createComponent(CampaignSetupPage);
     await fixture.whenStable();

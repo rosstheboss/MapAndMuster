@@ -75,14 +75,36 @@
 
 .commitment-roster {
   display: grid;
-  gap: var(--space-2);
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  width: 100%;
+  align-items: start;
 }
 
-.commitment-roster li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  align-items: center;
+@media (width >= 44rem) {
+  .commitment-roster {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width >= 70rem) {
+  .commitment-roster {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.commitment-entry,
+.commitment-entry p {
+  margin: 0;
+}
+
+.commitment-entry {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.commitment-entry-meta {
+  padding-left: 1.25rem;
 }
 
 .manage-campaign {
@@ -286,8 +308,10 @@
   border-radius: 0.35rem;
 }
 
-.map-section {
-  scroll-margin-top: 5.5rem;
+.map-section,
+[id^='campaign-faction-'],
+[id^='campaign-ally-'] {
+  scroll-margin-top: 8rem;
 }
 
 .faction-swatch {

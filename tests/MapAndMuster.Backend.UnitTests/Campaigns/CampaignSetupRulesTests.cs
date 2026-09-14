@@ -1597,6 +1597,149 @@ public sealed class CampaignSetupRulesTests
     }
 
     [Fact]
+    public void RejectsPrivateObjectivesThatExcludeEveryFaction()
+    {
+        var northId = Guid.NewGuid();
+        var southId = Guid.NewGuid();
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            [
+                new FactionInput { Id = northId, Name = "North" },
+                new FactionInput { Id = southId, Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var errors,
+            privateObjectiveTypes:
+            [
+                new PrivateObjectiveTypeInput
+                {
+                    Name = "Hold the north",
+                    CampaignPoints = 3,
+                    AllowedHolderKinds = ["Player"],
+                    ExcludedFactionIds = [northId, southId],
+                },
+            ]);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Field == "privateObjectiveTypes[0].excludedFactionIds");
+    }
+
+    [Fact]
+    public void RejectsPrivateObjectivesThatCannotBeDistributedUniquelyOntoFactions()
+    {
+        var northId = Guid.NewGuid();
+        var southId = Guid.NewGuid();
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            [
+                new FactionInput { Id = northId, Name = "North" },
+                new FactionInput { Id = southId, Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var errors,
+            privateObjectiveTypes:
+            [
+                new PrivateObjectiveTypeInput
+                {
+                    Name = "North only 1",
+                    CampaignPoints = 3,
+                    AllowedHolderKinds = ["Faction"],
+                    ExcludedFactionIds = [southId],
+                },
+                new PrivateObjectiveTypeInput
+                {
+                    Name = "North only 2",
+                    CampaignPoints = 3,
+                    AllowedHolderKinds = ["Faction"],
+                    ExcludedFactionIds = [southId],
+                },
+            ]);
+
+        Assert.False(succeeded);
+        Assert.Contains(errors, error => error.Code == "privateObjectiveTypes.distribution.invalid");
+    }
+
+    [Fact]
+    public void AcceptsPrivateObjectiveExcludeListsWhenUniqueFactionAssignmentRemainsPossible()
+    {
+        var northId = Guid.NewGuid();
+        var southId = Guid.NewGuid();
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            [
+                new FactionInput { Id = northId, Name = "North" },
+                new FactionInput { Id = southId, Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out var setup,
+            out _,
+            out var errors,
+            privateObjectiveTypes:
+            [
+                new PrivateObjectiveTypeInput
+                {
+                    Name = "South hunt",
+                    CampaignPoints = 3,
+                    AllowedHolderKinds = ["Player"],
+                    ExcludedFactionIds = [northId],
+                },
+                new PrivateObjectiveTypeInput
+                {
+                    Name = "North hunt",
+                    CampaignPoints = 3,
+                    AllowedHolderKinds = ["Faction"],
+                    ExcludedFactionIds = [southId],
+                },
+            ],
+            rivalObjectivesEnabled: true,
+            rivalObjectiveCampaignPoints: 5);
+
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        Assert.NotNull(setup);
+        Assert.True(setup.RivalObjectivesEnabled);
+        Assert.Equal(5, setup.RivalObjectiveCampaignPoints);
+        Assert.Equal(northId, Assert.Single(setup.PrivateObjectiveTypes[0].ExcludedFactionIds));
+        Assert.Equal(southId, Assert.Single(setup.PrivateObjectiveTypes[1].ExcludedFactionIds));
+    }
+
+    [Fact]
     public void AcceptsBuildAnyStructureTypePrivateObjectives()
     {
         var succeeded = CampaignSetupRules.TryCreate(

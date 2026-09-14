@@ -320,6 +320,8 @@ type PrivateObjectiveGroup = FormGroup<{
   prerequisiteWasLost: FormControl<boolean>;
   structureTagId: FormControl<string>;
   terrainTagId: FormControl<string>;
+  excludedFactionIds: FormControl<string[]>;
+  excludedAllyGroupIds: FormControl<string[]>;
 }>;
 type PhaseGroup = FormGroup<{
   kind: FormControl<string>;
@@ -561,6 +563,8 @@ export class CampaignSetupPage {
     missionTags: this.formBuilder.array<CatalogTagGroup>([]),
     forceStatuses: this.formBuilder.array<ForceStatusGroup>([]),
     privateObjectiveTypes: this.formBuilder.array<PrivateObjectiveGroup>([]),
+    rivalObjectivesEnabled: [true],
+    rivalObjectiveCampaignPoints: [5, [minValue(0), maxValue(999)]],
     publicObjectiveTypes: this.formBuilder.array<PublicObjectiveGroup>([]),
     pointsPerBattleWon: [2, [minValue(0), maxValue(999)]],
     pointsPerBattleDraw: [1, [minValue(0), maxValue(999)]],
@@ -1402,6 +1406,18 @@ export class CampaignSetupPage {
             ),
             structureTagId: item.structureTagId ?? '',
             terrainTagId: item.terrainTagId ?? '',
+            excludedFactionIds: (item.excludedFactionIds ?? []).map((id) => appliedFactionIds.get(id) ?? id),
+            excludedAllyGroupIds: (item.excludedAllyGroupIds ?? []).map(
+              (id) =>
+                this.allyGroups.controls.find(
+                  (group) =>
+                    group.controls.name.value.trim().toLowerCase() ===
+                    (campaign.allyGroups
+                      .find((source) => source.id === id)
+                      ?.name.trim()
+                      .toLowerCase() ?? ''),
+                )?.controls.id.value ?? id,
+            ),
           },
           item.id,
         ),
@@ -2173,6 +2189,89 @@ export class CampaignSetupPage {
 
     status.controls.cancelsStatusIds.setValue(next);
     status.controls.cancelsStatusIds.markAsDirty();
+  }
+
+  protected privateObjectiveExcludeFactionOptions(item: PrivateObjectiveGroup): { id: string; name: string }[] {
+    const selected = new Set(item.controls.excludedFactionIds.value);
+    return this.factions.controls
+      .filter((faction) => faction.controls.name.value.trim().length > 0 && !selected.has(faction.controls.id.value))
+      .map((faction) => ({ id: faction.controls.id.value, name: faction.controls.name.value.trim() }));
+  }
+
+  protected privateObjectiveExcludeAllyOptions(item: PrivateObjectiveGroup): { id: string; name: string }[] {
+    const selected = new Set(item.controls.excludedAllyGroupIds.value);
+    return this.allyGroups.controls
+      .filter((group) => group.controls.name.value.trim().length > 0 && !selected.has(group.controls.id.value))
+      .map((group) => ({ id: group.controls.id.value, name: group.controls.name.value.trim() }));
+  }
+
+  protected privateObjectiveExcludeEntries(
+    item: PrivateObjectiveGroup,
+  ): { id: string; name: string; kind: 'faction' | 'ally' }[] {
+    const factions = new Map(
+      this.factions.controls.map((faction) => [faction.controls.id.value, faction.controls.name.value.trim()] as const),
+    );
+    const allies = new Map(
+      this.allyGroups.controls.map((group) => [group.controls.id.value, group.controls.name.value.trim()] as const),
+    );
+    return [
+      ...item.controls.excludedFactionIds.value.flatMap((id) => {
+        const name = factions.get(id);
+        return name ? [{ id, name, kind: 'faction' as const }] : [];
+      }),
+      ...item.controls.excludedAllyGroupIds.value.flatMap((id) => {
+        const name = allies.get(id);
+        return name ? [{ id, name, kind: 'ally' as const }] : [];
+      }),
+    ];
+  }
+
+  protected addPrivateObjectiveExclude(item: PrivateObjectiveGroup, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const value = select.value;
+    select.value = '';
+    const [kind, id] = value.split(':', 2);
+    if (!id) {
+      return;
+    }
+
+    if (kind === 'faction') {
+      const current = item.controls.excludedFactionIds.value;
+      if (current.includes(id)) {
+        return;
+      }
+
+      item.controls.excludedFactionIds.setValue([...current, id]);
+      item.controls.excludedFactionIds.markAsDirty();
+      return;
+    }
+
+    if (kind === 'ally') {
+      const current = item.controls.excludedAllyGroupIds.value;
+      if (current.includes(id)) {
+        return;
+      }
+
+      item.controls.excludedAllyGroupIds.setValue([...current, id]);
+      item.controls.excludedAllyGroupIds.markAsDirty();
+    }
+  }
+
+  protected removePrivateObjectiveExclude(
+    item: PrivateObjectiveGroup,
+    kind: 'faction' | 'ally',
+    targetId: string,
+  ): void {
+    if (kind === 'faction') {
+      item.controls.excludedFactionIds.setValue(item.controls.excludedFactionIds.value.filter((id) => id !== targetId));
+      item.controls.excludedFactionIds.markAsDirty();
+      return;
+    }
+
+    item.controls.excludedAllyGroupIds.setValue(
+      item.controls.excludedAllyGroupIds.value.filter((id) => id !== targetId),
+    );
+    item.controls.excludedAllyGroupIds.markAsDirty();
   }
 
   protected commitForceStatusPriority(index: number, event?: Event): void {
@@ -3150,6 +3249,10 @@ export class CampaignSetupPage {
     });
     this.applyRankingTagFilters(campaign);
     this.applySplitForcePenalty(campaign);
+    this.form.controls.rivalObjectivesEnabled.setValue(campaign.rivalObjectivesEnabled ?? true, { emitEvent: false });
+    this.form.controls.rivalObjectiveCampaignPoints.setValue(campaign.rivalObjectiveCampaignPoints ?? 5, {
+      emitEvent: false,
+    });
   }
 
   private hydrateFromDetail(campaign: CampaignDetail): void {
@@ -3877,6 +3980,8 @@ export class CampaignSetupPage {
       prerequisiteWasLost: [type?.prerequisiteWasLost === true],
       structureTagId: [type?.structureTagId ?? ''],
       terrainTagId: [type?.terrainTagId ?? ''],
+      excludedFactionIds: [(type?.excludedFactionIds ?? []).concat()],
+      excludedAllyGroupIds: [(type?.excludedAllyGroupIds ?? []).concat()],
     });
   }
 
@@ -4821,6 +4926,8 @@ export class CampaignSetupPage {
         prerequisiteWasLost: type.prerequisiteWasLost,
         structureTagId: type.structureTagId.trim() || null,
         terrainTagId: type.terrainTagId.trim() || null,
+        excludedFactionIds: type.excludedFactionIds,
+        excludedAllyGroupIds: type.excludedAllyGroupIds,
       }));
     const publicObjectiveTypes = value.publicObjectiveTypes
       .filter((type) => type.name.trim().length > 0)
@@ -4902,6 +5009,8 @@ export class CampaignSetupPage {
         durationUnit: phase.durationUnit,
         endPhaseEarlyIfAble: phase.endPhaseEarlyIfAble,
       })),
+      rivalObjectivesEnabled: value.rivalObjectivesEnabled,
+      rivalObjectiveCampaignPoints: Number(value.rivalObjectiveCampaignPoints) || 0,
     };
   }
 

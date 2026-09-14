@@ -125,6 +125,51 @@ describe('CampaignLogComponent', () => {
     expect(compiled.querySelector('a[href^="/users/southplayer"]')?.textContent.trim()).toBe('@southplayer');
     expect(compiled.textContent).toContain('Campaign:');
     expect([...compiled.querySelectorAll('a')].some((link) => link.textContent.trim() === 'Campaign')).toBe(false);
+    const started = [...compiled.querySelectorAll('strong')].find((node) =>
+      node.textContent.includes('The campaign has started.'),
+    );
+    expect(started).toBeTruthy();
+  });
+
+  it('bolds campaign start and named round phase openings', () => {
+    const fixture = TestBed.createComponent(CampaignLogComponent);
+    fixture.componentRef.setInput('entries', [
+      {
+        id: 'log-start',
+        occurredUtc: '2026-08-15T20:45:23-04:00',
+        kind: 'CampaignStarted',
+        originator: 'Campaign',
+        originatorUsername: null,
+        summary: 'The campaign started.',
+        territoryId: null,
+        forceId: null,
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+      {
+        id: 'log-phase',
+        occurredUtc: '2026-08-15T20:46:23-04:00',
+        kind: 'PhaseChanged',
+        originator: 'Campaign',
+        originatorUsername: null,
+        summary: 'Round 1 — Action phase began.',
+        territoryId: null,
+        forceId: null,
+        battleId: null,
+        isSystemAdjustment: false,
+      },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(
+      [...compiled.querySelectorAll('strong')].some((node) => node.textContent.includes('The campaign started.')),
+    ).toBe(true);
+    expect(
+      [...compiled.querySelectorAll('strong')].some((node) =>
+        node.textContent.includes('Round 1 — Action phase began.'),
+      ),
+    ).toBe(true);
   });
 
   it('autocompletes a recipient username from the Send to field', () => {

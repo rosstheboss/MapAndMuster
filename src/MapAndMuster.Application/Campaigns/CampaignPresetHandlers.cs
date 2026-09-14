@@ -247,6 +247,8 @@ public sealed class ApplyCampaignPresetHandler
             Missions = withFiles.Missions,
             ForceStatuses = withFiles.ForceStatuses,
             PrivateObjectiveTypes = withFiles.PrivateObjectiveTypes,
+            RivalObjectivesEnabled = withFiles.RivalObjectivesEnabled,
+            RivalObjectiveCampaignPoints = withFiles.RivalObjectiveCampaignPoints,
             BattleScoring = withFiles.BattleScoring,
             RankingObjectivePoints = withFiles.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = withFiles.SplitForceSupplyPenaltyPercent,

@@ -1,6 +1,7 @@
 using MapAndMuster.Application.Campaigns;
 using MapAndMuster.Application.Play;
 using MapAndMuster.Application.Ports;
+using MapAndMuster.Domain.Play;
 using MapAndMuster.Infrastructure.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -92,73 +93,147 @@ public sealed partial class LocalTestCampaignSeeder
 
         var existing = await _campaigns.ListForUserAsync(manager.Id, cancellationToken).ConfigureAwait(false);
         var missing = Stages.Where(stage => existing.All(campaign => campaign.Name != LocalTestCampaignCopy.NameFor(stage))).ToArray();
-        if (missing.Length == 0)
+        if (missing.Length > 0)
         {
-            return;
-        }
-
-        var source = ChooseSource(existing);
-        if (source is null)
-        {
-            LogMissingSource(_logger, IdentityMaintenance.PrivilegedUsername);
-            return;
-        }
-
-        var mapped = await _campaigns.FindByIdAsync(source.Id, cancellationToken).ConfigureAwait(false);
-        if (mapped?.MapGraph is null)
-        {
-            LogMissingSource(_logger, IdentityMaintenance.PrivilegedUsername);
-            return;
-        }
-
-        source = mapped;
-
-        var testUsers = await _accounts.ListTestAccountsAsync(cancellationToken).ConfigureAwait(false);
-        if (testUsers.Count == 0)
-        {
-            LogMissingTestAccounts(_logger);
-            return;
-        }
-
-        var utcNow = _clock.UtcNow;
-        foreach (var stage in missing)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var duplicated = await _duplicate.HandleAsync(
-                    new DuplicateCampaignCommand { UserId = manager.Id, CampaignId = source.Id },
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (!duplicated.IsSuccess || duplicated.Value is null)
+            var source = ChooseSource(existing);
+            if (source is null)
             {
-                LogDuplicateFailed(_logger, source.Name, stage, duplicated.Message);
-                continue;
+                LogMissingSource(_logger, IdentityMaintenance.PrivilegedUsername);
             }
-
-            var stored = await _campaigns.FindByIdAsync(duplicated.Value.Id, cancellationToken).ConfigureAwait(false);
-            if (stored is null)
+            else
             {
-                continue;
-            }
-
-            var configured = LocalTestCampaignCopy.Configure(stored, stage, manager.Id, testUsers, utcNow);
-            var updated = await _campaigns.UpdateAsync(configured, stored.Revision, cancellationToken).ConfigureAwait(false);
-            if (!updated.IsSuccess)
-            {
-                LogConfigureFailed(_logger, configured.Name, updated.Message);
-                continue;
-            }
-
-            if (stage != LocalTestCampaignStage.NotStarted)
-            {
-                var play = await _play.HandleAsync(configured.Id, manager.Id, isAdministrator: true, cancellationToken)
-                    .ConfigureAwait(false);
-                if (!play.IsSuccess)
+                var mapped = await _campaigns.FindByIdAsync(source.Id, cancellationToken).ConfigureAwait(false);
+                if (mapped?.MapGraph is null)
                 {
-                    LogPlayFailed(_logger, configured.Name, play.Message);
+                    LogMissingSource(_logger, IdentityMaintenance.PrivilegedUsername);
+                }
+                else
+                {
+                    source = mapped;
+
+                    var testUsers = await _accounts.ListTestAccountsAsync(cancellationToken).ConfigureAwait(false);
+                    if (testUsers.Count == 0)
+                    {
+                        LogMissingTestAccounts(_logger);
+                    }
+                    else
+                    {
+                        var utcNow = _clock.UtcNow;
+                        foreach (var stage in missing)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            var duplicated = await _duplicate.HandleAsync(
+                                    new DuplicateCampaignCommand { UserId = manager.Id, CampaignId = source.Id },
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+                            if (!duplicated.IsSuccess || duplicated.Value is null)
+                            {
+                                LogDuplicateFailed(_logger, source.Name, stage, duplicated.Message);
+                                continue;
+                            }
+
+                            var stored = await _campaigns.FindByIdAsync(duplicated.Value.Id, cancellationToken)
+                                .ConfigureAwait(false);
+                            if (stored is null)
+                            {
+                                continue;
+                            }
+
+                            var configured = LocalTestCampaignCopy.Configure(stored, stage, manager.Id, testUsers, utcNow);
+                            var updated = await _campaigns.UpdateAsync(configured, stored.Revision, cancellationToken)
+                                .ConfigureAwait(false);
+                            if (!updated.IsSuccess)
+                            {
+                                LogConfigureFailed(_logger, configured.Name, updated.Message);
+                                continue;
+                            }
+
+                            if (stage != LocalTestCampaignStage.NotStarted)
+                            {
+                                var play = await _play.HandleAsync(
+                                        configured.Id,
+                                        manager.Id,
+                                        isAdministrator: true,
+                                        cancellationToken)
+                                    .ConfigureAwait(false);
+                                if (!play.IsSuccess)
+                                {
+                                    LogPlayFailed(_logger, configured.Name, play.Message);
+                                }
+                            }
+
+                            LogSeeded(_logger, configured.Name, source.Name);
+                        }
+                    }
                 }
             }
+        }
 
-            LogSeeded(_logger, configured.Name, source.Name);
+        await BackfillRivalObjectivesAsync(manager.Id, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task BackfillRivalObjectivesAsync(Guid managerId, CancellationToken cancellationToken)
+    {
+        var existing = await _campaigns.ListForUserAsync(managerId, cancellationToken).ConfigureAwait(false);
+        var utcNow = _clock.UtcNow;
+        foreach (var listed in existing)
+        {
+            var stored = await _campaigns.FindByIdAsync(listed.Id, cancellationToken).ConfigureAwait(false);
+            if (stored?.PlayState is not { Forces.Count: > 0 } play || play.RivalObjectives.Count > 0)
+            {
+                continue;
+            }
+
+            if (!LocalTestCampaignCopy.ShouldBackfillInitialRivalDraft(
+                    stored.Name,
+                    stored.ClosedUtc,
+                    stored.EndsUtc,
+                    utcNow))
+            {
+                continue;
+            }
+
+            var occupying = play.Forces
+                .Select(static force => force.ControllerUserId)
+                .Distinct()
+                .OrderBy(static id => id)
+                .ToArray();
+            var factionByPlayer = play.Forces
+                .GroupBy(static force => force.ControllerUserId)
+                .ToDictionary(static group => group.Key, static group => group.First().FactionId);
+            var assigned = RivalObjectiveRules.SeedInitial(
+                occupying,
+                factionByPlayer,
+                stored.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName),
+                play.BrokenAllyFactionIds,
+                utcNow,
+                static _ => 0,
+                stored.RivalObjectiveCampaignPoints > 0
+                    ? stored.RivalObjectiveCampaignPoints
+                    : RivalObjectiveRules.DefaultCampaignPoints);
+            if (assigned.Count == 0)
+            {
+                continue;
+            }
+
+            var updated = await _campaigns.UpdatePlayStateAsync(
+                    stored.Id,
+                    play.With(rivalObjectives: assigned),
+                    mapGraph: null,
+                    stored.EndsUtc,
+                    stored.RoundCount,
+                    stored.Revision,
+                    utcNow,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (!updated.IsSuccess)
+            {
+                LogConfigureFailed(_logger, stored.Name, updated.Message);
+                continue;
+            }
+
+            var uniqueTargets = assigned.Select(static item => item.RivalUserId).Distinct().Count();
+            LogRivalDraft(_logger, stored.Name, assigned.Count, uniqueTargets);
         }
     }
 
@@ -194,4 +269,10 @@ public sealed partial class LocalTestCampaignSeeder
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Seeded local test campaign {Name} from {Source}.")]
     private static partial void LogSeeded(ILogger logger, string name, string source);
+
+    [LoggerMessage(
+        EventId = 8,
+        Level = LogLevel.Information,
+        Message = "Assigned an initial secret-rival draft on {Name}: {Assigned} occupying players, {Unique} unique rivals.")]
+    private static partial void LogRivalDraft(ILogger logger, string name, int assigned, int unique);
 }

@@ -19,13 +19,18 @@ export function resolveFactionAppearance(
   const appearance = findSubfactionAppearance(faction, subfactionName);
   const color = appearance?.color?.trim() ? appearance.color : faction.color;
   const source = appearance?.flagSource ?? 'inherit';
-  if (source === 'color') {
+  const requiredSubfaction = faction.requiresSubfaction && !!subfactionName?.trim();
+  if (source === 'color' || (requiredSubfaction && source !== 'image')) {
     return { color, hasFlagImage: false, tint: false };
   }
 
   if (source === 'image') {
     if (appearance?.hasFlagImage) {
       return { color, hasFlagImage: true, tint: appearance.tintFlagImage === true };
+    }
+
+    if (requiredSubfaction) {
+      return { color, hasFlagImage: false, tint: false };
     }
 
     return {

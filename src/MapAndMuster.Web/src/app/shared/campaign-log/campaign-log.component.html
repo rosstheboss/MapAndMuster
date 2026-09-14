@@ -149,6 +149,8 @@
                     >
                   } @else if (part.mention) {
                     <strong>{{ part.text }}</strong>
+                  } @else if (isEmphasized(entry)) {
+                    <strong>{{ part.text }}</strong>
                   } @else {
                     {{ part.text }}
                   }

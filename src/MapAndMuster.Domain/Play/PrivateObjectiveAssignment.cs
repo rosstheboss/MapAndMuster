@@ -37,7 +37,8 @@ public sealed class PrivateObjectiveAssignment
         DateTimeOffset? revealedUtc = null,
         Guid? claimedByUserId = null,
         Guid? approvedByUserId = null,
-        Guid? resolvedTargetId = null)
+        Guid? resolvedTargetId = null,
+        string? holderSubfaction = null)
     {
         Id = id;
         TypeId = typeId;
@@ -51,6 +52,7 @@ public sealed class PrivateObjectiveAssignment
         ClaimedByUserId = claimedByUserId;
         ApprovedByUserId = approvedByUserId;
         ResolvedTargetId = resolvedTargetId;
+        HolderSubfaction = string.IsNullOrWhiteSpace(holderSubfaction) ? null : holderSubfaction.Trim();
     }
 
     /// <summary>Gets the assignment identifier.</summary>
@@ -89,6 +91,12 @@ public sealed class PrivateObjectiveAssignment
     /// <summary>Gets the opponent chosen at assignment for a Random DefeatOpponent criterion.</summary>
     public Guid? ResolvedTargetId { get; }
 
+    /// <summary>
+    /// Gets the required subfaction this faction assignment is scoped to, when the faction
+    /// treats required subfactions as separate holders.
+    /// </summary>
+    public string? HolderSubfaction { get; }
+
     /// <summary>Gets whether the assignment still counts as unclaimed for public counts.</summary>
     public bool IsUnclaimed => Status is PrivateObjectiveAssignmentStatus.Assigned or PrivateObjectiveAssignmentStatus.Claimed;
 
@@ -104,7 +112,9 @@ public sealed class PrivateObjectiveAssignment
         DateTimeOffset? revealedUtc = null,
         Guid? claimedByUserId = null,
         Guid? approvedByUserId = null,
-        bool clearClaim = false)
+        bool clearClaim = false,
+        string? holderSubfaction = null,
+        bool setHolderSubfaction = false)
     {
         return new PrivateObjectiveAssignment(
             Id,
@@ -118,7 +128,8 @@ public sealed class PrivateObjectiveAssignment
             revealedUtc ?? RevealedUtc,
             clearClaim ? null : claimedByUserId ?? ClaimedByUserId,
             approvedByUserId ?? ApprovedByUserId,
-            ResolvedTargetId);
+            ResolvedTargetId,
+            setHolderSubfaction ? holderSubfaction : HolderSubfaction);
     }
 }
 

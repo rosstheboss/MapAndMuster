@@ -199,6 +199,15 @@ public sealed class CampaignDetail
     /// <summary>Gets public unclaimed private-objective counts.</summary>
     public IReadOnlyList<PrivateObjectiveUnclaimedCountDetail> PrivateObjectiveUnclaimedCounts { get; init; } = [];
 
+    /// <summary>Gets assigned rival objectives visible to the viewer.</summary>
+    public IReadOnlyList<RivalObjectiveAssignmentDetail> RivalObjectives { get; init; } = [];
+
+    /// <summary>Gets whether occupying players receive a secret rival objective.</summary>
+    public bool RivalObjectivesEnabled { get; init; } = true;
+
+    /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
+    public int RivalObjectiveCampaignPoints { get; init; } = 5;
+
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon { get; init; }
 
@@ -840,6 +849,12 @@ public sealed class StoredCampaign
     /// <summary>Gets the private campaign objectives. Empty means none.</summary>
     public IReadOnlyList<StoredPrivateObjectiveType> PrivateObjectiveTypes { get; init; } = [];
 
+    /// <summary>Gets whether occupying players receive a secret rival objective. Default is on.</summary>
+    public bool RivalObjectivesEnabled { get; init; } = true;
+
+    /// <summary>Gets campaign points awarded when a player reveals their rival. Default is 5.</summary>
+    public int RivalObjectiveCampaignPoints { get; init; } = 5;
+
     /// <summary>Gets conversion from resolved battles into campaign points.</summary>
     public MapAndMuster.Domain.Campaigns.BattleScoringSetup BattleScoring { get; init; } =
         MapAndMuster.Domain.Campaigns.BattleScoringSetup.Default;
@@ -1475,6 +1490,12 @@ public sealed class PrivateObjectiveTypeDetail
 
     /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
     public Guid? TerrainTagId { get; init; }
+
+    /// <summary>Gets factions whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid> ExcludedFactionIds { get; init; } = [];
+
+    /// <summary>Gets ally groups whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid> ExcludedAllyGroupIds { get; init; } = [];
 }
 
 /// <summary>
@@ -1493,6 +1514,9 @@ public sealed class PrivateObjectiveAssignmentDetail
 
     /// <summary>Gets the player, faction, or ally-group identifier.</summary>
     public required Guid HolderId { get; init; }
+
+    /// <summary>Gets the required subfaction this faction assignment is scoped to, when present.</summary>
+    public string? HolderSubfaction { get; init; }
 
     /// <summary>Gets Assigned, Claimed, or Revealed.</summary>
     public required string Status { get; init; }
@@ -1538,6 +1562,36 @@ public sealed class PrivateObjectiveUnclaimedCountDetail
 
     /// <summary>Gets how many assigned private objectives are still unclaimed.</summary>
     public required int Count { get; init; }
+}
+
+/// <summary>
+/// One assigned rival objective visible to the current viewer.
+/// </summary>
+public sealed class RivalObjectiveAssignmentDetail
+{
+    /// <summary>Gets the assignment identifier.</summary>
+    public required Guid Id { get; init; }
+
+    /// <summary>Gets the player who must defeat the rival.</summary>
+    public required Guid HolderUserId { get; init; }
+
+    /// <summary>Gets Assigned or Revealed.</summary>
+    public required string Status { get; init; }
+
+    /// <summary>Gets the rival player when the viewer may see them.</summary>
+    public Guid? RivalUserId { get; init; }
+
+    /// <summary>Gets the rival display name when the viewer may see it.</summary>
+    public string? RivalDisplayName { get; init; }
+
+    /// <summary>Gets the rival's faction name when the viewer may see it.</summary>
+    public string? RivalFactionName { get; init; }
+
+    /// <summary>Gets the rival's subfaction name when the viewer may see it.</summary>
+    public string? RivalSubfaction { get; init; }
+
+    /// <summary>Gets campaign points when the viewer may see them.</summary>
+    public int? CampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -2180,6 +2234,12 @@ public sealed class StoredPrivateObjectiveType
 
     /// <summary>Gets the terrain-catalog tag for territory-control automatic criteria.</summary>
     public Guid? TerrainTagId { get; init; }
+
+    /// <summary>Gets factions whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid> ExcludedFactionIds { get; init; } = [];
+
+    /// <summary>Gets ally groups whose players cannot receive this objective.</summary>
+    public IReadOnlyList<Guid> ExcludedAllyGroupIds { get; init; } = [];
 }
 
 /// <summary>

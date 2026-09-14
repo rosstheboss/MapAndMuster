@@ -147,6 +147,12 @@ public sealed class CreateCampaignCommand
 
     /// <summary>Gets an optional terrain tag that limits points-per-territory scoring.</summary>
     public Guid? PointsPerTerritoryTerrainTagId { get; init; }
+
+    /// <summary>Gets whether occupying players receive a secret rival objective.</summary>
+    public bool? RivalObjectivesEnabled { get; init; }
+
+    /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
+    public int? RivalObjectiveCampaignPoints { get; init; }
 }
 
 /// <summary>
@@ -300,6 +306,12 @@ public sealed class UpdateCampaignCommand
 
     /// <summary>Gets an optional terrain tag that limits points-per-territory scoring.</summary>
     public Guid? PointsPerTerritoryTerrainTagId { get; init; }
+
+    /// <summary>Gets whether occupying players receive a secret rival objective.</summary>
+    public bool? RivalObjectivesEnabled { get; init; }
+
+    /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
+    public int? RivalObjectiveCampaignPoints { get; init; }
 }
 
 /// <summary>

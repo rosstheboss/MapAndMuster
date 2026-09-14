@@ -2,6 +2,7 @@ using System.Text.Json;
 using MapAndMuster.Application.Campaigns;
 using MapAndMuster.Domain.Campaigns;
 using MapAndMuster.Domain.Maps;
+using MapAndMuster.Domain.Play;
 
 namespace MapAndMuster.Infrastructure.Campaigns;
 
@@ -40,7 +41,9 @@ internal static class CatalogJson
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? factionTagIds = null,
         IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionTags>>? subfactionTagIds = null,
         IReadOnlyDictionary<Guid, int>? factionMovementSpeeds = null,
-        IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionMovementSpeed>>? subfactionMovementSpeeds = null)
+        IReadOnlyDictionary<Guid, IReadOnlyList<StoredSubfactionMovementSpeed>>? subfactionMovementSpeeds = null,
+        bool? rivalObjectivesEnabled = null,
+        int? rivalObjectiveCampaignPoints = null)
     {
         ArgumentNullException.ThrowIfNull(terrainTypes);
         ArgumentNullException.ThrowIfNull(structureTypes);
@@ -99,6 +102,8 @@ internal static class CatalogJson
                                 TagIds = [.. item.TagIds],
                             })),
                 ],
+                RivalObjectivesEnabled = rivalObjectivesEnabled,
+                RivalObjectiveCampaignPoints = rivalObjectiveCampaignPoints,
             },
             Options);
     }
@@ -130,7 +135,23 @@ internal static class CatalogJson
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.TagIds),
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionTags),
             campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.ForceMovementSpeed),
-            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionMovementSpeeds));
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.SubfactionMovementSpeeds),
+            campaign.RivalObjectivesEnabled,
+            campaign.RivalObjectiveCampaignPoints);
+    }
+
+    public static (bool Enabled, int Points) RivalObjectiveSettings(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return (true, RivalObjectiveRules.DefaultCampaignPoints);
+        }
+
+        var document = JsonSerializer.Deserialize<CatalogDocument>(json, Options);
+        var points = document?.RivalObjectiveCampaignPoints is { } supplied && supplied >= 0
+            ? supplied
+            : RivalObjectiveRules.DefaultCampaignPoints;
+        return (document?.RivalObjectivesEnabled ?? true, points);
     }
 
     public static (
@@ -802,6 +823,8 @@ internal static class CatalogJson
             PrerequisiteWasLost = type.PrerequisiteWasLost,
             StructureTagId = type.StructureTagId,
             TerrainTagId = type.TerrainTagId,
+            ExcludedFactionIds = [.. type.ExcludedFactionIds],
+            ExcludedAllyGroupIds = [.. type.ExcludedAllyGroupIds],
         };
     }
 
@@ -996,6 +1019,8 @@ internal static class CatalogJson
             PrerequisiteWasLost = type.PrerequisiteWasLost,
             StructureTagId = type.StructureTagId,
             TerrainTagId = type.TerrainTagId,
+            ExcludedFactionIds = type.ExcludedFactionIds ?? [],
+            ExcludedAllyGroupIds = type.ExcludedAllyGroupIds ?? [],
         };
     }
 
@@ -1287,6 +1312,10 @@ internal static class CatalogJson
         public List<CatalogTagDocument>? MissionTags { get; set; }
 
         public List<FactionTagsDocument>? FactionTagsAssignments { get; set; }
+
+        public bool? RivalObjectivesEnabled { get; set; }
+
+        public int? RivalObjectiveCampaignPoints { get; set; }
     }
 
     private sealed class BattleScoringDocument
@@ -1635,6 +1664,10 @@ internal static class CatalogJson
         public Guid? StructureTagId { get; set; }
 
         public Guid? TerrainTagId { get; set; }
+
+        public List<Guid>? ExcludedFactionIds { get; set; }
+
+        public List<Guid>? ExcludedAllyGroupIds { get; set; }
     }
 
     private sealed class FactionSpecialRulesDocument

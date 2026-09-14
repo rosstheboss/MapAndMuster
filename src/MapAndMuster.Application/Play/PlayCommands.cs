@@ -454,6 +454,9 @@ public sealed class CampaignPlayDetail
     /// <summary>Gets public unclaimed private-objective counts.</summary>
     public IReadOnlyList<Campaigns.PrivateObjectiveUnclaimedCountDetail> PrivateObjectiveUnclaimedCounts { get; init; } = [];
 
+    /// <summary>Gets assigned rival objectives visible to the viewer.</summary>
+    public IReadOnlyList<Campaigns.RivalObjectiveAssignmentDetail> RivalObjectives { get; init; } = [];
+
     /// <summary>Gets reusable special rules.</summary>
     public IReadOnlyList<Campaigns.SpecialRuleDetail> SpecialRules { get; init; } = [];
 

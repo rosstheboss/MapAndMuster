@@ -411,27 +411,6 @@
   backface-visibility: hidden;
 }
 
-.force-pin.has-image img {
-  width: 80%;
-  height: 80%;
-  object-fit: contain;
-  pointer-events: none;
-}
-
-.force-pin.has-image.is-tinted {
-  transform: translateZ(0);
-  background: var(--faction-color, currentColor);
-  /* stylelint-disable property-no-vendor-prefix -- Chromium still applies HTML masks through -webkit-mask-* */
-  -webkit-mask-image: var(--logo-mask);
-  mask-image: var(--logo-mask);
-  -webkit-mask-size: 80%;
-  mask-size: 80%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  /* stylelint-enable property-no-vendor-prefix */
-}
-
 .faction-flag {
   clip-path: polygon(0 0, 100% 20%, 70% 50%, 100% 80%, 0 100%);
   box-shadow: 0 0 0 1px rgb(28 25 23 / 35%);

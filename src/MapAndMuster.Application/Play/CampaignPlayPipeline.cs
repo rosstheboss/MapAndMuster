@@ -66,7 +66,10 @@ internal static class CampaignPlayPipeline
             [.. campaign.Factions.Select(static faction => faction.Id)],
             [.. campaign.AllyGroups.Select(static group => group.Id)],
             CampaignPlayCatalog.SpecialRules(campaign),
-            CampaignPlayCatalog.AllyGroupByFaction(campaign));
+            CampaignPlayCatalog.AllyGroupByFaction(campaign),
+            campaign.RivalObjectivesEnabled,
+            campaign.RivalObjectiveCampaignPoints,
+            CampaignPlayCatalog.FactionAllyGroupNames(campaign));
         var schedule = CampaignMapper.ToSchedule(campaign);
         var advanced = CampaignPlayRules.Advance(
             seeded.State,
@@ -329,7 +332,8 @@ internal static class CampaignPlayPipeline
         StoredMapGraph? graph,
         DateTimeOffset endsUtc,
         int roundCount,
-        DateTimeOffset updatedUtc)
+        DateTimeOffset updatedUtc,
+        bool? rivalObjectivesEnabled = null)
     {
         return new StoredCampaign
         {
@@ -374,6 +378,8 @@ internal static class CampaignPlayPipeline
             Missions = existing.Missions,
             ForceStatuses = existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
+            RivalObjectivesEnabled = rivalObjectivesEnabled ?? existing.RivalObjectivesEnabled,
+            RivalObjectiveCampaignPoints = existing.RivalObjectiveCampaignPoints,
             BattleScoring = existing.BattleScoring,
             RankingObjectivePoints = existing.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = existing.SplitForceSupplyPenaltyPercent,

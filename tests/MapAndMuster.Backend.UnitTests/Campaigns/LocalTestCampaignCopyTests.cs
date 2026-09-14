@@ -24,6 +24,8 @@ public sealed class LocalTestCampaignCopyTests
             Now);
 
         Assert.Equal("[Test] Estalia (Action 1)", copy.Name);
+        Assert.True(copy.RivalObjectivesEnabled);
+        Assert.Equal(5, copy.RivalObjectiveCampaignPoints);
         Assert.False(copy.CreatorIsParticipant);
         Assert.Equal(LocalTestCampaignCopy.RoundMinutes, copy.RoundLengthAmount);
         Assert.Equal(nameof(DurationUnit.Minutes), copy.RoundLengthUnit);
@@ -46,6 +48,31 @@ public sealed class LocalTestCampaignCopyTests
             member => member.FactionId == EmpireId && member.Subfaction == "Knightly Orders");
         Assert.Contains(copy.Memberships, member => member.FactionId == SkavenId && member.Subfaction is null);
         Assert.DoesNotContain(copy.Memberships, member => member.FactionId == DaemonsId && member.Subfaction is null);
+    }
+
+    [Fact]
+    public void BackfillsNamedTestCopiesAndCurrentlyOpenCampaigns()
+    {
+        Assert.True(LocalTestCampaignCopy.ShouldBackfillInitialRivalDraft(
+            "[Test] Estalia (Action 1)",
+            Now,
+            Now.AddHours(-8),
+            Now));
+        Assert.True(LocalTestCampaignCopy.ShouldBackfillInitialRivalDraft(
+            "The Hunt in Estalia",
+            closedUtc: null,
+            Now.AddDays(2),
+            Now));
+        Assert.False(LocalTestCampaignCopy.ShouldBackfillInitialRivalDraft(
+            "The Hunt in Estalia",
+            Now,
+            Now.AddDays(2),
+            Now));
+        Assert.False(LocalTestCampaignCopy.ShouldBackfillInitialRivalDraft(
+            "The Hunt in Estalia",
+            closedUtc: null,
+            Now.AddHours(-1),
+            Now));
     }
 
     [Fact]

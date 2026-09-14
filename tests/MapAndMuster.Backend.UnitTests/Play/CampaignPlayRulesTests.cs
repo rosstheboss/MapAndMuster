@@ -33,11 +33,58 @@ public sealed class CampaignPlayRulesTests
         Assert.Equal(PhaseWindowStatus.Open, seeded.State.Windows[0].Status);
         Assert.Equal(RoundPhaseKind.Action, seeded.State.Windows[0].Kind);
         Assert.Contains(seeded.State.Log, item => item.Kind == PlayLogKind.CampaignStarted);
+        Assert.Contains(
+            seeded.State.Log,
+            item => item.Kind == PlayLogKind.PhaseChanged && item.Message == "Round 1 — Action phase began.");
         var northForce = seeded.State.Forces.Single(force => force.FactionId == North);
         Assert.Equal([Midland], CampaignPlayRules.EligibleMoves(seeded.Map, northForce));
         var retreats = CampaignPlayRules.EligibleRetreats(seeded.Map, northForce, occupyingForces: seeded.State.Forces);
         Assert.Contains(Midland, retreats);
         Assert.DoesNotContain(NorthSpawn, retreats);
+        Assert.Empty(seeded.State.RivalObjectives);
+    }
+
+    [Fact]
+    public void SeedAssignsEachOccupyingPlayerAUniqueRivalWhenEnabled()
+    {
+        var schedule = CreateSchedule();
+        var seeded = CampaignPlayRules.Seed(
+            CampaignPlayState.Empty,
+            CreateMap(ownerMidland: null),
+            schedule,
+            [new PlayerFactionAssignment(PlayerOne, North), new PlayerFactionAssignment(PlayerTwo, South)],
+            schedule.StartsUtc,
+            rivalObjectivesEnabled: true,
+            factionAllyGroups: AllyGroups());
+
+        Assert.Equal(2, seeded.State.RivalObjectives.Count);
+        Assert.Equal(2, seeded.State.RivalObjectives.Select(item => item.RivalUserId).Distinct().Count());
+        Assert.All(seeded.State.RivalObjectives, item => Assert.NotEqual(item.HolderUserId, item.RivalUserId));
+        Assert.Equal(
+            PlayerTwo,
+            Assert.Single(seeded.State.RivalObjectives, item => item.HolderUserId == PlayerOne).RivalUserId);
+        Assert.Equal(
+            PlayerOne,
+            Assert.Single(seeded.State.RivalObjectives, item => item.HolderUserId == PlayerTwo).RivalUserId);
+    }
+
+    [Fact]
+    public void SeedBackfillsRivalsOnAnAlreadyLaunchedCampaign()
+    {
+        var (state, map, schedule) = Seeded();
+        Assert.Empty(state.RivalObjectives);
+
+        var backfilled = CampaignPlayRules.Seed(
+            state,
+            map,
+            schedule,
+            [new PlayerFactionAssignment(PlayerOne, North), new PlayerFactionAssignment(PlayerTwo, South)],
+            schedule.StartsUtc,
+            rivalObjectivesEnabled: true,
+            factionAllyGroups: AllyGroups());
+
+        Assert.Equal(2, backfilled.State.RivalObjectives.Count);
+        Assert.Equal(2, backfilled.State.RivalObjectives.Select(item => item.RivalUserId).Distinct().Count());
     }
 
     [Fact]

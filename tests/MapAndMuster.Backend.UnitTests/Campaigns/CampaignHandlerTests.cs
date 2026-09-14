@@ -1177,6 +1177,113 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task GetCampaignHidesUnrevealedRivalIdentityFromOtherPlayers()
+    {
+        var northSpawn = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var southSpawn = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var plainsId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var windowId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+        var assignmentId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb20");
+        var graph = new StoredMapGraph
+        {
+            Territories =
+            [
+                SquareTerritory(northSpawn, 1, 0.05, 0.05, 0.2, NorthFactionId, plainsId, owner: NorthFactionId),
+                SquareTerritory(southSpawn, 2, 0.55, 0.05, 0.2, SouthFactionId, plainsId, owner: SouthFactionId),
+            ],
+            Adjacencies = [],
+        };
+        var assignment = new RivalObjectiveAssignment(
+            assignmentId,
+            UserId,
+            OtherUserId,
+            5,
+            PrivateObjectiveAssignmentStatus.Assigned,
+            Now);
+        var play = new CampaignPlayState(
+            [
+                new PhaseWindow(
+                    windowId,
+                    1,
+                    1,
+                    RoundPhaseKind.Action,
+                    3,
+                    DurationUnit.Days,
+                    Now.AddHours(-2),
+                    Now.AddDays(1),
+                    PhaseWindowStatus.Open),
+            ],
+            [
+                new CampaignForce(Guid.NewGuid(), UserId, NorthFactionId, northSpawn, false),
+                new CampaignForce(Guid.NewGuid(), OtherUserId, SouthFactionId, southSpawn, false),
+            ],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            rivalObjectives: [assignment]);
+        var campaign = WithCopied(
+            StoredCampaignFor(UserId),
+            memberships:
+            [
+                new StoredCampaignMembership
+                {
+                    UserId = UserId,
+                    IsGameMaster = true,
+                    IsPlayer = true,
+                    FactionId = NorthFactionId,
+                },
+                new StoredCampaignMembership
+                {
+                    UserId = OtherUserId,
+                    IsGameMaster = false,
+                    IsPlayer = true,
+                    FactionId = SouthFactionId,
+                    Subfaction = "Corsairs",
+                },
+            ],
+            startsUtc: Now.AddHours(-1),
+            endsUtc: Now.AddDays(40),
+            mapGraph: graph,
+            terrainTypes:
+            [
+                new StoredTerrainType
+                {
+                    Id = plainsId,
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [],
+                },
+            ],
+            playState: play);
+        var store = new FakeCampaignStore { Existing = campaign };
+        var handler = new GetCampaignHandler(store, new FakeClock(), new FakeAccounts());
+
+        var holder = await handler.HandleAsync(campaign.Id, UserId, CancellationToken.None);
+        Assert.True(holder.IsSuccess);
+        var holderRival = Assert.Single(holder.Value!.RivalObjectives);
+        Assert.Equal(OtherUserId, holderRival.RivalUserId);
+        Assert.Equal("southplayer", holderRival.RivalDisplayName);
+        Assert.Equal("South", holderRival.RivalFactionName);
+        Assert.Equal("Corsairs", holderRival.RivalSubfaction);
+        Assert.Equal(5, holderRival.CampaignPoints);
+
+        var other = await handler.HandleAsync(campaign.Id, OtherUserId, CancellationToken.None);
+        Assert.True(other.IsSuccess);
+        Assert.Empty(other.Value!.RivalObjectives);
+        var unclaimed = Assert.Single(
+            other.Value.PrivateObjectiveUnclaimedCounts,
+            item => item.HolderId == UserId);
+        Assert.Equal(1, unclaimed.Count);
+    }
+
+    [Fact]
     public async Task GetPlayHidesUnrevealedItemObjectivesUntilDebugReveal()
     {
         var northSpawn = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -2578,6 +2685,8 @@ public sealed class CampaignHandlerTests
             RankingObjectivePoints = campaign.RankingObjectivePoints,
             PlayState = playState ?? campaign.PlayState,
             PrivateObjectiveTypes = privateObjectiveTypes ?? campaign.PrivateObjectiveTypes,
+            RivalObjectivesEnabled = campaign.RivalObjectivesEnabled,
+            RivalObjectiveCampaignPoints = campaign.RivalObjectiveCampaignPoints,
         };
     }
 

@@ -208,9 +208,12 @@ public static class CampaignMapper
                 EnableOccurrences = status.EnableOccurrences,
                 ClearOccurrences = status.ClearOccurrences,
             })],
-            PrivateObjectiveTypes = VisiblePrivateTypes(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed),
-            PrivateObjectives = VisiblePrivateAssignments(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed),
+            PrivateObjectiveTypes = VisiblePrivateTypes(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed, membership?.Subfaction),
+            PrivateObjectives = VisiblePrivateAssignments(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed, membership?.Subfaction),
             PrivateObjectiveUnclaimedCounts = UnclaimedCounts(campaign, mappedParticipants),
+            RivalObjectives = VisibleRivalObjectives(campaign, viewerUserId, canStaff, completed, mappedParticipants),
+            RivalObjectivesEnabled = campaign.RivalObjectivesEnabled,
+            RivalObjectiveCampaignPoints = campaign.RivalObjectiveCampaignPoints,
             PointsPerBattleWon = campaign.BattleScoring.PointsPerWin,
             PointsPerBattleDraw = campaign.BattleScoring.PointsPerDraw,
             UseDifferentialBattleScoring = campaign.BattleScoring.UseDifferential,
@@ -425,7 +428,8 @@ public static class CampaignMapper
         Guid? viewerFactionId,
         Guid? viewerAllyGroupId,
         bool staffView,
-        bool campaignCompleted)
+        bool campaignCompleted,
+        string? viewerSubfaction)
     {
         var assignments = campaign.PlayState?.PrivateObjectives ?? [];
         return
@@ -440,7 +444,8 @@ public static class CampaignMapper
                             viewerFactionId,
                             viewerAllyGroupId,
                             staffView,
-                            campaignCompleted)))
+                            campaignCompleted,
+                            viewerSubfaction)))
                 .Select(type =>
                 {
                     var visible = staffView
@@ -452,7 +457,8 @@ public static class CampaignMapper
                                 viewerFactionId,
                                 viewerAllyGroupId,
                                 staffView,
-                                campaignCompleted));
+                                campaignCompleted,
+                                viewerSubfaction));
                     return new PrivateObjectiveTypeDetail
                     {
                         Id = type.Id,
@@ -477,6 +483,8 @@ public static class CampaignMapper
                         PrerequisiteWasLost = visible && type.PrerequisiteWasLost,
                         StructureTagId = visible ? type.StructureTagId : null,
                         TerrainTagId = visible ? type.TerrainTagId : null,
+                        ExcludedFactionIds = type.ExcludedFactionIds,
+                        ExcludedAllyGroupIds = type.ExcludedAllyGroupIds,
                     };
                 }),
         ];
@@ -488,7 +496,8 @@ public static class CampaignMapper
         Guid? viewerFactionId,
         Guid? viewerAllyGroupId,
         bool staffView,
-        bool campaignCompleted)
+        bool campaignCompleted,
+        string? viewerSubfaction)
     {
         var play = campaign.PlayState;
         if (play is null)
@@ -502,6 +511,7 @@ public static class CampaignMapper
         var territories = CampaignPlayCatalog.Territories(map);
         var factionByPlayer = CampaignPlayCatalog.FactionByPlayer(campaign);
         var allyGroupByFaction = CampaignPlayCatalog.AllyGroupByFaction(campaign);
+        var subfactionByPlayer = CampaignPlayCatalog.SubfactionByPlayer(campaign);
         var brokenAllyFactionIds = play.BrokenAllyFactionIds.ToHashSet();
         return
         [
@@ -515,7 +525,8 @@ public static class CampaignMapper
                     viewerFactionId,
                     viewerAllyGroupId,
                     staffView,
-                    campaignCompleted);
+                    campaignCompleted,
+                    viewerSubfaction);
                 var progress = visible && rules is not null
                     ? PrivateObjectiveRules.AutomaticProgress(
                         assignment,
@@ -525,7 +536,8 @@ public static class CampaignMapper
                         factionByPlayer,
                         allyGroupByFaction,
                         brokenAllyFactionIds,
-                        map)
+                        map,
+                        subfactionByPlayer)
                     : null;
                 return new PrivateObjectiveAssignmentDetail
                 {
@@ -533,6 +545,7 @@ public static class CampaignMapper
                     TypeId = assignment.TypeId,
                     HolderKind = assignment.HolderKind.ToString(),
                     HolderId = assignment.HolderId,
+                    HolderSubfaction = assignment.HolderSubfaction,
                     Status = assignment.Status.ToString(),
                     ScoringKind = assignment.ScoringKind.ToString(),
                     Name = visible ? type?.Name : null,
@@ -542,7 +555,7 @@ public static class CampaignMapper
                     RequiredCount = visible ? progress?.Required : null,
                     CanClaim = assignment.ScoringKind == PrivateObjectiveScoringKind.Manual
                         && assignment.Status == PrivateObjectiveAssignmentStatus.Assigned
-                        && IsHolder(assignment, viewerUserId, viewerFactionId, viewerAllyGroupId),
+                        && IsHolder(assignment, viewerUserId, viewerFactionId, viewerAllyGroupId, viewerSubfaction),
                     CanModerate = staffView
                         && assignment.ScoringKind == PrivateObjectiveScoringKind.Manual
                         && assignment.Status is PrivateObjectiveAssignmentStatus.Assigned or PrivateObjectiveAssignmentStatus.Claimed,
@@ -580,27 +593,134 @@ public static class CampaignMapper
 
         return
         [
-            .. PrivateObjectiveRules.UnclaimedCounts(play.PrivateObjectives).Select(item => new PrivateObjectiveUnclaimedCountDetail
-            {
-                HolderKind = item.HolderKind.ToString(),
-                HolderId = item.HolderId,
-                HolderName = names.GetValueOrDefault((item.HolderKind, item.HolderId)) ?? "Unknown",
-                Count = item.Count,
-            }),
+            .. PrivateObjectiveRules.UnclaimedCounts(play.PrivateObjectives)
+                .Select(item =>
+                {
+                    var count = item.Count;
+                    if (item.HolderKind == PrivateObjectiveHolderKind.Player
+                        && play.RivalObjectives.Count(rival =>
+                            rival.HolderUserId == item.HolderId && rival.IsActive) is { } rivalCount
+                        && rivalCount > 0)
+                    {
+                        count += rivalCount;
+                    }
+
+                    return new PrivateObjectiveUnclaimedCountDetail
+                    {
+                        HolderKind = item.HolderKind.ToString(),
+                        HolderId = item.HolderId,
+                        HolderName = names.GetValueOrDefault((item.HolderKind, item.HolderId)) ?? "Unknown",
+                        Count = count,
+                    };
+                }),
+            .. play.RivalObjectives
+                .Where(static rival => rival.IsActive)
+                .Select(static rival => rival.HolderUserId)
+                .Distinct()
+                .Where(holderId => !play.PrivateObjectives.Any(item =>
+                    item.HolderKind == PrivateObjectiveHolderKind.Player && item.HolderId == holderId))
+                .Select(holderId => new PrivateObjectiveUnclaimedCountDetail
+                {
+                    HolderKind = nameof(PrivateObjectiveHolderKind.Player),
+                    HolderId = holderId,
+                    HolderName = names.GetValueOrDefault((PrivateObjectiveHolderKind.Player, holderId)) ?? "Unknown",
+                    Count = play.RivalObjectives.Count(rival => rival.HolderUserId == holderId && rival.IsActive),
+                }),
         ];
+    }
+
+    private static IReadOnlyList<RivalObjectiveAssignmentDetail> VisibleRivalObjectives(
+        StoredCampaign campaign,
+        Guid viewerUserId,
+        bool staffView,
+        bool campaignCompleted,
+        IReadOnlyList<CampaignParticipantDetail> participants)
+    {
+        var play = campaign.PlayState;
+        if (play is null || !campaign.RivalObjectivesEnabled)
+        {
+            return [];
+        }
+
+        var displayNames = participants.ToDictionary(static item => item.UserId, static item => item.DisplayName);
+        return
+        [
+            .. play.RivalObjectives
+                .Where(assignment =>
+                    RivalObjectiveRules.CanViewDetails(assignment, viewerUserId, staffView, campaignCompleted)
+                    || assignment.Status == PrivateObjectiveAssignmentStatus.Revealed
+                    || assignment.HolderUserId == viewerUserId)
+                .Select(assignment =>
+                {
+                    var visible = RivalObjectiveRules.CanViewDetails(
+                        assignment,
+                        viewerUserId,
+                        staffView,
+                        campaignCompleted);
+                    var (factionName, subfaction) = visible
+                        ? RivalFaction(campaign, participants, assignment.RivalUserId)
+                        : (null, null);
+                    return new RivalObjectiveAssignmentDetail
+                    {
+                        Id = assignment.Id,
+                        HolderUserId = assignment.HolderUserId,
+                        Status = assignment.Status.ToString(),
+                        RivalUserId = visible ? assignment.RivalUserId : null,
+                        RivalDisplayName = visible
+                            ? displayNames.GetValueOrDefault(assignment.RivalUserId)
+                            : null,
+                        RivalFactionName = factionName,
+                        RivalSubfaction = subfaction,
+                        CampaignPoints = visible ? assignment.CampaignPoints : null,
+                    };
+                }),
+        ];
+    }
+
+    private static (string? FactionName, string? Subfaction) RivalFaction(
+        StoredCampaign campaign,
+        IReadOnlyList<CampaignParticipantDetail> participants,
+        Guid rivalUserId)
+    {
+        var participant = participants.FirstOrDefault(item => item.UserId == rivalUserId);
+        var factionName = TrimToNull(participant?.FactionName);
+        var subfaction = TrimToNull(participant?.Subfaction);
+        if (factionName is not null)
+        {
+            return (factionName, subfaction);
+        }
+
+        var force = campaign.PlayState?.Forces.FirstOrDefault(item => item.ControllerUserId == rivalUserId);
+        if (force is null)
+        {
+            return (null, subfaction);
+        }
+
+        var fromForce = campaign.Factions.FirstOrDefault(item => item.Id == force.FactionId)?.Name;
+        return (TrimToNull(fromForce), subfaction ?? TrimToNull(force.Subfaction));
+    }
+
+    private static string? TrimToNull(string? value)
+    {
+        var trimmed = value?.Trim();
+        return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
     private static bool IsHolder(
         PrivateObjectiveAssignment assignment,
         Guid viewerUserId,
         Guid? viewerFactionId,
-        Guid? viewerAllyGroupId)
+        Guid? viewerAllyGroupId,
+        string? viewerSubfaction)
     {
         return assignment.HolderKind switch
         {
             PrivateObjectiveHolderKind.Player => assignment.HolderId == viewerUserId,
             PrivateObjectiveHolderKind.Traitor => assignment.HolderId == viewerUserId,
-            PrivateObjectiveHolderKind.Faction => viewerFactionId is { } faction && assignment.HolderId == faction,
+            PrivateObjectiveHolderKind.Faction => viewerFactionId is { } faction
+                && assignment.HolderId == faction
+                && (string.IsNullOrWhiteSpace(assignment.HolderSubfaction)
+                    || string.Equals(assignment.HolderSubfaction, viewerSubfaction, StringComparison.OrdinalIgnoreCase)),
             PrivateObjectiveHolderKind.AllyGroup => viewerAllyGroupId is { } group && assignment.HolderId == group,
             _ => false,
         };

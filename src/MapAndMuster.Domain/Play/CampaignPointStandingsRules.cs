@@ -241,14 +241,15 @@ public static class CampaignPointStandingsRules
                 player.FactionId,
                 player.FactionId is { } playerFaction
                     ? state.AllyGroupByFaction.GetValueOrDefault(playerFaction)
-                    : null);
+                    : null,
+                player.Subfaction);
 
             standings.Add(new CampaignPointStanding(
                 player.UserId,
                 territoryTotal,
                 battlePointsByPlayer.GetValueOrDefault(player.UserId),
                 publicTotal,
-                privateTotal,
+                privateTotal + RivalObjectiveRules.PointsForPlayer(state.RivalObjectives, player.UserId),
                 otherByPlayer.GetValueOrDefault(player.UserId),
                 heldItemsByPlayer.GetValueOrDefault(player.UserId) ?? []));
         }
@@ -717,6 +718,9 @@ public sealed class CampaignPointScoringState
 
     /// <summary>Gets assigned private objectives.</summary>
     public IReadOnlyList<PrivateObjectiveAssignment> PrivateObjectives { get; init; } = [];
+
+    /// <summary>Gets assigned rival objectives.</summary>
+    public IReadOnlyList<RivalObjectiveAssignment> RivalObjectives { get; init; } = [];
 
     /// <summary>Gets campaign points for each private-objective catalog type.</summary>
     public IReadOnlyDictionary<Guid, int> PrivateObjectivePoints { get; init; } =

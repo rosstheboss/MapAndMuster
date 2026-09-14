@@ -93,7 +93,9 @@ public sealed class CreateCampaignHandler
                 command.MostTerritoriesTerrainTagId,
                 command.LongestTerritoryChainTerrainTagId,
                 command.MostStructurePointsStructureTagId,
-                command.PointsPerTerritoryTerrainTagId))
+                command.PointsPerTerritoryTerrainTagId,
+                command.RivalObjectivesEnabled,
+                command.RivalObjectiveCampaignPoints))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -236,7 +238,9 @@ public sealed class UpdateCampaignHandler
                 command.MostTerritoriesTerrainTagId,
                 command.LongestTerritoryChainTerrainTagId,
                 command.MostStructurePointsStructureTagId,
-                command.PointsPerTerritoryTerrainTagId))
+                command.PointsPerTerritoryTerrainTagId,
+                command.RivalObjectivesEnabled,
+                command.RivalObjectiveCampaignPoints))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -423,6 +427,8 @@ internal static class CampaignPersistenceFactory
                     PrerequisiteWasLost = type.PrerequisiteWasLost,
                     StructureTagId = type.StructureTagId,
                     TerrainTagId = type.TerrainTagId,
+                    ExcludedFactionIds = RemapKnownIds(type.ExcludedFactionIds, factionIdMap),
+                    ExcludedAllyGroupIds = RemapKnownIds(type.ExcludedAllyGroupIds, allyIdMap),
                 }),
             ];
         }
@@ -499,6 +505,8 @@ internal static class CampaignPersistenceFactory
                         .Concat(previousStructureTypes?.SelectMany(static type => type.Missions) ?? []))),
             ForceStatuses = CatalogFileBinder.BindForceStatuses(setup.ForceStatuses),
             PrivateObjectiveTypes = privateObjectiveTypes,
+            RivalObjectivesEnabled = setup.RivalObjectivesEnabled,
+            RivalObjectiveCampaignPoints = setup.RivalObjectiveCampaignPoints,
             BattleScoring = setup.BattleScoring,
             RankingObjectivePoints = setup.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = setup.SplitForceSupplyPenaltyPercent,
@@ -506,6 +514,11 @@ internal static class CampaignPersistenceFactory
             StandardBattleResultQuestions = CatalogFileBinder.BindStandardBattleResultQuestions(setup.StandardBattleResultQuestions),
             ArmyEscalations = setup.Schedule.ArmyEscalations,
         };
+    }
+
+    private static IReadOnlyList<Guid> RemapKnownIds(IReadOnlyList<Guid> ids, Dictionary<Guid, Guid> map)
+    {
+        return [.. ids.Select(id => map.TryGetValue(id, out var next) ? next : id)];
     }
 
     private static Guid? RemapDefeatTarget(

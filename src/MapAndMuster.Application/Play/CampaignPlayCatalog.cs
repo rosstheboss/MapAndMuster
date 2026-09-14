@@ -55,7 +55,9 @@ internal static class CampaignPlayCatalog
                 type.PrerequisiteForceStatusTypeId,
                 type.PrerequisiteWasLost,
                 type.StructureTagId,
-                type.TerrainTagId)),
+                type.TerrainTagId,
+                type.ExcludedFactionIds,
+                type.ExcludedAllyGroupIds)),
         ];
     }
 
@@ -131,6 +133,12 @@ internal static class CampaignPlayCatalog
                 : (Guid?)null);
     }
 
+    public static IReadOnlyDictionary<Guid, string?> FactionAllyGroupNames(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        return campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName);
+    }
+
     public static IReadOnlyDictionary<Guid, Guid> FactionByPlayer(StoredCampaign campaign)
     {
         ArgumentNullException.ThrowIfNull(campaign);
@@ -150,7 +158,8 @@ internal static class CampaignPlayCatalog
                 territory.StructureTypeId,
                 territory.StructureCondition,
                 territory.TerrainTagIds,
-                territory.StructureTagIds)),
+                territory.StructureTagIds,
+                territory.OwnerSubfaction)),
         ];
     }
 
@@ -164,6 +173,11 @@ internal static class CampaignPlayCatalog
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
         var types = PrivateTypes(campaign);
+        var factionByPlayer = FactionByPlayer(campaign);
+        var allyGroupByFaction = AllyGroupByFaction(campaign);
+        var playerUserIds = campaign.Memberships.Where(static member => member.IsPlayer).Select(static member => member.UserId).ToArray();
+        var factionIds = campaign.Factions.Select(static faction => faction.Id).ToArray();
+        var allyGroupIds = campaign.AllyGroups.Select(static group => group.Id).ToArray();
         var next = state;
         foreach (var player in campaign.Memberships.Where(static member => member.IsPlayer).OrderBy(static member => member.UserId))
         {
@@ -173,11 +187,11 @@ internal static class CampaignPlayCatalog
                 player.UserId,
                 utcNow,
                 PickIndex,
-                FactionByPlayer(campaign),
-                AllyGroupByFaction(campaign),
-                [.. campaign.Memberships.Where(static member => member.IsPlayer).Select(static member => member.UserId)],
-                [.. campaign.Factions.Select(static faction => faction.Id)],
-                [.. campaign.AllyGroups.Select(static group => group.Id)]);
+                factionByPlayer,
+                allyGroupByFaction,
+                playerUserIds,
+                factionIds,
+                allyGroupIds);
         }
 
         next = PrivateObjectiveRules.GrantOwedTraitorObjectives(
@@ -185,21 +199,76 @@ internal static class CampaignPlayCatalog
             types,
             utcNow,
             PickIndex,
-            FactionByPlayer(campaign),
-            AllyGroupByFaction(campaign),
-            [.. campaign.Memberships.Where(static member => member.IsPlayer).Select(static member => member.UserId)],
-            [.. campaign.Factions.Select(static faction => faction.Id)],
-            [.. campaign.AllyGroups.Select(static group => group.Id)]);
+            factionByPlayer,
+            allyGroupByFaction,
+            playerUserIds,
+            factionIds,
+            allyGroupIds);
+        next = PrivateObjectiveRules.EnsureRequiredSubfactionFactionAssignments(
+            next,
+            types,
+            OccupyingRequiredSubfactions(campaign, next),
+            utcNow,
+            PickIndex,
+            factionByPlayer,
+            allyGroupByFaction,
+            playerUserIds,
+            factionIds,
+            allyGroupIds);
         next = PrivateObjectiveRules.EvaluateAutomatic(
             next,
             types,
             Territories(map),
-            FactionByPlayer(campaign),
-            AllyGroupByFaction(campaign),
+            factionByPlayer,
+            allyGroupByFaction,
             next.BrokenAllyFactionIds.ToHashSet(),
             utcNow,
-            map);
+            map,
+            SubfactionByPlayer(campaign));
         return next;
+    }
+
+    public static IReadOnlyDictionary<Guid, string?> SubfactionByPlayer(StoredCampaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        return campaign.Memberships
+            .Where(static member => member.IsPlayer)
+            .ToDictionary(static member => member.UserId, static member => member.Subfaction);
+    }
+
+    public static Dictionary<Guid, IReadOnlyList<string>> OccupyingRequiredSubfactions(
+        StoredCampaign campaign,
+        CampaignPlayState state)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        ArgumentNullException.ThrowIfNull(state);
+        var required = campaign.Factions.Where(static faction => faction.RequiresSubfaction).Select(static faction => faction.Id).ToHashSet();
+        if (required.Count == 0)
+        {
+            return [];
+        }
+
+        var fromForces = state.Forces
+            .Where(force => required.Contains(force.FactionId) && !string.IsNullOrWhiteSpace(force.Subfaction))
+            .Select(force => (force.FactionId, Subfaction: force.Subfaction!.Trim()));
+        var fromMembers = campaign.Memberships
+            .Where(member =>
+                member.IsPlayer
+                && member.FactionId is { } faction
+                && required.Contains(faction)
+                && !string.IsNullOrWhiteSpace(member.Subfaction))
+            .Select(member => (FactionId: member.FactionId!.Value, Subfaction: member.Subfaction!.Trim()));
+        return fromForces.Concat(fromMembers)
+            .GroupBy(static item => item.FactionId)
+            .ToDictionary(
+                static group => group.Key,
+                static group => (IReadOnlyList<string>)
+                [
+                    .. group
+                        .Select(static item => item.Subfaction)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase),
+                ]);
     }
 
     public static SupplyCatalog Supply(StoredCampaign campaign)

@@ -342,32 +342,17 @@
                     [class.is-battle]="pin.force.inBattle"
                     [class.is-emphasized]="pin.emphasized"
                     [class.has-action]="!!pin.force.isMine && !!pin.force.action"
-                    [class.has-image]="!!pin.image"
-                    [class.is-tinted]="!!pin.image && pin.tint"
                     [style.left.%]="pin.fit.x * 100"
                     [style.top.%]="pin.fit.y * 100"
                     [style.width.px]="markerSize(pin.fit).width"
                     [style.height.px]="markerSize(pin.fit).height"
                     [style.margin-left.px]="-markerSize(pin.fit).width / 2"
                     [style.margin-top.px]="-markerSize(pin.fit).height / 2"
-                    [style.background]="flagBackground(pin)"
-                    [style.--logo-mask]="pin.image && pin.tint ? maskUrl(pin.image) : null"
+                    [style.background]="pin.color"
                     role="img"
                     [attr.aria-label]="forceLabel(pin.force)"
                     [title]="forceLabel(pin.force)"
                   >
-                    @if (pin.image && pin.tint) {
-                      <img class="marker-decode" [src]="pin.image" alt="" decoding="async" draggable="false" />
-                    }
-                    @if (pin.image && !pin.tint) {
-                      <img
-                        [src]="pin.image"
-                        alt=""
-                        decoding="async"
-                        draggable="false"
-                        (error)="onFlagImageError(pin.image)"
-                      />
-                    }
                     @if (pin.force.isMine && pin.force.action) {
                       <span class="force-action-mark" aria-hidden="true">
                         <app-icon name="check" />
@@ -444,7 +429,13 @@
         </div>
         @if (!panning()) {
           @if (hoverTooltip(); as tip) {
-            <div class="territory-hover-tip" role="tooltip" [style.left.px]="tooltipX()" [style.top.px]="tooltipY()">
+            <div
+              class="territory-hover-tip"
+              #hoverTip
+              role="tooltip"
+              [style.left.px]="tooltipX()"
+              [style.top.px]="tooltipY()"
+            >
               {{ tip }}
             </div>
           }

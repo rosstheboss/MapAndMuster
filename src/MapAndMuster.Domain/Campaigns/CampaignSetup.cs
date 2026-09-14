@@ -38,6 +38,8 @@ public sealed class CampaignSetup
     /// <param name="structureTags">Structure-catalog tags.</param>
     /// <param name="factionTags">Faction-catalog tags shared with subfactions.</param>
     /// <param name="missionTags">Mission-catalog tags.</param>
+    /// <param name="rivalObjectivesEnabled">Whether occupying players receive a secret rival objective.</param>
+    /// <param name="rivalObjectiveCampaignPoints">Campaign points awarded when a player reveals their rival.</param>
     public CampaignSetup(
         string name,
         string? description,
@@ -68,7 +70,9 @@ public sealed class CampaignSetup
         IReadOnlyList<CatalogTag>? terrainTags = null,
         IReadOnlyList<CatalogTag>? structureTags = null,
         IReadOnlyList<CatalogTag>? factionTags = null,
-        IReadOnlyList<CatalogTag>? missionTags = null)
+        IReadOnlyList<CatalogTag>? missionTags = null,
+        bool rivalObjectivesEnabled = true,
+        int rivalObjectiveCampaignPoints = 5)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factions);
@@ -109,6 +113,8 @@ public sealed class CampaignSetup
         StructureTags = structureTags ?? [];
         FactionTags = factionTags ?? [];
         MissionTags = missionTags ?? [];
+        RivalObjectivesEnabled = rivalObjectivesEnabled;
+        RivalObjectiveCampaignPoints = rivalObjectiveCampaignPoints;
     }
 
     /// <summary>Gets the campaign name.</summary>
@@ -197,6 +203,12 @@ public sealed class CampaignSetup
 
     /// <summary>Gets mission-catalog tags.</summary>
     public IReadOnlyList<CatalogTag> MissionTags { get; }
+
+    /// <summary>Gets whether occupying players receive a secret rival objective.</summary>
+    public bool RivalObjectivesEnabled { get; }
+
+    /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
+    public int RivalObjectiveCampaignPoints { get; }
 
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon => BattleScoring.PointsPerWin;

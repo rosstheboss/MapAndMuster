@@ -175,6 +175,16 @@ internal static class PlayStateJson
                 BetrayedSubfaction = item.BetrayedSubfaction,
                 BetrayedUserId = item.BetrayedUserId,
             })],
+            RivalObjectives = [.. state.RivalObjectives.Select(static item => new RivalObjectiveDocument
+            {
+                Id = item.Id,
+                HolderUserId = item.HolderUserId,
+                RivalUserId = item.RivalUserId,
+                CampaignPoints = item.CampaignPoints,
+                Status = item.Status.ToString(),
+                AssignedUtc = item.AssignedUtc,
+                RevealedUtc = item.RevealedUtc,
+            })],
             Structures = [.. state.Structures.Select(static item => new StructureDocument
             {
                 TerritoryId = item.TerritoryId,
@@ -256,6 +266,7 @@ internal static class PlayStateJson
                 ClaimedByUserId = item.ClaimedByUserId,
                 ApprovedByUserId = item.ApprovedByUserId,
                 ResolvedTargetId = item.ResolvedTargetId,
+                HolderSubfaction = item.HolderSubfaction,
             })],
             StructureDestructions = [.. state.StructureDestructions.Select(static item => new StructureDestructionDocument
             {
@@ -437,7 +448,8 @@ internal static class PlayStateJson
                 item.RevealedUtc,
                 item.ClaimedByUserId,
                 item.ApprovedByUserId,
-                item.ResolvedTargetId))],
+                item.ResolvedTargetId,
+                item.HolderSubfaction))],
             [.. (document.StructureDestructions ?? []).Select(static item => new StructureDestructionFact(
                 item.Id,
                 item.TerritoryId,
@@ -483,7 +495,20 @@ internal static class PlayStateJson
                 item.TraitorUserId,
                 item.BetrayedFactionId,
                 item.BetrayedSubfaction,
-                item.BetrayedUserId))]);
+                item.BetrayedUserId))],
+            rivalObjectives:
+            [
+                .. (document.RivalObjectives ?? []).Select(static item => new RivalObjectiveAssignment(
+                    item.Id,
+                    item.HolderUserId,
+                    item.RivalUserId,
+                    item.CampaignPoints,
+                    Enum.TryParse<PrivateObjectiveAssignmentStatus>(item.Status, true, out var status)
+                        ? status
+                        : PrivateObjectiveAssignmentStatus.Assigned,
+                    item.AssignedUtc,
+                    item.RevealedUtc)),
+            ]);
     }
 
     private static IReadOnlyList<ActionWindowSnapshot> ToSnapshots(PlayDocument document)
@@ -631,6 +656,7 @@ internal static class PlayStateJson
         public List<Guid> BrokenAllyFactionIds { get; set; } = [];
         public List<BrokenAllySubfactionDocument> BrokenAllySubfactions { get; set; } = [];
         public List<AllyBetrayalDocument> AllyBetrayals { get; set; } = [];
+        public List<RivalObjectiveDocument>? RivalObjectives { get; set; }
         public List<StructureDocument> Structures { get; set; } = [];
         public List<ItemObjectiveDocument>? ItemObjectives { get; set; }
         public List<LogDocument> Log { get; set; } = [];
@@ -726,6 +752,17 @@ internal static class PlayStateJson
         public Guid BetrayedFactionId { get; set; }
         public string? BetrayedSubfaction { get; set; }
         public Guid? BetrayedUserId { get; set; }
+    }
+
+    private sealed class RivalObjectiveDocument
+    {
+        public Guid Id { get; set; }
+        public Guid HolderUserId { get; set; }
+        public Guid RivalUserId { get; set; }
+        public int CampaignPoints { get; set; }
+        public string Status { get; set; } = nameof(PrivateObjectiveAssignmentStatus.Assigned);
+        public DateTimeOffset AssignedUtc { get; set; }
+        public DateTimeOffset? RevealedUtc { get; set; }
     }
 
     private sealed class BattleDocument
@@ -915,6 +952,7 @@ internal static class PlayStateJson
         public Guid? ClaimedByUserId { get; set; }
         public Guid? ApprovedByUserId { get; set; }
         public Guid? ResolvedTargetId { get; set; }
+        public string? HolderSubfaction { get; set; }
     }
 
     private sealed class StructureDestructionDocument

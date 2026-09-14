@@ -38,6 +38,8 @@
                     >
                   } @else if (part.mention) {
                     <strong>{{ part.text }}</strong>
+                  } @else if (entry.kind === 'Admin') {
+                    <strong>{{ part.text }}</strong>
                   } @else {
                     {{ part.text }}
                   }

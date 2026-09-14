@@ -33,7 +33,10 @@ Required early suites:
 - Public/private objective visibility, completion, manager approval of private claims, automatic
   private-objective scoring and live `(current/required)` progress for authorized holders, and launch
   assignment (unique draws per holder-kind pool, then reshuffled duplicates until every holder in a
-  non-empty pool has an independent assignment).
+  non-empty pool has an independent assignment; required subfactions are separate faction holders).
+  Player-held automatic progress counts only that player's credited holdings. Private-objective exclude lists skip named factions
+  and ally groups. Rival objectives seed unique enemies, reveal on battle or surrender, and replenish
+  closest unused rivals on later non-final action rounds.
 - Relic discovery, transfer, drop, choice resolution, destroy-and-replace, tie-breaking, and secrecy.
 - Campaign-point components and graph objectives. Map holdings are attributed to individual
   players on a shared faction, not copied from a faction-wide total onto every co-faction player.
@@ -88,9 +91,9 @@ Use Angular's Vitest integration.
 
 Cover components/services for:
 
-- Order drafting from the map menu or force-panel **Save draft**, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed. Confirmation alertdialogs trap Tab, confirm on Enter, and cancel on Escape. The Actions Commitments player list starts collapsed and keeps the "X of Y players committed. Waiting on …" summary under the Commitments heading.
+- Order drafting from the map menu or force-panel **Save draft**, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed. Confirmation alertdialogs trap Tab, confirm on Enter, and cancel on Escape. The Actions Commitments player list starts collapsed and keeps the "X of Y players committed. Waiting on …" summary under the Commitments heading. Expanding it shows players in alphabetical username order in up to three columns, filling left to right then top to bottom; each player lists username with a profile link and Drafting or Committed, then faction and subfaction, then that player's force locations as map links joined with "and".
 - Campaign-page status bar (round/phase, throttled countdown live region, viewer commit chip, compact commitment count, Go to your orders). While a campaign is running, Actions, Chat, and Standings are open by default; other sections stay collapsed and the last set is stored in a per-campaign cookie. Staff tools are under collapsed Manage campaign. Battle, campaign, phase, and force-status enums use display labels. A hidden-relic notice and each battle reminder render once. The campaign log summary shows unread mention and private counts from `GET /log` without marking the log read on load. Log timestamps sit after the entry text (relative when under 24 hours).
-- Create/edit campaign starts with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded; optional sections start collapsed. The sticky toolbar shows remaining required sections, nested mission groups have unique names, and Edit map is hidden after a campaign starts. Force-status cancel-out is a dropdown that adds named statuses to a removable list. Enable and clear each have a consecutive-occurrence integer from 1 to 10, a location filter (any, type, or tag), and Add that does not hide a trigger already in the list. Each catalog section has a tag subpanel whose name field adds on Enter or comma without saving, and item chip comboboxes that suggest unassigned defined tags.
+- Create/edit campaign starts with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded; optional sections start collapsed. The sticky toolbar shows remaining required sections, nested mission groups have unique names, and Edit map is hidden after a campaign starts. Force-status cancel-out is a dropdown that adds named statuses to a removable list. Private-objective exclude lists add factions and ally groups the same way. Secret rival objectives default on with 5 campaign points. Enable and clear each have a consecutive-occurrence integer from 1 to 10, a location filter (any, type, or tag), and Add that does not hide a trigger already in the list. Each catalog section has a tag subpanel whose name field adds on Enter or comma without saving, and item chip comboboxes that suggest unassigned defined tags.
 - Countdown display without treating the browser clock as authoritative.
 - Map territory selection, force markers, polygon editing including Close Territory enclose and
   shared-border versus overlapping-interior checks, move drop validity, keyboard alternatives,
@@ -106,12 +109,16 @@ Cover components/services for:
   destinations, or Fit when that frame cannot be computed. Cycle forces uses Y. The same Commit or
   Uncommit control as Actions sits between Cycle forces and Show names, including last-commit
   confirmation and a disabled Commit when drafts are incomplete. C commits when that control is
-  enabled, or uncommits when Uncommit is shown. Force dots stay off flags and
-  structure logos, shrinking no more than 50%. Subfaction colors, color flags, and uploaded logos follow
+  enabled, or uncommits when Uncommit is shown. Force dots use faction or required-subfaction colors, not
+  logos; ownership flags and logos stay with the territory owner. Force dots stay off flags and
+  structure logos, shrinking no more than 50%. Required-subfaction claims keep that subfaction's color
+  flag or uploaded logo instead of the parent faction mark. Subfaction colors, color flags, and uploaded logos follow
   the same uniqueness and tint rules as faction flags.
   Full-screen map mode keeps the image inside the viewport: a fitted map recenters after the panel
   resizes, and a zoomed map clamps pan so it cannot sit off-screen.
-  Map zoom defaults to Fit and is restored from `localStorage` per campaign.
+  Map zoom on the campaign page opens at Fit for scheduled and completed campaigns, or framed on
+  the viewer's first owned force during an in-progress campaign. The map editor restores the last
+  Fit-or-percent choice from `localStorage` per campaign.
   Selecting a territory or group from outside the map pans to center it without leaving image bounds,
   and zooms out only when the current scale cannot encapsulate the selection, never past Fit.
   Territory hit polygons are named buttons; keyboard focus and Enter/Space select a territory, and a
@@ -153,8 +160,8 @@ Cover components/services for:
 - Password fields include a show/hide toggle that restores `type=password`.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
 - Campaign log display, member chat including typable recipient autocomplete and public/private/game-log/delinquency filters, live log refresh, chat send errors without the save success
-  banner, `@` mention autocomplete limited to current members, clickable originator and mention names, and manager or administrator download of public chat and/or game-log facts as text or CSV.
-- Public site chat on All Campaigns, including language filters, block toggles, administrator compose, and cookie-stored language preferences.
+  banner, `@` mention autocomplete limited to current members, clickable originator and mention names, bold campaign start/round/phase/end entries, and manager or administrator download of public chat and/or game-log facts as text or CSV.
+- Public site chat on All Campaigns, including language filters, block toggles, administrator compose with bold announcement text, and cookie-stored language preferences.
 - Participants panel names, factions, and Manager/Player/Admin roles, including manager add/search/kick, staff faction assignment, and a May be kicked badge that opens the delinquency log entry.
 - Administrator test-users page (filter, Currently testing chip) and the impersonation banner with Return to admin.
 - Public profile campaign list, scores placeholder, and Back to the previous in-app screen.

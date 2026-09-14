@@ -15,7 +15,9 @@ internal static class FactionAppearance
         var appearance = Find(faction, subfactionName);
         var color = string.IsNullOrWhiteSpace(appearance?.Color) ? faction.Color : appearance.Color;
         var source = SubfactionFlagSource.Normalize(appearance?.FlagSource) ?? SubfactionFlagSource.Inherit;
-        if (source == SubfactionFlagSource.Color)
+        var requiredSubfaction = faction.RequiresSubfaction && !string.IsNullOrWhiteSpace(subfactionName);
+        if (source == SubfactionFlagSource.Color
+            || (requiredSubfaction && source != SubfactionFlagSource.Image))
         {
             return new Resolved(color, false, false, null);
         }
@@ -25,6 +27,11 @@ internal static class FactionAppearance
             if (!string.IsNullOrWhiteSpace(appearance?.FlagImageStorageKey))
             {
                 return new Resolved(color, true, appearance.TintFlagImage, appearance.FlagImageStorageKey);
+            }
+
+            if (requiredSubfaction)
+            {
+                return new Resolved(color, false, false, null);
             }
 
             return new Resolved(

@@ -476,6 +476,8 @@ internal static class CatalogFileBinder
                 PrerequisiteWasLost = type.PrerequisiteWasLost,
                 StructureTagId = type.StructureTagId,
                 TerrainTagId = type.TerrainTagId,
+                ExcludedFactionIds = type.ExcludedFactionIds,
+                ExcludedAllyGroupIds = type.ExcludedAllyGroupIds,
             }),
         ];
     }

@@ -110,6 +110,43 @@ public sealed class CampaignPlayLogSummaryTests
             summaries[2]);
     }
 
+    [Fact]
+    public void FormatsPhaseChangesAndRivalRevealsFromTheStoredMessage()
+    {
+        var summaries = Summaries(
+        [
+            new PlayLogEntry(
+                Guid.NewGuid(),
+                Now,
+                PlayLogKind.PhaseChanged,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                [],
+                "Round 1 — Action phase began."),
+            new PlayLogEntry(
+                Guid.NewGuid(),
+                Now.AddSeconds(1),
+                PlayLogKind.RivalObjectiveRevealed,
+                null,
+                null,
+                Bob,
+                null,
+                null,
+                null,
+                null,
+                [],
+                Leopold.ToString("N")),
+        ]);
+
+        Assert.Equal("Round 1 — Action phase began.", summaries[0]);
+        Assert.Equal("bob defeated their secret rival leopold.", summaries[1]);
+    }
+
     private static PlayLogEntry Action(
         ActionKind kind,
         Guid territoryId,

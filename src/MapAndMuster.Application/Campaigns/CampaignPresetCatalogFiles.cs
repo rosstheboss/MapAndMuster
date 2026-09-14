@@ -61,6 +61,8 @@ internal static class CampaignPresetCatalogFiles
             Missions = Merge(campaign.Missions, preset.Missions, static mission => mission.Name, CopyMissionFiles),
             ForceStatuses = campaign.ForceStatuses,
             PrivateObjectiveTypes = campaign.PrivateObjectiveTypes,
+            RivalObjectivesEnabled = campaign.RivalObjectivesEnabled,
+            RivalObjectiveCampaignPoints = campaign.RivalObjectiveCampaignPoints,
             BattleScoring = campaign.BattleScoring,
             RankingObjectivePoints = campaign.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = campaign.SplitForceSupplyPenaltyPercent,

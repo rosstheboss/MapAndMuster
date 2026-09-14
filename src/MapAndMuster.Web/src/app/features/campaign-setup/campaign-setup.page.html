@@ -1244,6 +1244,30 @@
               fewer objectives than holders, unique draws are given first and the pool is shuffled again so everyone
               still receives one. Duplicate assignments are scored independently.
             </p>
+            <div class="nested-row">
+              <label class="choice-row">
+                <input type="checkbox" formControlName="rivalObjectivesEnabled" />
+                Secret rival objectives
+              </label>
+              @if (form.controls.rivalObjectivesEnabled.value) {
+                <div class="field">
+                  <label for="rival-objective-points">Rival campaign points</label>
+                  <input
+                    id="rival-objective-points"
+                    type="number"
+                    min="0"
+                    max="999"
+                    formControlName="rivalObjectiveCampaignPoints"
+                  />
+                </div>
+              }
+            </div>
+            <p class="muted">
+              When enabled, each occupying player also receives a secret rival: a specific enemy player. Defeating that
+              rival in battle or by surrender awards the points and reveals the assignment. Draws, delinquency,
+              no-contest, and ringer battles do not count. Unique rivals are preferred; duplicates are used only when
+              uniqueness is impossible.
+            </p>
             <div formArrayName="privateObjectiveTypes" class="stack">
               @for (item of privateObjectiveTypes.controls; track item; let index = $index) {
                 <div class="nested-card stack" [formGroupName]="index">
@@ -1303,6 +1327,59 @@
                         <input type="checkbox" formControlName="allowTraitor" />
                         Traitors (only after a successful Backstab)
                       </label>
+                    </fieldset>
+                    <fieldset class="field">
+                      <legend>Cannot be received by</legend>
+                      <p class="muted">
+                        Optional. Players in a listed faction or ally group cannot be assigned this objective. It must
+                        remain receivable by at least one faction.
+                      </p>
+                      <div class="field">
+                        <label [attr.for]="'private-objective-exclude-pick-' + index"
+                          >Add a faction or ally group</label
+                        >
+                        <select
+                          [id]="'private-objective-exclude-pick-' + index"
+                          [disabled]="
+                            privateObjectiveExcludeFactionOptions(item).length === 0 &&
+                            privateObjectiveExcludeAllyOptions(item).length === 0
+                          "
+                          (change)="addPrivateObjectiveExclude(item, $event)"
+                        >
+                          <option value="">Select a faction or ally group</option>
+                          @if (privateObjectiveExcludeFactionOptions(item).length > 0) {
+                            <optgroup label="Factions">
+                              @for (option of privateObjectiveExcludeFactionOptions(item); track option.id) {
+                                <option [value]="'faction:' + option.id">{{ option.name }}</option>
+                              }
+                            </optgroup>
+                          }
+                          @if (privateObjectiveExcludeAllyOptions(item).length > 0) {
+                            <optgroup label="Ally groups">
+                              @for (option of privateObjectiveExcludeAllyOptions(item); track option.id) {
+                                <option [value]="'ally:' + option.id">{{ option.name }}</option>
+                              }
+                            </optgroup>
+                          }
+                        </select>
+                      </div>
+                      @if (privateObjectiveExcludeEntries(item).length > 0) {
+                        <ul class="cancel-status-list">
+                          @for (entry of privateObjectiveExcludeEntries(item); track entry.kind + entry.id) {
+                            <li class="cancel-status-row">
+                              <span>{{ entry.name }}</span>
+                              <button
+                                type="button"
+                                class="button-danger icon-button"
+                                [attr.aria-label]="'Allow ' + entry.name + ' to receive this objective'"
+                                (click)="removePrivateObjectiveExclude(item, entry.kind, entry.id)"
+                              >
+                                <app-icon name="x" />
+                              </button>
+                            </li>
+                          }
+                        </ul>
+                      }
                     </fieldset>
                     <div class="nested-row">
                       <div class="field grow">

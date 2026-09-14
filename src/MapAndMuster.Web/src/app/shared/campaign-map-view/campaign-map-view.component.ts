@@ -51,6 +51,7 @@ import {
 } from '../../core/maps/geometry';
 import type { FittedSquare, MapPoint } from '../../core/maps/geometry';
 import { overlayNameLabel } from '../../core/maps/map-labels';
+import { placeMapHoverTooltip } from '../../core/maps/map-hover-tooltip';
 import { territoryLabel, type MapAdjacency, type MapTerritory } from '../../core/maps/map-graph.models';
 import { territoryHoverTooltip, type TerritoryTooltipBattle } from '../../core/maps/territory-tooltip';
 import { AppDialogService } from '../dialog/dialog.service';
@@ -66,12 +67,15 @@ const SPAWN_STRIPE_SCREEN_PX = 5;
 const SELECTION_FRAME_PADDING_PX = 16;
 const SELECTION_FRAME_SCALE_EPSILON = 1e-6;
 
-/** Wait before applying or clearing a territory hover so border jitter does not flicker. */
+/** Wait before applying a territory hover so border jitter and fast pointer travel do not flicker. */
 export const TERRITORY_HOVER_INTENT_MS = 200;
 /** Ease-in-out duration for lifting a hovered territory and returning it. */
 export const TERRITORY_HOVER_MOTION_MS = 200;
 
 export type MovePlacement = 'valid' | 'invalid' | null;
+
+/** Opening camera for a campaign map. The map editor restores the last stored zoom. */
+export type MapInitialCamera = 'stored' | 'fit' | 'first-force';
 
 export interface MapForceAction {
   kind: string;
@@ -171,6 +175,11 @@ export class CampaignMapViewComponent {
   readonly showUncommit = input(false);
   readonly actionPrompt = input<string | null>(null);
   readonly promptAvoidTerritoryIds = input<readonly string[]>([]);
+  /**
+   * Opening camera. Campaign play uses Fit for scheduled/completed games and the first owned
+   * force for in-progress games. The map editor omits this and restores stored zoom.
+   */
+  readonly initialCamera = input<MapInitialCamera>('stored');
 
   readonly mapPoint = output<MapPoint>();
   readonly commit = output<void>();
@@ -193,6 +202,7 @@ export class CampaignMapViewComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly dialogs = inject(AppDialogService);
   private readonly viewport = viewChild<ElementRef<HTMLElement>>('viewport');
+  private readonly hoverTip = viewChild<ElementRef<HTMLElement>>('hoverTip');
   protected readonly zoom = signal(1);
   private readonly fitToPanel = signal(true);
   private readonly panX = signal(0);
@@ -217,10 +227,9 @@ export class CampaignMapViewComponent {
   private pinch: { distance: number; zoom: number; imageX: number; imageY: number } | null = null;
   private pinchCooldown = false;
   private hoverIntentTimer: ReturnType<typeof setTimeout> | null = null;
-  private hoverIntentId: string | null | undefined = undefined;
+  private hoverIntentId: string | undefined = undefined;
   private lastMapHoverPoint: MapPoint | null = null;
   private tooltipFrame = 0;
-  private pendingTooltip: { x: number; y: number } | null = null;
   private readonly hoverMotionIds = signal<ReadonlySet<string>>(new Set());
   private readonly hoverMotionTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private resizeObserver: ResizeObserver | null = null;
@@ -230,6 +239,9 @@ export class CampaignMapViewComponent {
   private pendingSelectionFrame = false;
   private selectionCameraFrame = 0;
   private lastCycledForceId: string | null = null;
+  private hasAppliedInitialForceCamera = false;
+  private cameraTouched = false;
+  private lastPointer: { x: number; y: number } | null = null;
 
   constructor() {
     this.destroyRef.onDestroy(() => {
@@ -243,6 +255,23 @@ export class CampaignMapViewComponent {
     effect(() => {
       const ids = this.selectedTerritoryIds();
       untracked(() => this.onSelectedTerritoriesChanged(ids));
+    });
+    effect(() => {
+      this.initialCamera();
+      this.imageReady();
+      this.forces();
+      this.viewportSize();
+      untracked(() => {
+        this.tryApplyFirstForceCamera();
+      });
+    });
+    effect(() => {
+      const tip = this.hoverTooltip();
+      untracked(() => {
+        if (tip && !this.panning()) {
+          this.queueTooltipPlacement();
+        }
+      });
     });
   }
 
@@ -268,9 +297,9 @@ export class CampaignMapViewComponent {
       const destroyed = territory.structureCondition === 'Destroyed';
       const pillaged = territory.structureCondition === 'Pillaged';
       const owner = this.factions().find((faction) => faction.id === territory.ownerFactionId) ?? null;
-      const appearance = resolveFactionAppearance(owner, territory.ownerSubfaction);
-      const flagUrl =
-        owner && appearance.hasFlagImage ? this.flagImageUrl()(owner.id, territory.ownerSubfaction) : null;
+      const ownerSubfaction = this.ownerSubfactionFor(territory);
+      const appearance = resolveFactionAppearance(owner, ownerSubfaction);
+      const flagUrl = owner && appearance.hasFlagImage ? this.flagImageUrl()(owner.id, ownerSubfaction) : null;
       const structureFit =
         structure && !destroyed ? fitSquareInPolygon(territory.polygon, center, maxWidth, maxHeight) : null;
       const flagPreferred = structureFit ? { x: structureFit.x + structureFit.width * 0.7, y: structureFit.y } : center;
@@ -303,14 +332,10 @@ export class CampaignMapViewComponent {
         avoided.push(fit);
         const forceOwner = this.factions().find((faction) => faction.id === force.factionId) ?? null;
         const forceAppearance = resolveFactionAppearance(forceOwner, force.subfaction);
-        const forceFlagUrl =
-          forceOwner && forceAppearance.hasFlagImage ? this.flagImageUrl()(force.factionId, force.subfaction) : null;
         return {
           force,
           fit,
           color: forceAppearance.color,
-          image: forceFlagUrl && !this.failedFlagUrls().has(forceFlagUrl) ? forceFlagUrl : null,
-          tint: forceAppearance.tint,
           emphasized: this.emphasizedForceIds().includes(force.id),
         };
       });
@@ -357,7 +382,7 @@ export class CampaignMapViewComponent {
     return layouts.map((layout) => {
       const territory = layout.territory;
       const owner = this.factions().find((faction) => faction.id === territory.ownerFactionId) ?? null;
-      const appearance = resolveFactionAppearance(owner, territory.ownerSubfaction);
+      const appearance = resolveFactionAppearance(owner, this.ownerSubfactionFor(territory));
       const selected = this.isSelected(territory.id);
       const fill = this.territoryFill(territory, owner, appearance.color);
       const spawnFaction = this.factions().find((faction) => faction.id === territory.spawnFactionId) ?? null;
@@ -405,13 +430,16 @@ export class CampaignMapViewComponent {
         id: territory.id,
         selected: this.selectedTerritoryIds().includes(territory.id),
         tooltip: this.territoryTooltip(territory),
-        ...territoryListItemMarks(territory, {
-          factions: this.factions(),
-          terrainTypes: this.terrainTypes(),
-          structures: this.structures(),
-          flagImageUrl: this.flagImageUrl(),
-          structureImageUrl: this.structureImageUrl(),
-        }),
+        ...territoryListItemMarks(
+          { ...territory, ownerSubfaction: this.ownerSubfactionFor(territory) },
+          {
+            factions: this.factions(),
+            terrainTypes: this.terrainTypes(),
+            structures: this.structures(),
+            flagImageUrl: this.flagImageUrl(),
+            structureImageUrl: this.structureImageUrl(),
+          },
+        ),
       })),
   );
 
@@ -425,7 +453,7 @@ export class CampaignMapViewComponent {
       }
 
       const owner = this.factions().find((faction) => faction.id === territory.ownerFactionId) ?? null;
-      const appearance = resolveFactionAppearance(owner, territory.ownerSubfaction);
+      const appearance = resolveFactionAppearance(owner, this.ownerSubfactionFor(territory));
       const fill = this.territoryFill(territory, owner, appearance.color);
       const spawnFaction = this.factions().find((faction) => faction.id === territory.spawnFactionId) ?? null;
       const color =
@@ -540,6 +568,28 @@ export class CampaignMapViewComponent {
   protected markerSize(fit: FittedSquare): { width: number; height: number } {
     const image = this.imageSize();
     return { width: fit.width * image.width, height: fit.height * image.height };
+  }
+
+  private ownerSubfactionFor(territory: MapTerritory): string | null {
+    const named = territory.ownerSubfaction?.trim();
+    if (named) {
+      return named;
+    }
+
+    if (!territory.ownerFactionId) {
+      return null;
+    }
+
+    const occupying = this.forces()
+      .filter(
+        (force) =>
+          force.territoryId === territory.id &&
+          force.factionId === territory.ownerFactionId &&
+          !!force.subfaction?.trim(),
+      )
+      .map((force) => force.subfaction!.trim())
+      .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+    return occupying[0] ?? null;
   }
 
   protected flagBackground(flag: { image: string | null; tint: boolean; color: string }): string {
@@ -778,6 +828,10 @@ export class CampaignMapViewComponent {
       return;
     }
 
+    if (this.hoveredTerritoryId()) {
+      this.emitTerritoryHover(null);
+    }
+
     this.scheduleTerritoryHover(id);
   }
 
@@ -821,11 +875,10 @@ export class CampaignMapViewComponent {
     if (this.hoverIntentId === id) {
       this.clearHoverIntentTimer();
       this.hoverIntentId = undefined;
-      return;
     }
 
     if (this.hoveredTerritoryId() === id) {
-      this.scheduleTerritoryHover(null);
+      this.emitTerritoryHover(null);
     }
   }
 
@@ -854,7 +907,7 @@ export class CampaignMapViewComponent {
     }
   }
 
-  private scheduleTerritoryHover(id: string | null): void {
+  private scheduleTerritoryHover(id: string): void {
     if (this.hoverIntentId === id) {
       return;
     }
@@ -1365,34 +1418,53 @@ export class CampaignMapViewComponent {
   }
 
   private trackTooltipPosition(event: PointerEvent): void {
-    if (!this.hoverTooltip()) {
-      return;
-    }
-
     const viewport = this.viewport()?.nativeElement;
     if (!viewport) {
       return;
     }
 
     const rect = viewport.getBoundingClientRect();
-    this.pendingTooltip = {
-      x: Math.min(Math.max(event.clientX - rect.left + 12, 8), Math.max(rect.width - 8, 8)),
-      y: Math.min(Math.max(event.clientY - rect.top + 16, 8), Math.max(rect.height - 8, 8)),
-    };
+    this.lastPointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    if (!this.hoverTooltip() || this.panning()) {
+      return;
+    }
+
+    this.queueTooltipPlacement();
+  }
+
+  private queueTooltipPlacement(): void {
     if (this.tooltipFrame !== 0) {
       return;
     }
 
     this.tooltipFrame = requestAnimationFrame(() => {
       this.tooltipFrame = 0;
-      const pending = this.pendingTooltip;
-      if (!pending || this.destroyed) {
+      if (this.destroyed) {
         return;
       }
 
-      this.tooltipX.set(pending.x);
-      this.tooltipY.set(pending.y);
+      this.applyTooltipPlacement();
     });
+  }
+
+  private applyTooltipPlacement(): void {
+    const pointer = this.lastPointer;
+    const viewport = this.viewport()?.nativeElement;
+    const tip = this.hoverTip()?.nativeElement;
+    if (!pointer || !viewport || !tip || !this.hoverTooltip() || this.panning()) {
+      return;
+    }
+
+    const width = tip.offsetWidth;
+    const height = tip.offsetHeight;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+
+    const rect = viewport.getBoundingClientRect();
+    const placed = placeMapHoverTooltip(pointer.x, pointer.y, width, height, rect.width, rect.height);
+    this.tooltipX.set(placed.x);
+    this.tooltipY.set(placed.y);
   }
 
   private setFullscreen(on: boolean): void {
@@ -1595,6 +1667,10 @@ export class CampaignMapViewComponent {
       return;
     }
 
+    if (this.tryApplyFirstForceCamera()) {
+      return;
+    }
+
     if (this.fitToPanel()) {
       this.centerImage();
       return;
@@ -1664,20 +1740,75 @@ export class CampaignMapViewComponent {
   }
 
   private restoreOrFitZoom(): void {
-    const id = this.campaignId();
-    const stored = id ? readStoredMapViewZoom(id) : null;
+    const mode = this.initialCamera();
     this.clearHoverMotion();
-    if (stored && !stored.fit) {
-      this.fitToPanel.set(false);
-      this.zoom.set(clampZoom(stored.zoom));
-    } else {
-      this.fitToPanel.set(true);
+    if (mode === 'stored') {
+      const id = this.campaignId();
+      const stored = id ? readStoredMapViewZoom(id) : null;
+      if (stored && !stored.fit) {
+        this.fitToPanel.set(false);
+        this.zoom.set(clampZoom(stored.zoom));
+      } else {
+        this.fitToPanel.set(true);
+      }
+
+      this.centerImage();
+      return;
     }
 
+    if (mode === 'first-force' && this.hasAppliedInitialForceCamera) {
+      return;
+    }
+
+    this.fitToPanel.set(true);
     this.centerImage();
+    if (mode === 'first-force') {
+      this.tryApplyFirstForceCamera();
+    }
+  }
+
+  private tryApplyFirstForceCamera(): boolean {
+    if (
+      this.initialCamera() !== 'first-force' ||
+      this.hasAppliedInitialForceCamera ||
+      this.cameraTouched ||
+      this.lastCycledForceId
+    ) {
+      return false;
+    }
+
+    if (!this.imageReady()) {
+      return false;
+    }
+
+    const viewport = this.viewportSize();
+    const image = this.imageSize();
+    if (viewport.width <= 1 || viewport.height <= 1 || image.width <= 1) {
+      return false;
+    }
+
+    const mine = this.ownForces();
+    if (mine.length === 0) {
+      return false;
+    }
+
+    this.hasAppliedInitialForceCamera = true;
+    const force = mine[0];
+    this.lastCycledForceId = force.id;
+    this.armSelectionCameraSuppress();
+    this.territorySelect.emit({
+      id: force.territoryId,
+      additive: false,
+      clientX: 0,
+      clientY: 0,
+      source: 'cycle',
+    });
+    this.frameForceReach(force);
+    return true;
   }
 
   private persistZoom(): void {
+    this.cameraTouched = true;
     const id = this.campaignId();
     if (!id) {
       return;

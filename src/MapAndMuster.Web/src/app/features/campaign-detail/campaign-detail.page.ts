@@ -66,6 +66,7 @@ import type {
   PrivateObjectiveAssignment,
   PublicObjectiveLeader,
   PublicObjectiveLeaderboard,
+  RivalObjectiveAssignment,
   TraitorVictim,
   UserSearchHit,
 } from '../../core/campaigns/campaign.models';
@@ -133,7 +134,9 @@ type CampaignSection = (typeof CAMPAIGN_SECTIONS)[number];
 interface AllyGroupPlayer {
   userId: string;
   displayName: string;
-  factionLabel: string;
+  factionId: string;
+  factionName: string;
+  subfaction: string | null;
   traitorVictims: TraitorVictim[];
 }
 
@@ -161,6 +164,16 @@ interface FactionSpawnPlace {
   prefix: string;
   subfactionLabel: string;
   suffix: string;
+}
+
+interface CommitmentRosterEntry {
+  userId: string;
+  username: string | null;
+  isCommitted: boolean;
+  faction: CampaignFaction | null;
+  factionName: string | null;
+  subfaction: string | null;
+  locations: { territoryId: string; label: string }[];
 }
 
 interface OrderDraft {
@@ -443,6 +456,50 @@ export class CampaignDetailPage {
           : `${committed} of ${total} players committed. Waiting on ${waiting.join(', ')}.`,
     };
   });
+  protected readonly commitmentEntries = computed((): CommitmentRosterEntry[] => {
+    const play = this.play();
+    const campaign = this.campaign();
+    if (!play) {
+      return [];
+    }
+
+    return play.commitments
+      .map((item) => {
+        const participant = campaign?.participants?.find((member) => member.userId === item.userId);
+        const forces = play.forces.filter((force) => force.controllerUserId === item.userId);
+        const force = forces.find((entry) => firstNonEmpty(entry.subfaction) !== null) ?? forces.at(0);
+        const faction =
+          (participant ? resolveParticipantFaction(participant, campaign?.factions ?? []) : null) ??
+          (force ? (campaign?.factions.find((entry) => entry.id === force.factionId) ?? null) : null);
+        const factionName = firstNonEmpty(
+          participant?.factionName,
+          faction?.name,
+          namedFaction(force ? this.factionName(force.factionId) : null),
+        );
+        const subfaction = firstNonEmpty(participant?.subfaction, force?.subfaction);
+        const locations: CommitmentRosterEntry['locations'] = [];
+        const seen = new Set<string>();
+        for (const owned of forces) {
+          if (seen.has(owned.territoryId)) {
+            continue;
+          }
+
+          seen.add(owned.territoryId);
+          locations.push({ territoryId: owned.territoryId, label: this.territoryName(owned.territoryId) });
+        }
+
+        return {
+          userId: item.userId,
+          username: item.username,
+          isCommitted: item.isCommitted,
+          faction,
+          factionName,
+          subfaction,
+          locations,
+        };
+      })
+      .sort((left, right) => compareNames(left.username ?? left.userId, right.username ?? right.userId));
+  });
   protected readonly viewerCommitChip = computed(() => {
     const play = this.play();
     if (!play?.isParticipant || play.canChooseFaction) {
@@ -542,21 +599,24 @@ export class CampaignDetailPage {
     }
 
     const items = play.itemObjectives ?? [];
-    return play.forces.map((force) => ({
-      id: force.id,
-      territoryId: force.territoryId,
-      factionId: force.factionId,
-      subfaction: force.subfaction ?? null,
-      isMine: force.isMine,
-      inBattle: force.inBattle,
-      name: this.forceLabel(force),
-      label: `${this.forceLabel(force)} in ${this.territoryName(force.territoryId)}`,
-      heldItems: items
-        .filter((item) => item.possessorForceId === force.id)
-        .map((item) => this.toHeldMapItem(item, campaign)),
-      action: this.ownForceMapAction(force),
-      moveTargets: force.moveTargets,
-    }));
+    return play.forces.map((force) => {
+      const participant = campaign?.participants?.find((member) => member.userId === force.controllerUserId);
+      return {
+        id: force.id,
+        territoryId: force.territoryId,
+        factionId: force.factionId,
+        subfaction: force.subfaction ?? participant?.subfaction ?? null,
+        isMine: force.isMine,
+        inBattle: force.inBattle,
+        name: this.forceLabel(force),
+        label: `${this.forceLabel(force)} in ${this.territoryName(force.territoryId)}`,
+        heldItems: items
+          .filter((item) => item.possessorForceId === force.id)
+          .map((item) => this.toHeldMapItem(item, campaign)),
+        action: this.ownForceMapAction(force),
+        moveTargets: force.moveTargets,
+      };
+    });
   });
   protected readonly mapBattles = computed(() => {
     return (this.play()?.battles ?? []).map((battle) => ({
@@ -620,7 +680,7 @@ export class CampaignDetailPage {
         const players = allyGroupPlayers(campaign, factions, brokenAllyFactionIds);
         return {
           group,
-          membersLabel: formatAllyGroupFactionList(factions),
+          members: allyGroupMemberFactions(factions),
           players,
         };
       });
@@ -689,7 +749,12 @@ export class CampaignDetailPage {
     return this.visiblePrivateObjectives().filter((assignment) => isOwnPrivateAssignment(assignment, campaign, userId));
   });
   protected readonly myUnclaimedPrivateObjectives = computed(() =>
-    this.myPrivateObjectives().filter((assignment) => assignment.status === 'Assigned'),
+    this.myPrivateObjectives().filter(
+      (assignment) => assignment.status === 'Assigned' || assignment.status === 'Claimed',
+    ),
+  );
+  protected readonly myActiveRivalObjectives = computed(() =>
+    this.myRivalObjectives().filter((assignment) => assignment.status === 'Assigned'),
   );
   protected readonly othersClaimedPrivateObjectives = computed(() => {
     const campaign = this.campaign();
@@ -718,6 +783,72 @@ export class CampaignDetailPage {
     const campaign = this.campaign();
     const userId = this.auth.currentUser()?.id;
     return !!campaign && !!userId && isOwnPrivateAssignment(assignment, campaign, userId);
+  }
+  protected readonly visibleRivalObjectives = computed(
+    () => this.play()?.rivalObjectives ?? this.campaign()?.rivalObjectives ?? [],
+  );
+  protected readonly myRivalObjectives = computed(() => {
+    const userId = this.auth.currentUser()?.id;
+    if (!userId) {
+      return [];
+    }
+
+    return this.visibleRivalObjectives().filter((assignment) => assignment.holderUserId === userId);
+  });
+  protected readonly othersRevealedRivals = computed(() => {
+    const userId = this.auth.currentUser()?.id;
+    return this.visibleRivalObjectives().filter(
+      (assignment) => assignment.status === 'Revealed' && assignment.holderUserId !== userId,
+    );
+  });
+  protected rivalHolderCaption(assignment: RivalObjectiveAssignment): string {
+    const campaign = this.campaign();
+    return (
+      campaign?.participants?.find((participant) => participant.userId === assignment.holderUserId)?.displayName ??
+      'A player'
+    );
+  }
+  protected rivalTargetCaption(assignment: RivalObjectiveAssignment): string | null {
+    const identity = this.rivalIdentity(assignment);
+    if (!identity) {
+      return null;
+    }
+
+    const { name, faction, subfaction } = identity;
+    if (faction && subfaction) {
+      return `${name} (${faction} — ${subfaction})`;
+    }
+
+    if (faction) {
+      return `${name} (${faction})`;
+    }
+
+    return name;
+  }
+  private rivalIdentity(
+    assignment: RivalObjectiveAssignment,
+  ): { name: string; faction: string | null; subfaction: string | null } | null {
+    const userId = assignment.rivalUserId?.trim();
+    const participant = userId ? this.campaign()?.participants?.find((item) => item.userId === userId) : undefined;
+    const name = firstNonEmpty(assignment.rivalDisplayName, participant?.displayName, participant?.username);
+    if (!name) {
+      return null;
+    }
+
+    const force = rivalForce(this.play(), userId);
+    const standing = userId
+      ? (this.play()?.standings ?? this.campaign()?.standings ?? []).find((row) => row.userId === userId)
+      : undefined;
+    return {
+      name,
+      faction: firstNonEmpty(
+        assignment.rivalFactionName,
+        participant?.factionName,
+        namedFaction(force ? this.factionName(force.factionId) : null),
+        standing?.factionName,
+      ),
+      subfaction: firstNonEmpty(assignment.rivalSubfaction, participant?.subfaction, force?.subfaction),
+    };
   }
   protected readonly grantHolders = computed(() => {
     const campaign = this.campaign();
@@ -1340,7 +1471,7 @@ export class CampaignDetailPage {
     );
   }
 
-  private scrollElementIntoView(element: HTMLElement | undefined): void {
+  private scrollElementIntoView(element: HTMLElement | null | undefined): void {
     if (!element || typeof element.scrollIntoView !== 'function') {
       return;
     }
@@ -1521,6 +1652,68 @@ export class CampaignDetailPage {
 
   protected toggleCommitmentsRoster(): void {
     this.commitmentsRosterOpen.update((open) => !open);
+  }
+
+  protected goToFactionListing(factionId: string, event?: Event): void {
+    event?.preventDefault();
+    this.setSection('factions', true);
+    this.scrollListingIntoView(`campaign-faction-${factionId}`);
+  }
+
+  protected goToAllyGroupListing(groupId: string, event?: Event): void {
+    event?.preventDefault();
+    this.setSection('allies', true);
+    this.scrollListingIntoView(`campaign-ally-${groupId}`);
+  }
+
+  private scrollListingIntoView(elementId: string): void {
+    afterNextRender(
+      () => {
+        const element = document.getElementById(elementId);
+        if (!element) {
+          return;
+        }
+
+        const toolbar = document.querySelector('.setup-toolbar');
+        const offset = toolbar instanceof HTMLElement ? toolbar.getBoundingClientRect().height + 8 : 88;
+        const top = window.scrollY + element.getBoundingClientRect().top - offset;
+        window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      },
+      { injector: this.injector },
+    );
+  }
+
+  protected listJoin(index: number, total: number): string {
+    if (index === 0 || total <= 1) {
+      return '';
+    }
+
+    if (total === 2) {
+      return ' and ';
+    }
+
+    return index === total - 1 ? ', and ' : ', ';
+  }
+
+  protected catalogFaction(id?: string | null, name?: string | null): CampaignFaction | null {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return null;
+    }
+
+    if (id) {
+      const byId = campaign.factions.find((faction) => faction.id === id);
+      if (byId) {
+        return byId;
+      }
+    }
+
+    const trimmed = name?.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    return campaign.factions.find((faction) => faction.name === trimmed) ?? null;
   }
 
   protected goToCommitments(): void {
@@ -3252,11 +3445,17 @@ export class CampaignDetailPage {
         }
 
         const structureTypeId = overlay.structureTypeId ?? territory.structureTypeId;
+        const occupyingSubfaction =
+          play.forces.find(
+            (force) =>
+              force.territoryId === overlay.id && force.factionId === overlay.ownerFactionId && force.subfaction,
+          )?.subfaction ?? null;
         return {
           ...territory,
           ownerFactionId: overlay.ownerFactionId,
           ownerSubfaction: overlay.ownerFactionId
             ? (overlay.ownerSubfaction ??
+              occupyingSubfaction ??
               (overlay.ownerFactionId === territory.ownerFactionId ? territory.ownerSubfaction : null))
             : null,
           structureTypeId,
@@ -3897,7 +4096,17 @@ function isOwnPrivateAssignment(
   }
 
   if (assignment.holderKind === 'Faction') {
-    return assignment.holderId === campaign.factionId;
+    if (assignment.holderId !== campaign.factionId) {
+      return false;
+    }
+
+    const scoped = assignment.holderSubfaction?.trim();
+    if (!scoped) {
+      return true;
+    }
+
+    const viewerSubfaction = campaign.subfaction?.trim();
+    return !!viewerSubfaction && scoped.localeCompare(viewerSubfaction, undefined, { sensitivity: 'accent' }) === 0;
   }
 
   if (assignment.holderKind !== 'AllyGroup') {
@@ -3942,17 +4151,18 @@ function privateObjectiveHolderLabel(assignment: PrivateObjectiveAssignment, cam
   return campaign.allyGroups.find((group) => group.id === assignment.holderId)?.name ?? 'Ally group';
 }
 
-function formatAllyGroupFactionList(factions: readonly CampaignFaction[]): string {
+function allyGroupMemberFactions(
+  factions: readonly CampaignFaction[],
+): { faction: CampaignFaction; subfactions: string[] }[] {
   return [...factions]
     .sort((left, right) => compareNames(left.name, right.name))
-    .map((faction) => {
-      const subfactions = [...faction.subfactions]
+    .map((faction) => ({
+      faction,
+      subfactions: [...faction.subfactions]
         .map((name) => name.trim())
         .filter((name) => name.length > 0)
-        .sort(compareNames);
-      return subfactions.length > 0 ? `${faction.name} (${subfactions.join(', ')})` : faction.name;
-    })
-    .join(', ');
+        .sort(compareNames),
+    }));
 }
 
 function allyGroupPlayers(
@@ -3978,7 +4188,9 @@ function allyGroupPlayers(
       return {
         userId: participant.userId,
         displayName: participant.displayName,
-        factionLabel: playerFactionLabel(participant, faction),
+        factionId: faction.id,
+        factionName: firstNonEmpty(participant.factionName, faction.name) ?? faction.name,
+        subfaction: firstNonEmpty(participant.subfaction),
         traitorVictims: participant.traitorVictims ?? [],
       };
     })
@@ -4003,13 +4215,6 @@ function resolveParticipantFaction(
   }
 
   return factions.find((faction) => faction.name === name) ?? null;
-}
-
-function playerFactionLabel(participant: CampaignParticipant, faction: CampaignFaction): string {
-  const named = participant.factionName?.trim();
-  const factionName = named && named.length > 0 ? named : faction.name;
-  const subfaction = participant.subfaction?.trim();
-  return subfaction ? `${factionName}, ${subfaction}` : factionName;
 }
 
 function factionRoster(
@@ -4047,4 +4252,33 @@ function rosterPlayers(participants: readonly CampaignParticipant[]): FactionRos
   return [...participants]
     .map((participant) => ({ userId: participant.userId, displayName: participant.displayName }))
     .sort((left, right) => compareNames(left.displayName, right.displayName));
+}
+
+function rivalForce(play: CampaignPlayDetail | null | undefined, userId: string | undefined): PlayForce | undefined {
+  if (!userId) {
+    return undefined;
+  }
+
+  const forces = (play?.forces ?? []).filter((force) => force.controllerUserId === userId);
+  return forces.find((item) => firstNonEmpty(item.subfaction) !== null) ?? forces.at(0);
+}
+
+function namedFaction(name: string | null | undefined): string | null {
+  const trimmed = firstNonEmpty(name);
+  if (trimmed === 'Neutral' || trimmed === 'Unknown faction') {
+    return null;
+  }
+
+  return trimmed;
+}
+
+function firstNonEmpty(...values: (string | null | undefined)[]): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return null;
 }
