@@ -2196,8 +2196,35 @@ public sealed class CampaignPointStandingResponse
     /// <summary>Gets the sum of the five component columns.</summary>
     public required int Total { get; init; }
 
+    /// <summary>Gets labeled sources that add up to Territories and structures.</summary>
+    public IReadOnlyList<CampaignPointSourceResponse> TerritoryAndStructureSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to Battle points.</summary>
+    public IReadOnlyList<CampaignPointSourceResponse> BattleSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to Public Objectives.</summary>
+    public IReadOnlyList<CampaignPointSourceResponse> PublicObjectiveSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to Private Objectives.</summary>
+    public IReadOnlyList<CampaignPointSourceResponse> PrivateObjectiveSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to Other.</summary>
+    public IReadOnlyList<CampaignPointSourceResponse> OtherSources { get; init; } = [];
+
     /// <summary>Gets visible item objectives the player currently holds.</summary>
     public IReadOnlyList<HeldItemObjectiveResponse> HeldItems { get; init; } = [];
+}
+
+/// <summary>
+/// One labeled contribution to a campaign-point column.
+/// </summary>
+public sealed class CampaignPointSourceResponse
+{
+    /// <summary>Gets the source name.</summary>
+    public required string Label { get; init; }
+
+    /// <summary>Gets points from this source.</summary>
+    public required int Points { get; init; }
 }
 
 /// <summary>
@@ -3519,6 +3546,11 @@ public static class CampaignResponses
             PrivateObjectivePoints = standing.PrivateObjectivePoints,
             OtherPoints = standing.OtherPoints,
             Total = standing.Total,
+            TerritoryAndStructureSources = FromSources(standing.TerritoryAndStructureSources),
+            BattleSources = FromSources(standing.BattleSources),
+            PublicObjectiveSources = FromSources(standing.PublicObjectiveSources),
+            PrivateObjectiveSources = FromSources(standing.PrivateObjectiveSources),
+            OtherSources = FromSources(standing.OtherSources),
             HeldItems =
             [
                 .. standing.HeldItems.Select(static item => new HeldItemObjectiveResponse
@@ -3531,6 +3563,19 @@ public static class CampaignResponses
                 }),
             ],
         };
+    }
+
+    private static IReadOnlyList<CampaignPointSourceResponse> FromSources(
+        IReadOnlyList<MapAndMuster.Domain.Play.CampaignPointSource> sources)
+    {
+        return
+        [
+            .. sources.Select(static source => new CampaignPointSourceResponse
+            {
+                Label = source.Label,
+                Points = source.Points,
+            }),
+        ];
     }
 
     /// <summary>

@@ -1662,6 +1662,21 @@ public sealed class CampaignPointStandingDetail
     /// <summary>Gets the sum of the five component columns.</summary>
     public required int Total { get; init; }
 
+    /// <summary>Gets labeled sources that add up to Territories and structures.</summary>
+    public IReadOnlyList<CampaignPointSource> TerritoryAndStructureSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to Battle points.</summary>
+    public IReadOnlyList<CampaignPointSource> BattleSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to Public Objectives.</summary>
+    public IReadOnlyList<CampaignPointSource> PublicObjectiveSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to Private Objectives.</summary>
+    public IReadOnlyList<CampaignPointSource> PrivateObjectiveSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to Other.</summary>
+    public IReadOnlyList<CampaignPointSource> OtherSources { get; init; } = [];
+
     /// <summary>Gets visible item objectives the player currently holds.</summary>
     public IReadOnlyList<HeldItemObjectiveDetail> HeldItems { get; init; } = [];
 }

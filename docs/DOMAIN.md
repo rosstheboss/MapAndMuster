@@ -204,10 +204,13 @@ Chaos require a subfaction.
 Named Hunt effect keys the engine enforces or calculates (matched by key, not display name).
 Faction and subfaction force movement speed (default 1; Kingdom of Bretonnia preset is 2) is how
 many adjacent territories a force may Move or Split in one action. Held item effects can add more.
-The order names the destination and, when more than one legal route exists, the territory moved
-through. An enemy on the path stops the force there for battle. Intermediate hops are not claimed;
-only the landing territory is. The route cannot enter another faction's spawn. Same-player split
-forces rejoin when they occupy the same territory.
+The order names the destination and each territory moved through. When the destination is not
+adjacent, the player selects every hop on the map, including when only one legal route exists.
+An enemy on the path stops the force there for battle. Allied forces do not interrupt a
+move through their territory. Intermediate hops are not claimed; only the landing territory is.
+The route may pass through the moving force's own spawn but cannot enter another faction's spawn,
+and a Move or Split cannot land on any spawn. Same-player split forces rejoin when they occupy
+the same territory.
 
 - `Slavers`: each owned unpillaged Town or City grants one extra map supply point.
 - `DividedWeStand`: daemon-god subfactions of the same faction count as allies and may backstab
@@ -236,10 +239,13 @@ forces rejoin when they occupy the same territory.
   Town or City pick.
 - `CalledByTheRelic`: while a revealed, non-destroyed item objective exists and no force of this
   faction holds an item, every force of the faction gains +1 movement speed. When any force of the
-  faction holds an item, the speed bonus ends. The same key also refuses Shaken, Exhausted,
-  Diseased, Well Rested, and Confident. The +2 casting or dispelling reminder for a holder is
-  catalog text (and `RelicOfAPastAge` when assigned).
-- `Undead`: never Shaken, Exhausted, Diseased, Well Rested, or Confident.
+  faction holds an item, the speed bonus ends. If they later lose that item, the bonus returns
+  while a revealed item still exists. Hunt assigns this to Tomb Kings of Khemri. The same key also
+  refuses any named force status so older Hunt campaigns that only had this rule stay immune. The
+  +2 casting or dispelling reminder is `RelicOfAPastAge` catalog text when assigned.
+- `Undead`: never any named force status (Normal is allowed). Hunt assigns this to Vampire Counts
+  and Tomb Kings of Khemri. Catalog text names Shaken, Exhausted, Diseased, Well Rested, and
+  Confident.
 - `NorthernRaiders`: Pillage awards at least two temporary supply points.
 - `PreparedForBattle`: on a battle result, the player may declare Extra Black Powder; that spends
   one extra supply point for the battle.
@@ -273,8 +279,7 @@ priority number remains. If the incoming status lists the current (or simultaneo
 cancel-out, both are removed and the force has no status. Exhausted cancels Well Rested in the
 standard catalog, so a Well Rested force that would become Exhausted has no status instead.
 Effect text is display-only; the app does not resolve tabletop modifiers. Named effect
-keys can refuse a status: `Undead` and `CalledByTheRelic` never Shaken, Exhausted, Diseased, Well
-Rested, or Confident;
+keys can refuse a status: `Undead` and `CalledByTheRelic` never any named force status;
 `BringersOfThePlague` never Diseased or Well Rested; `ToughGuts` never Diseased.
 
 Named Diseased keeps engine behavior only for contagion, rejoin, plague-bearing wins, and immunity.
@@ -322,7 +327,8 @@ panel lists every player occupying a slot. Upcoming campaigns omit this panel. D
 highest total to lowest, then display name. Columns are display name
 (with currently held visible item-objective logos), faction logo, alliance group, Territories and structures,
 Battle points, Public Objectives, Private Objectives, Other, and Total. The five point
-columns sum to Total. The table sorts by any of those columns. Territories and structures is the
+columns sum to Total. Hovering a numeric points cell lists that column's sources and that cell's
+total; hovering Total lists every source and the grand total. The table sorts by any of those columns. Territories and structures is the
 current holdings: campaign points from currently owned non-destroyed structures, plus configured
 campaign points for each currently owned territory (optional terrain tag). Battle points are cumulative campaign points from
 resolved battles: by default the score differential (winner minus loser, times a multiplier,
@@ -547,7 +553,9 @@ Orders resolve simultaneously against the window's starting map state. Processin
 movement and splits, then backstab alliance breaks, then battles from enemy co-location, then
 `Build`, `Pillage`, and `Repair` for forces that are not in battle. An invalid `Move`, `Split`,
 `Build`, `Pillage`, `Repair`, or `Backstab` becomes `Hold`. A force may not enter or claim
-another faction's spawn. After movement, enemy forces that occupy the same territory create a
+another faction's spawn. A Move or Split may pass through the force's own spawn but cannot land
+on any spawn; a forced retreat may still use that force's spawn as a destination. After movement,
+enemy forces that occupy the same territory create a
 battle; later action slots for those forces become `Battle`. Same-player forces that share a
 territory rejoin. Uncontested occupation claims a non-spawn territory and plants that faction's
 flag, or the required subfaction's flag or logo when the claiming force's faction requires a
@@ -565,14 +573,17 @@ same territory and competing arrivals, become `Hold` rather than an invented win
 Player-submittable actions in an open action window are listed in this order:
 
 - `Hold`: remain and receive applicable resting effects.
-- `Move`: travel to an allowed adjacent territory; invalid move becomes Hold. Each force has a
-  movement speed of how many adjacent territories it may traverse in one action (default 1).
-  Kingdom of Bretonnia's preset speed is 2. Item objectives can add speed. `CalledByTheRelic` adds
-  +1 speed while a revealed item exists and no force of that faction holds an item. Only the final
-  destination is claimed. When several routes exist, the player names the territory to move through.
-  `ConduitsOfPower` can add destinations after a relic is involved.
-- `Teleport`: available while holding an item that grants a random empty non-spawn teleport. The
-  destination is chosen at resolution from unoccupied non-spawn territories.
+- `Move`: travel along a legal path of one or more adjacent territories up to the force's
+  movement speed; invalid move becomes Hold. Each force has a movement speed of how many adjacent
+  territories it may traverse in one action (default 1). Kingdom of Bretonnia's preset speed is 2.
+  Item objectives can add speed. `CalledByTheRelic` adds +1 speed while a revealed item exists and
+  no force of that faction holds an item. Only the final destination is claimed. When several
+  routes exist, the player names the territory to move through. An enemy on an intermediate
+  territory stops the force there; allies do not. A Move cannot land on a spawn. `ConduitsOfPower`
+  can add destinations after a relic is involved.
+- `Teleport`: available while holding an item that grants teleport. A random empty-non-spawn
+  effect picks an unoccupied non-spawn territory at resolution. A once-per-round chosen-non-spawn
+  effect lets the player pick any non-spawn territory, including occupied land, once each round.
 - `Build`: create an allowed structure in a non-spawn territory that has no intact structure.
   Only structure types flagged buildable may be chosen. Town, Capital City, City, and Castle
   start not buildable; Supply Depot and Fortification start buildable.
@@ -708,8 +719,9 @@ allowance plus the round bonus, then from the player's temporary pool.
 ## Territory and structures
 
 - Adjacency is a graph edge, not an assumption based only on touching pixels.
-- Spawn locations prohibit enemy entry, battle, construction, and capture. The spawn faction's
-  flag is always present there.
+- Spawn locations prohibit enemy entry, battle, construction, and capture. A force may pass
+  through its own spawn during a multi-territory Move but cannot land on any spawn except as a
+  forced retreat to its own spawn. The spawn faction's flag is always present there.
 - A faction that controls a non-spawn territory displays its flag there. Neutral means no
   faction owns the territory.
 - At most one structure occupies a territory under the supplied rules.
@@ -906,7 +918,12 @@ fits the screen. Your force pins show a green-and-white check emblem half the pi
 on the circular pin's top-right edge so half of it overlaps the pin, when that force has a saved
 draft or a committed order.
 Hovering the pin names the action and whether it is draft or
-committed. Selecting a territory or group from outside the map (the
+committed. After a Move, Split, or Retreat is drafted or committed, one-way black arrows mark each
+hop from the force's current territory to the destination. Those arrows use the same size and
+placement as connection arrows, with a single head pointing at the next territory. A multi-territory
+move draws one arrow per hop rather than a single arrow skipping intermediate territories. They are
+visible only to the player who issued the order, or to a GM or administrator in Debug.
+Selecting a territory or group from outside the map (the
 directory, campaign links, or the map editor list) pans to center that selection as far as image
 bounds allow. Zoom changes only when the current scale cannot show the whole selection, and never
 zooms out past Fit. The first time a map view
@@ -967,8 +984,10 @@ parentheses, alphabetically, as `Subfaction: Territory`. Factions with no specif
 parenthetical. Each faction lists its special rules, then the players currently taking that faction
 without a subfaction, then each named subfaction with that subfaction's special rules and the players
 taking it. Choosing a faction (or subfaction) on the campaign page also lists those special rules
-under the selector, and the Actions panel repeats the viewer's faction powers with the power names
-in bold. Faction and ally-group names elsewhere on the campaign page link to that faction's listing
+under the selector, including on scheduled upcoming campaigns before play has started, and the
+Actions panel repeats the viewer's faction powers with the power names in bold. The campaign page,
+Edit campaign, and map editor each end with a Back to top control that scrolls to the page start.
+Faction and ally-group names elsewhere on the campaign page link to that faction's listing
 in Factions or that group's listing in Ally groups, scrolling the listing name into view below the
 sticky campaign toolbar. The campaign page Ally groups section lists groups alphabetically. Each group name is a map-focus
 control, followed by the current player count in parentheses, then its member factions in
@@ -1140,10 +1159,11 @@ traitor (a player who successfully resolved Backstab). A player may score each c
 once. Unrevealed text and criteria are omitted from unauthorized payloads. The campaign page lists the
 viewer's own private objectives at the top of Private objectives and reiterates still-unclaimed
 ones in Summary, including Traitor-held assignments and the viewer's active secret rival, with automatic assignments showing live progress as `(current/required)` next to
-the description. Other players' claimed or revealed private objectives appear in a collapsed
+the description and each listed private objective showing its award as `(X CP)`. Other players' claimed or revealed private objectives appear in a collapsed
 subpanel ordered by faction name. Unclaimed private objectives for other holders are not listed.
 When rival objectives are enabled, the viewer's secret rival is listed with their private
-objectives and in Summary, showing the rival's name, faction, and subfaction when one is selected, and revealed rival victories appear in the claimed subpanel. Catalog entries may
+objectives and in Summary, showing the rival's name, faction, and subfaction when one is selected,
+with the award as `(5 CP)`, and revealed rival victories appear in the claimed subpanel. Catalog entries may
 exclude factions and ally groups as described in campaign setup. Manual private objectives are claimed by an authorized holder (the player, or any
 player in that faction or ally group) who reveals them to a manager. A manager or administrator
 approves the claim to reveal it publicly and add its points, or denies it so the holder may
@@ -1183,11 +1203,12 @@ omitted from standings. A replacement item, when configured, appears with the po
 the same territory and uses that catalog type's own flavor, choices, and special rules.
 An item type may also list parameterized effects that apply while a force holds it, including
 several at once: push a defeated opponent to spawn; add movement speed; add or subtract map
-supply (never below 1); teleport to a random empty non-spawn territory; inflict a status while
-held; grant immunity to all or listed statuses; inflict statuses on forces sharing the territory;
-nullify adjacent item objectives; add army points by amount or percent of the round cap; suspend
-the holder's ally group and/or force extra alliances; or custom display-only battle reminder
-text that the map engine does not execute.
+supply (never below 1); teleport to a random empty non-spawn territory; teleport once per round
+to a player-chosen non-spawn territory; inflict a status while held; grant immunity to all or
+listed statuses; inflict statuses on forces sharing the territory; nullify adjacent item
+objectives; add army points by amount or percent of the round cap; suspend the holder's ally
+group and/or force extra alliances; or custom display-only battle reminder text that the map
+engine does not execute.
 
 ## Corrections
 

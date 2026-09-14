@@ -179,10 +179,8 @@ export const OLD_WORLD_SPECIAL_RULES: readonly SpecialRulePreset[] = [
     name: 'Called by the Relic',
     effectKey: 'CalledByTheRelic',
     description:
-      'If a Relic is found but no Tomb Kings players owns a Relic, Tomb Kings forces gain an extra movement speed. ' +
-      'If a Tomb Kings force has a Relic, all Tomb Kings forces lose the speed bonus but that force may gain +2 to a ' +
-      'casting or dispelling roll once per battle (even on a Fated Dispel or Bound spell). Tomb Kings do not suffer from ' +
-      'being Shaken, Exhausted, or Diseased, but also are never Well Rested or Confident.',
+      'If a Relic is found, the Tomb Kings players gain an extra movement speed on the map until they captured a Relic. ' +
+      'If they lose the Relic, then they gain back the extra movement speed.',
   },
   {
     name: 'Relic of a Past Age',
@@ -194,7 +192,7 @@ export const OLD_WORLD_SPECIAL_RULES: readonly SpecialRulePreset[] = [
     name: 'Undead',
     effectKey: 'Undead',
     description:
-      'Vampire Counts do not suffer from being Shaken, Exhausted, or Diseased, but also are never Well Rested or Confident.',
+      'Undead forces do not suffer from being Shaken, Exhausted, or Diseased, but also are never Well Rested or Confident.',
   },
   {
     name: 'Fresh Corpses',
@@ -236,7 +234,7 @@ export const OLD_WORLD_FACTION_SPECIAL_RULES: Readonly<Record<string, readonly s
   'Orc & Goblin Tribes': ['The Green Tide'],
   'Renegade Crowns': ['Defenders of the Homeland', 'The Great City of Magritta'],
   Skaven: ['The Underground Network'],
-  'Tomb Kings of Khemri': ['Called by the Relic'],
+  'Tomb Kings of Khemri': ['Called by the Relic', 'Undead'],
   'Vampire Counts': ['Fresh Corpses', 'Undead'],
   'Warriors of Chaos': ['Northern Raiders'],
   'Wood Elf Realms': ['Navigators of the Forests', 'Healed by Nature'],

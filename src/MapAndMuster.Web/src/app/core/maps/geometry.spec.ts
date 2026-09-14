@@ -2,6 +2,7 @@ import {
   adjacentTerritoryIds,
   adjacencyArrowEndpoints,
   adjacencyArrowGeometry,
+  directedArrowGeometry,
   findConnection,
   generateAdjacencies,
 } from './adjacency';
@@ -214,6 +215,14 @@ describe('map geometry', () => {
     const geometry = adjacencyArrowGeometry(ends.from, ends.to, 0.02);
     expect(geometry.x1).toBe(ends.from.x);
     expect(geometry.x2).toBe(ends.to.x);
+    const directed = directedArrowGeometry(ends.from, ends.to, 0.02);
+    expect(directed).toEqual({
+      x1: geometry.x1,
+      y1: geometry.y1,
+      x2: geometry.x2,
+      y2: geometry.y2,
+      head: geometry.headB,
+    });
   });
 
   it('keeps adjacent connection arrows from crossing', () => {

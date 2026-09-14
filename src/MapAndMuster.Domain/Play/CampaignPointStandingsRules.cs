@@ -116,6 +116,7 @@ public static class CampaignPointStandingsRules
 
         var heldItemsByPlayer = new Dictionary<Guid, List<Guid>>();
         var otherByPlayer = new Dictionary<Guid, int>();
+        var otherSourcesByPlayer = new Dictionary<Guid, List<CampaignPointSource>>();
         foreach (var item in state.VisibleItems)
         {
             if (item.IsDestroyed
@@ -127,6 +128,16 @@ public static class CampaignPointStandingsRules
 
             var points = itemPoints.GetValueOrDefault(item.TypeId);
             otherByPlayer[possessor.ControllerUserId] = otherByPlayer.GetValueOrDefault(possessor.ControllerUserId) + points;
+            if (!otherSourcesByPlayer.TryGetValue(possessor.ControllerUserId, out var otherSources))
+            {
+                otherSources = [];
+                otherSourcesByPlayer[possessor.ControllerUserId] = otherSources;
+            }
+
+            AddSource(
+                otherSources,
+                NameOrDefault(state.ItemNames, item.TypeId, "Item objective"),
+                points);
             if (!heldItemsByPlayer.TryGetValue(possessor.ControllerUserId, out var held))
             {
                 held = [];
@@ -184,6 +195,7 @@ public static class CampaignPointStandingsRules
         {
             var capture = unfilteredStructurePointsByPlayer.GetValueOrDefault(player.UserId);
             var publicTotal = 0;
+            var publicSources = new List<CampaignPointSource>();
             foreach (var (playerId, objectiveId) in activeAwards)
             {
                 if (playerId != player.UserId)
@@ -195,6 +207,7 @@ public static class CampaignPointStandingsRules
                 if (awarded > 0)
                 {
                     publicTotal += awarded;
+                    AddSource(publicSources, NamedPublicLabel(state, objectiveId), awarded);
                 }
             }
 
@@ -203,6 +216,7 @@ public static class CampaignPointStandingsRules
                 && territoryCountByPlayer.GetValueOrDefault(player.UserId) > 0)
             {
                 publicTotal += ranking.MostTerritories;
+                AddSource(publicSources, "Most territories", ranking.MostTerritories);
             }
 
             if (ranking.LongestTerritoryChain > 0
@@ -210,6 +224,7 @@ public static class CampaignPointStandingsRules
                 && chainByPlayer.GetValueOrDefault(player.UserId) > 0)
             {
                 publicTotal += ranking.LongestTerritoryChain;
+                AddSource(publicSources, "Longest territory chain", ranking.LongestTerritoryChain);
             }
 
             if (ranking.MostBattlesWon > 0
@@ -217,6 +232,7 @@ public static class CampaignPointStandingsRules
                 && winsByPlayer.GetValueOrDefault(player.UserId) > 0)
             {
                 publicTotal += ranking.MostBattlesWon;
+                AddSource(publicSources, "Most battles won", ranking.MostBattlesWon);
             }
 
             if (ranking.MostStructurePoints > 0
@@ -224,34 +240,90 @@ public static class CampaignPointStandingsRules
                 && structurePointsByPlayer.GetValueOrDefault(player.UserId) > 0)
             {
                 publicTotal += ranking.MostStructurePoints;
+                AddSource(publicSources, "Most structure points", ranking.MostStructurePoints);
             }
 
             if (ranking.AlliedRelicControlPoints > 0)
             {
-                publicTotal += ranking.AlliedRelicControlPoints * AlliedRelicCount(player, state, forcesById);
+                var alliedRelicPoints = ranking.AlliedRelicControlPoints
+                    * AlliedRelicCount(player, state, forcesById);
+                publicTotal += alliedRelicPoints;
+                AddSource(publicSources, "Allied relic control", alliedRelicPoints);
             }
 
-            var territoryTotal = capture
-                + ranking.PointsPerTerritory * pointsPerTerritoryCountByPlayer.GetValueOrDefault(player.UserId);
+            var perTerritoryPoints = ranking.PointsPerTerritory
+                * pointsPerTerritoryCountByPlayer.GetValueOrDefault(player.UserId);
+            var territoryTotal = capture + perTerritoryPoints;
+            var territorySources = new List<CampaignPointSource>();
+            foreach (var territory in territoriesByPlayer.GetValueOrDefault(player.UserId) ?? [])
+            {
+                if (territory.StructureTypeId is not { } structureId
+                    || territory.StructureCondition == StructureCondition.Destroyed)
+                {
+                    continue;
+                }
 
+                AddSource(
+                    territorySources,
+                    NameOrDefault(state.StructureNames, structureId, "Structures"),
+                    structurePoints.GetValueOrDefault(structureId));
+            }
+
+            AddSource(territorySources, "Campaign points per territory", perTerritoryPoints);
+
+            var extraBattlePoints = state.ExtraBattleReportPoints.GetValueOrDefault(player.UserId);
+            var battleTotal = battlePointsByPlayer.GetValueOrDefault(player.UserId);
+            var battleSources = new List<CampaignPointSource>();
+            AddSource(battleSources, "Resolved battles", battleTotal - extraBattlePoints);
+            AddSource(battleSources, "Battle reports", extraBattlePoints);
+
+            var allyGroupId = player.FactionId is { } playerFaction
+                ? state.AllyGroupByFaction.GetValueOrDefault(playerFaction)
+                : null;
             var privateTotal = PrivateObjectiveRules.PointsForPlayer(
                 state.PrivateObjectives,
                 state.PrivateObjectivePoints,
                 player.UserId,
                 player.FactionId,
-                player.FactionId is { } playerFaction
-                    ? state.AllyGroupByFaction.GetValueOrDefault(playerFaction)
-                    : null,
+                allyGroupId,
                 player.Subfaction);
+            var privateSources = new List<CampaignPointSource>();
+            foreach (var assignment in state.PrivateObjectives)
+            {
+                if (!PrivateObjectiveRules.CountsForPlayer(
+                    assignment,
+                    player.UserId,
+                    player.FactionId,
+                    allyGroupId,
+                    player.Subfaction))
+                {
+                    continue;
+                }
+
+                AddSource(
+                    privateSources,
+                    NameOrDefault(state.PrivateObjectiveNames, assignment.TypeId, "Private objective"),
+                    state.PrivateObjectivePoints.GetValueOrDefault(assignment.TypeId));
+            }
+
+            var rivalPoints = RivalObjectiveRules.PointsForPlayer(state.RivalObjectives, player.UserId);
+            AddSource(privateSources, "Secret rival", rivalPoints);
 
             standings.Add(new CampaignPointStanding(
                 player.UserId,
                 territoryTotal,
-                battlePointsByPlayer.GetValueOrDefault(player.UserId),
+                battleTotal,
                 publicTotal,
-                privateTotal + RivalObjectiveRules.PointsForPlayer(state.RivalObjectives, player.UserId),
+                privateTotal + rivalPoints,
                 otherByPlayer.GetValueOrDefault(player.UserId),
-                heldItemsByPlayer.GetValueOrDefault(player.UserId) ?? []));
+                heldItemsByPlayer.GetValueOrDefault(player.UserId) ?? [])
+            {
+                TerritoryAndStructureSources = territorySources,
+                BattleSources = battleSources,
+                PublicObjectiveSources = publicSources,
+                PrivateObjectiveSources = privateSources,
+                OtherSources = otherSourcesByPlayer.GetValueOrDefault(player.UserId) ?? [],
+            });
         }
 
         return new CampaignPointStandingsResult
@@ -405,6 +477,43 @@ public static class CampaignPointStandingsRules
         }
 
         return total;
+    }
+
+    private static void AddSource(List<CampaignPointSource> sources, string label, int points)
+    {
+        if (points == 0)
+        {
+            return;
+        }
+
+        for (var index = 0; index < sources.Count; index++)
+        {
+            if (string.Equals(sources[index].Label, label, StringComparison.Ordinal))
+            {
+                sources[index] = sources[index] with { Points = sources[index].Points + points };
+                return;
+            }
+        }
+
+        sources.Add(new CampaignPointSource(label, points));
+    }
+
+    private static string NameOrDefault(IReadOnlyDictionary<Guid, string> names, Guid id, string fallback)
+    {
+        return names.TryGetValue(id, out var name) && !string.IsNullOrWhiteSpace(name) ? name : fallback;
+    }
+
+    private static string NamedPublicLabel(CampaignPointScoringState state, Guid objectiveId)
+    {
+        foreach (var named in state.NamedPublicObjectives)
+        {
+            if (named.Id == objectiveId && !string.IsNullOrWhiteSpace(named.Name))
+            {
+                return named.Name;
+            }
+        }
+
+        return "Public objective";
     }
 
     private static int AlliedRelicCount(
@@ -741,6 +850,16 @@ public sealed class CampaignPointScoringState
     /// </summary>
     public IReadOnlyDictionary<Guid, int> ExtraBattleReportPoints { get; init; } =
         new Dictionary<Guid, int>();
+
+    /// <summary>Gets display names for structure types used in standings source lists.</summary>
+    public IReadOnlyDictionary<Guid, string> StructureNames { get; init; } = new Dictionary<Guid, string>();
+
+    /// <summary>Gets display names for item-objective types used in standings source lists.</summary>
+    public IReadOnlyDictionary<Guid, string> ItemNames { get; init; } = new Dictionary<Guid, string>();
+
+    /// <summary>Gets display names for private-objective types used in standings source lists.</summary>
+    public IReadOnlyDictionary<Guid, string> PrivateObjectiveNames { get; init; } =
+        new Dictionary<Guid, string>();
 }
 
 /// <summary>
@@ -804,4 +923,26 @@ public sealed record CampaignPointStanding(
     /// <summary>Gets the sum of the five component columns.</summary>
     public int Total =>
         TerritoryAndStructurePoints + BattlesWonPoints + PublicObjectivePoints + PrivateObjectivePoints + OtherPoints;
+
+    /// <summary>Gets labeled sources that add up to <see cref="TerritoryAndStructurePoints"/>.</summary>
+    public IReadOnlyList<CampaignPointSource> TerritoryAndStructureSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to <see cref="BattlesWonPoints"/>.</summary>
+    public IReadOnlyList<CampaignPointSource> BattleSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to <see cref="PublicObjectivePoints"/>.</summary>
+    public IReadOnlyList<CampaignPointSource> PublicObjectiveSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to <see cref="PrivateObjectivePoints"/>.</summary>
+    public IReadOnlyList<CampaignPointSource> PrivateObjectiveSources { get; init; } = [];
+
+    /// <summary>Gets labeled sources that add up to <see cref="OtherPoints"/>.</summary>
+    public IReadOnlyList<CampaignPointSource> OtherSources { get; init; } = [];
 }
+
+/// <summary>
+/// One labeled contribution to a campaign-point column.
+/// </summary>
+/// <param name="Label">The source name.</param>
+/// <param name="Points">Points from this source.</param>
+public readonly record struct CampaignPointSource(string Label, int Points);

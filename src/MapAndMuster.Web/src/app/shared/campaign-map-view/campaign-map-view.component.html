@@ -267,6 +267,20 @@
                 </g>
               </g>
             }
+
+            @for (item of overlayOrderRoutes(); track item.id) {
+              <g class="order-route" [attr.aria-label]="item.label">
+                <line
+                  class="order-route-line"
+                  [attr.x1]="item.geometry.x1"
+                  [attr.y1]="item.geometry.y1"
+                  [attr.x2]="item.geometry.x2"
+                  [attr.y2]="item.geometry.y2"
+                  [attr.stroke-width]="item.strokeWidth"
+                />
+                <polygon class="order-route-head" [attr.points]="item.geometry.head" />
+              </g>
+            }
           </svg>
           @if (showOverlay()) {
             @for (item of territoryLayouts(); track item.territory.id) {

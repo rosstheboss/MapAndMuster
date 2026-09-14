@@ -578,21 +578,40 @@ public static class CampaignPlayRules
 
         if (kind == ActionKind.Teleport)
         {
-            if (!ItemObjectiveEffectRules.CanTeleport(force, map, state.ItemObjectives, rules)
-                || ItemObjectiveEffectRules.TeleportDestinations(map, state.Forces).Count == 0)
+            var round = window.RoundNumber;
+            if (!ItemObjectiveEffectRules.HasAvailableTeleport(
+                force,
+                map,
+                state.ItemObjectives,
+                rules,
+                state.Forces,
+                round))
             {
                 error = new DomainError("order.teleport.invalid", "Teleport is not available for this force.", "kind");
                 return false;
             }
+
+            if (ItemObjectiveEffectRules.CanChosenTeleport(force, map, state.ItemObjectives, rules, round)
+                && !ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
+                    force,
+                    map,
+                    state.ItemObjectives,
+                    rules,
+                    round,
+                    targetTerritoryId))
+            {
+                error = new DomainError("order.target.required", "Choose a non-spawn teleport destination.", "targetTerritoryId");
+                return false;
+            }
         }
 
-        if (kind is ActionKind.Move or ActionKind.Split or ActionKind.Retreat
-            && targetTerritoryId is { } destinationId)
+        if (kind is ActionKind.Move or ActionKind.Split
+            && targetTerritoryId is { } moveDestinationId)
         {
-            var destination = map.Territory(destinationId);
-            if (destination is not null && FactionSpecialRulePolicies.IsEnemySpawn(destination, force))
+            var destination = map.Territory(moveDestinationId);
+            if (destination is not null && destination.IsSpawn)
             {
-                error = new DomainError("order.spawn.forbidden", "A force cannot enter another faction's spawn.", "targetTerritoryId");
+                error = new DomainError("order.spawn.forbidden", "A force cannot move into a spawn territory.", "targetTerritoryId");
                 return false;
             }
         }
@@ -4234,7 +4253,8 @@ public static class CampaignPlayRules
                 force.ConsecutiveWaterActions,
                 force.EnableStreaks,
                 force.ClearStreaks,
-                force.ClearStreak))],
+                force.ClearStreak,
+                force.LastChosenTeleportRound))],
             state.Structures,
             state.BrokenAllyFactionIds,
             [.. map.Territories.Select(static territory => new TerritorySnapshot(

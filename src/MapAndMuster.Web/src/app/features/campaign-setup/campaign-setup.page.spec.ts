@@ -78,6 +78,7 @@ describe('CampaignSetupPage', () => {
     expect(compiled.querySelector('.setup-toolbar')?.textContent).toContain('Collapse All');
     expect(compiled.querySelector('.setup-toolbar button.button')?.textContent).toContain('Create campaign');
     expect(compiled.querySelector('.setup-toolbar')?.textContent).not.toContain('Save as Preset');
+    expect(compiled.querySelector('app-back-to-top')?.textContent).toContain('Back to top');
     expect(compiled.querySelector('a[href$="/map"]')).toBeNull();
     expect(compiled.querySelector('#add-catalog-mission')).toBeTruthy();
     expect(compiled.querySelector('#name')).toBeTruthy();
@@ -1501,6 +1502,7 @@ describe('CampaignSetupPage edit', () => {
     expect(toolbar?.textContent).toContain('Upload Preset');
     expect(toolbar?.textContent).toContain('Clear Unsaved Changes');
     expect(toolbar?.textContent).toContain('End campaign');
+    expect(compiled.querySelector('app-back-to-top')?.textContent).toContain('Back to top');
     const save = [...(toolbar?.querySelectorAll('button') ?? [])].find(
       (button) => button.textContent.trim() === 'Save campaign',
     );

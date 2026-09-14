@@ -105,7 +105,8 @@ public sealed class CampaignForce
         int consecutiveWaterActions = 0,
         IReadOnlyDictionary<string, int>? enableStreaks = null,
         IReadOnlyDictionary<string, int>? clearStreaks = null,
-        int clearStreak = 0)
+        int clearStreak = 0,
+        int lastChosenTeleportRound = 0)
     {
         Id = id;
         ControllerUserId = controllerUserId;
@@ -118,6 +119,7 @@ public sealed class CampaignForce
         EnableStreaks = NormalizeStreaks(enableStreaks);
         ClearStreaks = NormalizeStreaks(clearStreaks);
         ClearStreak = Math.Clamp(clearStreak, 0, 10);
+        LastChosenTeleportRound = Math.Max(0, lastChosenTeleportRound);
     }
 
     /// <summary>Gets the force identifier.</summary>
@@ -160,6 +162,11 @@ public sealed class CampaignForce
     public int ClearStreak { get; }
 
     /// <summary>
+    /// Gets the round number when this force last used a chosen item-objective teleport, or 0.
+    /// </summary>
+    public int LastChosenTeleportRound { get; }
+
+    /// <summary>
     /// Returns a copy with a new location, battle flag, water-occupation streak, or trigger streaks.
     /// Status and subfaction are preserved.
     /// </summary>
@@ -169,7 +176,8 @@ public sealed class CampaignForce
         int? consecutiveWaterActions = null,
         IReadOnlyDictionary<string, int>? enableStreaks = null,
         IReadOnlyDictionary<string, int>? clearStreaks = null,
-        int? clearStreak = null)
+        int? clearStreak = null,
+        int? lastChosenTeleportRound = null)
     {
         return new CampaignForce(
             Id,
@@ -182,7 +190,8 @@ public sealed class CampaignForce
             consecutiveWaterActions ?? ConsecutiveWaterActions,
             enableStreaks ?? EnableStreaks,
             clearStreaks ?? ClearStreaks,
-            clearStreak ?? ClearStreak);
+            clearStreak ?? ClearStreak,
+            lastChosenTeleportRound ?? LastChosenTeleportRound);
     }
 
     /// <summary>
@@ -203,7 +212,8 @@ public sealed class CampaignForce
             ConsecutiveWaterActions,
             EnableStreaks,
             same ? ClearStreaks : new Dictionary<string, int>(),
-            same ? ClearStreak : 0);
+            same ? ClearStreak : 0,
+            LastChosenTeleportRound);
     }
 
     /// <summary>
@@ -222,7 +232,8 @@ public sealed class CampaignForce
             ConsecutiveWaterActions,
             EnableStreaks,
             ClearStreaks,
-            ClearStreak);
+            ClearStreak,
+            LastChosenTeleportRound);
     }
 
     private static Dictionary<string, int> NormalizeStreaks(IReadOnlyDictionary<string, int>? streaks)

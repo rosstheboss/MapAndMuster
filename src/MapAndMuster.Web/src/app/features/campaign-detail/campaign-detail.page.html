@@ -384,7 +384,7 @@
                         }
                       </select>
                     </div>
-                    @if (draftFor(force.id).kind === 'Move' || draftFor(force.id).kind === 'Split') {
+                    @if (needsDraftDestination(force, draftFor(force.id).kind)) {
                       <div class="field grow">
                         <label [attr.for]="'target-' + force.id">Destination</label>
                         <select
@@ -394,12 +394,15 @@
                           [name]="'target-' + force.id"
                         >
                           <option value="">Select a territory</option>
-                          @for (target of force.moveTargets; track target) {
+                          @for (target of destinationTargets(force, draftFor(force.id).kind); track target) {
                             <option [value]="target">{{ territoryName(target) }}</option>
                           }
                         </select>
                       </div>
-                      @if (viasForDestination(force, draftFor(force.id).targetTerritoryId).length > 1) {
+                      @if (
+                        draftFor(force.id).kind !== 'Teleport' &&
+                        needsViaChoice(force, draftFor(force.id).targetTerritoryId)
+                      ) {
                         <div class="field grow">
                           <label [attr.for]="'via-' + force.id">Move through</label>
                           <select
@@ -1355,12 +1358,56 @@
                           {{ row.allyGroupName || '—' }}
                         }
                       </td>
-                      <td>{{ row.territoryAndStructurePoints }}</td>
-                      <td>{{ row.battlesWonPoints }}</td>
-                      <td>{{ row.publicObjectivePoints }}</td>
-                      <td>{{ row.privateObjectivePoints ?? 0 }}</td>
-                      <td>{{ row.otherPoints }}</td>
-                      <td class="standings-total">{{ row.total }}</td>
+                      <td
+                        class="standings-points"
+                        [attr.title]="
+                          standingColumnTooltip(row.territoryAndStructureSources, row.territoryAndStructurePoints)
+                        "
+                        [attr.aria-label]="
+                          standingColumnTooltip(row.territoryAndStructureSources, row.territoryAndStructurePoints)
+                        "
+                      >
+                        {{ row.territoryAndStructurePoints }}
+                      </td>
+                      <td
+                        class="standings-points"
+                        [attr.title]="standingColumnTooltip(row.battleSources, row.battlesWonPoints)"
+                        [attr.aria-label]="standingColumnTooltip(row.battleSources, row.battlesWonPoints)"
+                      >
+                        {{ row.battlesWonPoints }}
+                      </td>
+                      <td
+                        class="standings-points"
+                        [attr.title]="standingColumnTooltip(row.publicObjectiveSources, row.publicObjectivePoints)"
+                        [attr.aria-label]="standingColumnTooltip(row.publicObjectiveSources, row.publicObjectivePoints)"
+                      >
+                        {{ row.publicObjectivePoints }}
+                      </td>
+                      <td
+                        class="standings-points"
+                        [attr.title]="
+                          standingColumnTooltip(row.privateObjectiveSources, row.privateObjectivePoints ?? 0)
+                        "
+                        [attr.aria-label]="
+                          standingColumnTooltip(row.privateObjectiveSources, row.privateObjectivePoints ?? 0)
+                        "
+                      >
+                        {{ row.privateObjectivePoints ?? 0 }}
+                      </td>
+                      <td
+                        class="standings-points"
+                        [attr.title]="standingColumnTooltip(row.otherSources, row.otherPoints)"
+                        [attr.aria-label]="standingColumnTooltip(row.otherSources, row.otherPoints)"
+                      >
+                        {{ row.otherPoints }}
+                      </td>
+                      <td
+                        class="standings-total standings-points"
+                        [attr.title]="standingTotalTooltip(row)"
+                        [attr.aria-label]="standingTotalTooltip(row)"
+                      >
+                        {{ row.total }}
+                      </td>
                     </tr>
                   }
                 </tbody>
@@ -2123,7 +2170,7 @@
                         }
                       </select>
                     </div>
-                    @if (debugDraftFor(force.id).kind === 'Move' || debugDraftFor(force.id).kind === 'Split') {
+                    @if (needsDraftDestination(force, debugDraftFor(force.id).kind)) {
                       <div class="field">
                         <label [attr.for]="'debug-target-' + force.id">Destination</label>
                         <select
@@ -2133,12 +2180,15 @@
                           [name]="'debug-target-' + force.id"
                         >
                           <option value="">Select a territory</option>
-                          @for (target of force.moveTargets; track target) {
+                          @for (target of destinationTargets(force, debugDraftFor(force.id).kind); track target) {
                             <option [value]="target">{{ territoryName(target) }}</option>
                           }
                         </select>
                       </div>
-                      @if (viasForDestination(force, debugDraftFor(force.id).targetTerritoryId).length > 1) {
+                      @if (
+                        debugDraftFor(force.id).kind !== 'Teleport' &&
+                        needsViaChoice(force, debugDraftFor(force.id).targetTerritoryId)
+                      ) {
                         <div class="field">
                           <label [attr.for]="'debug-via-' + force.id">Move through</label>
                           <select
@@ -2640,7 +2690,7 @@
         <p>
           Defeat {{ rival }} in battle or by surrender
           @if (assignment.campaignPoints !== null && assignment.campaignPoints !== undefined) {
-            ({{ assignment.campaignPoints }} campaign points)
+            ({{ assignment.campaignPoints }} CP)
           }
         </p>
       }
@@ -2652,7 +2702,14 @@
         <span class="muted"> · {{ privateObjectiveHolderCaption(assignment) }}</span>
       }
       @if (privateObjectiveSummary(assignment); as summary) {
-        <p>{{ summary }}</p>
+        <p>
+          {{ summary }}
+          @if (assignment.campaignPoints !== null && assignment.campaignPoints !== undefined) {
+            ({{ assignment.campaignPoints }} CP)
+          }
+        </p>
+      } @else if (assignment.campaignPoints !== null && assignment.campaignPoints !== undefined) {
+        <p>({{ assignment.campaignPoints }} CP)</p>
       }
       @if (assignment.canClaim) {
         <button type="button" class="button" (click)="claimPrivateObjective(assignment.id)">
@@ -2691,4 +2748,5 @@
       </details>
     </ng-template>
   }
+  <app-back-to-top />
 </section>

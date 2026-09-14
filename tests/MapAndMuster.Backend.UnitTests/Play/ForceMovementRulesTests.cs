@@ -12,6 +12,8 @@ public sealed class ForceMovementRulesTests
     private static readonly Guid Via = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid Dest = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid EnemySpawn = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private static readonly Guid Beyond = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    private static readonly Guid Far = Guid.Parse("66666666-6666-6666-6666-666666666666");
 
     [Fact]
     public void FactionSpeedTwoAllowsATwoTerritoryMoveWithoutCrusaders()
@@ -88,6 +90,88 @@ public sealed class ForceMovementRulesTests
         Assert.True(ForceMovementRules.IsValidMove(Map(), force, Via, null, [], rules));
     }
 
+    [Fact]
+    public void MoveCannotLandOnASpawnTerritory()
+    {
+        var rules = SpeedContext(Bretonnia, 2);
+        var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Via, false);
+        var map = Map();
+
+        Assert.False(ForceMovementRules.IsValidMove(map, force, Origin, null, [], rules));
+        Assert.DoesNotContain(Origin, ForceMovementRules.EligibleDestinations(map, force, 2, [], rules));
+    }
+
+    [Fact]
+    public void MoveMayPassThroughOwnSpawnToANonSpawnDestination()
+    {
+        var rules = SpeedContext(Bretonnia, 2);
+        var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Via, false);
+        var map = Map();
+
+        Assert.True(ForceMovementRules.IsValidMove(map, force, Beyond, Origin, [], rules));
+        Assert.Contains(
+            ForceMovementRules.EligibleHops(map, force, 2),
+            hop => hop.ViaTerritoryId == Origin && hop.TargetTerritoryId == Beyond);
+    }
+
+    [Fact]
+    public void MoveCannotPassThroughAnotherFactionsSpawn()
+    {
+        var rules = SpeedContext(Bretonnia, 2);
+        var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Origin, false);
+        var map = Map();
+
+        Assert.False(ForceMovementRules.IsValidMove(map, force, Far, EnemySpawn, [], rules));
+        Assert.DoesNotContain(Far, ForceMovementRules.EligibleDestinations(map, force, 2, [], rules));
+    }
+
+    [Fact]
+    public void EnemyOnAnIntermediateHopStopsTheForceThere()
+    {
+        var rules = SpeedContext(Bretonnia, 2);
+        var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Origin, false);
+        var enemy = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), ChaosDwarfs, Via, false);
+
+        Assert.Equal(
+            Via,
+            ForceMovementRules.ResolveDestination(
+                Map(),
+                force,
+                Dest,
+                Via,
+                [force, enemy],
+                new Dictionary<Guid, string?>(),
+                [],
+                [],
+                rules));
+    }
+
+    [Fact]
+    public void AlliedForceOnAnIntermediateHopDoesNotInterrupt()
+    {
+        var rules = SpeedContext(Bretonnia, 2);
+        var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Origin, false);
+        var ally = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), ChaosDwarfs, Via, false);
+        var groups = new Dictionary<Guid, string?>
+        {
+            [Bretonnia] = "Pact",
+            [ChaosDwarfs] = "Pact",
+        };
+
+        Assert.Equal(
+            Dest,
+            ForceMovementRules.ResolveDestination(
+                Map(),
+                force,
+                Dest,
+                Via,
+                [force, ally],
+                groups,
+                [],
+                [],
+                rules));
+    }
+
     private static SpecialRuleContext SpeedContext(Guid factionId, int speed)
     {
         return new SpecialRuleContext(
@@ -127,7 +211,9 @@ public sealed class ForceMovementRulesTests
                 new PlayTerritory(Via, 2, null, null, null, null, StructureCondition.Operational),
                 new PlayTerritory(Dest, 3, ChaosDwarfs, null, null, null, StructureCondition.Operational),
                 new PlayTerritory(EnemySpawn, 4, ChaosDwarfs, ChaosDwarfs, null, null, StructureCondition.Operational),
+                new PlayTerritory(Beyond, 5, null, null, null, null, StructureCondition.Operational),
+                new PlayTerritory(Far, 6, null, null, null, null, StructureCondition.Operational),
             ],
-            [(Origin, Via), (Via, Dest), (Origin, EnemySpawn)]);
+            [(Origin, Via), (Via, Dest), (Origin, EnemySpawn), (Origin, Beyond), (EnemySpawn, Far)]);
     }
 }

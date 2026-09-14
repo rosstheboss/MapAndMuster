@@ -287,6 +287,7 @@ export const ITEM_OBJECTIVE_EFFECT_KINDS = [
   { id: 'AddMovementSpeed', label: 'Add force movement speed' },
   { id: 'ModifySupply', label: 'Add or subtract supply (minimum 1)' },
   { id: 'TeleportToRandomEmptyNonSpawn', label: 'Teleport to a random empty non-spawn territory' },
+  { id: 'TeleportToChosenNonSpawnOncePerRound', label: 'Teleport once per round to a chosen non-spawn territory' },
   { id: 'InflictStatusWhileHeld', label: 'Inflict a status while holding this item' },
   { id: 'ImmuneToStatuses', label: 'Immune to statuses' },
   { id: 'InflictStatusOnSharedTerritory', label: 'Inflict statuses on forces sharing the territory' },
@@ -436,7 +437,17 @@ export interface CampaignPointStanding {
   privateObjectivePoints?: number;
   otherPoints: number;
   total: number;
+  territoryAndStructureSources?: CampaignPointSource[];
+  battleSources?: CampaignPointSource[];
+  publicObjectiveSources?: CampaignPointSource[];
+  privateObjectiveSources?: CampaignPointSource[];
+  otherSources?: CampaignPointSource[];
   heldItems?: HeldItemObjective[];
+}
+
+export interface CampaignPointSource {
+  label: string;
+  points: number;
 }
 
 export interface PublicObjectiveLeaderboard {
@@ -892,6 +903,8 @@ export interface PlayForce {
   hiddenRelicNearby?: boolean;
   battleReminders?: string[];
   supply?: PlayerSupplyView | null;
+  canChooseTeleportDestination?: boolean;
+  teleportTargets?: string[];
 }
 
 export interface PlayMoveHop {

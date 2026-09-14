@@ -21,7 +21,7 @@ import type {
 } from '../../core/campaigns/campaign.models';
 import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import type { MapHighlightMode } from '../../core/campaigns/campaign-view-prefs.service';
-import { adjacencyArrowEndpoints, adjacencyArrowGeometry } from '../../core/maps/adjacency';
+import { adjacencyArrowEndpoints, adjacencyArrowGeometry, directedArrowGeometry } from '../../core/maps/adjacency';
 import {
   ARROW_HEAD_SCREEN_PX,
   ARROW_HIT_SCREEN_PX,
@@ -98,6 +98,10 @@ export interface MapForceMarker {
   heldItems?: readonly MapHeldItem[];
   /** Own saved draft or committed order, when the viewer can see it. */
   action?: MapForceAction | null;
+  /** Consecutive territories of a secret Move, Split, or Retreat, when the viewer may see it. */
+  routeSteps?: readonly string[];
+  /** Accessible summary of {@link routeSteps}. */
+  routeLabel?: string;
   /** Territories this force can Move or Split into, including multi-hop destinations. */
   moveTargets?: readonly string[];
 }
@@ -544,6 +548,45 @@ export class CampaignMapViewComponent {
           strokeWidth,
         },
       ];
+    });
+  });
+
+  protected readonly overlayOrderRoutes = computed(() => {
+    if (!this.showOverlay()) {
+      return [];
+    }
+
+    const byId = new Map(this.territories().map((territory) => [territory.id, territory]));
+    const inset = this.screenToMap(ARROW_HEAD_SCREEN_PX + ARROW_OVERHANG_LINE_SCREEN_PX);
+    const strokeWidth = Math.min(this.screenToMap(STROKE_FULL_HIGHLIGHT_SCREEN_PX), 0.008);
+    const headLength = this.screenToMap(ARROW_HEAD_SCREEN_PX);
+    return this.forces().flatMap((force) => {
+      const steps = force.routeSteps ?? [];
+      const hops: {
+        id: string;
+        label: string;
+        geometry: { x1: number; y1: number; x2: number; y2: number; head: string };
+        strokeWidth: number;
+      }[] = [];
+      for (let index = 0; index < steps.length - 1; index += 1) {
+        const fromId = steps[index];
+        const toId = steps[index + 1];
+        const from = fromId ? byId.get(fromId) : undefined;
+        const to = toId ? byId.get(toId) : undefined;
+        if (!from || !to || !fromId || !toId) {
+          continue;
+        }
+
+        const ends = adjacencyArrowEndpoints(from.polygon, to.polygon, inset);
+        hops.push({
+          id: `${force.id}:${fromId}:${toId}:${index}`,
+          label: force.routeLabel ?? `Move from ${fromId} to ${toId}`,
+          geometry: directedArrowGeometry(ends.from, ends.to, headLength),
+          strokeWidth,
+        });
+      }
+
+      return hops;
     });
   });
 

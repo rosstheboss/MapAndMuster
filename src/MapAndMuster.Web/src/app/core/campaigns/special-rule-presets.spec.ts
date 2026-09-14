@@ -20,10 +20,15 @@ describe('special rule presets', () => {
 
     const calledByTheRelic = OLD_WORLD_SPECIAL_RULES.find((rule) => rule.name === 'Called by the Relic');
     expect(calledByTheRelic?.description).toContain('extra movement speed');
+    expect(calledByTheRelic?.description).toContain('gain back the extra movement speed');
+    expect(calledByTheRelic?.description).not.toContain('+2');
     expect(calledByTheRelic?.effectKey).toBe('CalledByTheRelic');
     const undead = OLD_WORLD_SPECIAL_RULES.find((rule) => rule.name === 'Undead');
+    expect(undead?.description).toContain('Undead forces');
     expect(undead?.description).toContain('Exhausted');
     expect(undead?.effectKey).toBe('Undead');
+    expect(OLD_WORLD_FACTION_SPECIAL_RULES['Tomb Kings of Khemri']).toEqual(['Called by the Relic', 'Undead']);
+    expect(OLD_WORLD_FACTION_SPECIAL_RULES['Vampire Counts']).toEqual(['Fresh Corpses', 'Undead']);
 
     const copy = specialRulesFromOldWorldPreset();
     expect(copy).toHaveLength(OLD_WORLD_SPECIAL_RULES.length);

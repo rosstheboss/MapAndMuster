@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, type FormArray, type FormControl, typ
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { BackToTopComponent } from '../../shared/back-to-top/back-to-top.component';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
 import { AppDialogComponent } from '../../shared/dialog/dialog.component';
@@ -393,6 +394,7 @@ const SETUP_INDEX_SECTIONS: readonly {
   imports: [
     ReactiveFormsModule,
     RouterLink,
+    BackToTopComponent,
     FilterableComboboxComponent,
     SaveCampaignPresetDialogComponent,
     AppDialogComponent,
@@ -3989,7 +3991,7 @@ export class CampaignSetupPage {
     return this.formBuilder.nonNullable.group({
       id: [effect?.id ?? this.newId()],
       kind: [effect?.kind ?? 'AddMovementSpeed'],
-      amount: [effect?.amount ?? 0, [minValue(-999), maxValue(999)]],
+      amount: [effect?.amount ?? 1, [minValue(-999), maxValue(999)]],
       amountIsPercent: [effect?.amountIsPercent === true],
       statusTypeIds: [effect?.statusTypeIds ? [...effect.statusTypeIds] : []],
       immuneToAllStatuses: [effect?.immuneToAllStatuses === true],

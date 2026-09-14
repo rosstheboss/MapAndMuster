@@ -37,4 +37,9 @@ public enum ItemObjectiveEffectKind
 
     /// <summary>Display-only reminder for tabletop play. Does not execute map code.</summary>
     Custom = 10,
+
+    /// <summary>
+    /// Grants a Teleport action once per round to a player-chosen non-spawn territory.
+    /// </summary>
+    TeleportToChosenNonSpawnOncePerRound = 11,
 }

@@ -51,7 +51,7 @@ public static class FactionSpecialRulePolicies
 
             foreach (var neighbor in map.Neighbors(relicId))
             {
-                if (neighbor != force.TerritoryId && CanEnter(map, force, neighbor))
+                if (neighbor != force.TerritoryId && CanLandOnForMove(map, force, neighbor))
                 {
                     ids.Add(neighbor);
                 }
@@ -85,11 +85,20 @@ public static class FactionSpecialRulePolicies
             && !string.Equals(territory.SpawnSubfaction, force.Subfaction, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Returns whether the force may enter the territory (not an enemy spawn).</summary>
+    /// <summary>Returns whether the force may pass through the territory (not another faction's spawn).</summary>
     public static bool CanEnter(PlayMap map, CampaignForce force, Guid territoryId)
     {
         var territory = map.Territory(territoryId);
         return territory is not null && !IsEnemySpawn(territory, force);
+    }
+
+    /// <summary>
+    /// Returns whether a Move or Split may end on the territory. Spawn landings are retreat-only.
+    /// </summary>
+    public static bool CanLandOnForMove(PlayMap map, CampaignForce force, Guid territoryId)
+    {
+        var territory = map.Territory(territoryId);
+        return territory is not null && !territory.IsSpawn && CanEnter(map, force, territoryId);
     }
 
     /// <summary>
@@ -330,8 +339,7 @@ public static class FactionSpecialRulePolicies
             return false;
         }
 
-        if (HasUndeadStatusImmunity(force, rules)
-            && MatchesAny(statusName, "Shaken", "Exhausted", "Diseased", "Well Rested", "Confident"))
+        if (HasUndeadStatusImmunity(force, rules) && !ForceStatusNames.IsNormal(statusName))
         {
             return false;
         }

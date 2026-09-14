@@ -95,11 +95,9 @@ public static class ActionResolution
                 continue;
             }
 
+            var picker = pickIndex ?? (static count => 0);
             var destination = order.Kind == ActionKind.Teleport
-                ? ItemObjectiveEffectRules.PickTeleportDestination(
-                    map,
-                    state.Forces,
-                    pickIndex ?? (static count => 0)) ?? force.TerritoryId
+                ? ResolveTeleportDestination(map, force, order, state, rules, window.RoundNumber, picker)
                 : order.Kind is ActionKind.Move or ActionKind.Retreat
                 ? FactionSpecialRulePolicies.ResolveMoveDestination(
                     map,
@@ -119,7 +117,18 @@ public static class ActionResolution
                 moveOrigins[force.Id] = force.TerritoryId;
             }
 
-            var moved = force.With(territoryId: destination);
+            var usedChosenTeleport = order.Kind == ActionKind.Teleport
+                && destination != force.TerritoryId
+                && ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
+                    force,
+                    map,
+                    state.ItemObjectives,
+                    rules,
+                    window.RoundNumber,
+                    destination);
+            var moved = force.With(
+                territoryId: destination,
+                lastChosenTeleportRound: usedChosenTeleport ? window.RoundNumber : null);
             nextForces.Add(moved);
             AddOccupied(occupied, destination, moved.Id);
             arrivalKinds[force.Id] = order.Kind;
@@ -350,8 +359,13 @@ public static class ActionResolution
             kinds.Add(ActionKind.Move);
         }
 
-        if (ItemObjectiveEffectRules.CanTeleport(force, map, state.ItemObjectives, rules)
-            && ItemObjectiveEffectRules.TeleportDestinations(map, state.Forces).Count > 0)
+        if (ItemObjectiveEffectRules.HasAvailableTeleport(
+            force,
+            map,
+            state.ItemObjectives,
+            rules,
+            state.Forces,
+            state.CurrentWindow()?.RoundNumber ?? 0))
         {
             kinds.Add(ActionKind.Teleport);
         }
@@ -480,11 +494,31 @@ public static class ActionResolution
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
-        if (kind == ActionKind.Teleport
-            && (!ItemObjectiveEffectRules.CanTeleport(force, map, state.ItemObjectives, rules)
-                || ItemObjectiveEffectRules.TeleportDestinations(map, state.Forces).Count == 0))
+        if (kind == ActionKind.Teleport)
         {
-            return Hold(force, OrderAdjustment.InvalidOrder);
+            var round = window.RoundNumber;
+            if (!ItemObjectiveEffectRules.HasAvailableTeleport(
+                force,
+                map,
+                state.ItemObjectives,
+                rules,
+                state.Forces,
+                round))
+            {
+                return Hold(force, OrderAdjustment.InvalidOrder);
+            }
+
+            if (ItemObjectiveEffectRules.CanChosenTeleport(force, map, state.ItemObjectives, rules, round)
+                && !ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
+                    force,
+                    map,
+                    state.ItemObjectives,
+                    rules,
+                    round,
+                    target))
+            {
+                return Hold(force, OrderAdjustment.InvalidOrder);
+            }
         }
 
         if (kind == ActionKind.Build
@@ -1365,6 +1399,34 @@ public static class ActionResolution
         }
 
         return hops;
+    }
+
+    private static Guid ResolveTeleportDestination(
+        PlayMap map,
+        CampaignForce force,
+        ResolvedOrder order,
+        CampaignPlayState state,
+        SpecialRuleContext rules,
+        int roundNumber,
+        Func<int, int> pickIndex)
+    {
+        if (ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
+            force,
+            map,
+            state.ItemObjectives,
+            rules,
+            roundNumber,
+            order.TargetTerritoryId))
+        {
+            return order.TargetTerritoryId!.Value;
+        }
+
+        if (ItemObjectiveEffectRules.CanRandomTeleport(force, map, state.ItemObjectives, rules))
+        {
+            return ItemObjectiveEffectRules.PickTeleportDestination(map, state.Forces, pickIndex) ?? force.TerritoryId;
+        }
+
+        return force.TerritoryId;
     }
 
     private static ResolvedOrder Hold(CampaignForce force, OrderAdjustment adjustment)

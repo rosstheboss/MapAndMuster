@@ -10,6 +10,7 @@ public sealed class ActionResolutionTests
     private static readonly Guid NorthSpawn = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid SouthSpawn = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid Midland = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    private static readonly Guid Eastland = Guid.Parse("99999999-9999-9999-9999-999999999999");
     private static readonly Guid PlayerOne = Guid.Parse("44444444-4444-4444-4444-444444444444");
     private static readonly Guid PlayerTwo = Guid.Parse("55555555-5555-5555-5555-555555555555");
     private static readonly Guid PlayerThree = Guid.Parse("77777777-7777-7777-7777-777777777777");
@@ -665,8 +666,9 @@ public sealed class ActionResolutionTests
                     midlandPillageable,
                     midlandDestructible),
                 new PlayTerritory(SouthSpawn, 3, South, South, null, null, StructureCondition.Operational),
+                new PlayTerritory(Eastland, 4, null, null, null, null, StructureCondition.Operational),
             ],
-            [(NorthSpawn, Midland), (Midland, SouthSpawn)],
+            [(NorthSpawn, Midland), (Midland, SouthSpawn), (Midland, Eastland)],
             structureTypes);
     }
 

@@ -33,6 +33,40 @@ public sealed class ItemObjectiveEffectRulesTests
     }
 
     [Fact]
+    public void ChosenTeleportDestinationsExcludeSpawnsAndIncludeOccupiedLand()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Origin, false);
+        var dests = ItemObjectiveEffectRules.ChosenTeleportDestinations(Map(), force);
+
+        Assert.Contains(Via, dests);
+        Assert.Contains(Dest, dests);
+        Assert.DoesNotContain(Origin, dests);
+        Assert.DoesNotContain(EnemySpawn, dests);
+    }
+
+    [Fact]
+    public void ChosenTeleportIsAvailableOncePerRound()
+    {
+        var typeId = Guid.NewGuid();
+        var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Origin, false);
+        var used = force.With(lastChosenTeleportRound: 2);
+        var item = HeldItem(typeId, force.Id);
+        var rules = Effects(
+            typeId,
+            new ItemObjectiveEffectSetup(Guid.NewGuid(), ItemObjectiveEffectKind.TeleportToChosenNonSpawnOncePerRound));
+        var map = Map();
+
+        Assert.True(ItemObjectiveEffectRules.CanChosenTeleport(force, map, [item], rules, 2));
+        Assert.False(ItemObjectiveEffectRules.CanChosenTeleport(used, map, [item], rules, 2));
+        Assert.True(ItemObjectiveEffectRules.CanChosenTeleport(used, map, [item], rules, 3));
+        Assert.True(ItemObjectiveEffectRules.HasAvailableTeleport(force, map, [item], rules, [force], 2));
+        Assert.False(ItemObjectiveEffectRules.HasAvailableTeleport(used, map, [item], rules, [used], 2));
+        Assert.True(ItemObjectiveEffectRules.IsValidChosenTeleportTarget(force, map, [item], rules, 2, Via));
+        Assert.False(ItemObjectiveEffectRules.IsValidChosenTeleportTarget(force, map, [item], rules, 2, Origin));
+        Assert.False(ItemObjectiveEffectRules.IsValidChosenTeleportTarget(force, map, [item], rules, 2, EnemySpawn));
+    }
+
+    [Fact]
     public void PushDefeatedOpponentToSpawnIsActiveOnTheHolder()
     {
         var typeId = Guid.NewGuid();

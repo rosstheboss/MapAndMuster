@@ -71,6 +71,7 @@ import {
   type MapTerritory,
 } from '../../core/maps/map-graph.models';
 import { territoryHoverTooltip } from '../../core/maps/territory-tooltip';
+import { BackToTopComponent } from '../../shared/back-to-top/back-to-top.component';
 import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { ConfirmButtonComponent } from '../../shared/confirm-button/confirm-button.component';
 import { MapLegendComponent } from '../../shared/map-legend/map-legend.component';
@@ -93,6 +94,7 @@ export type { OverlayColorMode };
   imports: [
     FormsModule,
     RouterLink,
+    BackToTopComponent,
     CampaignMapViewComponent,
     IconComponent,
     MapLegendComponent,

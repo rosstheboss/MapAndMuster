@@ -179,8 +179,8 @@ public static class ItemObjectiveEffectRules
         return Math.Max(0, cap);
     }
 
-    /// <summary>Returns whether the holder may teleport this action window.</summary>
-    public static bool CanTeleport(
+    /// <summary>Returns whether the holder may use a random empty-non-spawn teleport.</summary>
+    public static bool CanRandomTeleport(
         CampaignForce force,
         PlayMap map,
         IReadOnlyList<CampaignItemObjective> items,
@@ -188,6 +188,69 @@ public static class ItemObjectiveEffectRules
     {
         return ActiveEffects(force, map, items, rules)
             .Any(static effect => effect.Kind == ItemObjectiveEffectKind.TeleportToRandomEmptyNonSpawn);
+    }
+
+    /// <summary>Returns whether the holder may choose a non-spawn teleport this round.</summary>
+    public static bool CanChosenTeleport(
+        CampaignForce force,
+        PlayMap map,
+        IReadOnlyList<CampaignItemObjective> items,
+        SpecialRuleContext rules,
+        int roundNumber)
+    {
+        if (roundNumber <= 0
+            || force.LastChosenTeleportRound == roundNumber
+            || !ActiveEffects(force, map, items, rules)
+                .Any(static effect => effect.Kind == ItemObjectiveEffectKind.TeleportToChosenNonSpawnOncePerRound))
+        {
+            return false;
+        }
+
+        return ChosenTeleportDestinations(map, force).Count > 0;
+    }
+
+    /// <summary>Returns whether the holder may teleport this action window.</summary>
+    public static bool CanTeleport(
+        CampaignForce force,
+        PlayMap map,
+        IReadOnlyList<CampaignItemObjective> items,
+        SpecialRuleContext rules,
+        int roundNumber = 0)
+    {
+        return CanRandomTeleport(force, map, items, rules)
+            || CanChosenTeleport(force, map, items, rules, roundNumber);
+    }
+
+    /// <summary>
+    /// Returns whether Teleport is a legal action this window: random empty land, or a chosen
+    /// non-spawn destination that has not been used this round.
+    /// </summary>
+    public static bool HasAvailableTeleport(
+        CampaignForce force,
+        PlayMap map,
+        IReadOnlyList<CampaignItemObjective> items,
+        SpecialRuleContext rules,
+        IReadOnlyList<CampaignForce> occupyingForces,
+        int roundNumber)
+    {
+        ArgumentNullException.ThrowIfNull(occupyingForces);
+        return (CanRandomTeleport(force, map, items, rules)
+                && TeleportDestinations(map, occupyingForces).Count > 0)
+            || CanChosenTeleport(force, map, items, rules, roundNumber);
+    }
+
+    /// <summary>Returns whether a submitted Teleport target is a legal chosen destination this round.</summary>
+    public static bool IsValidChosenTeleportTarget(
+        CampaignForce force,
+        PlayMap map,
+        IReadOnlyList<CampaignItemObjective> items,
+        SpecialRuleContext rules,
+        int roundNumber,
+        Guid? targetId)
+    {
+        return targetId is { } id
+            && CanChosenTeleport(force, map, items, rules, roundNumber)
+            && ChosenTeleportDestinations(map, force).Contains(id);
     }
 
     /// <summary>Empty non-spawn territories with no occupying force.</summary>
@@ -202,6 +265,19 @@ public static class ItemObjectiveEffectRules
         [
             .. map.Territories
                 .Where(territory => !territory.IsSpawn && !occupied.Contains(territory.Id))
+                .Select(static territory => territory.Id),
+        ];
+    }
+
+    /// <summary>Non-spawn territories a chosen teleport may land on, including occupied land.</summary>
+    public static IReadOnlyList<Guid> ChosenTeleportDestinations(PlayMap map, CampaignForce force)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(force);
+        return
+        [
+            .. map.Territories
+                .Where(territory => !territory.IsSpawn && territory.Id != force.TerritoryId)
                 .Select(static territory => territory.Id),
         ];
     }

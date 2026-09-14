@@ -223,7 +223,10 @@
 .adjacency-head,
 .adjacency-hit,
 .adjacency-hit-head,
-.adjacency-visual {
+.adjacency-visual,
+.order-route,
+.order-route-line,
+.order-route-head {
   pointer-events: none;
 }
 
@@ -497,11 +500,13 @@
   stroke: #f59e0b;
 }
 
-.adjacency-line {
+.adjacency-line,
+.order-route-line {
   stroke: #1c1917;
 }
 
-.adjacency-head {
+.adjacency-head,
+.order-route-head {
   fill: #1c1917;
 }
 

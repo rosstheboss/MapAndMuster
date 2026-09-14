@@ -135,6 +135,7 @@ describe('MapEditorPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Map editor');
+    expect(compiled.querySelector('app-back-to-top')?.textContent).toContain('Back to top');
     expect(compiled.textContent).toContain('Auto Generate Connections');
     expect(compiled.textContent).not.toContain('Connect selected');
     expect(compiled.textContent).not.toContain('Cancel Drawing');

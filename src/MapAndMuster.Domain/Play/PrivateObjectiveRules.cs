@@ -764,22 +764,7 @@ public static class PrivateObjectiveRules
         var total = 0;
         foreach (var assignment in assignments)
         {
-            if (!assignment.CountsDuringPlay)
-            {
-                continue;
-            }
-
-            var applies = assignment.HolderKind switch
-            {
-                PrivateObjectiveHolderKind.Player => assignment.HolderId == playerUserId,
-                PrivateObjectiveHolderKind.Traitor => assignment.HolderId == playerUserId,
-                PrivateObjectiveHolderKind.Faction => factionId is { } faction
-                    && assignment.HolderId == faction
-                    && SubfactionScopeMatches(assignment.HolderSubfaction, playerSubfaction),
-                PrivateObjectiveHolderKind.AllyGroup => allyGroupId is { } group && assignment.HolderId == group,
-                _ => false,
-            };
-            if (!applies)
+            if (!CountsForPlayer(assignment, playerUserId, factionId, allyGroupId, playerSubfaction))
             {
                 continue;
             }
@@ -788,6 +773,34 @@ public static class PrivateObjectiveRules
         }
 
         return total;
+    }
+
+    /// <summary>
+    /// Whether a scoring assignment currently counts for this player.
+    /// </summary>
+    public static bool CountsForPlayer(
+        PrivateObjectiveAssignment assignment,
+        Guid playerUserId,
+        Guid? factionId,
+        Guid? allyGroupId,
+        string? playerSubfaction = null)
+    {
+        ArgumentNullException.ThrowIfNull(assignment);
+        if (!assignment.CountsDuringPlay)
+        {
+            return false;
+        }
+
+        return assignment.HolderKind switch
+        {
+            PrivateObjectiveHolderKind.Player => assignment.HolderId == playerUserId,
+            PrivateObjectiveHolderKind.Traitor => assignment.HolderId == playerUserId,
+            PrivateObjectiveHolderKind.Faction => factionId is { } faction
+                && assignment.HolderId == faction
+                && SubfactionScopeMatches(assignment.HolderSubfaction, playerSubfaction),
+            PrivateObjectiveHolderKind.AllyGroup => allyGroupId is { } group && assignment.HolderId == group,
+            _ => false,
+        };
     }
 
     /// <summary>

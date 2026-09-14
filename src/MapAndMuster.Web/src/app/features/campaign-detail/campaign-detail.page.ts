@@ -54,6 +54,8 @@ import type {
   CampaignMission,
   CampaignParticipant,
   CampaignPlayDetail,
+  CampaignPointSource,
+  CampaignPointStanding,
   CampaignSpecialRule,
   MapGraphDetail,
   PlayBattle,
@@ -88,6 +90,7 @@ import {
 import type { MapGraph, MapTerritory } from '../../core/maps/map-graph.models';
 import { normalizeStructureCondition, territoryLabel } from '../../core/maps/map-graph.models';
 import { mapSvgCatalogFrom, serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
+import { BackToTopComponent } from '../../shared/back-to-top/back-to-top.component';
 import { CampaignLogComponent } from '../../shared/campaign-log/campaign-log.component';
 import {
   CampaignMapViewComponent,
@@ -244,6 +247,7 @@ function openSections(): Record<CampaignSection, boolean> {
     NgTemplateOutlet,
     RouterLink,
     InstantDatePipe,
+    BackToTopComponent,
     CampaignLogComponent,
     CampaignMapViewComponent,
     ConfirmButtonComponent,
@@ -382,7 +386,7 @@ export class CampaignDetailPage {
     const flow = this.mapAction();
     if (flow?.step === 'pick-target') {
       const force = this.myForces().find((item) => item.id === flow.forceId);
-      return force?.moveTargets ?? [];
+      return force ? this.destinationTargets(force, flow.kind) : [];
     }
 
     if (flow?.step === 'pick-via') {
@@ -614,6 +618,7 @@ export class CampaignDetailPage {
           .filter((item) => item.possessorForceId === force.id)
           .map((item) => this.toHeldMapItem(item, campaign)),
         action: this.ownForceMapAction(force),
+        ...this.forceOrderRouteFields(force),
         moveTargets: force.moveTargets,
       };
     });
@@ -691,7 +696,17 @@ export class CampaignDetailPage {
       return [];
     }
 
-    return campaign.factions.map((faction) => factionRoster(campaign, faction, (ids) => this.specialRulesFor(ids)));
+    const playFactions = this.play()?.factions ?? [];
+    return campaign.factions.map((faction) =>
+      factionRoster(
+        campaign,
+        factionWithPlayRules(
+          faction,
+          playFactions.find((item) => item.id === faction.id),
+        ),
+        (ids) => this.specialRulesFor(ids),
+      ),
+    );
   });
   protected readonly chosenSpecialRules = computed(() => {
     const parsed = parseMapFactionOptionValue(this.factionChoice());
@@ -702,18 +717,22 @@ export class CampaignDetailPage {
       return [];
     }
 
-    const faction = campaign.factions.find((item) => item.id === factionId);
-    if (!faction) {
+    const catalogFaction = campaign.factions.find((item) => item.id === factionId);
+    if (!catalogFaction) {
       return [];
     }
 
+    const faction = factionWithPlayRules(
+      catalogFaction,
+      this.play()?.factions?.find((item) => item.id === catalogFaction.id),
+    );
     const factionRules = this.specialRulesFor(faction.specialRuleIds);
     const assigned = subfaction
-      ? faction.subfactionSpecialRules?.find((item) => item.name === subfaction)?.specialRuleIds
+      ? faction.subfactionSpecialRules?.find((item) => compareNames(item.name, subfaction) === 0)?.specialRuleIds
       : undefined;
     const subRules = this.specialRulesFor(assigned);
-    const seen = new Set(factionRules.map((rule) => rule.id));
-    return [...factionRules, ...subRules.filter((rule) => !seen.has(rule.id))];
+    const seen = new Set(factionRules.map((rule) => rule.id.toLowerCase()));
+    return [...factionRules, ...subRules.filter((rule) => !seen.has(rule.id.toLowerCase()))];
   });
   protected readonly pendingRetreatTargets = computed(() => {
     const battles = this.play()?.battles ?? [];
@@ -1848,8 +1867,12 @@ export class CampaignDetailPage {
       return [];
     }
 
-    const catalog = this.play()?.specialRules ?? this.campaign()?.specialRules ?? [];
-    return ids.flatMap((id) => catalog.find((rule) => rule.id === id) ?? []);
+    const catalog = mergeSpecialRuleCatalogs(this.play()?.specialRules, this.campaign()?.specialRules);
+    const byId = new Map(catalog.map((rule) => [rule.id.toLowerCase(), rule] as const));
+    return ids.flatMap((id) => {
+      const rule = byId.get(id.toLowerCase());
+      return rule ? [rule] : [];
+    });
   }
 
   protected itemSpecialRules(item: PlayItemObjective): CampaignSpecialRule[] {
@@ -1978,6 +2001,25 @@ export class CampaignDetailPage {
   }): string {
     const faction = this.campaign()?.factions.find((item) => item.id === row.factionId);
     return resolveFactionAppearance(faction, this.standingSubfaction(row.userId)).color;
+  }
+
+  protected standingColumnTooltip(sources: CampaignPointSource[] | undefined, total: number): string {
+    const lines = (sources ?? []).map((source) => `${source.label}: ${source.points}`);
+    lines.push(`Total: ${total}`);
+    return lines.join('\n');
+  }
+
+  protected standingTotalTooltip(row: CampaignPointStanding): string {
+    return this.standingColumnTooltip(
+      [
+        ...(row.territoryAndStructureSources ?? []),
+        ...(row.battleSources ?? []),
+        ...(row.publicObjectiveSources ?? []),
+        ...(row.privateObjectiveSources ?? []),
+        ...(row.otherSources ?? []),
+      ],
+      row.total,
+    );
   }
 
   protected participantFlagUrl(participant: CampaignParticipant): string | null {
@@ -2125,6 +2167,118 @@ export class CampaignDetailPage {
     return `to ${this.territoryName(targetTerritoryId)}`;
   }
 
+  private forceOrderRouteFields(force: PlayForce): { routeSteps?: readonly string[]; routeLabel?: string } {
+    const route = this.forceOrderRoute(force);
+    if (!route) {
+      return {};
+    }
+
+    return { routeSteps: route.steps, routeLabel: route.label };
+  }
+
+  private forceOrderRoute(force: PlayForce): { steps: readonly string[]; label: string } | null {
+    const play = this.play();
+    if (!play) {
+      return null;
+    }
+
+    const retreat = this.forceRetreatRoute(force, play);
+    if (retreat) {
+      return retreat;
+    }
+
+    const flow = this.mapAction();
+    if (
+      flow?.forceId === force.id &&
+      flow.step === 'confirm' &&
+      (flow.kind === 'Move' || flow.kind === 'Split') &&
+      flow.targetTerritoryId
+    ) {
+      return this.routeFromSteps(
+        flow.kind,
+        force.territoryId,
+        flow.targetTerritoryId,
+        flow.viaTerritoryId,
+        flow.viaPath,
+      );
+    }
+
+    const canSeeOthers = play.isDebugActive === true;
+    if (!force.isMine && !canSeeOthers) {
+      return null;
+    }
+
+    const draft = force.isMine ? this.draftFor(force.id) : this.debugDraftFor(force.id);
+    if ((draft.kind !== 'Move' && draft.kind !== 'Split') || !draft.targetTerritoryId) {
+      return null;
+    }
+
+    return this.routeFromSteps(
+      draft.kind,
+      force.territoryId,
+      draft.targetTerritoryId,
+      draft.viaTerritoryId,
+      draft.viaPath,
+    );
+  }
+
+  private forceRetreatRoute(
+    force: PlayForce,
+    play: CampaignPlayDetail,
+  ): { steps: readonly string[]; label: string } | null {
+    if (!force.isMine && play.isDebugActive !== true) {
+      return null;
+    }
+
+    for (const battle of play.battles) {
+      if (!battle.participantForceIds.includes(force.id)) {
+        continue;
+      }
+
+      const dest = this.retreatTarget()[battle.id];
+      if (!dest) {
+        continue;
+      }
+
+      return this.routeFromSteps('Retreat', force.territoryId, dest, '', []);
+    }
+
+    return null;
+  }
+
+  private routeFromSteps(
+    kind: string,
+    originId: string,
+    targetId: string,
+    viaTerritoryId: string,
+    viaPath: readonly string[],
+  ): { steps: readonly string[]; label: string } | null {
+    const steps = [originId];
+    for (const id of [viaTerritoryId, ...viaPath, targetId]) {
+      if (id.length > 0 && id !== steps.at(-1)) {
+        steps.push(id);
+      }
+    }
+
+    if (steps.length < 2) {
+      return null;
+    }
+
+    return { steps, label: this.describeOrderRoute(kind, steps) };
+  }
+
+  private describeOrderRoute(kind: string, steps: readonly string[]): string {
+    const origin = this.territoryName(steps[0] ?? '');
+    const destination = this.territoryName(steps.at(-1) ?? '');
+    const hops = steps.slice(1, -1);
+    if (hops.length === 0) {
+      return `${kind} from ${origin} to ${destination}`;
+    }
+
+    const through = hops.map((id) => this.territoryName(id)).join(' and ');
+    return `${kind} from ${origin} through ${through} to ${destination}`;
+  }
+
   protected onDraftKind(forceId: string, kind: string): void {
     const current = this.draftFor(forceId);
     this.markDraftDirty(forceId);
@@ -2132,14 +2286,14 @@ export class CampaignDetailPage {
       ...drafts,
       [forceId]: emptyOrderDraft({
         kind,
-        targetTerritoryId: kind === 'Move' || kind === 'Split' ? current.targetTerritoryId : '',
+        targetTerritoryId: this.needsDraftDestinationKind(kind) ? current.targetTerritoryId : '',
         structureTypeId: kind === 'Build' ? current.structureTypeId : '',
         viaTerritoryId: kind === 'Move' || kind === 'Split' ? current.viaTerritoryId : '',
         viaPath: kind === 'Move' || kind === 'Split' ? current.viaPath : [],
         destroyImmediately: kind === 'Pillage' ? current.destroyImmediately : false,
       }),
     }));
-    if ((kind === 'Move' || kind === 'Split') && current.targetTerritoryId) {
+    if (this.needsDraftDestinationKind(kind) && current.targetTerritoryId) {
       this.applyDestinationRoute(forceId, current.targetTerritoryId, false);
     }
   }
@@ -2160,6 +2314,26 @@ export class CampaignDetailPage {
 
   protected viaTargets(force: PlayForce): string[] {
     return [...new Set((force.moveHops ?? []).map((hop) => hop.viaTerritoryId))];
+  }
+
+  protected needsDraftDestination(force: PlayForce, kind: string): boolean {
+    return kind === 'Move' || kind === 'Split' || this.canChooseTeleport(force, kind);
+  }
+
+  protected canChooseTeleport(force: PlayForce, kind = 'Teleport'): boolean {
+    return kind === 'Teleport' && force.canChooseTeleportDestination === true;
+  }
+
+  protected destinationTargets(force: PlayForce, kind: string): string[] {
+    if (this.canChooseTeleport(force, kind)) {
+      return force.teleportTargets ?? [];
+    }
+
+    return force.moveTargets;
+  }
+
+  private needsDraftDestinationKind(kind: string): boolean {
+    return kind === 'Move' || kind === 'Split' || kind === 'Teleport';
   }
 
   protected destinationsForVia(force: PlayForce, viaTerritoryId: string): string[] {
@@ -2200,14 +2374,14 @@ export class CampaignDetailPage {
       ...drafts,
       [forceId]: emptyOrderDraft({
         kind,
-        targetTerritoryId: kind === 'Move' || kind === 'Split' ? current.targetTerritoryId : '',
+        targetTerritoryId: this.needsDraftDestinationKind(kind) ? current.targetTerritoryId : '',
         structureTypeId: kind === 'Build' ? current.structureTypeId : '',
         viaTerritoryId: kind === 'Move' || kind === 'Split' ? current.viaTerritoryId : '',
         viaPath: kind === 'Move' || kind === 'Split' ? current.viaPath : [],
         destroyImmediately: kind === 'Pillage' ? current.destroyImmediately : false,
       }),
     }));
-    if ((kind === 'Move' || kind === 'Split') && current.targetTerritoryId) {
+    if (this.needsDraftDestinationKind(kind) && current.targetTerritoryId) {
       this.applyDestinationRoute(forceId, current.targetTerritoryId, true);
     }
   }
@@ -3099,6 +3273,10 @@ export class CampaignDetailPage {
         return 'Pick a territory to split forces to...';
       }
 
+      if (flow.kind === 'Teleport') {
+        return 'Pick a non-spawn territory to teleport to...';
+      }
+
       return `Select a destination for ${flow.kind}.`;
     }
 
@@ -3128,10 +3306,10 @@ export class CampaignDetailPage {
     }
 
     const origin = this.territoryName(flow.originId);
-    if (flow.kind === 'Move' || flow.kind === 'Split') {
+    if (flow.kind === 'Move' || flow.kind === 'Split' || flow.kind === 'Teleport') {
       const destination = this.territoryName(flow.targetTerritoryId);
       const hops = [flow.viaTerritoryId, ...flow.viaPath].filter((id) => id.length > 0);
-      if (hops.length === 0) {
+      if (hops.length === 0 || flow.kind === 'Teleport') {
         return `${flow.kind} from ${origin} to ${destination}?`;
       }
 
@@ -3153,7 +3331,8 @@ export class CampaignDetailPage {
       return;
     }
 
-    if (kind === 'Move' || kind === 'Split') {
+    const force = this.myForces().find((item) => item.id === flow.forceId);
+    if (kind === 'Move' || kind === 'Split' || (kind === 'Teleport' && force && this.canChooseTeleport(force))) {
       this.mapAction.set({
         ...flow,
         step: 'pick-target',
@@ -3245,7 +3424,7 @@ export class CampaignDetailPage {
       this.cancelMapAction();
     } else if (flow?.step === 'pick-target') {
       const force = this.myForces().find((item) => item.id === flow.forceId);
-      if (force?.moveTargets.includes(event.id) && event.id !== flow.originId) {
+      if (force && this.destinationTargets(force, flow.kind).includes(event.id) && event.id !== flow.originId) {
         this.applyMapDestination(flow, force, event.id);
         return true;
       }
@@ -3307,7 +3486,7 @@ export class CampaignDetailPage {
     }
 
     if (draft.kind === 'Teleport') {
-      return true;
+      return !this.canChooseTeleport(force) || draft.targetTerritoryId.length > 0;
     }
 
     if (draft.kind === 'Build') {
@@ -3405,8 +3584,14 @@ export class CampaignDetailPage {
             privateObjectives: play.privateObjectives ?? current.privateObjectives,
             privateObjectiveUnclaimedCounts:
               play.privateObjectiveUnclaimedCounts ?? current.privateObjectiveUnclaimedCounts,
-            specialRules: play.specialRules ?? current.specialRules,
+            specialRules: mergeSpecialRuleCatalogs(play.specialRules, current.specialRules),
             forceStatuses: play.forceStatuses ?? current.forceStatuses,
+            factions: current.factions.map((faction) =>
+              factionWithPlayRules(
+                faction,
+                play.factions.find((item) => item.id === faction.id),
+              ),
+            ),
           }
         : current,
     );
@@ -3549,8 +3734,12 @@ export class CampaignDetailPage {
     return (force.moveHops ?? []).filter((hop) => hop.targetTerritoryId === destId);
   }
 
+  protected needsViaChoice(force: PlayForce, destId: string): boolean {
+    return this.viasForDestination(force, destId).length > 0;
+  }
+
   private requiresViaChoice(force: PlayForce, destId: string): boolean {
-    return this.viasForDestination(force, destId).length > 1;
+    return this.needsViaChoice(force, destId);
   }
 
   private routeForDestination(
@@ -3586,7 +3775,7 @@ export class CampaignDetailPage {
   }
 
   private applyMapDestination(flow: MapActionFlow, force: PlayForce, destId: string): void {
-    if (this.isDirectMove(force, destId)) {
+    if (flow.kind === 'Teleport' || this.isDirectMove(force, destId)) {
       this.confirmMapMove(flow, destId, '', []);
       return;
     }
@@ -3621,38 +3810,34 @@ export class CampaignDetailPage {
     this.resolveMapHops({ ...flow, viaTerritoryId, viaPath }, flow.targetTerritoryId, remaining, viaPath);
   }
 
+  private nextHopCandidates(hops: PlayMoveHop[], viaTerritoryId: string, viaPath: readonly string[]): string[] {
+    return [
+      ...new Set(
+        hops.map((hop) => {
+          if (!viaTerritoryId) {
+            return hop.viaTerritoryId;
+          }
+
+          return (hop.intermediateTerritoryIds ?? [])[viaPath.length] ?? '';
+        }),
+      ),
+    ].filter((id) => id.length > 0);
+  }
+
   private resolveMapHops(flow: MapActionFlow, destId: string, hops: PlayMoveHop[], viaPath: string[]): void {
     if (hops.length === 0) {
       this.confirmMapMove(flow, destId, flow.viaTerritoryId, viaPath);
       return;
     }
 
-    if (hops.length === 1) {
+    const nextCandidates = this.nextHopCandidates(hops, flow.viaTerritoryId, viaPath);
+    if (nextCandidates.length === 0) {
       const hop = hops[0];
       this.confirmMapMove(
         flow,
         destId,
-        hop.viaTerritoryId,
-        hop.intermediateTerritoryIds ? [...hop.intermediateTerritoryIds] : viaPath,
-      );
-      return;
-    }
-
-    const nextCandidates = [
-      ...new Set(
-        hops.map((hop) => {
-          const intermediates = hop.intermediateTerritoryIds ?? [];
-          return viaPath.length === 0 ? hop.viaTerritoryId : (intermediates[viaPath.length] ?? '');
-        }),
-      ),
-    ].filter((id) => id.length > 0);
-    if (nextCandidates.length <= 1) {
-      const hop = hops[0];
-      this.confirmMapMove(
-        flow,
-        destId,
-        hop.viaTerritoryId,
-        hop.intermediateTerritoryIds ? [...hop.intermediateTerritoryIds] : viaPath,
+        hop?.viaTerritoryId ?? flow.viaTerritoryId,
+        hop?.intermediateTerritoryIds ? [...hop.intermediateTerritoryIds] : viaPath,
       );
       return;
     }
@@ -3663,7 +3848,9 @@ export class CampaignDetailPage {
       targetTerritoryId: destId,
       viaCandidates: nextCandidates,
     });
-    this.selectedIds.set([flow.originId, destId, ...nextCandidates]);
+    this.selectedIds.set(
+      [flow.originId, destId, flow.viaTerritoryId, ...viaPath, ...nextCandidates].filter((id) => id.length > 0),
+    );
   }
 
   private confirmMapMove(flow: MapActionFlow, destId: string, viaTerritoryId: string, viaPath: string[]): void {
@@ -4238,11 +4425,15 @@ function factionRoster(
     specialRules: rulesFor(faction.specialRuleIds),
     players: rosterPlayers(members.filter((participant) => !participant.subfaction?.trim())),
     subfactions: subfactionNames.map((name) => {
-      const assigned = faction.subfactionSpecialRules?.find((item) => item.name === name)?.specialRuleIds;
+      const assigned = faction.subfactionSpecialRules?.find(
+        (item) => compareNames(item.name, name) === 0,
+      )?.specialRuleIds;
       return {
         name,
         specialRules: rulesFor(assigned),
-        players: rosterPlayers(members.filter((participant) => (participant.subfaction?.trim() ?? '') === name)),
+        players: rosterPlayers(
+          members.filter((participant) => compareNames(participant.subfaction?.trim() ?? '', name) === 0),
+        ),
       };
     }),
   };
@@ -4252,6 +4443,39 @@ function rosterPlayers(participants: readonly CampaignParticipant[]): FactionRos
   return [...participants]
     .map((participant) => ({ userId: participant.userId, displayName: participant.displayName }))
     .sort((left, right) => compareNames(left.displayName, right.displayName));
+}
+
+function mergeSpecialRuleCatalogs(
+  primary: readonly CampaignSpecialRule[] | undefined,
+  fallback: readonly CampaignSpecialRule[] | undefined,
+): CampaignSpecialRule[] {
+  const byId = new Map<string, CampaignSpecialRule>();
+  for (const rule of fallback ?? []) {
+    byId.set(rule.id.toLowerCase(), rule);
+  }
+
+  for (const rule of primary ?? []) {
+    byId.set(rule.id.toLowerCase(), rule);
+  }
+
+  return [...byId.values()];
+}
+
+function factionWithPlayRules(
+  campaignFaction: CampaignFaction,
+  playFaction: CampaignFaction | undefined,
+): CampaignFaction {
+  if (!playFaction) {
+    return campaignFaction;
+  }
+
+  return {
+    ...campaignFaction,
+    specialRuleIds: playFaction.specialRuleIds?.length ? playFaction.specialRuleIds : campaignFaction.specialRuleIds,
+    subfactionSpecialRules: playFaction.subfactionSpecialRules?.length
+      ? playFaction.subfactionSpecialRules
+      : campaignFaction.subfactionSpecialRules,
+  };
 }
 
 function rivalForce(play: CampaignPlayDetail | null | undefined, userId: string | undefined): PlayForce | undefined {

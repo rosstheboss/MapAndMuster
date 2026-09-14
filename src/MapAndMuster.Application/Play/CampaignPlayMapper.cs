@@ -204,6 +204,22 @@ internal static class CampaignPlayMapper
                     Supply = force.ControllerUserId == viewerUserId || staffView
                         ? ToForceSupply(play, map, campaign, force, window)
                         : null,
+                    CanChooseTeleportDestination = (force.ControllerUserId == viewerUserId || staffView)
+                        && ItemObjectiveEffectRules.CanChosenTeleport(
+                            force,
+                            map,
+                            play.ItemObjectives,
+                            specialRules,
+                            play.CurrentWindow()?.RoundNumber ?? 0),
+                    TeleportTargets = (force.ControllerUserId == viewerUserId || staffView)
+                        && ItemObjectiveEffectRules.CanChosenTeleport(
+                            force,
+                            map,
+                            play.ItemObjectives,
+                            specialRules,
+                            play.CurrentWindow()?.RoundNumber ?? 0)
+                        ? ItemObjectiveEffectRules.ChosenTeleportDestinations(map, force)
+                        : [],
                 }),
             ],
             MyDrafts = currentActionId is { } draftWindow

@@ -72,7 +72,8 @@ public static class ForceMovementRules
             return IsLegalPath(map, force, [force.TerritoryId, .. intermediates, targetId.Value]);
         }
 
-        if (map.AreAdjacent(force.TerritoryId, targetId.Value) && IsLegalStep(map, force, force.TerritoryId, targetId.Value))
+        if (map.AreAdjacent(force.TerritoryId, targetId.Value)
+            && FactionSpecialRulePolicies.CanLandOnForMove(map, force, targetId.Value))
         {
             return true;
         }
@@ -152,7 +153,7 @@ public static class ForceMovementRules
         var ids = new List<Guid>();
         foreach (var neighborId in map.Neighbors(force.TerritoryId))
         {
-            if (!FactionSpecialRulePolicies.CanEnter(map, force, neighborId) || ids.Contains(neighborId))
+            if (!FactionSpecialRulePolicies.CanLandOnForMove(map, force, neighborId) || ids.Contains(neighborId))
             {
                 continue;
             }
@@ -219,7 +220,7 @@ public static class ForceMovementRules
             }
 
             var nextPath = new List<Guid>(path) { next };
-            if (nextPath.Count >= 2)
+            if (nextPath.Count >= 2 && FactionSpecialRulePolicies.CanLandOnForMove(map, force, next))
             {
                 hops.Add(new MoveHop(nextPath[0], next, nextPath.Count == 2 ? [] : [.. nextPath.Skip(1).Take(nextPath.Count - 2)]));
             }
@@ -237,7 +238,15 @@ public static class ForceMovementRules
     {
         for (var i = 1; i < path.Count; i++)
         {
-            if (!IsLegalStep(map, force, path[i - 1], path[i]))
+            var landing = i == path.Count - 1;
+            if (!map.AreAdjacent(path[i - 1], path[i]))
+            {
+                return false;
+            }
+
+            if (landing
+                ? !FactionSpecialRulePolicies.CanLandOnForMove(map, force, path[i])
+                : !FactionSpecialRulePolicies.CanEnter(map, force, path[i]))
             {
                 return false;
             }

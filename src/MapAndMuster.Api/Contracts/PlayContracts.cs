@@ -273,6 +273,12 @@ public sealed class PlayForceResponse
 
     /// <summary>Gets this force's connected-chain supply when the viewer may see it.</summary>
     public PlayerSupplyViewResponse? Supply { get; init; }
+
+    /// <summary>Gets whether the holder may pick a non-spawn teleport destination this round.</summary>
+    public bool CanChooseTeleportDestination { get; init; }
+
+    /// <summary>Gets chosen-teleport destinations when the viewer may pick one.</summary>
+    public IReadOnlyList<Guid> TeleportTargets { get; init; } = [];
 }
 
 /// <summary>A two-territory Move hop.</summary>
@@ -1279,6 +1285,8 @@ public static class PlayResponses
                     HiddenRelicNearby = force.HiddenRelicNearby,
                     BattleReminders = force.BattleReminders,
                     Supply = CampaignResponses.FromSupply(force.Supply),
+                    CanChooseTeleportDestination = force.CanChooseTeleportDestination,
+                    TeleportTargets = force.TeleportTargets,
                 }),
             ],
             MyDrafts =

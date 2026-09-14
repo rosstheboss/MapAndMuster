@@ -126,6 +126,16 @@ export function adjacencyArrowGeometry(
   return { x1: from.x, y1: from.y, x2: to.x, y2: to.y, headA, headB };
 }
 
+/** One-way arrow using the same shaft and head size as a connection, pointing at `to`. */
+export function directedArrowGeometry(
+  from: MapPoint,
+  to: MapPoint,
+  headLength: number,
+): { x1: number; y1: number; x2: number; y2: number; head: string } {
+  const geometry = adjacencyArrowGeometry(from, to, headLength);
+  return { x1: geometry.x1, y1: geometry.y1, x2: geometry.x2, y2: geometry.y2, head: geometry.headB };
+}
+
 function midpointOf(left: { x: number; y: number }, right: { x: number; y: number }): { x: number; y: number } {
   return { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 };
 }

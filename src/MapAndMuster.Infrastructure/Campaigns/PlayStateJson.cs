@@ -624,6 +624,7 @@ internal static class PlayStateJson
                 ? null
                 : force.ClearStreaks.ToDictionary(static pair => pair.Key, static pair => pair.Value),
             ClearStreak = force.ClearStreak,
+            LastChosenTeleportRound = force.LastChosenTeleportRound,
         };
     }
 
@@ -640,7 +641,8 @@ internal static class PlayStateJson
             force.ConsecutiveWaterActions,
             force.EnableStreaks,
             force.ClearStreaks,
-            force.ClearStreak);
+            force.ClearStreak,
+            force.LastChosenTeleportRound);
     }
 
     private sealed class PlayDocument
@@ -702,6 +704,8 @@ internal static class PlayStateJson
         public Dictionary<string, int>? ClearStreaks { get; set; }
 
         public int ClearStreak { get; set; }
+
+        public int LastChosenTeleportRound { get; set; }
     }
 
     private sealed class DraftDocument

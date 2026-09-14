@@ -36,6 +36,16 @@ public sealed class FactionSpecialRulePoliciesTests
             [],
             [],
             rules));
+        Assert.Equal(Dest, FactionSpecialRulePolicies.ResolveMoveDestination(
+            map,
+            force,
+            Dest,
+            Via,
+            [force, new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), ChaosDwarfs, Via, false)],
+            new Dictionary<Guid, string?> { [Bretonnia] = "Pact", [ChaosDwarfs] = "Pact" },
+            [],
+            [],
+            rules));
     }
 
     [Fact]
@@ -64,6 +74,8 @@ public sealed class FactionSpecialRulePoliciesTests
         Assert.False(FactionSpecialRulePolicies.AllowsStatus(force, "Diseased", undead));
         Assert.False(FactionSpecialRulePolicies.AllowsStatus(force, "Well Rested", undead));
         Assert.False(FactionSpecialRulePolicies.AllowsStatus(force, "Confident", undead));
+        Assert.False(FactionSpecialRulePolicies.AllowsStatus(force, "Cursed", undead));
+        Assert.True(FactionSpecialRulePolicies.AllowsStatus(force, "Normal", undead));
     }
 
     [Fact]
@@ -100,6 +112,7 @@ public sealed class FactionSpecialRulePoliciesTests
         Assert.Contains(Dest, moves);
         Assert.Equal(1, FactionSpecialRulePolicies.CalledByTheRelicSpeedBonus(tomb, [tomb], [item], relic));
         Assert.False(FactionSpecialRulePolicies.AllowsStatus(tomb, "Exhausted", relic));
+        Assert.False(FactionSpecialRulePolicies.AllowsStatus(tomb, "Cursed", relic));
     }
 
     [Fact]

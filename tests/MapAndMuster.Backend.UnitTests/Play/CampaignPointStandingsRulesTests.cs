@@ -35,6 +35,89 @@ public sealed class CampaignPointStandingsRulesTests
         var row = Assert.Single(standings);
         Assert.Equal(3, row.TerritoryAndStructurePoints);
         Assert.Equal(row.TerritoryAndStructurePoints, row.Total);
+        Assert.Equal([new CampaignPointSource("Structures", 3)], row.TerritoryAndStructureSources);
+    }
+
+    [Fact]
+    public void ListsNamedSourcesForEachCampaignPointColumn()
+    {
+        var player = Guid.NewGuid();
+        var rival = Guid.NewGuid();
+        var faction = Guid.NewGuid();
+        var town = Guid.NewGuid();
+        var privateType = Guid.NewGuid();
+        var itemType = Guid.NewGuid();
+        var forceId = Guid.NewGuid();
+        var territoryId = Guid.NewGuid();
+        var standings = CampaignPointStandingsRules.Calculate(new CampaignPointScoringState
+        {
+            Players = [new CampaignPointPlayer(player, faction)],
+            Territories =
+            [
+                new CampaignPointTerritory(territoryId, faction, town, StructureCondition.Operational),
+            ],
+            StructurePoints = new Dictionary<Guid, int> { [town] = 4 },
+            StructureNames = new Dictionary<Guid, string> { [town] = "Town" },
+            ItemPoints = new Dictionary<Guid, int> { [itemType] = 3 },
+            ItemNames = new Dictionary<Guid, string> { [itemType] = "Crown" },
+            PublicObjectivePoints = new Dictionary<Guid, int>(),
+            BattleScoring = BattleScoringSetup.Straight(0),
+            RankingObjectivePoints = GeneralPublicObjectivePoints.None,
+            Battles = [],
+            ExtraBattleReportPoints = new Dictionary<Guid, int> { [player] = 2 },
+            Forces = [new CampaignForce(forceId, player, faction, territoryId, false)],
+            VisibleItems =
+            [
+                new CampaignItemObjective(
+                    Guid.NewGuid(),
+                    itemType,
+                    "Crown",
+                    null,
+                    forceId,
+                    true,
+                    territoryId,
+                    true),
+            ],
+            Awards = [],
+            PrivateObjectives =
+            [
+                new PrivateObjectiveAssignment(
+                    Guid.NewGuid(),
+                    privateType,
+                    PrivateObjectiveHolderKind.Player,
+                    player,
+                    PrivateObjectiveScoringKind.Manual,
+                    PrivateObjectiveAssignmentStatus.Revealed,
+                    DateTimeOffset.UtcNow,
+                    revealedUtc: DateTimeOffset.UtcNow),
+            ],
+            PrivateObjectivePoints = new Dictionary<Guid, int> { [privateType] = 5 },
+            PrivateObjectiveNames = new Dictionary<Guid, string> { [privateType] = "Hold the pass" },
+            RivalObjectives =
+            [
+                new RivalObjectiveAssignment(
+                    Guid.NewGuid(),
+                    player,
+                    rival,
+                    5,
+                    PrivateObjectiveAssignmentStatus.Revealed,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow),
+            ],
+        }).Standings;
+
+        var row = Assert.Single(standings);
+        Assert.Equal([new CampaignPointSource("Town", 4)], row.TerritoryAndStructureSources);
+        Assert.Equal([new CampaignPointSource("Battle reports", 2)], row.BattleSources);
+        Assert.Equal(
+            [new CampaignPointSource("Hold the pass", 5), new CampaignPointSource("Secret rival", 5)],
+            row.PrivateObjectiveSources);
+        Assert.Equal([new CampaignPointSource("Crown", 3)], row.OtherSources);
+        Assert.Equal(4, row.TerritoryAndStructurePoints);
+        Assert.Equal(2, row.BattlesWonPoints);
+        Assert.Equal(10, row.PrivateObjectivePoints);
+        Assert.Equal(3, row.OtherPoints);
+        Assert.Equal(19, row.Total);
     }
 
     [Fact]

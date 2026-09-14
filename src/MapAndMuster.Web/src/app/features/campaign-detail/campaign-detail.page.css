@@ -461,6 +461,10 @@ app-campaign-map-view.is-fullscreen .map-meta {
   font-weight: 800;
 }
 
+.standings-table .standings-points {
+  cursor: help;
+}
+
 .standings-table tr.is-viewer > :first-child {
   box-shadow: inset 4px 0 0 var(--color-accent);
 }

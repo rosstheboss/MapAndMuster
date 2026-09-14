@@ -97,6 +97,11 @@ internal static class CampaignPointStandingsMapper
             BrokenAllyFactionIds = play.BrokenAllyFactionIds.ToHashSet(),
             AllyBetrayals = play.AllyBetrayals,
             ExtraBattleReportPoints = CampaignPlayCatalog.ExtraBattleReportPoints(campaign),
+            StructureNames = campaign.StructureTypes.ToDictionary(static type => type.Id, static type => type.Name),
+            ItemNames = campaign.ItemObjectiveTypes.ToDictionary(static type => type.Id, static type => type.Name),
+            PrivateObjectiveNames = campaign.PrivateObjectiveTypes.ToDictionary(
+                static type => type.Id,
+                static type => type.Name),
         });
 
         var byUser = participants.ToDictionary(static participant => participant.UserId);
@@ -126,6 +131,11 @@ internal static class CampaignPointStandingsMapper
                 PrivateObjectivePoints = standing.PrivateObjectivePoints,
                 OtherPoints = standing.OtherPoints,
                 Total = standing.Total,
+                TerritoryAndStructureSources = standing.TerritoryAndStructureSources,
+                BattleSources = standing.BattleSources,
+                PublicObjectiveSources = standing.PublicObjectiveSources,
+                PrivateObjectiveSources = standing.PrivateObjectiveSources,
+                OtherSources = standing.OtherSources,
                 HeldItems =
                 [
                     .. standing.HeldItemTypeIds.Select(typeId =>

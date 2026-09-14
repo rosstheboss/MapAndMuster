@@ -1453,6 +1453,44 @@ describe('CampaignMapViewComponent', () => {
     expect(hovered?.classList.contains('is-interactive')).toBe(false);
   });
 
+  it('draws one-way black hop arrows for a secret order without connection hits', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      squareTerritory('t1', 0.1, 0.1),
+      squareTerritory('t2', 0.4, 0.1),
+      squareTerritory('t3', 0.7, 0.1),
+    ]);
+    fixture.componentRef.setInput('showAdjacencies', false);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'North in t1',
+        routeSteps: ['t1', 't2', 't3'],
+        routeLabel: 'Move from t1 through t2 to t3',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const groups = [...compiled.querySelectorAll('.order-route')];
+    expect(groups).toHaveLength(2);
+    expect(compiled.querySelectorAll('.order-route-head')).toHaveLength(2);
+    expect(compiled.querySelector('.order-route-hit')).toBeNull();
+    expect(compiled.querySelectorAll('.adjacency')).toHaveLength(0);
+    expect(groups[0]?.getAttribute('aria-label')).toBe('Move from t1 through t2 to t3');
+    expect(getComputedStyle(groups[0]!.querySelector('.order-route-line')!).stroke).toBe('rgb(28, 25, 23)');
+    expect(getComputedStyle(groups[0]!.querySelector('.order-route-head')!).fill).toBe('rgb(28, 25, 23)');
+
+    fixture.componentRef.setInput('showOverlay', false);
+    fixture.detectChanges();
+    expect(compiled.querySelectorAll('.order-route')).toHaveLength(0);
+  });
+
   it('uses a full highlight for selection and a half highlight for hover and connections', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);

@@ -28,12 +28,17 @@ describe('campaign presets', () => {
     expect(copy!.specialRules.find((rule) => rule.name === 'Called by the Relic')?.description).toContain(
       'extra movement speed',
     );
+    expect(copy!.specialRules.find((rule) => rule.name === 'Called by the Relic')?.description).toContain(
+      'gain back the extra movement speed',
+    );
+    expect(copy!.specialRules.find((rule) => rule.name === 'Undead')?.description).toContain('Undead forces');
     expect(copy!.specialRules.find((rule) => rule.name === 'Undead')?.description).toContain('Exhausted');
     expect(copy!.factions.find((faction) => faction.name === 'Kingdom of Bretonnia')?.specialRuleNames).toEqual([
       'Safe in Water',
     ]);
     expect(copy!.factions.find((faction) => faction.name === 'Tomb Kings of Khemri')?.specialRuleNames).toEqual([
       'Called by the Relic',
+      'Undead',
     ]);
     expect(copy!.factions.find((faction) => faction.name === 'Vampire Counts')?.specialRuleNames).toEqual([
       'Fresh Corpses',
