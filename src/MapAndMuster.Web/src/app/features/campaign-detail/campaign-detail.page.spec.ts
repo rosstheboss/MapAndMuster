@@ -5464,11 +5464,12 @@ describe('CampaignDetailPage', () => {
     const summaryPanel = [...compiled.querySelectorAll('.panel')].find((panel) =>
       (panel.querySelector('h2')?.textContent ?? '').includes('Summary'),
     );
-    const notice = summaryPanel?.querySelector('.relic-nearby-notice') as HTMLElement | null;
-    expect(notice?.textContent?.replace(/\s+/g, ' ').trim()).toBe(relic);
-    expect(notice?.classList.contains('app-glow')).toBe(true);
-    expect(notice?.style.getPropertyValue('--glow-color')).toBe('#2563EB');
-    expect(notice?.querySelector('strong')?.textContent).toBe(relic);
+    const notice = summaryPanel?.querySelector<HTMLElement>('.relic-nearby-notice');
+    expect(notice).toBeTruthy();
+    expect(visibleText(notice!)).toBe(relic);
+    expect(notice!.classList.contains('app-glow')).toBe(true);
+    expect(notice!.style.getPropertyValue('--glow-color')).toBe('#2563EB');
+    expect(notice!.querySelector('strong')?.textContent).toBe(relic);
     expect(compiled.textContent.split(relic).length - 1).toBe(1);
     expect(compiled.textContent.split(reminder).length - 1).toBe(1);
     expect(compiled.textContent).not.toContain('A hidden relic is in an adjacent territory.');

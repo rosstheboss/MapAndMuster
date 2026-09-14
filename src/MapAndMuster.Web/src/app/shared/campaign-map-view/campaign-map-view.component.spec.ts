@@ -143,10 +143,13 @@ describe('CampaignMapViewComponent', () => {
     ]);
     fixture.detectChanges();
 
-    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin') as HTMLElement | null;
+    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin');
+    expect(pin).toBeTruthy();
     expect(pin?.classList.contains('app-glow')).toBe(true);
     expect(pin?.classList.contains('is-relic-nearby')).toBe(true);
-    expect(getComputedStyle(pin!).getPropertyValue('--glow-color').trim()).toBe('#fff');
+    expect(pin instanceof HTMLElement ? getComputedStyle(pin).getPropertyValue('--glow-color').trim() : null).toBe(
+      '#fff',
+    );
     expect(pin?.getAttribute('aria-label')).toContain('Relic nearby');
   });
 
