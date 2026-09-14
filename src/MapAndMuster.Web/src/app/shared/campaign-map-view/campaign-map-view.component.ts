@@ -104,6 +104,8 @@ export interface MapForceMarker {
   routeLabel?: string;
   /** Territories this force can Move or Split into, including multi-hop destinations. */
   moveTargets?: readonly string[];
+  /** Adjacent to a still-hidden relic or item objective the viewer may be told about. */
+  hiddenRelicNearby?: boolean;
 }
 
 export interface MapHeldItem {
@@ -668,6 +670,10 @@ export class CampaignMapViewComponent {
     const held = force.heldItems?.map((item) => item.name).join(', ');
     if (held) {
       parts.push(`Holding ${held}`);
+    }
+
+    if (force.hiddenRelicNearby) {
+      parts.push('Relic nearby');
     }
 
     return parts.join('. ');

@@ -356,6 +356,8 @@
                     [class.is-battle]="pin.force.inBattle"
                     [class.is-emphasized]="pin.emphasized"
                     [class.has-action]="!!pin.force.isMine && !!pin.force.action"
+                    [class.app-glow]="!!pin.force.hiddenRelicNearby"
+                    [class.is-relic-nearby]="!!pin.force.hiddenRelicNearby"
                     [style.left.%]="pin.fit.x * 100"
                     [style.top.%]="pin.fit.y * 100"
                     [style.width.px]="markerSize(pin.fit).width"

@@ -265,7 +265,7 @@ public sealed class PlayForceResponse
     /// <summary>Gets whether this force may declare Magical Supply rerolls on a battle result.</summary>
     public bool CanUseMagicalSupply { get; init; }
 
-    /// <summary>Gets whether a hidden relic is in an adjacent territory.</summary>
+    /// <summary>Gets whether this force is adjacent to a still-hidden relic the viewer may be told about.</summary>
     public bool HiddenRelicNearby { get; init; }
 
     /// <summary>Gets tabletop or campaign reminders from assigned special rules.</summary>

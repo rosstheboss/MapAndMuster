@@ -115,6 +115,41 @@ describe('CampaignMapViewComponent', () => {
     expect(pin instanceof HTMLElement ? pin.style.background : null).toBe('rgb(37, 99, 235)');
   });
 
+  it('glows a force pin white when a hidden relic is nearby', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+      },
+    ]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'North force in Coast',
+        hiddenRelicNearby: true,
+      },
+    ]);
+    fixture.detectChanges();
+
+    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin') as HTMLElement | null;
+    expect(pin?.classList.contains('app-glow')).toBe(true);
+    expect(pin?.classList.contains('is-relic-nearby')).toBe(true);
+    expect(getComputedStyle(pin!).getPropertyValue('--glow-color').trim()).toBe('#fff');
+    expect(pin?.getAttribute('aria-label')).toContain('Relic nearby');
+  });
+
   it('colors a force pin with the occupying subfaction color', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
@@ -1482,9 +1517,23 @@ describe('CampaignMapViewComponent', () => {
     expect(compiled.querySelectorAll('.order-route-head')).toHaveLength(2);
     expect(compiled.querySelector('.order-route-hit')).toBeNull();
     expect(compiled.querySelectorAll('.adjacency')).toHaveLength(0);
-    expect(groups[0]?.getAttribute('aria-label')).toBe('Move from t1 through t2 to t3');
-    expect(getComputedStyle(groups[0]!.querySelector('.order-route-line')!).stroke).toBe('rgb(28, 25, 23)');
-    expect(getComputedStyle(groups[0]!.querySelector('.order-route-head')!).fill).toBe('rgb(28, 25, 23)');
+    const group = groups[0];
+    expect(group).toBeInstanceOf(Element);
+    if (!(group instanceof Element)) {
+      return;
+    }
+
+    expect(group.getAttribute('aria-label')).toBe('Move from t1 through t2 to t3');
+    const line = group.querySelector('.order-route-line');
+    const head = group.querySelector('.order-route-head');
+    expect(line).toBeInstanceOf(Element);
+    expect(head).toBeInstanceOf(Element);
+    if (!(line instanceof Element) || !(head instanceof Element)) {
+      return;
+    }
+
+    expect(getComputedStyle(line).stroke).toBe('rgb(28, 25, 23)');
+    expect(getComputedStyle(head).fill).toBe('rgb(28, 25, 23)');
 
     fixture.componentRef.setInput('showOverlay', false);
     fixture.detectChanges();

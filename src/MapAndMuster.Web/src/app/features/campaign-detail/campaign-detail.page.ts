@@ -409,6 +409,15 @@ export class CampaignDetailPage {
     return campaign.factions.find((faction) => faction.id === campaign.factionId) ?? null;
   });
   protected readonly myForces = computed(() => this.play()?.forces.filter((force) => force.isMine) ?? []);
+  protected readonly relicNearbyNotices = computed(() =>
+    this.myForces()
+      .filter((force) => force.hiddenRelicNearby)
+      .map((force) => ({
+        forceId: force.id,
+        territoryName: this.territoryName(force.territoryId),
+        glowColor: this.forceAccent(force),
+      })),
+  );
   protected readonly anyForceHasChainSupply = computed(() => this.myForces().some((force) => !!force.supply));
   protected readonly orderableForces = computed(() =>
     this.myForces().filter((force) => !force.inBattle && force.availableActions.length > 0),
@@ -620,6 +629,7 @@ export class CampaignDetailPage {
         action: this.ownForceMapAction(force),
         ...this.forceOrderRouteFields(force),
         moveTargets: force.moveTargets,
+        hiddenRelicNearby: !!force.hiddenRelicNearby,
       };
     });
   });
@@ -724,7 +734,7 @@ export class CampaignDetailPage {
 
     const faction = factionWithPlayRules(
       catalogFaction,
-      this.play()?.factions?.find((item) => item.id === catalogFaction.id),
+      this.play()?.factions.find((item) => item.id === catalogFaction.id),
     );
     const factionRules = this.specialRulesFor(faction.specialRuleIds);
     const assigned = subfaction
@@ -3836,8 +3846,8 @@ export class CampaignDetailPage {
       this.confirmMapMove(
         flow,
         destId,
-        hop?.viaTerritoryId ?? flow.viaTerritoryId,
-        hop?.intermediateTerritoryIds ? [...hop.intermediateTerritoryIds] : viaPath,
+        hop.viaTerritoryId,
+        hop.intermediateTerritoryIds ? [...hop.intermediateTerritoryIds] : viaPath,
       );
       return;
     }

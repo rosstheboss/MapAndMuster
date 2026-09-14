@@ -344,20 +344,13 @@ public static class SupplyRules
             }
         }
         var escalation = EscalationFor(catalog.ArmyEscalations, roundNumber);
-        var mapAfterPenalty = isSplit
-            ? Math.Max(
-                HuntInEstaliaDefaults.SplitForceMinimumMapSupply,
-                mapSupply - SplitPenalty(
-                    mapSupply,
-                    catalog.SplitForceSupplyPenaltyPercent,
-                    catalog.SplitForceSupplyPenaltyIsPercent))
-            : mapSupply;
-        if (isSplit && mapSupply <= 0)
-        {
-            mapAfterPenalty = 0;
-        }
-
-        var splitPenalty = mapSupply - mapAfterPenalty;
+        var splitPenalty = isSplit
+            ? SplitPenalty(
+                mapSupply,
+                catalog.SplitForceSupplyPenaltyPercent,
+                catalog.SplitForceSupplyPenaltyIsPercent)
+            : 0;
+        var mapAfterPenalty = mapSupply - splitPenalty;
         var allowance = mapAfterPenalty + escalation.FreeSupplyPoints;
         if (escalation.FreeSupplyPoints != 0)
         {

@@ -5412,7 +5412,25 @@ describe('CampaignDetailPage', () => {
       campaignId: campaign.id,
       revision: campaign.revision,
       canManage: true,
-      territories: [],
+      territories: [
+        {
+          id: 't1',
+          displayNumber: 1,
+          name: 'Gretios Road',
+          description: null,
+          polygon: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.4, y: 0.1 },
+            { x: 0.4, y: 0.4 },
+            { x: 0.1, y: 0.4 },
+          ],
+          terrainTypeId: null,
+          structureTypeId: null,
+          structureCondition: 'Operational',
+          overlayColor: null,
+          ownerFactionId: '1',
+        },
+      ],
       adjacencies: [],
     });
     http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
@@ -5438,12 +5456,26 @@ describe('CampaignDetailPage', () => {
     flushLog(http);
     await fixture.whenStable();
     fixture.detectChanges();
+    openSection(fixture, 'faction');
 
     const compiled = fixture.nativeElement as HTMLElement;
-    const relic = 'A hidden relic is in an adjacent territory.';
+    const relic = 'Relic is nearby the force at Gretios Road.';
     const reminder = 'Bring a relic hunter.';
+    const summaryPanel = [...compiled.querySelectorAll('.panel')].find((panel) =>
+      (panel.querySelector('h2')?.textContent ?? '').includes('Summary'),
+    );
+    const notice = summaryPanel?.querySelector('.relic-nearby-notice') as HTMLElement | null;
+    expect(notice?.textContent?.replace(/\s+/g, ' ').trim()).toBe(relic);
+    expect(notice?.classList.contains('app-glow')).toBe(true);
+    expect(notice?.style.getPropertyValue('--glow-color')).toBe('#2563EB');
+    expect(notice?.querySelector('strong')?.textContent).toBe(relic);
     expect(compiled.textContent.split(relic).length - 1).toBe(1);
     expect(compiled.textContent.split(reminder).length - 1).toBe(1);
+    expect(compiled.textContent).not.toContain('A hidden relic is in an adjacent territory.');
+    const ordersPanel = [...compiled.querySelectorAll('.panel')].find((panel) =>
+      (panel.querySelector('h2')?.textContent ?? '').includes('Actions'),
+    );
+    expect(ordersPanel?.textContent).not.toContain(relic);
     http.verify();
   });
 

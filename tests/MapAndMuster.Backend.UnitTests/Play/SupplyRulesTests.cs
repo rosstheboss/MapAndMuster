@@ -190,6 +190,58 @@ public sealed class SupplyRulesTests
     }
 
     [Fact]
+    public void SplitForcesApplyRawPenaltyWhenMapSupplyIsOne()
+    {
+        var state = EmptyState(forceCount: 2);
+        var map = new PlayMap(
+            [
+                new PlayTerritory(
+                    Spawn,
+                    1,
+                    Faction,
+                    Faction,
+                    null,
+                    null,
+                    StructureCondition.Operational,
+                    terrainTypeId: Terrain),
+            ],
+            []);
+        var snapshot = SupplyRules.ForPlayer(state, map, Catalog(), Player, roundNumber: 1);
+
+        Assert.True(snapshot.IsSplit);
+        Assert.Equal(1, snapshot.MapSupplyPoints);
+        Assert.Equal(1, snapshot.RoundFreeSupplyPoints);
+        Assert.Equal(1, snapshot.SplitPenaltyPoints);
+        Assert.Equal(1, snapshot.ForceAllowancePoints);
+        Assert.Contains(
+            snapshot.Contributions,
+            item => item.Kind == SupplyContributionKind.SplitPenalty && item.Points == -1);
+    }
+
+    [Fact]
+    public void SplitForcesApplyNoPenaltyWhenConfiguredZero()
+    {
+        var state = EmptyState(forceCount: 2, territoryId: Spawn);
+        var map = MapWithKeep();
+        var catalog = new SupplyCatalog(
+            new Dictionary<Guid, int> { [Terrain] = 1 },
+            new Dictionary<Guid, StructureSupplyRules> { [Keep] = new(1, 1, 1) },
+            0,
+            HuntInEstaliaDefaults.ArmyEscalations(8),
+            new Dictionary<Guid, Guid> { [Player] = Faction },
+            new Dictionary<Guid, string?> { [Faction] = null },
+            new HashSet<Guid>(),
+            splitForceSupplyPenaltyIsPercent: false);
+        var snapshot = SupplyRules.ForPlayer(state, map, catalog, Player, roundNumber: 3);
+
+        Assert.True(snapshot.IsSplit);
+        Assert.Equal(3, snapshot.MapSupplyPoints);
+        Assert.Equal(0, snapshot.SplitPenaltyPoints);
+        Assert.Equal(4, snapshot.ForceAllowancePoints);
+        Assert.DoesNotContain(snapshot.Contributions, item => item.Kind == SupplyContributionKind.SplitPenalty);
+    }
+
+    [Fact]
     public void SplitForcesApplyPercentPenaltyWhenConfigured()
     {
         var state = EmptyState(forceCount: 2, territoryId: Spawn);

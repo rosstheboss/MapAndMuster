@@ -18,7 +18,7 @@ describe('BackToTopComponent', () => {
     fixture.detectChanges();
 
     const button = (fixture.nativeElement as HTMLElement).querySelector('button');
-    expect(button?.textContent?.trim()).toBe('Back to top');
+    expect(button?.textContent.trim()).toBe('Back to top');
     button?.click();
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });

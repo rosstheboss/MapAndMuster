@@ -332,6 +332,68 @@ public sealed class FactionSpecialRulePoliciesTests
         Assert.Null(FactionSpecialRulePolicies.Capture(Map(), Via, Bretonnia, "Khorne").Territory(Via)!.OwnerSubfaction);
     }
 
+    [Fact]
+    public void HiddenRelicAdjacentTellsConduitsOfPowerWhenAHiddenItemIsNextDoor()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Origin, false);
+        var hidden = Relic(Via, isRevealed: false);
+
+        Assert.True(
+            FactionSpecialRulePolicies.HiddenRelicAdjacent(
+                Map(),
+                force,
+                [hidden],
+                Context(Bretonnia, SpecialRuleEffectKeys.ConduitsOfPower)));
+        Assert.False(
+            FactionSpecialRulePolicies.HiddenRelicAdjacent(
+                Map(),
+                force,
+                [hidden],
+                SpecialRuleContext.None));
+        Assert.False(
+            FactionSpecialRulePolicies.HiddenRelicAdjacent(
+                Map(),
+                force,
+                [Relic(Via, isRevealed: true)],
+                Context(Bretonnia, SpecialRuleEffectKeys.ConduitsOfPower)));
+        Assert.False(
+            FactionSpecialRulePolicies.HiddenRelicAdjacent(
+                Map(),
+                force,
+                [Relic(Via, isRevealed: false, possessorForceId: force.Id)],
+                Context(Bretonnia, SpecialRuleEffectKeys.ConduitsOfPower)));
+        Assert.False(
+            FactionSpecialRulePolicies.HiddenRelicAdjacent(
+                Map(),
+                force,
+                [Relic(Via, isRevealed: false, isDestroyed: true)],
+                Context(Bretonnia, SpecialRuleEffectKeys.ConduitsOfPower)));
+        Assert.False(
+            FactionSpecialRulePolicies.HiddenRelicAdjacent(
+                Map(),
+                force,
+                [Relic(Dest, isRevealed: false)],
+                Context(Bretonnia, SpecialRuleEffectKeys.ConduitsOfPower)));
+    }
+
+    private static CampaignItemObjective Relic(
+        Guid territoryId,
+        bool isRevealed,
+        Guid? possessorForceId = null,
+        bool isDestroyed = false)
+    {
+        return new CampaignItemObjective(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Crown",
+            territoryId,
+            possessorForceId,
+            isRevealed,
+            territoryId,
+            wasHiddenUntilFound: true,
+            isDestroyed: isDestroyed);
+    }
+
     private static SpecialRuleContext Context(Guid factionId, string effectKey)
     {
         var ruleId = Guid.NewGuid();

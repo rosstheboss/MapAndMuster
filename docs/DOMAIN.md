@@ -220,8 +220,10 @@ the same territory.
 - `BringersOfThePlague`: never Diseased or Well Rested; beating a force that is not already
   Diseased inflicts Diseased, including when that loser is Shaken.
 - `ArtOfWar`: Retreat may enter any non-enemy-spawn territory and may capture it.
-- `ConduitsOfPower`: a player is told when they are adjacent to a still-hidden relic. After a
-  relic is revealed, they may Move to any territory adjacent to it.
+- `ConduitsOfPower`: a player is told when they are adjacent to a still-hidden relic. The notice
+  names each of that player's adjacent forces by territory and does not reveal the relic's
+  location. Staff debug visibility of the relic does not count as revealed for this notice.
+  After a relic is revealed, they may Move to any territory adjacent to it.
 - `SpawningPools`: owned water-feature territories without a Town, City, or Castle count as a
   supply depot and fortification without a supply path. Built Supply Depot or Fortification
   structures grant one extra map supply point. The bonus does not apply to allies.
@@ -1118,12 +1120,12 @@ and the game log.
   supply. The earning player may assign remaining points to any of their forces. Each spent
   point applies to exactly one force: if two forces spend 2 and 1 from a pool of 3, the pool
   is empty. Remaining temporary supply is not added into each force's chain total.
-- Split forces each receive the map supply of the chain they can reach after the split-force
-  penalty, with a minimum of 1 map supply each. The round's free supply points are granted in
-  full to every one of that player's forces. Temporary points are not duplicated. The Hunt in
-  Estalia split penalty default is a raw value of 1 and is the application default. The penalty
-  may instead be a percentage of map supply (0–100). Catalogs stored before this toggle keep
-  the legacy 25 percent when the flag is absent.
+- Split forces each receive the map supply of the chain they can reach minus the configured
+  split-force penalty. A configured 0 applies no penalty. Map supply after the penalty may be 0.
+  The round's free supply points are granted in full to every one of that player's forces.
+  Temporary points are not duplicated. The Hunt in Estalia split penalty default is a raw value
+  of 1 and is the application default. The penalty may instead be a percentage of map supply
+  (0–100). Catalogs stored before this toggle keep the legacy 25 percent when the flag is absent.
 - Current chain supply shown under each of the viewer's forces in Summary, on the Participants
   list as the maximum one force can spend from its chain plus remaining spendable supply, and
   on battles to resolve is that force's allowance (map after split penalty, plus round free

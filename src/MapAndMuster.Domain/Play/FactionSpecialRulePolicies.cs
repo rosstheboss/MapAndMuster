@@ -378,7 +378,9 @@ public static class FactionSpecialRulePolicies
         return ForceStatusNames.Diseased;
     }
 
-    /// <summary>Returns whether a hidden item is adjacent to the force.</summary>
+    /// <summary>
+    /// Returns whether a still-hidden, unpossessed, undestroyed item is adjacent to the force.
+    /// </summary>
     public static bool HiddenRelicAdjacent(
         PlayMap map,
         CampaignForce force,
@@ -392,7 +394,10 @@ public static class FactionSpecialRulePolicies
 
         foreach (var item in items)
         {
-            if (item.IsRevealed || item.PossessorForceId is not null || item.TerritoryId is not { } relicId)
+            if (item.IsDestroyed
+                || item.IsRevealed
+                || item.PossessorForceId is not null
+                || item.TerritoryId is not { } relicId)
             {
                 continue;
             }

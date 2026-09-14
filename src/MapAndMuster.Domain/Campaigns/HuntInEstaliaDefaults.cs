@@ -17,9 +17,6 @@ public static class HuntInEstaliaDefaults
     /// <summary>Legacy catalog percent used when older JSON omits the raw-or-percent flag.</summary>
     public const int LegacySplitForceSupplyPenaltyPercent = 25;
 
-    /// <summary>Each split force keeps at least this many map supply points after the penalty.</summary>
-    public const int SplitForceMinimumMapSupply = 1;
-
     /// <summary>Army points after an attacker/defender mission advantage are never below this.</summary>
     public const int MinimumArmyPoints = 500;
 

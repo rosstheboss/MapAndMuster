@@ -199,7 +199,8 @@ internal static class CampaignPlayMapper
                     CanDestroyImmediately = FactionSpecialRulePolicies.CanDestroyImmediately(force, specialRules),
                     CanUseExtraBlackPowder = specialRules.Has(force, SpecialRuleEffectKeys.PreparedForBattle),
                     CanUseMagicalSupply = specialRules.Has(force, SpecialRuleEffectKeys.MagicalSupply),
-                    HiddenRelicNearby = FactionSpecialRulePolicies.HiddenRelicAdjacent(map, force, play.ItemObjectives, specialRules),
+                    HiddenRelicNearby = (force.ControllerUserId == viewerUserId || staffView)
+                        && FactionSpecialRulePolicies.HiddenRelicAdjacent(map, force, play.ItemObjectives, specialRules),
                     BattleReminders = BattleRemindersFor(campaign, force, specialRules, map, play),
                     Supply = force.ControllerUserId == viewerUserId || staffView
                         ? ToForceSupply(play, map, campaign, force, window)

@@ -355,9 +355,6 @@
                 @if (force.statusEffects) {
                   <p class="muted">{{ force.statusEffects }}</p>
                 }
-                @if (force.hiddenRelicNearby) {
-                  <p class="muted">A hidden relic is in an adjacent territory.</p>
-                }
                 @if (force.battleReminders?.length) {
                   <ul>
                     @for (reminder of force.battleReminders; track reminder) {
@@ -2633,6 +2630,11 @@
             }
           </ul>
         </div>
+      }
+      @for (notice of relicNearbyNotices(); track notice.forceId) {
+        <p class="relic-nearby-notice app-glow" [style.--glow-color]="notice.glowColor">
+          <strong>Relic is nearby the force at {{ notice.territoryName }}.</strong>
+        </p>
       }
     </ng-template>
     <ng-template #commitmentEntry let-item>
