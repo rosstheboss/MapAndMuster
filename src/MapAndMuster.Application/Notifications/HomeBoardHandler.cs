@@ -176,9 +176,8 @@ public sealed class GetHomeBoardHandler
             }
 
             var needsRetreat = battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved
-                && !battle.IsDraw
-                && battle.WinnerForceId != myForce.Id
-                && !play.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == myForce.Id);
+                && (battle.IsNoContest || battle.IsDraw || battle.WinnerForceId != myForce.Id)
+                && !play.HasCommittedRetreat(battle.Id, myForce.Id);
             if (needsRetreat)
             {
                 yield return Item(

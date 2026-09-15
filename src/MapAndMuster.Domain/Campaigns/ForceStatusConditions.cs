@@ -1,7 +1,8 @@
 namespace MapAndMuster.Domain.Campaigns;
 
 /// <summary>
-/// One enable trigger, consecutive-occurrence count, and optional location filter.
+/// One enable trigger, consecutive-occurrence count, optional location filter, and optional
+/// co-located force status.
 /// </summary>
 public sealed class ForceStatusEnableCondition
 {
@@ -12,7 +13,8 @@ public sealed class ForceStatusEnableCondition
         ForceStatusEnableTrigger trigger,
         int occurrences = ForceStatusOccurrences.Default,
         Guid? id = null,
-        ConditionLocation? location = null)
+        ConditionLocation? location = null,
+        Guid? requiredStatusId = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(occurrences, ForceStatusOccurrences.Min);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(occurrences, ForceStatusOccurrences.Max);
@@ -20,6 +22,7 @@ public sealed class ForceStatusEnableCondition
         Trigger = trigger;
         Occurrences = occurrences;
         Location = location ?? ConditionLocation.Any;
+        RequiredStatusId = requiredStatusId is { } status && status != Guid.Empty ? status : null;
     }
 
     /// <summary>Gets the stable condition identifier.</summary>
@@ -35,16 +38,23 @@ public sealed class ForceStatusEnableCondition
     public ConditionLocation Location { get; }
 
     /// <summary>
+    /// Gets the catalog status another occupying force must have when the trigger is
+    /// <see cref="ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus"/>.
+    /// </summary>
+    public Guid? RequiredStatusId { get; }
+
+    /// <summary>
     /// Returns a fingerprint used to detect duplicate conditions.
     /// </summary>
     public string Fingerprint()
     {
-        return $"{Trigger}:{Occurrences}:{Location.Fingerprint()}";
+        return $"{Trigger}:{Occurrences}:{Location.Fingerprint()}:{RequiredStatusId?.ToString("D") ?? "-"}";
     }
 }
 
 /// <summary>
-/// One clear trigger, consecutive-occurrence count, and optional location filter.
+/// One clear trigger, consecutive-occurrence count, optional location filter, and optional
+/// co-located force status.
 /// </summary>
 public sealed class ForceStatusClearCondition
 {
@@ -55,7 +65,8 @@ public sealed class ForceStatusClearCondition
         ForceStatusClearTrigger trigger,
         int occurrences = ForceStatusOccurrences.Default,
         Guid? id = null,
-        ConditionLocation? location = null)
+        ConditionLocation? location = null,
+        Guid? requiredStatusId = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(occurrences, ForceStatusOccurrences.Min);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(occurrences, ForceStatusOccurrences.Max);
@@ -63,6 +74,7 @@ public sealed class ForceStatusClearCondition
         Trigger = trigger;
         Occurrences = occurrences;
         Location = location ?? ConditionLocation.Any;
+        RequiredStatusId = requiredStatusId is { } status && status != Guid.Empty ? status : null;
     }
 
     /// <summary>Gets the stable condition identifier.</summary>
@@ -78,10 +90,16 @@ public sealed class ForceStatusClearCondition
     public ConditionLocation Location { get; }
 
     /// <summary>
+    /// Gets the catalog status another occupying force must have when the trigger is
+    /// <see cref="ForceStatusClearTrigger.OccupyingWithSpecifiedStatus"/>.
+    /// </summary>
+    public Guid? RequiredStatusId { get; }
+
+    /// <summary>
     /// Returns a fingerprint used to detect duplicate conditions.
     /// </summary>
     public string Fingerprint()
     {
-        return $"{Trigger}:{Occurrences}:{Location.Fingerprint()}";
+        return $"{Trigger}:{Occurrences}:{Location.Fingerprint()}:{RequiredStatusId?.ToString("D") ?? "-"}";
     }
 }

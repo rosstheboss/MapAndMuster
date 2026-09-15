@@ -34,6 +34,8 @@ import type {
   SubmitRetreatPayload,
   ParseArmyListPayload,
   ParseArmyListResult,
+  BattleActionPayload,
+  BattleParticipantReport,
   UserSearchHit,
 } from './campaign.models';
 import { filenameFromContentDisposition, type CampaignLogExportRequest, type CampaignLogSync } from './campaign-log';
@@ -410,13 +412,26 @@ export class CampaignService {
     );
   }
 
-  async acceptBattleResult(campaignId: string, battleId: string, revision: number): Promise<CampaignPlayDetail> {
+  async acceptBattleResult(
+    campaignId: string,
+    battleId: string,
+    revision: number,
+    reports?: BattleParticipantReport[],
+  ): Promise<CampaignPlayDetail> {
     return firstValueFrom(
       this.http.post<CampaignPlayDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/play/accept-result`,
-        { revision, battleId },
+        { revision, battleId, reports },
         { withCredentials: true },
       ),
+    );
+  }
+
+  async submitArmyList(campaignId: string, payload: BattleActionPayload): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/army-list`, payload, {
+        withCredentials: true,
+      }),
     );
   }
 
@@ -425,6 +440,19 @@ export class CampaignService {
       this.http.post<CampaignPlayDetail>(`/api/campaigns/${encodeURIComponent(campaignId)}/play/retreat`, payload, {
         withCredentials: true,
       }),
+    );
+  }
+
+  async uncommitRetreat(
+    campaignId: string,
+    payload: { revision: number; battleId: string },
+  ): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/retreat/uncommit`,
+        payload,
+        { withCredentials: true },
+      ),
     );
   }
 

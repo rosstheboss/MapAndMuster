@@ -313,6 +313,122 @@ public sealed class ForceStatusRulesTests
     }
 
     [Fact]
+    public void OccupyingWithThisStatusEnablesWhenAnotherForceAlreadyHasIt()
+    {
+        var plagueId = Guid.NewGuid();
+        var plague = new ForceStatusSetup(
+            plagueId,
+            "Plague",
+            "effects",
+            [new ForceStatusEnableCondition(ForceStatusEnableTrigger.OccupyingWithThisStatus)],
+            [new ForceStatusClearCondition(ForceStatusClearTrigger.AfterMove)],
+            1);
+        var carrier = new CampaignForce(OtherForceId, OtherUserId, OtherFactionId, TerritoryId, false, statusName: "Plague");
+        var visitor = Force();
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false, occupyingStatusTypeIds: [plagueId]),
+            [OtherForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false),
+        };
+
+        var next = ForceStatusRules.Apply([visitor, carrier], [plague], facts);
+        Assert.Equal("Plague", next.Single(force => force.Id == ForceId).StatusName);
+    }
+
+    [Fact]
+    public void OccupyingWithThisStatusIgnoresAForceThatOnlyPassedThrough()
+    {
+        var plagueId = Guid.NewGuid();
+        var plague = new ForceStatusSetup(
+            plagueId,
+            "Plague",
+            "effects",
+            [new ForceStatusEnableCondition(ForceStatusEnableTrigger.OccupyingWithThisStatus)],
+            [new ForceStatusClearCondition(ForceStatusClearTrigger.AfterMove)],
+            1);
+        var visitor = Force();
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(ActionKind.Move, occupiesWater: false),
+        };
+
+        var next = Assert.Single(ForceStatusRules.Apply([visitor], [plague], facts));
+        Assert.Null(next.StatusName);
+    }
+
+    [Fact]
+    public void OccupyingWithSpecifiedStatusEnablesWhenTheChosenStatusIsPresent()
+    {
+        var shaken = Status("Shaken", ForceStatusEnableTrigger.BattleLostOrRetreat, ForceStatusClearTrigger.Hold);
+        var cursed = new ForceStatusSetup(
+            Guid.NewGuid(),
+            "Cursed",
+            "effects",
+            [
+                new ForceStatusEnableCondition(
+                    ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus,
+                    requiredStatusId: shaken.Id),
+            ],
+            [new ForceStatusClearCondition(ForceStatusClearTrigger.AfterMove)],
+            2);
+        var carrier = new CampaignForce(OtherForceId, OtherUserId, OtherFactionId, TerritoryId, false, statusName: "Shaken");
+        var visitor = Force();
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false, occupyingStatusTypeIds: [shaken.Id]),
+            [OtherForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false),
+        };
+
+        var next = ForceStatusRules.Apply([visitor, carrier], [shaken, cursed], facts);
+        Assert.Equal("Cursed", next.Single(force => force.Id == ForceId).StatusName);
+    }
+
+    [Fact]
+    public void OccupyingWithThisStatusClearsWhenAnotherForceHasIt()
+    {
+        var plagueId = Guid.NewGuid();
+        var plague = new ForceStatusSetup(
+            plagueId,
+            "Plague",
+            "effects",
+            [new ForceStatusEnableCondition(ForceStatusEnableTrigger.AfterBattle)],
+            [new ForceStatusClearCondition(ForceStatusClearTrigger.OccupyingWithThisStatus)],
+            1);
+        var infected = Force(statusName: "Plague");
+        var carrier = new CampaignForce(OtherForceId, OtherUserId, OtherFactionId, TerritoryId, false, statusName: "Plague");
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false, occupyingStatusTypeIds: [plagueId]),
+            [OtherForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false, occupyingStatusTypeIds: [plagueId]),
+        };
+
+        var next = ForceStatusRules.Apply([infected, carrier], [plague], facts);
+        Assert.Null(next.Single(force => force.Id == ForceId).StatusName);
+    }
+
+    [Fact]
+    public void OccupyingWithThisStatusWaitsForConfiguredConsecutiveActions()
+    {
+        var plagueId = Guid.NewGuid();
+        var plague = new ForceStatusSetup(
+            plagueId,
+            "Plague",
+            "effects",
+            [new ForceStatusEnableCondition(ForceStatusEnableTrigger.OccupyingWithThisStatus, 2)],
+            [new ForceStatusClearCondition(ForceStatusClearTrigger.AfterMove)],
+            1);
+        var occupying = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(ActionKind.Hold, occupiesWater: false, occupyingStatusTypeIds: [plagueId]),
+        };
+
+        var first = Assert.Single(ForceStatusRules.Apply([Force()], [plague], occupying));
+        Assert.Null(first.StatusName);
+        var second = Assert.Single(ForceStatusRules.Apply([first], [plague], occupying));
+        Assert.Equal("Plague", second.StatusName);
+    }
+
+    [Fact]
     public void HoldAtSettlementClearsDiseasedAndHoldEnablesWellRested()
     {
         var catalog = Catalog();

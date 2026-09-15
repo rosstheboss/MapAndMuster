@@ -91,6 +91,16 @@ public sealed class ForceMovementRulesTests
     }
 
     [Fact]
+    public void CanReachWithinSpeedFollowsAdjacentHopsAndBlockedHexes()
+    {
+        var map = Map();
+        Assert.True(ForceMovementRules.CanReachWithinSpeed(map, Origin, Via, 1, static _ => true));
+        Assert.False(ForceMovementRules.CanReachWithinSpeed(map, Origin, Dest, 1, static _ => true));
+        Assert.True(ForceMovementRules.CanReachWithinSpeed(map, Origin, Dest, 2, static _ => true));
+        Assert.False(ForceMovementRules.CanReachWithinSpeed(map, Origin, Dest, 2, hop => hop != Via));
+    }
+
+    [Fact]
     public void MoveCannotLandOnASpawnTerritory()
     {
         var rules = SpeedContext(Bretonnia, 2);

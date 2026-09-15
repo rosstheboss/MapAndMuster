@@ -358,7 +358,8 @@ internal static class CatalogFileBinder
                     Enum.Parse<ForceStatusEnableTrigger>(condition.Trigger, true),
                     ForceStatusOccurrences.Normalize(condition.Occurrences),
                     condition.Id,
-                    ParseLocation(condition)))
+                    ParseLocation(condition),
+                    condition.RequiredStatusId))
                 .DistinctBy(static condition => condition.Fingerprint()),
         ];
     }
@@ -388,7 +389,8 @@ internal static class CatalogFileBinder
                     Enum.Parse<ForceStatusClearTrigger>(condition.Trigger, true),
                     ForceStatusOccurrences.Normalize(condition.Occurrences),
                     condition.Id,
-                    ParseLocation(condition)))
+                    ParseLocation(condition),
+                    condition.RequiredStatusId))
                 .DistinctBy(static condition => condition.Fingerprint()),
         ];
     }
@@ -402,7 +404,8 @@ internal static class CatalogFileBinder
                 condition.Id,
                 condition.Trigger.ToString(),
                 condition.Occurrences,
-                condition.Location)),
+                condition.Location,
+                condition.RequiredStatusId)),
         ];
     }
 
@@ -415,7 +418,8 @@ internal static class CatalogFileBinder
                 condition.Id,
                 condition.Trigger.ToString(),
                 condition.Occurrences,
-                condition.Location)),
+                condition.Location,
+                condition.RequiredStatusId)),
         ];
     }
 
@@ -423,7 +427,8 @@ internal static class CatalogFileBinder
         Guid id,
         string trigger,
         int occurrences,
-        ConditionLocation location)
+        ConditionLocation location,
+        Guid? requiredStatusId)
     {
         return new StoredForceStatusCondition
         {
@@ -433,6 +438,7 @@ internal static class CatalogFileBinder
             LocationKind = location.Kind.ToString(),
             LocationTypeId = location.TypeId,
             LocationTagId = location.TagId,
+            RequiredStatusId = requiredStatusId,
         };
     }
 

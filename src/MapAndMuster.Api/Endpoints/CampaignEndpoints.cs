@@ -378,6 +378,14 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status401Unauthorized)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/{campaignId:guid}/play/army-list", SubmitArmyListAsync)
+            .WithName("SubmitCampaignArmyList")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
         group.MapPost("/{campaignId:guid}/play/accept-result", AcceptBattleResultAsync)
             .WithName("AcceptCampaignBattleResult")
             .Produces<CampaignPlayResponse>()
@@ -388,6 +396,14 @@ public static class CampaignEndpoints
 
         group.MapPost("/{campaignId:guid}/play/retreat", SubmitRetreatAsync)
             .WithName("SubmitCampaignRetreat")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/retreat/uncommit", UncommitRetreatAsync)
+            .WithName("UncommitCampaignRetreat")
             .Produces<CampaignPlayResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
@@ -2379,6 +2395,35 @@ public static class CampaignEndpoints
                     CampaignId = campaignId,
                     ExpectedRevision = request.Revision,
                     BattleId = request.BattleId,
+                    Reports = PlayResponses.ToReportInputs(request.Reports),
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> SubmitArmyListAsync(
+        Guid campaignId,
+        BattleActionRequest request,
+        ClaimsPrincipal principal,
+        SubmitArmyListHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new BattleActionCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
+                    Reports = PlayResponses.ToReportInputs(request.Reports),
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -2407,6 +2452,33 @@ public static class CampaignEndpoints
                     ExpectedRevision = request.Revision,
                     BattleId = request.BattleId,
                     TargetTerritoryId = request.TargetTerritoryId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> UncommitRetreatAsync(
+        Guid campaignId,
+        UncommitRetreatRequest request,
+        ClaimsPrincipal principal,
+        UncommitRetreatHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new UncommitRetreatCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    BattleId = request.BattleId,
                 },
                 cancellationToken)
             .ConfigureAwait(false);

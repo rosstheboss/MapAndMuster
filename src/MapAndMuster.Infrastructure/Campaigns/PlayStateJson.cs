@@ -151,6 +151,26 @@ internal static class PlayStateJson
                     })],
                 })],
             })],
+            ArmyLists = [.. state.ArmyLists.Select(static item => new ArmyListDocument
+            {
+                Id = item.Id,
+                BattleId = item.BattleId,
+                ForceId = item.ForceId,
+                SubmitterUserId = item.SubmitterUserId,
+                SubmittedUtc = item.SubmittedUtc,
+                ArmyPoints = item.ArmyPoints,
+                SupplyCostingUnitCount = item.SupplyCostingUnitCount,
+                ArmyListText = item.ArmyListText,
+                ArmyListGameSystem = item.ArmyListGameSystem,
+                ArmyListBuilder = item.ArmyListBuilder.ToString(),
+                SupplyCategories = [.. item.SupplyCategories.Select(static category => new ArmyListCategoryDocument
+                {
+                    Name = category.Name,
+                    UnitCount = category.UnitCount,
+                    SupplyPoints = category.SupplyPoints,
+                    CostsSupply = category.CostsSupply,
+                })],
+            })],
             Retreats = [.. state.Retreats.Select(static item => new RetreatDocument
             {
                 Id = item.Id,
@@ -160,6 +180,7 @@ internal static class PlayStateJson
                 IsDefault = item.IsDefault,
                 IsSurrender = item.IsSurrender,
                 IsStaffCorrection = item.IsStaffCorrection,
+                IsCommitted = item.IsCommitted,
                 SubmittedUtc = item.SubmittedUtc,
             })],
             BrokenAllyFactionIds = [.. state.BrokenAllyFactionIds],
@@ -398,7 +419,8 @@ internal static class PlayStateJson
                 item.IsDefault,
                 item.SubmittedUtc,
                 item.IsSurrender,
-                item.IsStaffCorrection))],
+                item.IsStaffCorrection,
+                item.IsCommitted))],
             document.BrokenAllyFactionIds,
             [.. document.Structures.Select(static item => new TerritoryStructureState(
                 item.TerritoryId,
@@ -508,6 +530,10 @@ internal static class PlayStateJson
                         : PrivateObjectiveAssignmentStatus.Assigned,
                     item.AssignedUtc,
                     item.RevealedUtc)),
+            ],
+            armyLists:
+            [
+                .. (document.ArmyLists ?? []).Select(FromArmyList),
             ]);
     }
 
@@ -588,6 +614,30 @@ internal static class PlayStateJson
             Math.Max(0, report.MagicalSupplyRerolls));
     }
 
+    private static BattleArmyListSubmission FromArmyList(ArmyListDocument item)
+    {
+        return new BattleArmyListSubmission(
+            item.Id,
+            item.BattleId,
+            item.ForceId,
+            item.SubmitterUserId,
+            item.SubmittedUtc,
+            Math.Max(0, item.ArmyPoints),
+            Math.Max(0, item.SupplyCostingUnitCount),
+            string.IsNullOrWhiteSpace(item.ArmyListText) ? null : item.ArmyListText.Trim(),
+            ArmyListRules.NormalizeGameSystem(item.ArmyListGameSystem),
+            ArmyListRules.ParseBuilder(item.ArmyListBuilder),
+            [
+                .. (item.SupplyCategories ?? [])
+                    .Where(static category => !string.IsNullOrWhiteSpace(category.Name))
+                    .Select(static category => new ArmyListSupplyCategory(
+                        category.Name,
+                        Math.Max(0, category.UnitCount),
+                        Math.Max(0, category.SupplyPoints),
+                        category.CostsSupply)),
+            ]);
+    }
+
     private static CampaignItemObjective FromItem(ItemObjectiveDocument item)
     {
         return new CampaignItemObjective(
@@ -654,6 +704,7 @@ internal static class PlayStateJson
         public List<CommitmentDocument> Commitments { get; set; } = [];
         public List<BattleDocument> Battles { get; set; } = [];
         public List<BattleSubmissionDocument> BattleSubmissions { get; set; } = [];
+        public List<ArmyListDocument>? ArmyLists { get; set; }
         public List<RetreatDocument> Retreats { get; set; } = [];
         public List<Guid> BrokenAllyFactionIds { get; set; } = [];
         public List<BrokenAllySubfactionDocument> BrokenAllySubfactions { get; set; } = [];
@@ -809,6 +860,21 @@ internal static class PlayStateJson
         public List<BattleReportDocument>? Reports { get; set; }
     }
 
+    private sealed class ArmyListDocument
+    {
+        public Guid Id { get; set; }
+        public Guid BattleId { get; set; }
+        public Guid ForceId { get; set; }
+        public Guid SubmitterUserId { get; set; }
+        public DateTimeOffset SubmittedUtc { get; set; }
+        public int ArmyPoints { get; set; }
+        public int SupplyCostingUnitCount { get; set; }
+        public string? ArmyListText { get; set; }
+        public string? ArmyListGameSystem { get; set; }
+        public string? ArmyListBuilder { get; set; }
+        public List<ArmyListCategoryDocument>? SupplyCategories { get; set; }
+    }
+
     private sealed class BattleReportDocument
     {
         public Guid ForceId { get; set; }
@@ -858,6 +924,7 @@ internal static class PlayStateJson
         public bool IsDefault { get; set; }
         public bool IsSurrender { get; set; }
         public bool IsStaffCorrection { get; set; }
+        public bool IsCommitted { get; set; } = true;
         public DateTimeOffset SubmittedUtc { get; set; }
     }
 

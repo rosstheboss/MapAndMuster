@@ -185,7 +185,7 @@ public enum PlayLogKind
     /// <summary>A player surrendered an engagement.</summary>
     PlayerSurrendered = 28,
 
-    /// <summary>A retreat collision kept the strongest force in the contested territory.</summary>
+    /// <summary>Enemy factions that would land on the same hex after retreat were sent to spawn.</summary>
     RetreatCollisionResolved = 29,
 
     /// <summary>A multi-side engagement scheduled the next tabletop pairing.</summary>

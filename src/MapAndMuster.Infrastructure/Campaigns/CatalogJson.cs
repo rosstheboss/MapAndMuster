@@ -739,6 +739,7 @@ internal static class CatalogJson
                     LocationKind = condition.LocationKind,
                     LocationTypeId = condition.LocationTypeId,
                     LocationTagId = condition.LocationTagId,
+                    RequiredStatusId = condition.RequiredStatusId,
                 }),
             ];
         }
@@ -778,6 +779,7 @@ internal static class CatalogJson
                         : condition.LocationKind,
                     LocationTypeId = condition.LocationTypeId,
                     LocationTagId = condition.LocationTagId,
+                    RequiredStatusId = condition.RequiredStatusId,
                 }),
             ];
         }
@@ -1617,6 +1619,8 @@ internal static class CatalogJson
         public Guid? LocationTypeId { get; set; }
 
         public Guid? LocationTagId { get; set; }
+
+        public Guid? RequiredStatusId { get; set; }
     }
 
     private sealed class PrivateObjectiveDocument

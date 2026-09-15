@@ -2210,6 +2210,97 @@ public sealed class CampaignSetupRulesTests
     }
 
     [Fact]
+    public void OccupyingSpecifiedStatusRequiresAKnownCatalogId()
+    {
+        var shakenId = Guid.NewGuid();
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out var setup,
+            out _,
+            out var errors,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Id = shakenId,
+                    Name = "Shaken",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.Hold),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.AfterMove),
+                },
+                new ForceStatusInput
+                {
+                    Name = "Cursed",
+                    EnableConditions =
+                    [
+                        new ForceStatusConditionInput
+                        {
+                            Trigger = nameof(ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus),
+                            RequiredStatusId = shakenId,
+                        },
+                    ],
+                    ClearConditions =
+                    [
+                        new ForceStatusConditionInput
+                        {
+                            Trigger = nameof(ForceStatusClearTrigger.OccupyingWithThisStatus),
+                        },
+                    ],
+                },
+            ]);
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        var cursed = Assert.Single(setup!.ForceStatuses, status => status.Name == "Cursed");
+        Assert.Equal(shakenId, Assert.Single(cursed.EnableConditions).RequiredStatusId);
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var missing,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Cursed",
+                    EnableConditions =
+                    [
+                        new ForceStatusConditionInput
+                        {
+                            Trigger = nameof(ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus),
+                        },
+                    ],
+                    ClearTrigger = nameof(ForceStatusClearTrigger.AfterMove),
+                },
+            ]));
+        Assert.Contains(missing, error => error.Code == "forceStatuses.requiredStatusId.required");
+    }
+
+    [Fact]
     public void AcceptsMissionStatusChangeConditions()
     {
         var succeeded = CampaignSetupRules.TryCreate(

@@ -4,6 +4,8 @@ import {
   committedForceStatusPriority,
   diseasedClearConditions,
   diseasedEnableConditions,
+  FORCE_STATUS_CLEAR_OPTIONS,
+  FORCE_STATUS_ENABLE_OPTIONS,
   forceStatusClearConditions,
   forceStatusEnableConditions,
   forceStatusesFromStandardPreset,
@@ -62,6 +64,7 @@ describe('force-status-presets', () => {
         locationKind: 'Any',
         locationTypeId: null,
         locationTagId: null,
+        requiredStatusId: null,
       },
     ]);
     expect(forceStatusEnableConditions({ enableTrigger: 'Hold', enableOccurrences: 3, enableConditions: [] })).toEqual([
@@ -82,6 +85,13 @@ describe('force-status-presets', () => {
     expect(STANDARD_FORCE_STATUSES.find((status) => status.name === 'Exhausted')?.cancelsStatusNames).toEqual([
       'Well Rested',
     ]);
+  });
+
+  it('lists occupying-with-status triggers for enable and clear', () => {
+    expect(FORCE_STATUS_ENABLE_OPTIONS.some((option) => option.id === 'OccupyingWithThisStatus')).toBe(true);
+    expect(FORCE_STATUS_ENABLE_OPTIONS.some((option) => option.id === 'OccupyingWithSpecifiedStatus')).toBe(true);
+    expect(FORCE_STATUS_CLEAR_OPTIONS.some((option) => option.id === 'OccupyingWithThisStatus')).toBe(true);
+    expect(FORCE_STATUS_CLEAR_OPTIONS.some((option) => option.id === 'OccupyingWithSpecifiedStatus')).toBe(true);
   });
 
   it('picks the lowest unused priority for a new status', () => {

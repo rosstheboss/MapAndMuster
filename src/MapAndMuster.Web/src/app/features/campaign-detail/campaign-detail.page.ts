@@ -58,8 +58,10 @@ import type {
   CampaignPointStanding,
   CampaignSpecialRule,
   MapGraphDetail,
+  MissionResultQuestion,
   PlayBattle,
   PlayBattleForceSupply,
+  PlayBattleSubmission,
   PlayDraft,
   PlayerSupplyView,
   PlayForce,
@@ -173,6 +175,9 @@ interface CommitmentRosterEntry {
   userId: string;
   username: string | null;
   isCommitted: boolean;
+  needsResult: boolean;
+  needsRetreat: boolean;
+  dutyLabel: string;
   faction: CampaignFaction | null;
   factionName: string | null;
   subfaction: string | null;
@@ -202,6 +207,22 @@ interface MapActionFlow {
   menuY: number;
 }
 
+function battleDutyLabel(needsResult: boolean, needsRetreat: boolean): string | null {
+  if (needsResult && needsRetreat) {
+    return 'Needs result and retreat';
+  }
+
+  if (needsResult) {
+    return 'Needs result';
+  }
+
+  if (needsRetreat) {
+    return 'Needs retreat';
+  }
+
+  return null;
+}
+
 function emptyOrderDraft(overrides?: Partial<OrderDraft>): OrderDraft {
   return {
     kind: 'Hold',
@@ -217,6 +238,7 @@ function emptyOrderDraft(overrides?: Partial<OrderDraft>): OrderDraft {
 const RUNNING_OPEN_SECTIONS: readonly CampaignSection[] = [
   'faction',
   'orders',
+  'battles',
   'log',
   'standings',
   'debug',
@@ -293,6 +315,7 @@ export class CampaignDetailPage {
   protected readonly confirmingEnd = signal(false);
   protected readonly confirmingDelete = signal(false);
   protected readonly confirmingCommit = signal(false);
+  protected readonly confirmingRetreatBattleId = signal<string | null>(null);
   protected readonly ending = signal(false);
   protected readonly deleting = signal(false);
   protected readonly nowMs = this.clock.nowMs;
@@ -343,9 +366,14 @@ export class CampaignDetailPage {
     Partial<Record<string, { winnerScore: number | null; loserScore: number | null }>>
   >({});
   private readonly battleReports = signal<Record<string, BattleParticipantReport[]>>({});
+  private readonly dirtyBattleResultIds = signal<ReadonlySet<string>>(new Set());
+  private readonly dirtyArmyListKeys = signal<ReadonlySet<string>>(new Set());
+  private readonly appliedResultKeys = signal<Record<string, string>>({});
   private readonly armyListParseMessages = signal<Record<string, string>>({});
   private readonly armyListParseTimers = new Map<string, ReturnType<typeof setTimeout>>();
   protected readonly retreatTarget = signal<Record<string, string>>({});
+  private readonly expandedBattles = signal<Record<string, boolean>>({});
+  private readonly expandedBattlePanels = signal<Record<string, boolean>>({});
   protected readonly updateStream = signal<UpdateStreamSubscription | null>(null);
 
   constructor() {
@@ -441,7 +469,7 @@ export class CampaignDetailPage {
     const others = play.commitments.filter((item) => item.userId !== viewerId);
     return others.every((item) => item.isCommitted);
   });
-  protected readonly canUncommit = computed(() => {
+  protected readonly canUncommitActions = computed(() => {
     const play = this.play();
     return (
       !!play?.isCommitted &&
@@ -450,6 +478,7 @@ export class CampaignDetailPage {
       this.orderableForces().length > 0
     );
   });
+  protected readonly canUncommit = computed(() => this.canUncommitActions());
   protected readonly commitmentSummary = computed(() => {
     const play = this.play();
     if (!play) {
@@ -458,15 +487,24 @@ export class CampaignDetailPage {
 
     const total = play.commitments.length;
     const committed = play.commitments.filter((item) => item.isCommitted).length;
-    const waiting = play.commitments.filter((item) => !item.isCommitted).map((item) => item.username ?? item.userId);
+    const waiting = play.commitments
+      .filter((item) => !item.isCommitted)
+      .map((item) => {
+        const name = item.username ?? item.userId;
+        const duties = battleDutyLabel(item.needsResult === true, item.needsRetreat === true);
+        return play.currentPhaseKind === 'Battle' && duties ? `${name} (${duties.toLowerCase()})` : name;
+      });
+    const finishedNoun = play.currentPhaseKind === 'Battle' ? 'finished results and retreats' : 'committed';
     return {
       committed,
       total,
       waiting,
       text:
         waiting.length === 0
-          ? `${committed} of ${total} players committed.`
-          : `${committed} of ${total} players committed. Waiting on ${waiting.join(', ')}.`,
+          ? `${committed} of ${total} players ${finishedNoun}.`
+          : play.currentPhaseKind === 'Battle'
+            ? `${committed} of ${total} players finished. Waiting on ${waiting.join(', ')}.`
+            : `${committed} of ${total} players committed. Waiting on ${waiting.join(', ')}.`,
     };
   });
   protected readonly commitmentEntries = computed((): CommitmentRosterEntry[] => {
@@ -501,10 +539,15 @@ export class CampaignDetailPage {
           locations.push({ territoryId: owned.territoryId, label: this.territoryName(owned.territoryId) });
         }
 
+        const needsResult = item.needsResult === true;
+        const needsRetreat = item.needsRetreat === true;
         return {
           userId: item.userId,
           username: item.username,
           isCommitted: item.isCommitted,
+          needsResult,
+          needsRetreat,
+          dutyLabel: item.isCommitted ? 'Committed' : (battleDutyLabel(needsResult, needsRetreat) ?? 'Drafting'),
           faction,
           factionName,
           subfaction,
@@ -513,6 +556,7 @@ export class CampaignDetailPage {
       })
       .sort((left, right) => compareNames(left.username ?? left.userId, right.username ?? right.userId));
   });
+  protected readonly pendingBattleDuties = computed(() => this.commitmentEntries().filter((item) => !item.isCommitted));
   protected readonly viewerCommitChip = computed(() => {
     const play = this.play();
     if (!play?.isParticipant || play.canChooseFaction) {
@@ -562,18 +606,67 @@ export class CampaignDetailPage {
     return endsUtc ? formatCountdown(endsUtc, this.nowMs()) : '';
   });
   protected readonly battleStatusLabel = battleStatusLabel;
+
+  protected battleDisplayStatus(battle: PlayBattle): string {
+    if (battle.awaitingRetreat) {
+      return 'Awaiting Retreat Order.';
+    }
+
+    return battleStatusLabel(battle.status);
+  }
+
   protected readonly buildableStructures = computed(() =>
     (this.play()?.structureTypes ?? this.campaign()?.structureTypes ?? []).filter((type) => type.isBuildable),
   );
   protected readonly isActionPhase = computed(() => this.play()?.currentPhaseKind === 'Action');
   protected readonly showMapCommit = computed(() => {
     const play = this.play();
-    return (
-      this.isActionPhase() &&
-      !!play?.isParticipant &&
-      !play.canChooseFaction &&
-      (!play.isCommitted || this.canUncommit())
-    );
+    if (!play?.isParticipant || play.canChooseFaction) {
+      return false;
+    }
+
+    if (this.isActionPhase() && (!play.isCommitted || this.canUncommitActions())) {
+      return true;
+    }
+
+    return this.canUncommitRetreat() || this.hasMapBattleCommit();
+  });
+  protected readonly mapCommitNoun = computed(() => {
+    if (this.canUncommitActions()) {
+      return 'Actions';
+    }
+
+    const battles = this.play()?.battles ?? [];
+    if (battles.some((battle) => battle.canSurrender === true)) {
+      return 'Surrender';
+    }
+
+    if (battles.some((battle) => battle.needsRetreat === true || battle.isRetreatCommitted === true)) {
+      return 'Retreat';
+    }
+
+    return 'Actions';
+  });
+  protected readonly mapCanCommit = computed(
+    () => this.canCommitActions() || this.canCommitSurrender() || this.canCommitAnyRetreat(),
+  );
+  protected readonly mapShowUncommit = computed(() => this.canUncommitActions() || this.canUncommitRetreat());
+  protected readonly mapCommitClosesPhase = computed(() => {
+    if (this.canUncommitActions() || this.canUncommitRetreat()) {
+      return false;
+    }
+
+    const surrender = this.pendingSurrenderBattle();
+    if (surrender) {
+      return this.isFinalRequiredBattleCommitment(surrender);
+    }
+
+    const retreat = this.pendingRetreatBattle();
+    if (retreat) {
+      return this.isFinalRequiredBattleCommitment(retreat);
+    }
+
+    return this.isFinalRequiredCommitment();
   });
   protected readonly isBattlePhase = computed(() => this.play()?.currentPhaseKind === 'Battle');
   protected readonly hasOpenBattles = computed(() => (this.play()?.battles.length ?? 0) > 0);
@@ -752,7 +845,7 @@ export class CampaignDetailPage {
         continue;
       }
 
-      for (const target of battle.retreatTargets) {
+      for (const target of battle.retreatTargets ?? []) {
         targets.add(target);
       }
     }
@@ -1366,6 +1459,81 @@ export class CampaignDetailPage {
     this.hoveredTerritoryId.set(event.id);
   }
 
+  protected onForceSelect(event: { id: string; territoryId: string; clientX: number; clientY: number }): void {
+    const play = this.play();
+    const force = this.myForces().find((item) => item.id === event.id);
+    if (!play?.isParticipant || play.canChooseFaction || !force) {
+      return;
+    }
+
+    this.mapFocus.set(null);
+    this.selectedIds.set([event.territoryId]);
+    this.hoveredTerritoryId.set(event.territoryId);
+    if (this.mapAction()?.step === 'pick-target' || this.mapAction()?.step === 'pick-via') {
+      return;
+    }
+
+    const battle = this.battleForForce(force);
+    if (force.inBattle) {
+      const kinds: string[] = [];
+      if (battle?.canSurrender) {
+        kinds.push('Surrender');
+      }
+
+      if (battle?.needsRetreat) {
+        kinds.push('Retreat');
+      }
+
+      if (kinds.length === 1 && kinds[0] === 'Retreat') {
+        this.mapAction.set({
+          step: 'pick-target',
+          forceId: force.id,
+          originId: event.territoryId,
+          kind: 'Retreat',
+          targetTerritoryId: '',
+          viaTerritoryId: '',
+          viaPath: [],
+          viaCandidates: [],
+          structureTypeId: '',
+          menuX: 0,
+          menuY: 0,
+        });
+        return;
+      }
+
+      if (kinds.length > 0) {
+        this.openForceMapMenu(force, event.clientX, event.clientY);
+      }
+
+      return;
+    }
+
+    if (!this.isActionPhase() || play.isCommitted || force.availableActions.length === 0) {
+      return;
+    }
+
+    this.openForceMapMenu(force, event.clientX, event.clientY);
+  }
+
+  private openForceMapMenu(force: PlayForce, clientX: number, clientY: number): void {
+    const { x, y } = this.menuPosition(clientX, clientY);
+    this.selectedIds.set([force.territoryId]);
+    this.hoveredTerritoryId.set(force.territoryId);
+    this.mapAction.set({
+      step: 'menu',
+      forceId: force.id,
+      originId: force.territoryId,
+      kind: '',
+      targetTerritoryId: '',
+      viaTerritoryId: '',
+      viaPath: [],
+      viaCandidates: [],
+      structureTypeId: '',
+      menuX: x,
+      menuY: y,
+    });
+  }
+
   protected onMapBackgroundSelect(): void {
     this.cancelMapAction();
     this.selectedIds.set([]);
@@ -1772,8 +1940,35 @@ export class CampaignDetailPage {
   }
 
   protected onMapCommit(): void {
-    if (this.canUncommit()) {
+    if (this.canUncommitActions()) {
       void this.uncommit();
+      return;
+    }
+
+    if (this.canUncommitRetreat() && !this.canCommitSurrender() && !this.canCommitAnyRetreat()) {
+      void this.uncommitReadyRetreats();
+      return;
+    }
+
+    const surrender = this.pendingSurrenderBattle();
+    if (surrender) {
+      if (this.isFinalRequiredBattleCommitment(surrender)) {
+        this.requestRetreatCommit(surrender);
+        return;
+      }
+
+      void this.submitSurrender(surrender);
+      return;
+    }
+
+    const retreat = this.pendingRetreatBattle();
+    if (retreat) {
+      if (this.isFinalRequiredBattleCommitment(retreat)) {
+        this.requestRetreatCommit(retreat);
+        return;
+      }
+
+      void this.commitRetreat(retreat);
       return;
     }
 
@@ -2093,7 +2288,7 @@ export class CampaignDetailPage {
     const battle = this.play()?.battles.find((item) => item.participantForceIds.includes(force.id));
     const opponents = this.battleOpponentNames(force, battle);
     const withWhom = opponents.length > 0 ? ` with ${joinDisplayNames(opponents)}` : '';
-    return `Locked in battle at ${place}${withWhom}. This force cannot perform an action until the battle is resolved.`;
+    return `Locked in battle at ${place}${withWhom}. This force cannot perform an action until the battle is resolved. Surrender from the map.`;
   }
 
   private battleOpponentNames(force: PlayForce, battle: PlayBattle | undefined): string[] {
@@ -2148,7 +2343,7 @@ export class CampaignDetailPage {
     if (play.isCommitted) {
       const kind = order?.kind ?? draft?.kind;
       if (!kind) {
-        return null;
+        return this.ownForceRetreatAction(force, play);
       }
 
       return {
@@ -2159,7 +2354,8 @@ export class CampaignDetailPage {
     }
 
     if (!draft) {
-      return null;
+      const retreat = this.ownForceRetreatAction(force, play);
+      return retreat;
     }
 
     return {
@@ -2170,7 +2366,7 @@ export class CampaignDetailPage {
   }
 
   private forceActionDetail(kind: string, targetTerritoryId: string | null): string | null {
-    if (!targetTerritoryId || (kind !== 'Move' && kind !== 'Split')) {
+    if (!targetTerritoryId || (kind !== 'Move' && kind !== 'Split' && kind !== 'Surrender' && kind !== 'Retreat')) {
       return null;
     }
 
@@ -2335,6 +2531,10 @@ export class CampaignDetailPage {
   }
 
   protected destinationTargets(force: PlayForce, kind: string): string[] {
+    if (kind === 'Surrender' || kind === 'Retreat') {
+      return this.battleForForce(force)?.retreatTargets ?? [];
+    }
+
     if (this.canChooseTeleport(force, kind)) {
       return force.teleportTargets ?? [];
     }
@@ -2343,7 +2543,7 @@ export class CampaignDetailPage {
   }
 
   private needsDraftDestinationKind(kind: string): boolean {
-    return kind === 'Move' || kind === 'Split' || kind === 'Teleport';
+    return kind === 'Move' || kind === 'Split' || kind === 'Teleport' || kind === 'Surrender' || kind === 'Retreat';
   }
 
   protected destinationsForVia(force: PlayForce, viaTerritoryId: string): string[] {
@@ -2420,6 +2620,7 @@ export class CampaignDetailPage {
 
   protected onBattleWinner(battleId: string, winnerForceId: string): void {
     this.battleWinner.update((current) => ({ ...current, [battleId]: winnerForceId }));
+    this.markBattleResultDirty(battleId);
   }
 
   protected battleWinnerScore(battleId: string): number | null {
@@ -2448,6 +2649,235 @@ export class CampaignDetailPage {
     );
   }
 
+  protected canEditArmyList(battle: PlayBattle, forceId: string): boolean {
+    return this.canReportBattle(battle) && (this.canStaffMembers() || this.playForce(forceId)?.isMine === true);
+  }
+
+  protected isBattleExpanded(battleId: string): boolean {
+    return this.expandedBattles()[battleId] !== false;
+  }
+
+  protected toggleBattle(battleId: string): void {
+    this.expandedBattles.update((current) => ({ ...current, [battleId]: !this.isBattleExpanded(battleId) }));
+  }
+
+  protected isBattlePanelOpen(battleId: string, panel: string): boolean {
+    return this.expandedBattlePanels()[`${battleId}:${panel}`] !== false;
+  }
+
+  protected toggleBattlePanel(battleId: string, panel: string): void {
+    const key = `${battleId}:${panel}`;
+    this.expandedBattlePanels.update((current) => ({ ...current, [key]: !this.isBattlePanelOpen(battleId, panel) }));
+  }
+
+  protected canCommitRetreat(battle: PlayBattle): boolean {
+    return battle.needsRetreat === true && !battle.isRetreatCommitted && !!this.retreatTarget()[battle.id];
+  }
+
+  protected canCommitSurrenderFor(battle: PlayBattle): boolean {
+    return battle.canSurrender === true && !battle.isRetreatCommitted && !!this.retreatTarget()[battle.id];
+  }
+
+  protected canCommitSurrender(): boolean {
+    return this.pendingSurrenderBattle() !== null;
+  }
+
+  protected canCommitAnyRetreat(): boolean {
+    return this.pendingRetreatBattle() !== null;
+  }
+
+  protected canUncommitRetreat(): boolean {
+    return (this.play()?.battles ?? []).some((battle) => this.canUncommitBattleRetreat(battle));
+  }
+
+  protected canUncommitBattleRetreat(battle: PlayBattle): boolean {
+    return battle.isRetreatCommitted === true && (battle.retreatTargets?.length ?? 0) > 1;
+  }
+
+  private hasMapBattleCommit(): boolean {
+    return (this.play()?.battles ?? []).some(
+      (battle) => battle.canSurrender === true || battle.needsRetreat === true || battle.isRetreatCommitted === true,
+    );
+  }
+
+  private pendingSurrenderBattle(): PlayBattle | null {
+    return (this.play()?.battles ?? []).find((battle) => this.canCommitSurrenderFor(battle)) ?? null;
+  }
+
+  private pendingRetreatBattle(): PlayBattle | null {
+    return (this.play()?.battles ?? []).find((battle) => this.canCommitRetreat(battle)) ?? null;
+  }
+
+  private battleForForce(force: PlayForce): PlayBattle | undefined {
+    return this.play()?.battles.find((battle) => battle.participantForceIds.includes(force.id));
+  }
+
+  private ownForceRetreatAction(force: PlayForce, play: CampaignPlayDetail): MapForceAction | null {
+    const battle = play.battles.find((item) => item.participantForceIds.includes(force.id));
+    if (!battle) {
+      return null;
+    }
+
+    const chosen = this.retreatTarget()[battle.id] ?? '';
+    const dest = chosen.length > 0 ? chosen : (battle.retreatDraftTargetId ?? null);
+    if (battle.isRetreatCommitted) {
+      return {
+        kind: 'Retreat',
+        status: 'committed',
+        detail: dest ? `to ${this.territoryName(dest)}` : null,
+      };
+    }
+
+    if (battle.canSurrender && dest) {
+      return { kind: 'Surrender', status: 'draft', detail: `to ${this.territoryName(dest)}` };
+    }
+
+    if (battle.needsRetreat && dest) {
+      return { kind: 'Retreat', status: 'draft', detail: `to ${this.territoryName(dest)}` };
+    }
+
+    return null;
+  }
+
+  protected isFinalRequiredRetreatCommitment(battle: PlayBattle): boolean {
+    return this.isFinalRequiredBattleCommitment(battle);
+  }
+
+  protected isFinalRequiredBattleCommitment(battle: PlayBattle): boolean {
+    const play = this.play();
+    const viewerId = this.auth.currentUser()?.id ?? play?.forces.find((force) => force.isMine)?.controllerUserId;
+    const awaiting = battle.needsRetreat || battle.canSurrender;
+    if (!play || !viewerId || play.currentPhaseKind !== 'Battle' || !awaiting || battle.isRetreatCommitted) {
+      return false;
+    }
+
+    const others = play.commitments.filter((item) => item.userId !== viewerId);
+    if (!others.every((item) => item.isCommitted)) {
+      return false;
+    }
+
+    return !play.battles.some((other) => {
+      if (other.id === battle.id) {
+        return false;
+      }
+
+      if (other.needsRetreat) {
+        return true;
+      }
+
+      return this.canReportBattle(other) && !other.mySubmission;
+    });
+  }
+
+  protected confirmingRetreatBattle(): PlayBattle | null {
+    const battleId = this.confirmingRetreatBattleId();
+    return battleId ? (this.play()?.battles.find((item) => item.id === battleId) ?? null) : null;
+  }
+
+  protected confirmingBattleCommitTitle(): string {
+    const battle = this.confirmingRetreatBattle();
+    if (battle?.canSurrender && !battle.needsRetreat) {
+      return 'Commit surrender and close the phase?';
+    }
+
+    return 'Commit retreat and close the phase?';
+  }
+
+  protected requestRetreatCommit(battle: PlayBattle): void {
+    if (this.canCommitSurrenderFor(battle) || this.canCommitRetreat(battle)) {
+      this.confirmingRetreatBattleId.set(battle.id);
+      return;
+    }
+
+    this.error.set(
+      battle.canSurrender
+        ? 'Choose a surrender destination before committing.'
+        : 'Choose a retreat destination before committing.',
+    );
+  }
+
+  protected cancelRetreatCommit(): void {
+    this.confirmingRetreatBattleId.set(null);
+  }
+
+  protected async confirmRetreatCommit(): Promise<void> {
+    const battle = this.confirmingRetreatBattle();
+    this.confirmingRetreatBattleId.set(null);
+    if (!battle) {
+      return;
+    }
+
+    if (this.canCommitSurrenderFor(battle)) {
+      await this.submitSurrender(battle);
+      return;
+    }
+
+    await this.commitRetreat(battle);
+  }
+
+  private async uncommitReadyRetreats(): Promise<void> {
+    const play = this.play();
+    if (!play) {
+      return;
+    }
+
+    const committed = play.battles.filter((battle) => battle.isRetreatCommitted);
+    for (const battle of committed) {
+      await this.uncommitRetreat(battle);
+    }
+  }
+
+  protected battleResultCaption(battle: PlayBattle): string | null {
+    if (battle.isNoContest) {
+      return 'No contest';
+    }
+
+    if (battle.isDraw) {
+      return 'Draw';
+    }
+
+    if (battle.winnerForceId) {
+      return `Winner: ${this.forceLabelById(battle.winnerForceId)}`;
+    }
+
+    return null;
+  }
+
+  protected retreatDestinations(battle: PlayBattle): { id: string; name: string }[] {
+    const seen = new Set<string>();
+    const destinations: { id: string; name: string }[] = [];
+    for (const id of battle.retreatTargets ?? []) {
+      if (!id || seen.has(id)) {
+        continue;
+      }
+
+      seen.add(id);
+      destinations.push({ id, name: this.territoryName(id) });
+    }
+
+    return destinations;
+  }
+
+  protected questionLabel(question: MissionResultQuestion): string {
+    return `${question.prompt} (${question.battlePoints} BP)`;
+  }
+
+  protected battleReportTotal(battle: PlayBattle, forceId: string): number {
+    const report = this.reportFor(battle.id, forceId);
+    let questionPoints = 0;
+    for (const question of battle.resultQuestions ?? []) {
+      if (question.kind === 'Boolean') {
+        if (this.battleQuestionBoolean(battle.id, forceId, question.id)) {
+          questionPoints += question.battlePoints;
+        }
+      } else {
+        questionPoints += this.battleQuestionPoints(battle.id, forceId, question.id);
+      }
+    }
+
+    return report.differentialBattlePoints + report.bonusBattlePoints + questionPoints;
+  }
+
   protected battleReportValue(
     battleId: string,
     forceId: string,
@@ -2463,7 +2893,12 @@ export class CampaignDetailPage {
     value: string | number | null,
   ): void {
     const parsed = typeof value === 'number' ? value : Number(value);
-    this.patchReport(battleId, forceId, { [field]: Number.isFinite(parsed) ? Math.max(0, parsed) : 0 });
+    this.patchReport(
+      battleId,
+      forceId,
+      { [field]: Number.isFinite(parsed) ? Math.max(0, parsed) : 0 },
+      field === 'armyPoints' || field === 'supplyCostingUnitCount' ? 'army' : 'result',
+    );
   }
 
   protected battleReportFlag(battleId: string, forceId: string, field: 'usedExtraBlackPowder'): boolean {
@@ -2471,15 +2906,19 @@ export class CampaignDetailPage {
   }
 
   protected onBattleReportFlag(battleId: string, forceId: string, field: 'usedExtraBlackPowder', value: boolean): void {
-    this.patchReport(battleId, forceId, { [field]: value });
+    this.patchReport(battleId, forceId, { [field]: value }, 'result');
   }
 
   protected battleQuestionBoolean(battleId: string, forceId: string, questionId: string): boolean {
     return this.answerFor(battleId, forceId, questionId).booleanValue === true;
   }
 
-  protected onBattleQuestionBoolean(battleId: string, forceId: string, questionId: string, value: boolean): void {
-    this.patchAnswer(battleId, forceId, questionId, { booleanValue: value, battlePointsValue: null });
+  protected onBattleQuestionBoolean(battle: PlayBattle, forceId: string, questionId: string, value: boolean): void {
+    const question = (battle.resultQuestions ?? []).find((item) => item.id === questionId);
+    this.patchAnswer(battle.id, forceId, questionId, {
+      booleanValue: value,
+      battlePointsValue: value ? (question?.battlePoints ?? 0) : 0,
+    });
   }
 
   protected battleQuestionPoints(battleId: string, forceId: string, questionId: string): number {
@@ -2575,7 +3014,7 @@ export class CampaignDetailPage {
   }
 
   protected onArmyListText(battleId: string, forceId: string, value: string): void {
-    this.patchReport(battleId, forceId, { armyListText: value });
+    this.patchReport(battleId, forceId, { armyListText: value }, 'army');
     this.scheduleArmyListParse(battleId, forceId);
   }
 
@@ -2584,7 +3023,7 @@ export class CampaignDetailPage {
   }
 
   protected onArmyListGameSystem(battleId: string, forceId: string, value: string): void {
-    this.patchReport(battleId, forceId, { armyListGameSystem: value });
+    this.patchReport(battleId, forceId, { armyListGameSystem: value }, 'army');
     this.scheduleArmyListParse(battleId, forceId);
   }
 
@@ -2593,7 +3032,7 @@ export class CampaignDetailPage {
   }
 
   protected onArmyListBuilder(battleId: string, forceId: string, value: string): void {
-    this.patchReport(battleId, forceId, { armyListBuilder: value });
+    this.patchReport(battleId, forceId, { armyListBuilder: value }, 'army');
     this.setArmyListParseMessage(battleId, forceId, '');
     this.scheduleArmyListParse(battleId, forceId);
   }
@@ -2621,12 +3060,16 @@ export class CampaignDetailPage {
     const supplyCostingUnitCount = categories
       .filter((category) => category.costsSupply)
       .reduce((sum, category) => sum + category.supplyPoints, 0);
-    this.patchReport(battleId, forceId, { supplyCategories: categories, supplyCostingUnitCount });
+    this.patchReport(battleId, forceId, { supplyCategories: categories, supplyCostingUnitCount }, 'army');
   }
 
-  protected opponentArmyList(battle: PlayBattle, forceId: string): string | null {
-    const text = battle.opponentSubmission?.reports?.find((report) => report.forceId === forceId)?.armyListText?.trim();
-    return text ?? null;
+  protected submittedArmyList(battle: PlayBattle, forceId: string): string | null {
+    const text = battle.armyLists?.find((list) => list.forceId === forceId)?.armyListText?.trim();
+    if (!text) {
+      return null;
+    }
+
+    return text;
   }
 
   private scheduleArmyListParse(battleId: string, forceId: string): void {
@@ -2666,11 +3109,16 @@ export class CampaignDetailPage {
       }
 
       this.setArmyListParseMessage(battleId, forceId, '');
-      this.patchReport(battleId, forceId, {
-        armyPoints: result.armyPoints,
-        supplyCostingUnitCount: result.supplyCostingUnitCount,
-        supplyCategories: result.categories,
-      });
+      this.patchReport(
+        battleId,
+        forceId,
+        {
+          armyPoints: result.armyPoints,
+          supplyCostingUnitCount: result.supplyCostingUnitCount,
+          supplyCategories: result.categories,
+        },
+        'army',
+      );
     } catch {
       this.setArmyListParseMessage(
         battleId,
@@ -2704,10 +3152,10 @@ export class CampaignDetailPage {
 
   private reportFor(battleId: string, forceId: string): BattleParticipantReport {
     const existing = (this.battleReports()[battleId] ?? []).find((report) => report.forceId === forceId);
-    if (existing) {
-      return existing;
-    }
+    return existing ?? this.emptyBattleReport(forceId);
+  }
 
+  private emptyBattleReport(forceId: string): BattleParticipantReport {
     return {
       forceId,
       victoryPoints: 0,
@@ -2738,7 +3186,12 @@ export class CampaignDetailPage {
     );
   }
 
-  private patchReport(battleId: string, forceId: string, patch: Partial<BattleParticipantReport>): void {
+  private patchReport(
+    battleId: string,
+    forceId: string,
+    patch: Partial<BattleParticipantReport>,
+    kind: 'result' | 'army' = 'result',
+  ): void {
     this.battleReports.update((current) => {
       const reports = [...(current[battleId] ?? [])];
       const index = reports.findIndex((report) => report.forceId === forceId);
@@ -2751,6 +3204,11 @@ export class CampaignDetailPage {
 
       return { ...current, [battleId]: reports };
     });
+    if (kind === 'army') {
+      this.markArmyListDirty(battleId, forceId);
+    } else {
+      this.markBattleResultDirty(battleId);
+    }
   }
 
   private patchAnswer(
@@ -2770,6 +3228,44 @@ export class CampaignDetailPage {
     }
 
     this.patchReport(battleId, forceId, { answers });
+  }
+
+  private markBattleResultDirty(battleId: string): void {
+    this.dirtyBattleResultIds.update((current) => new Set(current).add(battleId));
+  }
+
+  private markArmyListDirty(battleId: string, forceId: string): void {
+    this.dirtyArmyListKeys.update((current) => new Set(current).add(this.armyListKey(battleId, forceId)));
+  }
+
+  private ownedArmyListReports(battle: PlayBattle): BattleParticipantReport[] {
+    return this.reportingForceIds(battle)
+      .filter((forceId) => this.canEditArmyList(battle, forceId))
+      .map((forceId) => this.reportFor(battle.id, forceId));
+  }
+
+  private ownArmyPointsMissing(battle: PlayBattle, forceId?: string): boolean {
+    const forceIds = forceId
+      ? [forceId]
+      : this.reportingForceIds(battle).filter((id) => this.canEditArmyList(battle, id));
+    return forceIds.some((id) => {
+      const report = this.reportFor(battle.id, id);
+      const submitted = battle.armyLists?.find((item) => item.forceId === id);
+      return report.armyPoints <= 0 && (!submitted || submitted.armyPoints <= 0);
+    });
+  }
+
+  private latestResultSubmission(battle: PlayBattle): PlayBattleSubmission | null {
+    const candidates = [battle.mySubmission, battle.opponentSubmission].filter(
+      (item): item is PlayBattleSubmission => item !== null,
+    );
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    return [...candidates].sort(
+      (left, right) => Date.parse(right.submittedUtc ?? '') - Date.parse(left.submittedUtc ?? ''),
+    )[0];
   }
 
   protected leaderboardHeading(board: PublicObjectiveLeaderboard): string {
@@ -2828,7 +3324,11 @@ export class CampaignDetailPage {
     }
 
     for (const battle of play.battles) {
-      if ((!battle.needsRetreat && !battle.canSurrender) || !battle.retreatTargets.includes(territoryId)) {
+      if (
+        (!battle.needsRetreat && !battle.canSurrender) ||
+        battle.isRetreatCommitted ||
+        !(battle.retreatTargets ?? []).includes(territoryId)
+      ) {
         continue;
       }
 
@@ -2881,6 +3381,11 @@ export class CampaignDetailPage {
       return;
     }
 
+    if (this.ownArmyPointsMissing(battle)) {
+      this.error.set('Enter the army points you used before submitting a result.');
+      return;
+    }
+
     const winnerChoice = this.battleWinner()[battle.id] ?? '';
     const isDraw = winnerChoice === 'draw';
     const winnerForceId =
@@ -2906,7 +3411,34 @@ export class CampaignDetailPage {
       return;
     }
 
-    await this.runPlay(() => this.campaignsApi.acceptBattleResult(play.id, battle.id, play.revision));
+    if (this.ownArmyPointsMissing(battle)) {
+      this.error.set('Enter the army points you used before agreeing to a result.');
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.acceptBattleResult(play.id, battle.id, play.revision, this.ownedArmyListReports(battle)),
+    );
+  }
+
+  protected async submitArmyList(battle: PlayBattle, forceId: string): Promise<void> {
+    const play = this.play();
+    if (!play || !this.canEditArmyList(battle, forceId)) {
+      return;
+    }
+
+    if (this.ownArmyPointsMissing(battle, forceId)) {
+      this.error.set('Enter the army points you used before submitting an army list.');
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.submitArmyList(play.id, {
+        revision: play.revision,
+        battleId: battle.id,
+        reports: [this.reportFor(battle.id, forceId)],
+      }),
+    );
   }
 
   protected async resolveBattle(battle: PlayBattle): Promise<void> {
@@ -2926,7 +3458,7 @@ export class CampaignDetailPage {
     );
   }
 
-  protected async submitRetreat(battle: PlayBattle): Promise<void> {
+  protected async commitRetreat(battle: PlayBattle): Promise<void> {
     const play = this.play();
     const targetTerritoryId = this.retreatTarget()[battle.id];
     if (!play) {
@@ -2934,7 +3466,7 @@ export class CampaignDetailPage {
     }
 
     if (!targetTerritoryId) {
-      this.error.set('Choose a retreat destination before submitting.');
+      this.error.set('Choose a retreat destination before committing.');
       return;
     }
 
@@ -2943,6 +3475,20 @@ export class CampaignDetailPage {
         revision: play.revision,
         battleId: battle.id,
         targetTerritoryId,
+      }),
+    );
+  }
+
+  protected async uncommitRetreat(battle: PlayBattle): Promise<void> {
+    const play = this.play();
+    if (!play) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.uncommitRetreat(play.id, {
+        revision: play.revision,
+        battleId: battle.id,
       }),
     );
   }
@@ -3269,7 +3815,25 @@ export class CampaignDetailPage {
   protected mapMenuActions(): readonly string[] {
     const flow = this.mapAction();
     const force = this.myForces().find((item) => item.id === flow?.forceId);
-    return force?.availableActions ?? [];
+    if (!force) {
+      return [];
+    }
+
+    if (force.inBattle) {
+      const battle = this.battleForForce(force);
+      const kinds: string[] = [];
+      if (battle?.canSurrender) {
+        kinds.push('Surrender');
+      }
+
+      if (battle?.needsRetreat) {
+        kinds.push('Retreat');
+      }
+
+      return kinds;
+    }
+
+    return force.availableActions;
   }
 
   protected mapActionPrompt(): string | null {
@@ -3285,6 +3849,14 @@ export class CampaignDetailPage {
 
       if (flow.kind === 'Teleport') {
         return 'Pick a non-spawn territory to teleport to...';
+      }
+
+      if (flow.kind === 'Surrender') {
+        return 'Pick a territory to surrender to...';
+      }
+
+      if (flow.kind === 'Retreat') {
+        return 'Pick a territory to retreat to...';
       }
 
       return `Select a destination for ${flow.kind}.`;
@@ -3316,7 +3888,13 @@ export class CampaignDetailPage {
     }
 
     const origin = this.territoryName(flow.originId);
-    if (flow.kind === 'Move' || flow.kind === 'Split' || flow.kind === 'Teleport') {
+    if (
+      flow.kind === 'Move' ||
+      flow.kind === 'Split' ||
+      flow.kind === 'Teleport' ||
+      flow.kind === 'Surrender' ||
+      flow.kind === 'Retreat'
+    ) {
       const destination = this.territoryName(flow.targetTerritoryId);
       const hops = [flow.viaTerritoryId, ...flow.viaPath].filter((id) => id.length > 0);
       if (hops.length === 0 || flow.kind === 'Teleport') {
@@ -3342,7 +3920,13 @@ export class CampaignDetailPage {
     }
 
     const force = this.myForces().find((item) => item.id === flow.forceId);
-    if (kind === 'Move' || kind === 'Split' || (kind === 'Teleport' && force && this.canChooseTeleport(force))) {
+    if (
+      kind === 'Move' ||
+      kind === 'Split' ||
+      kind === 'Surrender' ||
+      kind === 'Retreat' ||
+      (kind === 'Teleport' && force && this.canChooseTeleport(force))
+    ) {
       this.mapAction.set({
         ...flow,
         step: 'pick-target',
@@ -3420,7 +4004,7 @@ export class CampaignDetailPage {
 
   private handleMapActionSelect(event: { id: string; additive: boolean; clientX?: number; clientY?: number }): boolean {
     const play = this.play();
-    if (!this.isActionPhase() || !play?.isParticipant || play.canChooseFaction || play.isCommitted) {
+    if (!play?.isParticipant || play.canChooseFaction) {
       return false;
     }
 
@@ -3444,6 +4028,10 @@ export class CampaignDetailPage {
       this.cancelMapAction();
     }
 
+    if (!this.isActionPhase() || play.isCommitted) {
+      return !!flow;
+    }
+
     const occupying = this.myForces().find(
       (item) => item.territoryId === event.id && !item.inBattle && item.availableActions.length > 0,
     );
@@ -3451,22 +4039,7 @@ export class CampaignDetailPage {
       return false;
     }
 
-    const { x, y } = this.menuPosition(event.clientX ?? 0, event.clientY ?? 0);
-    this.selectedIds.set([event.id]);
-    this.hoveredTerritoryId.set(event.id);
-    this.mapAction.set({
-      step: 'menu',
-      forceId: occupying.id,
-      originId: event.id,
-      kind: '',
-      targetTerritoryId: '',
-      viaTerritoryId: '',
-      viaPath: [],
-      viaCandidates: [],
-      structureTypeId: '',
-      menuX: x,
-      menuY: y,
-    });
+    this.openForceMapMenu(occupying, event.clientX ?? 0, event.clientY ?? 0);
     return true;
   }
 
@@ -3622,6 +4195,101 @@ export class CampaignDetailPage {
     }
 
     this.applyPlayMapOverlay(play);
+    this.hydrateBattleForms(play, preserveLocalWork);
+  }
+
+  private hydrateBattleForms(play: CampaignPlayDetail, preserveLocalWork: boolean): void {
+    const dirtyResults = new Set(preserveLocalWork ? this.dirtyBattleResultIds() : []);
+    const dirtyArmy = new Set(preserveLocalWork ? this.dirtyArmyListKeys() : []);
+    const applied = { ...this.appliedResultKeys() };
+    const nextReports: Record<string, BattleParticipantReport[]> = preserveLocalWork ? { ...this.battleReports() } : {};
+    const nextWinners = preserveLocalWork ? { ...this.battleWinner() } : {};
+    const nextScores = preserveLocalWork ? { ...this.battleScores() } : {};
+
+    for (const battle of play.battles) {
+      const latest = this.latestResultSubmission(battle);
+      const resultKey = latest ? `${latest.submitterUserId}:${latest.submittedUtc ?? ''}` : '';
+      const applyResults = !preserveLocalWork || applied[battle.id] !== resultKey;
+      const current = [...(nextReports[battle.id] ?? [])];
+
+      for (const forceId of this.reportingForceIds(battle)) {
+        let report = current.find((item) => item.forceId === forceId) ?? this.emptyBattleReport(forceId);
+        if (applyResults && latest) {
+          const submitted = latest.reports?.find((item) => item.forceId === forceId);
+          if (submitted) {
+            report = {
+              ...report,
+              victoryPoints: submitted.victoryPoints,
+              differentialBattlePoints: submitted.differentialBattlePoints,
+              bonusBattlePoints: submitted.bonusBattlePoints,
+              usedExtraBlackPowder: submitted.usedExtraBlackPowder ?? false,
+              magicalSupplyRerolls: submitted.magicalSupplyRerolls ?? 0,
+              answers: submitted.answers,
+            };
+          }
+        }
+
+        const armyKey = this.armyListKey(battle.id, forceId);
+        if (!preserveLocalWork || !dirtyArmy.has(armyKey)) {
+          const list = battle.armyLists?.find((item) => item.forceId === forceId);
+          if (list) {
+            report = {
+              ...report,
+              armyPoints: list.armyPoints,
+              supplyCostingUnitCount: list.supplyCostingUnitCount,
+              armyListText: list.armyListText ?? '',
+              armyListGameSystem: list.armyListGameSystem ?? 'WarhammerTheOldWorld',
+              armyListBuilder: list.armyListBuilder ?? 'Other',
+              supplyCategories: list.supplyCategories ?? [],
+            };
+          }
+        }
+
+        const index = current.findIndex((item) => item.forceId === forceId);
+        if (index >= 0) {
+          current[index] = report;
+        } else {
+          current.push(report);
+        }
+      }
+
+      nextReports[battle.id] = current;
+      if (applyResults && latest) {
+        dirtyResults.delete(battle.id);
+        nextWinners[battle.id] = latest.isDraw ? 'draw' : (latest.winnerForceId ?? '');
+        nextScores[battle.id] = {
+          winnerScore: latest.winnerScore ?? null,
+          loserScore: latest.loserScore ?? null,
+        };
+      }
+
+      applied[battle.id] = resultKey;
+    }
+
+    if (!preserveLocalWork) {
+      dirtyResults.clear();
+      dirtyArmy.clear();
+    }
+
+    this.battleReports.set(nextReports);
+    this.battleWinner.set(nextWinners);
+    this.battleScores.set(nextScores);
+    this.dirtyBattleResultIds.set(dirtyResults);
+    this.dirtyArmyListKeys.set(dirtyArmy);
+    this.appliedResultKeys.set(applied);
+
+    const nextRetreats = preserveLocalWork ? { ...this.retreatTarget() } : {};
+    for (const battle of play.battles) {
+      if (preserveLocalWork && nextRetreats[battle.id]) {
+        continue;
+      }
+
+      if (battle.retreatDraftTargetId) {
+        nextRetreats[battle.id] = battle.retreatDraftTargetId;
+      }
+    }
+
+    this.retreatTarget.set(nextRetreats);
   }
 
   private applyPlayMapOverlay(play: CampaignPlayDetail): void {
@@ -3785,6 +4453,29 @@ export class CampaignDetailPage {
   }
 
   private applyMapDestination(flow: MapActionFlow, force: PlayForce, destId: string): void {
+    if (flow.kind === 'Surrender' || flow.kind === 'Retreat') {
+      const battle = this.battleForForce(force);
+      if (battle) {
+        this.onRetreatTarget(battle.id, destId);
+      }
+
+      if (flow.kind === 'Surrender' && this.isActionPhase() && !this.play()?.isCommitted) {
+        this.markDraftDirty(force.id);
+        this.drafts.update((drafts) => ({
+          ...drafts,
+          [force.id]: emptyOrderDraft({
+            kind: 'Surrender',
+            targetTerritoryId: destId,
+          }),
+        }));
+        void this.saveDraft(force);
+      }
+
+      this.cancelMapAction();
+      this.selectedIds.set([destId]);
+      return;
+    }
+
     if (flow.kind === 'Teleport' || this.isDirectMove(force, destId)) {
       this.confirmMapMove(flow, destId, '', []);
       return;
@@ -4181,6 +4872,7 @@ export class CampaignDetailPage {
         },
       };
     });
+    this.markBattleResultDirty(battleId);
   }
 
   private seedAwardDefaults(): void {

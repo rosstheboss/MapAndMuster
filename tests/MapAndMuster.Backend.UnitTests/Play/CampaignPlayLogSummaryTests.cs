@@ -54,6 +54,42 @@ public sealed class CampaignPlayLogSummaryTests
     }
 
     [Fact]
+    public void OrdersSameTimestampResolvedActionsBeforeTheNextPhaseHeading()
+    {
+        var summaries = Summaries(
+        [
+            new PlayLogEntry(
+                Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+                Now,
+                PlayLogKind.ResolvedAction,
+                null,
+                null,
+                Bob,
+                FromId,
+                null,
+                null,
+                ActionKind.Hold,
+                []),
+            new PlayLogEntry(
+                Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                Now,
+                PlayLogKind.PhaseChanged,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                [],
+                "Round 1 — Battle phase began."),
+        ]);
+
+        Assert.Equal("bob held in West Avila Coastline.", summaries[0]);
+        Assert.Equal("Round 1 — Battle phase began.", summaries[1]);
+    }
+
+    [Fact]
     public void FormatsTreacheryForAttackPillageAndClaim()
     {
         var summaries = Summaries(

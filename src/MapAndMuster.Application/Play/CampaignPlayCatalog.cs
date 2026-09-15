@@ -545,6 +545,77 @@ internal static class CampaignPlayCatalog
         var next = new List<BattleParticipantReport>(reports.Count);
         foreach (var report in reports)
         {
+            if (!ArmyListRules.TryNormalizeText(report.ArmyListText, out _, out var armyListText))
+            {
+                armyListText = null;
+            }
+
+            var rawCategories = new List<ArmyListSupplyCategory>();
+            foreach (var category in report.SupplyCategories ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(category.Name))
+                {
+                    continue;
+                }
+
+                rawCategories.Add(
+                    new ArmyListSupplyCategory(
+                        category.Name,
+                        Math.Max(0, category.UnitCount),
+                        Math.Max(0, category.SupplyPoints),
+                        category.CostsSupply));
+            }
+
+            if (!ArmyListRules.TryNormalizeCategories(rawCategories, out _, out var normalizedCategories))
+            {
+                normalizedCategories = [];
+            }
+
+            next.Add(
+                new BattleParticipantReport(
+                    report.ForceId,
+                    report.VictoryPoints,
+                    report.ArmyPoints,
+                    report.DifferentialBattlePoints,
+                    report.BonusBattlePoints,
+                    [
+                        .. (report.Answers ?? []).Select(static answer => new BattleQuestionAnswer(
+                            answer.QuestionId,
+                            answer.BooleanValue,
+                            answer.BattlePointsValue)),
+                    ],
+                    report.SupplyCostingUnitCount,
+                    armyListText,
+                    ArmyListRules.NormalizeGameSystem(report.ArmyListGameSystem),
+                    ArmyListRules.ParseBuilder(report.ArmyListBuilder),
+                    normalizedCategories,
+                    report.UsedExtraBlackPowder,
+                    Math.Max(0, report.MagicalSupplyRerolls)));
+        }
+
+        mapped = next;
+        return true;
+    }
+
+    /// <summary>
+    /// Maps army-list composition for an independent submit. Invalid pasted text fails this path
+    /// because there is no battle result to keep.
+    /// </summary>
+    public static bool TryToArmyLists(
+        IReadOnlyList<BattleParticipantReportInput>? reports,
+        [NotNullWhen(true)] out IReadOnlyList<BattleParticipantReport>? mapped,
+        [NotNullWhen(false)] out DomainError? error)
+    {
+        mapped = [];
+        error = null;
+        if (reports is null || reports.Count == 0)
+        {
+            return true;
+        }
+
+        var next = new List<BattleParticipantReport>(reports.Count);
+        foreach (var report in reports)
+        {
             if (!ArmyListRules.TryNormalizeText(report.ArmyListText, out error, out var armyListText))
             {
                 mapped = null;
@@ -554,7 +625,8 @@ internal static class CampaignPlayCatalog
             var rawCategories = new List<ArmyListSupplyCategory>();
             foreach (var category in report.SupplyCategories ?? [])
             {
-                if (string.IsNullOrWhiteSpace(category.Name))
+                if (string.IsNullOrWhiteSpace(category.Name)
+                    || category.Name.Trim().Length > ArmyListRules.CategoryNameMaxLength)
                 {
                     error = new DomainError(
                         "armyListCategories.name",
@@ -581,23 +653,16 @@ internal static class CampaignPlayCatalog
             next.Add(
                 new BattleParticipantReport(
                     report.ForceId,
-                    report.VictoryPoints,
-                    report.ArmyPoints,
-                    report.DifferentialBattlePoints,
-                    report.BonusBattlePoints,
-                    [
-                        .. (report.Answers ?? []).Select(static answer => new BattleQuestionAnswer(
-                            answer.QuestionId,
-                            answer.BooleanValue,
-                            answer.BattlePointsValue)),
-                    ],
-                    report.SupplyCostingUnitCount,
+                    0,
+                    Math.Max(0, report.ArmyPoints),
+                    0,
+                    0,
+                    [],
+                    Math.Max(0, report.SupplyCostingUnitCount),
                     armyListText,
                     ArmyListRules.NormalizeGameSystem(report.ArmyListGameSystem),
                     ArmyListRules.ParseBuilder(report.ArmyListBuilder),
-                    normalizedCategories,
-                    report.UsedExtraBlackPowder,
-                    Math.Max(0, report.MagicalSupplyRerolls)));
+                    normalizedCategories));
         }
 
         mapped = next;

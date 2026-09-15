@@ -2880,6 +2880,16 @@ public static class CampaignSetupRules
         var knownIds = drafts.Select(static draft => draft.Id).ToHashSet();
         foreach (var draft in drafts)
         {
+            ValidateOccupyingStatusReferences(
+                draft.Enables,
+                draft.Clears,
+                knownIds,
+                draft.Index,
+                errors);
+        }
+
+        foreach (var draft in drafts)
+        {
             var priority = draft.Priority ?? ForceStatusPriority.NextAvailable(usedPriorities);
             if (draft.Priority is null)
             {
@@ -2970,13 +2980,24 @@ public static class CampaignSetupRules
                     $"forceStatuses[{index}].enableConditions[{item}]",
                     catalog,
                     errors);
+                if (!TryParseRequiredStatusId(
+                        trigger == ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus,
+                        listed[item].RequiredStatusId,
+                        $"forceStatuses[{index}].enableConditions[{item}].requiredStatusId",
+                        errors,
+                        out var requiredStatusId))
+                {
+                    return null;
+                }
+
                 parsed.AddRange(ExpandLegacyEnable(
                     trigger,
                     occurrences,
                     listed[item].Id,
                     location,
                     usedIds,
-                    catalog));
+                    catalog,
+                    requiredStatusId));
             }
 
             return parsed.Count == 0 ? null : parsed;
@@ -3050,13 +3071,24 @@ public static class CampaignSetupRules
                     $"forceStatuses[{index}].clearConditions[{item}]",
                     catalog,
                     errors);
+                if (!TryParseRequiredStatusId(
+                        trigger == ForceStatusClearTrigger.OccupyingWithSpecifiedStatus,
+                        listed[item].RequiredStatusId,
+                        $"forceStatuses[{index}].clearConditions[{item}].requiredStatusId",
+                        errors,
+                        out var requiredStatusId))
+                {
+                    return null;
+                }
+
                 parsed.AddRange(ExpandLegacyClear(
                     trigger,
                     occurrences,
                     listed[item].Id,
                     location,
                     usedIds,
-                    catalog));
+                    catalog,
+                    requiredStatusId));
             }
 
             return parsed.Count == 0 ? null : parsed;
@@ -3163,7 +3195,8 @@ public static class CampaignSetupRules
         Guid? id,
         ConditionLocation location,
         HashSet<Guid> usedIds,
-        ForceStatusLocationCatalog catalog)
+        ForceStatusLocationCatalog catalog,
+        Guid? requiredStatusId = null)
     {
         var water = catalog.WaterTagId == Guid.Empty
             ? location
@@ -3196,7 +3229,8 @@ public static class CampaignSetupRules
                 trigger,
                 occurrences,
                 ResolveId(id, usedIds, "forceStatuses.condition.id", []),
-                location),
+                location,
+                requiredStatusId),
         ];
     }
 
@@ -3206,7 +3240,8 @@ public static class CampaignSetupRules
         Guid? id,
         ConditionLocation location,
         HashSet<Guid> usedIds,
-        ForceStatusLocationCatalog catalog)
+        ForceStatusLocationCatalog catalog,
+        Guid? requiredStatusId = null)
     {
         if (trigger == ForceStatusClearTrigger.HoldAtSettlement)
         {
@@ -3251,8 +3286,74 @@ public static class CampaignSetupRules
                 trigger,
                 occurrences,
                 ResolveId(id, usedIds, "forceStatuses.condition.id", []),
-                location),
+                location,
+                requiredStatusId),
         ];
+    }
+
+    private static bool TryParseRequiredStatusId(
+        bool required,
+        Guid? supplied,
+        string field,
+        List<DomainError> errors,
+        out Guid? requiredStatusId)
+    {
+        requiredStatusId = supplied is { } id && id != Guid.Empty ? id : null;
+        if (required && requiredStatusId is null)
+        {
+            errors.Add(new DomainError(
+                "forceStatuses.requiredStatusId.required",
+                "Choose which force status the other occupying force must have.",
+                field));
+            return false;
+        }
+
+        if (!required)
+        {
+            requiredStatusId = null;
+        }
+
+        return true;
+    }
+
+    private static void ValidateOccupyingStatusReferences(
+        IReadOnlyList<ForceStatusEnableCondition> enables,
+        IReadOnlyList<ForceStatusClearCondition> clears,
+        HashSet<Guid> knownIds,
+        int index,
+        List<DomainError> errors)
+    {
+        for (var item = 0; item < enables.Count; item++)
+        {
+            if (enables[item].Trigger != ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus)
+            {
+                continue;
+            }
+
+            if (enables[item].RequiredStatusId is not { } required || !knownIds.Contains(required))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.requiredStatusId.unknown",
+                    "Choose a force status from this campaign.",
+                    $"forceStatuses[{index}].enableConditions[{item}].requiredStatusId"));
+            }
+        }
+
+        for (var item = 0; item < clears.Count; item++)
+        {
+            if (clears[item].Trigger != ForceStatusClearTrigger.OccupyingWithSpecifiedStatus)
+            {
+                continue;
+            }
+
+            if (clears[item].RequiredStatusId is not { } required || !knownIds.Contains(required))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.requiredStatusId.unknown",
+                    "Choose a force status from this campaign.",
+                    $"forceStatuses[{index}].clearConditions[{item}].requiredStatusId"));
+            }
+        }
     }
 
     private static bool TryParseForceStatusEnable(string? raw, out ForceStatusEnableTrigger trigger)

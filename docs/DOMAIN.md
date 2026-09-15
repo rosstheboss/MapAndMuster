@@ -265,16 +265,20 @@ A campaign may configure named force statuses (at most 20). Each status has a un
 than Normal, effect text shown on the force, one or more enable conditions, one or more clear
 conditions, a unique priority integer from 0 to 999 (0 is highest), and optional cancel-out statuses.
 Each condition is a trigger plus a consecutive-occurrence count from 1 to 10 (default 1). At least
-one enable condition and one clear condition are required; the same trigger cannot appear twice in
-one list. A force has at most one status; Normal is stored as no
+one enable condition and one clear condition are required. The same trigger may appear more than
+once when the location filter or required occupying status differs. A force has at most one status; Normal is stored as no
 status and is not shown as a named status in the UI. Setup can copy the standard catalog: Diseased,
 Shaken, Confident, Exhausted, and Well Rested, with priorities 0, 1, 2, 3, and 4 in that list order.
 A newly added status defaults to the lowest unused priority. Any listed enable or clear condition
 whose trigger matches that many times in a row can gain or clear the status. Battle triggers count
 consecutive battles (a Hold does not break a battle-loss streak; a win does). Occupying triggers
-(consecutive actions, surrender, and legacy water occupancy) count consecutive action phases (a
-battle window does not break them; leaving the matching location does). The same trigger may appear
-more than once when the location filter differs. Enable and clear lists are OR. Priority and
+(consecutive actions, surrender, occupying with a force that has this status or a chosen status, and
+legacy water occupancy) count consecutive action phases (a battle window does not break them;
+leaving the matching location does). Occupying with another force uses the territory after the
+action; passing through during a multi-territory Move does not count. OccupyingWithThisStatus
+matches another force that already has this catalog status. OccupyingWithSpecifiedStatus matches
+another force that has a chosen catalog status, including this one. Enable and clear lists
+are OR. Priority and
 cancel-out still apply when the Nth matching event fires. When a force would
 gain a status while it already has one, or two effects would apply at the same time, the lower
 priority number remains. If the incoming status lists the current (or simultaneous) status as a
@@ -498,9 +502,10 @@ Each action window and battle phase has an "End phase early if able to resolve" 
 default on. When it is on, a window that can resolve closes immediately and the next window
 opens with that next window's duration already in effect, not leftover time from the window
 that just ended. Later windows keep their scheduled start and end times so the campaign does
-not finish early. When the checkbox is off, the window stays open until its deadline even if
-nothing remains to resolve, so a manager can still inject a ringer battle during a battle
-phase. Simultaneous-action resolution runs immediately when an action window closes.
+not finish early. When the checkbox is off, an action window stays open until its deadline even
+if every order is committed, and an idle battle phase stays open so a manager can still inject
+a ringer fight. A battle phase that already has finalized engagements and committed retreats
+still ends. Simultaneous-action resolution runs immediately when an action window closes.
 
 ## Role and actor model
 
@@ -564,8 +569,9 @@ flag, or the required subfaction's flag or logo when the claiming force's factio
 subfaction. A spawn always keeps its faction's flag (and that spawn's required subfaction mark
 when one is assigned); a force cannot claim an ally's territory
 or structure without backstabbing first (the previous owner's flag stays while the ally defends);
-two or more allied factions on Neutral land award the claim to the strongest using the retreat
-collision ranking. Enemy capture leaves the structure operational unless a configured special
+two or more allied factions on Neutral land award the claim to the strongest using combatant
+strength (campaign points, territories, structures, supply including temporary, then recorded
+random). Enemy capture leaves the structure operational unless a configured special
 rule auto-pillages it. The territory owner owns the occupying structure. Collisions that still
 lack a documented ranking, including competing `Build`, `Pillage`, or `Repair` actions on the
 same territory and competing arrivals, become `Hold` rather than an invented winner.
@@ -617,39 +623,51 @@ Player-submittable actions in an open action window are listed in this order:
 
 Battle-phase and system actions:
 
-- `Retreat`: move a losing/withdrawing force to an open (unoccupied) Neutral territory, a
-  territory the force owns, or a territory owned by a current ally, otherwise to spawn. Players
-  submit retreat after a battle, not during an action window, except as part of surrender.
-  `ArtOfWar` may retreat into any non-enemy-spawn territory and may capture it.
-- `Surrender`: while a force is engaged, during an action or battle window, commit to leaving
-  the fight and retreat. Once committed it cannot be withdrawn. A surrender left in draft still
-  executes when the window ends.
+- `Retreat`: move a losing/withdrawing force to a territory the force owns, a territory owned by
+  a current ally, or a Neutral territory it can reach with its movement speed without meeting
+  enemies or crossing a territory that has a battle, otherwise to spawn. An allied force already
+  in the destination is allowed. Players submit retreat after a battle, not during an action
+  window, except as part of surrender. `ArtOfWar` may retreat into any non-enemy-spawn territory
+  and may capture it.
+- `Surrender`: while a force is engaged, during an action or battle window, choose a retreat
+  destination on the map and commit it from the map toolbar, the same way Action-phase orders
+  and post-battle retreats commit. Clicking your force shows Surrender. A committed surrender
+  cannot be withdrawn. A surrender left in draft still executes when the window ends. The
+  remaining player does not agree to a result: they are awarded maximum differential battle
+  points and the surrendering player is awarded 0. Voluntary surrender is not a missed-result
+  delinquency for either side.
 - `Battle`: automatic system action created by resolution; players do not submit it directly.
 
 Battle overrides incompatible orders. If Action 1 puts a force in battle, later action slots for
 that force become Battle. That force does not submit an action until the battle is resolved;
-Surrender is offered on the battle, not as a required action-list item.
+Surrender is offered on the map by clicking that force, not as a required action-list item.
 
 ## Battle lifecycle
 
 `Pending -> AwaitingResults -> Finalized | Disputed -> GMResolved`
 
 Players may report a battle during the Battle phase or earlier while an Action window is still
-open if they are already in that battle. One player reports both sides. The report includes
-victory points, army size in points, how many supply-costing units they fielded (special, rare,
-and similar; each unit spends one supply point), differential battle points from VP, bonus
-battle points from the mission, and any mission result questions the campaign manager configured
-(true/false or a battle-point amount, each awarding battle points and/or campaign points).
+open if they are already in that battle. One player reports both sides' tabletop outcome:
+victory points, differential battle points from VP, other battle points, and any mission result
+questions the campaign manager configured (true/false or a battle-point amount, each awarding
+battle points and/or campaign points). Each player must record the army points and supply-costing
+units they fielded (special, rare, and similar; each unit spends one supply point). Those
+composition fields are required only for the force the submitting player controls. Army-list text
+is optional.
 A force with Prepared for Battle may declare Extra Black Powder (spending one extra supply
 point). A force with Magical Supply may declare leftover unused composition supply used as
-casting or dispelling rerolls this battle only. A player may optionally paste army-list text for each force. That text is informational: the
-opponent and campaign manager can read it to check the list by hand. The player may also choose
-Warhammer: The Old World and a builder. Other (the default) does not parse the text. New Recruit
-and Old World Builder attempt to recognize that app's text export and fill army points plus
-supply amounts for Characters, Core, Special, Rare, and similar categories. Special, rare,
-mercenary, and allied units default to one supply point each; the player may correct those
-amounts. If the text cannot be parsed, the player is told to enter supply points manually.
-Automatic parsing is only implemented for Warhammer: The Old World.
+casting or dispelling rerolls this battle only. Army lists, army points, and supply-costing unit
+counts are submitted per battle independently of result agreement. A participant may submit their
+composition as soon as the engagement exists so the opponent can read it before reporting tabletop
+results. Lists do not carry from one battle to the next. A player may paste army-list text. That
+text is informational: the opponent and campaign manager can read it to check the list by hand.
+The player may also choose Warhammer: The Old World and a builder. Other (the default) does not
+parse the text. New Recruit and Old World Builder attempt to recognize that app's text export and
+fill army points plus supply amounts for Characters, Core, Special, Rare, and similar categories.
+Special, rare, mercenary, and allied units default to one supply point each; the player may correct
+those amounts. If the text cannot be parsed, the player is told to enter supply points manually.
+Automatic parsing is only implemented for Warhammer: The Old World. A list that does not parse does
+not block submitting or agreeing to results.
 The campaign manager can keep a reusable catalog of standard battle-result questions (prompt,
 true/false or battle-point amount, standard battle points, and standard campaign points) and
 attach those questions to any number of catalog missions, including all missions at once.
@@ -663,9 +681,15 @@ allowance plus the round bonus, then from the player's temporary pool.
 
 - Each participant may submit one current structured result covering every participating force;
   revisions retain history.
-- The other participant may agree with the reported result or submit different numbers.
+- When one player has submitted, the other player's result fields fill with that latest report
+  and Agree with other player's results becomes available, even if they were already typing.
+  After a player submits, their form shows those values and Results submitted!.
+- The other participant may agree with the reported result (keeping their own army list, army
+  points, and supply-costing units) or submit different result numbers.
+- Equivalent submissions (including an accept) compare tabletop outcome fields and ignore army
+  list, army points, and supply-costing units. Matching outcomes finalize immediately. Players may
+  keep submitting until they agree or a campaign manager records the true result.
 - A campaign manager or administrator may be the second confirmation.
-- Equivalent submissions (including an accept) finalize immediately.
 - One timely submission becomes authoritative at the battle-phase deadline.
 - Conflicting submissions become Disputed, lock the forces in that battle, and notify managers
   in-app and by email until a manager confirms (and may edit) the true result.
@@ -673,25 +697,39 @@ allowance plus the round bonus, then from the player's temporary pool.
 - Winner is the higher total battle points (differential + bonus + answered question BP). A
   true battle-point tie is not a loss: both forces must retreat. Otherwise only the loser
   retreats, dropping a carried item objective for the winner to pick up.
-- Players submit retreat after the result is committed, by the end of the Battle phase. Eligible
-  destinations are open (unoccupied) Neutral territories, territories the force owns, and
-  territories owned by a current ally. The current battlefield and enemy spawns are never
-  eligible, and a force cannot retreat onto a hex occupied by an enemy. Friendly occupation of
-  owned or allied land is allowed (rejoin). `ArtOfWar` may also enter any other non-enemy-spawn
-  territory and may capture it. A missing retreat, or a force with no remaining eligible
-  destination, is assigned to that force's spawn (`UndergroundNetwork` uses the same Town or
-  City pick as its initial placement). If two or more enemy forces would
-  occupy the same territory after retreat, the strongest stays and the others are sent to the
-  next safest eligible destination. Strongest is most current campaign points, then most
-  territories, then most structures, then most supply including remaining temporary supply;
-  a remaining tie is chosen at random and recorded on the play log.
-- Surrender may be committed while engaged during an action or battle window. A committed
-  surrender cannot be uncommitted. In a 1v1 fight the remaining player wins with maximum
-  differential battle points (the scoring clamp, default 10) and no extra or mission bonus
-  battle points. In a larger fight, allies of a surrendering force may keep fighting or also
-  run. If only one side still has a fighting force, that side wins the same way. If every
-  remaining force runs, the battle is a no-contest: nobody wins, ranking does not record a
-  win or draw, and relics do not transfer.
+- Players choose a retreat destination after the result is committed, by the end of the Battle
+  phase, then commit it the same way they commit Action-phase orders. They may uncommit while the
+  battle window that will apply the retreat is still open. Uncommitted retreat drafts are not
+  written to the play log. Retreat commit and uncommit live on the map toolbar (the Battles
+  panel keeps the same controls as an accessible alternative). Surrender stays committed and
+  cannot be withdrawn. Eligible
+  destinations are territories the force owns, territories owned by a current ally, and Neutral
+  territories the force can reach with its movement speed along a path that does not meet
+  enemies or cross a territory that has a battle. The current battlefield and enemy spawns are
+  never eligible, and a force cannot retreat onto a hex occupied by an enemy. Friendly
+  occupation of the destination is allowed, including an allied force already in Neutral land
+  (rejoin). `ArtOfWar` may also enter any other non-enemy-spawn territory and may capture it. An
+  uncommitted retreat draft is submitted at the battle-phase deadline, the same way an
+  uncommitted action draft is. A missing retreat, or a force with no remaining eligible
+  destination, is assigned to that force's spawn (`UndergroundNetwork` uses the same Town or City
+  pick as its initial placement).
+  If two or more enemy factions would land in the same territory after retreat, none of them
+  keep it: every force that retreated onto that hex is sent to its spawn, and the play log
+  records the collision. Passing through (but not landing in) a territory another enemy is
+  retreating to does not start a battle or a collision; both forces are too beaten to fight
+  while one is only racing through.
+- Surrender may be committed while engaged during an action or battle window. Click the force
+  on the map, choose a destination, then commit from the map toolbar. A committed surrender
+  cannot be uncommitted. Uncommitted action-phase orders may still be uncommitted while the
+  action window is open, even if that player also saved a surrender draft that has not applied
+  yet. In a 1v1 fight the remaining player is clicked through: they win with maximum
+  differential battle points (the scoring clamp, default 10) and 0 for the surrenderer, with
+  no extra or mission bonus battle points, and without agreeing to a result. That voluntary
+  surrender is not a missed-result delinquency for the victor or the surrenderer. In a larger
+  fight, allies of a surrendering force may keep fighting or also run. If only one side still
+  has a fighting force, that side wins the same way. If every remaining force runs, the battle
+  is a no-contest: nobody wins, ranking does not record a win or draw, and relics do not
+  transfer.
 - When more than one player fights on the same side, that side's round army-point cap increases
   by 25 percent per extra player, then is divided evenly and each force's share rounds up to
   the next 10. More than two opposing sides who do not all retreat: the two strongest play the
@@ -708,15 +746,22 @@ allowance plus the round bonus, then from the player's temporary pool.
   given a missed-result offence. Waiting other sides stay in the territory. If an ally of the
   previous owner remains, that owner's flag stays (the ally is only defending). Otherwise a
   remaining uncontested occupant claims, or remaining opponents start a new battle.
-- A battle phase ends early when its "End phase early if able to resolve" checkbox is on and
-  every engagement is finalized and every required retreat is recorded, and also when that
-  checkbox is on and no battles remain for anyone to report. The next window then runs for its
-  own duration rather than leftover time from the battle phase. When the checkbox is off, the
-  window stays open until its deadline. The battle-phase commitment count is unique players who
-  have a force in a battle this window. A player with two forces in two battles is one of that
-  total and is not committed until every one of their battles has an agreed result or a
-  manager/administrator entered or confirmed the result on a participant's behalf, and any
-  required retreat is recorded.
+- A battle phase ends as soon as every engagement is finalized (including surrender) and every
+  required retreat is committed, and also when its "End phase early if able to resolve" checkbox is
+  on and no battles remain for anyone to report. The next window then runs for its own duration
+  rather than leftover time from the battle phase. When the checkbox is off and no battles occurred,
+  the window stays open until its deadline so a manager can still inject a ringer fight. The last
+  retreat or surrender commit that would close the phase early uses the same last-player warning as
+  the last Action-phase commit. The battle-phase commitment count is unique players who have a force
+  in a battle this window. A player with two forces in two battles is one of that total and is not
+  committed until every one of their battles has an agreed result or a manager/administrator entered
+  or confirmed the result on a participant's behalf, including that player's army points and
+  supply-costing units, and any required retreat is committed. The Battles section lists who still
+  needs to commit a result or a retreat. A finalized battle that still awaits a committed retreat is
+  shown as Awaiting Retreat Order, not Finalized.
+- A force that must retreat and has exactly one legal destination is auto-committed to that
+  destination, including its spawn when spawn is the only remaining option. That auto-commit is
+  not a missed-retreat offence, and the player cannot uncommit while only one destination remains.
 
 ## Territory and structures
 
@@ -835,7 +880,13 @@ used only if no normal mission exists, and attacker/defender roles are then assi
 Role priority is backstab, then structure owner, then Hold/Retreat versus Move/Split.
 Chosen missions appear on the campaign Battles panel with the mission name, attacker/defender or
 pitched-combatant roles, army and supply points for each reporting force, and a link or file
-download that opens in a new tab when present. If the mission has no URL or uploaded file, the
+download that opens in a new tab when present. Each battle card is collapsible, with nested
+collapsible panels for the battle summary, each player's victory and battle points, and each
+player's army list. Submit result and agree stay outside those nested panels at the bottom of the card.
+Retreat and surrender commit and uncommit are on the map; the Battles card keeps matching
+controls as an accessible alternative. Required fields are marked with an asterisk.
+Mission questions show the battle points they award, and those points are included in a live
+total with differential and other battle points. If the mission has no URL or uploaded file, the
 panel says "See Campaign Manager for Mission details." Attacker/defender missions may grant a signed army-point number
 or percent change and a signed raw supply-point change to one side; after apply, army points are
 never below 500 and supply points are never below 1. Mission names are unique across the campaign.
@@ -1254,7 +1305,11 @@ formatted as
 end, and campaign close are shown in bold. Recent entries (under 24 hours) use a relative label
 with the absolute time in the `title` attribute; older entries show the absolute time. On small
 viewports the timestamp sits on a secondary line and the log uses the body font.
-Campaign-generated facts use the originator name `Campaign` and always belong to the public channel.
+When a phase closes, resolved actions and other close-of-phase facts for that window are written
+before the next round or phase heading, including when they share the same timestamp, so players
+can tell which phase those actions belonged to. Member chat stays in time order among those
+facts. Campaign-generated facts use the originator name `Campaign` and always belong to the
+public channel.
 Member chat uses the author's display name
 snapshotted when the message was posted. Chat originators and `@` mentions of current members
 link to that player's public profile. The log refreshes while the page is open. Sending chat
@@ -1287,8 +1342,10 @@ territory, revealed rival-objective victories, and automatic substitutions: miss
 missing retreats assigned to spawn, no-result forced retreats, ringer battles (including
 voided neither-report fights), and delinquency notices from the third offence onward.
 Unresolved secret orders, including drafts and unrevealed commitments, are never written to or
-returned in the log. A player may uncommit a committed draft only while the action window is
-still open; after the window closes, orders resolve and cannot be returned to draft.
+returned in the log. A player may uncommit a committed action draft only while the action window
+is still open; after the window closes, orders resolve and cannot be returned to draft. A player
+may uncommit a committed retreat only while the battle window that will apply it remains open;
+player-chosen retreats are written to the log when that window applies them.
 
 Current members may post chat in this log, including before launch. Chat and
 `@` tags are limited to people who currently belong to the campaign. An unescaped `@` followed

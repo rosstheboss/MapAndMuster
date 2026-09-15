@@ -1418,6 +1418,12 @@ public sealed class ForceStatusConditionDetail
 
     /// <summary>Gets the terrain or structure tag when the location is a tag filter.</summary>
     public Guid? LocationTagId { get; init; }
+
+    /// <summary>
+    /// Gets the catalog status another occupying force must have when the trigger is
+    /// OccupyingWithSpecifiedStatus.
+    /// </summary>
+    public Guid? RequiredStatusId { get; init; }
 }
 
 /// <summary>
@@ -2177,6 +2183,12 @@ public sealed class StoredForceStatusCondition
 
     /// <summary>Gets the terrain or structure tag when the location is a tag filter.</summary>
     public Guid? LocationTagId { get; init; }
+
+    /// <summary>
+    /// Gets the catalog status another occupying force must have when the trigger is
+    /// OccupyingWithSpecifiedStatus.
+    /// </summary>
+    public Guid? RequiredStatusId { get; init; }
 }
 
 /// <summary>

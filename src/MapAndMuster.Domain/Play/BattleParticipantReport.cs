@@ -92,4 +92,26 @@ public sealed class BattleParticipantReport
     /// </summary>
     public int TotalBattlePoints =>
         DifferentialBattlePoints + BonusBattlePoints + Answers.Sum(static answer => answer.BattlePointsValue ?? 0);
+
+    /// <summary>
+    /// Returns a copy with independent army-list composition replaced.
+    /// </summary>
+    public BattleParticipantReport WithArmyComposition(BattleArmyListSubmission list)
+    {
+        ArgumentNullException.ThrowIfNull(list);
+        return new BattleParticipantReport(
+            ForceId,
+            VictoryPoints,
+            list.ArmyPoints,
+            DifferentialBattlePoints,
+            BonusBattlePoints,
+            Answers,
+            list.SupplyCostingUnitCount,
+            list.ArmyListText,
+            list.ArmyListGameSystem,
+            list.ArmyListBuilder,
+            list.SupplyCategories,
+            UsedExtraBlackPowder,
+            MagicalSupplyRerolls);
+    }
 }

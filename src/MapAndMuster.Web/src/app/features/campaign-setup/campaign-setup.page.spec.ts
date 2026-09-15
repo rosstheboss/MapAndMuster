@@ -155,7 +155,12 @@ describe('CampaignSetupPage', () => {
             enablePick: { setValue: (value: string) => void };
             enablePickLocationKind: { setValue: (value: string) => void };
             enablePickTypeId: { setValue: (value: string) => void };
-            enableConditions: { length: number };
+            enablePickRequiredStatusId: { setValue: (value: string) => void };
+            id: { value: string };
+            enableConditions: {
+              length: number;
+              at: (index: number) => { controls: { trigger: { value: string }; requiredStatusId: { value: string } } };
+            };
           };
         };
       };
@@ -215,6 +220,12 @@ describe('CampaignSetupPage', () => {
     status.controls.enablePickTypeId.setValue(page.terrainTypes.at(0).controls.id.value);
     page.addForceStatusEnableCondition(status);
     expect(status.controls.enableConditions.length).toBe(2);
+    status.controls.enablePick.setValue('OccupyingWithSpecifiedStatus');
+    status.controls.enablePickRequiredStatusId.setValue(status.controls.id.value);
+    page.addForceStatusEnableCondition(status);
+    expect(status.controls.enableConditions.length).toBe(3);
+    expect(status.controls.enableConditions.at(2).controls.trigger.value).toBe('OccupyingWithSpecifiedStatus');
+    expect(status.controls.enableConditions.at(2).controls.requiredStatusId.value).toBe(status.controls.id.value);
     TestBed.inject(HttpTestingController).verify();
   });
 

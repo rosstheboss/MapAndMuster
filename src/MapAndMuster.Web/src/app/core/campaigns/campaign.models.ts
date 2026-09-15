@@ -951,6 +951,8 @@ export interface PlayCommitment {
   userId: string;
   username: string | null;
   isCommitted: boolean;
+  needsResult?: boolean;
+  needsRetreat?: boolean;
 }
 
 export interface PlayBattle {
@@ -967,12 +969,16 @@ export interface PlayBattle {
   isMine: boolean;
   mySubmission: PlayBattleSubmission | null;
   opponentSubmission: PlayBattleSubmission | null;
+  armyLists?: PlayBattleArmyList[];
   winnerForceId: string | null;
   isDraw: boolean;
   winnerScore?: number | null;
   loserScore?: number | null;
   needsRetreat: boolean;
-  retreatTargets: string[];
+  awaitingRetreat?: boolean;
+  isRetreatCommitted?: boolean;
+  retreatDraftTargetId?: string | null;
+  retreatTargets?: string[];
   canSurrender?: boolean;
   resultQuestions?: MissionResultQuestion[];
   viewerSupplyPoints?: number | null;
@@ -1024,6 +1030,19 @@ export interface PlayBattleSubmission {
   winnerScore?: number | null;
   loserScore?: number | null;
   reports?: BattleParticipantReport[];
+  submittedUtc?: string | null;
+}
+
+export interface PlayBattleArmyList {
+  forceId: string;
+  submitterUserId: string;
+  submittedUtc: string;
+  armyPoints: number;
+  supplyCostingUnitCount: number;
+  armyListText?: string | null;
+  armyListGameSystem?: string | null;
+  armyListBuilder?: string;
+  supplyCategories?: ArmyListSupplyCategory[];
 }
 
 export interface BattleParticipantReport {
@@ -1209,6 +1228,7 @@ export interface SubmitBattleResultPayload {
 export interface BattleActionPayload {
   revision: number;
   battleId: string;
+  reports?: BattleParticipantReport[];
 }
 
 export interface SubmitRetreatPayload {

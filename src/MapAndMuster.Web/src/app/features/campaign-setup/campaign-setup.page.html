@@ -718,6 +718,20 @@
                             </select>
                           </div>
                         }
+                        @if (needsSpecifiedOccupyingStatus(status.controls.enablePick.value)) {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-enable-status-' + index">Occupying force status</label>
+                            <select
+                              [id]="'force-status-enable-status-' + index"
+                              formControlName="enablePickRequiredStatusId"
+                            >
+                              <option value="">Select a force status</option>
+                              @for (option of occupyingForceStatusOptions(status); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
                         <div class="field">
                           <label [attr.for]="'force-status-enable-count-' + index">Consecutive occurrences</label>
                           <input
@@ -732,7 +746,12 @@
                         <button
                           type="button"
                           class="button-secondary"
-                          [disabled]="!status.controls.enablePick.value"
+                          [disabled]="
+                            !canAddForceStatusCondition(
+                              status.controls.enablePick.value,
+                              status.controls.enablePickRequiredStatusId.value
+                            )
+                          "
                           (click)="addForceStatusEnableCondition(status)"
                         >
                           Add
@@ -748,8 +767,8 @@
                             <li class="cancel-status-row">
                               <span>
                                 {{ forceStatusEnableOptionLabel(condition.controls.trigger.value) }} ×
-                                {{ condition.controls.occurrences.value }} at
-                                {{ forceStatusLocationLabel(condition) }}
+                                {{ condition.controls.occurrences.value }} at {{ forceStatusLocationLabel(condition)
+                                }}{{ occupyingStatusSuffix(condition) }}
                               </span>
                               <button
                                 type="button"
@@ -836,6 +855,20 @@
                             </select>
                           </div>
                         }
+                        @if (needsSpecifiedOccupyingStatus(status.controls.clearPick.value)) {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-clear-status-' + index">Occupying force status</label>
+                            <select
+                              [id]="'force-status-clear-status-' + index"
+                              formControlName="clearPickRequiredStatusId"
+                            >
+                              <option value="">Select a force status</option>
+                              @for (option of occupyingForceStatusOptions(status); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
                         <div class="field">
                           <label [attr.for]="'force-status-clear-count-' + index">Consecutive occurrences</label>
                           <input
@@ -850,7 +883,12 @@
                         <button
                           type="button"
                           class="button-secondary"
-                          [disabled]="!status.controls.clearPick.value"
+                          [disabled]="
+                            !canAddForceStatusCondition(
+                              status.controls.clearPick.value,
+                              status.controls.clearPickRequiredStatusId.value
+                            )
+                          "
                           (click)="addForceStatusClearCondition(status)"
                         >
                           Add
@@ -866,8 +904,8 @@
                             <li class="cancel-status-row">
                               <span>
                                 {{ forceStatusClearOptionLabel(condition.controls.trigger.value) }} ×
-                                {{ condition.controls.occurrences.value }} at
-                                {{ forceStatusLocationLabel(condition) }}
+                                {{ condition.controls.occurrences.value }} at {{ forceStatusLocationLabel(condition)
+                                }}{{ occupyingStatusSuffix(condition) }}
                               </span>
                               <button
                                 type="button"

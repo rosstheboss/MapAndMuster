@@ -35,7 +35,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<ForceStatusChangeFact>? forceStatusChanges = null,
         IReadOnlyList<StructureWorkFact>? structureWorks = null,
         IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
-        IReadOnlyList<RivalObjectiveAssignment>? rivalObjectives = null)
+        IReadOnlyList<RivalObjectiveAssignment>? rivalObjectives = null,
+        IReadOnlyList<BattleArmyListSubmission>? armyLists = null)
     {
         ArgumentNullException.ThrowIfNull(windows);
         ArgumentNullException.ThrowIfNull(forces);
@@ -74,6 +75,7 @@ public sealed class CampaignPlayState
         StructureWorks = structureWorks ?? [];
         AllyBetrayals = allyBetrayals ?? [];
         RivalObjectives = rivalObjectives ?? [];
+        ArmyLists = armyLists ?? [];
     }
 
     /// <summary>Gets an empty play state.</summary>
@@ -157,6 +159,9 @@ public sealed class CampaignPlayState
     /// <summary>Gets secret rival assignments. Unrevealed details are omitted from unauthorized reads.</summary>
     public IReadOnlyList<RivalObjectiveAssignment> RivalObjectives { get; }
 
+    /// <summary>Gets append-only army-list submissions, independent of battle-result agreement.</summary>
+    public IReadOnlyList<BattleArmyListSubmission> ArmyLists { get; }
+
     /// <summary>
     /// Returns a copy with replaced collections.
     /// </summary>
@@ -186,7 +191,8 @@ public sealed class CampaignPlayState
         IReadOnlyList<ForceStatusChangeFact>? forceStatusChanges = null,
         IReadOnlyList<StructureWorkFact>? structureWorks = null,
         IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
-        IReadOnlyList<RivalObjectiveAssignment>? rivalObjectives = null)
+        IReadOnlyList<RivalObjectiveAssignment>? rivalObjectives = null,
+        IReadOnlyList<BattleArmyListSubmission>? armyLists = null)
     {
         return new CampaignPlayState(
             windows ?? Windows,
@@ -213,7 +219,8 @@ public sealed class CampaignPlayState
             forceStatusChanges ?? ForceStatusChanges,
             structureWorks ?? StructureWorks,
             allyBetrayals ?? AllyBetrayals,
-            rivalObjectives ?? RivalObjectives);
+            rivalObjectives ?? RivalObjectives,
+            armyLists ?? ArmyLists);
     }
 
     /// <summary>
@@ -366,42 +373,68 @@ public sealed class CampaignPlayState
     }
 
     /// <summary>
-    /// Whether the player has finished every battle they are in: each result is submitted or
-    /// staff-resolved, and every required retreat is recorded.
+    /// Whether the player still owes a battle result or a required retreat in this window.
     /// </summary>
-    public bool HasCompletedBattleDuties(Guid windowId, Guid userId)
+    public (bool NeedsResult, bool NeedsRetreat) PendingBattleDuties(Guid windowId, Guid userId)
     {
+        var needsResult = false;
+        var needsRetreat = false;
+        var forceIds = Forces
+            .Where(force => force.ControllerUserId == userId)
+            .Select(static force => force.Id)
+            .ToHashSet();
         foreach (var battle in Battles.Where(battle => battle.BattleWindowId == windowId))
         {
-            var forceIds = Forces
-                .Where(force => force.ControllerUserId == userId)
-                .Select(static force => force.Id)
-                .ToHashSet();
             if (battle.Status is BattleStatus.AwaitingResults or BattleStatus.Disputed
                 && battle.ReportingForceIds.Any(forceIds.Contains)
                 && LatestBattleSubmission(battle.Id, userId) is null)
             {
-                return false;
+                var mineReporting = battle.ReportingForceIds.Where(forceIds.Contains).ToArray();
+                if (mineReporting.Length == 0 || !mineReporting.All(battle.SurrenderedForceIds.Contains))
+                {
+                    needsResult = true;
+                }
             }
 
             if (battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved)
             {
                 foreach (var forceId in CampaignPlayRules.ForcesRequiredToRetreat(battle))
                 {
-                    if (!forceIds.Contains(forceId))
+                    if (forceIds.Contains(forceId) && !HasCommittedRetreat(battle.Id, forceId))
                     {
-                        continue;
-                    }
-
-                    if (!Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == forceId))
-                    {
-                        return false;
+                        needsRetreat = true;
                     }
                 }
             }
         }
 
-        return true;
+        return (needsResult, needsRetreat);
+    }
+
+    /// <summary>
+    /// Whether the player has finished every battle they are in: each result is submitted or
+    /// staff-resolved, and every required retreat is committed.
+    /// </summary>
+    public bool HasCompletedBattleDuties(Guid windowId, Guid userId)
+    {
+        var pending = PendingBattleDuties(windowId, userId);
+        return !pending.NeedsResult && !pending.NeedsRetreat;
+    }
+
+    /// <summary>
+    /// Whether a committed retreat exists for this force in this battle.
+    /// </summary>
+    public bool HasCommittedRetreat(Guid battleId, Guid forceId)
+    {
+        return Retreats.Any(item => item.BattleId == battleId && item.ForceId == forceId && item.IsCommitted);
+    }
+
+    /// <summary>
+    /// The latest stored retreat for this force in this battle, committed or still in draft.
+    /// </summary>
+    public RetreatOrder? RetreatFor(Guid battleId, Guid forceId)
+    {
+        return Retreats.FirstOrDefault(item => item.BattleId == battleId && item.ForceId == forceId);
     }
 
     private void AddController(Guid forceId, List<Guid> userIds)
@@ -420,6 +453,17 @@ public sealed class CampaignPlayState
     {
         return BattleSubmissions
             .Where(item => item.BattleId == battleId && item.SubmitterUserId == userId)
+            .OrderByDescending(static item => item.SubmittedUtc)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Returns the latest army list for a force in a battle, when any.
+    /// </summary>
+    public BattleArmyListSubmission? LatestArmyList(Guid battleId, Guid forceId)
+    {
+        return ArmyLists
+            .Where(item => item.BattleId == battleId && item.ForceId == forceId)
             .OrderByDescending(static item => item.SubmittedUtc)
             .FirstOrDefault();
     }

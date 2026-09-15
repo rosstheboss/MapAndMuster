@@ -275,6 +275,7 @@ type ForceStatusConditionGroup = FormGroup<{
   locationKind: FormControl<string>;
   locationTypeId: FormControl<string>;
   locationTagId: FormControl<string>;
+  requiredStatusId: FormControl<string>;
 }>;
 type ForceStatusGroup = FormGroup<{
   id: FormControl<string>;
@@ -285,12 +286,14 @@ type ForceStatusGroup = FormGroup<{
   enablePickLocationKind: FormControl<string>;
   enablePickTypeId: FormControl<string>;
   enablePickTagId: FormControl<string>;
+  enablePickRequiredStatusId: FormControl<string>;
   enableConditions: FormArray<ForceStatusConditionGroup>;
   clearPick: FormControl<string>;
   clearPickOccurrences: FormControl<number>;
   clearPickLocationKind: FormControl<string>;
   clearPickTypeId: FormControl<string>;
   clearPickTagId: FormControl<string>;
+  clearPickRequiredStatusId: FormControl<string>;
   clearConditions: FormArray<ForceStatusConditionGroup>;
   priority: FormControl<number>;
   cancelsStatusIds: FormControl<string[]>;
@@ -1837,6 +1840,35 @@ export class CampaignSetupPage {
     return CONDITION_LOCATION_OPTIONS;
   }
 
+  protected needsSpecifiedOccupyingStatus(trigger: string): boolean {
+    return trigger === 'OccupyingWithSpecifiedStatus';
+  }
+
+  protected canAddForceStatusCondition(trigger: string, requiredStatusId: string): boolean {
+    if (!trigger) {
+      return false;
+    }
+
+    return !this.needsSpecifiedOccupyingStatus(trigger) || requiredStatusId.length > 0;
+  }
+
+  protected occupyingForceStatusOptions(status: ForceStatusGroup): { id: string; name: string }[] {
+    return this.forceStatuses.controls.map((item) => ({
+      id: item.controls.id.value,
+      name: item.controls.name.value.trim() || (item === status ? 'This status' : 'Unnamed status'),
+    }));
+  }
+
+  protected occupyingStatusSuffix(condition: ForceStatusConditionGroup): string {
+    if (condition.controls.trigger.value !== 'OccupyingWithSpecifiedStatus') {
+      return '';
+    }
+
+    const id = condition.controls.requiredStatusId.value;
+    const name = this.forceStatuses.controls.find((item) => item.controls.id.value === id)?.controls.name.value.trim();
+    return name ? ` (${name})` : '';
+  }
+
   protected addForceStatusEnableCondition(status: ForceStatusGroup): void {
     this.addForceStatusCondition(
       status.controls.enableConditions,
@@ -1845,6 +1877,7 @@ export class CampaignSetupPage {
       status.controls.enablePickLocationKind,
       status.controls.enablePickTypeId,
       status.controls.enablePickTagId,
+      status.controls.enablePickRequiredStatusId,
     );
   }
 
@@ -1856,6 +1889,7 @@ export class CampaignSetupPage {
       status.controls.clearPickLocationKind,
       status.controls.clearPickTypeId,
       status.controls.clearPickTagId,
+      status.controls.clearPickRequiredStatusId,
     );
   }
 
@@ -1866,9 +1900,14 @@ export class CampaignSetupPage {
     locationKind: FormControl<string>,
     locationTypeId: FormControl<string>,
     locationTagId: FormControl<string>,
+    requiredStatusId: FormControl<string>,
   ): void {
     const trigger = pick.value.trim();
     if (!trigger) {
+      return;
+    }
+
+    if (this.needsSpecifiedOccupyingStatus(trigger) && !requiredStatusId.value) {
       return;
     }
 
@@ -1878,6 +1917,7 @@ export class CampaignSetupPage {
       locationKind: (locationKind.value || 'Any') as ConditionLocationKind,
       locationTypeId: locationTypeId.value || null,
       locationTagId: locationTagId.value || null,
+      requiredStatusId: this.needsSpecifiedOccupyingStatus(trigger) ? requiredStatusId.value || null : null,
     });
     const fingerprint = this.forceStatusConditionFingerprint(condition);
     if (list.controls.some((item) => this.forceStatusConditionFingerprint(item) === fingerprint)) {
@@ -1891,6 +1931,7 @@ export class CampaignSetupPage {
     locationKind.setValue('Any');
     locationTypeId.setValue('');
     locationTagId.setValue('');
+    requiredStatusId.setValue('');
   }
 
   protected removeForceStatusEnableCondition(status: ForceStatusGroup, index: number): void {
@@ -3850,6 +3891,7 @@ export class CampaignSetupPage {
       enablePickLocationKind: ['Any'],
       enablePickTypeId: [''],
       enablePickTagId: [''],
+      enablePickRequiredStatusId: [''],
       enableConditions: this.formBuilder.array<ForceStatusConditionGroup>(
         enableConditions.map((condition) => this.createForceStatusConditionGroup(condition)),
       ),
@@ -3861,6 +3903,7 @@ export class CampaignSetupPage {
       clearPickLocationKind: ['Any'],
       clearPickTypeId: [''],
       clearPickTagId: [''],
+      clearPickRequiredStatusId: [''],
       clearConditions: this.formBuilder.array<ForceStatusConditionGroup>(
         clearConditions.map((condition) => this.createForceStatusConditionGroup(condition)),
       ),
@@ -3881,6 +3924,7 @@ export class CampaignSetupPage {
       locationKind: this.formBuilder.nonNullable.control<string>(kind),
       locationTypeId: [condition.locationTypeId ?? ''],
       locationTagId: [condition.locationTagId ?? ''],
+      requiredStatusId: [condition.requiredStatusId ?? ''],
     });
   }
 
@@ -4695,6 +4739,7 @@ export class CampaignSetupPage {
       condition.controls.locationKind.value || 'Any',
       condition.controls.locationTypeId.value,
       condition.controls.locationTagId.value,
+      condition.controls.requiredStatusId.value || '-',
     ].join('|');
   }
 
@@ -4705,8 +4750,10 @@ export class CampaignSetupPage {
     locationKind: string;
     locationTypeId: string;
     locationTagId: string;
+    requiredStatusId?: string;
   }): ForceStatusCondition {
     const kind = (condition.locationKind || 'Any') as ConditionLocationKind;
+    const specified = condition.trigger === 'OccupyingWithSpecifiedStatus';
     return {
       id: condition.id,
       trigger: condition.trigger,
@@ -4714,6 +4761,7 @@ export class CampaignSetupPage {
       locationKind: kind,
       locationTypeId: kind === 'TerrainType' || kind === 'StructureType' ? condition.locationTypeId || null : null,
       locationTagId: kind === 'TerrainTag' || kind === 'StructureTag' ? condition.locationTagId || null : null,
+      requiredStatusId: specified && condition.requiredStatusId ? condition.requiredStatusId : null,
     };
   }
 
@@ -5509,6 +5557,17 @@ export class CampaignSetupPage {
           sections.add(`force-status-${index}`);
         }
 
+        if (
+          this.needsSpecifiedOccupyingStatus(condition.controls.trigger.value) &&
+          !condition.controls.requiredStatusId.value
+        ) {
+          failures.push(
+            `Force status ${index + 1} enable condition ${conditionIndex + 1} needs the occupying force status.`,
+          );
+          sections.add('forceStatuses');
+          sections.add(`force-status-${index}`);
+        }
+
         const enableOccurrences = condition.controls.occurrences.value;
         if (
           !Number.isInteger(enableOccurrences) ||
@@ -5532,6 +5591,17 @@ export class CampaignSetupPage {
       status.controls.clearConditions.controls.forEach((condition, conditionIndex) => {
         if (!condition.controls.trigger.value) {
           failures.push(`Force status ${index + 1} clear condition ${conditionIndex + 1} needs a trigger.`);
+          sections.add('forceStatuses');
+          sections.add(`force-status-${index}`);
+        }
+
+        if (
+          this.needsSpecifiedOccupyingStatus(condition.controls.trigger.value) &&
+          !condition.controls.requiredStatusId.value
+        ) {
+          failures.push(
+            `Force status ${index + 1} clear condition ${conditionIndex + 1} needs the occupying force status.`,
+          );
           sections.add('forceStatuses');
           sections.add(`force-status-${index}`);
         }

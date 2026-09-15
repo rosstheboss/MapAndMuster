@@ -8,7 +8,9 @@ export type ForceStatusEnableTrigger =
   | 'Build'
   | 'Pillage'
   | 'Repair'
-  | 'Destroy';
+  | 'Destroy'
+  | 'OccupyingWithThisStatus'
+  | 'OccupyingWithSpecifiedStatus';
 
 export type ForceStatusClearTrigger =
   | 'Hold'
@@ -22,7 +24,9 @@ export type ForceStatusClearTrigger =
   | 'Build'
   | 'Pillage'
   | 'Repair'
-  | 'Destroy';
+  | 'Destroy'
+  | 'OccupyingWithThisStatus'
+  | 'OccupyingWithSpecifiedStatus';
 
 export type ConditionLocationKind = 'Any' | 'TerrainType' | 'TerrainTag' | 'StructureType' | 'StructureTag';
 
@@ -33,6 +37,7 @@ export interface ForceStatusCondition {
   locationKind?: ConditionLocationKind;
   locationTypeId?: string | null;
   locationTagId?: string | null;
+  requiredStatusId?: string | null;
 }
 
 export interface ForceStatusPreset {
@@ -64,6 +69,8 @@ export const FORCE_STATUS_ENABLE_OPTIONS: readonly { id: ForceStatusEnableTrigge
   { id: 'Pillage', label: 'After a successful Pillage' },
   { id: 'Repair', label: 'After a successful Repair' },
   { id: 'Destroy', label: 'After a successful Destroy' },
+  { id: 'OccupyingWithThisStatus', label: 'Occupying with a force that has this status' },
+  { id: 'OccupyingWithSpecifiedStatus', label: 'Occupying with a force that has a specified status' },
 ];
 
 export const FORCE_STATUS_CLEAR_OPTIONS: readonly { id: ForceStatusClearTrigger; label: string }[] = [
@@ -79,6 +86,8 @@ export const FORCE_STATUS_CLEAR_OPTIONS: readonly { id: ForceStatusClearTrigger;
   { id: 'Pillage', label: 'After a successful Pillage' },
   { id: 'Repair', label: 'After a successful Repair' },
   { id: 'Destroy', label: 'After a successful Destroy' },
+  { id: 'OccupyingWithThisStatus', label: 'Occupying with a force that has this status' },
+  { id: 'OccupyingWithSpecifiedStatus', label: 'Occupying with a force that has a specified status' },
 ];
 
 const DISEASED_EFFECTS =
@@ -236,6 +245,7 @@ function listedOrLegacy(
       locationKind: condition.locationKind ?? 'Any',
       locationTypeId: condition.locationTypeId ?? null,
       locationTagId: condition.locationTagId ?? null,
+      requiredStatusId: condition.requiredStatusId ?? null,
     }));
   }
 

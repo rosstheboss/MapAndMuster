@@ -119,18 +119,55 @@ public sealed class BattleResultRulesTests
         Assert.Equal(4, Report(NorthForce, 5, 0, supplyCostingUnitCount: 3, usedExtraBlackPowder: true).SupplySpend);
     }
 
+    [Fact]
+    public void EquivalentResultsIgnoreArmyComposition()
+    {
+        var battleId = Guid.NewGuid();
+        var left = new BattleResultSubmission(
+            Guid.NewGuid(),
+            battleId,
+            Guid.NewGuid(),
+            NorthForce,
+            false,
+            null,
+            DateTimeOffset.UtcNow,
+            6,
+            4,
+            [
+                Report(NorthForce, 6, 0, supplyCostingUnitCount: 2, armyPoints: 1500),
+                Report(SouthForce, 4, 0, supplyCostingUnitCount: 1, armyPoints: 1000),
+            ]);
+        var right = new BattleResultSubmission(
+            Guid.NewGuid(),
+            battleId,
+            Guid.NewGuid(),
+            NorthForce,
+            false,
+            left.Id,
+            DateTimeOffset.UtcNow,
+            6,
+            4,
+            [
+                Report(NorthForce, 6, 0, supplyCostingUnitCount: 9, armyPoints: 2500),
+                Report(SouthForce, 4, 0, supplyCostingUnitCount: 4, armyPoints: 1800),
+            ]);
+
+        Assert.True(BattleResultRules.AreEquivalent(left, right));
+    }
+
     private static BattleParticipantReport Report(
         Guid forceId,
         int differential,
         int bonus,
         int supplyCostingUnitCount = 0,
         bool usedExtraBlackPowder = false,
-        int magicalSupplyRerolls = 0)
+        int magicalSupplyRerolls = 0,
+        int armyPoints = 1000)
     {
         return new BattleParticipantReport(
             forceId,
             10,
-            1000,
+            armyPoints,
             differential,
             bonus,
             [],

@@ -1,12 +1,12 @@
 namespace MapAndMuster.Domain.Play;
 
 /// <summary>
-/// Ranks forces for retreat collisions and multi-side battle pairing.
+/// Ranks forces for Neutral occupation claims and multi-side battle pairing.
 /// </summary>
 public static class CombatantStrengthRules
 {
     /// <summary>
-    /// Strength used to decide who keeps a collided retreat destination or who plays first.
+    /// Strength used to decide who claims Neutral land or who plays first.
     /// </summary>
     /// <param name="CampaignPoints">Current campaign-point total.</param>
     /// <param name="TerritoryCount">Territories currently owned by the force's faction.</param>

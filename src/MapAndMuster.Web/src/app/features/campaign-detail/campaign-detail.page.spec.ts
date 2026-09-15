@@ -3704,7 +3704,7 @@ describe('CampaignDetailPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain(
-      'Locked in battle at Midland with southplayer · South. This force cannot perform an action until the battle is resolved.',
+      'Locked in battle at Midland with southplayer · South. This force cannot perform an action until the battle is resolved. Surrender from the map.',
     );
     expect(compiled.textContent).toContain('You have no actions to commit this phase.');
     expect(compiled.textContent).not.toContain('Choose an action for each of your forces');
@@ -4044,6 +4044,9 @@ describe('CampaignDetailPage', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Supply-costing units');
     expect(compiled.textContent).toContain('Army list (optional text)');
+    expect(compiled.textContent).toContain('Other Battle Points');
+    expect(compiled.textContent).toContain('Battle summary');
+    expect(compiled.querySelector('#army-battle-1-force-1')?.getAttribute('aria-required')).toBe('true');
     expect(compiled.textContent).toContain('Army points this battle');
     expect(compiled.textContent).toContain('1000');
     expect(compiled.textContent).toContain('Standard supply');
@@ -4069,6 +4072,127 @@ describe('CampaignDetailPage', () => {
       item.textContent.includes('Attacker supply'),
     );
     expect(attackerSummary?.getAttribute('title')).toContain('Ridge terrain (Hills): +2');
+    http.verify();
+  });
+
+  it('prefills the latest opponent result and keeps an independent army list', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canManage: false,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 3,
+      currentPhaseKind: 'Battle',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        currentPhaseKind: 'Battle',
+        currentPhaseLabel: 'Battle',
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: [],
+          },
+          {
+            id: 'force-2',
+            controllerUserId: 'user-2',
+            controllerUsername: 'southplayer',
+            factionId: '2',
+            territoryId: 't1',
+            isMine: false,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: [],
+          },
+        ],
+        battles: [
+          {
+            id: 'battle-1',
+            territoryId: 't1',
+            status: 'AwaitingResults',
+            participantForceIds: ['force-1', 'force-2'],
+            reportingForceIds: ['force-1', 'force-2'],
+            isMine: true,
+            mySubmission: null,
+            opponentSubmission: {
+              submitterUserId: 'user-2',
+              winnerForceId: 'force-2',
+              isDraw: false,
+              submittedUtc: '2026-08-14T12:01:00+00:00',
+              reports: [
+                {
+                  forceId: 'force-1',
+                  victoryPoints: 7,
+                  armyPoints: 1500,
+                  differentialBattlePoints: 2,
+                  bonusBattlePoints: 0,
+                  supplyCostingUnitCount: 1,
+                  answers: [],
+                },
+                {
+                  forceId: 'force-2',
+                  victoryPoints: 12,
+                  armyPoints: 2000,
+                  differentialBattlePoints: 5,
+                  bonusBattlePoints: 1,
+                  supplyCostingUnitCount: 4,
+                  answers: [],
+                },
+              ],
+            },
+            armyLists: [
+              {
+                forceId: 'force-2',
+                submitterUserId: 'user-2',
+                submittedUtc: '2026-08-14T12:00:00+00:00',
+                armyPoints: 2000,
+                supplyCostingUnitCount: 4,
+                armyListText: 'South list',
+                armyListBuilder: 'Other',
+                supplyCategories: [],
+              },
+            ],
+            winnerForceId: null,
+            isDraw: false,
+            needsRetreat: false,
+            retreatTargets: [],
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'battles');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain("Agree with other player's results");
+    expect(compiled.textContent).not.toContain('Results submitted!');
+    expect(compiled.textContent).toContain('Submit army list');
+    expect(compiled.textContent).toContain('South list');
+    expect(compiled.querySelector<HTMLInputElement>('#vp-battle-1-force-2')?.value).toBe('12');
+    expect(compiled.querySelector<HTMLInputElement>('#army-battle-1-force-2')?.disabled).toBe(true);
+    expect(compiled.querySelector<HTMLTextAreaElement>('#army-list-battle-1-force-1')?.disabled).toBe(false);
     http.verify();
   });
 
@@ -4350,6 +4474,7 @@ describe('CampaignDetailPage', () => {
             winnerForceId: 'force-2',
             isDraw: false,
             needsRetreat: true,
+            awaitingRetreat: true,
             canSurrender: false,
             retreatTargets: ['t2'],
             mission: null,
@@ -4365,13 +4490,14 @@ describe('CampaignDetailPage', () => {
     openSection(fixture, 'battles');
 
     const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Awaiting Retreat Order.');
     const submit = [...compiled.querySelectorAll('button')].find(
-      (button) => button.textContent.trim() === 'Submit retreat',
+      (button) => button.textContent.trim() === 'Commit Retreat',
     );
-    expect(submit).toBeTruthy();
-    submit!.click();
-    fixture.detectChanges();
-    expect(compiled.textContent).toContain('Choose a retreat destination before submitting.');
+    if (!(submit instanceof HTMLButtonElement)) {
+      throw new Error('expected a Commit Retreat button');
+    }
+    expect(submit.disabled).toBe(true);
     openSection(fixture, 'map');
     expect(compiled.textContent).toContain('Pick a territory to retreat to...');
     expect(compiled.querySelector('.map-action-prompt')?.textContent).toContain('Pick a territory to retreat to...');
@@ -4387,6 +4513,470 @@ describe('CampaignDetailPage', () => {
     fixture.detectChanges();
     expect(page.selectedIds()).toEqual(['t2']);
     expect(page.retreatTargetId('battle-1')).toBe('t2');
+    fixture.detectChanges();
+    expect(submit.disabled).toBe(false);
+    http.verify();
+  });
+
+  it('shows Commit Retreat on the map toolbar during the battle phase', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 3,
+      currentPhaseKind: 'Battle',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [squareTerritory('t1', 'Coast', 0.1), squareTerritory('t2', 'Ridge', 0.4)],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        currentPhaseKind: 'Battle',
+        currentPhaseLabel: 'Battle 1',
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: [],
+          },
+        ],
+        battles: [
+          {
+            id: 'battle-1',
+            territoryId: 't1',
+            status: 'Finalized',
+            participantForceIds: ['force-1', 'force-2'],
+            reportingForceIds: ['force-1', 'force-2'],
+            isMine: true,
+            mySubmission: null,
+            opponentSubmission: null,
+            winnerForceId: 'force-2',
+            isDraw: false,
+            needsRetreat: true,
+            awaitingRetreat: true,
+            canSurrender: false,
+            retreatTargets: ['t2'],
+            mission: null,
+            attackerForceId: null,
+            defenderForceId: null,
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'map');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const mapCommit = [...compiled.querySelectorAll<HTMLButtonElement>('.map-toolbar button')].find(
+      (button) => button.textContent.trim() === 'Commit Retreat',
+    );
+    expect(mapCommit).toBeTruthy();
+    expect(mapCommit?.disabled).toBe(true);
+    http.verify();
+  });
+
+  it('opens Surrender when the player clicks their force on the map', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 3,
+      currentPhaseKind: 'Battle',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [squareTerritory('t1', 'Coast', 0.1), squareTerritory('t2', 'Ridge', 0.4)],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        currentPhaseKind: 'Battle',
+        currentPhaseLabel: 'Battle 1',
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: ['Surrender'],
+          },
+          {
+            id: 'force-2',
+            controllerUserId: 'user-2',
+            controllerUsername: 'southplayer',
+            factionId: '2',
+            territoryId: 't1',
+            isMine: false,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: [],
+          },
+        ],
+        battles: [
+          {
+            id: 'battle-1',
+            territoryId: 't1',
+            status: 'AwaitingResults',
+            participantForceIds: ['force-1', 'force-2'],
+            reportingForceIds: ['force-1', 'force-2'],
+            isMine: true,
+            mySubmission: null,
+            opponentSubmission: null,
+            winnerForceId: null,
+            isDraw: false,
+            needsRetreat: false,
+            canSurrender: true,
+            retreatTargets: ['t2'],
+            mission: null,
+            attackerForceId: null,
+            defenderForceId: null,
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'map');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const pin = compiled.querySelector('.force-pin.is-mine');
+    expect(pin).toBeInstanceOf(HTMLButtonElement);
+    pin?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 40, clientY: 40 }));
+    fixture.detectChanges();
+    expect(compiled.querySelector('.action-context-menu')?.textContent).toContain('Surrender');
+    http.verify();
+  });
+
+  it('lets a retreating player uncommit and warns on the last battle-phase commit', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 3,
+      currentPhaseKind: 'Battle',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [
+        squareTerritory('t1', 'Coast', 0.1),
+        squareTerritory('t2', 'Ridge', 0.4),
+        squareTerritory('t3', 'South spawn', 0.7),
+      ],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        currentPhaseKind: 'Battle',
+        currentPhaseLabel: 'Battle 1',
+        isCommitted: false,
+        commitments: [
+          { userId: 'user-1', username: 'northplayer', isCommitted: false },
+          { userId: 'user-2', username: 'southplayer', isCommitted: true },
+        ],
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: [],
+          },
+        ],
+        battles: [
+          {
+            id: 'battle-1',
+            territoryId: 't1',
+            status: 'Finalized',
+            participantForceIds: ['force-1', 'force-2'],
+            reportingForceIds: ['force-1', 'force-2'],
+            isMine: true,
+            mySubmission: null,
+            opponentSubmission: null,
+            winnerForceId: 'force-2',
+            isDraw: false,
+            needsRetreat: true,
+            awaitingRetreat: true,
+            isRetreatCommitted: true,
+            retreatDraftTargetId: 't2',
+            canSurrender: false,
+            retreatTargets: ['t2', 't3'],
+            mission: null,
+            attackerForceId: null,
+            defenderForceId: null,
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'battles');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Your retreat is committed.');
+    const uncommit = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Uncommit',
+    );
+    expect(uncommit).toBeTruthy();
+    uncommit!.click();
+    http.expectOne(`/api/campaigns/${campaign.id}/play/retreat/uncommit`).flush(
+      playState({
+        currentPhaseKind: 'Battle',
+        currentPhaseLabel: 'Battle 1',
+        isCommitted: false,
+        commitments: [
+          { userId: 'user-1', username: 'northplayer', isCommitted: false },
+          { userId: 'user-2', username: 'southplayer', isCommitted: true },
+        ],
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: [],
+          },
+        ],
+        battles: [
+          {
+            id: 'battle-1',
+            territoryId: 't1',
+            status: 'Finalized',
+            participantForceIds: ['force-1', 'force-2'],
+            reportingForceIds: ['force-1', 'force-2'],
+            isMine: true,
+            mySubmission: null,
+            opponentSubmission: null,
+            winnerForceId: 'force-2',
+            isDraw: false,
+            needsRetreat: true,
+            awaitingRetreat: true,
+            isRetreatCommitted: false,
+            retreatDraftTargetId: 't2',
+            canSurrender: false,
+            retreatTargets: ['t2'],
+            mission: null,
+            attackerForceId: null,
+            defenderForceId: null,
+          },
+        ],
+      }),
+    );
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Commit Retreat and close the phase');
+    http.verify();
+  });
+
+  it('lists who still needs a result or retreat at the top of Battles', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 3,
+      currentPhaseKind: 'Battle',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [squareTerritory('t1', 'Coast', 0.1)],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        currentPhaseKind: 'Battle',
+        currentPhaseLabel: 'Battle 1',
+        isCommitted: false,
+        commitments: [
+          { userId: 'user-1', username: 'northplayer', isCommitted: false, needsResult: true, needsRetreat: false },
+          { userId: 'user-2', username: 'southplayer', isCommitted: false, needsResult: false, needsRetreat: true },
+        ],
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: [],
+          },
+        ],
+        battles: [
+          {
+            id: 'battle-1',
+            territoryId: 't1',
+            status: 'AwaitingResults',
+            participantForceIds: ['force-1', 'force-2'],
+            reportingForceIds: ['force-1', 'force-2'],
+            isMine: true,
+            mySubmission: null,
+            opponentSubmission: null,
+            winnerForceId: null,
+            isDraw: false,
+            needsRetreat: false,
+            retreatTargets: [],
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'battles');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const battles = [...compiled.querySelectorAll('.panel')].find((panel) =>
+      (panel.querySelector('h2')?.textContent ?? '').includes('Battles'),
+    );
+    expect(battles?.textContent).toContain('Results and retreats');
+    expect(battles?.textContent).toContain(
+      '0 of 2 players finished. Waiting on northplayer (needs result), southplayer (needs retreat).',
+    );
+    expect(battles?.textContent).toContain('Needs result');
+    expect(battles?.textContent).toContain('Needs retreat');
+    http.verify();
+  });
+
+  it('hides Uncommit when a sole retreat destination was auto-committed', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 3,
+      currentPhaseKind: 'Battle',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [squareTerritory('t1', 'Coast', 0.1), squareTerritory('t2', 'South spawn', 0.4)],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        currentPhaseKind: 'Battle',
+        currentPhaseLabel: 'Battle 1',
+        isCommitted: true,
+        commitments: [
+          { userId: 'user-1', username: 'northplayer', isCommitted: true },
+          { userId: 'user-2', username: 'southplayer', isCommitted: true },
+        ],
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: true,
+            moveTargets: [],
+            availableActions: [],
+          },
+        ],
+        battles: [
+          {
+            id: 'battle-1',
+            territoryId: 't1',
+            status: 'Finalized',
+            participantForceIds: ['force-1', 'force-2'],
+            reportingForceIds: ['force-1', 'force-2'],
+            isMine: true,
+            mySubmission: null,
+            opponentSubmission: null,
+            winnerForceId: 'force-2',
+            isDraw: false,
+            needsRetreat: false,
+            awaitingRetreat: false,
+            isRetreatCommitted: true,
+            retreatDraftTargetId: 't2',
+            canSurrender: false,
+            retreatTargets: ['t2'],
+            mission: null,
+            attackerForceId: null,
+            defenderForceId: null,
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'battles');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain(
+      'This force automatically retreated to South spawn because that was the only legal destination.',
+    );
+    expect(
+      [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Uncommit'),
+    ).toBeUndefined();
     http.verify();
   });
 
@@ -5459,7 +6049,7 @@ describe('CampaignDetailPage', () => {
     openSection(fixture, 'faction');
 
     const compiled = fixture.nativeElement as HTMLElement;
-    const relic = 'Relic is nearby the force at Gretios Road.';
+    const relic = 'A hidden Relic is nearby the force at Gretios Road.';
     const reminder = 'Bring a relic hunter.';
     const summaryPanel = [...compiled.querySelectorAll('.panel')].find((panel) =>
       (panel.querySelector('h2')?.textContent ?? '').includes('Summary'),

@@ -92,8 +92,8 @@
           (ownForces().length ? 'Y cycles your forces. ' : '') +
           (showCommit()
             ? showUncommit()
-              ? 'C uncommits your actions. '
-              : 'C commits actions when that button is enabled. '
+              ? 'C uncommits. '
+              : 'C commits ' + commitNoun().toLowerCase() + ' when that button is enabled. '
             : '') +
           'N toggles territory names. ' +
           'Tab to a territory and press Enter or Space to select it. Zoom up to 800 percent to trace fine coasts. ' +
@@ -350,44 +350,80 @@
                   </div>
                 }
                 @for (pin of item.forces; track pin.force.id) {
-                  <div
-                    class="force-pin"
-                    [class.is-mine]="pin.force.isMine"
-                    [class.is-battle]="pin.force.inBattle"
-                    [class.is-emphasized]="pin.emphasized"
-                    [class.has-action]="!!pin.force.isMine && !!pin.force.action"
-                    [class.app-glow]="!!pin.force.hiddenRelicNearby"
-                    [class.is-relic-nearby]="!!pin.force.hiddenRelicNearby"
-                    [style.left.%]="pin.fit.x * 100"
-                    [style.top.%]="pin.fit.y * 100"
-                    [style.width.px]="markerSize(pin.fit).width"
-                    [style.height.px]="markerSize(pin.fit).height"
-                    [style.margin-left.px]="-markerSize(pin.fit).width / 2"
-                    [style.margin-top.px]="-markerSize(pin.fit).height / 2"
-                    [style.background]="pin.color"
-                    role="img"
-                    [attr.aria-label]="forceLabel(pin.force)"
-                    [title]="forceLabel(pin.force)"
-                  >
-                    @if (pin.force.isMine && pin.force.action) {
-                      <span class="force-action-mark" aria-hidden="true">
-                        <app-icon name="check" />
-                      </span>
-                    }
-                    @if (pin.force.heldItems?.length) {
-                      <div class="force-held-items">
-                        @for (held of pin.force.heldItems; track held.name) {
-                          <span class="held-item" [style.color]="held.color">
-                            @if (held.imageUrl; as src) {
-                              <img [src]="src" alt="" decoding="async" draggable="false" />
-                            } @else {
-                              <app-map-symbol kind="item" [name]="held.builtinSymbol" [label]="held.name" />
-                            }
-                          </span>
-                        }
-                      </div>
-                    }
-                  </div>
+                  @if (pin.force.isMine) {
+                    <button
+                      type="button"
+                      class="force-pin"
+                      [class.is-mine]="true"
+                      [class.is-battle]="pin.force.inBattle"
+                      [class.is-emphasized]="pin.emphasized"
+                      [class.has-action]="!!pin.force.action"
+                      [class.app-glow]="!!pin.force.hiddenRelicNearby"
+                      [class.is-relic-nearby]="!!pin.force.hiddenRelicNearby"
+                      [style.left.%]="pin.fit.x * 100"
+                      [style.top.%]="pin.fit.y * 100"
+                      [style.width.px]="markerSize(pin.fit).width"
+                      [style.height.px]="markerSize(pin.fit).height"
+                      [style.margin-left.px]="-markerSize(pin.fit).width / 2"
+                      [style.margin-top.px]="-markerSize(pin.fit).height / 2"
+                      [style.background]="pin.color"
+                      [attr.aria-label]="forceLabel(pin.force)"
+                      [title]="forceLabel(pin.force)"
+                      (pointerdown)="$event.stopPropagation()"
+                      (click)="onForcePinActivate($event, pin.force)"
+                    >
+                      @if (pin.force.action) {
+                        <span class="force-action-mark" aria-hidden="true">
+                          <app-icon name="check" />
+                        </span>
+                      }
+                      @if (pin.force.heldItems?.length) {
+                        <div class="force-held-items">
+                          @for (held of pin.force.heldItems; track held.name) {
+                            <span class="held-item" [style.color]="held.color">
+                              @if (held.imageUrl; as src) {
+                                <img [src]="src" alt="" decoding="async" draggable="false" />
+                              } @else {
+                                <app-map-symbol kind="item" [name]="held.builtinSymbol" [label]="held.name" />
+                              }
+                            </span>
+                          }
+                        </div>
+                      }
+                    </button>
+                  } @else {
+                    <div
+                      class="force-pin"
+                      [class.is-battle]="pin.force.inBattle"
+                      [class.is-emphasized]="pin.emphasized"
+                      [class.app-glow]="!!pin.force.hiddenRelicNearby"
+                      [class.is-relic-nearby]="!!pin.force.hiddenRelicNearby"
+                      [style.left.%]="pin.fit.x * 100"
+                      [style.top.%]="pin.fit.y * 100"
+                      [style.width.px]="markerSize(pin.fit).width"
+                      [style.height.px]="markerSize(pin.fit).height"
+                      [style.margin-left.px]="-markerSize(pin.fit).width / 2"
+                      [style.margin-top.px]="-markerSize(pin.fit).height / 2"
+                      [style.background]="pin.color"
+                      role="img"
+                      [attr.aria-label]="forceLabel(pin.force)"
+                      [title]="forceLabel(pin.force)"
+                    >
+                      @if (pin.force.heldItems?.length) {
+                        <div class="force-held-items">
+                          @for (held of pin.force.heldItems; track held.name) {
+                            <span class="held-item" [style.color]="held.color">
+                              @if (held.imageUrl; as src) {
+                                <img [src]="src" alt="" decoding="async" draggable="false" />
+                              } @else {
+                                <app-map-symbol kind="item" [name]="held.builtinSymbol" [label]="held.name" />
+                              }
+                            </span>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
                 }
                 @for (pin of item.items; track pin.item.id) {
                   <div

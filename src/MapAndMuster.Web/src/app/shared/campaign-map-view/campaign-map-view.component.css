@@ -311,6 +311,8 @@
 .force-pin {
   z-index: 2;
   overflow: visible;
+  border: 0;
+  padding: 0;
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgb(28 25 23 / 45%);
 }

@@ -17,10 +17,18 @@ Required early suites:
 - Ending a campaign against a stale client revision and retrying when another write moves the revision.
   Deleting a completed campaign is limited to managers and administrators; open campaigns are rejected.
 - Commit, uncommit only while the action window is open, deadline auto-submit, and default Hold.
+  Retreat commit and uncommit while the applying battle window is open, last-commit early battle
+  close when every result, surrender, and required retreat is committed even if the Battle-phase
+  early-close checkbox is off, idle battle windows staying open for a ringer when that checkbox is
+  off, auto-commit of a sole legal retreat destination including spawn, deadline use of an
+  uncommitted retreat draft, and default spawn when no retreat exists.
   Players whose forces are all in battle (or otherwise owe no order) appear as committed on the
   action roster; Actions names the locked battle's territory and opponents.
 - Action validity and precedence, especially Battle overriding later actions.
-- Move adjacency, spawn restrictions (no landing on spawn; pass through own spawn only), split/rejoin with a play-log entry, backstab, pillage/repair, and retreat.
+- Move adjacency, spawn restrictions (no landing on spawn; pass through own spawn only), split/rejoin with a play-log entry, backstab, pillage/repair, and retreat
+  (Neutral reachability at movement speed, blocked by enemies or battles on the path, allied
+  occupation of the destination, two enemy landings both sent to spawn, pass-through of another
+  enemy's landing hex).
   `UndergroundNetwork` uses the same Town/City pick for initial placement and a missing or
   ineligible retreat (or collision fallback) that would otherwise send the force to spawn.
 - Supply graph traversal, alliance inclusion, temporary supply, and split forces.
@@ -92,7 +100,7 @@ Use Angular's Vitest integration.
 Cover components/services for:
 
 - Order drafting from the map menu or force-panel **Save draft**, including a chosen item-objective teleport destination, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed. Confirmation alertdialogs trap Tab, confirm on Enter, and cancel on Escape. A two-or-more-territory Move or Split always picks each via on the map, including a unique legal route. The Actions Commitments player list starts collapsed and keeps the "X of Y players committed. Waiting on …" summary under the Commitments heading. Expanding it shows players in alphabetical username order in up to three columns, filling left to right then top to bottom; each player lists username with a profile link and Drafting or Committed, then faction and subfaction, then that player's force locations as map links joined with "and".
-- Campaign-page status bar (round/phase, throttled countdown live region, viewer commit chip, compact commitment count, Go to your orders). While a campaign is running, Actions, Chat, and Standings are open by default; other sections stay collapsed and the last set is stored in a per-campaign cookie. Staff tools are under collapsed Manage campaign. Battle, campaign, phase, and force-status enums use display labels. Summary ends with one Conduits of Power notice per adjacent force (`Relic is nearby the force at {territory}.`, bold and faction-colored glow) and each battle reminder renders once. The campaign log summary shows unread mention and private counts from `GET /log` without marking the log read on load. Log timestamps sit after the entry text (relative when under 24 hours). Scheduled campaign pages list faction and subfaction special rules in Factions and under the Summary faction selector from the campaign catalog, including when `GET /play` has not started or returns an empty rule list. Campaign, Edit campaign, and map editor pages end with Back to top.
+- Campaign-page status bar (round/phase, throttled countdown live region, viewer commit chip, compact commitment count, Go to your orders). While a campaign is running, Actions, Chat, and Standings are open by default; other sections stay collapsed and the last set is stored in a per-campaign cookie. Staff tools are under collapsed Manage campaign. Battle, campaign, phase, and force-status enums use display labels. Summary ends with one Conduits of Power notice per adjacent force (`A hidden Relic is nearby the force at {territory}.`, bold and faction-colored glow) and each battle reminder renders once. The campaign log summary shows unread mention and private counts from `GET /log` without marking the log read on load. Log timestamps sit after the entry text (relative when under 24 hours). Scheduled campaign pages list faction and subfaction special rules in Factions and under the Summary faction selector from the campaign catalog, including when `GET /play` has not started or returns an empty rule list. Campaign, Edit campaign, and map editor pages end with Back to top.
 - Create/edit campaign starts with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded; optional sections start collapsed. The sticky toolbar shows remaining required sections, nested mission groups have unique names, and Edit map is hidden after a campaign starts. Force-status cancel-out is a dropdown that adds named statuses to a removable list. Private-objective exclude lists add factions and ally groups the same way. Secret rival objectives default on with 5 campaign points. The campaign page lists a secret rival with the award as `(5 CP)` and the viewer's private objectives with `(X CP)`. Hovering a standings points cell lists that column's sources and that cell's total. Enable and clear each have a consecutive-occurrence integer from 1 to 10, a location filter (any, type, or tag), and Add that does not hide a trigger already in the list. Each catalog section has a tag subpanel whose name field adds on Enter or comma without saving, and item chip comboboxes that suggest unassigned defined tags.
 - Countdown display without treating the browser clock as authoritative.
 - Map territory selection, force markers, polygon editing including Close Territory enclose and
@@ -137,7 +145,9 @@ Cover components/services for:
   use theme surface/text colors. Named territories keep their full name at any size; unnamed display
   numbers hide when they would not fit. N toggles Show names. Hovering a map territory or a
   Territories row shows name, owner or Neutral, structure (with pillaged state), terrain, forces,
-  an open battle, and a retreating force after a loss or surrender.
+  an open battle, and a retreating force after a loss or surrender. Clicking your force opens
+  Surrender while engaged, or the usual action menu otherwise. Retreat and surrender commit and
+  uncommit use the map toolbar.
   Playwright axe includes map polygons; a Playwright test
   tabs to a territory, presses Enter, and asserts the details panel updates without changing height.
   The map editor does not show hover-placeholder copy, and hovering or selecting a
@@ -163,7 +173,11 @@ Cover components/services for:
 - Password fields include a show/hide toggle that restores `type=password`.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
 - Campaign log display, member chat including typable recipient autocomplete and public/private/game-log/delinquency filters, live log refresh, chat send errors without the save success
-  banner, `@` mention autocomplete limited to current members, clickable originator and mention names, bold campaign start/round/phase/end entries, and manager or administrator download of public chat and/or game-log facts as text or CSV.
+  banner, `@` mention autocomplete limited to current members, clickable originator and mention names, bold campaign start/round/phase/end entries, resolved actions of a closed phase appearing before the next round/phase heading, and manager or administrator download of public chat and/or game-log facts as text or CSV.
+- Battles panel collapse, a top-of-panel list of who still needs to commit a result or retreat,
+  required army-points and supply-costing fields for the inputting player,
+  Awaiting Retreat Order while a committed retreat is still owed, and retreat and surrender
+  commit/uncommit on the map toolbar matching Action-phase commit.
 - Public site chat on All Campaigns, including language filters, block toggles, administrator compose with bold announcement text, and cookie-stored language preferences.
 - Participants panel names, factions, and Manager/Player/Admin roles, including manager add/search/kick, staff faction assignment, and a May be kicked badge that opens the delinquency log entry.
 - Administrator test-users page (filter, Currently testing chip) and the impersonation banner with Return to admin.

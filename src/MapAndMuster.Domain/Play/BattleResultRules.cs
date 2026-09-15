@@ -221,10 +221,8 @@ public static class BattleResultRules
     private static bool ReportEquals(BattleParticipantReport left, BattleParticipantReport right)
     {
         if (left.VictoryPoints != right.VictoryPoints
-            || left.ArmyPoints != right.ArmyPoints
             || left.DifferentialBattlePoints != right.DifferentialBattlePoints
             || left.BonusBattlePoints != right.BonusBattlePoints
-            || left.SupplyCostingUnitCount != right.SupplyCostingUnitCount
             || left.UsedExtraBlackPowder != right.UsedExtraBlackPowder
             || left.MagicalSupplyRerolls != right.MagicalSupplyRerolls
             || left.Answers.Count != right.Answers.Count)
@@ -244,5 +242,25 @@ public static class BattleResultRules
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Overlays each force's latest army list onto result reports so supply spend and display use
+    /// independently submitted composition.
+    /// </summary>
+    public static IReadOnlyList<BattleParticipantReport> OverlayArmyLists(
+        IReadOnlyList<BattleParticipantReport> reports,
+        Func<Guid, BattleArmyListSubmission?> latestForForce)
+    {
+        ArgumentNullException.ThrowIfNull(reports);
+        ArgumentNullException.ThrowIfNull(latestForForce);
+        return
+        [
+            .. reports.Select(report =>
+            {
+                var list = latestForForce(report.ForceId);
+                return list is null ? report : report.WithArmyComposition(list);
+            }),
+        ];
     }
 }

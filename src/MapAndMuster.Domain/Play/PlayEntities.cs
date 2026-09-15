@@ -645,6 +645,77 @@ public sealed class BattleResultSubmission
 }
 
 /// <summary>
+/// One force's army list for a single battle. Append-only; the latest row per force is current.
+/// Independent of result agreement and does not carry over to later battles.
+/// </summary>
+public sealed class BattleArmyListSubmission
+{
+    /// <summary>
+    /// Initializes an army-list submission.
+    /// </summary>
+    public BattleArmyListSubmission(
+        Guid id,
+        Guid battleId,
+        Guid forceId,
+        Guid submitterUserId,
+        DateTimeOffset submittedUtc,
+        int armyPoints,
+        int supplyCostingUnitCount,
+        string? armyListText,
+        string? armyListGameSystem,
+        ArmyListBuilder armyListBuilder,
+        IReadOnlyList<ArmyListSupplyCategory>? supplyCategories)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(armyPoints);
+        ArgumentOutOfRangeException.ThrowIfNegative(supplyCostingUnitCount);
+        Id = id;
+        BattleId = battleId;
+        ForceId = forceId;
+        SubmitterUserId = submitterUserId;
+        SubmittedUtc = submittedUtc;
+        ArmyPoints = armyPoints;
+        SupplyCostingUnitCount = supplyCostingUnitCount;
+        ArmyListText = armyListText;
+        ArmyListGameSystem = armyListGameSystem;
+        ArmyListBuilder = armyListBuilder;
+        SupplyCategories = supplyCategories ?? [];
+    }
+
+    /// <summary>Gets the submission identifier.</summary>
+    public Guid Id { get; }
+
+    /// <summary>Gets the battle.</summary>
+    public Guid BattleId { get; }
+
+    /// <summary>Gets the force whose list this is.</summary>
+    public Guid ForceId { get; }
+
+    /// <summary>Gets who submitted the list.</summary>
+    public Guid SubmitterUserId { get; }
+
+    /// <summary>Gets when the list was submitted, in UTC.</summary>
+    public DateTimeOffset SubmittedUtc { get; }
+
+    /// <summary>Gets the army size in points.</summary>
+    public int ArmyPoints { get; }
+
+    /// <summary>Gets how many supply-costing units this force fielded.</summary>
+    public int SupplyCostingUnitCount { get; }
+
+    /// <summary>Gets optional pasted army-list text.</summary>
+    public string? ArmyListText { get; }
+
+    /// <summary>Gets the game system selected when the list was pasted, when any.</summary>
+    public string? ArmyListGameSystem { get; }
+
+    /// <summary>Gets which army builder produced the pasted text, when parsing was attempted.</summary>
+    public ArmyListBuilder ArmyListBuilder { get; }
+
+    /// <summary>Gets optional per-category supply amounts.</summary>
+    public IReadOnlyList<ArmyListSupplyCategory> SupplyCategories { get; }
+}
+
+/// <summary>
 /// Structure occupancy and condition for one territory during play.
 /// </summary>
 public sealed class TerritoryStructureState
@@ -803,7 +874,8 @@ public sealed class RetreatOrder
         bool isDefault,
         DateTimeOffset submittedUtc,
         bool isSurrender = false,
-        bool isStaffCorrection = false)
+        bool isStaffCorrection = false,
+        bool isCommitted = true)
     {
         Id = id;
         BattleId = battleId;
@@ -813,6 +885,7 @@ public sealed class RetreatOrder
         SubmittedUtc = submittedUtc;
         IsSurrender = isSurrender;
         IsStaffCorrection = isStaffCorrection;
+        IsCommitted = isCommitted || isSurrender || isDefault || isStaffCorrection;
     }
 
     /// <summary>Gets the retreat identifier.</summary>
@@ -836,8 +909,31 @@ public sealed class RetreatOrder
     /// <summary>Gets whether a staff correction assigned this retreat. Those do not increment delinquency.</summary>
     public bool IsStaffCorrection { get; }
 
+    /// <summary>Gets whether the player has committed this retreat. Uncommitted drafts can be changed.</summary>
+    public bool IsCommitted { get; }
+
     /// <summary>Gets when the retreat was recorded, in UTC.</summary>
     public DateTimeOffset SubmittedUtc { get; }
+
+    /// <summary>
+    /// Returns a copy with an updated destination or commitment.
+    /// </summary>
+    public RetreatOrder With(
+        Guid? targetTerritoryId = null,
+        bool? isCommitted = null,
+        DateTimeOffset? submittedUtc = null)
+    {
+        return new RetreatOrder(
+            Id,
+            BattleId,
+            ForceId,
+            targetTerritoryId ?? TargetTerritoryId,
+            IsDefault,
+            submittedUtc ?? SubmittedUtc,
+            IsSurrender,
+            IsStaffCorrection,
+            isCommitted ?? IsCommitted);
+    }
 }
 
 /// <summary>

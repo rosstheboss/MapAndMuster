@@ -348,7 +348,6 @@ public static class ActionResolution
         var rules = specialRules ?? SpecialRuleContext.None;
         if (force.InBattle)
         {
-            // Surrender is committed from the battle panel, not as a required action-list item.
             return [ActionKind.Surrender];
         }
 

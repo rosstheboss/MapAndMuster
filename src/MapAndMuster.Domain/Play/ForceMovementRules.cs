@@ -139,6 +139,55 @@ public static class ForceMovementRules
     }
 
     /// <summary>
+    /// Returns whether <paramref name="targetId"/> is reachable from <paramref name="originId"/>
+    /// in at most <paramref name="speed"/> adjacent hops that each satisfy
+    /// <paramref name="canStepOnto"/>.
+    /// </summary>
+    public static bool CanReachWithinSpeed(
+        PlayMap map,
+        Guid originId,
+        Guid targetId,
+        int speed,
+        Func<Guid, bool> canStepOnto)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(canStepOnto);
+        if (originId == targetId || speed < ForceMovementSpeeds.Min)
+        {
+            return false;
+        }
+
+        var visited = new HashSet<Guid> { originId };
+        var queue = new Queue<(Guid Id, int Dist)>();
+        queue.Enqueue((originId, 0));
+        while (queue.Count > 0)
+        {
+            var (current, dist) = queue.Dequeue();
+            if (dist >= speed)
+            {
+                continue;
+            }
+
+            foreach (var next in map.Neighbors(current))
+            {
+                if (!visited.Add(next) || !canStepOnto(next))
+                {
+                    continue;
+                }
+
+                if (next == targetId)
+                {
+                    return true;
+                }
+
+                queue.Enqueue((next, dist + 1));
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Destinations reachable in 1..<paramref name="speed"/> adjacent hops, plus relic extras.
     /// </summary>
     public static IReadOnlyList<Guid> EligibleDestinations(

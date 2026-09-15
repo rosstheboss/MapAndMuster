@@ -392,6 +392,12 @@ public sealed class PlayCommitmentResponse
 
     /// <summary>Gets whether they are committed.</summary>
     public required bool IsCommitted { get; init; }
+
+    /// <summary>Gets whether they still need to submit a battle result.</summary>
+    public bool NeedsResult { get; init; }
+
+    /// <summary>Gets whether they still need to commit a required retreat.</summary>
+    public bool NeedsRetreat { get; init; }
 }
 
 /// <summary>A battle on the campaign page.</summary>
@@ -436,6 +442,9 @@ public sealed class PlayBattleResponse
     /// <summary>Gets the opponent submission when the viewer may accept it.</summary>
     public PlayBattleSubmissionResponse? OpponentSubmission { get; init; }
 
+    /// <summary>Gets the latest army list for each participating force the viewer may see.</summary>
+    public IReadOnlyList<PlayBattleArmyListResponse> ArmyLists { get; init; } = [];
+
     /// <summary>Gets the winner when finalized.</summary>
     public Guid? WinnerForceId { get; init; }
 
@@ -450,6 +459,15 @@ public sealed class PlayBattleResponse
 
     /// <summary>Gets whether the viewer must retreat.</summary>
     public required bool NeedsRetreat { get; init; }
+
+    /// <summary>Gets whether any required retreat on this battle is still uncommitted.</summary>
+    public bool AwaitingRetreat { get; init; }
+
+    /// <summary>Gets whether the viewer has committed a retreat for this battle.</summary>
+    public bool IsRetreatCommitted { get; init; }
+
+    /// <summary>Gets the viewer's saved retreat destination, committed or still in draft.</summary>
+    public Guid? RetreatDraftTargetId { get; init; }
 
     /// <summary>Gets eligible retreat destinations.</summary>
     public required IReadOnlyList<Guid> RetreatTargets { get; init; }
@@ -499,6 +517,40 @@ public sealed class PlayBattleSubmissionResponse
 
     /// <summary>Gets structured per-force reports, when submitted.</summary>
     public IReadOnlyList<BattleParticipantReportResponse> Reports { get; init; } = [];
+
+    /// <summary>Gets when this result was submitted.</summary>
+    public DateTimeOffset SubmittedUtc { get; init; }
+}
+
+/// <summary>The latest army list a participant submitted for one force in a battle.</summary>
+public sealed class PlayBattleArmyListResponse
+{
+    /// <summary>Gets the force.</summary>
+    public required Guid ForceId { get; init; }
+
+    /// <summary>Gets who submitted the list.</summary>
+    public required Guid SubmitterUserId { get; init; }
+
+    /// <summary>Gets when the list was submitted.</summary>
+    public required DateTimeOffset SubmittedUtc { get; init; }
+
+    /// <summary>Gets the army size in points.</summary>
+    public int ArmyPoints { get; init; }
+
+    /// <summary>Gets how many supply-costing units this force fielded.</summary>
+    public int SupplyCostingUnitCount { get; init; }
+
+    /// <summary>Gets optional pasted army-list text.</summary>
+    public string? ArmyListText { get; init; }
+
+    /// <summary>Gets the game system selected for list verification.</summary>
+    public string? ArmyListGameSystem { get; init; }
+
+    /// <summary>Gets the army builder selected for automatic supply parsing.</summary>
+    public required string ArmyListBuilder { get; init; }
+
+    /// <summary>Gets optional per-category supply amounts.</summary>
+    public IReadOnlyList<ArmyListSupplyCategoryResponse> SupplyCategories { get; init; } = [];
 }
 
 /// <summary>One force's structured battle report.</summary>
@@ -859,6 +911,12 @@ public sealed class BattleActionRequest
 
     /// <summary>Gets the battle.</summary>
     public required Guid BattleId { get; init; }
+
+    /// <summary>
+    /// Gets optional army-list composition to keep when accepting results, or the lists to submit
+    /// independently of a result.
+    /// </summary>
+    public IReadOnlyList<BattleParticipantReportRequest>? Reports { get; init; }
 }
 
 /// <summary>Request to submit a retreat.</summary>
@@ -872,6 +930,16 @@ public sealed class SubmitRetreatRequest
 
     /// <summary>Gets the destination.</summary>
     public required Guid TargetTerritoryId { get; init; }
+}
+
+/// <summary>Request to return a committed retreat to draft.</summary>
+public sealed class UncommitRetreatRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the battle.</summary>
+    public required Guid BattleId { get; init; }
 }
 
 /// <summary>Request to extend remaining phases and/or append rounds.</summary>
@@ -1332,6 +1400,8 @@ public static class PlayResponses
                     UserId = item.UserId,
                     Username = item.Username,
                     IsCommitted = item.IsCommitted,
+                    NeedsResult = item.NeedsResult,
+                    NeedsRetreat = item.NeedsRetreat,
                 }),
             ],
             Battles =
@@ -1351,11 +1421,38 @@ public static class PlayResponses
                     IsMine = battle.IsMine,
                     MySubmission = ToSubmission(battle.MySubmission),
                     OpponentSubmission = ToSubmission(battle.OpponentSubmission),
+                    ArmyLists =
+                    [
+                        .. battle.ArmyLists.Select(static list => new PlayBattleArmyListResponse
+                        {
+                            ForceId = list.ForceId,
+                            SubmitterUserId = list.SubmitterUserId,
+                            SubmittedUtc = list.SubmittedUtc,
+                            ArmyPoints = list.ArmyPoints,
+                            SupplyCostingUnitCount = list.SupplyCostingUnitCount,
+                            ArmyListText = list.ArmyListText,
+                            ArmyListGameSystem = list.ArmyListGameSystem,
+                            ArmyListBuilder = list.ArmyListBuilder,
+                            SupplyCategories =
+                            [
+                                .. list.SupplyCategories.Select(static category => new ArmyListSupplyCategoryResponse
+                                {
+                                    Name = category.Name,
+                                    UnitCount = category.UnitCount,
+                                    SupplyPoints = category.SupplyPoints,
+                                    CostsSupply = category.CostsSupply,
+                                }),
+                            ],
+                        }),
+                    ],
                     WinnerForceId = battle.WinnerForceId,
                     IsDraw = battle.IsDraw,
                     WinnerScore = battle.WinnerScore,
                     LoserScore = battle.LoserScore,
                     NeedsRetreat = battle.NeedsRetreat,
+                    AwaitingRetreat = battle.AwaitingRetreat,
+                    IsRetreatCommitted = battle.IsRetreatCommitted,
+                    RetreatDraftTargetId = battle.RetreatDraftTargetId,
                     CanSurrender = battle.CanSurrender,
                     RetreatTargets = battle.RetreatTargets,
                     ResultQuestions =
@@ -1449,6 +1546,7 @@ public static class PlayResponses
                 IsDraw = submission.IsDraw,
                 WinnerScore = submission.WinnerScore,
                 LoserScore = submission.LoserScore,
+                SubmittedUtc = submission.SubmittedUtc,
                 Reports =
                 [
                     .. submission.Reports.Select(static report => new BattleParticipantReportResponse

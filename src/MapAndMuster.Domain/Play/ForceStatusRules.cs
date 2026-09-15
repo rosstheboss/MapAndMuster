@@ -37,7 +37,8 @@ public static class ForceStatusRules
             bool built = false,
             bool pillaged = false,
             bool repaired = false,
-            bool destroyed = false)
+            bool destroyed = false,
+            IReadOnlyList<Guid>? occupyingStatusTypeIds = null)
         {
             Held = held;
             Moved = moved;
@@ -59,6 +60,7 @@ public static class ForceStatusRules
             Pillaged = pillaged;
             Repaired = repaired;
             Destroyed = destroyed;
+            OccupyingStatusTypeIds = occupyingStatusTypeIds ?? [];
         }
 
         /// <summary>Gets whether the force Held.</summary>
@@ -120,6 +122,12 @@ public static class ForceStatusRules
 
         /// <summary>Gets whether the force successfully destroyed a structure this action phase.</summary>
         public bool Destroyed { get; }
+
+        /// <summary>
+        /// Gets catalog status identifiers of other forces occupying the same territory after the
+        /// action. Intermediate Move hops are not included.
+        /// </summary>
+        public IReadOnlyList<Guid> OccupyingStatusTypeIds { get; }
 
         /// <summary>Gets whether this resolution is an action phase rather than a battle window.</summary>
         public bool IsActionPhase => UpdateWaterStreak;
@@ -677,7 +685,8 @@ public static class ForceStatusRules
         bool built = false,
         bool pillaged = false,
         bool repaired = false,
-        bool destroyed = false)
+        bool destroyed = false,
+        IReadOnlyList<Guid>? occupyingStatusTypeIds = null)
     {
         var held = kind is null or ActionKind.Hold;
         var moved = kind is ActionKind.Move or ActionKind.Split or ActionKind.Retreat;
@@ -701,7 +710,8 @@ public static class ForceStatusRules
             built,
             pillaged,
             repaired,
-            destroyed);
+            destroyed,
+            occupyingStatusTypeIds);
     }
 
     /// <summary>
@@ -894,6 +904,18 @@ public static class ForceStatusRules
                     LegacyEnableStreak(force, status.Id)) >= condition.Occurrences;
         }
 
+        if (condition.Trigger is ForceStatusEnableTrigger.OccupyingWithThisStatus
+            or ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus)
+        {
+            return !facts.SkipActionResolution
+                && facts.IsActionPhase
+                && OccupyingMatchesEnable(status, condition, facts)
+                && EnableStreakValue(
+                    force.EnableStreaks,
+                    ForceStatusStreakKeys.Enable(status.Id, condition.Id),
+                    LegacyEnableStreak(force, status.Id)) >= condition.Occurrences;
+        }
+
         return ShouldEvaluateEnable(condition.Trigger, facts)
             && MatchesEnable(condition, facts)
             && EnableStreakValue(
@@ -984,7 +1006,7 @@ public static class ForceStatusRules
                         continue;
                     }
 
-                    var occupying = OccupyingMatchesEnable(condition, facts);
+                    var occupying = OccupyingMatchesEnable(status, condition, facts);
                     var streak = occupying ? Math.Min(previous + 1, ForceStatusOccurrences.Max) : 0;
                     if (streak > 0)
                     {
@@ -1052,8 +1074,7 @@ public static class ForceStatusRules
                     continue;
                 }
 
-                var occupying = MatchesLocation(condition.Location, facts)
-                    && MatchesClearTrigger(condition.Trigger, facts);
+                var occupying = OccupyingMatchesClear(starting, condition, facts);
                 var occupyingStreak = occupying ? Math.Min(previous + 1, ForceStatusOccurrences.Max) : 0;
                 if (occupyingStreak > 0)
                 {
@@ -1101,7 +1122,9 @@ public static class ForceStatusRules
                 or ForceStatusEnableTrigger.Pillage
                 or ForceStatusEnableTrigger.Repair
                 or ForceStatusEnableTrigger.Destroy
-                or ForceStatusEnableTrigger.Surrender => facts.UpdateWaterStreak,
+                or ForceStatusEnableTrigger.Surrender
+                or ForceStatusEnableTrigger.OccupyingWithThisStatus
+                or ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus => facts.UpdateWaterStreak,
             ForceStatusEnableTrigger.AfterBattle
                 or ForceStatusEnableTrigger.BattleWon
                 or ForceStatusEnableTrigger.BattleLostOrRetreat => !facts.UpdateWaterStreak,
@@ -1127,7 +1150,9 @@ public static class ForceStatusRules
                 or ForceStatusClearTrigger.Pillage
                 or ForceStatusClearTrigger.Repair
                 or ForceStatusClearTrigger.Destroy
-                or ForceStatusClearTrigger.Surrender => facts.UpdateWaterStreak,
+                or ForceStatusClearTrigger.Surrender
+                or ForceStatusClearTrigger.OccupyingWithThisStatus
+                or ForceStatusClearTrigger.OccupyingWithSpecifiedStatus => facts.UpdateWaterStreak,
             ForceStatusClearTrigger.AfterBattle
                 or ForceStatusClearTrigger.BattleWon
                 or ForceStatusClearTrigger.BattleLostOrRetreat => !facts.UpdateWaterStreak,
@@ -1140,13 +1165,17 @@ public static class ForceStatusRules
     {
         return trigger is ForceStatusEnableTrigger.ConsecutiveActions
             or ForceStatusEnableTrigger.OccupyingWater
-            or ForceStatusEnableTrigger.Surrender;
+            or ForceStatusEnableTrigger.Surrender
+            or ForceStatusEnableTrigger.OccupyingWithThisStatus
+            or ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus;
     }
 
     private static bool TracksOccupying(ForceStatusClearTrigger trigger)
     {
         return trigger is ForceStatusClearTrigger.ConsecutiveActions
-            or ForceStatusClearTrigger.Surrender;
+            or ForceStatusClearTrigger.Surrender
+            or ForceStatusClearTrigger.OccupyingWithThisStatus
+            or ForceStatusClearTrigger.OccupyingWithSpecifiedStatus;
     }
 
     private static bool CurrentStatusMatches(string? current, string required)
@@ -1169,14 +1198,55 @@ public static class ForceStatusRules
         return MatchesClearTrigger(condition.Trigger, facts) && MatchesLocation(condition.Location, facts);
     }
 
-    private static bool OccupyingMatchesEnable(ForceStatusEnableCondition condition, Facts facts)
+    private static bool OccupyingMatchesEnable(
+        ForceStatusSetup status,
+        ForceStatusEnableCondition condition,
+        Facts facts)
     {
         if (!MatchesLocation(condition.Location, facts))
         {
             return false;
         }
 
-        return condition.Trigger != ForceStatusEnableTrigger.OccupyingWater || facts.OccupiesWater;
+        if (condition.Trigger == ForceStatusEnableTrigger.OccupyingWater)
+        {
+            return facts.OccupiesWater;
+        }
+
+        if (condition.Trigger == ForceStatusEnableTrigger.OccupyingWithThisStatus)
+        {
+            return facts.OccupyingStatusTypeIds.Contains(status.Id);
+        }
+
+        if (condition.Trigger == ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus)
+        {
+            return condition.RequiredStatusId is { } required && facts.OccupyingStatusTypeIds.Contains(required);
+        }
+
+        return true;
+    }
+
+    private static bool OccupyingMatchesClear(
+        ForceStatusSetup status,
+        ForceStatusClearCondition condition,
+        Facts facts)
+    {
+        if (!MatchesLocation(condition.Location, facts) || !MatchesClearTrigger(condition.Trigger, facts))
+        {
+            return false;
+        }
+
+        if (condition.Trigger == ForceStatusClearTrigger.OccupyingWithThisStatus)
+        {
+            return facts.OccupyingStatusTypeIds.Contains(status.Id);
+        }
+
+        if (condition.Trigger == ForceStatusClearTrigger.OccupyingWithSpecifiedStatus)
+        {
+            return condition.RequiredStatusId is { } required && facts.OccupyingStatusTypeIds.Contains(required);
+        }
+
+        return true;
     }
 
     private static bool MatchesLocation(ConditionLocation location, Facts facts)
@@ -1207,6 +1277,8 @@ public static class ForceStatusRules
             ForceStatusEnableTrigger.Pillage => facts.Pillaged,
             ForceStatusEnableTrigger.Repair => facts.Repaired,
             ForceStatusEnableTrigger.Destroy => facts.Destroyed,
+            ForceStatusEnableTrigger.OccupyingWithThisStatus => facts.IsActionPhase,
+            ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus => facts.IsActionPhase,
             ForceStatusEnableTrigger.Disease => false,
             _ => false,
         };
@@ -1230,6 +1302,8 @@ public static class ForceStatusRules
             ForceStatusClearTrigger.Pillage => facts.Pillaged,
             ForceStatusClearTrigger.Repair => facts.Repaired,
             ForceStatusClearTrigger.Destroy => facts.Destroyed,
+            ForceStatusClearTrigger.OccupyingWithThisStatus => facts.IsActionPhase,
+            ForceStatusClearTrigger.OccupyingWithSpecifiedStatus => facts.IsActionPhase,
             _ => false,
         };
     }

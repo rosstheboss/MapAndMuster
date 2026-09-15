@@ -672,6 +672,12 @@ public sealed class ForceStatusConditionRequest
 
     /// <summary>Gets the terrain or structure tag when the location is a tag filter.</summary>
     public Guid? LocationTagId { get; init; }
+
+    /// <summary>
+    /// Gets the catalog status another occupying force must have when the trigger is
+    /// OccupyingWithSpecifiedStatus.
+    /// </summary>
+    public Guid? RequiredStatusId { get; init; }
 }
 
 /// <summary>
@@ -1925,6 +1931,12 @@ public sealed class ForceStatusConditionResponse
 
     /// <summary>Gets the terrain or structure tag when the location is a tag filter.</summary>
     public Guid? LocationTagId { get; init; }
+
+    /// <summary>
+    /// Gets the catalog status another occupying force must have when the trigger is
+    /// OccupyingWithSpecifiedStatus.
+    /// </summary>
+    public Guid? RequiredStatusId { get; init; }
 }
 
 /// <summary>
@@ -3413,6 +3425,7 @@ public static class CampaignResponses
                         LocationKind = condition.LocationKind,
                         LocationTypeId = condition.LocationTypeId,
                         LocationTagId = condition.LocationTagId,
+                        RequiredStatusId = condition.RequiredStatusId,
                     })
                     .ToArray(),
                 ClearConditions = status.ClearConditions?
@@ -3424,6 +3437,7 @@ public static class CampaignResponses
                         LocationKind = condition.LocationKind,
                         LocationTypeId = condition.LocationTypeId,
                         LocationTagId = condition.LocationTagId,
+                        RequiredStatusId = condition.RequiredStatusId,
                     })
                     .ToArray(),
                 Priority = status.Priority,
@@ -3451,6 +3465,7 @@ public static class CampaignResponses
                     LocationKind = condition.LocationKind,
                     LocationTypeId = condition.LocationTypeId,
                     LocationTagId = condition.LocationTagId,
+                    RequiredStatusId = condition.RequiredStatusId,
                 }),
             ];
         }

@@ -868,6 +868,7 @@ public static class CampaignMapper
                         : condition.LocationKind,
                     LocationTypeId = condition.LocationTypeId,
                     LocationTagId = condition.LocationTagId,
+                    RequiredStatusId = condition.RequiredStatusId,
                 }),
             ];
         }

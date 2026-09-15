@@ -190,7 +190,7 @@ internal static class CampaignPlayMapper
                             IntermediateTerritoryIds = hop.IntermediateTerritoryIds,
                         })]
                         : [],
-                    AvailableActions = (force.ControllerUserId == viewerUserId || staffView) && !force.InBattle
+                    AvailableActions = force.ControllerUserId == viewerUserId || staffView
                         ? [.. ActionResolution.EligibleActions(play, map, force, allyGroups, specialRules).Select(static kind => kind.ToString())]
                         : [],
                     Subfaction = force.Subfaction,
@@ -293,11 +293,17 @@ internal static class CampaignPlayMapper
             return
             [
                 .. play.RequiredBattlePlayers(window.Id)
-                    .Select(userId => new PlayCommitmentDetail
+                    .Select(userId =>
                     {
-                        UserId = userId,
-                        Username = names.GetValueOrDefault(userId),
-                        IsCommitted = play.HasCompletedBattleDuties(window.Id, userId),
+                        var pending = play.PendingBattleDuties(window.Id, userId);
+                        return new PlayCommitmentDetail
+                        {
+                            UserId = userId,
+                            Username = names.GetValueOrDefault(userId),
+                            IsCommitted = !pending.NeedsResult && !pending.NeedsRetreat,
+                            NeedsResult = pending.NeedsResult,
+                            NeedsRetreat = pending.NeedsRetreat,
+                        };
                     }),
             ];
         }
@@ -394,9 +400,11 @@ internal static class CampaignPlayMapper
             force.ControllerUserId != viewerUserId && battle.ParticipantForceIds.Contains(force.Id));
         var mine = play.LatestBattleSubmission(battle.Id, viewerUserId);
         var theirs = opponent is null ? null : play.LatestBattleSubmission(battle.Id, opponent.ControllerUserId);
+        var myRetreat = myForce is null ? null : play.RetreatFor(battle.Id, myForce.Id);
+        var awaitingRetreat = CampaignPlayRules.BattleAwaitsRetreat(play, battle);
         var needsRetreat = myForce is not null
             && battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved
-            && !play.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == myForce.Id)
+            && (myRetreat is null || !myRetreat.IsCommitted)
             && (battle.IsNoContest || battle.IsDraw || battle.WinnerForceId != myForce.Id);
         var canSurrender = myForce is not null
             && myForce.InBattle
@@ -522,13 +530,24 @@ internal static class CampaignPlayMapper
             IsMine = myForce is not null,
             MySubmission = ToSubmission(mine),
             OpponentSubmission = myForce is null && !canStaff ? null : ToSubmission(theirs),
+            ArmyLists = myForce is null && !canStaff
+                ? []
+                : [
+                    .. battle.ParticipantForceIds
+                        .Select(forceId => play.LatestArmyList(battle.Id, forceId))
+                        .OfType<BattleArmyListSubmission>()
+                        .Select(ToArmyList),
+                ],
             WinnerForceId = battle.WinnerForceId,
             IsDraw = battle.IsDraw,
             WinnerScore = battle.WinnerScore,
             LoserScore = battle.LoserScore,
             NeedsRetreat = needsRetreat,
+            AwaitingRetreat = awaitingRetreat,
+            IsRetreatCommitted = myRetreat is { IsCommitted: true, IsSurrender: false },
+            RetreatDraftTargetId = myRetreat?.TargetTerritoryId,
             CanSurrender = canSurrender,
-            RetreatTargets = (needsRetreat || canSurrender) && myForce is not null
+            RetreatTargets = (needsRetreat || canSurrender || myRetreat is not null) && myForce is not null
                 ? CampaignPlayRules.EligibleRetreats(
                     map,
                     myForce,
@@ -536,7 +555,9 @@ internal static class CampaignPlayMapper
                     play.Forces,
                     campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.AllyGroupName),
                     play.BrokenAllyFactionIds,
-                    play.AllyBetrayals)
+                    play.AllyBetrayals,
+                    play.ItemObjectives,
+                    play.Battles)
                 : [],
             ResultQuestions =
             [
@@ -610,6 +631,7 @@ internal static class CampaignPlayMapper
                 IsDraw = submission.IsDraw,
                 WinnerScore = submission.WinnerScore,
                 LoserScore = submission.LoserScore,
+                SubmittedUtc = submission.SubmittedUtc,
                 Reports =
                 [
                     .. submission.Reports.Select(static report => new BattleParticipantReportDetail
@@ -649,6 +671,31 @@ internal static class CampaignPlayMapper
             };
     }
 
+    private static PlayBattleArmyListDetail ToArmyList(BattleArmyListSubmission list)
+    {
+        return new PlayBattleArmyListDetail
+        {
+            ForceId = list.ForceId,
+            SubmitterUserId = list.SubmitterUserId,
+            SubmittedUtc = list.SubmittedUtc,
+            ArmyPoints = list.ArmyPoints,
+            SupplyCostingUnitCount = list.SupplyCostingUnitCount,
+            ArmyListText = list.ArmyListText,
+            ArmyListGameSystem = list.ArmyListGameSystem,
+            ArmyListBuilder = list.ArmyListBuilder.ToString(),
+            SupplyCategories =
+            [
+                .. list.SupplyCategories.Select(static category => new ArmyListSupplyCategoryDetail
+                {
+                    Name = category.Name,
+                    UnitCount = category.UnitCount,
+                    SupplyPoints = category.SupplyPoints,
+                    CostsSupply = category.CostsSupply,
+                }),
+            ],
+        };
+    }
+
     internal static IReadOnlyList<PlayLogEntryDetail> ToLogEntries(
         StoredCampaign campaign,
         IReadOnlyDictionary<Guid, string> names,
@@ -675,10 +722,20 @@ internal static class CampaignPlayMapper
         return
         [
             .. play.Log
-                .Where(entry => CampaignChatRules.CanView(entry, viewerUserId, memberships, inspectPrivateChat))
-                .OrderBy(static item => item.OccurredUtc)
-                .ThenBy(static item => item.Id),
+                .Select(static (entry, index) => (entry, index))
+                .Where(item => CampaignChatRules.CanView(item.entry, viewerUserId, memberships, inspectPrivateChat))
+                .OrderBy(static item => item.entry.OccurredUtc)
+                .ThenBy(static item => PhaseHeadingSort(item.entry.Kind))
+                .ThenBy(static item => item.index)
+                .Select(static item => item.entry),
         ];
+    }
+
+    private static int PhaseHeadingSort(PlayLogKind kind)
+    {
+        return kind is PlayLogKind.PhaseChanged or PlayLogKind.CampaignEnded or PlayLogKind.CampaignClosed
+            ? 1
+            : 0;
     }
 
     /// <summary>
@@ -1077,7 +1134,7 @@ internal static class CampaignPlayMapper
             PlayLogKind.PlayerSurrendered =>
                 $"{actor} surrendered in {territory} and retreated to {target}.",
             PlayLogKind.RetreatCollisionResolved =>
-                $"{actor} was displaced from {territory} to {target} after a retreat collision.",
+                $"{actor} was sent from {territory} to {target} because enemy factions retreated to the same territory.",
             PlayLogKind.BattleMatchAdvanced =>
                 $"The next pairing in {territory} is {participants}.",
             PlayLogKind.DefaultRetreat =>

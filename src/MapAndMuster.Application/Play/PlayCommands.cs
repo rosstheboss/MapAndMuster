@@ -195,6 +195,11 @@ public sealed class BattleActionCommand
 
     /// <summary>Gets the battle.</summary>
     public required Guid BattleId { get; init; }
+
+    /// <summary>
+    /// Gets optional army-list composition to keep when accepting the opponent's result.
+    /// </summary>
+    public IReadOnlyList<BattleParticipantReportInput>? Reports { get; init; }
 }
 
 /// <summary>
@@ -219,6 +224,27 @@ public sealed class SubmitRetreatCommand
 
     /// <summary>Gets the destination.</summary>
     public required Guid TargetTerritoryId { get; init; }
+}
+
+/// <summary>
+/// Command to return a committed retreat to draft.
+/// </summary>
+public sealed class UncommitRetreatCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the battle.</summary>
+    public required Guid BattleId { get; init; }
 }
 
 /// <summary>
@@ -725,6 +751,12 @@ public sealed class PlayCommitmentDetail
 
     /// <summary>Gets whether they are committed.</summary>
     public required bool IsCommitted { get; init; }
+
+    /// <summary>Gets whether they still need to submit a battle result.</summary>
+    public bool NeedsResult { get; init; }
+
+    /// <summary>Gets whether they still need to commit a required retreat.</summary>
+    public bool NeedsRetreat { get; init; }
 }
 
 /// <summary>A battle on the campaign page.</summary>
@@ -769,6 +801,9 @@ public sealed class PlayBattleDetail
     /// <summary>Gets the opponent submission when the viewer may accept it.</summary>
     public PlayBattleSubmissionDetail? OpponentSubmission { get; init; }
 
+    /// <summary>Gets the latest army list for each participating force the viewer may see.</summary>
+    public IReadOnlyList<PlayBattleArmyListDetail> ArmyLists { get; init; } = [];
+
     /// <summary>Gets the winner when finalized.</summary>
     public Guid? WinnerForceId { get; init; }
 
@@ -783,6 +818,15 @@ public sealed class PlayBattleDetail
 
     /// <summary>Gets whether the viewer must retreat.</summary>
     public required bool NeedsRetreat { get; init; }
+
+    /// <summary>Gets whether any required retreat on this battle is still uncommitted.</summary>
+    public bool AwaitingRetreat { get; init; }
+
+    /// <summary>Gets whether the viewer has committed a retreat for this battle.</summary>
+    public bool IsRetreatCommitted { get; init; }
+
+    /// <summary>Gets the viewer's saved retreat destination, committed or still in draft.</summary>
+    public Guid? RetreatDraftTargetId { get; init; }
 
     /// <summary>Gets eligible retreat destinations.</summary>
     public required IReadOnlyList<Guid> RetreatTargets { get; init; }
@@ -832,6 +876,40 @@ public sealed class PlayBattleSubmissionDetail
 
     /// <summary>Gets structured per-force reports, when submitted.</summary>
     public IReadOnlyList<BattleParticipantReportDetail> Reports { get; init; } = [];
+
+    /// <summary>Gets when this result was submitted.</summary>
+    public DateTimeOffset SubmittedUtc { get; init; }
+}
+
+/// <summary>The latest army list a participant submitted for one force in a battle.</summary>
+public sealed class PlayBattleArmyListDetail
+{
+    /// <summary>Gets the force.</summary>
+    public required Guid ForceId { get; init; }
+
+    /// <summary>Gets who submitted the list.</summary>
+    public required Guid SubmitterUserId { get; init; }
+
+    /// <summary>Gets when the list was submitted.</summary>
+    public required DateTimeOffset SubmittedUtc { get; init; }
+
+    /// <summary>Gets the army size in points.</summary>
+    public int ArmyPoints { get; init; }
+
+    /// <summary>Gets how many supply-costing units this force fielded.</summary>
+    public int SupplyCostingUnitCount { get; init; }
+
+    /// <summary>Gets optional pasted army-list text.</summary>
+    public string? ArmyListText { get; init; }
+
+    /// <summary>Gets the game system selected for list verification.</summary>
+    public string? ArmyListGameSystem { get; init; }
+
+    /// <summary>Gets the army builder selected for automatic supply parsing.</summary>
+    public required string ArmyListBuilder { get; init; }
+
+    /// <summary>Gets optional per-category supply amounts.</summary>
+    public IReadOnlyList<ArmyListSupplyCategoryDetail> SupplyCategories { get; init; } = [];
 }
 
 /// <summary>One force's structured battle report in a play response.</summary>

@@ -39,11 +39,13 @@ Player and Game Master in the same campaign.
 - Battle creation, mission assignment from structure then terrain catalogs (attacker/defender
   roles when the engagement calls for them), dual result submissions (including early reports during
   Action windows), agreement or dispute, no-result forced retreats, staff confirmation, retreats,
-  scoring, and optional GM ringer battles against idle forces.
+  scoring, and optional GM ringer battles against idle forces. Army lists, army points, and
+  supply-costing units are submitted per battle independently of result agreement.
 - Administrators can save campaign settings and map data as named reusable presets, and can download
   or upload a portable preset package (catalog, overlay, map image, and uploaded logos) between hosts.
 - Campaign-point, supply-line, temporary-supply, status, objective, and relic tracking.
-- Configurable force statuses with one or more enable and clear conditions (each a trigger, a consecutive occurrence count from 1 to 10, and an optional location filter for any place, a type, or a tag; at least one of each after overlapping filters collapse). Unique priorities, optional cancel-out, and display-only tabletop effects.
+- Configurable force statuses with one or more enable and clear conditions (each a trigger, a consecutive occurrence count from 1 to 10, an optional location filter for any place, a type, or a tag, and for occupying-with-specified-status a chosen catalog status; at least one of each after overlapping filters collapse). Unique priorities, optional cancel-out, and display-only tabletop effects.
+  Occupying with another force uses the territory after the action; passing through does not count.
   Named Diseased uses Water-tag catalog conditions, settlement Holds, contagion, rejoin, and
   plague-bearing wins; missions, item results, and staff assignment can also set status.
   Campaign catalogs may define unused tags on terrain, structures, factions/subfactions, and missions.

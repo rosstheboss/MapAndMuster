@@ -115,6 +115,41 @@ describe('CampaignMapViewComponent', () => {
     expect(pin instanceof HTMLElement ? pin.style.background : null).toBe('rgb(37, 99, 235)');
   });
 
+  it('emits forceSelect when an own force pin is activated', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+      },
+    ]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: true,
+        label: 'North force in Coast',
+      },
+    ]);
+    const selected = vi.fn();
+    fixture.componentInstance.forceSelect.subscribe(selected);
+    fixture.detectChanges();
+
+    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin.is-mine');
+    expect(pin).toBeInstanceOf(HTMLButtonElement);
+    pin?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 24, clientY: 32 }));
+    expect(selected).toHaveBeenCalledWith({ id: 'force-1', territoryId: 't1', clientX: 24, clientY: 32 });
+  });
+
   it('glows a force pin white when a hidden relic is nearby', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
@@ -357,6 +392,22 @@ describe('CampaignMapViewComponent', () => {
     expect(commit!.hasAttribute('aria-keyshortcuts')).toBe(false);
   });
 
+  it('labels the map commit button for a surrender', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('showCommit', true);
+    fixture.componentRef.setInput('canCommit', true);
+    fixture.componentRef.setInput('commitNoun', 'Surrender');
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const commit = [...compiled.querySelectorAll('button')].find(
+      (button) => button.textContent.trim() === 'Commit Surrender',
+    );
+    expect(commit).toBeTruthy();
+    expect(commit!.getAttribute('title')).toBe('Commit Surrender (C)');
+  });
+
   it('places Commit between Cycle forces and Show names and emits on C when enabled', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
@@ -484,7 +535,7 @@ describe('CampaignMapViewComponent', () => {
     expect(view.fitToPanel()).toBe(true);
   });
 
-  it('selects a territory when clicking its force, flag, or structure marker', () => {
+  it('selects a territory when clicking its flag or structure marker, and emits forceSelect for your force', () => {
     const owned = { ...territory, ownerFactionId: 'north', structureTypeId: 'town' };
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
@@ -525,13 +576,18 @@ describe('CampaignMapViewComponent', () => {
       },
     ]);
     const selected = vi.fn();
+    const forceSelected = vi.fn();
     fixture.componentInstance.territorySelect.subscribe(selected);
+    fixture.componentInstance.forceSelect.subscribe(forceSelected);
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
     const pin = compiled.querySelector('.force-pin')!;
-    pin.dispatchEvent(pointer('pointerdown', { button: 0, clientX: 20, clientY: 20 }));
-    expect(selected).toHaveBeenCalledWith(expect.objectContaining({ id: 't1', additive: false }));
+    pin.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 20, clientY: 20 }));
+    expect(forceSelected).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'force-1', territoryId: 't1', clientX: 20, clientY: 20 }),
+    );
+    expect(selected).not.toHaveBeenCalled();
 
     selected.mockClear();
     compiled

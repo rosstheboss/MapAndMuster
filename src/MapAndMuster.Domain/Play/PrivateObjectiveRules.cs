@@ -1153,7 +1153,8 @@ public static class PrivateObjectiveRules
             PrivateObjectiveAutomaticKind.BattleLossCount => CountBattles(state, holderForces, won: false),
             PrivateObjectiveAutomaticKind.PlayerRetreatCount =>
                 state.Retreats.Count(retreat =>
-                    !retreat.IsDefault
+                    retreat.IsCommitted
+                    && !retreat.IsDefault
                     && !retreat.IsStaffCorrection
                     && holderForces.Any(force => force.Id == retreat.ForceId)),
             PrivateObjectiveAutomaticKind.AdjacentToRelic =>

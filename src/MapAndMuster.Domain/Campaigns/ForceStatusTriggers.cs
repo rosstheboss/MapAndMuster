@@ -40,6 +40,18 @@ public enum ForceStatusEnableTrigger
 
     /// <summary>Applied after a successful destroy (second Pillage or DestroyImmediately).</summary>
     Destroy = 11,
+
+    /// <summary>
+    /// Applied after occupying a territory with another force that currently has this status.
+    /// Passing through during a multi-territory Move does not count.
+    /// </summary>
+    OccupyingWithThisStatus = 12,
+
+    /// <summary>
+    /// Applied after occupying a territory with another force that currently has a chosen status.
+    /// Passing through during a multi-territory Move does not count.
+    /// </summary>
+    OccupyingWithSpecifiedStatus = 13,
 }
 
 /// <summary>
@@ -88,4 +100,16 @@ public enum ForceStatusClearTrigger
 
     /// <summary>Cleared after a successful destroy (second Pillage or DestroyImmediately).</summary>
     Destroy = 13,
+
+    /// <summary>
+    /// Cleared after occupying a territory with another force that currently has this status.
+    /// Passing through during a multi-territory Move does not count.
+    /// </summary>
+    OccupyingWithThisStatus = 14,
+
+    /// <summary>
+    /// Cleared after occupying a territory with another force that currently has a chosen status.
+    /// Passing through during a multi-territory Move does not count.
+    /// </summary>
+    OccupyingWithSpecifiedStatus = 15,
 }

@@ -78,8 +78,10 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<SubmitBattleResultHandler>();
         services.AddScoped<ParseArmyListHandler>();
         services.AddScoped<AcceptBattleResultHandler>();
+        services.AddScoped<SubmitArmyListHandler>();
         services.AddScoped<ResolveBattleHandler>();
         services.AddScoped<SubmitRetreatHandler>();
+        services.AddScoped<UncommitRetreatHandler>();
         services.AddScoped<SubmitSurrenderHandler>();
         services.AddScoped<ExtendCampaignScheduleHandler>();
         services.AddScoped<InjectRingerBattleHandler>();

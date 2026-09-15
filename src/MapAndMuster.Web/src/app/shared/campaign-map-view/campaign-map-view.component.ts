@@ -179,6 +179,8 @@ export class CampaignMapViewComponent {
   readonly canCommit = input(false);
   readonly commitClosesPhase = input(false);
   readonly showUncommit = input(false);
+  /** Noun in Commit/Uncommit labels: Actions, Retreat, or Surrender. */
+  readonly commitNoun = input('Actions');
   readonly actionPrompt = input<string | null>(null);
   readonly promptAvoidTerritoryIds = input<readonly string[]>([]);
   /**
@@ -189,6 +191,12 @@ export class CampaignMapViewComponent {
 
   readonly mapPoint = output<MapPoint>();
   readonly commit = output<void>();
+  readonly forceSelect = output<{
+    id: string;
+    territoryId: string;
+    clientX: number;
+    clientY: number;
+  }>();
   readonly mapHover = output<MapPoint>();
   readonly territoryHover = output<string | null>();
   readonly adjacencyHover = output<string | null>();
@@ -287,7 +295,8 @@ export class CampaignMapViewComponent {
       return 'Uncommit';
     }
 
-    return this.commitClosesPhase() ? 'Commit Actions and close the phase' : 'Commit Actions';
+    const noun = this.commitNoun();
+    return this.commitClosesPhase() ? `Commit ${noun} and close the phase` : `Commit ${noun}`;
   });
   protected readonly commitButtonTitle = computed(() => `${this.commitButtonLabel()} (C)`);
   protected readonly commitButtonEnabled = computed(() => this.showUncommit() || this.canCommit());
@@ -1078,6 +1087,22 @@ export class CampaignMapViewComponent {
     }
 
     this.commit.emit();
+  }
+
+  protected onForcePinActivate(event: Event, force: MapForceMarker): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.interactive() || !force.isMine) {
+      return;
+    }
+
+    const point = event instanceof PointerEvent || event instanceof MouseEvent ? event : null;
+    this.forceSelect.emit({
+      id: force.id,
+      territoryId: force.territoryId,
+      clientX: point?.clientX ?? 0,
+      clientY: point?.clientY ?? 0,
+    });
   }
 
   protected cycleOwnForces(): void {

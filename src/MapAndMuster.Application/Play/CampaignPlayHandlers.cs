@@ -417,6 +417,11 @@ public sealed class AcceptBattleResultHandler
             {
                 var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
                 var isStaff = command.IsAdministrator || membership?.IsGameMaster == true;
+                if (!CampaignPlayCatalog.TryToReports(command.Reports, out var reports, out var reportError))
+                {
+                    return PlayMutation.Fail(reportError);
+                }
+
                 if (!CampaignPlayRules.TryAcceptBattleResult(
                     state,
                     command.UserId,
@@ -429,7 +434,72 @@ public sealed class AcceptBattleResultHandler
                     map,
                     CampaignPlayCatalog.Supply(campaign),
                     CampaignPlayPipeline.AllyGroups(campaign),
-                    CampaignPlayCatalog.PickIndex))
+                    CampaignPlayCatalog.PickIndex,
+                    reports))
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.FromOutcome(outcome!);
+            },
+            cancellationToken,
+            _notifications);
+    }
+}
+
+/// <summary>
+/// Records army-list composition without submitting a battle result.
+/// </summary>
+public sealed class SubmitArmyListHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public SubmitArmyListHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts, CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Records army lists for participating forces.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(BattleActionCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignPlayPipeline.MutateAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, map, campaign, utcNow) =>
+            {
+                _ = map;
+                var membership = CampaignMapper.MembershipFor(campaign, command.UserId);
+                var isStaff = command.IsAdministrator || membership?.IsGameMaster == true;
+                if (!CampaignPlayCatalog.TryToArmyLists(command.Reports, out var reports, out var reportError))
+                {
+                    return PlayMutation.Fail(reportError);
+                }
+
+                if (!CampaignPlayRules.TrySubmitArmyList(
+                    state,
+                    command.UserId,
+                    command.BattleId,
+                    reports,
+                    utcNow,
+                    out var outcome,
+                    out var error,
+                    isStaff))
                 {
                     return PlayMutation.Fail(error);
                 }
@@ -583,6 +653,69 @@ public sealed class SubmitRetreatHandler
                 }
 
                 return PlayMutation.FromOutcome(outcome!);
+            },
+            cancellationToken,
+            _notifications);
+    }
+}
+
+/// <summary>
+/// Returns a committed retreat to draft while the battle window remains open.
+/// </summary>
+public sealed class UncommitRetreatHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly IClock _clock;
+    private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
+
+    /// <summary>Initializes a new handler.</summary>
+    public UncommitRetreatHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(accounts);
+        _campaigns = campaigns;
+        _clock = clock;
+        _accounts = accounts;
+        _notifications = notifications;
+    }
+
+    /// <summary>Uncommits a retreat destination.</summary>
+    public Task<OperationResult<CampaignPlayDetail>> HandleAsync(
+        UncommitRetreatCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CampaignPlayPipeline.MutateAsync(
+            _campaigns,
+            _clock,
+            _accounts,
+            command.CampaignId,
+            command.UserId,
+            command.IsAdministrator,
+            command.ExpectedRevision,
+            (state, map, campaign, utcNow) =>
+            {
+                if (!CampaignPlayRules.TryUncommitRetreat(
+                    state,
+                    command.UserId,
+                    command.BattleId,
+                    utcNow,
+                    out var next,
+                    out var error,
+                    map,
+                    CampaignPlayCatalog.SpecialRules(campaign),
+                    CampaignPlayPipeline.AllyGroups(campaign)))
+                {
+                    return PlayMutation.Fail(error);
+                }
+
+                return PlayMutation.Ok(next!, map, preserveMap: true);
             },
             cancellationToken,
             _notifications);
