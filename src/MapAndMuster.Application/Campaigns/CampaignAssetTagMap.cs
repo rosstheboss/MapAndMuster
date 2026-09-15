@@ -29,6 +29,12 @@ public static class CampaignAssetTagMap
     public static string ItemKey(Guid itemObjectiveTypeId)
         => string.Create(CultureInfo.InvariantCulture, $"item:{itemObjectiveTypeId}");
 
+    /// <summary>Builds the key for a force-status chit or token image.</summary>
+    /// <param name="forceStatusId">The force status identifier.</param>
+    /// <returns>The lookup key.</returns>
+    public static string ForceStatusTokenKey(Guid forceStatusId)
+        => string.Create(CultureInfo.InvariantCulture, $"force-status-token:{forceStatusId}");
+
     /// <summary>Builds the key for a faction or subfaction flag.</summary>
     /// <param name="factionId">The faction identifier.</param>
     /// <param name="subfactionName">The subfaction name, or <see langword="null"/> for the faction itself.</param>
@@ -62,6 +68,11 @@ public static class CampaignAssetTagMap
         foreach (var item in campaign.ItemObjectiveTypes)
         {
             Add(tags, ItemKey(item.Id), item.ImageStorageKey);
+        }
+
+        foreach (var status in campaign.ForceStatuses)
+        {
+            Add(tags, ForceStatusTokenKey(status.Id), status.TokenImageStorageKey);
         }
 
         foreach (var faction in campaign.Factions)

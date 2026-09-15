@@ -98,4 +98,19 @@ public sealed class ForceStatusConditionCollapseTests
 
         Assert.Equal(2, enables.Count);
     }
+
+    [Fact]
+    public void KeepsStandardBattleResultQuestionsWhenTheCatalogQuestionDiffers()
+    {
+        var first = new ForceStatusEnableCondition(
+            ForceStatusEnableTrigger.StandardBattleResultQuestion,
+            requiredQuestionId: Guid.NewGuid());
+        var second = new ForceStatusEnableCondition(
+            ForceStatusEnableTrigger.StandardBattleResultQuestion,
+            requiredQuestionId: Guid.NewGuid());
+        var clear = new ForceStatusClearCondition(ForceStatusClearTrigger.AfterMove, 1);
+        var (enables, _) = ForceStatusConditionCollapse.Collapse([first, second], [clear], _ => []);
+
+        Assert.Equal(2, enables.Count);
+    }
 }

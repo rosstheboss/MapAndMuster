@@ -130,6 +130,7 @@ public sealed class UserNotificationStore : IUserNotificationStore
             .AsNoTracking()
             .Where(item => item.UserId == userId && item.ReadUtc == null)
             .OrderByDescending(item => item.CreatedUtc)
+            .ThenByDescending(item => item.Id)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return [.. records.Select(Map)];

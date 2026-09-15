@@ -4,6 +4,8 @@ import {
   campaignFromPreset,
   campaignPresetApplyOptions,
   campaignPresetSaveNames,
+  huntImmuneFactionNames,
+  huntImmuneSubfactions,
 } from './campaign-presets';
 import { WARHAMMER_OLD_WORLD_PRESET_ID } from './faction-presets';
 import { STANDARD_STRUCTURES_PRESET_ID } from './structure-presets';
@@ -72,6 +74,11 @@ describe('campaign presets', () => {
     ]);
     expect(copy!.factions.some((faction) => faction.name === 'Renegade Crowns')).toBe(true);
     expect(copy!.terrainTypes.find((entry) => entry.name === 'Sea')?.isWaterFeature).toBe(true);
+    expect(huntImmuneFactionNames('Diseased')).toEqual(['Vampire Counts', 'Tomb Kings of Khemri', 'Ogre Kingdoms']);
+    expect(huntImmuneFactionNames('Shaken')).toEqual(['Vampire Counts', 'Tomb Kings of Khemri']);
+    expect(huntImmuneSubfactions('Diseased')).toEqual([{ factionName: 'Daemons of Chaos', subfaction: 'Nurgle' }]);
+    expect(huntImmuneSubfactions('Well Rested')).toEqual([{ factionName: 'Daemons of Chaos', subfaction: 'Nurgle' }]);
+    expect(huntImmuneSubfactions('Shaken')).toEqual([]);
     expect(campaignFromPreset('unknown')).toBeNull();
   });
 

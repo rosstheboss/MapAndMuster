@@ -52,6 +52,38 @@ public enum ForceStatusEnableTrigger
     /// Passing through during a multi-territory Move does not count.
     /// </summary>
     OccupyingWithSpecifiedStatus = 13,
+
+    /// <summary>
+    /// Applied after a resolved battle when this force or an opposing participant achieved a chosen
+    /// standard battle-result question.
+    /// </summary>
+    StandardBattleResultQuestion = 14,
+
+    /// <summary>
+    /// Applied after an action phase while the force has no chain access to a structure type or tag.
+    /// </summary>
+    CutOffFromStructure = 15,
+
+    /// <summary>
+    /// Applied after an action phase while the force has no chain access to its spawn or an ally spawn.
+    /// </summary>
+    CutOffFromSpawn = 16,
+
+    /// <summary>
+    /// Applied after an action phase when the force newly gains a contiguous route to its spawn or an ally spawn.
+    /// </summary>
+    ReunitedWithSpawn = 17,
+
+    /// <summary>
+    /// Applied after an action phase when the force newly gains chain access to a structure type or tag.
+    /// </summary>
+    ReunitedWithStructure = 18,
+
+    /// <summary>Applied after a special action such as teleport succeeds.</summary>
+    SpecialActionSucceeded = 19,
+
+    /// <summary>Applied after a special action such as teleport fails or is interrupted.</summary>
+    SpecialActionFailed = 20,
 }
 
 /// <summary>
@@ -112,4 +144,84 @@ public enum ForceStatusClearTrigger
     /// Passing through during a multi-territory Move does not count.
     /// </summary>
     OccupyingWithSpecifiedStatus = 15,
+
+    /// <summary>
+    /// Cleared after a resolved battle when this force or an opposing participant achieved a chosen
+    /// standard battle-result question.
+    /// </summary>
+    StandardBattleResultQuestion = 16,
+
+    /// <summary>
+    /// Cleared after an action phase while the force has no chain access to a structure type or tag.
+    /// </summary>
+    CutOffFromStructure = 17,
+
+    /// <summary>
+    /// Cleared after an action phase while the force has no chain access to its spawn or an ally spawn.
+    /// </summary>
+    CutOffFromSpawn = 18,
+
+    /// <summary>
+    /// Cleared after an action phase when the force newly gains a contiguous route to its spawn or an ally spawn.
+    /// </summary>
+    ReunitedWithSpawn = 19,
+
+    /// <summary>
+    /// Cleared after an action phase when the force newly gains chain access to a structure type or tag.
+    /// </summary>
+    ReunitedWithStructure = 20,
+}
+
+/// <summary>
+/// Classifies force-status triggers that need extra catalog data or map-access evaluation.
+/// </summary>
+public static class ForceStatusTriggerKinds
+{
+    /// <summary>Returns whether the trigger is a chosen standard battle-result question.</summary>
+    public static bool RequiresQuestion(ForceStatusEnableTrigger trigger)
+    {
+        return trigger == ForceStatusEnableTrigger.StandardBattleResultQuestion;
+    }
+
+    /// <summary>Returns whether the trigger is a chosen standard battle-result question.</summary>
+    public static bool RequiresQuestion(ForceStatusClearTrigger trigger)
+    {
+        return trigger == ForceStatusClearTrigger.StandardBattleResultQuestion;
+    }
+
+    /// <summary>Returns whether the trigger is spawn-chain cut-off or reunion.</summary>
+    public static bool IsSpawnAccess(ForceStatusEnableTrigger trigger)
+    {
+        return trigger is ForceStatusEnableTrigger.CutOffFromSpawn or ForceStatusEnableTrigger.ReunitedWithSpawn;
+    }
+
+    /// <summary>Returns whether the trigger is spawn-chain cut-off or reunion.</summary>
+    public static bool IsSpawnAccess(ForceStatusClearTrigger trigger)
+    {
+        return trigger is ForceStatusClearTrigger.CutOffFromSpawn or ForceStatusClearTrigger.ReunitedWithSpawn;
+    }
+
+    /// <summary>Returns whether the trigger is structure-chain cut-off or reunion.</summary>
+    public static bool IsStructureAccess(ForceStatusEnableTrigger trigger)
+    {
+        return trigger is ForceStatusEnableTrigger.CutOffFromStructure or ForceStatusEnableTrigger.ReunitedWithStructure;
+    }
+
+    /// <summary>Returns whether the trigger is structure-chain cut-off or reunion.</summary>
+    public static bool IsStructureAccess(ForceStatusClearTrigger trigger)
+    {
+        return trigger is ForceStatusClearTrigger.CutOffFromStructure or ForceStatusClearTrigger.ReunitedWithStructure;
+    }
+
+    /// <summary>Returns whether the trigger reads current or previous territory-chain access.</summary>
+    public static bool IsTerritoryAccess(ForceStatusEnableTrigger trigger)
+    {
+        return IsSpawnAccess(trigger) || IsStructureAccess(trigger);
+    }
+
+    /// <summary>Returns whether the trigger reads current or previous territory-chain access.</summary>
+    public static bool IsTerritoryAccess(ForceStatusClearTrigger trigger)
+    {
+        return IsSpawnAccess(trigger) || IsStructureAccess(trigger);
+    }
 }

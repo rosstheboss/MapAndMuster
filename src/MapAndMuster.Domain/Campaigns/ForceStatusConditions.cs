@@ -14,7 +14,8 @@ public sealed class ForceStatusEnableCondition
         int occurrences = ForceStatusOccurrences.Default,
         Guid? id = null,
         ConditionLocation? location = null,
-        Guid? requiredStatusId = null)
+        Guid? requiredStatusId = null,
+        Guid? requiredQuestionId = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(occurrences, ForceStatusOccurrences.Min);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(occurrences, ForceStatusOccurrences.Max);
@@ -23,6 +24,7 @@ public sealed class ForceStatusEnableCondition
         Occurrences = occurrences;
         Location = location ?? ConditionLocation.Any;
         RequiredStatusId = requiredStatusId is { } status && status != Guid.Empty ? status : null;
+        RequiredQuestionId = requiredQuestionId is { } question && question != Guid.Empty ? question : null;
     }
 
     /// <summary>Gets the stable condition identifier.</summary>
@@ -44,11 +46,17 @@ public sealed class ForceStatusEnableCondition
     public Guid? RequiredStatusId { get; }
 
     /// <summary>
+    /// Gets the standard battle-result question that must be achieved when the trigger is
+    /// <see cref="ForceStatusEnableTrigger.StandardBattleResultQuestion"/>.
+    /// </summary>
+    public Guid? RequiredQuestionId { get; }
+
+    /// <summary>
     /// Returns a fingerprint used to detect duplicate conditions.
     /// </summary>
     public string Fingerprint()
     {
-        return $"{Trigger}:{Occurrences}:{Location.Fingerprint()}:{RequiredStatusId?.ToString("D") ?? "-"}";
+        return $"{Trigger}:{Occurrences}:{Location.Fingerprint()}:{RequiredStatusId?.ToString("D") ?? "-"}:{RequiredQuestionId?.ToString("D") ?? "-"}";
     }
 }
 
@@ -66,7 +74,8 @@ public sealed class ForceStatusClearCondition
         int occurrences = ForceStatusOccurrences.Default,
         Guid? id = null,
         ConditionLocation? location = null,
-        Guid? requiredStatusId = null)
+        Guid? requiredStatusId = null,
+        Guid? requiredQuestionId = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(occurrences, ForceStatusOccurrences.Min);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(occurrences, ForceStatusOccurrences.Max);
@@ -75,6 +84,7 @@ public sealed class ForceStatusClearCondition
         Occurrences = occurrences;
         Location = location ?? ConditionLocation.Any;
         RequiredStatusId = requiredStatusId is { } status && status != Guid.Empty ? status : null;
+        RequiredQuestionId = requiredQuestionId is { } question && question != Guid.Empty ? question : null;
     }
 
     /// <summary>Gets the stable condition identifier.</summary>
@@ -96,10 +106,16 @@ public sealed class ForceStatusClearCondition
     public Guid? RequiredStatusId { get; }
 
     /// <summary>
+    /// Gets the standard battle-result question that must be achieved when the trigger is
+    /// <see cref="ForceStatusClearTrigger.StandardBattleResultQuestion"/>.
+    /// </summary>
+    public Guid? RequiredQuestionId { get; }
+
+    /// <summary>
     /// Returns a fingerprint used to detect duplicate conditions.
     /// </summary>
     public string Fingerprint()
     {
-        return $"{Trigger}:{Occurrences}:{Location.Fingerprint()}:{RequiredStatusId?.ToString("D") ?? "-"}";
+        return $"{Trigger}:{Occurrences}:{Location.Fingerprint()}:{RequiredStatusId?.ToString("D") ?? "-"}:{RequiredQuestionId?.ToString("D") ?? "-"}";
     }
 }

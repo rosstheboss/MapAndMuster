@@ -38,6 +38,27 @@ export interface CampaignPreset {
 
 export const HUNT_IN_ESTALIA_CAMPAIGN_PRESET_ID = 'the-hunt-in-estalia';
 
+const HUNT_UNDEAD_FACTIONS = ['Vampire Counts', 'Tomb Kings of Khemri'] as const;
+const HUNT_DISEASED_FACTIONS = ['Ogre Kingdoms'] as const;
+const HUNT_NURGLE = { factionName: 'Daemons of Chaos', subfaction: 'Nurgle' } as const;
+
+export function huntImmuneFactionNames(statusName: string): readonly string[] {
+  if (statusName.trim().toLowerCase() === 'diseased') {
+    return [...HUNT_UNDEAD_FACTIONS, ...HUNT_DISEASED_FACTIONS];
+  }
+
+  return HUNT_UNDEAD_FACTIONS;
+}
+
+export function huntImmuneSubfactions(statusName: string): readonly { factionName: string; subfaction: string }[] {
+  const key = statusName.trim().toLowerCase();
+  if (key === 'diseased' || key === 'well rested') {
+    return [HUNT_NURGLE];
+  }
+
+  return [];
+}
+
 export const CAMPAIGN_PRESETS: readonly CampaignPreset[] = [
   {
     id: HUNT_IN_ESTALIA_CAMPAIGN_PRESET_ID,

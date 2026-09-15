@@ -79,6 +79,36 @@ public sealed class FactionSpecialRulePoliciesTests
     }
 
     [Fact]
+    public void CatalogImmunitiesOverrideSpecialRuleFallback()
+    {
+        var undead = Context(TombKings, SpecialRuleEffectKeys.Undead);
+        var tomb = new CampaignForce(Guid.NewGuid(), Player, TombKings, Origin, false);
+        var catalogImmune = new ForceStatusSetup(
+            Guid.NewGuid(),
+            "Shaken",
+            "effects",
+            [new ForceStatusEnableCondition(ForceStatusEnableTrigger.BattleLostOrRetreat)],
+            [new ForceStatusClearCondition(ForceStatusClearTrigger.Hold)],
+            0,
+            [],
+            [Bretonnia]);
+        Assert.True(FactionSpecialRulePolicies.AllowsStatus(tomb, "Shaken", undead, catalog: [catalogImmune]));
+        Assert.False(FactionSpecialRulePolicies.AllowsStatus(
+            new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Origin, false),
+            "Shaken",
+            SpecialRuleContext.None,
+            catalog: [catalogImmune]));
+
+        var empty = new ForceStatusSetup(
+            Guid.NewGuid(),
+            "Shaken",
+            "effects",
+            [new ForceStatusEnableCondition(ForceStatusEnableTrigger.BattleLostOrRetreat)],
+            [new ForceStatusClearCondition(ForceStatusClearTrigger.Hold)]);
+        Assert.False(FactionSpecialRulePolicies.AllowsStatus(tomb, "Shaken", undead, catalog: [empty]));
+    }
+
+    [Fact]
     public void ArtOfWarAndCalledByTheRelicChangeEligibleDestinations()
     {
         var art = Context(Cathay, SpecialRuleEffectKeys.ArtOfWar);

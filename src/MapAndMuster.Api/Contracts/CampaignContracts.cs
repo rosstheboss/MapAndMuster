@@ -519,6 +519,12 @@ public sealed class ItemObjectiveEffectRequest
 
     /// <summary>Gets display-only reminder text for a custom battle effect.</summary>
     public string? CustomText { get; init; }
+
+    /// <summary>Gets the catalog status applied after this special action succeeds.</summary>
+    public Guid? SuccessStatusTypeId { get; init; }
+
+    /// <summary>Gets the catalog status applied after this special action fails.</summary>
+    public Guid? FailureStatusTypeId { get; init; }
 }
 
 /// <summary>
@@ -643,6 +649,15 @@ public sealed class ForceStatusRequest
     /// <summary>Gets catalog identifiers this status cancels to Normal, when supplied.</summary>
     public IReadOnlyList<Guid>? CancelsStatusIds { get; init; }
 
+    /// <summary>Gets factions that refuse this status, when supplied.</summary>
+    public IReadOnlyList<Guid>? ImmuneFactionIds { get; init; }
+
+    /// <summary>Gets named subfactions that refuse this status, when supplied.</summary>
+    public IReadOnlyList<ForceStatusImmuneSubfactionRequest>? ImmuneSubfactions { get; init; }
+
+    /// <summary>Gets whether an existing chit or token image should be removed.</summary>
+    public bool ClearTokenImage { get; init; }
+
     /// <summary>Gets how many times in a row the enable trigger must match, when supplied.</summary>
     public int? EnableOccurrences { get; init; }
 
@@ -678,6 +693,24 @@ public sealed class ForceStatusConditionRequest
     /// OccupyingWithSpecifiedStatus.
     /// </summary>
     public Guid? RequiredStatusId { get; init; }
+
+    /// <summary>
+    /// Gets the standard battle-result question that must be achieved when the trigger is
+    /// StandardBattleResultQuestion.
+    /// </summary>
+    public Guid? RequiredQuestionId { get; init; }
+}
+
+/// <summary>
+/// A named subfaction that refuses a catalog force status.
+/// </summary>
+public sealed class ForceStatusImmuneSubfactionRequest
+{
+    /// <summary>Gets the parent faction.</summary>
+    public Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction name.</summary>
+    public string? Subfaction { get; init; }
 }
 
 /// <summary>
@@ -1778,6 +1811,12 @@ public sealed class ItemObjectiveEffectResponse
 
     /// <summary>Gets display-only reminder text for a custom battle effect.</summary>
     public string? CustomText { get; init; }
+
+    /// <summary>Gets the catalog status applied after this special action succeeds.</summary>
+    public Guid? SuccessStatusTypeId { get; init; }
+
+    /// <summary>Gets the catalog status applied after this special action fails.</summary>
+    public Guid? FailureStatusTypeId { get; init; }
 }
 
 /// <summary>
@@ -1907,6 +1946,27 @@ public sealed class ForceStatusResponse
 
     /// <summary>Gets how many consecutive clear-trigger matches are required.</summary>
     public int ClearOccurrences { get; init; }
+
+    /// <summary>Gets factions that refuse this named status.</summary>
+    public IReadOnlyList<Guid> ImmuneFactionIds { get; init; } = [];
+
+    /// <summary>Gets named subfactions that refuse this named status.</summary>
+    public IReadOnlyList<ForceStatusImmuneSubfactionResponse> ImmuneSubfactions { get; init; } = [];
+
+    /// <summary>Gets whether a chit or token image is stored.</summary>
+    public bool HasTokenImage { get; init; }
+}
+
+/// <summary>
+/// A named subfaction that refuses a catalog force status.
+/// </summary>
+public sealed class ForceStatusImmuneSubfactionResponse
+{
+    /// <summary>Gets the parent faction.</summary>
+    public required Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Subfaction { get; init; }
 }
 
 /// <summary>
@@ -1937,6 +1997,12 @@ public sealed class ForceStatusConditionResponse
     /// OccupyingWithSpecifiedStatus.
     /// </summary>
     public Guid? RequiredStatusId { get; init; }
+
+    /// <summary>
+    /// Gets the standard battle-result question that must be achieved when the trigger is
+    /// StandardBattleResultQuestion.
+    /// </summary>
+    public Guid? RequiredQuestionId { get; init; }
 }
 
 /// <summary>
@@ -2724,6 +2790,8 @@ public static class CampaignResponses
                                 }),
                             ],
                             CustomText = effect.CustomText,
+                            SuccessStatusTypeId = effect.SuccessStatusTypeId,
+                            FailureStatusTypeId = effect.FailureStatusTypeId,
                         }),
                     ],
                     Choices =
@@ -2796,11 +2864,21 @@ public static class CampaignResponses
                     ClearTrigger = status.ClearTrigger,
                     EnableConditions = ConditionResponses(status.EnableConditions, status.EnableTrigger, status.EnableOccurrences),
                     ClearConditions = ConditionResponses(status.ClearConditions, status.ClearTrigger, status.ClearOccurrences),
-                    Priority = status.Priority,
-                    CancelsStatusIds = status.CancelsStatusIds,
-                    EnableOccurrences = status.EnableOccurrences,
-                    ClearOccurrences = status.ClearOccurrences,
-                }),
+                Priority = status.Priority,
+                CancelsStatusIds = status.CancelsStatusIds,
+                EnableOccurrences = status.EnableOccurrences,
+                ClearOccurrences = status.ClearOccurrences,
+                ImmuneFactionIds = status.ImmuneFactionIds,
+                ImmuneSubfactions =
+                [
+                    .. status.ImmuneSubfactions.Select(static item => new ForceStatusImmuneSubfactionResponse
+                    {
+                        FactionId = item.FactionId,
+                        Subfaction = item.Subfaction,
+                    }),
+                ],
+                HasTokenImage = status.HasTokenImage,
+            }),
             ],
             PrivateObjectiveTypes =
             [
@@ -3344,6 +3422,8 @@ public static class CampaignResponses
                             })
                             .ToArray(),
                         CustomText = effect.CustomText,
+                        SuccessStatusTypeId = effect.SuccessStatusTypeId,
+                        FailureStatusTypeId = effect.FailureStatusTypeId,
                     })
                     .ToArray(),
                 Choices = type.Choices?
@@ -3426,6 +3506,7 @@ public static class CampaignResponses
                         LocationTypeId = condition.LocationTypeId,
                         LocationTagId = condition.LocationTagId,
                         RequiredStatusId = condition.RequiredStatusId,
+                        RequiredQuestionId = condition.RequiredQuestionId,
                     })
                     .ToArray(),
                 ClearConditions = status.ClearConditions?
@@ -3438,12 +3519,22 @@ public static class CampaignResponses
                         LocationTypeId = condition.LocationTypeId,
                         LocationTagId = condition.LocationTagId,
                         RequiredStatusId = condition.RequiredStatusId,
+                        RequiredQuestionId = condition.RequiredQuestionId,
                     })
                     .ToArray(),
                 Priority = status.Priority,
                 CancelsStatusIds = status.CancelsStatusIds,
                 EnableOccurrences = status.EnableOccurrences,
                 ClearOccurrences = status.ClearOccurrences,
+                ImmuneFactionIds = status.ImmuneFactionIds,
+                ImmuneSubfactions = status.ImmuneSubfactions?
+                    .Select(static item => new ForceStatusImmuneSubfactionInput
+                    {
+                        FactionId = item.FactionId,
+                        Subfaction = item.Subfaction,
+                    })
+                    .ToArray(),
+                ClearTokenImage = status.ClearTokenImage,
             })
             .ToArray();
     }
@@ -3466,6 +3557,7 @@ public static class CampaignResponses
                     LocationTypeId = condition.LocationTypeId,
                     LocationTagId = condition.LocationTagId,
                     RequiredStatusId = condition.RequiredStatusId,
+                    RequiredQuestionId = condition.RequiredQuestionId,
                 }),
             ];
         }

@@ -113,6 +113,7 @@ describe('CampaignMapViewComponent', () => {
     expect(pin?.classList.contains('has-image')).toBe(false);
     expect(pin?.querySelector('img')).toBeNull();
     expect(pin instanceof HTMLElement ? pin.style.background : null).toBe('rgb(37, 99, 235)');
+    expect(pin instanceof HTMLElement ? getComputedStyle(pin).boxShadow : null).toContain('#fff');
   });
 
   it('emits forceSelect when an own force pin is activated', () => {
@@ -180,11 +181,9 @@ describe('CampaignMapViewComponent', () => {
 
     const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin');
     expect(pin).toBeTruthy();
-    expect(pin?.classList.contains('app-glow')).toBe(true);
+    expect(pin?.classList.contains('app-glow')).toBe(false);
     expect(pin?.classList.contains('is-relic-nearby')).toBe(true);
-    expect(pin instanceof HTMLElement ? getComputedStyle(pin).getPropertyValue('--glow-color').trim() : null).toBe(
-      '#fff',
-    );
+    expect(pin instanceof HTMLElement ? getComputedStyle(pin).boxShadow : null).toContain('#fff');
     expect(pin?.getAttribute('aria-label')).toContain('Relic nearby');
   });
 
@@ -291,6 +290,40 @@ describe('CampaignMapViewComponent', () => {
     expect(markStyles.width).toBe('50%');
     expect(markStyles.height).toBe('50%');
     expect(markStyles.transform).toBe('translate(-50%, -50%)');
+  });
+
+  it('overlays a held item on the top-left of the force pin at checkmark size', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.componentRef.setInput('factions', [northFaction()]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'North force in Coast',
+        heldItems: [{ name: 'Crown', builtinSymbol: 'Crown', color: '#C45C26', imageUrl: null }],
+        action: { kind: 'Hold', status: 'committed' },
+      },
+    ]);
+    fixture.detectChanges();
+
+    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin.is-mine')!;
+    const mark = pin.querySelector('.force-action-mark')!;
+    const held = pin.querySelector('.force-held-items')!;
+    const markStyles = getComputedStyle(mark);
+    const heldStyles = getComputedStyle(held);
+    expect(heldStyles.position).toBe('absolute');
+    expect(heldStyles.top).toBe('14.645%');
+    expect(heldStyles.left).toBe('14.645%');
+    expect(heldStyles.width).toBe(markStyles.width);
+    expect(heldStyles.height).toBe(markStyles.height);
+    expect(Number.parseInt(heldStyles.zIndex, 10)).toBeGreaterThanOrEqual(
+      Number.parseInt(getComputedStyle(pin).zIndex, 10),
+    );
   });
 
   it('hides Cycle forces until you own a force, then cycles selection and zooms to move reach', () => {
@@ -837,6 +870,61 @@ describe('CampaignMapViewComponent', () => {
     const pin = (fixture.nativeElement as HTMLElement).querySelector('.item-pin');
     expect(pin).toBeTruthy();
     expect(pin?.getAttribute('aria-label')).toBe('Crown');
+  });
+
+  it('sizes an unclaimed item like the structure and places it above that structure', () => {
+    const owned = {
+      ...territory,
+      polygon: [
+        { x: 0.1, y: 0.05 },
+        { x: 0.4, y: 0.05 },
+        { x: 0.4, y: 0.85 },
+        { x: 0.1, y: 0.85 },
+      ],
+      structureTypeId: 'keep',
+      ownerFactionId: 'f1',
+    };
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [owned]);
+    fixture.componentRef.setInput('structures', [
+      {
+        id: 'keep',
+        name: 'Keep',
+        builtinSymbol: 'Keep',
+        hasImage: false,
+        hasPillagedImage: false,
+        isBuildable: true,
+        isPillageable: true,
+        isDestructible: true,
+        missions: [],
+      },
+    ]);
+    fixture.componentRef.setInput('items', [
+      {
+        id: 'item-1',
+        territoryId: 't1',
+        name: 'Crown',
+        carried: false,
+        hidden: false,
+      },
+    ]);
+    fixture.detectChanges();
+    const view = mapView(fixture.componentInstance);
+    view.imageSize.set({ width: 1000, height: 800 });
+    view.viewportSize.set({ width: 1000, height: 800 });
+    view.fitToPanel.set(false);
+    view.zoom.set(1);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const structure = compiled.querySelector<HTMLElement>('.structure-pin');
+    const item = compiled.querySelector<HTMLElement>('.item-pin');
+    expect(structure).toBeTruthy();
+    expect(item).toBeTruthy();
+    expect(item?.style.width).toBe(structure?.style.width);
+    expect(item?.style.height).toBe(structure?.style.height);
+    expect(Number.parseFloat(item?.style.top ?? '100')).toBeLessThan(Number.parseFloat(structure?.style.top ?? '0'));
   });
 
   it('fills owned territories with faction or alliance colors', () => {

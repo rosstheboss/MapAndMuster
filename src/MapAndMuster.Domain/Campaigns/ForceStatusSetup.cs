@@ -41,6 +41,9 @@ public sealed class ForceStatusSetup
     /// <param name="clearConditions">When this status returns to Normal. At least one is required.</param>
     /// <param name="priority">Unique ranking from 0 (highest) to 999 (lowest).</param>
     /// <param name="cancelsStatusIds">Other catalog statuses this one cancels to Normal.</param>
+    /// <param name="immuneFactionIds">Factions that refuse this status.</param>
+    /// <param name="immuneSubfactions">Named subfactions that refuse this status.</param>
+    /// <param name="clearTokenImage">Whether an existing chit or token image should be removed.</param>
     public ForceStatusSetup(
         Guid id,
         string name,
@@ -48,7 +51,10 @@ public sealed class ForceStatusSetup
         IReadOnlyList<ForceStatusEnableCondition> enableConditions,
         IReadOnlyList<ForceStatusClearCondition> clearConditions,
         int priority = ForceStatusPriority.Min,
-        IReadOnlyList<Guid>? cancelsStatusIds = null)
+        IReadOnlyList<Guid>? cancelsStatusIds = null,
+        IReadOnlyList<Guid>? immuneFactionIds = null,
+        IReadOnlyList<ForceStatusImmuneSubfaction>? immuneSubfactions = null,
+        bool clearTokenImage = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(effects);
@@ -85,6 +91,9 @@ public sealed class ForceStatusSetup
         ClearConditions = [.. clearConditions];
         Priority = priority;
         CancelsStatusIds = DistinctExcluding(cancelsStatusIds, id);
+        ImmuneFactionIds = DistinctIds(immuneFactionIds);
+        ImmuneSubfactions = DistinctSubfactions(immuneSubfactions);
+        ClearTokenImage = clearTokenImage;
     }
 
     /// <summary>Gets the status identifier.</summary>
@@ -122,6 +131,73 @@ public sealed class ForceStatusSetup
     /// has one of these, both are removed and the force has no status.
     /// </summary>
     public IReadOnlyList<Guid> CancelsStatusIds { get; }
+
+    /// <summary>Gets factions that refuse this named status.</summary>
+    public IReadOnlyList<Guid> ImmuneFactionIds { get; }
+
+    /// <summary>Gets named subfactions that refuse this named status.</summary>
+    public IReadOnlyList<ForceStatusImmuneSubfaction> ImmuneSubfactions { get; }
+
+    /// <summary>Gets whether an existing chit or token image should be removed.</summary>
+    public bool ClearTokenImage { get; }
+
+    /// <summary>Gets whether this status lists any configured immunities.</summary>
+    public bool HasConfiguredImmunities => ImmuneFactionIds.Count > 0 || ImmuneSubfactions.Count > 0;
+
+    /// <summary>Returns whether this status lists the faction or named subfaction as immune.</summary>
+    public bool Refuses(Guid factionId, string? subfaction)
+    {
+        if (ImmuneFactionIds.Contains(factionId))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(subfaction))
+        {
+            return false;
+        }
+
+        return ImmuneSubfactions.Any(item =>
+            item.FactionId == factionId
+            && string.Equals(item.Subfaction, subfaction, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IReadOnlyList<Guid> DistinctIds(IReadOnlyList<Guid>? ids)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. ids
+                .Where(static id => id != Guid.Empty)
+                .Distinct(),
+        ];
+    }
+
+    private static List<ForceStatusImmuneSubfaction> DistinctSubfactions(
+        IReadOnlyList<ForceStatusImmuneSubfaction>? listed)
+    {
+        if (listed is null || listed.Count == 0)
+        {
+            return [];
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<ForceStatusImmuneSubfaction>();
+        foreach (var item in listed)
+        {
+            var key = $"{item.FactionId:N}:{item.Subfaction}";
+            if (seen.Add(key))
+            {
+                result.Add(item);
+            }
+        }
+
+        return result;
+    }
 
     private static IReadOnlyList<Guid> DistinctExcluding(IReadOnlyList<Guid>? ids, Guid self)
     {

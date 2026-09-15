@@ -76,7 +76,7 @@ internal static class CampaignPresetKeyRemap
             PublicObjectiveTypes = campaign.PublicObjectiveTypes,
             SpecialRules = campaign.SpecialRules,
             Missions = [.. campaign.Missions.Select(mission => RemapMission(mission, keys))],
-            ForceStatuses = campaign.ForceStatuses,
+            ForceStatuses = [.. campaign.ForceStatuses.Select(status => RemapForceStatus(status, keys))],
             PrivateObjectiveTypes = campaign.PrivateObjectiveTypes,
             RivalObjectivesEnabled = campaign.RivalObjectivesEnabled,
             RivalObjectiveCampaignPoints = campaign.RivalObjectiveCampaignPoints,
@@ -141,6 +141,27 @@ internal static class CampaignPresetKeyRemap
             Choices = type.Choices,
             SpecialRuleIds = type.SpecialRuleIds,
             Effects = type.Effects,
+        };
+    }
+
+    private static StoredForceStatus RemapForceStatus(StoredForceStatus status, IReadOnlyDictionary<string, string> keys)
+    {
+        return new StoredForceStatus
+        {
+            Id = status.Id,
+            Name = status.Name,
+            Effects = status.Effects,
+            EnableTrigger = status.EnableTrigger,
+            ClearTrigger = status.ClearTrigger,
+            EnableConditions = status.EnableConditions,
+            ClearConditions = status.ClearConditions,
+            Priority = status.Priority,
+            CancelsStatusIds = status.CancelsStatusIds,
+            EnableOccurrences = status.EnableOccurrences,
+            ClearOccurrences = status.ClearOccurrences,
+            ImmuneFactionIds = status.ImmuneFactionIds,
+            ImmuneSubfactions = status.ImmuneSubfactions,
+            TokenImageStorageKey = RemapKey(status.TokenImageStorageKey, keys),
         };
     }
 

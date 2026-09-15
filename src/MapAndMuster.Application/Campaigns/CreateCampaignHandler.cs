@@ -297,7 +297,8 @@ public sealed class UpdateCampaignHandler
             existing.StructureTypes,
             existing.Factions,
             existing.ItemObjectiveTypes,
-            existing.Missions);
+            existing.Missions,
+            existing.ForceStatuses);
 
         var outcome = await _campaigns
             .UpdateAsync(updated, command.ExpectedRevision, cancellationToken)
@@ -344,7 +345,8 @@ internal static class CampaignPersistenceFactory
         IReadOnlyList<StoredStructureType>? previousStructureTypes = null,
         IReadOnlyList<StoredFaction>? previousFactions = null,
         IReadOnlyList<StoredItemObjectiveType>? previousItemObjectiveTypes = null,
-        IReadOnlyList<StoredMission>? previousMissions = null)
+        IReadOnlyList<StoredMission>? previousMissions = null,
+        IReadOnlyList<StoredForceStatus>? previousForceStatuses = null)
     {
         var mintNewCatalogIds = previousFactions is null;
         var allyIdMap = new Dictionary<Guid, Guid>();
@@ -503,7 +505,7 @@ internal static class CampaignPersistenceFactory
                     (previousMissions ?? [])
                         .Concat(previousTerrainTypes?.SelectMany(static type => type.Missions) ?? [])
                         .Concat(previousStructureTypes?.SelectMany(static type => type.Missions) ?? []))),
-            ForceStatuses = CatalogFileBinder.BindForceStatuses(setup.ForceStatuses),
+            ForceStatuses = CatalogFileBinder.BindForceStatuses(setup.ForceStatuses, previousForceStatuses),
             PrivateObjectiveTypes = privateObjectiveTypes,
             RivalObjectivesEnabled = setup.RivalObjectivesEnabled,
             RivalObjectiveCampaignPoints = setup.RivalObjectiveCampaignPoints,

@@ -616,7 +616,8 @@ internal static class CampaignMapClone
         IReadOnlyList<StoredTerrainType> terrainTypes,
         IReadOnlyList<StoredStructureType> structureTypes,
         DateTimeOffset updatedUtc,
-        IReadOnlyList<StoredItemObjectiveType>? itemObjectiveTypes = null)
+        IReadOnlyList<StoredItemObjectiveType>? itemObjectiveTypes = null,
+        IReadOnlyList<StoredForceStatus>? forceStatuses = null)
     {
         return new StoredCampaign
         {
@@ -659,7 +660,7 @@ internal static class CampaignMapClone
             PublicObjectiveTypes = existing.PublicObjectiveTypes,
             SpecialRules = existing.SpecialRules,
             Missions = existing.Missions,
-            ForceStatuses = existing.ForceStatuses,
+            ForceStatuses = forceStatuses ?? existing.ForceStatuses,
             PrivateObjectiveTypes = existing.PrivateObjectiveTypes,
             RivalObjectivesEnabled = existing.RivalObjectivesEnabled,
             RivalObjectiveCampaignPoints = existing.RivalObjectiveCampaignPoints,

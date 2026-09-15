@@ -108,17 +108,12 @@ public sealed class HomeBoardHandlerTests
         var accounts = new FakeProfileStore();
         var noticeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var store = new FakeNoticeStore();
-        store.Unread.Add(new UserNotification
-        {
-            Id = noticeId,
-            UserId = accounts.User.Id,
-            Kind = "CampaignChat",
-            Title = "New mention",
-            Body = "You were mentioned.",
-            Path = "/campaigns/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-            CreatedUtc = new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero),
-            DedupeKey = "chat:1",
-        });
+        store.Unread.Add(Notice(
+            accounts.User.Id,
+            noticeId,
+            "New mention",
+            "chat:1",
+            new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero)));
         var handler = new GetHomeBoardHandler(store, new EmptyCampaignStore(), accounts, new FixedClock());
 
         var result = await handler.HandleAsync(accounts.User.Id, CancellationToken.None);
@@ -126,6 +121,39 @@ public sealed class HomeBoardHandlerTests
         Assert.True(result.IsSuccess);
         var item = Assert.Single(result.Value!);
         Assert.Equal(noticeId.ToString("D"), item.Id);
+    }
+
+    [Fact]
+    public async Task ReturnsStoredNoticesNewestFirst()
+    {
+        var accounts = new FakeProfileStore();
+        var store = new FakeNoticeStore();
+        store.Unread.Add(Notice(
+            accounts.User.Id,
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "Older mention",
+            "chat:older",
+            new DateTimeOffset(2026, 8, 14, 0, 0, 0, TimeSpan.Zero)));
+        store.Unread.Add(Notice(
+            accounts.User.Id,
+            Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            "Newest mention",
+            "chat:newest",
+            new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero)));
+        store.Unread.Add(Notice(
+            accounts.User.Id,
+            Guid.Parse("33333333-3333-3333-3333-333333333333"),
+            "Middle mention",
+            "chat:middle",
+            new DateTimeOffset(2026, 8, 15, 8, 0, 0, TimeSpan.Zero)));
+        var handler = new GetHomeBoardHandler(store, new EmptyCampaignStore(), accounts, new FixedClock());
+
+        var result = await handler.HandleAsync(accounts.User.Id, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            ["Newest mention", "Middle mention", "Older mention"],
+            result.Value!.Select(item => item.Title).ToArray());
     }
 
     [Fact]
@@ -138,6 +166,26 @@ public sealed class HomeBoardHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, store.MarkAllCalls);
+    }
+
+    private static UserNotification Notice(
+        Guid userId,
+        Guid id,
+        string title,
+        string dedupeKey,
+        DateTimeOffset createdUtc)
+    {
+        return new UserNotification
+        {
+            Id = id,
+            UserId = userId,
+            Kind = "CampaignChat",
+            Title = title,
+            Body = "You were mentioned.",
+            Path = "/campaigns/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            CreatedUtc = createdUtc,
+            DedupeKey = dedupeKey,
+        };
     }
 }
 

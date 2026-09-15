@@ -44,8 +44,9 @@ Player and Game Master in the same campaign.
 - Administrators can save campaign settings and map data as named reusable presets, and can download
   or upload a portable preset package (catalog, overlay, map image, and uploaded logos) between hosts.
 - Campaign-point, supply-line, temporary-supply, status, objective, and relic tracking.
-- Configurable force statuses with one or more enable and clear conditions (each a trigger, a consecutive occurrence count from 1 to 10, an optional location filter for any place, a type, or a tag, and for occupying-with-specified-status a chosen catalog status; at least one of each after overlapping filters collapse). Unique priorities, optional cancel-out, and display-only tabletop effects.
+- Configurable force statuses with one or more enable and clear conditions (each a trigger, a consecutive occurrence count from 1 to 10, an optional location filter for any place, a type, or a tag, for occupying-with-specified-status a chosen catalog status, and for a standard battle-result question a chosen catalog question; at least one of each after overlapping filters collapse). Unique priorities, optional cancel-out, optional chit or token image, optional immune factions and named subfactions, and display-only tabletop effects.
   Occupying with another force uses the territory after the action; passing through does not count.
+  Cut-off and reunion triggers walk the force's owned and allied territory chain, including special-rule non-contiguous access, to spawn or a structure type/tag.
   Named Diseased uses Water-tag catalog conditions, settlement Holds, contagion, rejoin, and
   plague-bearing wins; missions, item results, and staff assignment can also set status.
   Campaign catalogs may define unused tags on terrain, structures, factions/subfactions, and missions.

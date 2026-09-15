@@ -650,8 +650,9 @@
                       <legend>Enable when</legend>
                       <p class="muted">
                         Add at least one condition. Listed conditions are OR. The same trigger may be added more than
-                        once when the location filter differs. Battle triggers count consecutive battles; occupying
-                        triggers count consecutive action phases.
+                        once when the location filter, occupying status, or battle-result question differs. Battle
+                        triggers count consecutive battles; occupying and cut-off triggers count consecutive action
+                        phases. Reunion triggers fire when a claim restores a route that was missing.
                       </p>
                       <div class="nested-row">
                         <div class="field grow">
@@ -663,60 +664,71 @@
                             }
                           </select>
                         </div>
-                        <div class="field">
-                          <label [attr.for]="'force-status-enable-location-' + index">Location</label>
-                          <select
-                            [id]="'force-status-enable-location-' + index"
-                            formControlName="enablePickLocationKind"
-                          >
-                            @for (option of conditionLocationOptions(); track option.id) {
-                              <option [value]="option.id">{{ option.label }}</option>
-                            }
-                          </select>
-                        </div>
-                        @if (status.controls.enablePickLocationKind.value === 'TerrainType') {
-                          <div class="field grow">
-                            <label [attr.for]="'force-status-enable-type-' + index">Terrain type</label>
-                            <select [id]="'force-status-enable-type-' + index" formControlName="enablePickTypeId">
-                              <option value="">Select a terrain type</option>
-                              @for (option of namedTerrainTypes(); track option.id) {
-                                <option [value]="option.id">{{ option.name }}</option>
+                        @if (!hidesForceStatusLocation(status.controls.enablePick.value)) {
+                          <div class="field">
+                            <label [attr.for]="'force-status-enable-location-' + index">Location</label>
+                            <select
+                              [id]="'force-status-enable-location-' + index"
+                              formControlName="enablePickLocationKind"
+                            >
+                              @for (
+                                option of conditionLocationOptions(status.controls.enablePick.value);
+                                track option.id
+                              ) {
+                                <option [value]="option.id">{{ option.label }}</option>
                               }
                             </select>
                           </div>
-                        }
-                        @if (status.controls.enablePickLocationKind.value === 'StructureType') {
-                          <div class="field grow">
-                            <label [attr.for]="'force-status-enable-stype-' + index">Structure type</label>
-                            <select [id]="'force-status-enable-stype-' + index" formControlName="enablePickTypeId">
-                              <option value="">Select a structure type</option>
-                              @for (option of namedStructureTypes(); track option.id) {
-                                <option [value]="option.id">{{ option.name }}</option>
-                              }
-                            </select>
-                          </div>
-                        }
-                        @if (status.controls.enablePickLocationKind.value === 'TerrainTag') {
-                          <div class="field grow">
-                            <label [attr.for]="'force-status-enable-tag-' + index">Terrain tag</label>
-                            <select [id]="'force-status-enable-tag-' + index" formControlName="enablePickTagId">
-                              <option value="">Select a terrain tag</option>
-                              @for (option of namedTerrainTags(); track option.id) {
-                                <option [value]="option.id">{{ option.name }}</option>
-                              }
-                            </select>
-                          </div>
-                        }
-                        @if (status.controls.enablePickLocationKind.value === 'StructureTag') {
-                          <div class="field grow">
-                            <label [attr.for]="'force-status-enable-stag-' + index">Structure tag</label>
-                            <select [id]="'force-status-enable-stag-' + index" formControlName="enablePickTagId">
-                              <option value="">Select a structure tag</option>
-                              @for (option of namedStructureTags(); track option.id) {
-                                <option [value]="option.id">{{ option.name }}</option>
-                              }
-                            </select>
-                          </div>
+                          @if (
+                            !isStructureAccessTrigger(status.controls.enablePick.value) &&
+                            status.controls.enablePickLocationKind.value === 'TerrainType'
+                          ) {
+                            <div class="field grow">
+                              <label [attr.for]="'force-status-enable-type-' + index">Terrain type</label>
+                              <select [id]="'force-status-enable-type-' + index" formControlName="enablePickTypeId">
+                                <option value="">Select a terrain type</option>
+                                @for (option of namedTerrainTypes(); track option.id) {
+                                  <option [value]="option.id">{{ option.name }}</option>
+                                }
+                              </select>
+                            </div>
+                          }
+                          @if (status.controls.enablePickLocationKind.value === 'StructureType') {
+                            <div class="field grow">
+                              <label [attr.for]="'force-status-enable-stype-' + index">Structure type</label>
+                              <select [id]="'force-status-enable-stype-' + index" formControlName="enablePickTypeId">
+                                <option value="">Select a structure type</option>
+                                @for (option of namedStructureTypes(); track option.id) {
+                                  <option [value]="option.id">{{ option.name }}</option>
+                                }
+                              </select>
+                            </div>
+                          }
+                          @if (
+                            !isStructureAccessTrigger(status.controls.enablePick.value) &&
+                            status.controls.enablePickLocationKind.value === 'TerrainTag'
+                          ) {
+                            <div class="field grow">
+                              <label [attr.for]="'force-status-enable-tag-' + index">Terrain tag</label>
+                              <select [id]="'force-status-enable-tag-' + index" formControlName="enablePickTagId">
+                                <option value="">Select a terrain tag</option>
+                                @for (option of namedTerrainTags(); track option.id) {
+                                  <option [value]="option.id">{{ option.name }}</option>
+                                }
+                              </select>
+                            </div>
+                          }
+                          @if (status.controls.enablePickLocationKind.value === 'StructureTag') {
+                            <div class="field grow">
+                              <label [attr.for]="'force-status-enable-stag-' + index">Structure tag</label>
+                              <select [id]="'force-status-enable-stag-' + index" formControlName="enablePickTagId">
+                                <option value="">Select a structure tag</option>
+                                @for (option of namedStructureTags(); track option.id) {
+                                  <option [value]="option.id">{{ option.name }}</option>
+                                }
+                              </select>
+                            </div>
+                          }
                         }
                         @if (needsSpecifiedOccupyingStatus(status.controls.enablePick.value)) {
                           <div class="field grow">
@@ -727,6 +739,20 @@
                             >
                               <option value="">Select a force status</option>
                               @for (option of occupyingForceStatusOptions(status); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
+                        @if (needsStandardBattleResultQuestion(status.controls.enablePick.value)) {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-enable-question-' + index">Battle result question</label>
+                            <select
+                              [id]="'force-status-enable-question-' + index"
+                              formControlName="enablePickRequiredQuestionId"
+                            >
+                              <option value="">Select a standard question</option>
+                              @for (option of namedStandardBattleResultQuestions(); track option.id) {
                                 <option [value]="option.id">{{ option.name }}</option>
                               }
                             </select>
@@ -746,12 +772,7 @@
                         <button
                           type="button"
                           class="button-secondary"
-                          [disabled]="
-                            !canAddForceStatusCondition(
-                              status.controls.enablePick.value,
-                              status.controls.enablePickRequiredStatusId.value
-                            )
-                          "
+                          [disabled]="!canAddForceStatusCondition(status, 'enable')"
                           (click)="addForceStatusEnableCondition(status)"
                         >
                           Add
@@ -791,7 +812,7 @@
                       <legend>Clear when</legend>
                       <p class="muted">
                         Add at least one condition. Listed conditions are OR. The same trigger may be added more than
-                        once when the location filter differs.
+                        once when the location filter, occupying status, or battle-result question differs.
                       </p>
                       <div class="nested-row">
                         <div class="field grow">
@@ -803,57 +824,71 @@
                             }
                           </select>
                         </div>
-                        <div class="field">
-                          <label [attr.for]="'force-status-clear-location-' + index">Location</label>
-                          <select [id]="'force-status-clear-location-' + index" formControlName="clearPickLocationKind">
-                            @for (option of conditionLocationOptions(); track option.id) {
-                              <option [value]="option.id">{{ option.label }}</option>
-                            }
-                          </select>
-                        </div>
-                        @if (status.controls.clearPickLocationKind.value === 'TerrainType') {
-                          <div class="field grow">
-                            <label [attr.for]="'force-status-clear-type-' + index">Terrain type</label>
-                            <select [id]="'force-status-clear-type-' + index" formControlName="clearPickTypeId">
-                              <option value="">Select a terrain type</option>
-                              @for (option of namedTerrainTypes(); track option.id) {
-                                <option [value]="option.id">{{ option.name }}</option>
+                        @if (!hidesForceStatusLocation(status.controls.clearPick.value)) {
+                          <div class="field">
+                            <label [attr.for]="'force-status-clear-location-' + index">Location</label>
+                            <select
+                              [id]="'force-status-clear-location-' + index"
+                              formControlName="clearPickLocationKind"
+                            >
+                              @for (
+                                option of conditionLocationOptions(status.controls.clearPick.value);
+                                track option.id
+                              ) {
+                                <option [value]="option.id">{{ option.label }}</option>
                               }
                             </select>
                           </div>
-                        }
-                        @if (status.controls.clearPickLocationKind.value === 'StructureType') {
-                          <div class="field grow">
-                            <label [attr.for]="'force-status-clear-stype-' + index">Structure type</label>
-                            <select [id]="'force-status-clear-stype-' + index" formControlName="clearPickTypeId">
-                              <option value="">Select a structure type</option>
-                              @for (option of namedStructureTypes(); track option.id) {
-                                <option [value]="option.id">{{ option.name }}</option>
-                              }
-                            </select>
-                          </div>
-                        }
-                        @if (status.controls.clearPickLocationKind.value === 'TerrainTag') {
-                          <div class="field grow">
-                            <label [attr.for]="'force-status-clear-tag-' + index">Terrain tag</label>
-                            <select [id]="'force-status-clear-tag-' + index" formControlName="clearPickTagId">
-                              <option value="">Select a terrain tag</option>
-                              @for (option of namedTerrainTags(); track option.id) {
-                                <option [value]="option.id">{{ option.name }}</option>
-                              }
-                            </select>
-                          </div>
-                        }
-                        @if (status.controls.clearPickLocationKind.value === 'StructureTag') {
-                          <div class="field grow">
-                            <label [attr.for]="'force-status-clear-stag-' + index">Structure tag</label>
-                            <select [id]="'force-status-clear-stag-' + index" formControlName="clearPickTagId">
-                              <option value="">Select a structure tag</option>
-                              @for (option of namedStructureTags(); track option.id) {
-                                <option [value]="option.id">{{ option.name }}</option>
-                              }
-                            </select>
-                          </div>
+                          @if (
+                            !isStructureAccessTrigger(status.controls.clearPick.value) &&
+                            status.controls.clearPickLocationKind.value === 'TerrainType'
+                          ) {
+                            <div class="field grow">
+                              <label [attr.for]="'force-status-clear-type-' + index">Terrain type</label>
+                              <select [id]="'force-status-clear-type-' + index" formControlName="clearPickTypeId">
+                                <option value="">Select a terrain type</option>
+                                @for (option of namedTerrainTypes(); track option.id) {
+                                  <option [value]="option.id">{{ option.name }}</option>
+                                }
+                              </select>
+                            </div>
+                          }
+                          @if (status.controls.clearPickLocationKind.value === 'StructureType') {
+                            <div class="field grow">
+                              <label [attr.for]="'force-status-clear-stype-' + index">Structure type</label>
+                              <select [id]="'force-status-clear-stype-' + index" formControlName="clearPickTypeId">
+                                <option value="">Select a structure type</option>
+                                @for (option of namedStructureTypes(); track option.id) {
+                                  <option [value]="option.id">{{ option.name }}</option>
+                                }
+                              </select>
+                            </div>
+                          }
+                          @if (
+                            !isStructureAccessTrigger(status.controls.clearPick.value) &&
+                            status.controls.clearPickLocationKind.value === 'TerrainTag'
+                          ) {
+                            <div class="field grow">
+                              <label [attr.for]="'force-status-clear-tag-' + index">Terrain tag</label>
+                              <select [id]="'force-status-clear-tag-' + index" formControlName="clearPickTagId">
+                                <option value="">Select a terrain tag</option>
+                                @for (option of namedTerrainTags(); track option.id) {
+                                  <option [value]="option.id">{{ option.name }}</option>
+                                }
+                              </select>
+                            </div>
+                          }
+                          @if (status.controls.clearPickLocationKind.value === 'StructureTag') {
+                            <div class="field grow">
+                              <label [attr.for]="'force-status-clear-stag-' + index">Structure tag</label>
+                              <select [id]="'force-status-clear-stag-' + index" formControlName="clearPickTagId">
+                                <option value="">Select a structure tag</option>
+                                @for (option of namedStructureTags(); track option.id) {
+                                  <option [value]="option.id">{{ option.name }}</option>
+                                }
+                              </select>
+                            </div>
+                          }
                         }
                         @if (needsSpecifiedOccupyingStatus(status.controls.clearPick.value)) {
                           <div class="field grow">
@@ -864,6 +899,20 @@
                             >
                               <option value="">Select a force status</option>
                               @for (option of occupyingForceStatusOptions(status); track option.id) {
+                                <option [value]="option.id">{{ option.name }}</option>
+                              }
+                            </select>
+                          </div>
+                        }
+                        @if (needsStandardBattleResultQuestion(status.controls.clearPick.value)) {
+                          <div class="field grow">
+                            <label [attr.for]="'force-status-clear-question-' + index">Battle result question</label>
+                            <select
+                              [id]="'force-status-clear-question-' + index"
+                              formControlName="clearPickRequiredQuestionId"
+                            >
+                              <option value="">Select a standard question</option>
+                              @for (option of namedStandardBattleResultQuestions(); track option.id) {
                                 <option [value]="option.id">{{ option.name }}</option>
                               }
                             </select>
@@ -883,12 +932,7 @@
                         <button
                           type="button"
                           class="button-secondary"
-                          [disabled]="
-                            !canAddForceStatusCondition(
-                              status.controls.clearPick.value,
-                              status.controls.clearPickRequiredStatusId.value
-                            )
-                          "
+                          [disabled]="!canAddForceStatusCondition(status, 'clear')"
                           (click)="addForceStatusClearCondition(status)"
                         >
                           Add
@@ -953,6 +997,103 @@
                                 class="button-danger icon-button"
                                 [attr.aria-label]="'Remove ' + entry.name + ' from cancel out'"
                                 (click)="removeForceStatusCancel(status, entry.id)"
+                              >
+                                <app-icon name="x" />
+                              </button>
+                            </li>
+                          }
+                        </ul>
+                      }
+                    </fieldset>
+                    <div class="field" [class.is-dirty]="hasPendingForceStatusToken(status.controls.id.value)">
+                      <label [attr.for]="'force-status-token-' + index">Chit or token image (50×50)</label>
+                      <input
+                        [id]="'force-status-token-' + index"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        (change)="onForceStatusTokenSelected(status.controls.id.value, $event)"
+                      />
+                      @if (pendingForceStatusTokenName(status.controls.id.value); as pending) {
+                        <p class="muted">Selected: {{ pending }}</p>
+                      } @else if (forceStatusTokenUrl(status.controls.id.value); as src) {
+                        <img class="structure-logo-preview" [src]="src" alt="" />
+                      }
+                      @if (hasStoredForceStatusToken(status.controls.id.value)) {
+                        <label class="choice-row">
+                          <input type="checkbox" formControlName="clearTokenImage" />
+                          Remove the stored chit or token
+                        </label>
+                      }
+                    </div>
+                    <fieldset class="field">
+                      <legend>Immune factions</legend>
+                      <p class="muted">
+                        Optional. These factions never gain this status, including from contagion, rejoin, or catalog
+                        conditions. Staff assignment still ignores immunity.
+                      </p>
+                      <div class="field">
+                        <label [attr.for]="'force-status-immune-faction-pick-' + index">Add a faction</label>
+                        <select
+                          [id]="'force-status-immune-faction-pick-' + index"
+                          [disabled]="forceStatusImmuneFactionOptions(status).length === 0"
+                          (change)="addForceStatusImmuneFaction(status, $event)"
+                        >
+                          <option value="">Select a faction</option>
+                          @for (option of forceStatusImmuneFactionOptions(status); track option.id) {
+                            <option [value]="option.id">{{ option.name }}</option>
+                          }
+                        </select>
+                      </div>
+                      @if (forceStatusImmuneFactionEntries(status).length > 0) {
+                        <ul class="cancel-status-list">
+                          @for (entry of forceStatusImmuneFactionEntries(status); track entry.id) {
+                            <li class="cancel-status-row">
+                              <span>{{ entry.name }}</span>
+                              <button
+                                type="button"
+                                class="button-danger icon-button"
+                                [attr.aria-label]="'Remove ' + entry.name + ' from immune factions'"
+                                (click)="removeForceStatusImmuneFaction(status, entry.id)"
+                              >
+                                <app-icon name="x" />
+                              </button>
+                            </li>
+                          }
+                        </ul>
+                      }
+                    </fieldset>
+                    <fieldset class="field">
+                      <legend>Immune subfactions</legend>
+                      <p class="muted">Optional. Named subfactions never gain this status.</p>
+                      <div class="field">
+                        <label [attr.for]="'force-status-immune-subfaction-pick-' + index">Add a subfaction</label>
+                        <select
+                          [id]="'force-status-immune-subfaction-pick-' + index"
+                          [disabled]="forceStatusImmuneSubfactionOptions(status).length === 0"
+                          (change)="addForceStatusImmuneSubfaction(status, $event)"
+                        >
+                          <option value="">Select a subfaction</option>
+                          @for (
+                            option of forceStatusImmuneSubfactionOptions(status);
+                            track option.factionId + option.subfaction
+                          ) {
+                            <option [value]="option.factionId + '::' + option.subfaction">{{ option.label }}</option>
+                          }
+                        </select>
+                      </div>
+                      @if (forceStatusImmuneSubfactionEntries(status).length > 0) {
+                        <ul class="cancel-status-list">
+                          @for (
+                            entry of forceStatusImmuneSubfactionEntries(status);
+                            track entry.factionId + entry.subfaction
+                          ) {
+                            <li class="cancel-status-row">
+                              <span>{{ entry.label }}</span>
+                              <button
+                                type="button"
+                                class="button-danger icon-button"
+                                [attr.aria-label]="'Remove ' + entry.label + ' from immune subfactions'"
+                                (click)="removeForceStatusImmuneSubfaction(status, entry.factionId, entry.subfaction)"
                               >
                                 <app-icon name="x" />
                               </button>
@@ -3760,6 +3901,36 @@
                                 maxlength="2000"
                                 rows="3"
                               ></textarea>
+                            </div>
+                          }
+                          @if (itemEffectNeedsOutcomeStatuses(effect.controls.kind.value)) {
+                            <div class="field">
+                              <label [attr.for]="'item-effect-success-status-' + index + '-' + effectIndex"
+                                >Status after a successful teleport</label
+                              >
+                              <select
+                                [id]="'item-effect-success-status-' + index + '-' + effectIndex"
+                                formControlName="successStatusTypeId"
+                              >
+                                <option value="">None (Exhausted still applies)</option>
+                                @for (status of namedForceStatuses(); track status.id) {
+                                  <option [value]="status.id">{{ status.name }}</option>
+                                }
+                              </select>
+                            </div>
+                            <div class="field">
+                              <label [attr.for]="'item-effect-failure-status-' + index + '-' + effectIndex"
+                                >Status after a failed teleport</label
+                              >
+                              <select
+                                [id]="'item-effect-failure-status-' + index + '-' + effectIndex"
+                                formControlName="failureStatusTypeId"
+                              >
+                                <option value="">None (Exhausted still applies)</option>
+                                @for (status of namedForceStatuses(); track status.id) {
+                                  <option [value]="status.id">{{ status.name }}</option>
+                                }
+                              </select>
                             </div>
                           }
                         </div>

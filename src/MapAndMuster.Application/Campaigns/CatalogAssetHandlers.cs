@@ -359,6 +359,180 @@ public sealed class GetItemObjectiveImageHandler
 }
 
 /// <summary>
+/// Uploads a custom force-status chit or token for a campaign manager.
+/// </summary>
+public sealed class UploadForceStatusTokenHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly ICampaignMapProcessor _processor;
+    private readonly ICampaignAssetStorage _assets;
+    private readonly IClock _clock;
+    private readonly ICampaignPresetStore? _presets;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    public UploadForceStatusTokenHandler(
+        ICampaignStore campaigns,
+        ICampaignMapProcessor processor,
+        ICampaignAssetStorage assets,
+        IClock clock,
+        ICampaignPresetStore? presets = null)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(processor);
+        ArgumentNullException.ThrowIfNull(assets);
+        ArgumentNullException.ThrowIfNull(clock);
+        _campaigns = campaigns;
+        _processor = processor;
+        _assets = assets;
+        _clock = clock;
+        _presets = presets;
+    }
+
+    /// <summary>
+    /// Replaces the force-status token after validating and re-encoding the upload.
+    /// </summary>
+    public async Task<OperationResult<CampaignDetail>> HandleAsync(
+        UploadForceStatusTokenCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var access = await CatalogAssetAccess.RequireManagerAsync(_campaigns, command.CampaignId, command.UserId, _clock.UtcNow, cancellationToken)
+            .ConfigureAwait(false);
+        if (!access.IsSuccess || access.Campaign is null)
+        {
+            return OperationResults.Failure<CampaignDetail>(access.ErrorCode ?? ErrorCodes.CampaignNotFound, access.Message ?? "The campaign was not found.");
+        }
+
+        var processed = await _processor
+            .ProcessAsync(
+                command.Content,
+                command.ContentType,
+                command.Length,
+                cancellationToken,
+                ICampaignMapProcessor.StructureLogoMaxDimension)
+            .ConfigureAwait(false);
+        if (!processed.IsSuccess || processed.Content is null || processed.FileExtension is null)
+        {
+            return OperationResults.Failure<CampaignDetail>(
+                processed.ErrorCode ?? ErrorCodes.UploadInvalidImage,
+                processed.Message ?? "The force status token could not be processed.");
+        }
+
+        var statuses = access.Campaign.ForceStatuses.ToList();
+        var index = statuses.FindIndex(status => status.Id == command.ForceStatusId);
+        if (index < 0)
+        {
+            return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The force status was not found.");
+        }
+
+        var newKey = await _assets
+            .SaveAsync("status-tokens", processed.Content, processed.FileExtension, "image/png", cancellationToken)
+            .ConfigureAwait(false);
+        var previous = statuses[index];
+        var previousKey = previous.TokenImageStorageKey;
+        statuses[index] = new StoredForceStatus
+        {
+            Id = previous.Id,
+            Name = previous.Name,
+            Effects = previous.Effects,
+            EnableTrigger = previous.EnableTrigger,
+            ClearTrigger = previous.ClearTrigger,
+            EnableConditions = previous.EnableConditions,
+            ClearConditions = previous.ClearConditions,
+            Priority = previous.Priority,
+            CancelsStatusIds = previous.CancelsStatusIds,
+            EnableOccurrences = previous.EnableOccurrences,
+            ClearOccurrences = previous.ClearOccurrences,
+            ImmuneFactionIds = previous.ImmuneFactionIds,
+            ImmuneSubfactions = previous.ImmuneSubfactions,
+            TokenImageStorageKey = newKey,
+        };
+
+        var updated = CampaignMapClone.CloneWithCatalogs(
+            access.Campaign,
+            access.Campaign.TerrainTypes,
+            access.Campaign.StructureTypes,
+            _clock.UtcNow,
+            access.Campaign.ItemObjectiveTypes,
+            statuses);
+        var outcome = await _campaigns.UpdateAsync(updated, command.ExpectedRevision, cancellationToken).ConfigureAwait(false);
+        if (!outcome.IsSuccess || outcome.Campaign is null)
+        {
+            await _assets.DeleteAsync(newKey, cancellationToken).ConfigureAwait(false);
+            return OperationResults.Failure<CampaignDetail>(
+                outcome.ErrorCode ?? ErrorCodes.CampaignNotFound,
+                outcome.Message ?? "The force status token could not be saved.");
+        }
+
+        if (CatalogFileBinder.IsUserUploadedFileKey(previousKey))
+        {
+            await CampaignAssetRetention.DeleteIfUnreferencedAsync(
+                _campaigns,
+                _assets.DeleteAsync,
+                previousKey,
+                command.CampaignId,
+                cancellationToken,
+                _presets).ConfigureAwait(false);
+        }
+
+        return OperationResults.Success(CampaignMapper.ToDetail(outcome.Campaign, command.UserId, _clock.UtcNow));
+    }
+}
+
+/// <summary>
+/// Opens a stored force-status chit or token for a campaign member.
+/// </summary>
+public sealed class GetForceStatusTokenHandler
+{
+    private readonly ICampaignStore _campaigns;
+    private readonly ICampaignAssetStorage _assets;
+
+    /// <summary>
+    /// Initializes a new handler.
+    /// </summary>
+    public GetForceStatusTokenHandler(ICampaignStore campaigns, ICampaignAssetStorage assets)
+    {
+        ArgumentNullException.ThrowIfNull(campaigns);
+        ArgumentNullException.ThrowIfNull(assets);
+        _campaigns = campaigns;
+        _assets = assets;
+    }
+
+    /// <summary>
+    /// Returns the stored force-status token for a member.
+    /// </summary>
+    public async Task<OperationResult<CampaignAssetRead>> HandleAsync(
+        Guid campaignId,
+        Guid forceStatusId,
+        Guid userId,
+        CancellationToken cancellationToken,
+        bool isAdministrator = false,
+        string? ifNoneMatch = null)
+    {
+        var campaign = await _campaigns.FindByIdAsync(campaignId, cancellationToken).ConfigureAwait(false);
+        if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
+        {
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+        }
+
+        var status = campaign.ForceStatuses.FirstOrDefault(item => item.Id == forceStatusId);
+        if (status is null || string.IsNullOrWhiteSpace(status.TokenImageStorageKey))
+        {
+            return OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The force status token was not found.");
+        }
+
+        var read = await CampaignAssetReader
+            .ReadAsync(_assets.OpenStreamAsync, status.TokenImageStorageKey, ifNoneMatch, downloadName: null, cancellationToken)
+            .ConfigureAwait(false);
+        return read is null
+            ? OperationResults.Failure<CampaignAssetRead>(ErrorCodes.CampaignNotFound, "The force status token was not found.")
+            : OperationResults.Success(read);
+    }
+}
+
+/// <summary>
 /// Uploads a custom faction flag for a campaign manager.
 /// </summary>
 public sealed class UploadFactionFlagHandler
@@ -925,6 +1099,33 @@ public sealed class UploadItemObjectiveImageCommand
 }
 
 /// <summary>
+/// Command to replace a force-status chit or token image.
+/// </summary>
+public sealed class UploadForceStatusTokenCommand
+{
+    /// <summary>Gets the authenticated user.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the force status identifier.</summary>
+    public required Guid ForceStatusId { get; init; }
+
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the uploaded image stream.</summary>
+    public required Stream Content { get; init; }
+
+    /// <summary>Gets the declared content type.</summary>
+    public required string ContentType { get; init; }
+
+    /// <summary>Gets the declared length, if known.</summary>
+    public long? Length { get; init; }
+}
+
+/// <summary>
 /// Command to replace a faction flag image.
 /// </summary>
 public sealed class UploadFactionFlagCommand
@@ -1000,6 +1201,9 @@ public enum CampaignPresetAssetKind
 
     /// <summary>An item-objective logo.</summary>
     ItemObjectiveImage = 3,
+
+    /// <summary>A force-status chit or token image.</summary>
+    ForceStatusToken = 4,
 }
 
 /// <summary>
@@ -1045,6 +1249,8 @@ public sealed class GetCampaignPresetAssetHandler
                 preset.StructureTypes.FirstOrDefault(type => type.Id == catalogId)?.PillagedImageStorageKey,
             CampaignPresetAssetKind.ItemObjectiveImage =>
                 preset.ItemObjectiveTypes.FirstOrDefault(type => type.Id == catalogId)?.ImageStorageKey,
+            CampaignPresetAssetKind.ForceStatusToken =>
+                preset.ForceStatuses.FirstOrDefault(status => status.Id == catalogId)?.TokenImageStorageKey,
             _ => null,
         };
         if (!CatalogFileBinder.IsUserUploadedFileKey(storageKey) || storageKey is null)

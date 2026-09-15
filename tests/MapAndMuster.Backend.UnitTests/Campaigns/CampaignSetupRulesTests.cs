@@ -1824,6 +1824,119 @@ public sealed class CampaignSetupRulesTests
         Assert.Empty(status.CancelsStatusIds);
         Assert.Equal(1, status.EnableOccurrences);
         Assert.Equal(1, status.ClearOccurrences);
+        Assert.Empty(status.ImmuneFactionIds);
+        Assert.Empty(status.ImmuneSubfactions);
+
+        var northId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01");
+        var southId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02");
+        var immuneSucceeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            [
+                new FactionInput { Id = northId, Name = "North", Subfactions = ["Riders"] },
+                new FactionInput { Id = southId, Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out var immuneSetup,
+            out _,
+            out var immuneErrors,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    Effects = "Tabletop shaken modifiers apply.",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                    ImmuneFactionIds = [northId],
+                    ImmuneSubfactions =
+                    [
+                        new ForceStatusImmuneSubfactionInput { FactionId = northId, Subfaction = "Riders" },
+                    ],
+                },
+            ]);
+        Assert.True(immuneSucceeded, string.Join('\n', immuneErrors.Select(error => error.Message)));
+        var immune = Assert.Single(immuneSetup!.ForceStatuses);
+        Assert.Equal(northId, Assert.Single(immune.ImmuneFactionIds));
+        var subfaction = Assert.Single(immune.ImmuneSubfactions);
+        Assert.Equal(northId, subfaction.FactionId);
+        Assert.Equal("Riders", subfaction.Subfaction);
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var unknownImmune,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                    ImmuneFactionIds = [Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd")],
+                },
+            ]));
+        Assert.Contains(unknownImmune, error => error.Code == "forceStatuses.immuneFaction.unknown");
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            [
+                new FactionInput { Id = northId, Name = "North", Subfactions = ["Riders"] },
+                new FactionInput { Id = southId, Name = "South" },
+            ],
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var unknownSubfaction,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Shaken",
+                    EnableTrigger = nameof(ForceStatusEnableTrigger.BattleLostOrRetreat),
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                    ImmuneSubfactions =
+                    [
+                        new ForceStatusImmuneSubfactionInput { FactionId = northId, Subfaction = "Knights" },
+                    ],
+                },
+            ]));
+        Assert.Contains(unknownSubfaction, error => error.Code == "forceStatuses.immuneSubfaction.unknown");
 
         Assert.False(CampaignSetupRules.TryCreate(
             "Border War",
@@ -2298,6 +2411,148 @@ public sealed class CampaignSetupRulesTests
                 },
             ]));
         Assert.Contains(missing, error => error.Code == "forceStatuses.requiredStatusId.required");
+    }
+
+    [Fact]
+    public void StandardBattleResultQuestionRequiresACatalogQuestion()
+    {
+        var questionId = Guid.NewGuid();
+        var succeeded = CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out var setup,
+            out _,
+            out var errors,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Raided",
+                    EnableConditions =
+                    [
+                        new ForceStatusConditionInput
+                        {
+                            Trigger = nameof(ForceStatusEnableTrigger.StandardBattleResultQuestion),
+                            RequiredQuestionId = questionId,
+                        },
+                    ],
+                    ClearConditions =
+                    [
+                        new ForceStatusConditionInput { Trigger = nameof(ForceStatusClearTrigger.Hold) },
+                    ],
+                },
+            ],
+            standardBattleResultQuestions:
+            [
+                new StandardBattleResultQuestionInput
+                {
+                    Id = questionId,
+                    Prompt = "Destroyed the baggage train",
+                    Kind = nameof(MissionResultQuestionKind.Boolean),
+                    BattlePoints = 1,
+                    CampaignPoints = 0,
+                },
+            ]);
+        Assert.True(succeeded, string.Join('\n', errors.Select(error => error.Message)));
+        var status = Assert.Single(setup!.ForceStatuses);
+        Assert.Equal(questionId, Assert.Single(status.EnableConditions).RequiredQuestionId);
+
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            null,
+            null,
+            out _,
+            out _,
+            out var missing,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Raided",
+                    EnableConditions =
+                    [
+                        new ForceStatusConditionInput
+                        {
+                            Trigger = nameof(ForceStatusEnableTrigger.StandardBattleResultQuestion),
+                        },
+                    ],
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                },
+            ]));
+        Assert.Contains(missing, error => error.Code == "forceStatuses.requiredQuestionId.required");
+    }
+
+    [Fact]
+    public void CutOffFromStructureRejectsTerrainLocations()
+    {
+        var terrainId = Guid.NewGuid();
+        Assert.False(CampaignSetupRules.TryCreate(
+            "Border War",
+            description: null,
+            playerCount: 8,
+            isPrivate: false,
+            joinPassword: null,
+            joinPasswordRequired: false,
+            creatorIsParticipant: true,
+            occupiedPlayerSlotsExcludingCreator: 0,
+            TwoFactions(),
+            allyGroups: null,
+            links: null,
+            WeekSchedule(),
+            [
+                new TerrainTypeInput
+                {
+                    Id = terrainId,
+                    Name = "Plains",
+                    Color = "#7CB342",
+                    Missions = [new MissionInput { Name = "Plains control" }],
+                },
+            ],
+            structureTypes: null,
+            out _,
+            out _,
+            out var errors,
+            forceStatuses:
+            [
+                new ForceStatusInput
+                {
+                    Name = "Starving",
+                    EnableConditions =
+                    [
+                        new ForceStatusConditionInput
+                        {
+                            Trigger = nameof(ForceStatusEnableTrigger.CutOffFromStructure),
+                            LocationKind = nameof(ConditionLocationKind.TerrainType),
+                            LocationTypeId = terrainId,
+                        },
+                    ],
+                    ClearTrigger = nameof(ForceStatusClearTrigger.Hold),
+                },
+            ]));
+        Assert.Contains(errors, error => error.Code == "forceStatuses.location.structure");
     }
 
     [Fact]

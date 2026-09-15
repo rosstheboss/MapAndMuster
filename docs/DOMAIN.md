@@ -217,8 +217,9 @@ the same territory.
   each other by god. Backstab against one god makes only that god's players enemies of the traitor;
   other gods of the same faction remain allied to that traitor.
 - `OnlyBloodSatisfies`: Pillage may target an allied structure and may destroy it in one action.
-- `BringersOfThePlague`: never Diseased or Well Rested; beating a force that is not already
-  Diseased inflicts Diseased, including when that loser is Shaken.
+- `BringersOfThePlague`: beating a force that is not already Diseased inflicts Diseased, including
+  when that loser is Shaken. Hunt configures Nurgle as immune to Diseased and Well Rested on those
+  catalog statuses rather than hard-coding the refusal on this key.
 - `ArtOfWar`: Retreat may enter any non-enemy-spawn territory and may capture it.
 - `ConduitsOfPower`: a player is told when they are adjacent to a still-hidden relic. The notice
   names each of that player's adjacent forces by territory and does not reveal the relic's
@@ -227,7 +228,8 @@ the same territory.
 - `SpawningPools`: owned water-feature territories without a Town, City, or Castle count as a
   supply depot and fortification without a supply path. Built Supply Depot or Fortification
   structures grant one extra map supply point. The bonus does not apply to allies.
-- `ToughGuts`: never Diseased.
+- `ToughGuts`: Hunt configures Ogre Kingdoms as immune to Diseased on that catalog status rather
+  than hard-coding the refusal on this key.
 - `GreenTide`: cannot Build a Supply Depot; owned empty or pillaged territories count as depots.
   Allied land is not included.
 - `DefendersOfTheHomeland`: unowned Towns and Cities count as depots regardless of path. Allies
@@ -242,12 +244,14 @@ the same territory.
 - `CalledByTheRelic`: while a revealed, non-destroyed item objective exists and no force of this
   faction holds an item, every force of the faction gains +1 movement speed. When any force of the
   faction holds an item, the speed bonus ends. If they later lose that item, the bonus returns
-  while a revealed item still exists. Hunt assigns this to Tomb Kings of Khemri. The same key also
-  refuses any named force status so older Hunt campaigns that only had this rule stay immune. The
+  while a revealed item still exists. Hunt assigns this to Tomb Kings of Khemri and lists that
+  faction as immune on each named catalog status. Older Hunt campaigns that only had this rule
+  still refuse any named force status as a fallback when a status lists no immunities. The
   +2 casting or dispelling reminder is `RelicOfAPastAge` catalog text when assigned.
-- `Undead`: never any named force status (Normal is allowed). Hunt assigns this to Vampire Counts
-  and Tomb Kings of Khemri. Catalog text names Shaken, Exhausted, Diseased, Well Rested, and
-  Confident.
+- `Undead`: Hunt assigns this to Vampire Counts and Tomb Kings of Khemri and lists those factions
+  as immune on each named catalog status. Catalog text names Shaken, Exhausted, Diseased, Well
+  Rested, and Confident. Older campaigns that only had this rule still refuse any named force
+  status (Normal is allowed) when a status lists no immunities.
 - `NorthernRaiders`: Pillage awards at least two temporary supply points.
 - `PreparedForBattle`: on a battle result, the player may declare Extra Black Powder; that spends
   one extra supply point for the battle.
@@ -262,11 +266,22 @@ Tabletop-only Hunt keys stay as catalog text and battle reminders: `ExpertAmbush
 or army-list mercenary slots.
 
 A campaign may configure named force statuses (at most 20). Each status has a unique name other
-than Normal, effect text shown on the force, one or more enable conditions, one or more clear
-conditions, a unique priority integer from 0 to 999 (0 is highest), and optional cancel-out statuses.
+than Normal, effect text shown on the force, an optional chit or token image, one or more enable
+conditions, one or more clear conditions, a unique priority integer from 0 to 999 (0 is highest),
+optional cancel-out statuses, and optional immune factions and named subfactions. A force of an
+immune faction or named subfaction never gains that status from catalog conditions, contagion,
+rejoin, or plague-bearing wins. Staff assignment still ignores immunity. When a status lists no
+immunities, older special-rule keys still refuse it: `Undead` and `CalledByTheRelic` never any
+named force status; `BringersOfThePlague` never Diseased or Well Rested; `ToughGuts` never
+Diseased. The Hunt in Estalia preset fills those immunities on the standard catalog instead of
+relying on the keys. The upcoming and active campaign pages show a collapsed Force statuses
+reference listing effects, conditions, cancel-out, current forces (faction, players, clickable
+location), and currently immune factions.
+
 Each condition is a trigger plus a consecutive-occurrence count from 1 to 10 (default 1). At least
 one enable condition and one clear condition are required. The same trigger may appear more than
-once when the location filter or required occupying status differs. A force has at most one status; Normal is stored as no
+once when the location filter, required occupying status, or required standard battle-result
+question differs. A force has at most one status; Normal is stored as no
 status and is not shown as a named status in the UI. Setup can copy the standard catalog: Diseased,
 Shaken, Confident, Exhausted, and Well Rested, with priorities 0, 1, 2, 3, and 4 in that list order.
 A newly added status defaults to the lowest unused priority. Any listed enable or clear condition
@@ -277,16 +292,28 @@ legacy water occupancy) count consecutive action phases (a battle window does no
 leaving the matching location does). Occupying with another force uses the territory after the
 action; passing through during a multi-territory Move does not count. OccupyingWithThisStatus
 matches another force that already has this catalog status. OccupyingWithSpecifiedStatus matches
-another force that has a chosen catalog status, including this one. Enable and clear lists
+another force that has a chosen catalog status, including this one. StandardBattleResultQuestion
+matches a chosen catalog question when this force or an opposing participant scored it as achieved
+on the authoritative result (boolean true, or a battle-point amount greater than 0). Unique
+per-mission questions without a catalog link never match. CutOffFromSpawn and CutOffFromStructure
+count consecutive action phases while the force's territory chain has no access: owned and allied
+contiguous land from the force's hex, plus special-rule non-contiguous access (`SpawningPools` owned
+water as Supply Depot and Fortification, `DefendersOfTheHomeland` unowned operational towns and
+cities as Supply Depots, and `GreenTide` empty owned land on the chain as Supply Depots). Extra
+special-rule territories do not bridge otherwise separate owned clusters. Spawn access is the
+force's spawn or a current ally's spawn. Underground Network factions have no spawn of their own.
+CutOffFromStructure uses any structure, a structure type, or a structure tag; destroyed structures
+do not count. ReunitedWithSpawn and ReunitedWithStructure fire on the action phase when claiming
+territory newly restores that route or structure access; a force that already had the route does
+not match. Enable and clear lists
 are OR. Priority and
 cancel-out still apply when the Nth matching event fires. When a force would
 gain a status while it already has one, or two effects would apply at the same time, the lower
 priority number remains. If the incoming status lists the current (or simultaneous) status as a
 cancel-out, both are removed and the force has no status. Exhausted cancels Well Rested in the
 standard catalog, so a Well Rested force that would become Exhausted has no status instead.
-Effect text is display-only; the app does not resolve tabletop modifiers. Named effect
-keys can refuse a status: `Undead` and `CalledByTheRelic` never any named force status;
-`BringersOfThePlague` never Diseased or Well Rested; `ToughGuts` never Diseased.
+Effect text is display-only; the app does not resolve tabletop modifiers. Immunities are
+configured on each catalog status. Empty immunity lists keep the older special-rule refusals.
 
 Named Diseased keeps engine behavior only for contagion, rejoin, plague-bearing wins, and immunity.
 Water occupancy, a fought defeat on Water, surrender after two consecutive Water actions, and
@@ -588,10 +615,30 @@ Player-submittable actions in an open action window are listed in this order:
   no force of that faction holds an item. Only the final destination is claimed. When several
   routes exist, the player names the territory to move through. An enemy on an intermediate
   territory stops the force there; allies do not. A Move cannot land on a spawn. `ConduitsOfPower`
-  can add destinations after a relic is involved.
-- `Teleport`: available while holding an item that grants teleport. A random empty-non-spawn
-  effect picks an unoccupied non-spawn territory at resolution. A once-per-round chosen-non-spawn
-  effect lets the player pick any non-spawn territory, including occupied land, once each round.
+  can add destinations after a relic is involved. A force that holds an unopened item objective
+  may drop that item at the start of a Move; the player must choose to drop it. Opened or
+  already-interacted items cannot be dropped this way. The public log records
+  `{player}'s force dropped {item} at {territory}.` before that force's move. Any other force
+  that later occupies the territory alone and is not in battle picks the item up.
+- `Teleport Randomly`: available while holding an item that grants a random teleport. The first
+  action phase locks the force into teleporting (it auto-Holds). After that phase the app
+  secretly chooses a Neutral or allied non-spawn territory with no open battle and no enemy
+  occupants. The public log records `{player}'s force at {territory} is preparing to teleport
+  to a random location.` The following action phase auto-resolves the teleport to that
+  destination. A friendly force that enters the destination during the teleport does not cancel
+  it. The teleport fails and the force stays at its original territory if an enemy occupies the
+  source or destination in either phase, or if an allied force backstabs the teleporter at the
+  source in either phase.
+- `Teleport to Specific Territory`: available while holding an item that grants a chosen
+  teleport and the ability is recharged. The player picks any non-spawn territory that currently
+  has no enemy occupants (enemy-owned empty land is allowed). The teleport happens in the same
+  action phase. The ability then recharges for 3 action phases; each Hold during recharge
+  reduces the remaining wait by one extra phase, to a minimum of 0. If an enemy occupies the
+  source or destination of that teleport, the action is canceled, the force stays at the source
+  (and may be locked in battle), and is Exhausted. After either teleport succeeds or fails as
+  a completed special action, the force gains Exhausted unless a higher-priority status applies
+  or Exhausted is canceled by Well Rested. Each teleport effect may also configure a status
+  granted on success and a status granted on failure.
 - `Build`: create an allowed structure in a non-spawn territory that has no intact structure.
   Only structure types flagged buildable may be chosen. Town, Capital City, City, and Castle
   start not buildable; Supply Depot and Fortification start buildable.
@@ -624,7 +671,7 @@ Player-submittable actions in an open action window are listed in this order:
 Battle-phase and system actions:
 
 - `Retreat`: move a losing/withdrawing force to a territory the force owns, a territory owned by
-  a current ally, or a Neutral territory it can reach with its movement speed without meeting
+  a current ally, or a Neutral territory, each reachable with its movement speed without meeting
   enemies or crossing a territory that has a battle, otherwise to spawn. An allied force already
   in the destination is allowed. Players submit retreat after a battle, not during an action
   window, except as part of surrender. `ArtOfWar` may retreat into any non-enemy-spawn territory
@@ -632,10 +679,11 @@ Battle-phase and system actions:
 - `Surrender`: while a force is engaged, during an action or battle window, choose a retreat
   destination on the map and commit it from the map toolbar, the same way Action-phase orders
   and post-battle retreats commit. Clicking your force shows Surrender. A committed surrender
-  cannot be withdrawn. A surrender left in draft still executes when the window ends. The
-  remaining player does not agree to a result: they are awarded maximum differential battle
-  points and the surrendering player is awarded 0. Voluntary surrender is not a missed-result
-  delinquency for either side.
+  may be uncommitted while the current window remains open; uncommitting restores the engagement
+  and the opponent does not keep maximum differential battle points. A surrender left in draft
+  still executes when the window ends. The remaining player does not agree to a result: they are
+  awarded maximum differential battle points and the surrendering player is awarded 0. Voluntary
+  surrender is not a missed-result delinquency for either side.
 - `Battle`: automatic system action created by resolution; players do not submit it directly.
 
 Battle overrides incompatible orders. If Action 1 puts a force in battle, later action slots for
@@ -701,10 +749,10 @@ allowance plus the round bonus, then from the player's temporary pool.
   phase, then commit it the same way they commit Action-phase orders. They may uncommit while the
   battle window that will apply the retreat is still open. Uncommitted retreat drafts are not
   written to the play log. Retreat commit and uncommit live on the map toolbar (the Battles
-  panel keeps the same controls as an accessible alternative). Surrender stays committed and
-  cannot be withdrawn. Eligible
+  panel keeps the same controls as an accessible alternative). A committed surrender may be
+  uncommitted while the current window remains open. Eligible
   destinations are territories the force owns, territories owned by a current ally, and Neutral
-  territories the force can reach with its movement speed along a path that does not meet
+  territories, each reachable with the force's movement speed along a path that does not meet
   enemies or cross a territory that has a battle. The current battlefield and enemy spawns are
   never eligible, and a force cannot retreat onto a hex occupied by an enemy. Friendly
   occupation of the destination is allowed, including an allied force already in Neutral land
@@ -720,9 +768,11 @@ allowance plus the round bonus, then from the player's temporary pool.
   while one is only racing through.
 - Surrender may be committed while engaged during an action or battle window. Click the force
   on the map, choose a destination, then commit from the map toolbar. A committed surrender
-  cannot be uncommitted. Uncommitted action-phase orders may still be uncommitted while the
-  action window is open, even if that player also saved a surrender draft that has not applied
-  yet. In a 1v1 fight the remaining player is clicked through: they win with maximum
+  may be uncommitted while the current window remains open; uncommitting restores the engagement
+  so the opponent does not keep maximum differential battle points. A surrender left in draft
+  still executes when the window ends. Uncommitted action-phase orders may still be uncommitted
+  while the action window is open, even if that player also saved a surrender draft that has not
+  applied yet. In a 1v1 fight the remaining player is clicked through: they win with maximum
   differential battle points (the scoring clamp, default 10) and 0 for the surrenderer, with
   no extra or mission bonus battle points, and without agreeing to a result. That voluntary
   surrender is not a missed-result delinquency for the victor or the surrenderer. In a larger
@@ -967,9 +1017,12 @@ inside the viewport: a fitted map recenters when the panel size changes, and a z
 so the image cannot sit off-screen. Cycle forces walks your forces in roster order. Each press
 selects only that force's territory and zooms as tightly as possible to show the force, its territory,
 and every territory that force can Move or Split into. If that frame cannot be computed, the map
-fits the screen. Your force pins show a green-and-white check emblem half the pin's size, centered
-on the circular pin's top-right edge so half of it overlaps the pin, when that force has a saved
-draft or a committed order.
+fits the screen. Faction force pins have a white glow. Your force pins show a green-and-white
+check emblem half the pin's size, centered on the circular pin's top-right edge so half of it
+overlaps the pin, when that force has a saved draft or a committed order. A held item objective
+uses the same relative size on the top-left edge so half of it overlaps the pin. Both overlays
+stack above the force pin and its glow. An unclaimed item on the map uses the same marker size
+as a structure icon, centered above that structure without overlapping it.
 Hovering the pin names the action and whether it is draft or
 committed. After a Move, Split, or Retreat is drafted or committed, one-way black arrows mark each
 hop from the force's current territory to the destination. Those arrows use the same size and
@@ -1245,9 +1298,13 @@ Item objectives are named catalog items (none, one, or many). Launch placement i
 Placed. Hidden-until-found items are omitted from player play payloads, including location and
 possessor, until found or until staff in an active debug session clicks Reveal hidden
 objectives. Staff in that debug session may see still-hidden items. Once revealed, an item
-stays revealed. A force that Moves or Retreats drops a carried item on the territory it left;
-another force that is alone in that territory and not in battle picks it up. A battle winner
-takes items held by participants or lying in the battle territory; a draw does not transfer
+stays revealed. A force that Moves may drop an unopened carried item on the territory it left when the player
+chooses that drop as part of the Move; another force that is alone in that territory and not in
+battle picks it up. The public log records `{player}'s force at {territory} picked up {item}.`
+when a force takes an unpossessed item. If two or more
+forces occupy a hidden item, or occupy a found item that nobody holds, the item is revealed
+without a possessor. A force may hold more than one item objective. A battle winner
+takes every item held by participants or lying in the battle territory; a draw does not transfer
 them. Items may occupy a spawn territory only when that catalog flag is enabled (off by
 default). The possessing player may resolve one configured choice on a held item. That choice
 applies its only result, or one result picked at random when several are configured. A destroyed
@@ -1256,12 +1313,14 @@ omitted from standings. A replacement item, when configured, appears with the po
 the same territory and uses that catalog type's own flavor, choices, and special rules.
 An item type may also list parameterized effects that apply while a force holds it, including
 several at once: push a defeated opponent to spawn; add movement speed; add or subtract map
-supply (never below 1); teleport to a random empty non-spawn territory; teleport once per round
-to a player-chosen non-spawn territory; inflict a status while held; grant immunity to all or
-listed statuses; inflict statuses on forces sharing the territory; nullify adjacent item
+supply (never below 1); Teleport Randomly to a Neutral or allied non-spawn territory; Teleport
+to Specific Territory with a 3-phase recharge; inflict a status while held; grant immunity to
+all or listed statuses; inflict statuses on forces sharing the territory; nullify adjacent item
 objectives; add army points by amount or percent of the round cap; suspend the holder's ally
 group and/or force extra alliances; or custom display-only battle reminder text that the map
-engine does not execute.
+engine does not execute. Teleport effects may configure a status granted when the special
+action succeeds and a status granted when it fails. Exhausted is also gained after a completed
+teleport succeeds or fails unless a higher-priority status applies or Well Rested cancels it.
 
 ## Corrections
 
@@ -1344,8 +1403,10 @@ voided neither-report fights), and delinquency notices from the third offence on
 Unresolved secret orders, including drafts and unrevealed commitments, are never written to or
 returned in the log. A player may uncommit a committed action draft only while the action window
 is still open; after the window closes, orders resolve and cannot be returned to draft. A player
-may uncommit a committed retreat only while the battle window that will apply it remains open;
-player-chosen retreats are written to the log when that window applies them.
+may uncommit a committed retreat or surrender only while the applying window remains open;
+player-chosen retreats are written to the log when that window applies them. Uncommitting a
+surrender restores the engagement so the opponent does not keep maximum differential battle
+points.
 
 Current members may post chat in this log, including before launch. Chat and
 `@` tags are limited to people who currently belong to the campaign. An unescaped `@` followed
@@ -1399,8 +1460,8 @@ commit orders, submit a battle result, or record a retreat. From the third delin
 onward, campaign managers are notified that a player is a possible kick. Email copies never include hidden
 orders, relics, private chat text, or site-chat bodies; they tell the recipient to sign in and
 open the campaign or All Campaigns. Seeded test accounts never receive email. The home page lists
-campaigns that need attention, then notifications (five per page, dismissable, with dismiss all),
-then site news. When none remain, it shows "No new notifications."
+campaigns that need attention, then notifications (five per page, newest first, with timestamps,
+dismissable, with dismiss all), then site news. When none remain, it shows "No new notifications."
 Profile editing and the public profile live on their own pages. The profile includes a default
 site-chat compose language and a date-and-time display format.
 

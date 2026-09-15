@@ -186,11 +186,12 @@ public static class ItemObjectiveEffectRules
         IReadOnlyList<CampaignItemObjective> items,
         SpecialRuleContext rules)
     {
-        return ActiveEffects(force, map, items, rules)
-            .Any(static effect => effect.Kind == ItemObjectiveEffectKind.TeleportToRandomEmptyNonSpawn);
+        return force.PendingRandomTeleportDestinationId is null
+            && ActiveEffects(force, map, items, rules)
+                .Any(static effect => effect.Kind == ItemObjectiveEffectKind.TeleportToRandomEmptyNonSpawn);
     }
 
-    /// <summary>Returns whether the holder may choose a non-spawn teleport this round.</summary>
+    /// <summary>Returns whether the holder may choose a non-spawn teleport this window.</summary>
     public static bool CanChosenTeleport(
         CampaignForce force,
         PlayMap map,
@@ -198,15 +199,16 @@ public static class ItemObjectiveEffectRules
         SpecialRuleContext rules,
         int roundNumber)
     {
-        if (roundNumber <= 0
-            || force.LastChosenTeleportRound == roundNumber
+        _ = roundNumber;
+        if (force.PendingRandomTeleportDestinationId is not null
+            || force.ChosenTeleportCooldownRemaining > 0
             || !ActiveEffects(force, map, items, rules)
                 .Any(static effect => effect.Kind == ItemObjectiveEffectKind.TeleportToChosenNonSpawnOncePerRound))
         {
             return false;
         }
 
-        return ChosenTeleportDestinations(map, force).Count > 0;
+        return true;
     }
 
     /// <summary>Returns whether the holder may teleport this action window.</summary>
@@ -222,8 +224,7 @@ public static class ItemObjectiveEffectRules
     }
 
     /// <summary>
-    /// Returns whether Teleport is a legal action this window: random empty land, or a chosen
-    /// non-spawn destination that has not been used this round.
+    /// Returns whether Teleport Randomly or Teleport to Specific Territory is a legal action this window.
     /// </summary>
     public static bool HasAvailableTeleport(
         CampaignForce force,
@@ -231,29 +232,59 @@ public static class ItemObjectiveEffectRules
         IReadOnlyList<CampaignItemObjective> items,
         SpecialRuleContext rules,
         IReadOnlyList<CampaignForce> occupyingForces,
-        int roundNumber)
+        int roundNumber,
+        IReadOnlyList<CampaignBattle>? battles = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        IReadOnlyCollection<Guid>? broken = null,
+        IReadOnlyList<AllyBetrayal>? betrayals = null)
     {
         ArgumentNullException.ThrowIfNull(occupyingForces);
-        return (CanRandomTeleport(force, map, items, rules)
-                && TeleportDestinations(map, occupyingForces).Count > 0)
-            || CanChosenTeleport(force, map, items, rules, roundNumber);
+        return force.PendingRandomTeleportDestinationId is not null
+            || (CanRandomTeleport(force, map, items, rules)
+                && TeleportActionRules.RandomDestinations(
+                    map,
+                    force,
+                    occupyingForces,
+                    battles ?? [],
+                    factionAllyGroups ?? new Dictionary<Guid, string?>(),
+                    broken ?? [],
+                    betrayals ?? []).Count > 0)
+            || (CanChosenTeleport(force, map, items, rules, roundNumber)
+                && TeleportActionRules.ChosenDestinations(
+                    map,
+                    force,
+                    occupyingForces,
+                    factionAllyGroups ?? new Dictionary<Guid, string?>(),
+                    broken ?? [],
+                    betrayals ?? []).Count > 0);
     }
 
-    /// <summary>Returns whether a submitted Teleport target is a legal chosen destination this round.</summary>
+    /// <summary>Returns whether a submitted Teleport to Specific Territory target is legal.</summary>
     public static bool IsValidChosenTeleportTarget(
         CampaignForce force,
         PlayMap map,
         IReadOnlyList<CampaignItemObjective> items,
         SpecialRuleContext rules,
         int roundNumber,
-        Guid? targetId)
+        Guid? targetId,
+        IReadOnlyList<CampaignForce>? occupyingForces = null,
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        IReadOnlyCollection<Guid>? broken = null,
+        IReadOnlyList<AllyBetrayal>? betrayals = null)
     {
         return targetId is { } id
             && CanChosenTeleport(force, map, items, rules, roundNumber)
-            && ChosenTeleportDestinations(map, force).Contains(id);
+            && TeleportActionRules.ChosenDestinations(
+                    map,
+                    force,
+                    occupyingForces ?? [],
+                    factionAllyGroups ?? new Dictionary<Guid, string?>(),
+                    broken ?? [],
+                    betrayals ?? [])
+                .Contains(id);
     }
 
-    /// <summary>Empty non-spawn territories with no occupying force.</summary>
+    /// <summary>Empty non-spawn territories with no occupying force. Prefer <see cref="TeleportActionRules.RandomDestinations"/>.</summary>
     public static IReadOnlyList<Guid> TeleportDestinations(
         PlayMap map,
         IReadOnlyList<CampaignForce> forces)
@@ -269,17 +300,18 @@ public static class ItemObjectiveEffectRules
         ];
     }
 
-    /// <summary>Non-spawn territories a chosen teleport may land on, including occupied land.</summary>
+    /// <summary>Non-spawn territories a chosen teleport may land on when no occupant list is supplied.</summary>
     public static IReadOnlyList<Guid> ChosenTeleportDestinations(PlayMap map, CampaignForce force)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(force);
-        return
-        [
-            .. map.Territories
-                .Where(territory => !territory.IsSpawn && territory.Id != force.TerritoryId)
-                .Select(static territory => territory.Id),
-        ];
+        return TeleportActionRules.ChosenDestinations(
+            map,
+            force,
+            [],
+            new Dictionary<Guid, string?>(),
+            [],
+            []);
     }
 
     /// <summary>Picks a teleport destination, or null when none exist.</summary>

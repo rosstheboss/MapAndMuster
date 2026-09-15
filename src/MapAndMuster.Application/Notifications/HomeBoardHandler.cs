@@ -90,7 +90,9 @@ public sealed class GetHomeBoardHandler
         }
 
         return OperationResults.Success<IReadOnlyList<HomeAttentionItem>>(
-            [.. items.OrderByDescending(static item => item.CreatedUtc)]);
+            [.. items
+                .OrderByDescending(static item => item.CreatedUtc)
+                .ThenByDescending(static item => item.Id)]);
     }
 
     internal static IEnumerable<HomeAttentionItem> LiveAttention(

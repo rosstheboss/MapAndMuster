@@ -330,7 +330,8 @@ public static class FactionSpecialRulePolicies
         string statusName,
         SpecialRuleContext rules,
         PlayMap? map = null,
-        IReadOnlyList<CampaignItemObjective>? items = null)
+        IReadOnlyList<CampaignItemObjective>? items = null,
+        IReadOnlyList<ForceStatusSetup>? catalog = null)
     {
         if (map is not null
             && items is not null
@@ -339,7 +340,19 @@ public static class FactionSpecialRulePolicies
             return false;
         }
 
-        if (HasUndeadStatusImmunity(force, rules) && !ForceStatusNames.IsNormal(statusName))
+        if (ForceStatusNames.IsNormal(statusName))
+        {
+            return true;
+        }
+
+        var configured = catalog?.FirstOrDefault(status =>
+            string.Equals(status.Name, statusName, StringComparison.OrdinalIgnoreCase));
+        if (configured is not null && configured.HasConfiguredImmunities)
+        {
+            return !configured.Refuses(force.FactionId, force.Subfaction);
+        }
+
+        if (HasUndeadStatusImmunity(force, rules))
         {
             return false;
         }

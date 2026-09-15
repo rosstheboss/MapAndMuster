@@ -32,6 +32,15 @@ public sealed class ForceStatusInput
     /// <summary>Gets catalog identifiers this status cancels to Normal, when supplied.</summary>
     public IReadOnlyList<Guid>? CancelsStatusIds { get; init; }
 
+    /// <summary>Gets factions that refuse this status, when supplied.</summary>
+    public IReadOnlyList<Guid>? ImmuneFactionIds { get; init; }
+
+    /// <summary>Gets named subfactions that refuse this status, when supplied.</summary>
+    public IReadOnlyList<ForceStatusImmuneSubfactionInput>? ImmuneSubfactions { get; init; }
+
+    /// <summary>Gets whether an existing chit or token image should be removed.</summary>
+    public bool ClearTokenImage { get; init; }
+
     /// <summary>Gets how many times in a row a single enable trigger must match, when supplied.</summary>
     public int? EnableOccurrences { get; init; }
 
@@ -67,4 +76,22 @@ public sealed class ForceStatusConditionInput
     /// OccupyingWithSpecifiedStatus.
     /// </summary>
     public Guid? RequiredStatusId { get; init; }
+
+    /// <summary>
+    /// Gets the standard battle-result question that must be achieved when the trigger is
+    /// StandardBattleResultQuestion.
+    /// </summary>
+    public Guid? RequiredQuestionId { get; init; }
+}
+
+/// <summary>
+/// A named subfaction that refuses a catalog force status.
+/// </summary>
+public sealed class ForceStatusImmuneSubfactionInput
+{
+    /// <summary>Gets the parent faction.</summary>
+    public Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction name.</summary>
+    public string? Subfaction { get; init; }
 }

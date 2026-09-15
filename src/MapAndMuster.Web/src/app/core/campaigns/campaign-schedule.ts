@@ -113,6 +113,16 @@ export function forceStatusLabel(status: string | null | undefined): string {
   return name;
 }
 
+const ACTION_KIND_LABELS: Readonly<Record<string, string>> = {
+  TeleportRandomly: 'Teleport Randomly',
+  TeleportToSpecificTerritory: 'Teleport to Specific Territory',
+  Teleport: 'Teleport',
+};
+
+export function actionKindLabel(kind: string): string {
+  return ACTION_KIND_LABELS[kind] ?? humanizeEnum(kind);
+}
+
 function humanizeEnum(value: string): string {
   return value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
 }

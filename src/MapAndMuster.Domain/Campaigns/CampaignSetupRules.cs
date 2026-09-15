@@ -433,7 +433,9 @@ public static class CampaignSetupRules
             parsedTerrain,
             parsedStructures,
             parsedTerrainTags,
-            parsedStructureTags);
+            parsedStructureTags,
+            parsedStandardQuestions,
+            parsedFactions);
         var structureTypeIds = parsedStructures.Select(static type => type.Id).ToHashSet();
         var knownItemObjectiveTypeIds = (itemObjectiveTypes ?? [])
             .Select(static item => item.Id)
@@ -2754,7 +2756,9 @@ public static class CampaignSetupRules
         IReadOnlyList<TerrainTypeSetup> terrainTypes,
         IReadOnlyList<StructureTypeSetup> structureTypes,
         IReadOnlyList<CatalogTag> terrainTags,
-        IReadOnlyList<CatalogTag> structureTags)
+        IReadOnlyList<CatalogTag> structureTags,
+        IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
+        IReadOnlyList<FactionSetup> factions)
     {
         var supplied = forceStatuses ?? [];
         var parsed = new List<ForceStatusSetup>();
@@ -2767,7 +2771,7 @@ public static class CampaignSetupRules
             return parsed;
         }
 
-        var drafts = new List<(int Index, Guid Id, string Name, string Effects, IReadOnlyList<ForceStatusEnableCondition> Enables, IReadOnlyList<ForceStatusClearCondition> Clears, int? Priority, IReadOnlyList<Guid> Cancels)>();
+        var drafts = new List<(int Index, Guid Id, string Name, string Effects, IReadOnlyList<ForceStatusEnableCondition> Enables, IReadOnlyList<ForceStatusClearCondition> Clears, int? Priority, IReadOnlyList<Guid> Cancels, IReadOnlyList<Guid> ImmuneFactions, IReadOnlyList<ForceStatusImmuneSubfaction> ImmuneSubfactions, bool ClearTokenImage)>();
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < supplied.Count; index++)
         {
@@ -2813,8 +2817,8 @@ public static class CampaignSetupRules
                 structureTypes,
                 terrainTags,
                 structureTags);
-            var enables = ParseEnableConditions(input, index, usedIds, locationCatalog, errors);
-            var clears = ParseClearConditions(input, index, usedIds, locationCatalog, errors);
+            var enables = ParseEnableConditions(input, index, usedIds, locationCatalog, standardQuestions, errors);
+            var clears = ParseClearConditions(input, index, usedIds, locationCatalog, standardQuestions, errors);
             if (enables is null || clears is null)
             {
                 continue;
@@ -2858,7 +2862,10 @@ public static class CampaignSetupRules
                 collapsedEnables,
                 collapsedClears,
                 priority,
-                input.CancelsStatusIds ?? []));
+                input.CancelsStatusIds ?? [],
+                ParseImmuneFactionIds(input.ImmuneFactionIds, factions, index, errors),
+                ParseImmuneSubfactions(input.ImmuneSubfactions, factions, index, errors),
+                input.ClearTokenImage));
         }
 
         var usedPriorities = drafts
@@ -2877,6 +2884,7 @@ public static class CampaignSetupRules
             }
         }
 
+        var knownQuestionIds = standardQuestions.Select(static question => question.Id).ToHashSet();
         var knownIds = drafts.Select(static draft => draft.Id).ToHashSet();
         foreach (var draft in drafts)
         {
@@ -2886,6 +2894,13 @@ public static class CampaignSetupRules
                 knownIds,
                 draft.Index,
                 errors);
+            ValidateQuestionReferences(
+                draft.Enables,
+                draft.Clears,
+                knownQuestionIds,
+                draft.Index,
+                errors);
+            ValidateAccessLocations(draft.Enables, draft.Clears, draft.Index, errors);
         }
 
         foreach (var draft in drafts)
@@ -2933,7 +2948,97 @@ public static class CampaignSetupRules
                 draft.Enables,
                 draft.Clears,
                 priority,
-                cancels));
+                cancels,
+                draft.ImmuneFactions,
+                draft.ImmuneSubfactions,
+                draft.ClearTokenImage));
+        }
+
+        return parsed;
+    }
+
+    private static List<Guid> ParseImmuneFactionIds(
+        IReadOnlyList<Guid>? listed,
+        IReadOnlyList<FactionSetup> factions,
+        int statusIndex,
+        List<DomainError> errors)
+    {
+        if (listed is null || listed.Count == 0)
+        {
+            return [];
+        }
+
+        var known = factions.Select(static faction => faction.Id).ToHashSet();
+        var parsed = new List<Guid>();
+        foreach (var factionId in listed.Where(static id => id != Guid.Empty).Distinct())
+        {
+            if (!known.Contains(factionId))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.immuneFaction.unknown",
+                    "Immune factions must be factions in this campaign.",
+                    $"forceStatuses[{statusIndex}].immuneFactionIds"));
+                continue;
+            }
+
+            parsed.Add(factionId);
+        }
+
+        return parsed;
+    }
+
+    private static List<ForceStatusImmuneSubfaction> ParseImmuneSubfactions(
+        IReadOnlyList<ForceStatusImmuneSubfactionInput>? listed,
+        IReadOnlyList<FactionSetup> factions,
+        int statusIndex,
+        List<DomainError> errors)
+    {
+        if (listed is null || listed.Count == 0)
+        {
+            return [];
+        }
+
+        var byId = factions.ToDictionary(static faction => faction.Id);
+        var parsed = new List<ForceStatusImmuneSubfaction>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < listed.Count; index++)
+        {
+            var item = listed[index];
+            if (item.FactionId == Guid.Empty || string.IsNullOrWhiteSpace(item.Subfaction))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.immuneSubfaction.invalid",
+                    "Immune subfactions need a faction and a subfaction name.",
+                    $"forceStatuses[{statusIndex}].immuneSubfactions[{index}]"));
+                continue;
+            }
+
+            if (!byId.TryGetValue(item.FactionId, out var faction))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.immuneSubfaction.unknown",
+                    "Immune subfactions must belong to a faction in this campaign.",
+                    $"forceStatuses[{statusIndex}].immuneSubfactions[{index}]"));
+                continue;
+            }
+
+            var name = item.Subfaction.Trim();
+            if (!faction.Subfactions.Any(subfaction => string.Equals(subfaction, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.immuneSubfaction.unknown",
+                    "Immune subfactions must match a named subfaction on that faction.",
+                    $"forceStatuses[{statusIndex}].immuneSubfactions[{index}]"));
+                continue;
+            }
+
+            var key = $"{item.FactionId:N}:{name}";
+            if (!seen.Add(key))
+            {
+                continue;
+            }
+
+            parsed.Add(new ForceStatusImmuneSubfaction(item.FactionId, name));
         }
 
         return parsed;
@@ -2944,6 +3049,7 @@ public static class CampaignSetupRules
         int index,
         HashSet<Guid> usedIds,
         ForceStatusLocationCatalog catalog,
+        IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
         List<DomainError> errors)
     {
         if (input.EnableConditions is { Count: > 0 } listed)
@@ -2980,12 +3086,24 @@ public static class CampaignSetupRules
                     $"forceStatuses[{index}].enableConditions[{item}]",
                     catalog,
                     errors);
+                location = NormalizeAccessLocation(trigger, location);
                 if (!TryParseRequiredStatusId(
                         trigger == ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus,
                         listed[item].RequiredStatusId,
                         $"forceStatuses[{index}].enableConditions[{item}].requiredStatusId",
                         errors,
                         out var requiredStatusId))
+                {
+                    return null;
+                }
+
+                if (!TryParseRequiredQuestionId(
+                        ForceStatusTriggerKinds.RequiresQuestion(trigger),
+                        listed[item].RequiredQuestionId,
+                        standardQuestions,
+                        $"forceStatuses[{index}].enableConditions[{item}].requiredQuestionId",
+                        errors,
+                        out var requiredQuestionId))
                 {
                     return null;
                 }
@@ -2997,7 +3115,8 @@ public static class CampaignSetupRules
                     location,
                     usedIds,
                     catalog,
-                    requiredStatusId));
+                    requiredStatusId,
+                    requiredQuestionId));
             }
 
             return parsed.Count == 0 ? null : parsed;
@@ -3035,6 +3154,7 @@ public static class CampaignSetupRules
         int index,
         HashSet<Guid> usedIds,
         ForceStatusLocationCatalog catalog,
+        IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
         List<DomainError> errors)
     {
         if (input.ClearConditions is { Count: > 0 } listed)
@@ -3071,12 +3191,24 @@ public static class CampaignSetupRules
                     $"forceStatuses[{index}].clearConditions[{item}]",
                     catalog,
                     errors);
+                location = NormalizeAccessLocation(trigger, location);
                 if (!TryParseRequiredStatusId(
                         trigger == ForceStatusClearTrigger.OccupyingWithSpecifiedStatus,
                         listed[item].RequiredStatusId,
                         $"forceStatuses[{index}].clearConditions[{item}].requiredStatusId",
                         errors,
                         out var requiredStatusId))
+                {
+                    return null;
+                }
+
+                if (!TryParseRequiredQuestionId(
+                        ForceStatusTriggerKinds.RequiresQuestion(trigger),
+                        listed[item].RequiredQuestionId,
+                        standardQuestions,
+                        $"forceStatuses[{index}].clearConditions[{item}].requiredQuestionId",
+                        errors,
+                        out var requiredQuestionId))
                 {
                     return null;
                 }
@@ -3088,7 +3220,8 @@ public static class CampaignSetupRules
                     location,
                     usedIds,
                     catalog,
-                    requiredStatusId));
+                    requiredStatusId,
+                    requiredQuestionId));
             }
 
             return parsed.Count == 0 ? null : parsed;
@@ -3196,7 +3329,8 @@ public static class CampaignSetupRules
         ConditionLocation location,
         HashSet<Guid> usedIds,
         ForceStatusLocationCatalog catalog,
-        Guid? requiredStatusId = null)
+        Guid? requiredStatusId = null,
+        Guid? requiredQuestionId = null)
     {
         var water = catalog.WaterTagId == Guid.Empty
             ? location
@@ -3230,7 +3364,8 @@ public static class CampaignSetupRules
                 occurrences,
                 ResolveId(id, usedIds, "forceStatuses.condition.id", []),
                 location,
-                requiredStatusId),
+                requiredStatusId,
+                requiredQuestionId),
         ];
     }
 
@@ -3241,7 +3376,8 @@ public static class CampaignSetupRules
         ConditionLocation location,
         HashSet<Guid> usedIds,
         ForceStatusLocationCatalog catalog,
-        Guid? requiredStatusId = null)
+        Guid? requiredStatusId = null,
+        Guid? requiredQuestionId = null)
     {
         if (trigger == ForceStatusClearTrigger.HoldAtSettlement)
         {
@@ -3287,7 +3423,8 @@ public static class CampaignSetupRules
                 occurrences,
                 ResolveId(id, usedIds, "forceStatuses.condition.id", []),
                 location,
-                requiredStatusId),
+                requiredStatusId,
+                requiredQuestionId),
         ];
     }
 
@@ -3314,6 +3451,135 @@ public static class CampaignSetupRules
         }
 
         return true;
+    }
+
+    private static bool TryParseRequiredQuestionId(
+        bool required,
+        Guid? supplied,
+        IReadOnlyList<StandardBattleResultQuestionSetup> standardQuestions,
+        string field,
+        List<DomainError> errors,
+        out Guid? requiredQuestionId)
+    {
+        requiredQuestionId = supplied is { } id && id != Guid.Empty ? id : null;
+        if (required && requiredQuestionId is null)
+        {
+            errors.Add(new DomainError(
+                "forceStatuses.requiredQuestionId.required",
+                "Choose which standard battle result question must be achieved.",
+                field));
+            return false;
+        }
+
+        if (!required)
+        {
+            requiredQuestionId = null;
+            return true;
+        }
+
+        if (requiredQuestionId is not { } questionId
+            || !standardQuestions.Any(question => question.Id == questionId))
+        {
+            errors.Add(new DomainError(
+                "forceStatuses.requiredQuestionId.unknown",
+                "Choose a standard battle result question from this campaign.",
+                field));
+            return false;
+        }
+
+        return true;
+    }
+
+    private static ConditionLocation NormalizeAccessLocation(ForceStatusEnableTrigger trigger, ConditionLocation location)
+    {
+        return ForceStatusTriggerKinds.IsSpawnAccess(trigger) ? ConditionLocation.Any : location;
+    }
+
+    private static ConditionLocation NormalizeAccessLocation(ForceStatusClearTrigger trigger, ConditionLocation location)
+    {
+        return ForceStatusTriggerKinds.IsSpawnAccess(trigger) ? ConditionLocation.Any : location;
+    }
+
+    private static void ValidateQuestionReferences(
+        IReadOnlyList<ForceStatusEnableCondition> enables,
+        IReadOnlyList<ForceStatusClearCondition> clears,
+        HashSet<Guid> knownQuestionIds,
+        int index,
+        List<DomainError> errors)
+    {
+        for (var item = 0; item < enables.Count; item++)
+        {
+            if (!ForceStatusTriggerKinds.RequiresQuestion(enables[item].Trigger))
+            {
+                continue;
+            }
+
+            if (enables[item].RequiredQuestionId is not { } required || !knownQuestionIds.Contains(required))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.requiredQuestionId.unknown",
+                    "Choose a standard battle result question from this campaign.",
+                    $"forceStatuses[{index}].enableConditions[{item}].requiredQuestionId"));
+            }
+        }
+
+        for (var item = 0; item < clears.Count; item++)
+        {
+            if (!ForceStatusTriggerKinds.RequiresQuestion(clears[item].Trigger))
+            {
+                continue;
+            }
+
+            if (clears[item].RequiredQuestionId is not { } required || !knownQuestionIds.Contains(required))
+            {
+                errors.Add(new DomainError(
+                    "forceStatuses.requiredQuestionId.unknown",
+                    "Choose a standard battle result question from this campaign.",
+                    $"forceStatuses[{index}].clearConditions[{item}].requiredQuestionId"));
+            }
+        }
+    }
+
+    private static void ValidateAccessLocations(
+        IReadOnlyList<ForceStatusEnableCondition> enables,
+        IReadOnlyList<ForceStatusClearCondition> clears,
+        int index,
+        List<DomainError> errors)
+    {
+        for (var item = 0; item < enables.Count; item++)
+        {
+            if (!ForceStatusTriggerKinds.IsStructureAccess(enables[item].Trigger)
+                || IsStructureAccessLocation(enables[item].Location))
+            {
+                continue;
+            }
+
+            errors.Add(new DomainError(
+                "forceStatuses.location.structure",
+                "Cut-off and reunion structure conditions must use any structure, a structure type, or a structure tag.",
+                $"forceStatuses[{index}].enableConditions[{item}].locationKind"));
+        }
+
+        for (var item = 0; item < clears.Count; item++)
+        {
+            if (!ForceStatusTriggerKinds.IsStructureAccess(clears[item].Trigger)
+                || IsStructureAccessLocation(clears[item].Location))
+            {
+                continue;
+            }
+
+            errors.Add(new DomainError(
+                "forceStatuses.location.structure",
+                "Cut-off and reunion structure conditions must use any structure, a structure type, or a structure tag.",
+                $"forceStatuses[{index}].clearConditions[{item}].locationKind"));
+        }
+    }
+
+    private static bool IsStructureAccessLocation(ConditionLocation location)
+    {
+        return location.Kind is ConditionLocationKind.Any
+            or ConditionLocationKind.StructureType
+            or ConditionLocationKind.StructureTag;
     }
 
     private static void ValidateOccupyingStatusReferences(
@@ -4198,7 +4464,23 @@ public static class CampaignSetupRules
                         .Where(static target => target.FactionId != Guid.Empty)
                         .Select(static target => new ItemObjectiveAllianceTarget(target.FactionId, target.Subfaction)),
                 ],
-                customText));
+                customText,
+                ParseOptionalStatusId(
+                    input.SuccessStatusTypeId,
+                    knownForceStatusTypeIds,
+                    kind is ItemObjectiveEffectKind.TeleportToRandomEmptyNonSpawn
+                        or ItemObjectiveEffectKind.TeleportToChosenNonSpawnOncePerRound,
+                    $"itemObjectiveTypes[{itemIndex}].effects[{index}].successStatusTypeId",
+                    $"Item objective {itemIndex + 1} effect {index + 1} success status",
+                    errors),
+                ParseOptionalStatusId(
+                    input.FailureStatusTypeId,
+                    knownForceStatusTypeIds,
+                    kind is ItemObjectiveEffectKind.TeleportToRandomEmptyNonSpawn
+                        or ItemObjectiveEffectKind.TeleportToChosenNonSpawnOncePerRound,
+                    $"itemObjectiveTypes[{itemIndex}].effects[{index}].failureStatusTypeId",
+                    $"Item objective {itemIndex + 1} effect {index + 1} failure status",
+                    errors)));
         }
 
         return parsed;
@@ -4398,6 +4680,28 @@ public static class CampaignSetupRules
         }
 
         return trimmed;
+    }
+
+    private static Guid? ParseOptionalStatusId(
+        Guid? statusId,
+        HashSet<Guid> knownForceStatusTypeIds,
+        bool allowed,
+        string field,
+        string label,
+        List<DomainError> errors)
+    {
+        if (statusId is not { } id || id == Guid.Empty)
+        {
+            return null;
+        }
+
+        if (!allowed || !knownForceStatusTypeIds.Contains(id))
+        {
+            errors.Add(new DomainError($"{field}.invalid", $"{label} must be a catalog force status.", field));
+            return null;
+        }
+
+        return id;
     }
 
     private sealed class MissionIndex

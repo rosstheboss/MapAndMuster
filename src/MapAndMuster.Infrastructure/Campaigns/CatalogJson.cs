@@ -666,6 +666,8 @@ internal static class CatalogJson
                 }),
             ],
             CustomText = effect.CustomText,
+            SuccessStatusTypeId = effect.SuccessStatusTypeId,
+            FailureStatusTypeId = effect.FailureStatusTypeId,
         };
     }
 
@@ -717,6 +719,16 @@ internal static class CatalogJson
             ClearConditions = ToConditionDocuments(status.ClearConditions, status.ClearTrigger, status.ClearOccurrences),
             Priority = status.Priority,
             CancelsStatusIds = [.. status.CancelsStatusIds],
+            ImmuneFactionIds = [.. status.ImmuneFactionIds],
+            ImmuneSubfactions =
+            [
+                .. status.ImmuneSubfactions.Select(static item => new ForceStatusImmuneSubfactionDocument
+                {
+                    FactionId = item.FactionId,
+                    Subfaction = item.Subfaction,
+                }),
+            ],
+            TokenImageStorageKey = status.TokenImageStorageKey,
             EnableOccurrences = status.EnableOccurrences,
             ClearOccurrences = status.ClearOccurrences,
         };
@@ -740,6 +752,7 @@ internal static class CatalogJson
                     LocationTypeId = condition.LocationTypeId,
                     LocationTagId = condition.LocationTagId,
                     RequiredStatusId = condition.RequiredStatusId,
+                    RequiredQuestionId = condition.RequiredQuestionId,
                 }),
             ];
         }
@@ -780,6 +793,7 @@ internal static class CatalogJson
                     LocationTypeId = condition.LocationTypeId,
                     LocationTagId = condition.LocationTagId,
                     RequiredStatusId = condition.RequiredStatusId,
+                    RequiredQuestionId = condition.RequiredQuestionId,
                 }),
             ];
         }
@@ -882,6 +896,8 @@ internal static class CatalogJson
                 }),
             ],
             CustomText = effect.CustomText,
+            SuccessStatusTypeId = effect.SuccessStatusTypeId,
+            FailureStatusTypeId = effect.FailureStatusTypeId,
         };
     }
 
@@ -933,9 +949,32 @@ internal static class CatalogJson
             ClearConditions = FromConditionDocuments(status.ClearConditions, status.ClearTrigger, status.ClearOccurrences),
             Priority = status.Priority ?? -1,
             CancelsStatusIds = status.CancelsStatusIds ?? [],
+            ImmuneFactionIds = status.ImmuneFactionIds ?? [],
+            ImmuneSubfactions = FromImmuneSubfactionDocuments(status.ImmuneSubfactions),
+            TokenImageStorageKey = status.TokenImageStorageKey,
             EnableOccurrences = ForceStatusOccurrences.Normalize(status.EnableOccurrences),
             ClearOccurrences = ForceStatusOccurrences.Normalize(status.ClearOccurrences),
         };
+    }
+
+    private static IReadOnlyList<StoredForceStatusImmuneSubfaction> FromImmuneSubfactionDocuments(
+        List<ForceStatusImmuneSubfactionDocument>? listed)
+    {
+        if (listed is null || listed.Count == 0)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. listed
+                .Where(static item => item.FactionId != Guid.Empty && !string.IsNullOrWhiteSpace(item.Subfaction))
+                .Select(static item => new StoredForceStatusImmuneSubfaction
+                {
+                    FactionId = item.FactionId,
+                    Subfaction = item.Subfaction.Trim(),
+                }),
+        ];
     }
 
     private static StoredForceStatus[] NormalizeForceStatuses(IEnumerable<StoredForceStatus> statuses)
@@ -963,6 +1002,9 @@ internal static class CatalogJson
                     .Where(id => id != status.Id && knownIds.Contains(id))
                     .Distinct(),
             ],
+            ImmuneFactionIds = status.ImmuneFactionIds,
+            ImmuneSubfactions = status.ImmuneSubfactions,
+            TokenImageStorageKey = status.TokenImageStorageKey,
             EnableOccurrences = ForceStatusOccurrences.Normalize(status.EnableOccurrences),
             ClearOccurrences = ForceStatusOccurrences.Normalize(status.ClearOccurrences),
         }).ToArray();
@@ -987,6 +1029,9 @@ internal static class CatalogJson
                 ClearConditions = status.ClearConditions,
                 Priority = index,
                 CancelsStatusIds = status.CancelsStatusIds,
+                ImmuneFactionIds = status.ImmuneFactionIds,
+                ImmuneSubfactions = status.ImmuneSubfactions,
+                TokenImageStorageKey = status.TokenImageStorageKey,
                 EnableOccurrences = status.EnableOccurrences,
                 ClearOccurrences = status.ClearOccurrences,
             }),
@@ -1437,6 +1482,10 @@ internal static class CatalogJson
         public List<ItemAllianceTargetDocument>? AlliedFactions { get; set; }
 
         public string? CustomText { get; set; }
+
+        public Guid? SuccessStatusTypeId { get; set; }
+
+        public Guid? FailureStatusTypeId { get; set; }
     }
 
     private sealed class ItemAllianceTargetDocument
@@ -1597,6 +1646,12 @@ internal static class CatalogJson
 
         public List<Guid>? CancelsStatusIds { get; set; }
 
+        public List<Guid>? ImmuneFactionIds { get; set; }
+
+        public List<ForceStatusImmuneSubfactionDocument>? ImmuneSubfactions { get; set; }
+
+        public string? TokenImageStorageKey { get; set; }
+
         public List<ForceStatusConditionDocument>? EnableConditions { get; set; }
 
         public List<ForceStatusConditionDocument>? ClearConditions { get; set; }
@@ -1604,6 +1659,13 @@ internal static class CatalogJson
         public int? EnableOccurrences { get; set; }
 
         public int? ClearOccurrences { get; set; }
+    }
+
+    private sealed class ForceStatusImmuneSubfactionDocument
+    {
+        public Guid FactionId { get; set; }
+
+        public string Subfaction { get; set; } = string.Empty;
     }
 
     private sealed class ForceStatusConditionDocument
@@ -1621,6 +1683,8 @@ internal static class CatalogJson
         public Guid? LocationTagId { get; set; }
 
         public Guid? RequiredStatusId { get; set; }
+
+        public Guid? RequiredQuestionId { get; set; }
     }
 
     private sealed class PrivateObjectiveDocument

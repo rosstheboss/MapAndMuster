@@ -207,6 +207,16 @@ public static class CampaignMapper
                 CancelsStatusIds = status.CancelsStatusIds,
                 EnableOccurrences = status.EnableOccurrences,
                 ClearOccurrences = status.ClearOccurrences,
+                ImmuneFactionIds = status.ImmuneFactionIds,
+                ImmuneSubfactions =
+                [
+                    .. status.ImmuneSubfactions.Select(static item => new ForceStatusImmuneSubfactionDetail
+                    {
+                        FactionId = item.FactionId,
+                        Subfaction = item.Subfaction,
+                    }),
+                ],
+                HasTokenImage = !string.IsNullOrWhiteSpace(status.TokenImageStorageKey),
             })],
             PrivateObjectiveTypes = VisiblePrivateTypes(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed, membership?.Subfaction),
             PrivateObjectives = VisiblePrivateAssignments(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed, membership?.Subfaction),
@@ -417,6 +427,8 @@ public static class CampaignMapper
                         }),
                     ],
                     CustomText = effect.CustomText,
+                    SuccessStatusTypeId = effect.SuccessStatusTypeId,
+                    FailureStatusTypeId = effect.FailureStatusTypeId,
                 }),
             ],
         };
@@ -869,6 +881,7 @@ public static class CampaignMapper
                     LocationTypeId = condition.LocationTypeId,
                     LocationTagId = condition.LocationTagId,
                     RequiredStatusId = condition.RequiredStatusId,
+                    RequiredQuestionId = condition.RequiredQuestionId,
                 }),
             ];
         }

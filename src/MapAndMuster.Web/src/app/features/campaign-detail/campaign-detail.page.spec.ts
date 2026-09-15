@@ -937,6 +937,107 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
+  it('lists a held item and its powers in Summary and places Item objectives under that panel', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      factionId: '1',
+      canChooseFaction: false,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      itemObjectiveTypes: [
+        {
+          id: 'crown',
+          name: 'Crown',
+          isHiddenUntilFound: false,
+          placement: 'Random',
+          allowOnSpawn: false,
+          effects: [{ id: 'e1', kind: 'TeleportToChosenNonSpawnOncePerRound', amount: 0 }],
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [
+        {
+          id: 't1',
+          displayNumber: 1,
+          name: 'Coast',
+          description: null,
+          polygon: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.4, y: 0.1 },
+            { x: 0.4, y: 0.4 },
+            { x: 0.1, y: 0.4 },
+          ],
+          terrainTypeId: null,
+          structureTypeId: null,
+          structureCondition: 'Operational',
+          overlayColor: null,
+          ownerFactionId: '1',
+        },
+      ],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: false,
+            moveTargets: ['t2'],
+            availableActions: ['Hold', 'Move', 'Teleport'],
+            canChooseTeleportDestination: true,
+          },
+        ],
+        itemObjectives: [
+          {
+            id: 'item-1',
+            typeId: 'crown',
+            name: 'Crown',
+            territoryId: null,
+            possessorForceId: 'force-1',
+            isRevealed: true,
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'faction');
+    openSection(fixture, 'itemObjectives');
+    openSection(fixture, 'orders');
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const headings = [...compiled.querySelectorAll('.panel h2')].map((heading) => heading.textContent.trim());
+    expect(headings.indexOf('Summary')).toBeGreaterThanOrEqual(0);
+    expect(headings.indexOf('Item objectives')).toBeGreaterThan(headings.indexOf('Summary'));
+    expect(headings.indexOf('Item objectives')).toBeLessThan(headings.indexOf('Links'));
+    const summaryPanel = [...compiled.querySelectorAll('.panel')].find((panel) =>
+      (panel.querySelector('h2')?.textContent ?? '').includes('Summary'),
+    );
+    expect(summaryPanel?.textContent).toContain('Holding Crown');
+    expect(summaryPanel?.textContent).toContain('Teleport to Specific Territory');
+    const itemPanel = [...compiled.querySelectorAll('.panel')].find((panel) =>
+      (panel.querySelector('h2')?.textContent ?? '').includes('Item objectives'),
+    );
+    expect(itemPanel?.textContent).toContain('Crown');
+    expect(itemPanel?.textContent).toContain('Carried by');
+    expect(compiled.textContent).toContain('Teleport');
+    http.verify();
+  });
+
   it('shows campaign chat before campaign data finishes loading', async () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
@@ -3139,6 +3240,153 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
+  it('labels specified teleport and lets a force drop an unopened item on Move', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: false,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      currentPhaseStartsUtc: '2026-08-14T12:00:00+00:00',
+      currentPhaseEndsUtc: '2026-08-14T12:06:00+00:00',
+      itemObjectiveTypes: [
+        {
+          id: 'crown',
+          name: 'Crown',
+          isHiddenUntilFound: false,
+          placement: 'Random',
+          allowOnSpawn: false,
+          effects: [{ id: 'e1', kind: 'TeleportToChosenNonSpawnOncePerRound', amount: 0 }],
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        hasMap: false,
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: false,
+            moveTargets: ['t2'],
+            availableActions: ['Hold', 'Move', 'TeleportRandomly', 'TeleportToSpecificTerritory'],
+            canChooseTeleportDestination: true,
+            teleportTargets: ['t2'],
+            droppableItemObjectiveIds: ['item-1'],
+          },
+        ],
+        itemObjectives: [
+          {
+            id: 'item-1',
+            typeId: 'crown',
+            name: 'Crown',
+            territoryId: null,
+            possessorForceId: 'force-1',
+            isRevealed: true,
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const options = [...compiled.querySelectorAll('#kind-force-1 option')].map((option) => option.textContent.trim());
+    expect(options).toContain('Teleport Randomly');
+    expect(options).toContain('Teleport to Specific Territory');
+
+    const page = fixture.componentInstance as unknown as {
+      onDraftKind: (forceId: string, kind: string) => void;
+      onDraftTarget: (forceId: string, targetTerritoryId: string) => void;
+      onDraftDropItem: (forceId: string, itemId: string, selected: boolean) => void;
+    };
+    page.onDraftKind('force-1', 'Move');
+    page.onDraftTarget('force-1', 't2');
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Drop Crown');
+    page.onDraftDropItem('force-1', 'item-1', true);
+    fixture.detectChanges();
+    const saveDraft = compiled.querySelector<HTMLButtonElement>('button[aria-label^="Save draft"]');
+    expect(saveDraft).toBeTruthy();
+    saveDraft!.click();
+    const draft = http.expectOne(`/api/campaigns/${campaign.id}/play/draft`);
+    expect(draft.request.body as { kind: string; droppedItemObjectiveIds: string[] }).toEqual(
+      expect.objectContaining({
+        kind: 'Move',
+        droppedItemObjectiveIds: ['item-1'],
+      }),
+    );
+    draft.flush(
+      playState({
+        hasMap: false,
+        revision: 3,
+        myDrafts: [
+          {
+            forceId: 'force-1',
+            kind: 'Move',
+            targetTerritoryId: 't2',
+            structureTypeId: null,
+            droppedItemObjectiveIds: ['item-1'],
+          },
+        ],
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: false,
+            moveTargets: ['t2'],
+            availableActions: ['Hold', 'Move', 'TeleportRandomly', 'TeleportToSpecificTerritory'],
+            droppableItemObjectiveIds: ['item-1'],
+          },
+        ],
+        itemObjectives: [
+          {
+            id: 'item-1',
+            typeId: 'crown',
+            name: 'Crown',
+            territoryId: null,
+            possessorForceId: 'force-1',
+            isRevealed: true,
+          },
+        ],
+      }),
+    );
+    await fixture.whenStable();
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: 3,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Draft: Move');
+    http.verify();
+  });
+
   it('highlights a faction’s territories and forces when that faction is clicked', async () => {
     const fixture = TestBed.createComponent(CampaignDetailPage);
     const http = TestBed.inject(HttpTestingController);
@@ -4758,6 +5006,10 @@ describe('CampaignDetailPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Your retreat is committed.');
+    const retreatOptions = [...compiled.querySelectorAll<HTMLOptionElement>('#retreat-battle-1 option')]
+      .map((option) => option.value)
+      .filter((value) => value.length > 0);
+    expect(retreatOptions).toEqual(['t2', 't3']);
     const uncommit = [...compiled.querySelectorAll('button')].find(
       (button) => button.textContent.trim() === 'Uncommit',
     );
@@ -5112,7 +5364,9 @@ describe('CampaignDetailPage', () => {
     expect(surrender).toBeTruthy();
     surrender!.click();
     fixture.detectChanges();
-    expect(compiled.textContent).toContain('Surrender Windmere to South? This cannot be undone.');
+    expect(compiled.textContent).toContain(
+      'Surrender Windmere to South? You can uncommit while this window stays open.',
+    );
     http.verify();
 
     [...compiled.querySelectorAll('button')]
@@ -5299,6 +5553,147 @@ describe('CampaignDetailPage', () => {
     await pending;
     await fixture.whenStable();
     http.verify();
+  });
+
+  it('lists force statuses collapsed by default on an upcoming campaign', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      forceStatuses: [
+        {
+          id: 'status-diseased',
+          name: 'Diseased',
+          effects: 'Disease effects.',
+          enableTrigger: 'ConsecutiveActions',
+          clearTrigger: 'Hold',
+          immuneFactionIds: ['2'],
+          immuneSubfactions: [{ factionId: '1', subfaction: 'Riders' }],
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [{ ...squareTerritory('t1', 'Coast', 0.1), spawnFactionId: '1', spawnSubfaction: null }],
+      adjacencies: [],
+    });
+    flushPlayUnavailable(http);
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      isOpen: (id: string) => boolean;
+      toggleCatalogStatus: (id: string) => void;
+    };
+    expect(page.isOpen('forceStatusCatalog')).toBe(false);
+    expect(compiled.textContent).toContain('Force statuses');
+    expect(compiled.textContent).not.toContain('Disease effects.');
+    expect(compiled.textContent).not.toContain('North — Riders');
+
+    openSection(fixture, 'forceStatusCatalog');
+    expect(compiled.textContent).not.toContain('Disease effects.');
+
+    page.toggleCatalogStatus('status-diseased');
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Disease effects.');
+    expect(compiled.textContent).toContain('After consecutive action phases');
+    expect(compiled.textContent).toContain('No forces currently have this status.');
+    expect(compiled.textContent).toContain('South');
+    expect(compiled.textContent).toContain('North — Riders');
+  });
+
+  it('lists force statuses collapsed by default with forces, locations, and immunities', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      currentRound: 1,
+      currentPhaseNumber: 1,
+      currentPhaseKind: 'Action',
+      forceStatuses: [
+        {
+          id: 'status-diseased',
+          name: 'Diseased',
+          effects: 'Disease effects.',
+          enableTrigger: 'ConsecutiveActions',
+          clearTrigger: 'Hold',
+          enableConditions: [{ trigger: 'ConsecutiveActions', occurrences: 3, locationKind: 'TerrainTag' }],
+          clearConditions: [{ trigger: 'Hold', occurrences: 1, locationKind: 'StructureType' }],
+          immuneFactionIds: ['2'],
+          immuneSubfactions: [{ factionId: '1', subfaction: 'Riders' }],
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [{ ...squareTerritory('t1', 'Coast', 0.1), spawnFactionId: '1', spawnSubfaction: null }],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        forces: [
+          {
+            id: 'force-1',
+            controllerUserId: 'user-1',
+            controllerUsername: 'northplayer',
+            factionId: '1',
+            territoryId: 't1',
+            isMine: true,
+            inBattle: false,
+            moveTargets: ['t2'],
+            availableActions: ['Hold', 'Move'],
+            statusName: 'Diseased',
+          },
+        ],
+        forceStatuses: [
+          {
+            id: 'status-diseased',
+            name: 'Diseased',
+            effects: 'Disease effects.',
+            enableTrigger: 'ConsecutiveActions',
+            clearTrigger: 'Hold',
+            immuneFactionIds: ['2'],
+            immuneSubfactions: [{ factionId: '1', subfaction: 'Riders' }],
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      isOpen: (id: string) => boolean;
+      toggleCatalogStatus: (id: string) => void;
+    };
+    expect(page.isOpen('forceStatusCatalog')).toBe(false);
+    expect(compiled.textContent).toContain('Force statuses');
+    expect(compiled.textContent).not.toContain('Disease effects.');
+
+    openSection(fixture, 'forceStatusCatalog');
+    expect(compiled.textContent).not.toContain('Disease effects.');
+
+    page.toggleCatalogStatus('status-diseased');
+    fixture.detectChanges();
+    expect(compiled.textContent).toContain('Disease effects.');
+    expect(compiled.textContent).toContain('After consecutive action phases');
+    expect(compiled.textContent).toContain('northplayer');
+    expect(compiled.textContent).toContain('North');
+    expect(compiled.textContent).toContain('Coast');
+    expect(compiled.textContent).toContain('South');
+    expect(compiled.textContent).toContain('North — Riders');
   });
 
   it('offers ringer, player, and draw when reporting a ringer battle', async () => {

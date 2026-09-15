@@ -293,7 +293,12 @@ public static class CampaignPlayRules
         var removedIds = removed.Select(static force => force.Id).ToHashSet();
         var origins = removed.ToDictionary(static force => force.Id, static force => force.TerritoryId);
         var log = new List<PlayLogEntry>();
-        var items = ItemObjectiveRules.DropCarriedByMovers(state.ItemObjectives, origins, utcNow, log);
+        var items = ItemObjectiveRules.DropCarriedByMovers(
+            state.ItemObjectives,
+            origins,
+            utcNow,
+            log,
+            requireUnopened: false);
         var battles = state.Battles
             .Where(battle =>
                 battle.Status is BattleStatus.Finalized or BattleStatus.GMResolved
@@ -525,7 +530,8 @@ public static class CampaignPlayRules
         Guid? viaTerritoryId = null,
         bool destroyImmediately = false,
         SpecialRuleContext? specialRules = null,
-        IReadOnlyList<Guid>? viaPath = null)
+        IReadOnlyList<Guid>? viaPath = null,
+        IReadOnlyList<Guid>? droppedItemObjectiveIds = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -576,37 +582,68 @@ public static class CampaignPlayRules
             }
         }
 
+        if (force.PendingRandomTeleportDestinationId is not null
+            && !TeleportActionRules.IsRandomTeleport(kind, targetTerritoryId))
+        {
+            error = new DomainError(
+                "order.teleport.locked",
+                "This force is already preparing to teleport randomly.",
+                "kind");
+            return false;
+        }
+
         if (kind is ActionKind.Move or ActionKind.Split or ActionKind.Retreat && targetTerritoryId is null)
         {
             error = new DomainError("order.target.required", "Choose a destination territory.", "targetTerritoryId");
             return false;
         }
 
-        if (kind == ActionKind.Teleport)
+        if (TeleportActionRules.IsTeleport(kind))
         {
             var round = window.RoundNumber;
-            if (!ItemObjectiveEffectRules.HasAvailableTeleport(
-                force,
-                map,
-                state.ItemObjectives,
-                rules,
-                state.Forces,
-                round))
+            if (force.PendingRandomTeleportDestinationId is not null)
             {
-                error = new DomainError("order.teleport.invalid", "Teleport is not available for this force.", "kind");
-                return false;
+                if (!TeleportActionRules.IsRandomTeleport(kind, targetTerritoryId))
+                {
+                    error = new DomainError(
+                        "order.teleport.locked",
+                        "This force is already preparing to teleport randomly.",
+                        "kind");
+                    return false;
+                }
             }
-
-            if (ItemObjectiveEffectRules.CanChosenTeleport(force, map, state.ItemObjectives, rules, round)
-                && !ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
+            else if (TeleportActionRules.IsChosenTeleport(kind, targetTerritoryId))
+            {
+                if (!ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
                     force,
                     map,
                     state.ItemObjectives,
                     rules,
                     round,
-                    targetTerritoryId))
+                    targetTerritoryId,
+                    state.Forces,
+                    factionAllyGroups,
+                    state.BrokenAllyFactionIds,
+                    state.AllyBetrayals))
+                {
+                    error = new DomainError(
+                        "order.target.required",
+                        "Choose a non-spawn teleport destination that has no enemy forces.",
+                        "targetTerritoryId");
+                    return false;
+                }
+            }
+            else if (!ItemObjectiveEffectRules.CanRandomTeleport(force, map, state.ItemObjectives, rules)
+                || TeleportActionRules.RandomDestinations(
+                    map,
+                    force,
+                    state.Forces,
+                    state.Battles,
+                    factionAllyGroups,
+                    state.BrokenAllyFactionIds,
+                    state.AllyBetrayals).Count == 0)
             {
-                error = new DomainError("order.target.required", "Choose a non-spawn teleport destination.", "targetTerritoryId");
+                error = new DomainError("order.teleport.invalid", "Teleport Randomly is not available for this force.", "kind");
                 return false;
             }
         }
@@ -732,7 +769,8 @@ public static class CampaignPlayRules
             utcNow,
             viaTerritoryId,
             destroyImmediately,
-            viaPath);
+            viaPath,
+            kind == ActionKind.Move ? droppedItemObjectiveIds : []);
         var drafts = state.Drafts.Where(item => !(item.WindowId == window.Id && item.ForceId == force.Id)).Append(draft).ToArray();
         next = state.With(drafts: drafts);
         return true;
@@ -802,7 +840,8 @@ public static class CampaignPlayRules
                 userId,
                 draft.ViaTerritoryId,
                 draft.DestroyImmediately,
-                draft.ViaPath));
+                draft.ViaPath,
+                draft.DroppedItemObjectiveIds));
         }
 
         var commitments = state.Commitments.Append(new PlayerCommitment(window.Id, userId, utcNow)).ToArray();
@@ -1282,7 +1321,7 @@ public static class CampaignPlayRules
     }
 
     /// <summary>
-    /// Returns a committed retreat to draft while the applying battle window remains open.
+    /// Returns a committed retreat or surrender to draft while the applying window remains open.
     /// </summary>
     public static bool TryUncommitRetreat(
         CampaignPlayState state,
@@ -1313,19 +1352,18 @@ public static class CampaignPlayRules
             return false;
         }
 
-        if (retreat.IsSurrender)
-        {
-            error = new DomainError("surrender.already_committed", "A committed surrender cannot be withdrawn.");
-            return false;
-        }
-
         if (RetreatWindowClosed(state, battle, utcNow))
         {
-            error = new DomainError("retreat.window.closed", "You can uncommit only while the battle window is open.");
+            error = new DomainError(
+                retreat.IsSurrender ? "surrender.window.closed" : "retreat.window.closed",
+                retreat.IsSurrender
+                    ? "You can uncommit only while the current window is open."
+                    : "You can uncommit only while the battle window is open.");
             return false;
         }
 
-        if (map is not null
+        if (!retreat.IsSurrender
+            && map is not null
             && EligibleRetreats(
                 map,
                 force,
@@ -1347,7 +1385,13 @@ public static class CampaignPlayRules
         var retreats = state.Retreats
             .Select(item => item.Id == retreat.Id ? item.With(isCommitted: false) : item)
             .ToArray();
-        next = state.With(retreats: retreats);
+        var nextState = state.With(retreats: retreats);
+        if (retreat.IsSurrender)
+        {
+            nextState = RevertCommittedSurrender(nextState, battle, retreat.ForceId);
+        }
+
+        next = nextState;
         return true;
     }
 
@@ -1365,7 +1409,8 @@ public static class CampaignPlayRules
     }
 
     /// <summary>
-    /// Commits a surrender and retreat while the force is engaged. It cannot be withdrawn.
+    /// Commits a surrender and retreat while the force is engaged. It may be uncommitted while the
+    /// current window remains open.
     /// </summary>
     public static bool TrySubmitSurrender(
         CampaignPlayState state,
@@ -1443,9 +1488,10 @@ public static class CampaignPlayRules
         }
 
         if (battle.SurrenderedForceIds.Contains(force.Id)
-            || state.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == force.Id && item.IsSurrender))
+            || state.Retreats.Any(item =>
+                item.BattleId == battle.Id && item.ForceId == force.Id && item.IsSurrender && item.IsCommitted))
         {
-            error = new DomainError("surrender.already_committed", "A committed surrender cannot be withdrawn.");
+            error = new DomainError("surrender.already_committed", "That force has already committed a surrender.");
             return false;
         }
 
@@ -1471,11 +1517,18 @@ public static class CampaignPlayRules
         error = null;
         var allies = factionAllyGroups ?? new Dictionary<Guid, string?>();
         var scoring = battleScoring ?? BattleScoringSetup.Default;
-        var retreat = new RetreatOrder(Guid.NewGuid(), battle.Id, force.Id, targetTerritoryId, false, utcNow, isSurrender: true);
+        var existing = state.Retreats.FirstOrDefault(item =>
+            item.BattleId == battle.Id && item.ForceId == force.Id && item.IsSurrender);
+        var retreat = existing is null
+            ? new RetreatOrder(Guid.NewGuid(), battle.Id, force.Id, targetTerritoryId, false, utcNow, isSurrender: true)
+            : existing.With(targetTerritoryId, isCommitted: true, submittedUtc: utcNow);
         var surrendered = battle.SurrenderedForceIds.Append(force.Id).Distinct().ToArray();
         var updatedBattle = battle.With(surrenderedForceIds: surrendered);
+        var retreats = existing is null
+            ? state.Retreats.Append(retreat).ToArray()
+            : [.. state.Retreats.Select(item => item.Id == retreat.Id ? retreat : item)];
         var next = state.With(
-                retreats: [.. state.Retreats, retreat],
+                retreats: retreats,
                 battles: ReplaceBattle(state.Battles, updatedBattle))
             .AppendLog(new PlayLogEntry(
                 Guid.NewGuid(),
@@ -1787,10 +1840,10 @@ public static class CampaignPlayRules
     }
 
     /// <summary>
-    /// Eligible player-chosen retreat destinations: owned or allied territories, Neutral
-    /// territories reachable at movement speed without meeting enemies or crossing a battle,
-    /// and Art of War extras. Spawn is added only when none of those destinations exist.
-    /// Friendly occupation of the destination is allowed.
+    /// Eligible player-chosen retreat destinations: owned or allied territories reachable at
+    /// movement speed without meeting enemies or crossing a battle, Neutral territories under the
+    /// same reachability rule, and Art of War extras. Spawn is added only when none of those
+    /// destinations exist. Friendly occupation of the destination is allowed.
     /// </summary>
     public static IReadOnlyList<Guid> EligibleRetreats(
         PlayMap map,
@@ -1837,8 +1890,17 @@ public static class CampaignPlayRules
 
             if (artOfWar || IsStandardRetreatTerritory(territory, force, allies, broken, betrayals))
             {
-                if (territory.OwnerFactionId is null
-                    && !CanReachNeutralRetreat(map, force, territory.Id, speed, others, allies, broken, betrayals, activeBattles))
+                if (!artOfWar
+                    && !CanReachNeutralRetreat(
+                        map,
+                        force,
+                        territory.Id,
+                        speed,
+                        others,
+                        allies,
+                        broken,
+                        betrayals,
+                        activeBattles))
                 {
                     continue;
                 }
@@ -1944,6 +2006,11 @@ public static class CampaignPlayRules
         var opened = windows.First(window => window.Id == windowId);
         var next = state.With(windows: windows);
         next = AppendPhaseChange(next, opened, utcNow);
+        if (opened.Kind == RoundPhaseKind.Action)
+        {
+            next = LockPendingRandomTeleports(next, opened, utcNow);
+        }
+
         if (map is not null)
         {
             next = RivalObjectiveRules.Replenish(
@@ -1991,6 +2058,61 @@ public static class CampaignPlayRules
             null,
             [],
             $"Round {window.RoundNumber} — {phase} phase began."));
+    }
+
+    private static CampaignPlayState LockPendingRandomTeleports(
+        CampaignPlayState state,
+        PhaseWindow window,
+        DateTimeOffset utcNow)
+    {
+        var submissions = state.Submissions.ToList();
+        var drafts = state.Drafts.ToList();
+        foreach (var force in state.Forces.Where(item => item.PendingRandomTeleportDestinationId is not null && !item.InBattle))
+        {
+            if (state.LatestSubmission(window.Id, force.Id) is not null)
+            {
+                continue;
+            }
+
+            drafts.RemoveAll(draft => draft.WindowId == window.Id && draft.ForceId == force.Id);
+            drafts.Add(new OrderDraft(
+                window.Id,
+                force.Id,
+                ActionKind.TeleportRandomly,
+                null,
+                null,
+                utcNow));
+            submissions.Add(new OrderSubmission(
+                Guid.NewGuid(),
+                window.Id,
+                force.Id,
+                ActionKind.TeleportRandomly,
+                null,
+                null,
+                OrderSource.DeadlineDraft,
+                utcNow,
+                force.ControllerUserId));
+        }
+
+        var commitments = state.Commitments.ToList();
+        foreach (var userId in state.Forces.Select(static force => force.ControllerUserId).Distinct())
+        {
+            if (commitments.Any(item => item.WindowId == window.Id && item.UserId == userId))
+            {
+                continue;
+            }
+
+            var unlocked = state.Forces.Any(force =>
+                force.ControllerUserId == userId
+                && !force.InBattle
+                && force.PendingRandomTeleportDestinationId is null);
+            if (!unlocked)
+            {
+                commitments.Add(new PlayerCommitment(window.Id, userId, utcNow));
+            }
+        }
+
+        return state.With(drafts: drafts, submissions: submissions, commitments: commitments);
     }
 
     /// <summary>
@@ -2066,7 +2188,8 @@ public static class CampaignPlayRules
                     force.ControllerUserId,
                     draft.ViaTerritoryId,
                     draft.DestroyImmediately,
-                    draft.ViaPath));
+                    draft.ViaPath,
+                    draft.DroppedItemObjectiveIds));
             }
         }
 
@@ -2114,7 +2237,9 @@ public static class CampaignPlayRules
             forceStatuses,
             specialRules,
             closeAt,
-            snapshot.Forces);
+            snapshot.Forces,
+            map,
+            factionAllyGroups);
         var missing = submissions
             .Where(item => item.WindowId == window.Id && item.Source == OrderSource.DeadlineHold)
             .Select(item => item.ForceId);
@@ -2481,8 +2606,7 @@ public static class CampaignPlayRules
             factionAllyGroups);
         log.AddRange(collisionLog);
         var nextForces = forces.Values.OrderBy(static force => force.Id).ToArray();
-        var items = ItemObjectiveRules.DropCarriedByMovers(state.ItemObjectives, origins, utcNow, log);
-        items = ItemObjectiveRules.PickUpUnpossessed(items, nextForces, utcNow, log);
+        var items = ItemObjectiveRules.PickUpUnpossessed(state.ItemObjectives, nextForces, utcNow, log);
         _ = staying;
         return state.With(forces: nextForces, itemObjectives: items).AppendLog([.. log]);
     }
@@ -3881,7 +4005,9 @@ public static class CampaignPlayRules
         IReadOnlyList<ForceStatusSetup>? statuses,
         SpecialRuleContext? specialRules,
         DateTimeOffset utcNow,
-        IReadOnlyList<CampaignForce>? previousForces = null)
+        IReadOnlyList<CampaignForce>? previousForces = null,
+        PlayMap? previousMap = null,
+        IReadOnlyDictionary<Guid, string?>? allyGroups = null)
     {
         var catalog = statuses ?? [];
         if (catalog.Count == 0)
@@ -3890,6 +4016,9 @@ public static class CampaignPlayRules
         }
 
         var idByName = catalog.ToDictionary(static status => status.Name, static status => status.Id, StringComparer.OrdinalIgnoreCase);
+        var rules = specialRules ?? SpecialRuleContext.None;
+        var groups = allyGroups ?? new Dictionary<Guid, string?>();
+        var broken = state.BrokenAllyFactionIds.ToHashSet();
         var facts = state.Forces.ToDictionary(
             force => force.Id,
             force =>
@@ -3898,6 +4027,23 @@ public static class CampaignPlayRules
                 var kind = state.LatestSubmission(window.Id, force.Id)?.Kind;
                 var destroyed = kind == ActionKind.Pillage && territory?.StructureTypeId is null;
                 var pillaged = kind == ActionKind.Pillage && territory?.StructureCondition == StructureCondition.Pillaged;
+                var access = ForceTerritoryAccessRules.Evaluate(
+                    map,
+                    force,
+                    groups,
+                    broken,
+                    state.AllyBetrayals,
+                    rules);
+                var previousForce = previousForces?.FirstOrDefault(item => item.Id == force.Id);
+                var previousAccess = previousMap is null || previousForce is null
+                    ? access
+                    : ForceTerritoryAccessRules.Evaluate(
+                        previousMap,
+                        previousForce,
+                        groups,
+                        broken,
+                        state.AllyBetrayals,
+                        rules);
                 return ForceStatusRules.FromAction(
                     kind,
                     territory is not null && map.IsWaterFeature(territory),
@@ -3908,10 +4054,50 @@ public static class CampaignPlayRules
                     pillaged,
                     kind == ActionKind.Repair,
                     destroyed,
-                    OccupyingNamedStatusTypeIds(state.Forces, force, idByName));
+                    OccupyingNamedStatusTypeIds(state.Forces, force, idByName),
+                    access,
+                    previousAccess,
+                    force.SpecialActionSucceeded);
             });
         var application = ForceStatusRules.ApplyDetailed(state.Forces, catalog, facts, specialRules);
         var attributions = new Dictionary<Guid, ForceStatusRules.Attribution>(application.Attributions);
+        var applied = application.Forces.ToList();
+        for (var index = 0; index < applied.Count; index++)
+        {
+            var force = applied[index];
+            if (force.SpecialActionSucceeded is not { } succeeded)
+            {
+                continue;
+            }
+
+            var granted = TeleportActionRules.ConfiguredOutcomeStatusName(
+                force,
+                map,
+                state.ItemObjectives,
+                rules,
+                succeeded);
+            if (!string.IsNullOrWhiteSpace(granted))
+            {
+                var (updated, attribution) = ForceStatusRules.ApplyConfiguredStatus(
+                    force,
+                    granted,
+                    catalog,
+                    rules,
+                    ForceStatusChangeSource.ItemObjective,
+                    granted);
+                applied[index] = updated.With(clearSpecialActionOutcome: true);
+                if (attribution is not null
+                    && !string.Equals(updated.StatusName, force.StatusName, StringComparison.Ordinal))
+                {
+                    attributions[updated.Id] = attribution.Value;
+                }
+            }
+            else
+            {
+                applied[index] = force.With(clearSpecialActionOutcome: true);
+            }
+        }
+
         foreach (var entry in state.Log.Where(item =>
                      item.Kind == PlayLogKind.ForcesRejoined && item.WindowId == window.Id))
         {
@@ -3921,7 +4107,7 @@ public static class CampaignPlayRules
             }
 
             var before = (previousForces ?? state.Forces).FirstOrDefault(item => item.Id == survivingId);
-            var after = application.Forces.FirstOrDefault(item => item.Id == survivingId);
+            var after = applied.FirstOrDefault(item => item.Id == survivingId);
             if (after is null
                 || !ForceStatusNames.IsDiseased(after.StatusName)
                 || ForceStatusNames.IsDiseased(before?.StatusName))
@@ -3934,13 +4120,13 @@ public static class CampaignPlayRules
 
         var (changes, log) = RecordStatusChanges(
             previousForces ?? state.Forces,
-            application.Forces,
+            applied,
             catalog,
             utcNow,
             attributions,
             window.Id);
         return state.With(
-                forces: application.Forces,
+                forces: applied,
                 forceStatusChanges: changes.Count == 0 ? state.ForceStatusChanges : [.. state.ForceStatusChanges, .. changes])
             .AppendLog([.. log]);
     }
@@ -3960,6 +4146,36 @@ public static class CampaignPlayRules
                 .Where(static id => id != Guid.Empty)
                 .Distinct(),
         ];
+    }
+
+    private static IReadOnlyList<Guid> AchievedStandardQuestionIds(
+        CampaignPlayState state,
+        IReadOnlyList<CampaignBattle> fought,
+        IReadOnlyList<MissionSetup> missions)
+    {
+        var achieved = new HashSet<Guid>();
+        foreach (var battle in fought)
+        {
+            if (battle.IsNoContest || battle.MissionId is not { } missionId)
+            {
+                continue;
+            }
+
+            var mission = missions.FirstOrDefault(item => item.Id == missionId);
+            if (mission is null || mission.ResultQuestions.Count == 0)
+            {
+                continue;
+            }
+
+            foreach (var id in BattleResultRules.AchievedStandardQuestionIds(
+                CurrentSubmissions(state, battle).SelectMany(static submission => submission.Reports),
+                mission.ResultQuestions))
+            {
+                achieved.Add(id);
+            }
+        }
+
+        return [.. achieved];
     }
 
     private static CampaignPlayState ApplyBattleStatuses(
@@ -4010,7 +4226,8 @@ public static class CampaignPlayRules
                 location is not null && map.IsWaterFeature(location),
                 surrendered,
                 lostOnWater,
-                location);
+                location,
+                AchievedStandardQuestionIds(state, fought, missionCatalog));
         }
 
         var application = catalog.Count == 0
@@ -4036,7 +4253,7 @@ public static class CampaignPlayRules
                 }
 
                 var inflicted = FactionSpecialRulePolicies.StatusInflictedOnLoser(winner, loser, rules);
-                if (inflicted is null || !FactionSpecialRulePolicies.AllowsStatus(loser, inflicted, rules))
+                if (inflicted is null || !FactionSpecialRulePolicies.AllowsStatus(loser, inflicted, rules, catalog: catalog))
                 {
                     continue;
                 }
@@ -4170,6 +4387,32 @@ public static class CampaignPlayRules
         }
 
         return [.. reporting.Where(forceId => forceId != battle.WinnerForceId)];
+    }
+
+    private static CampaignPlayState RevertCommittedSurrender(
+        CampaignPlayState state,
+        CampaignBattle battle,
+        Guid forceId)
+    {
+        var remainingSurrendered = battle.SurrenderedForceIds.Where(id => id != forceId).ToArray();
+        var restored = battle.With(
+            status: BattleStatus.AwaitingResults,
+            clearWinner: true,
+            isDraw: false,
+            assignScores: true,
+            winnerScore: 0,
+            loserScore: 0,
+            isNoContest: false,
+            surrenderedForceIds: remainingSurrendered);
+        var items = ItemObjectiveRules.RevertBattleSpoils(state.ItemObjectives, battle, state.Log);
+        var forces = state.Forces
+            .Select(force =>
+                battle.ParticipantForceIds.Contains(force.Id) ? force.With(inBattle: true) : force)
+            .ToArray();
+        return state.With(
+            itemObjectives: items,
+            forces: forces,
+            battles: ReplaceBattle(state.Battles, restored));
     }
 
     private static CampaignPlayState ResolveSurrenderedBattle(
@@ -4742,7 +4985,11 @@ public static class CampaignPlayRules
                 force.EnableStreaks,
                 force.ClearStreaks,
                 force.ClearStreak,
-                force.LastChosenTeleportRound))],
+                force.LastChosenTeleportRound,
+                force.ChosenTeleportCooldownRemaining,
+                force.PendingRandomTeleportDestinationId,
+                force.PendingRandomTeleportSourceTerritoryId,
+                force.SpecialActionSucceeded))],
             state.Structures,
             state.BrokenAllyFactionIds,
             [.. map.Territories.Select(static territory => new TerritorySnapshot(

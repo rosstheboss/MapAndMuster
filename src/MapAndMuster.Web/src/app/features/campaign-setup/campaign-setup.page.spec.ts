@@ -156,10 +156,17 @@ describe('CampaignSetupPage', () => {
             enablePickLocationKind: { setValue: (value: string) => void };
             enablePickTypeId: { setValue: (value: string) => void };
             enablePickRequiredStatusId: { setValue: (value: string) => void };
+            enablePickRequiredQuestionId: { setValue: (value: string) => void };
             id: { value: string };
             enableConditions: {
               length: number;
-              at: (index: number) => { controls: { trigger: { value: string }; requiredStatusId: { value: string } } };
+              at: (index: number) => {
+                controls: {
+                  trigger: { value: string };
+                  requiredStatusId: { value: string };
+                  requiredQuestionId: { value: string };
+                };
+              };
             };
           };
         };
@@ -226,6 +233,12 @@ describe('CampaignSetupPage', () => {
     expect(status.controls.enableConditions.length).toBe(3);
     expect(status.controls.enableConditions.at(2).controls.trigger.value).toBe('OccupyingWithSpecifiedStatus');
     expect(status.controls.enableConditions.at(2).controls.requiredStatusId.value).toBe(status.controls.id.value);
+    status.controls.enablePick.setValue('StandardBattleResultQuestion');
+    status.controls.enablePickRequiredQuestionId.setValue('question-1');
+    page.addForceStatusEnableCondition(status);
+    expect(status.controls.enableConditions.length).toBe(4);
+    expect(status.controls.enableConditions.at(3).controls.trigger.value).toBe('StandardBattleResultQuestion');
+    expect(status.controls.enableConditions.at(3).controls.requiredQuestionId.value).toBe('question-1');
     TestBed.inject(HttpTestingController).verify();
   });
 
@@ -782,6 +795,8 @@ describe('CampaignSetupPage', () => {
               name: { value: string };
               priority: { value: number };
               cancelsStatusIds: { value: string[] };
+              immuneFactionIds: { value: string[] };
+              immuneSubfactions: { value: { factionId: string; subfaction: string }[] };
               id: { value: string };
             };
           }[];
@@ -792,6 +807,37 @@ describe('CampaignSetupPage', () => {
     const exhausted = forceStatuses.controls.find((status) => status.controls.name.value === 'Exhausted');
     const wellRested = forceStatuses.controls.find((status) => status.controls.name.value === 'Well Rested');
     expect(exhausted?.controls.cancelsStatusIds.value).toEqual([wellRested?.controls.id.value]);
+    const factions = (
+      fixture.componentInstance as unknown as {
+        factions: {
+          controls: readonly {
+            controls: { id: { value: string }; name: { value: string } };
+          }[];
+        };
+      }
+    ).factions.controls;
+    const idFor = (name: string): string | undefined =>
+      factions.find((faction) => faction.controls.name.value === name)?.controls.id.value;
+    const vampireId = idFor('Vampire Counts');
+    const tombId = idFor('Tomb Kings of Khemri');
+    const ogreId = idFor('Ogre Kingdoms');
+    const daemonId = idFor('Daemons of Chaos');
+    const diseased = forceStatuses.controls.find((status) => status.controls.name.value === 'Diseased');
+    expect(diseased?.controls.immuneFactionIds.value).toEqual(
+      expect.arrayContaining([vampireId, tombId, ogreId].filter((id): id is string => !!id)),
+    );
+    expect(diseased?.controls.immuneSubfactions.value).toEqual(
+      expect.arrayContaining([{ factionId: daemonId, subfaction: 'Nurgle' }]),
+    );
+    expect(wellRested?.controls.immuneFactionIds.value).toEqual(
+      expect.arrayContaining([vampireId, tombId].filter((id): id is string => !!id)),
+    );
+    expect(wellRested?.controls.immuneSubfactions.value).toEqual(
+      expect.arrayContaining([{ factionId: daemonId, subfaction: 'Nurgle' }]),
+    );
+    expect(compiled.querySelector('#force-status-token-0')).toBeTruthy();
+    expect(compiled.querySelector('#force-status-immune-faction-pick-0')).toBeTruthy();
+    expect(compiled.querySelector('#force-status-immune-subfaction-pick-0')).toBeTruthy();
     expect(compiled.querySelector('#force-status-cancel-pick-3')).toBeTruthy();
     expect(compiled.querySelector('[aria-label="Remove Well Rested from cancel out"]')).toBeTruthy();
     expect(compiled.querySelector('#forceStatusPreset')).toBeTruthy();

@@ -51,13 +51,16 @@ public static class ItemObjectiveRules
     }
 
     /// <summary>
-    /// Drops carried items onto the territory a moving force left.
+    /// Drops selected carried items onto the territory a moving force left.
+    /// Opened or already-interacted items cannot be dropped this way.
     /// </summary>
     public static IReadOnlyList<CampaignItemObjective> DropCarriedByMovers(
         IReadOnlyList<CampaignItemObjective> items,
         IReadOnlyDictionary<Guid, Guid> originByForceId,
         DateTimeOffset utcNow,
-        ICollection<PlayLogEntry> log)
+        ICollection<PlayLogEntry> log,
+        IReadOnlySet<Guid>? itemIds = null,
+        bool requireUnopened = true)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(originByForceId);
@@ -72,7 +75,9 @@ public static class ItemObjectiveRules
             }
 
             if (item.PossessorForceId is { } forceId
-                && originByForceId.TryGetValue(forceId, out var origin))
+                && originByForceId.TryGetValue(forceId, out var origin)
+                && (itemIds is null || itemIds.Contains(item.Id))
+                && (!requireUnopened || TeleportActionRules.CanDropOnMove(item)))
             {
                 next.Add(item.With(territoryId: origin, clearPossessor: true));
                 if (item.IsRevealed)
@@ -91,6 +96,7 @@ public static class ItemObjectiveRules
 
     /// <summary>
     /// A lone force not in battle takes an unpossessed item in its territory, revealing it if it was hidden.
+    /// Two or more occupying forces reveal a hidden item without a possessor.
     /// </summary>
     public static IReadOnlyList<CampaignItemObjective> PickUpUnpossessed(
         IReadOnlyList<CampaignItemObjective> items,
@@ -103,31 +109,53 @@ public static class ItemObjectiveRules
         ArgumentNullException.ThrowIfNull(log);
 
         var occupants = forces
-            .Where(static force => !force.InBattle)
             .GroupBy(static force => force.TerritoryId)
-            .Where(static group => group.Count() == 1)
-            .ToDictionary(static group => group.Key, static group => group.First());
+            .ToDictionary(static group => group.Key, static group => group.ToArray());
         var next = new List<CampaignItemObjective>(items.Count);
         foreach (var item in items.OrderBy(static entry => entry.Id))
         {
             if (item.IsDestroyed
                 || item.PossessorForceId is not null
                 || item.TerritoryId is not { } territoryId
-                || !occupants.TryGetValue(territoryId, out var force))
+                || !occupants.TryGetValue(territoryId, out var present)
+                || present.Length == 0)
             {
                 next.Add(item);
                 continue;
             }
 
-            var found = !item.IsRevealed;
-            var taken = item.With(possessorForceId: force.Id, isRevealed: true, clearTerritory: true);
-            next.Add(taken);
-            log.Add(ItemLog(
-                found ? PlayLogKind.ItemObjectiveFound : PlayLogKind.ItemObjectivePickedUp,
-                taken,
-                utcNow,
-                territoryId,
-                force.Id));
+            var idle = present.Where(static force => !force.InBattle).ToArray();
+            if (idle.Length == 1 && present.Length == 1)
+            {
+                var force = idle[0];
+                var found = !item.IsRevealed;
+                var taken = item.With(possessorForceId: force.Id, isRevealed: true, clearTerritory: true);
+                next.Add(taken);
+                log.Add(ItemLog(
+                    found ? PlayLogKind.ItemObjectiveFound : PlayLogKind.ItemObjectivePickedUp,
+                    taken,
+                    utcNow,
+                    territoryId,
+                    force.Id));
+                continue;
+            }
+
+            if (!item.IsRevealed)
+            {
+                var revealed = item.With(isRevealed: true);
+                next.Add(revealed);
+                log.Add(ItemLog(
+                    PlayLogKind.ItemObjectiveFound,
+                    revealed,
+                    utcNow,
+                    territoryId,
+                    forceId: null,
+                    relatedForceId: null,
+                    relatedForceIds: present.Select(static force => force.Id).ToArray()));
+                continue;
+            }
+
+            next.Add(item);
         }
 
         return next;
@@ -185,7 +213,8 @@ public static class ItemObjectiveRules
                 utcNow,
                 battle.TerritoryId,
                 winnerId,
-                previousHolder));
+                previousHolder,
+                battleId: battle.Id));
         }
 
         _ = forces;
@@ -230,6 +259,50 @@ public static class ItemObjectiveRules
             []);
         next = state.With(itemObjectives: revealed).AppendLog(log);
         return true;
+    }
+
+    /// <summary>
+    /// Returns items transferred as this battle's spoils to their previous holder or the battlefield.
+    /// </summary>
+    public static IReadOnlyList<CampaignItemObjective> RevertBattleSpoils(
+        IReadOnlyList<CampaignItemObjective> items,
+        CampaignBattle battle,
+        IReadOnlyList<PlayLogEntry> log)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(battle);
+        ArgumentNullException.ThrowIfNull(log);
+
+        var spoils = log
+            .Where(entry =>
+                entry.BattleId == battle.Id
+                && entry.Kind is PlayLogKind.ItemObjectiveFound or PlayLogKind.ItemObjectivePickedUp)
+            .ToArray();
+        if (spoils.Length == 0)
+        {
+            return items;
+        }
+
+        var next = new List<CampaignItemObjective>(items.Count);
+        foreach (var item in items.OrderBy(static entry => entry.Id))
+        {
+            var taken = spoils.LastOrDefault(entry =>
+                string.Equals(entry.Message, item.Name, StringComparison.Ordinal)
+                && entry.ForceId == item.PossessorForceId);
+            if (taken is null)
+            {
+                next.Add(item);
+                continue;
+            }
+
+            var previousHolder = taken.RelatedForceIds.FirstOrDefault(id => id != taken.ForceId);
+            next.Add(
+                previousHolder != default
+                    ? item.With(possessorForceId: previousHolder, clearTerritory: true)
+                    : item.With(territoryId: battle.TerritoryId, clearPossessor: true));
+        }
+
+        return next;
     }
 
     private static bool TryChooseTerritory(
@@ -286,11 +359,14 @@ public static class ItemObjectiveRules
         DateTimeOffset utcNow,
         Guid? territoryId,
         Guid? forceId,
-        Guid? relatedForceId = null)
+        Guid? relatedForceId = null,
+        Guid? battleId = null,
+        IReadOnlyList<Guid>? relatedForceIds = null)
     {
-        IReadOnlyList<Guid> related = relatedForceId is { } extra && extra != forceId
-            ? forceId is { } id ? [id, extra] : [extra]
-            : forceId is { } only ? [only] : [];
+        IReadOnlyList<Guid> related = relatedForceIds
+            ?? (relatedForceId is { } extra && extra != forceId
+                ? forceId is { } id ? [id, extra] : [extra]
+                : forceId is { } only ? [only] : []);
         return new PlayLogEntry(
             Guid.NewGuid(),
             utcNow,
@@ -300,7 +376,7 @@ public static class ItemObjectiveRules
             actorUserId: null,
             territoryId,
             targetTerritoryId: null,
-            battleId: null,
+            battleId,
             actionKind: null,
             related,
             item.Name);

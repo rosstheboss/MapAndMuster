@@ -46,6 +46,39 @@ public static class ActionResolution
 
         DisallowConflictingStructureActions(resolved);
         var log = new List<PlayLogEntry>(state.Log);
+        var dropOrigins = new Dictionary<Guid, Guid>();
+        var dropItemIds = new HashSet<Guid>();
+        foreach (var force in acting)
+        {
+            if (!resolved.TryGetValue(force.Id, out var order)
+                || order.Kind != ActionKind.Move
+                || order.DroppedItemObjectiveIds is not { Count: > 0 } requested)
+            {
+                continue;
+            }
+
+            var allowed = requested
+                .Where(id => state.ItemObjectives.Any(item =>
+                    item.Id == id
+                    && item.PossessorForceId == force.Id
+                    && TeleportActionRules.CanDropOnMove(item)))
+                .ToArray();
+            if (allowed.Length == 0)
+            {
+                continue;
+            }
+
+            dropOrigins[force.Id] = force.TerritoryId;
+            foreach (var id in allowed)
+            {
+                dropItemIds.Add(id);
+            }
+        }
+
+        var items = dropOrigins.Count == 0
+            ? state.ItemObjectives
+            : ItemObjectiveRules.DropCarriedByMovers(state.ItemObjectives, dropOrigins, utcNow, log, dropItemIds);
+
         foreach (var force in acting)
         {
             var order = resolved[force.Id];
@@ -58,28 +91,20 @@ public static class ActionResolution
         var moveOrigins = new Dictionary<Guid, Guid>();
         var arrivalKinds = new Dictionary<Guid, ActionKind>();
         var skipClaimTerritories = new HashSet<Guid>();
+        var tentative = new Dictionary<Guid, CampaignForce>();
+        var picker = pickIndex ?? (static count => 0);
         foreach (var force in state.Forces.OrderBy(static item => item.Id))
         {
-            if (force.InBattle)
+            if (force.InBattle || !resolved.TryGetValue(force.Id, out var order))
             {
-                nextForces.Add(force);
-                AddOccupied(occupied, force.TerritoryId, force.Id);
-                arrivalKinds[force.Id] = ActionKind.Hold;
-                continue;
-            }
-
-            if (!resolved.TryGetValue(force.Id, out var order))
-            {
-                nextForces.Add(force);
-                AddOccupied(occupied, force.TerritoryId, force.Id);
+                tentative[force.Id] = force;
                 arrivalKinds[force.Id] = ActionKind.Hold;
                 continue;
             }
 
             if (order.Kind == ActionKind.Split && order.TargetTerritoryId is { } splitTarget)
             {
-                nextForces.Add(force);
-                AddOccupied(occupied, force.TerritoryId, force.Id);
+                tentative[force.Id] = force;
                 arrivalKinds[force.Id] = ActionKind.Hold;
                 var split = new CampaignForce(
                     Guid.NewGuid(),
@@ -89,16 +114,19 @@ public static class ActionResolution
                     false,
                     statusName: null,
                     force.Subfaction);
-                nextForces.Add(split);
-                AddOccupied(occupied, splitTarget, split.Id);
+                tentative[split.Id] = split;
                 arrivalKinds[split.Id] = ActionKind.Split;
                 continue;
             }
 
-            var picker = pickIndex ?? (static count => 0);
-            var destination = order.Kind == ActionKind.Teleport
-                ? ResolveTeleportDestination(map, force, order, state, rules, window.RoundNumber, picker)
-                : order.Kind is ActionKind.Move or ActionKind.Retreat
+            if (TeleportActionRules.IsTeleport(order.Kind) || force.PendingRandomTeleportDestinationId is not null)
+            {
+                tentative[force.Id] = force;
+                arrivalKinds[force.Id] = order.Kind;
+                continue;
+            }
+
+            var destination = order.Kind is ActionKind.Move or ActionKind.Retreat
                 ? FactionSpecialRulePolicies.ResolveMoveDestination(
                     map,
                     force,
@@ -112,25 +140,13 @@ public static class ActionResolution
                     state.AllyBetrayals,
                     order.ViaPath)
                 : force.TerritoryId;
-            if (order.Kind is ActionKind.Move or ActionKind.Retreat or ActionKind.Teleport && destination != force.TerritoryId)
+            if (order.Kind is ActionKind.Move or ActionKind.Retreat && destination != force.TerritoryId)
             {
                 moveOrigins[force.Id] = force.TerritoryId;
             }
 
-            var usedChosenTeleport = order.Kind == ActionKind.Teleport
-                && destination != force.TerritoryId
-                && ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
-                    force,
-                    map,
-                    state.ItemObjectives,
-                    rules,
-                    window.RoundNumber,
-                    destination);
-            var moved = force.With(
-                territoryId: destination,
-                lastChosenTeleportRound: usedChosenTeleport ? window.RoundNumber : null);
-            nextForces.Add(moved);
-            AddOccupied(occupied, destination, moved.Id);
+            var moved = force.With(territoryId: destination);
+            tentative[force.Id] = moved;
             arrivalKinds[force.Id] = order.Kind;
             if (order.Kind == ActionKind.Move)
             {
@@ -149,6 +165,44 @@ public static class ActionResolution
                     }
                 }
             }
+        }
+
+        var occupying = tentative.Values.ToArray();
+        var actionByForceId = arrivalKinds;
+        foreach (var force in state.Forces.OrderBy(static item => item.Id))
+        {
+            if (!resolved.TryGetValue(force.Id, out var order)
+                || (!TeleportActionRules.IsTeleport(order.Kind) && force.PendingRandomTeleportDestinationId is null))
+            {
+                continue;
+            }
+
+            var next = ApplyTeleport(
+                force,
+                order,
+                map,
+                state,
+                window,
+                occupying,
+                actionByForceId,
+                factionAllyGroups,
+                rules,
+                picker,
+                utcNow,
+                log);
+            tentative[force.Id] = next.Force;
+            occupying = tentative.Values.ToArray();
+            arrivalKinds[force.Id] = next.Kind;
+            if (next.Moved)
+            {
+                moveOrigins[force.Id] = force.TerritoryId;
+            }
+        }
+
+        foreach (var force in tentative.Values.OrderBy(static item => item.Id))
+        {
+            nextForces.Add(force);
+            AddOccupied(occupied, force.TerritoryId, force.Id);
         }
 
         nextForces = Rejoin(nextForces, window, utcNow, log, arrivalKinds, rules);
@@ -297,10 +351,18 @@ public static class ActionResolution
 
         nextForces =
         [
-            .. nextForces.Select(force => force.With(inBattle: inBattle.Contains(force.Id) || force.InBattle)),
+            .. nextForces.Select(force =>
+            {
+                var kind = arrivalKinds.GetValueOrDefault(force.Id, ActionKind.Hold);
+                var cooldown = TeleportActionRules.IsChosenTeleport(kind)
+                    ? TeleportActionRules.ChosenTeleportRechargePhases
+                    : TeleportActionRules.NextChosenTeleportCooldown(force.ChosenTeleportCooldownRemaining, kind);
+                return force.With(
+                    inBattle: inBattle.Contains(force.Id) || force.InBattle,
+                    chosenTeleportCooldownRemaining: cooldown);
+            }),
         ];
 
-        var items = ItemObjectiveRules.DropCarriedByMovers(state.ItemObjectives, moveOrigins, utcNow, log);
         items = ItemObjectiveRules.PickUpUnpossessed(items, nextForces, utcNow, log);
         nextForces = [.. ItemObjectiveEffectRules.ApplyStatuses(nextForces, map, items, rules)];
 
@@ -331,7 +393,7 @@ public static class ActionResolution
 
     /// <summary>
     /// Player-submittable actions available for a force in an open action window, in documented order:
-    /// Hold, Move, Teleport when granted, Build, Pillage, Repair, Split, then Backstab.
+    /// Hold, Move, Teleport Randomly / Teleport to Specific Territory when granted, Build, Pillage, Repair, Split, then Backstab.
     /// Kinds that are not legal for the force's current territory are omitted.
     /// </summary>
     public static IReadOnlyList<ActionKind> EligibleActions(
@@ -351,6 +413,11 @@ public static class ActionResolution
             return [ActionKind.Surrender];
         }
 
+        if (force.PendingRandomTeleportDestinationId is not null)
+        {
+            return [ActionKind.TeleportRandomly];
+        }
+
         var kinds = new List<ActionKind> { ActionKind.Hold };
         var moves = CampaignPlayRules.EligibleMoves(map, force, state.ItemObjectives, rules, state.Forces);
         if (moves.Count > 0)
@@ -358,15 +425,33 @@ public static class ActionResolution
             kinds.Add(ActionKind.Move);
         }
 
-        if (ItemObjectiveEffectRules.HasAvailableTeleport(
-            force,
-            map,
-            state.ItemObjectives,
-            rules,
-            state.Forces,
-            state.CurrentWindow()?.RoundNumber ?? 0))
+        var round = state.CurrentWindow()?.RoundNumber ?? 0;
+        var groups = factionAllyGroups;
+        var broken = state.BrokenAllyFactionIds;
+        var betrayals = state.AllyBetrayals;
+        if (ItemObjectiveEffectRules.CanRandomTeleport(force, map, state.ItemObjectives, rules)
+            && TeleportActionRules.RandomDestinations(
+                map,
+                force,
+                state.Forces,
+                state.Battles,
+                groups,
+                broken,
+                betrayals).Count > 0)
         {
-            kinds.Add(ActionKind.Teleport);
+            kinds.Add(ActionKind.TeleportRandomly);
+        }
+
+        if (ItemObjectiveEffectRules.CanChosenTeleport(force, map, state.ItemObjectives, rules, round)
+            && TeleportActionRules.ChosenDestinations(
+                map,
+                force,
+                state.Forces,
+                groups,
+                broken,
+                betrayals).Count > 0)
+        {
+            kinds.Add(ActionKind.TeleportToSpecificTerritory);
         }
 
         if (map.HasBuildableStructure && CanBuildInTerritory(map, force))
@@ -482,6 +567,16 @@ public static class ActionResolution
         var via = submission?.ViaTerritoryId;
         var viaPath = submission?.ViaPath;
         var destroyImmediately = submission?.DestroyImmediately == true;
+        var droppedItemIds = submission?.DroppedItemObjectiveIds ?? [];
+        if (force.PendingRandomTeleportDestinationId is not null)
+        {
+            return new ResolvedOrder(
+                force.Id,
+                ActionKind.TeleportRandomly,
+                force.PendingRandomTeleportDestinationId,
+                null);
+        }
+
         if (kind == ActionKind.Move
             && !FactionSpecialRulePolicies.IsValidMove(map, force, target, via, state.ItemObjectives, rules, viaPath, state.Forces))
         {
@@ -493,28 +588,35 @@ public static class ActionResolution
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
-        if (kind == ActionKind.Teleport)
+        if (TeleportActionRules.IsTeleport(kind))
         {
             var round = window.RoundNumber;
-            if (!ItemObjectiveEffectRules.HasAvailableTeleport(
-                force,
-                map,
-                state.ItemObjectives,
-                rules,
-                state.Forces,
-                round))
+            if (TeleportActionRules.IsChosenTeleport(kind, target))
             {
-                return Hold(force, OrderAdjustment.InvalidOrder);
-            }
-
-            if (ItemObjectiveEffectRules.CanChosenTeleport(force, map, state.ItemObjectives, rules, round)
-                && !ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
+                if (!ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
                     force,
                     map,
                     state.ItemObjectives,
                     rules,
                     round,
-                    target))
+                    target,
+                    state.Forces,
+                    factionAllyGroups,
+                    state.BrokenAllyFactionIds,
+                    state.AllyBetrayals))
+                {
+                    return Hold(force, OrderAdjustment.InvalidOrder);
+                }
+            }
+            else if (!ItemObjectiveEffectRules.CanRandomTeleport(force, map, state.ItemObjectives, rules)
+                || TeleportActionRules.RandomDestinations(
+                    map,
+                    force,
+                    state.Forces,
+                    state.Battles,
+                    factionAllyGroups,
+                    state.BrokenAllyFactionIds,
+                    state.AllyBetrayals).Count == 0)
             {
                 return Hold(force, OrderAdjustment.InvalidOrder);
             }
@@ -573,7 +675,16 @@ public static class ActionResolution
                 destroyImmediately && FactionSpecialRulePolicies.CanDestroyImmediately(force, rules));
         }
 
-        return new ResolvedOrder(force.Id, kind, target, structureTypeId, OrderAdjustment.None, via, false, viaPath);
+        return new ResolvedOrder(
+            force.Id,
+            kind,
+            target,
+            structureTypeId,
+            OrderAdjustment.None,
+            via,
+            false,
+            viaPath,
+            droppedItemIds);
     }
 
     private static void DisallowConflictingStructureActions(Dictionary<Guid, ResolvedOrder> resolved)
@@ -1400,32 +1511,113 @@ public static class ActionResolution
         return hops;
     }
 
-    private static Guid ResolveTeleportDestination(
-        PlayMap map,
+    private static (CampaignForce Force, ActionKind Kind, bool Moved) ApplyTeleport(
         CampaignForce force,
         ResolvedOrder order,
+        PlayMap map,
         CampaignPlayState state,
+        PhaseWindow window,
+        IReadOnlyList<CampaignForce> occupying,
+        IReadOnlyDictionary<Guid, ActionKind> actionByForceId,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
         SpecialRuleContext rules,
-        int roundNumber,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        DateTimeOffset utcNow,
+        List<PlayLogEntry> log)
     {
-        if (ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
+        var broken = state.BrokenAllyFactionIds;
+        var betrayals = state.AllyBetrayals;
+        var isPhaseTwo = force.PendingRandomTeleportDestinationId is not null;
+        var isChosen = TeleportActionRules.IsChosenTeleport(order.Kind, order.TargetTerritoryId);
+        Guid? destination = isPhaseTwo
+            ? force.PendingRandomTeleportDestinationId
+            : isChosen
+                ? order.TargetTerritoryId
+                : null;
+        var interrupted = TeleportActionRules.IsInterrupted(
+            force.TerritoryId,
+            destination,
             force,
+            occupying,
+            actionByForceId,
+            factionAllyGroups,
+            broken,
+            betrayals);
+
+        if (isChosen)
+        {
+            if (interrupted
+                || destination is not { } chosen
+                || !ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
+                    force,
+                    map,
+                    state.ItemObjectives,
+                    rules,
+                    window.RoundNumber,
+                    chosen,
+                    occupying,
+                    factionAllyGroups,
+                    broken,
+                    betrayals))
+            {
+                return (force.With(
+                    clearPendingTeleport: true,
+                    specialActionSucceeded: false), order.Kind, false);
+            }
+
+            return (force.With(
+                territoryId: chosen,
+                clearPendingTeleport: true,
+                specialActionSucceeded: true), order.Kind, true);
+        }
+
+        if (interrupted)
+        {
+            return (force.With(
+                clearPendingTeleport: true,
+                specialActionSucceeded: false), ActionKind.TeleportRandomly, false);
+        }
+
+        if (isPhaseTwo)
+        {
+            var dest = force.PendingRandomTeleportDestinationId!.Value;
+            return (force.With(
+                territoryId: dest,
+                clearPendingTeleport: true,
+                specialActionSucceeded: true), ActionKind.TeleportRandomly, true);
+        }
+
+        var picked = TeleportActionRules.PickRandomDestination(
             map,
-            state.ItemObjectives,
-            rules,
-            roundNumber,
-            order.TargetTerritoryId))
+            force,
+            occupying,
+            state.Battles,
+            factionAllyGroups,
+            broken,
+            betrayals,
+            pickIndex);
+        if (picked is null)
         {
-            return order.TargetTerritoryId!.Value;
+            return (force.With(
+                clearPendingTeleport: true,
+                specialActionSucceeded: false), ActionKind.TeleportRandomly, false);
         }
 
-        if (ItemObjectiveEffectRules.CanRandomTeleport(force, map, state.ItemObjectives, rules))
-        {
-            return ItemObjectiveEffectRules.PickTeleportDestination(map, state.Forces, pickIndex) ?? force.TerritoryId;
-        }
-
-        return force.TerritoryId;
+        log.Add(new PlayLogEntry(
+            Guid.NewGuid(),
+            utcNow,
+            PlayLogKind.RandomTeleportPreparing,
+            window.Id,
+            force.Id,
+            force.ControllerUserId,
+            force.TerritoryId,
+            targetTerritoryId: null,
+            battleId: null,
+            ActionKind.TeleportRandomly,
+            [force.Id]));
+        return (force.With(
+            pendingRandomTeleportDestinationId: picked,
+            pendingRandomTeleportSourceTerritoryId: force.TerritoryId), ActionKind.TeleportRandomly, false);
     }
 
     private static ResolvedOrder Hold(CampaignForce force, OrderAdjustment adjustment)
@@ -1441,7 +1633,8 @@ public static class ActionResolution
         OrderAdjustment Adjustment = OrderAdjustment.None,
         Guid? ViaTerritoryId = null,
         bool DestroyImmediately = false,
-        IReadOnlyList<Guid>? ViaPath = null);
+        IReadOnlyList<Guid>? ViaPath = null,
+        IReadOnlyList<Guid>? DroppedItemObjectiveIds = null);
 
     private enum OrderAdjustment
     {

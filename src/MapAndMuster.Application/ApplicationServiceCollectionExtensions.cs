@@ -65,6 +65,8 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<GetStructureImageHandler>();
         services.AddScoped<UploadItemObjectiveImageHandler>();
         services.AddScoped<GetItemObjectiveImageHandler>();
+        services.AddScoped<UploadForceStatusTokenHandler>();
+        services.AddScoped<GetForceStatusTokenHandler>();
         services.AddScoped<UploadFactionFlagHandler>();
         services.AddScoped<GetFactionFlagHandler>();
         services.AddScoped<GetCampaignPresetAssetHandler>();

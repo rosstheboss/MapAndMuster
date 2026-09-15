@@ -32,6 +32,15 @@ public sealed class ForceStatusRulesTests
         var exhausted = Assert.Single(catalog, static status => status.Name == "Exhausted");
         var rested = Assert.Single(catalog, static status => status.Name == "Well Rested");
         Assert.Equal(rested.Id, Assert.Single(exhausted.CancelsStatusIds));
+        Assert.Contains(
+            exhausted.EnableConditions,
+            static condition => condition.Trigger == ForceStatusEnableTrigger.AfterBattle);
+        Assert.Contains(
+            exhausted.EnableConditions,
+            static condition => condition.Trigger == ForceStatusEnableTrigger.SpecialActionSucceeded);
+        Assert.Contains(
+            exhausted.EnableConditions,
+            static condition => condition.Trigger == ForceStatusEnableTrigger.SpecialActionFailed);
         Assert.All(catalog.Where(static status => status.Name != "Diseased"), static status =>
         {
             Assert.Equal(1, status.EnableOccurrences);
@@ -88,6 +97,29 @@ public sealed class ForceStatusRulesTests
     }
 
     [Fact]
+    public void CatalogImmuneFactionDoesNotGainTheStatus()
+    {
+        var shaken = Status("Shaken", ForceStatusEnableTrigger.BattleLostOrRetreat, ForceStatusClearTrigger.Hold);
+        var immune = new ForceStatusSetup(
+            shaken.Id,
+            shaken.Name,
+            shaken.Effects,
+            shaken.EnableConditions,
+            shaken.ClearConditions,
+            shaken.Priority,
+            shaken.CancelsStatusIds,
+            [FactionId]);
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromBattle(fought: true, won: false, lost: true, retreated: true, occupiesWater: false),
+        };
+
+        var next = Assert.Single(ForceStatusRules.Apply([Force()], [immune], facts));
+        Assert.Null(next.StatusName);
+        Assert.Equal("Shaken", Assert.Single(ForceStatusRules.Apply([Force()], [shaken], facts)).StatusName);
+    }
+
+    [Fact]
     public void BattleWinEnablesConfidentAndClearsWellRested()
     {
         var catalog = Catalog();
@@ -113,6 +145,30 @@ public sealed class ForceStatusRulesTests
 
         var next = Assert.Single(ForceStatusRules.Apply([force], catalog, facts));
         Assert.Equal("Exhausted", next.StatusName);
+    }
+
+    [Fact]
+    public void SpecialActionOutcomeEnablesExhausted()
+    {
+        var catalog = Catalog();
+        var force = Force();
+        var success = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(
+                ActionKind.TeleportToSpecificTerritory,
+                occupiesWater: false,
+                specialActionSucceeded: true),
+        };
+        var failure = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(
+                ActionKind.TeleportRandomly,
+                occupiesWater: false,
+                specialActionSucceeded: false),
+        };
+
+        Assert.Equal("Exhausted", Assert.Single(ForceStatusRules.Apply([force], catalog, success)).StatusName);
+        Assert.Equal("Exhausted", Assert.Single(ForceStatusRules.Apply([force], catalog, failure)).StatusName);
     }
 
     [Fact]
@@ -757,6 +813,176 @@ public sealed class ForceStatusRulesTests
         var text = ForceStatusRules.DescribeChange("Shaken", "Diseased", ForceStatusChangeSource.Staff, null);
         Assert.Contains("Shaken became Diseased", text);
         Assert.Contains("manager or administrator", text);
+    }
+
+    [Fact]
+    public void StandardBattleResultQuestionEnablesWhenThisForceOrAnOpponentAchievedIt()
+    {
+        var questionId = Guid.NewGuid();
+        ForceStatusSetup[] catalog =
+        [
+            new ForceStatusSetup(
+                Guid.NewGuid(),
+                "Raided",
+                "effects",
+                [new ForceStatusEnableCondition(
+                    ForceStatusEnableTrigger.StandardBattleResultQuestion,
+                    requiredQuestionId: questionId)],
+                [new ForceStatusClearCondition(ForceStatusClearTrigger.Hold)]),
+        ];
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromBattle(
+                fought: true,
+                won: true,
+                lost: false,
+                retreated: false,
+                occupiesWater: false,
+                achievedStandardQuestionIds: [questionId]),
+        };
+
+        var next = Assert.Single(ForceStatusRules.Apply([Force()], catalog, facts));
+        Assert.Equal("Raided", next.StatusName);
+    }
+
+    [Fact]
+    public void StandardBattleResultQuestionDoesNotEnableWhenTheQuestionWasNotAchieved()
+    {
+        ForceStatusSetup[] catalog =
+        [
+            new ForceStatusSetup(
+                Guid.NewGuid(),
+                "Raided",
+                "effects",
+                [new ForceStatusEnableCondition(
+                    ForceStatusEnableTrigger.StandardBattleResultQuestion,
+                    requiredQuestionId: Guid.NewGuid())],
+                [new ForceStatusClearCondition(ForceStatusClearTrigger.Hold)]),
+        ];
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromBattle(true, true, false, false, false),
+        };
+
+        var next = Assert.Single(ForceStatusRules.Apply([Force()], catalog, facts));
+        Assert.Null(next.StatusName);
+    }
+
+    [Fact]
+    public void CutOffFromSpawnEnablesWhileTheForceHasNoSpawnChain()
+    {
+        ForceStatusSetup[] catalog =
+        [
+            new ForceStatusSetup(
+                Guid.NewGuid(),
+                "Isolated",
+                "effects",
+                [new ForceStatusEnableCondition(ForceStatusEnableTrigger.CutOffFromSpawn)],
+                [new ForceStatusClearCondition(ForceStatusClearTrigger.ReunitedWithSpawn)]),
+        ];
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(
+                ActionKind.Hold,
+                occupiesWater: false,
+                access: new TerritoryAccessFacts(false),
+                previousAccess: new TerritoryAccessFacts(true)),
+        };
+
+        var next = Assert.Single(ForceStatusRules.Apply([Force()], catalog, facts));
+        Assert.Equal("Isolated", next.StatusName);
+    }
+
+    [Fact]
+    public void CutOffFromStructureEnablesWhenTheChainHasNoMatchingStructure()
+    {
+        var depot = Guid.NewGuid();
+        var location = new ConditionLocation(ConditionLocationKind.StructureType, depot, null);
+        ForceStatusSetup[] catalog =
+        [
+            new ForceStatusSetup(
+                Guid.NewGuid(),
+                "Starving",
+                "effects",
+                [new ForceStatusEnableCondition(ForceStatusEnableTrigger.CutOffFromStructure, location: location)],
+                [new ForceStatusClearCondition(ForceStatusClearTrigger.ReunitedWithStructure, location: location)]),
+        ];
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(
+                ActionKind.Hold,
+                occupiesWater: false,
+                access: new TerritoryAccessFacts(true),
+                previousAccess: new TerritoryAccessFacts(true, [depot])),
+        };
+
+        var next = Assert.Single(ForceStatusRules.Apply([Force()], catalog, facts));
+        Assert.Equal("Starving", next.StatusName);
+    }
+
+    [Fact]
+    public void ReunitedWithSpawnEnablesOnlyWhenAccessIsNewlyGained()
+    {
+        ForceStatusSetup[] catalog =
+        [
+            new ForceStatusSetup(
+                Guid.NewGuid(),
+                "Home",
+                "effects",
+                [new ForceStatusEnableCondition(ForceStatusEnableTrigger.ReunitedWithSpawn)],
+                [new ForceStatusClearCondition(ForceStatusClearTrigger.CutOffFromSpawn)]),
+        ];
+        var alreadyHome = ForceStatusRules.FromAction(
+            ActionKind.Hold,
+            occupiesWater: false,
+            access: new TerritoryAccessFacts(true),
+            previousAccess: new TerritoryAccessFacts(true));
+        var reunited = ForceStatusRules.FromAction(
+            ActionKind.Move,
+            occupiesWater: false,
+            access: new TerritoryAccessFacts(true),
+            previousAccess: new TerritoryAccessFacts(false));
+
+        Assert.Null(Assert.Single(ForceStatusRules.Apply([Force()], catalog, new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = alreadyHome,
+        })).StatusName);
+        Assert.Equal(
+            "Home",
+            Assert.Single(ForceStatusRules.Apply([Force()], catalog, new Dictionary<Guid, ForceStatusRules.Facts>
+            {
+                [ForceId] = reunited,
+            })).StatusName);
+    }
+
+    [Fact]
+    public void CutOffFromStructureUsesTheLocationFilterAndReunionClearsOnANewRoute()
+    {
+        var depot = Guid.NewGuid();
+        var location = new ConditionLocation(ConditionLocationKind.StructureType, depot, null);
+        ForceStatusSetup[] catalog =
+        [
+            new ForceStatusSetup(
+                Guid.NewGuid(),
+                "Starving",
+                "effects",
+                [new ForceStatusEnableCondition(ForceStatusEnableTrigger.CutOffFromStructure, location: location)],
+                [new ForceStatusClearCondition(ForceStatusClearTrigger.ReunitedWithStructure, location: location)]),
+        ];
+        var cutOff = Force(
+            statusName: "Starving",
+            enableStreaks: new Dictionary<string, int>());
+        var facts = new Dictionary<Guid, ForceStatusRules.Facts>
+        {
+            [ForceId] = ForceStatusRules.FromAction(
+                ActionKind.Move,
+                occupiesWater: false,
+                access: new TerritoryAccessFacts(true, [depot]),
+                previousAccess: new TerritoryAccessFacts(true)),
+        };
+
+        var next = Assert.Single(ForceStatusRules.Apply([cutOff], catalog, facts));
+        Assert.Null(next.StatusName);
     }
 
     private static CampaignForce Force(

@@ -10,7 +10,14 @@ export type ForceStatusEnableTrigger =
   | 'Repair'
   | 'Destroy'
   | 'OccupyingWithThisStatus'
-  | 'OccupyingWithSpecifiedStatus';
+  | 'OccupyingWithSpecifiedStatus'
+  | 'StandardBattleResultQuestion'
+  | 'CutOffFromStructure'
+  | 'CutOffFromSpawn'
+  | 'ReunitedWithSpawn'
+  | 'ReunitedWithStructure'
+  | 'SpecialActionSucceeded'
+  | 'SpecialActionFailed';
 
 export type ForceStatusClearTrigger =
   | 'Hold'
@@ -26,7 +33,12 @@ export type ForceStatusClearTrigger =
   | 'Repair'
   | 'Destroy'
   | 'OccupyingWithThisStatus'
-  | 'OccupyingWithSpecifiedStatus';
+  | 'OccupyingWithSpecifiedStatus'
+  | 'StandardBattleResultQuestion'
+  | 'CutOffFromStructure'
+  | 'CutOffFromSpawn'
+  | 'ReunitedWithSpawn'
+  | 'ReunitedWithStructure';
 
 export type ConditionLocationKind = 'Any' | 'TerrainType' | 'TerrainTag' | 'StructureType' | 'StructureTag';
 
@@ -38,6 +50,7 @@ export interface ForceStatusCondition {
   locationTypeId?: string | null;
   locationTagId?: string | null;
   requiredStatusId?: string | null;
+  requiredQuestionId?: string | null;
 }
 
 export interface ForceStatusPreset {
@@ -71,6 +84,13 @@ export const FORCE_STATUS_ENABLE_OPTIONS: readonly { id: ForceStatusEnableTrigge
   { id: 'Destroy', label: 'After a successful Destroy' },
   { id: 'OccupyingWithThisStatus', label: 'Occupying with a force that has this status' },
   { id: 'OccupyingWithSpecifiedStatus', label: 'Occupying with a force that has a specified status' },
+  { id: 'StandardBattleResultQuestion', label: 'After a standard battle result question is achieved' },
+  { id: 'CutOffFromStructure', label: 'Cut off from a structure type or tag' },
+  { id: 'CutOffFromSpawn', label: 'Cut off from spawn or an ally spawn' },
+  { id: 'ReunitedWithSpawn', label: 'Reunited with spawn or an ally spawn' },
+  { id: 'ReunitedWithStructure', label: 'Reunited with a structure type or tag' },
+  { id: 'SpecialActionSucceeded', label: 'After a special action succeeds' },
+  { id: 'SpecialActionFailed', label: 'After a special action fails' },
 ];
 
 export const FORCE_STATUS_CLEAR_OPTIONS: readonly { id: ForceStatusClearTrigger; label: string }[] = [
@@ -88,6 +108,11 @@ export const FORCE_STATUS_CLEAR_OPTIONS: readonly { id: ForceStatusClearTrigger;
   { id: 'Destroy', label: 'After a successful Destroy' },
   { id: 'OccupyingWithThisStatus', label: 'Occupying with a force that has this status' },
   { id: 'OccupyingWithSpecifiedStatus', label: 'Occupying with a force that has a specified status' },
+  { id: 'StandardBattleResultQuestion', label: 'After a standard battle result question is achieved' },
+  { id: 'CutOffFromStructure', label: 'Cut off from a structure type or tag' },
+  { id: 'CutOffFromSpawn', label: 'Cut off from spawn or an ally spawn' },
+  { id: 'ReunitedWithSpawn', label: 'Reunited with spawn or an ally spawn' },
+  { id: 'ReunitedWithStructure', label: 'Reunited with a structure type or tag' },
 ];
 
 const DISEASED_EFFECTS =
@@ -148,7 +173,11 @@ export const STANDARD_FORCE_STATUSES: readonly ForceStatusPreset[] = [
       "Tabletop battles fought while exhausted use the campaign sheet's fatigue modifiers. " +
       'The app displays this and does not resolve the tabletop effect. ' +
       'Cancels Well Rested: gaining Exhausted while Well Rested leaves the force with no status.',
-    enableConditions: [{ trigger: 'AfterBattle', occurrences: 1, locationKind: 'Any' }],
+    enableConditions: [
+      { trigger: 'AfterBattle', occurrences: 1, locationKind: 'Any' },
+      { trigger: 'SpecialActionSucceeded', occurrences: 1, locationKind: 'Any' },
+      { trigger: 'SpecialActionFailed', occurrences: 1, locationKind: 'Any' },
+    ],
     clearConditions: [{ trigger: 'Hold', occurrences: 1, locationKind: 'Any' }],
     priority: 3,
     cancelsStatusNames: ['Well Rested'],
@@ -246,6 +275,7 @@ function listedOrLegacy(
       locationTypeId: condition.locationTypeId ?? null,
       locationTagId: condition.locationTagId ?? null,
       requiredStatusId: condition.requiredStatusId ?? null,
+      requiredQuestionId: condition.requiredQuestionId ?? null,
     }));
   }
 
@@ -312,4 +342,24 @@ export function committedForceStatusPriority(
 
 export function isWaterTagName(name: string | null | undefined): boolean {
   return name?.trim().toLowerCase() === WATER_TERRAIN_TAG_NAME.toLowerCase();
+}
+
+export function needsSpecifiedOccupyingStatus(trigger: string): boolean {
+  return trigger === 'OccupyingWithSpecifiedStatus';
+}
+
+export function needsStandardBattleResultQuestion(trigger: string): boolean {
+  return trigger === 'StandardBattleResultQuestion';
+}
+
+export function isSpawnAccessTrigger(trigger: string): boolean {
+  return trigger === 'CutOffFromSpawn' || trigger === 'ReunitedWithSpawn';
+}
+
+export function isStructureAccessTrigger(trigger: string): boolean {
+  return trigger === 'CutOffFromStructure' || trigger === 'ReunitedWithStructure';
+}
+
+export function hidesForceStatusLocation(trigger: string): boolean {
+  return isSpawnAccessTrigger(trigger) || needsStandardBattleResultQuestion(trigger);
 }

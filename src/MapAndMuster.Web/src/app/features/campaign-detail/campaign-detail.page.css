@@ -396,7 +396,7 @@
 
 .menu-item:hover,
 .menu-item:focus-visible {
-  background: var(--color-hover, rgb(28 25 23 / 8%));
+  background: var(--color-hover, #e7e5e4);
 }
 
 .force-draft-row,
@@ -613,4 +613,18 @@ fieldset {
 .surrender-group {
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
+}
+
+.nested-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.status-token {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
 }

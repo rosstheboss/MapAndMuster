@@ -6,6 +6,7 @@ import {
   MAP_ASSET_KEY,
   assetTagQuery,
   factionAssetKey,
+  forceStatusTokenAssetKey,
   itemAssetKey,
   structureAssetKey,
   type CampaignAssetTags,
@@ -218,6 +219,11 @@ export class CampaignService {
     return `/api/campaigns/${encodeURIComponent(campaignId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image${query}`;
   }
 
+  forceStatusTokenUrl(campaignId: string, forceStatusId: string, tags: CampaignAssetTags | undefined): string {
+    const query = assetTagQuery(tags, forceStatusTokenAssetKey(forceStatusId));
+    return `/api/campaigns/${encodeURIComponent(campaignId)}/force-statuses/${encodeURIComponent(forceStatusId)}/token${query}`;
+  }
+
   flagImageUrl(
     campaignId: string,
     factionId: string,
@@ -260,6 +266,11 @@ export class CampaignService {
     return `/api/campaign-presets/${encodeURIComponent(presetId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image${query}`;
   }
 
+  presetForceStatusTokenUrl(presetId: string, forceStatusId: string, tags?: CampaignAssetTags): string {
+    const query = assetTagQuery(tags, forceStatusTokenAssetKey(forceStatusId));
+    return `/api/campaign-presets/${encodeURIComponent(presetId)}/force-statuses/${encodeURIComponent(forceStatusId)}/token${query}`;
+  }
+
   missionFileUrl(campaignId: string, missionId: string): string {
     return `/api/campaigns/${encodeURIComponent(campaignId)}/missions/${encodeURIComponent(missionId)}/file`;
   }
@@ -296,6 +307,24 @@ export class CampaignService {
     return firstValueFrom(
       this.http.post<CampaignDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/item-objectives/${encodeURIComponent(itemObjectiveTypeId)}/image`,
+        form,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async uploadForceStatusToken(
+    campaignId: string,
+    forceStatusId: string,
+    file: File,
+    revision: number,
+  ): Promise<CampaignDetail> {
+    const form = new FormData();
+    form.set('image', file);
+    form.set('revision', String(revision));
+    return firstValueFrom(
+      this.http.post<CampaignDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/force-statuses/${encodeURIComponent(forceStatusId)}/token`,
         form,
         { withCredentials: true },
       ),

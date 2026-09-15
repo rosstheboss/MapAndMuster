@@ -32,11 +32,17 @@ public enum ActionKind
     /// <summary>Automatic system action while a force is locked in battle.</summary>
     Battle = 8,
 
-    /// <summary>Leave an engagement and retreat; once committed it cannot be withdrawn.</summary>
+    /// <summary>Leave an engagement and retreat. May be uncommitted while the current window remains open.</summary>
     Surrender = 9,
 
-    /// <summary>Move to a random empty non-spawn territory while holding a teleport item.</summary>
+    /// <summary>Legacy teleport kind. Random when no target is set; specified when a target is set.</summary>
     Teleport = 10,
+
+    /// <summary>Two-phase teleport to a secretly chosen random allied or Neutral non-spawn territory.</summary>
+    TeleportRandomly = 11,
+
+    /// <summary>Instant teleport to a player-chosen non-spawn territory that has no enemy occupants.</summary>
+    TeleportToSpecificTerritory = 12,
 }
 
 /// <summary>
@@ -220,6 +226,9 @@ public enum PlayLogKind
 
     /// <summary>A player defeated their secret rival in battle or by surrender.</summary>
     RivalObjectiveRevealed = 40,
+
+    /// <summary>A force locked in a random teleport and will resolve it next action phase.</summary>
+    RandomTeleportPreparing = 41,
 }
 
 /// <summary>

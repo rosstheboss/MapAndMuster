@@ -124,3 +124,103 @@ test('home shows the signed-in player and logout', async ({ page }) => {
   await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
 });
+
+test('home lists notifications newest first with timestamps', async ({ page }) => {
+  const profile = {
+    id: '11111111-1111-1111-1111-111111111111',
+    email: 'ada@example.test',
+    username: 'ada',
+    firstName: 'Ada',
+    middleInitial: null,
+    lastName: 'Lovelace',
+    suffix: null,
+    city: 'Halifax',
+    region: null,
+    country: 'Canada',
+    displayNameMode: 'Username',
+    timeZoneId: 'America/New_York',
+    hasAvatar: false,
+    createdUtc: '2026-08-13T00:00:00+00:00',
+    updatedUtc: '2026-08-13T00:00:00+00:00',
+    profileRevision: 1,
+    emailConfirmed: true,
+    isAdministrator: false,
+    inAppNotificationsEnabled: true,
+    emailNotificationsEnabled: true,
+    preferredChatLanguage: 'English',
+  };
+
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profile) });
+  });
+  await page.route('**/api/auth/external-providers', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/notifications', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: '11111111-1111-1111-1111-111111111111',
+          kind: 'CampaignChat',
+          campaignId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          campaignName: 'Border War',
+          title: 'Older mention',
+          body: 'From last week.',
+          path: '/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          createdUtc: '2026-08-14T16:00:00+00:00',
+        },
+        {
+          id: '22222222-2222-2222-2222-222222222222',
+          kind: 'CampaignChat',
+          campaignId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          campaignName: 'Border War',
+          title: 'Newest mention',
+          body: 'Just now.',
+          path: '/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          createdUtc: '2026-08-16T16:00:00+00:00',
+        },
+        {
+          id: '33333333-3333-3333-3333-333333333333',
+          kind: 'CampaignChat',
+          campaignId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          campaignName: 'Border War',
+          title: 'Middle mention',
+          body: 'Yesterday.',
+          path: '/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          createdUtc: '2026-08-15T16:00:00+00:00',
+        },
+      ]),
+    });
+  });
+  await page.route('**/api/campaigns', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/news**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ page: 1, totalPages: 0, articles: [], article: null }),
+    });
+  });
+
+  await page.goto('/');
+  const notices = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'Notifications' }) })
+    .locator('.notice-item');
+  await expect(notices).toHaveCount(3);
+  await expect(notices.nth(0).locator('strong')).toHaveText('Newest mention');
+  await expect(notices.nth(1).locator('strong')).toHaveText('Middle mention');
+  await expect(notices.nth(2).locator('strong')).toHaveText('Older mention');
+  await expect(notices.nth(0).locator('time')).toHaveAttribute('datetime', '2026-08-16T16:00:00+00:00');
+  await expect(notices.nth(0).locator('time')).toContainText('August 16, 2026');
+  await expect(notices.nth(1).locator('time')).toContainText('August 15, 2026');
+  await expect(notices.nth(2).locator('time')).toContainText('August 14, 2026');
+});

@@ -81,6 +81,9 @@
                 @if (item.campaignName) {
                   <span class="muted">{{ item.campaignName }}</span>
                 }
+                <time class="muted" [attr.datetime]="item.createdUtc">{{
+                  item.createdUtc | instantDate: user.timeZoneId
+                }}</time>
                 <span>{{ item.body }}</span>
               </button>
               <button type="button" class="button-secondary" (click)="dismissNotice(item)">Dismiss</button>

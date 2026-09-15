@@ -219,7 +219,20 @@ internal static class CampaignPlayMapper
                             play.ItemObjectives,
                             specialRules,
                             play.CurrentWindow()?.RoundNumber ?? 0)
-                        ? ItemObjectiveEffectRules.ChosenTeleportDestinations(map, force)
+                        ? TeleportActionRules.ChosenDestinations(
+                            map,
+                            force,
+                            play.Forces,
+                            allyGroups,
+                            play.BrokenAllyFactionIds,
+                            play.AllyBetrayals)
+                        : [],
+                    IsRandomTeleportLocked = (force.ControllerUserId == viewerUserId || staffView)
+                        && force.PendingRandomTeleportDestinationId is not null,
+                    DroppableItemObjectiveIds = (force.ControllerUserId == viewerUserId || staffView)
+                        ? [.. play.ItemObjectives
+                            .Where(item => item.PossessorForceId == force.Id && TeleportActionRules.CanDropOnMove(item))
+                            .Select(static item => item.Id)]
                         : [],
                 }),
             ],
@@ -237,6 +250,7 @@ internal static class CampaignPlayMapper
                             ViaTerritoryId = draft.ViaTerritoryId,
                             ViaPath = draft.ViaPath,
                             DestroyImmediately = draft.DestroyImmediately,
+                            DroppedItemObjectiveIds = draft.DroppedItemObjectiveIds,
                         }),
                 ]
                 : [],
@@ -350,6 +364,7 @@ internal static class CampaignPlayMapper
                     ViaTerritoryId = draft.ViaTerritoryId,
                     ViaPath = draft.ViaPath,
                     DestroyImmediately = draft.DestroyImmediately,
+                    DroppedItemObjectiveIds = draft.DroppedItemObjectiveIds,
                 }),
             ];
         }
@@ -410,7 +425,8 @@ internal static class CampaignPlayMapper
             && myForce.InBattle
             && battle.Status is not BattleStatus.Finalized and not BattleStatus.GMResolved
             && !battle.SurrenderedForceIds.Contains(myForce.Id)
-            && !play.Retreats.Any(item => item.BattleId == battle.Id && item.ForceId == myForce.Id && item.IsSurrender);
+            && !play.Retreats.Any(item =>
+                item.BattleId == battle.Id && item.ForceId == myForce.Id && item.IsSurrender && item.IsCommitted);
         var round = play.CurrentWindow()?.RoundNumber
             ?? (play.Windows.Count > 0 ? play.Windows[^1].RoundNumber : 1);
         var catalog = CampaignPlayCatalog.Supply(campaign);
@@ -545,6 +561,7 @@ internal static class CampaignPlayMapper
             NeedsRetreat = needsRetreat,
             AwaitingRetreat = awaitingRetreat,
             IsRetreatCommitted = myRetreat is { IsCommitted: true, IsSurrender: false },
+            IsSurrenderCommitted = myRetreat is { IsCommitted: true, IsSurrender: true },
             RetreatDraftTargetId = myRetreat?.TargetTerritoryId,
             CanSurrender = canSurrender,
             RetreatTargets = (needsRetreat || canSurrender || myRetreat is not null) && myForce is not null
@@ -1180,9 +1197,9 @@ internal static class CampaignPlayMapper
             PlayLogKind.ItemObjectiveFound =>
                 $"{(entry.ForceId is { } foundId ? ForceController(play, foundId, names) : actor)} found {entry.Message ?? "an item objective"} in {territory}.",
             PlayLogKind.ItemObjectivePickedUp =>
-                $"{(entry.ForceId is { } takenId ? ForceController(play, takenId, names) : actor)} took {entry.Message ?? "an item objective"}.",
+                $"{(entry.ForceId is { } takenId ? ForceController(play, takenId, names) : actor)}'s force at {territory} picked up {entry.Message ?? "an item objective"}.",
             PlayLogKind.ItemObjectiveDropped =>
-                $"{(entry.ForceId is { } droppedId ? ForceController(play, droppedId, names) : actor)} dropped {entry.Message ?? "an item objective"} in {territory}.",
+                $"{(entry.ForceId is { } droppedId ? ForceController(play, droppedId, names) : actor)}'s force dropped {entry.Message ?? "an item objective"} at {territory}.",
             PlayLogKind.ItemObjectivesStaffRevealed =>
                 $"{actor} revealed hidden item objectives.",
             PlayLogKind.PublicObjectiveAwarded =>
@@ -1199,6 +1216,8 @@ internal static class CampaignPlayMapper
                     : entry.Message ?? $"{actor} recorded a force status change.",
             PlayLogKind.AllianceBetrayed =>
                 FormatAllianceBetrayed(entry, actor, territory, campaign, play, names),
+            PlayLogKind.RandomTeleportPreparing =>
+                $"{(entry.ForceId is { } preparingId ? ForceController(play, preparingId, names) : actor)}'s force at {territory} is preparing to teleport to a random location.",
             _ => $"{actor} recorded a campaign change in {territory}.",
         };
     }
@@ -1241,6 +1260,15 @@ internal static class CampaignPlayMapper
                 $"{actor} destroyed {structure} at {territory}.",
             ActionKind.Pillage => $"{actor} pillaged {structure} at {territory}.",
             ActionKind.Retreat => $"{actor} retreated force at {territory} to {target}.",
+            ActionKind.TeleportRandomly =>
+                entry.TargetTerritoryId is null || entry.TargetTerritoryId == entry.TerritoryId
+                    ? $"{actor} prepared to teleport randomly from {territory}."
+                    : $"{actor} teleported randomly from {territory} to {target}.",
+            ActionKind.TeleportToSpecificTerritory => $"{actor} teleported from {territory} to {target}.",
+            ActionKind.Teleport =>
+                entry.TargetTerritoryId is null || entry.TargetTerritoryId == entry.TerritoryId
+                    ? $"{actor} prepared to teleport randomly from {territory}."
+                    : $"{actor} teleported from {territory} to {target}.",
             _ => $"{actor} resolved {entry.ActionKind?.ToString() ?? "Hold"} in {territory}"
                 + (entry.TargetTerritoryId is null || entry.TargetTerritoryId == entry.TerritoryId
                     ? "."

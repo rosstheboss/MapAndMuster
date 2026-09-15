@@ -50,12 +50,26 @@ export function storedNotificationRouteId(id: string): string | null {
   return null;
 }
 
+export function sortNotificationsNewestFirst(items: readonly HomeAttentionItem[]): HomeAttentionItem[] {
+  return [...items].sort((left, right) => {
+    const byTime = Date.parse(right.createdUtc) - Date.parse(left.createdUtc);
+    if (Number.isFinite(byTime) && byTime !== 0) {
+      return byTime;
+    }
+
+    return right.id.localeCompare(left.id);
+  });
+}
+
 @Injectable({ providedIn: 'root' })
 export class HomeBoardService {
   private readonly http = inject(HttpClient);
 
   async listNotifications(): Promise<HomeAttentionItem[]> {
-    return firstValueFrom(this.http.get<HomeAttentionItem[]>('/api/notifications', { withCredentials: true }));
+    const items = await firstValueFrom(
+      this.http.get<HomeAttentionItem[]>('/api/notifications', { withCredentials: true }),
+    );
+    return sortNotificationsNewestFirst(items);
   }
 
   async markRead(notificationId: string): Promise<void> {

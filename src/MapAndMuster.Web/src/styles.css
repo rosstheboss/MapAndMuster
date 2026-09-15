@@ -43,6 +43,7 @@
   --color-dirty: #c87606;
   --color-dirty-bg: #fef3c7;
   --color-button-secondary: #e7e5e4;
+  --color-hover: #e7e5e4;
 }
 
 [data-theme='dark'] {
@@ -69,6 +70,7 @@
   --color-dirty: #c87606;
   --color-dirty-bg: #422006;
   --color-button-secondary: #44403c;
+  --color-hover: #44403c;
 }
 
 *,

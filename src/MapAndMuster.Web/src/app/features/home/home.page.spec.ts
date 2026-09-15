@@ -7,6 +7,7 @@ import { provideRouter } from '@angular/router';
 import type { OwnProfile } from '../../core/auth/auth.models';
 import { AuthService } from '../../core/auth/auth.service';
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
+import { formatInstant } from '../../core/time/date-time-display';
 import { HomePage } from './home.page';
 
 function campaignItem(
@@ -155,7 +156,69 @@ describe('HomePage', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Orders needed');
     expect(compiled.textContent).toContain('Border War');
+    expect(compiled.textContent).toContain(formatInstant('2026-08-16T00:00:00+00:00', profile.timeZoneId));
     expect(compiled.textContent).toContain('Season opening');
+    http.verify();
+  });
+
+  it('lists notifications newest first with timestamps', async () => {
+    const auth = TestBed.inject(AuthService);
+    auth.currentUser.set({ ...profile, timeZoneId: 'America/New_York' });
+
+    const fixture = TestBed.createComponent(HomePage);
+    const http = TestBed.inject(HttpTestingController);
+    flushHomeBoard(http, {
+      notifications: [
+        {
+          id: '11111111-1111-1111-1111-111111111111',
+          kind: 'CampaignChat',
+          campaignId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          campaignName: 'Border War',
+          title: 'Older mention',
+          body: 'From last week.',
+          path: '/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          createdUtc: '2026-08-14T00:00:00+00:00',
+        },
+        {
+          id: '22222222-2222-2222-2222-222222222222',
+          kind: 'CampaignChat',
+          campaignId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          campaignName: 'Border War',
+          title: 'Newest mention',
+          body: 'Just now.',
+          path: '/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          createdUtc: '2026-08-16T12:00:00+00:00',
+        },
+        {
+          id: '33333333-3333-3333-3333-333333333333',
+          kind: 'CampaignChat',
+          campaignId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          campaignName: 'Border War',
+          title: 'Middle mention',
+          body: 'Yesterday.',
+          path: '/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          createdUtc: '2026-08-15T08:00:00+00:00',
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const noticeBoard = compiled.querySelector('#notice-heading')?.closest('section');
+    const titles = [...(noticeBoard?.querySelectorAll('.notice-item strong') ?? [])].map((node) =>
+      node.textContent.trim(),
+    );
+    expect(titles).toEqual(['Newest mention', 'Middle mention', 'Older mention']);
+    const times = [...(noticeBoard?.querySelectorAll('.notice-item time') ?? [])];
+    expect(times.map((node) => node.getAttribute('datetime'))).toEqual([
+      '2026-08-16T12:00:00+00:00',
+      '2026-08-15T08:00:00+00:00',
+      '2026-08-14T00:00:00+00:00',
+    ]);
+    expect(times[0]?.textContent).toContain(formatInstant('2026-08-16T12:00:00+00:00', 'America/New_York'));
+    expect(times[1]?.textContent).toContain(formatInstant('2026-08-15T08:00:00+00:00', 'America/New_York'));
+    expect(times[2]?.textContent).toContain(formatInstant('2026-08-14T00:00:00+00:00', 'America/New_York'));
     http.verify();
   });
 
@@ -174,7 +237,7 @@ describe('HomePage', () => {
         title: `Notice ${index + 1}`,
         body: `Body ${index + 1}`,
         path: '/campaigns/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-        createdUtc: '2026-08-16T00:00:00+00:00',
+        createdUtc: `2026-08-${String(16 - index).padStart(2, '0')}T12:00:00+00:00`,
       })),
     });
     await fixture.whenStable();

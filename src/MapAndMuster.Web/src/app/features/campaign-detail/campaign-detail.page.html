@@ -233,6 +233,17 @@
                   @if (force.supply; as supply) {
                     <ng-container *ngTemplateOutlet="supplyPoints; context: { $implicit: supply, caption: 'Supply' }" />
                   }
+                  @for (item of heldItemsForForce(force); track item.id) {
+                    <p>
+                      Holding {{ item.name }}
+                      @if (itemPowerLabels(item).length > 0) {
+                        —
+                        @for (power of itemPowerLabels(item); track power; let last = $last) {
+                          {{ power }}{{ last ? '' : '; ' }}
+                        }
+                      }
+                    </p>
+                  }
                 </li>
               }
             </ul>
@@ -252,6 +263,92 @@
             </p>
           }
           <ng-container *ngTemplateOutlet="summarySupply" />
+        }
+      </div>
+    }
+
+    @if (play() && (visibleItemObjectives().length > 0 || (canDebug() && isDebugActive()))) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('itemObjectives')"
+            (click)="toggleSection('itemObjectives')"
+          >
+            Item objectives
+          </button>
+        </h2>
+        @if (isOpen('itemObjectives')) {
+          @if (visibleItemObjectives().length === 0) {
+            <p class="muted">No revealed item objectives.</p>
+          } @else {
+            <ul class="stack">
+              @for (item of visibleItemObjectives(); track item.id) {
+                <li>
+                  {{ item.name }}
+                  @if (!item.isRevealed) {
+                    (hidden)
+                  }
+                  —
+                  @if (item.possessorForceId) {
+                    {{ itemLocation(item) }}
+                  } @else if (item.territoryId) {
+                    <button
+                      type="button"
+                      class="territory-link"
+                      [class.is-selected]="selectedIds().includes(item.territoryId)"
+                      [disabled]="!!mapAction()"
+                      [attr.aria-label]="'Show ' + territoryName(item.territoryId) + ' on the map'"
+                      (click)="selectTerritoryOnMap(item.territoryId)"
+                    >
+                      {{ territoryName(item.territoryId) }}
+                    </button>
+                  } @else {
+                    {{ itemLocation(item) }}
+                  }
+                  @if (item.flavorText) {
+                    <p>{{ item.flavorText }}</p>
+                  }
+                  @if (item.stateKey) {
+                    <p class="muted">State: {{ item.stateKey }}</p>
+                  }
+                  @if (itemSpecialRules(item).length > 0) {
+                    <ul>
+                      @for (rule of itemSpecialRules(item); track rule.id) {
+                        <li>
+                          <strong>{{ rule.name }}</strong>
+                          @if (rule.text) {
+                            — {{ rule.text }}
+                          }
+                        </li>
+                      }
+                    </ul>
+                  }
+                  @if (itemEffectLabels(item).length > 0) {
+                    <ul>
+                      @for (effect of itemEffectLabels(item); track effect) {
+                        <li>{{ effect }}</li>
+                      }
+                    </ul>
+                  }
+                  @if (canResolveItemChoice(item)) {
+                    <div class="choice-row">
+                      @for (choice of item.choices ?? []; track choice.id) {
+                        <button
+                          type="button"
+                          class="button-secondary"
+                          (click)="resolveItemObjectiveChoice(item.id, choice.id)"
+                        >
+                          {{ choice.name }}
+                        </button>
+                      }
+                    </div>
+                  }
+                </li>
+              }
+            </ul>
+          }
         }
       </div>
     }
@@ -375,9 +472,10 @@
                         [ngModel]="draftFor(force.id).kind"
                         (ngModelChange)="onDraftKind(force.id, $event)"
                         [name]="'kind-' + force.id"
+                        [disabled]="force.isRandomTeleportLocked === true"
                       >
                         @for (kind of draftKindsFor(force); track kind) {
-                          <option [value]="kind">{{ kind }}</option>
+                          <option [value]="kind">{{ actionKindLabel(kind) }}</option>
                         }
                       </select>
                     </div>
@@ -397,7 +495,7 @@
                         </select>
                       </div>
                       @if (
-                        draftFor(force.id).kind !== 'Teleport' &&
+                        !isChosenTeleportKind(draftFor(force.id).kind) &&
                         needsViaChoice(force, draftFor(force.id).targetTerritoryId)
                       ) {
                         <div class="field grow">
@@ -445,6 +543,23 @@
                       Save draft
                     </button>
                   </div>
+                  @if (draftFor(force.id).kind === 'Move' && droppableItemsFor(force).length > 0) {
+                    <fieldset class="stack">
+                      <legend>Drop unopened item objectives</legend>
+                      <p class="muted">Dropped items are left in this territory before the force moves.</p>
+                      @for (item of droppableItemsFor(force); track item.id) {
+                        <label>
+                          <input
+                            type="checkbox"
+                            [ngModel]="isItemDropSelected(force.id, item.id)"
+                            (ngModelChange)="onDraftDropItem(force.id, item.id, $event)"
+                            [name]="'drop-' + force.id + '-' + item.id"
+                          />
+                          Drop {{ item.name }}
+                        </label>
+                      }
+                    </fieldset>
+                  }
                   @if (draftFor(force.id).kind === 'Pillage') {
                     <p class="muted">
                       @if (structureAt(force.territoryId); as structure) {
@@ -499,7 +614,7 @@
                   }
                   @if (savedDraft(force.id); as saved) {
                     <p class="muted">
-                      Draft: {{ saved.kind }}
+                      Draft: {{ actionKindLabel(saved.kind) }}
                       @if (saved.targetTerritoryId) {
                         to
                         <button
@@ -775,7 +890,7 @@
                     @if (flow.step === 'menu') {
                       @for (kind of mapMenuActions(); track kind) {
                         <button type="button" class="menu-item" role="menuitem" (click)="onMapActionKind(kind)">
-                          {{ kind }}
+                          {{ actionKindLabel(kind) }}
                         </button>
                       }
                     } @else {
@@ -1328,11 +1443,18 @@
                         }
                       </div>
                     }
-                    @if (battle.needsRetreat || battle.isRetreatCommitted || battle.canSurrender) {
+                    @if (
+                      battle.needsRetreat ||
+                      battle.isRetreatCommitted ||
+                      battle.canSurrender ||
+                      battle.isSurrenderCommitted
+                    ) {
                       <div class="field">
                         <label [attr.for]="'retreat-' + battle.id">
                           {{
-                            battle.canSurrender && !battle.needsRetreat && !battle.isRetreatCommitted
+                            (battle.canSurrender || battle.isSurrenderCommitted) &&
+                            !battle.needsRetreat &&
+                            !battle.isRetreatCommitted
                               ? 'Surrender destination'
                               : 'Retreat destination'
                           }}
@@ -1343,7 +1465,7 @@
                           [ngModel]="retreatTarget()[battle.id] || ''"
                           (ngModelChange)="onRetreatTarget(battle.id, $event)"
                           [name]="'retreat-' + battle.id"
-                          [disabled]="!!battle.isRetreatCommitted"
+                          [disabled]="!!battle.isRetreatCommitted || !!battle.isSurrenderCommitted"
                           aria-required="true"
                         >
                           <option value="">Select a territory</option>
@@ -1353,11 +1475,16 @@
                         </select>
                         <p class="muted">Only territories this force can legally retreat to are listed.</p>
                       </div>
-                      @if (battle.isRetreatCommitted) {
+                      @if (battle.isRetreatCommitted || battle.isSurrenderCommitted) {
                         @if (canUncommitBattleRetreat(battle)) {
                           <p>
-                            Your retreat is committed. Uncommit returns it to draft until this battle window closes.
-                            After it closes the retreat resolves and cannot be backed out.
+                            @if (battle.isSurrenderCommitted) {
+                              Your surrender is committed. Uncommit returns it to draft until this window closes. After
+                              it closes the surrender resolves and the opponent is awarded maximum battle points.
+                            } @else {
+                              Your retreat is committed. Uncommit returns it to draft until this battle window closes.
+                              After it closes the retreat resolves and cannot be backed out.
+                            }
                           </p>
                           <button type="button" class="button-secondary" (click)="uncommitRetreat(battle)">
                             Uncommit
@@ -1839,6 +1966,117 @@
       }
     </div>
 
+    @if (forceStatusCatalog().length > 0) {
+      <div class="panel stack">
+        <h2>
+          <button
+            type="button"
+            class="section-toggle"
+            [attr.aria-expanded]="isOpen('forceStatusCatalog')"
+            (click)="toggleSection('forceStatusCatalog')"
+          >
+            Force statuses
+          </button>
+        </h2>
+        @if (isOpen('forceStatusCatalog')) {
+          <p class="muted">
+            Reference for named statuses, their effects, when they apply, and which forces currently have them.
+          </p>
+          <ul class="plain-list">
+            @for (entry of forceStatusCatalog(); track entry.status.id) {
+              <li class="stack">
+                <button
+                  type="button"
+                  class="section-toggle nested-toggle"
+                  [attr.aria-expanded]="isCatalogStatusOpen(entry.status.id)"
+                  (click)="toggleCatalogStatus(entry.status.id)"
+                >
+                  @if (forceStatusTokenSrc(entry.status); as src) {
+                    <img class="status-token" [src]="src" alt="" />
+                  }
+                  {{ entry.status.name }}
+                </button>
+                @if (isCatalogStatusOpen(entry.status.id)) {
+                  @if (entry.status.effects) {
+                    <p>{{ entry.status.effects }}</p>
+                  }
+                  <h3>Enable</h3>
+                  <ul>
+                    @for (condition of entry.enableConditions; track condition.id || $index) {
+                      <li>
+                        {{ forceStatusConditionLabel(condition, 'enable') }}
+                        @if (forceStatusConditionDetail(condition); as detail) {
+                          <span class="muted"> · {{ detail }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                  <h3>Clear</h3>
+                  <ul>
+                    @for (condition of entry.clearConditions; track condition.id || $index) {
+                      <li>
+                        {{ forceStatusConditionLabel(condition, 'clear') }}
+                        @if (forceStatusConditionDetail(condition); as detail) {
+                          <span class="muted"> · {{ detail }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                  @if (entry.cancelNames.length > 0) {
+                    <p>
+                      Cancel out:
+                      @for (name of entry.cancelNames; track name; let last = $last) {
+                        {{ name }}{{ last ? '' : ', ' }}
+                      }
+                    </p>
+                  }
+                  <h3>Forces with this status</h3>
+                  @if (entry.forces.length === 0) {
+                    <p class="muted">No forces currently have this status.</p>
+                  } @else {
+                    <ul>
+                      @for (item of entry.forces; track item.force.id) {
+                        <li>
+                          {{ item.factionName }} ·
+                          @for (player of item.players; track player; let last = $last) {
+                            {{ player }}{{ last ? '' : ', ' }}
+                          }
+                          ·
+                          <button
+                            type="button"
+                            class="territory-link"
+                            [class.is-selected]="selectedIds().includes(item.force.territoryId)"
+                            [disabled]="!!mapAction()"
+                            [attr.aria-label]="'Show ' + territoryName(item.force.territoryId) + ' on the map'"
+                            (click)="selectTerritoryOnMap(item.force.territoryId)"
+                          >
+                            {{ territoryName(item.force.territoryId) }}
+                          </button>
+                        </li>
+                      }
+                    </ul>
+                  }
+                  <h3>Immune factions</h3>
+                  @if (entry.immuneFactions.length === 0 && entry.immuneSubfactions.length === 0) {
+                    <p class="muted">No factions are configured as immune to this status.</p>
+                  } @else {
+                    <ul>
+                      @for (faction of entry.immuneFactions; track faction.id) {
+                        <li>{{ faction.name }}</li>
+                      }
+                      @for (item of entry.immuneSubfactions; track item.label) {
+                        <li>{{ item.label }}</li>
+                      }
+                    </ul>
+                  }
+                }
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    }
+
     @if (campaign.allyGroups.length > 0) {
       <div class="panel stack">
         <h2>
@@ -1943,85 +2181,6 @@
         }
       }
     </div>
-
-    @if (play() && (visibleItemObjectives().length > 0 || (canDebug() && isDebugActive()))) {
-      <div class="panel stack">
-        <h2>
-          <button
-            type="button"
-            class="section-toggle"
-            [attr.aria-expanded]="isOpen('itemObjectives')"
-            (click)="toggleSection('itemObjectives')"
-          >
-            Item objectives
-          </button>
-        </h2>
-        @if (isOpen('itemObjectives')) {
-          @if (visibleItemObjectives().length === 0) {
-            <p class="muted">No revealed item objectives.</p>
-          } @else {
-            <ul class="stack">
-              @for (item of visibleItemObjectives(); track item.id) {
-                <li>
-                  {{ item.name }}
-                  @if (!item.isRevealed) {
-                    (hidden)
-                  }
-                  —
-                  @if (item.possessorForceId) {
-                    {{ itemLocation(item) }}
-                  } @else if (item.territoryId) {
-                    <button
-                      type="button"
-                      class="territory-link"
-                      [class.is-selected]="selectedIds().includes(item.territoryId)"
-                      [disabled]="!!mapAction()"
-                      [attr.aria-label]="'Show ' + territoryName(item.territoryId) + ' on the map'"
-                      (click)="selectTerritoryOnMap(item.territoryId)"
-                    >
-                      {{ territoryName(item.territoryId) }}
-                    </button>
-                  } @else {
-                    {{ itemLocation(item) }}
-                  }
-                  @if (item.flavorText) {
-                    <p>{{ item.flavorText }}</p>
-                  }
-                  @if (item.stateKey) {
-                    <p class="muted">State: {{ item.stateKey }}</p>
-                  }
-                  @if (itemSpecialRules(item).length > 0) {
-                    <ul>
-                      @for (rule of itemSpecialRules(item); track rule.id) {
-                        <li>
-                          <strong>{{ rule.name }}</strong>
-                          @if (rule.text) {
-                            — {{ rule.text }}
-                          }
-                        </li>
-                      }
-                    </ul>
-                  }
-                  @if (canResolveItemChoice(item)) {
-                    <div class="choice-row">
-                      @for (choice of item.choices ?? []; track choice.id) {
-                        <button
-                          type="button"
-                          class="button-secondary"
-                          (click)="resolveItemObjectiveChoice(item.id, choice.id)"
-                        >
-                          {{ choice.name }}
-                        </button>
-                      }
-                    </div>
-                  }
-                </li>
-              }
-            </ul>
-          }
-        }
-      </div>
-    }
 
     @if (
       play() &&
@@ -2348,7 +2507,7 @@
                         [name]="'debug-kind-' + force.id"
                       >
                         @for (kind of debugKindsFor(force); track kind) {
-                          <option [value]="kind">{{ kind }}</option>
+                          <option [value]="kind">{{ actionKindLabel(kind) }}</option>
                         }
                       </select>
                     </div>
@@ -2368,7 +2527,7 @@
                         </select>
                       </div>
                       @if (
-                        debugDraftFor(force.id).kind !== 'Teleport' &&
+                        !isChosenTeleportKind(debugDraftFor(force.id).kind) &&
                         needsViaChoice(force, debugDraftFor(force.id).targetTerritoryId)
                       ) {
                         <div class="field">
@@ -2405,6 +2564,22 @@
                           }
                         </select>
                       </div>
+                    }
+                    @if (debugDraftFor(force.id).kind === 'Move' && droppableItemsFor(force).length > 0) {
+                      <fieldset class="stack">
+                        <legend>Drop unopened item objectives</legend>
+                        @for (item of droppableItemsFor(force); track item.id) {
+                          <label>
+                            <input
+                              type="checkbox"
+                              [ngModel]="isItemDropSelected(force.id, item.id, true)"
+                              (ngModelChange)="onDraftDropItem(force.id, item.id, $event, true)"
+                              [name]="'debug-drop-' + force.id + '-' + item.id"
+                            />
+                            Drop {{ item.name }}
+                          </label>
+                        }
+                      </fieldset>
                     }
                     <button type="button" class="button" (click)="applyDebugCorrection(force)">
                       {{ play.currentPhaseKind === 'Action' ? 'Apply correction' : 'Apply and re-resolve' }}
@@ -2714,6 +2889,27 @@
       >
         <h2 id="action-confirm-title">Confirm action</h2>
         <p id="action-confirm-desc">{{ confirmActionSummary() }}</p>
+        @if (mapAction()?.kind === 'Move') {
+          @if (mapConfirmForce(); as confirmForce) {
+            @if (droppableItemsFor(confirmForce).length > 0) {
+              <fieldset class="stack">
+                <legend>Drop unopened item objectives</legend>
+                <p class="muted">Dropped items are left in this territory before the force moves.</p>
+                @for (item of droppableItemsFor(confirmForce); track item.id) {
+                  <label>
+                    <input
+                      type="checkbox"
+                      [ngModel]="isMapItemDropSelected(item.id)"
+                      (ngModelChange)="onMapDropItem(item.id, $event)"
+                      [name]="'map-drop-' + item.id"
+                    />
+                    Drop {{ item.name }}
+                  </label>
+                }
+              </fieldset>
+            }
+          }
+        }
         <div class="actions">
           <button type="button" class="button" (click)="confirmMapAction()">Confirm</button>
           <button type="button" class="button-secondary" data-dialog-safe (click)="cancelMapAction()">Cancel</button>

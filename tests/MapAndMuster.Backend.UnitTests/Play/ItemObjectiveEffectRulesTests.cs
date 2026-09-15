@@ -45,11 +45,11 @@ public sealed class ItemObjectiveEffectRulesTests
     }
 
     [Fact]
-    public void ChosenTeleportIsAvailableOncePerRound()
+    public void ChosenTeleportIsUnavailableWhileRecharging()
     {
         var typeId = Guid.NewGuid();
         var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Origin, false);
-        var used = force.With(lastChosenTeleportRound: 2);
+        var recharging = force.With(chosenTeleportCooldownRemaining: 3);
         var item = HeldItem(typeId, force.Id);
         var rules = Effects(
             typeId,
@@ -57,10 +57,9 @@ public sealed class ItemObjectiveEffectRulesTests
         var map = Map();
 
         Assert.True(ItemObjectiveEffectRules.CanChosenTeleport(force, map, [item], rules, 2));
-        Assert.False(ItemObjectiveEffectRules.CanChosenTeleport(used, map, [item], rules, 2));
-        Assert.True(ItemObjectiveEffectRules.CanChosenTeleport(used, map, [item], rules, 3));
+        Assert.False(ItemObjectiveEffectRules.CanChosenTeleport(recharging, map, [item], rules, 2));
         Assert.True(ItemObjectiveEffectRules.HasAvailableTeleport(force, map, [item], rules, [force], 2));
-        Assert.False(ItemObjectiveEffectRules.HasAvailableTeleport(used, map, [item], rules, [used], 2));
+        Assert.False(ItemObjectiveEffectRules.HasAvailableTeleport(recharging, map, [item], rules, [recharging], 2));
         Assert.True(ItemObjectiveEffectRules.IsValidChosenTeleportTarget(force, map, [item], rules, 2, Via));
         Assert.False(ItemObjectiveEffectRules.IsValidChosenTeleportTarget(force, map, [item], rules, 2, Origin));
         Assert.False(ItemObjectiveEffectRules.IsValidChosenTeleportTarget(force, map, [item], rules, 2, EnemySpawn));

@@ -1,4 +1,5 @@
 import {
+  actionKindLabel,
   actionNumberAt,
   battleStatusLabel,
   BATTLE_STATUSES,
@@ -80,5 +81,11 @@ describe('campaign-schedule helpers', () => {
     );
     expect(forceStatusLabel('Shaken')).toBe('Shaken');
     expect(forceStatusLabel(null)).toBe('Normal');
+  });
+
+  it('labels teleport action kinds with the documented titles', () => {
+    expect(actionKindLabel('TeleportRandomly')).toBe('Teleport Randomly');
+    expect(actionKindLabel('TeleportToSpecificTerritory')).toBe('Teleport to Specific Territory');
+    expect(actionKindLabel('Hold')).toBe('Hold');
   });
 });

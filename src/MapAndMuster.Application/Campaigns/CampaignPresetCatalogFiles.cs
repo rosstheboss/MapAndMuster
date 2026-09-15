@@ -59,7 +59,11 @@ internal static class CampaignPresetCatalogFiles
             PublicObjectiveTypes = campaign.PublicObjectiveTypes,
             SpecialRules = campaign.SpecialRules,
             Missions = Merge(campaign.Missions, preset.Missions, static mission => mission.Name, CopyMissionFiles),
-            ForceStatuses = campaign.ForceStatuses,
+            ForceStatuses = Merge(
+                campaign.ForceStatuses,
+                preset.ForceStatuses,
+                static status => status.Name,
+                CopyForceStatusFiles),
             PrivateObjectiveTypes = campaign.PrivateObjectiveTypes,
             RivalObjectivesEnabled = campaign.RivalObjectivesEnabled,
             RivalObjectiveCampaignPoints = campaign.RivalObjectiveCampaignPoints,
@@ -203,6 +207,28 @@ internal static class CampaignPresetCatalogFiles
             Choices = destination.Choices,
             SpecialRuleIds = destination.SpecialRuleIds,
             Effects = destination.Effects,
+        };
+    }
+
+    private static StoredForceStatus CopyForceStatusFiles(StoredForceStatus destination, StoredForceStatus source)
+    {
+        var hasToken = CatalogFileBinder.IsUserUploadedFileKey(source.TokenImageStorageKey);
+        return new StoredForceStatus
+        {
+            Id = destination.Id,
+            Name = destination.Name,
+            Effects = destination.Effects,
+            EnableTrigger = destination.EnableTrigger,
+            ClearTrigger = destination.ClearTrigger,
+            EnableConditions = destination.EnableConditions,
+            ClearConditions = destination.ClearConditions,
+            Priority = destination.Priority,
+            CancelsStatusIds = destination.CancelsStatusIds,
+            EnableOccurrences = destination.EnableOccurrences,
+            ClearOccurrences = destination.ClearOccurrences,
+            ImmuneFactionIds = destination.ImmuneFactionIds,
+            ImmuneSubfactions = destination.ImmuneSubfactions,
+            TokenImageStorageKey = hasToken ? source.TokenImageStorageKey : destination.TokenImageStorageKey,
         };
     }
 

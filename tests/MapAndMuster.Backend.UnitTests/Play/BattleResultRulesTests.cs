@@ -55,6 +55,43 @@ public sealed class BattleResultRulesTests
     }
 
     [Fact]
+    public void AchievedStandardQuestionIdsIncludeThisForceOrTheOpponent()
+    {
+        var catalogId = Guid.NewGuid();
+        var missionQuestionId = Guid.NewGuid();
+        var questions = new[]
+        {
+            new MissionResultQuestionSetup(
+                missionQuestionId,
+                "Destroyed the baggage train",
+                MissionResultQuestionKind.Boolean,
+                1,
+                0,
+                catalogId),
+        };
+        var reports = new[]
+        {
+            new BattleParticipantReport(
+                NorthForce,
+                10,
+                1000,
+                6,
+                0,
+                [new BattleQuestionAnswer(missionQuestionId, true, 1)]),
+            new BattleParticipantReport(
+                SouthForce,
+                8,
+                1000,
+                4,
+                0,
+                [new BattleQuestionAnswer(missionQuestionId, false, 0)]),
+        };
+
+        var achieved = BattleResultRules.AchievedStandardQuestionIds(reports, questions);
+        Assert.Equal(catalogId, Assert.Single(achieved));
+    }
+
+    [Fact]
     public void ExtraCampaignPointsIncludeBooleanQuestions()
     {
         var question = new MissionResultQuestionSetup(Question, "Held the shrine?", MissionResultQuestionKind.Boolean, 2, 3);

@@ -568,6 +568,132 @@ public sealed class ActionResolutionTests
         Assert.Contains(resolved.State.Log, item => item.Kind == PlayLogKind.InvalidOrderHold);
     }
 
+    [Fact]
+    public void RandomTeleportPreparesInSecretThenResolvesOnTheFollowingAction()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var typeId = Guid.NewGuid();
+        var item = HeldItem(typeId, force.Id);
+        var rules = TeleportRules(typeId, ItemObjectiveEffectKind.TeleportToRandomEmptyNonSpawn);
+        var prepared = Resolve(
+            State(force, [Submit(force.Id, ActionKind.TeleportRandomly)], [item]),
+            Map(),
+            specialRules: rules);
+
+        var preparing = Assert.Single(prepared.State.Forces);
+        Assert.Equal(Midland, preparing.TerritoryId);
+        Assert.Equal(Eastland, preparing.PendingRandomTeleportDestinationId);
+        Assert.Null(preparing.SpecialActionSucceeded);
+        Assert.Contains(prepared.State.Log, entry =>
+            entry.Kind == PlayLogKind.RandomTeleportPreparing
+            && entry.TerritoryId == Midland
+            && entry.TargetTerritoryId is null);
+        Assert.Equal([ActionKind.TeleportRandomly], ActionResolution.EligibleActions(prepared.State, Map(), preparing, UnalignedGroups(), rules));
+
+        var resolved = Resolve(
+            prepared.State.With(submissions: [Submit(force.Id, ActionKind.TeleportRandomly)]),
+            Map(),
+            specialRules: rules);
+        var arrived = Assert.Single(resolved.State.Forces);
+        Assert.Equal(Eastland, arrived.TerritoryId);
+        Assert.Null(arrived.PendingRandomTeleportDestinationId);
+        Assert.True(arrived.SpecialActionSucceeded);
+    }
+
+    [Fact]
+    public void RandomTeleportFailsWhenAnEnemyOccupiesTheDestination()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var enemy = new CampaignForce(Guid.NewGuid(), PlayerTwo, South, Eastland, false);
+        var typeId = Guid.NewGuid();
+        var item = HeldItem(typeId, force.Id);
+        var rules = TeleportRules(typeId, ItemObjectiveEffectKind.TeleportToRandomEmptyNonSpawn);
+        var pending = force.With(pendingRandomTeleportDestinationId: Eastland, pendingRandomTeleportSourceTerritoryId: Midland);
+        var resolved = Resolve(
+            State([pending, enemy], [Submit(pending.Id, ActionKind.TeleportRandomly)], [item]),
+            Map(),
+            specialRules: rules);
+
+        var teleporter = Assert.Single(resolved.State.Forces, item => item.Id == pending.Id);
+        Assert.Equal(Midland, teleporter.TerritoryId);
+        Assert.Null(teleporter.PendingRandomTeleportDestinationId);
+        Assert.False(teleporter.SpecialActionSucceeded);
+    }
+
+    [Fact]
+    public void SpecifiedTeleportMovesImmediatelyAndStartsAThreePhaseRecharge()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var typeId = Guid.NewGuid();
+        var item = HeldItem(typeId, force.Id);
+        var rules = TeleportRules(typeId, ItemObjectiveEffectKind.TeleportToChosenNonSpawnOncePerRound);
+        var resolved = Resolve(
+            State(
+                force,
+                [Submit(force.Id, ActionKind.TeleportToSpecificTerritory, Eastland)],
+                [item]),
+            Map(),
+            specialRules: rules);
+
+        var arrived = Assert.Single(resolved.State.Forces);
+        Assert.Equal(Eastland, arrived.TerritoryId);
+        Assert.True(arrived.SpecialActionSucceeded);
+        Assert.Equal(3, arrived.ChosenTeleportCooldownRemaining);
+        Assert.DoesNotContain(
+            ActionResolution.EligibleActions(resolved.State, Map(), arrived, UnalignedGroups(), rules),
+            kind => kind == ActionKind.TeleportToSpecificTerritory);
+    }
+
+    [Fact]
+    public void SpecifiedTeleportCancelsWhenAnEnemyOccupiesTheDestination()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var enemy = new CampaignForce(Guid.NewGuid(), PlayerTwo, South, Midland, false);
+        var typeId = Guid.NewGuid();
+        var item = HeldItem(typeId, force.Id);
+        var rules = TeleportRules(typeId, ItemObjectiveEffectKind.TeleportToChosenNonSpawnOncePerRound);
+        var resolved = Resolve(
+            State(
+                [force, enemy],
+                [
+                    Submit(force.Id, ActionKind.TeleportToSpecificTerritory, Eastland),
+                    Submit(enemy.Id, ActionKind.Move, Eastland, actorUserId: PlayerTwo),
+                ],
+                [item]),
+            Map(),
+            specialRules: rules);
+
+        var teleporter = Assert.Single(resolved.State.Forces, item => item.Id == force.Id);
+        Assert.Equal(Midland, teleporter.TerritoryId);
+        Assert.False(teleporter.SpecialActionSucceeded);
+        Assert.Equal(3, teleporter.ChosenTeleportCooldownRemaining);
+    }
+
+    [Fact]
+    public void MoveDropsRequestedUnopenedItemsBeforeTheForceLeaves()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var drop = HeldItem(Guid.NewGuid(), force.Id, "Crown");
+        var keep = HeldItem(Guid.NewGuid(), force.Id, "Banner");
+        var resolved = Resolve(
+            State(
+                force,
+                [Submit(force.Id, ActionKind.Move, Eastland, droppedItemObjectiveIds: [drop.Id])],
+                [drop, keep]),
+            Map());
+
+        Assert.Null(Assert.Single(resolved.State.ItemObjectives, item => item.Id == drop.Id).PossessorForceId);
+        Assert.Equal(Midland, Assert.Single(resolved.State.ItemObjectives, item => item.Id == drop.Id).TerritoryId);
+        Assert.Equal(force.Id, Assert.Single(resolved.State.ItemObjectives, item => item.Id == keep.Id).PossessorForceId);
+        var log = resolved.State.Log.ToList();
+        var dropIndex = log.FindIndex(entry =>
+            entry.Kind == PlayLogKind.ItemObjectiveDropped && entry.Message == "Crown");
+        var moveIndex = log.FindIndex(entry =>
+            entry.Kind == PlayLogKind.ResolvedAction && entry.ActionKind == ActionKind.Move);
+        Assert.InRange(dropIndex, 0, moveIndex - 1);
+        Assert.Equal(Eastland, Assert.Single(resolved.State.Forces).TerritoryId);
+    }
+
     private static (CampaignPlayState State, PlayMap Map) Resolve(
         CampaignPlayState state,
         PlayMap map,
@@ -588,7 +714,18 @@ public sealed class ActionResolutionTests
         return State([force], submissions);
     }
 
-    private static CampaignPlayState State(IReadOnlyList<CampaignForce> forces, IReadOnlyList<OrderSubmission> submissions)
+    private static CampaignPlayState State(
+        CampaignForce force,
+        IReadOnlyList<OrderSubmission> submissions,
+        IReadOnlyList<CampaignItemObjective> items)
+    {
+        return State([force], submissions, items);
+    }
+
+    private static CampaignPlayState State(
+        IReadOnlyList<CampaignForce> forces,
+        IReadOnlyList<OrderSubmission> submissions,
+        IReadOnlyList<CampaignItemObjective>? items = null)
     {
         return new CampaignPlayState(
             [OpenAction()],
@@ -601,7 +738,7 @@ public sealed class ActionResolutionTests
             [],
             [],
             [],
-            [],
+            items ?? [],
             []);
     }
 
@@ -629,7 +766,8 @@ public sealed class ActionResolutionTests
         ActionKind kind,
         Guid? targetTerritoryId = null,
         Guid? structureTypeId = null,
-        Guid actorUserId = default)
+        Guid actorUserId = default,
+        IReadOnlyList<Guid>? droppedItemObjectiveIds = null)
     {
         return new OrderSubmission(
             Guid.NewGuid(),
@@ -640,7 +778,33 @@ public sealed class ActionResolutionTests
             structureTypeId,
             OrderSource.Commit,
             Now,
-            actorUserId == default ? PlayerOne : actorUserId);
+            actorUserId == default ? PlayerOne : actorUserId,
+            droppedItemObjectiveIds: droppedItemObjectiveIds);
+    }
+
+    private static CampaignItemObjective HeldItem(Guid typeId, Guid forceId, string name = "Crown")
+    {
+        return new CampaignItemObjective(
+            Guid.NewGuid(),
+            typeId,
+            name,
+            territoryId: null,
+            possessorForceId: forceId,
+            isRevealed: true,
+            Midland,
+            false);
+    }
+
+    private static SpecialRuleContext TeleportRules(Guid typeId, ItemObjectiveEffectKind kind)
+    {
+        return new SpecialRuleContext(
+            [],
+            new Dictionary<Guid, IReadOnlyList<Guid>>(),
+            new Dictionary<(Guid, string), IReadOnlyList<Guid>>(),
+            itemEffectsByTypeId: new Dictionary<Guid, IReadOnlyList<ItemObjectiveEffectSetup>>
+            {
+                [typeId] = [new ItemObjectiveEffectSetup(Guid.NewGuid(), kind)],
+            });
     }
 
     private static PlayMap Map(

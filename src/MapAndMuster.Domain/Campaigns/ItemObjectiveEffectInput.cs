@@ -34,6 +34,12 @@ public sealed class ItemObjectiveEffectInput
 
     /// <summary>Gets display-only reminder text for a custom battle effect.</summary>
     public string? CustomText { get; init; }
+
+    /// <summary>Gets the catalog status applied after this special action succeeds.</summary>
+    public Guid? SuccessStatusTypeId { get; init; }
+
+    /// <summary>Gets the catalog status applied after this special action fails.</summary>
+    public Guid? FailureStatusTypeId { get; init; }
 }
 
 /// <summary>

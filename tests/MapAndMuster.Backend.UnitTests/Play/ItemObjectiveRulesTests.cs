@@ -97,6 +97,54 @@ public sealed class ItemObjectiveRulesTests
     }
 
     [Fact]
+    public void MovingForceDropsOnlyRequestedUnopenedItems()
+    {
+        var forceId = Guid.Parse("88888888-8888-8888-8888-888888888888");
+        var keep = new CampaignItemObjective(
+            Guid.NewGuid(),
+            TypeId,
+            "Keep",
+            territoryId: null,
+            possessorForceId: forceId,
+            isRevealed: true,
+            Midland,
+            wasHiddenUntilFound: true);
+        var drop = new CampaignItemObjective(
+            Guid.NewGuid(),
+            TypeId,
+            "Drop",
+            territoryId: null,
+            possessorForceId: forceId,
+            isRevealed: true,
+            Midland,
+            wasHiddenUntilFound: true);
+        var opened = new CampaignItemObjective(
+            Guid.NewGuid(),
+            TypeId,
+            "Opened",
+            territoryId: null,
+            possessorForceId: forceId,
+            isRevealed: true,
+            Midland,
+            wasHiddenUntilFound: true,
+            resolvedChoiceId: Guid.NewGuid());
+        var log = new List<PlayLogEntry>();
+
+        var next = ItemObjectiveRules.DropCarriedByMovers(
+            [keep, drop, opened],
+            new Dictionary<Guid, Guid> { [forceId] = Midland },
+            Now,
+            log,
+            new HashSet<Guid> { drop.Id, opened.Id });
+
+        Assert.Equal(forceId, Assert.Single(next, item => item.Id == keep.Id).PossessorForceId);
+        Assert.Null(Assert.Single(next, item => item.Id == drop.Id).PossessorForceId);
+        Assert.Equal(forceId, Assert.Single(next, item => item.Id == opened.Id).PossessorForceId);
+        Assert.Contains(log, entry => entry.Kind == PlayLogKind.ItemObjectiveDropped && entry.Message == "Drop");
+        Assert.DoesNotContain(log, entry => entry.Message == "Keep" || entry.Message == "Opened");
+    }
+
+    [Fact]
     public void LoneForcePicksUpUnpossessedItemAndRevealsIt()
     {
         var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
@@ -121,6 +169,55 @@ public sealed class ItemObjectiveRulesTests
     }
 
     [Fact]
+    public void TwoOccupyingForcesRevealAHiddenItemWithoutAPossessor()
+    {
+        var north = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var south = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), South, Midland, false);
+        var item = new CampaignItemObjective(
+            Guid.NewGuid(),
+            TypeId,
+            "Crown",
+            Midland,
+            possessorForceId: null,
+            isRevealed: false,
+            Midland,
+            wasHiddenUntilFound: true);
+        var log = new List<PlayLogEntry>();
+
+        var next = ItemObjectiveRules.PickUpUnpossessed([item], [north, south], Now, log);
+
+        var revealed = Assert.Single(next);
+        Assert.Null(revealed.PossessorForceId);
+        Assert.Equal(Midland, revealed.TerritoryId);
+        Assert.True(revealed.IsRevealed);
+        Assert.Contains(log, entry => entry.Kind == PlayLogKind.ItemObjectiveFound);
+    }
+
+    [Fact]
+    public void TwoOccupyingForcesLeaveAnAlreadyFoundItemUnowned()
+    {
+        var north = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var south = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), South, Midland, false);
+        var item = new CampaignItemObjective(
+            Guid.NewGuid(),
+            TypeId,
+            "Crown",
+            Midland,
+            possessorForceId: null,
+            isRevealed: true,
+            Midland,
+            wasHiddenUntilFound: false);
+        var log = new List<PlayLogEntry>();
+
+        var next = ItemObjectiveRules.PickUpUnpossessed([item], [north, south], Now, log);
+
+        var remaining = Assert.Single(next);
+        Assert.Null(remaining.PossessorForceId);
+        Assert.Equal(Midland, remaining.TerritoryId);
+        Assert.Empty(log);
+    }
+
+    [Fact]
     public void BattleWinnerTakesItemsOnTheFieldAndFromParticipants()
     {
         var winner = Guid.Parse("88888888-8888-8888-8888-888888888888");
@@ -129,6 +226,15 @@ public sealed class ItemObjectiveRulesTests
             Guid.NewGuid(),
             TypeId,
             "Crown",
+            territoryId: null,
+            possessorForceId: loser,
+            isRevealed: true,
+            Midland,
+            false);
+        var secondHeld = new CampaignItemObjective(
+            Guid.NewGuid(),
+            Guid.Parse("66666666-6666-6666-6666-666666666666"),
+            "Orb",
             territoryId: null,
             possessorForceId: loser,
             isRevealed: true,
@@ -156,12 +262,13 @@ public sealed class ItemObjectiveRulesTests
         var log = new List<PlayLogEntry>();
 
         var next = ItemObjectiveRules.AwardBattleSpoils(
-            [held, ground],
+            [held, secondHeld, ground],
             battle,
             [],
             Now,
             log);
 
+        Assert.Equal(3, next.Count);
         Assert.All(next, item =>
         {
             Assert.Equal(winner, item.PossessorForceId);

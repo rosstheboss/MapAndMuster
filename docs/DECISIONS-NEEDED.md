@@ -35,13 +35,15 @@ in an ADR or the relevant domain document and update tests.
     played stays in the territory for the next round's battle phase. See `docs/DOMAIN.md`.
 8. Resolved: surrender may be submitted during an action or battle window while the force is
     engaged. Click the force on the map and commit from the map toolbar. A committed surrender
-    cannot be withdrawn. A surrender left in draft still executes at the deadline. Uncommitted
-    action-phase orders may still be uncommitted while the window is open. In 1v1 the remaining
-    player is clicked through at maximum differential battle points and 0 for the surrenderer,
-    with no extra/mission bonus battle points and no result agreement. Voluntary surrender is
-    not a missed-result delinquency for either side. In larger fights, allies of a surrendering
-    force may keep fighting or run; if only one side remains it wins; if every remaining force
-    runs, nobody wins and no relic transfers. See `docs/DOMAIN.md`.
+    may be uncommitted while the current window remains open; uncommitting restores the
+    engagement and the opponent does not keep maximum differential battle points. A surrender
+    left in draft still executes at the deadline. Uncommitted action-phase orders may still be
+    uncommitted while the window is open. In 1v1 the remaining player is clicked through at
+    maximum differential battle points and 0 for the surrenderer, with no extra/mission bonus
+    battle points and no result agreement. Voluntary surrender is not a missed-result
+    delinquency for either side. In larger fights, allies of a surrendering force may keep
+    fighting or run; if only one side remains it wins; if every remaining force runs, nobody
+    wins and no relic transfers. See `docs/DOMAIN.md`.
 9. Resolved: the territory owner owns the structure. Enemy capture stays operational unless a
    special rule auto-pillages. Allies cannot claim allied land without backstabbing. Empty-land
    backstab claims and auto-pillages (never auto-destroys). See `docs/DOMAIN.md`.

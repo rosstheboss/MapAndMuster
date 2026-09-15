@@ -1262,6 +1262,12 @@ public sealed class ItemObjectiveEffectDetail
 
     /// <summary>Gets display-only reminder text for a custom battle effect.</summary>
     public string? CustomText { get; init; }
+
+    /// <summary>Gets the catalog status applied after this special action succeeds.</summary>
+    public Guid? SuccessStatusTypeId { get; init; }
+
+    /// <summary>Gets the catalog status applied after this special action fails.</summary>
+    public Guid? FailureStatusTypeId { get; init; }
 }
 
 /// <summary>
@@ -1394,6 +1400,27 @@ public sealed class ForceStatusDetail
 
     /// <summary>Gets how many consecutive clear-trigger matches are required.</summary>
     public int ClearOccurrences { get; init; } = ForceStatusOccurrences.Default;
+
+    /// <summary>Gets factions that refuse this named status.</summary>
+    public IReadOnlyList<Guid> ImmuneFactionIds { get; init; } = [];
+
+    /// <summary>Gets named subfactions that refuse this named status.</summary>
+    public IReadOnlyList<ForceStatusImmuneSubfactionDetail> ImmuneSubfactions { get; init; } = [];
+
+    /// <summary>Gets whether a chit or token image is stored.</summary>
+    public bool HasTokenImage { get; init; }
+}
+
+/// <summary>
+/// A named subfaction that refuses a catalog force status.
+/// </summary>
+public sealed class ForceStatusImmuneSubfactionDetail
+{
+    /// <summary>Gets the parent faction.</summary>
+    public required Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Subfaction { get; init; }
 }
 
 /// <summary>
@@ -1424,6 +1451,12 @@ public sealed class ForceStatusConditionDetail
     /// OccupyingWithSpecifiedStatus.
     /// </summary>
     public Guid? RequiredStatusId { get; init; }
+
+    /// <summary>
+    /// Gets the standard battle-result question that must be achieved when the trigger is
+    /// StandardBattleResultQuestion.
+    /// </summary>
+    public Guid? RequiredQuestionId { get; init; }
 }
 
 /// <summary>
@@ -2027,6 +2060,12 @@ public sealed class StoredItemObjectiveEffect
 
     /// <summary>Gets display-only reminder text for a custom battle effect.</summary>
     public string? CustomText { get; init; }
+
+    /// <summary>Gets the catalog status applied after this special action succeeds.</summary>
+    public Guid? SuccessStatusTypeId { get; init; }
+
+    /// <summary>Gets the catalog status applied after this special action fails.</summary>
+    public Guid? FailureStatusTypeId { get; init; }
 }
 
 /// <summary>
@@ -2159,6 +2198,27 @@ public sealed class StoredForceStatus
 
     /// <summary>Gets how many consecutive clear-trigger matches are required.</summary>
     public int ClearOccurrences { get; init; } = ForceStatusOccurrences.Default;
+
+    /// <summary>Gets factions that refuse this named status.</summary>
+    public IReadOnlyList<Guid> ImmuneFactionIds { get; init; } = [];
+
+    /// <summary>Gets named subfactions that refuse this named status.</summary>
+    public IReadOnlyList<StoredForceStatusImmuneSubfaction> ImmuneSubfactions { get; init; } = [];
+
+    /// <summary>Gets the stored chit or token image key, when present.</summary>
+    public string? TokenImageStorageKey { get; init; }
+}
+
+/// <summary>
+/// A persisted named subfaction that refuses a catalog force status.
+/// </summary>
+public sealed class StoredForceStatusImmuneSubfaction
+{
+    /// <summary>Gets the parent faction.</summary>
+    public required Guid FactionId { get; init; }
+
+    /// <summary>Gets the subfaction name.</summary>
+    public required string Subfaction { get; init; }
 }
 
 /// <summary>
@@ -2189,6 +2249,12 @@ public sealed class StoredForceStatusCondition
     /// OccupyingWithSpecifiedStatus.
     /// </summary>
     public Guid? RequiredStatusId { get; init; }
+
+    /// <summary>
+    /// Gets the standard battle-result question that must be achieved when the trigger is
+    /// StandardBattleResultQuestion.
+    /// </summary>
+    public Guid? RequiredQuestionId { get; init; }
 }
 
 /// <summary>

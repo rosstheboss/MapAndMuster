@@ -143,7 +143,8 @@ public sealed class SaveOrderDraftHandler
                     viaTerritoryId: command.ViaTerritoryId,
                     destroyImmediately: command.DestroyImmediately,
                     specialRules: CampaignPlayCatalog.SpecialRules(campaign),
-                    viaPath: command.ViaPath))
+                    viaPath: command.ViaPath,
+                    droppedItemObjectiveIds: command.DroppedItemObjectiveIds))
                 {
                     return PlayMutation.Fail(error);
                 }

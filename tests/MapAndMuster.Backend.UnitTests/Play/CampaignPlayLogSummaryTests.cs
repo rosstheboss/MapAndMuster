@@ -12,9 +12,62 @@ public sealed class CampaignPlayLogSummaryTests
     private static readonly Guid South = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private static readonly Guid Bob = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid Leopold = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid BobForce = Guid.Parse("55555555-5555-5555-5555-555555555555");
     private static readonly Guid FromId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid ToId = Guid.Parse("44444444-4444-4444-4444-444444444444");
     private static readonly DateTimeOffset Now = new(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void FormatsItemPickupDropAndRandomTeleportPreparation()
+    {
+        var summaries = Summaries(
+        [
+            new PlayLogEntry(
+                Guid.NewGuid(),
+                Now,
+                PlayLogKind.ItemObjectivePickedUp,
+                null,
+                BobForce,
+                Bob,
+                FromId,
+                null,
+                null,
+                null,
+                [],
+                "Crown"),
+            new PlayLogEntry(
+                Guid.NewGuid(),
+                Now.AddSeconds(1),
+                PlayLogKind.ItemObjectiveDropped,
+                null,
+                BobForce,
+                Bob,
+                FromId,
+                null,
+                null,
+                null,
+                [],
+                "Crown"),
+            new PlayLogEntry(
+                Guid.NewGuid(),
+                Now.AddSeconds(2),
+                PlayLogKind.RandomTeleportPreparing,
+                null,
+                BobForce,
+                Bob,
+                FromId,
+                null,
+                null,
+                ActionKind.TeleportRandomly,
+                [BobForce]),
+        ]);
+
+        Assert.Equal("bob's force at West Avila Coastline picked up Crown.", summaries[0]);
+        Assert.Equal("bob's force dropped Crown at West Avila Coastline.", summaries[1]);
+        Assert.Equal(
+            "bob's force at West Avila Coastline is preparing to teleport to a random location.",
+            summaries[2]);
+    }
 
     [Fact]
     public void FormatsResolvedActionsInNaturalLanguage()
@@ -230,7 +283,7 @@ public sealed class CampaignPlayLogSummaryTests
         play = play.With(
             forces:
             [
-                new CampaignForce(Guid.NewGuid(), Bob, North, FromId, false),
+                new CampaignForce(BobForce, Bob, North, FromId, false),
                 new CampaignForce(Guid.NewGuid(), Leopold, South, ToId, false),
             ]);
 

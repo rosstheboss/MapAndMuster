@@ -286,8 +286,8 @@ export const ITEM_OBJECTIVE_EFFECT_KINDS = [
   { id: 'PushDefeatedOpponentToSpawn', label: 'Push a defeated opponent to spawn' },
   { id: 'AddMovementSpeed', label: 'Add force movement speed' },
   { id: 'ModifySupply', label: 'Add or subtract supply (minimum 1)' },
-  { id: 'TeleportToRandomEmptyNonSpawn', label: 'Teleport to a random empty non-spawn territory' },
-  { id: 'TeleportToChosenNonSpawnOncePerRound', label: 'Teleport once per round to a chosen non-spawn territory' },
+  { id: 'TeleportToRandomEmptyNonSpawn', label: 'Teleport Randomly' },
+  { id: 'TeleportToChosenNonSpawnOncePerRound', label: 'Teleport to Specific Territory' },
   { id: 'InflictStatusWhileHeld', label: 'Inflict a status while holding this item' },
   { id: 'ImmuneToStatuses', label: 'Immune to statuses' },
   { id: 'InflictStatusOnSharedTerritory', label: 'Inflict statuses on forces sharing the territory' },
@@ -308,6 +308,8 @@ export interface ItemObjectiveEffect {
   forcedAllyGroupName?: string | null;
   alliedFactions?: ItemObjectiveAllianceTarget[];
   customText?: string | null;
+  successStatusTypeId?: string | null;
+  failureStatusTypeId?: string | null;
 }
 
 export interface ItemObjectiveAllianceTarget {
@@ -357,6 +359,14 @@ export interface CampaignForceStatus {
   clearConditions?: ForceStatusCondition[];
   priority?: number;
   cancelsStatusIds?: string[];
+  immuneFactionIds?: string[];
+  immuneSubfactions?: ForceStatusImmuneSubfaction[];
+  hasTokenImage?: boolean;
+}
+
+export interface ForceStatusImmuneSubfaction {
+  factionId: string;
+  subfaction: string;
 }
 
 export interface CampaignPrivateObjectiveType {
@@ -641,6 +651,8 @@ export interface SaveItemObjectiveEffectPayload {
   forcedAllyGroupName?: string | null;
   alliedFactions?: ItemObjectiveAllianceTarget[];
   customText?: string | null;
+  successStatusTypeId?: string | null;
+  failureStatusTypeId?: string | null;
 }
 
 export interface SavePublicObjectiveTypePayload {
@@ -693,6 +705,9 @@ export interface SaveForceStatusPayload {
   clearOccurrences?: number;
   priority: number;
   cancelsStatusIds?: string[];
+  immuneFactionIds?: string[];
+  immuneSubfactions?: ForceStatusImmuneSubfaction[];
+  clearTokenImage?: boolean;
 }
 
 export interface SavePrivateObjectiveTypePayload {
@@ -905,6 +920,8 @@ export interface PlayForce {
   supply?: PlayerSupplyView | null;
   canChooseTeleportDestination?: boolean;
   teleportTargets?: string[];
+  isRandomTeleportLocked?: boolean;
+  droppableItemObjectiveIds?: string[];
 }
 
 export interface PlayMoveHop {
@@ -938,6 +955,7 @@ export interface PlayDraft {
   viaTerritoryId?: string | null;
   viaPath?: string[] | null;
   destroyImmediately?: boolean;
+  droppedItemObjectiveIds?: string[];
 }
 
 export interface PlayOrder {
@@ -977,6 +995,7 @@ export interface PlayBattle {
   needsRetreat: boolean;
   awaitingRetreat?: boolean;
   isRetreatCommitted?: boolean;
+  isSurrenderCommitted?: boolean;
   retreatDraftTargetId?: string | null;
   retreatTargets?: string[];
   canSurrender?: boolean;
@@ -1170,6 +1189,7 @@ export interface SaveOrderDraftPayload {
   viaTerritoryId?: string | null;
   viaPath?: string[] | null;
   destroyImmediately?: boolean;
+  droppedItemObjectiveIds?: string[] | null;
   reResolvePrevious?: boolean;
 }
 

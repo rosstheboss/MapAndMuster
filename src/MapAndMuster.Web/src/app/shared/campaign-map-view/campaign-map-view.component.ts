@@ -356,11 +356,15 @@ export class CampaignMapViewComponent {
       });
       const presentItems = this.items().filter((item) => item.territoryId === territory.id && !item.carried);
       const itemPins = presentItems.map((item, index) => {
-        const preferred = {
-          x: center.x + (index - (presentItems.length - 1) / 2) * maxWidth * 0.55,
-          y: center.y - maxHeight * 0.38,
-        };
-        const fit = fitSquareInPolygon(territory.polygon, preferred, maxWidth * 0.7, maxHeight * 0.7, avoided);
+        const offsetX = (index - (presentItems.length - 1) / 2) * maxWidth * 0.55;
+        const aboveStructure = structureFit
+          ? { x: structureFit.x + offsetX, y: structureFit.y - structureFit.height }
+          : null;
+        const preferred =
+          aboveStructure && containsStrict(territory.polygon, aboveStructure)
+            ? aboveStructure
+            : { x: center.x + offsetX, y: center.y - maxHeight * 0.38 };
+        const fit = fitSquareInPolygon(territory.polygon, preferred, maxWidth, maxHeight, avoided);
         avoided.push(fit);
         return { item, fit };
       });

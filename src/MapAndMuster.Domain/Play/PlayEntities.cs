@@ -106,7 +106,11 @@ public sealed class CampaignForce
         IReadOnlyDictionary<string, int>? enableStreaks = null,
         IReadOnlyDictionary<string, int>? clearStreaks = null,
         int clearStreak = 0,
-        int lastChosenTeleportRound = 0)
+        int lastChosenTeleportRound = 0,
+        int chosenTeleportCooldownRemaining = 0,
+        Guid? pendingRandomTeleportDestinationId = null,
+        Guid? pendingRandomTeleportSourceTerritoryId = null,
+        bool? specialActionSucceeded = null)
     {
         Id = id;
         ControllerUserId = controllerUserId;
@@ -120,6 +124,15 @@ public sealed class CampaignForce
         ClearStreaks = NormalizeStreaks(clearStreaks);
         ClearStreak = Math.Clamp(clearStreak, 0, 10);
         LastChosenTeleportRound = Math.Max(0, lastChosenTeleportRound);
+        ChosenTeleportCooldownRemaining = Math.Max(0, chosenTeleportCooldownRemaining);
+        PendingRandomTeleportDestinationId = pendingRandomTeleportDestinationId is { } dest && dest != Guid.Empty
+            ? dest
+            : null;
+        PendingRandomTeleportSourceTerritoryId =
+            pendingRandomTeleportSourceTerritoryId is { } source && source != Guid.Empty
+                ? source
+                : null;
+        SpecialActionSucceeded = specialActionSucceeded;
     }
 
     /// <summary>Gets the force identifier.</summary>
@@ -166,6 +179,22 @@ public sealed class CampaignForce
     /// </summary>
     public int LastChosenTeleportRound { get; }
 
+    /// <summary>Gets remaining action phases before specified teleport is ready.</summary>
+    public int ChosenTeleportCooldownRemaining { get; }
+
+    /// <summary>
+    /// Gets the secretly chosen random-teleport destination while a two-phase teleport is in progress.
+    /// </summary>
+    public Guid? PendingRandomTeleportDestinationId { get; }
+
+    /// <summary>Gets the territory the force started a random teleport from.</summary>
+    public Guid? PendingRandomTeleportSourceTerritoryId { get; }
+
+    /// <summary>
+    /// Gets whether the latest special action succeeded. Null when none resolved this window.
+    /// </summary>
+    public bool? SpecialActionSucceeded { get; }
+
     /// <summary>
     /// Returns a copy with a new location, battle flag, water-occupation streak, or trigger streaks.
     /// Status and subfaction are preserved.
@@ -177,7 +206,13 @@ public sealed class CampaignForce
         IReadOnlyDictionary<string, int>? enableStreaks = null,
         IReadOnlyDictionary<string, int>? clearStreaks = null,
         int? clearStreak = null,
-        int? lastChosenTeleportRound = null)
+        int? lastChosenTeleportRound = null,
+        int? chosenTeleportCooldownRemaining = null,
+        Guid? pendingRandomTeleportDestinationId = null,
+        Guid? pendingRandomTeleportSourceTerritoryId = null,
+        bool? specialActionSucceeded = null,
+        bool clearPendingTeleport = false,
+        bool clearSpecialActionOutcome = false)
     {
         return new CampaignForce(
             Id,
@@ -191,7 +226,13 @@ public sealed class CampaignForce
             enableStreaks ?? EnableStreaks,
             clearStreaks ?? ClearStreaks,
             clearStreak ?? ClearStreak,
-            lastChosenTeleportRound ?? LastChosenTeleportRound);
+            lastChosenTeleportRound ?? LastChosenTeleportRound,
+            chosenTeleportCooldownRemaining ?? ChosenTeleportCooldownRemaining,
+            clearPendingTeleport ? null : pendingRandomTeleportDestinationId ?? PendingRandomTeleportDestinationId,
+            clearPendingTeleport
+                ? null
+                : pendingRandomTeleportSourceTerritoryId ?? PendingRandomTeleportSourceTerritoryId,
+            clearSpecialActionOutcome ? null : specialActionSucceeded ?? SpecialActionSucceeded);
     }
 
     /// <summary>
@@ -213,7 +254,11 @@ public sealed class CampaignForce
             EnableStreaks,
             same ? ClearStreaks : new Dictionary<string, int>(),
             same ? ClearStreak : 0,
-            LastChosenTeleportRound);
+            LastChosenTeleportRound,
+            ChosenTeleportCooldownRemaining,
+            PendingRandomTeleportDestinationId,
+            PendingRandomTeleportSourceTerritoryId,
+            SpecialActionSucceeded);
     }
 
     /// <summary>
@@ -233,7 +278,11 @@ public sealed class CampaignForce
             EnableStreaks,
             ClearStreaks,
             ClearStreak,
-            LastChosenTeleportRound);
+            LastChosenTeleportRound,
+            ChosenTeleportCooldownRemaining,
+            PendingRandomTeleportDestinationId,
+            PendingRandomTeleportSourceTerritoryId,
+            SpecialActionSucceeded);
     }
 
     private static Dictionary<string, int> NormalizeStreaks(IReadOnlyDictionary<string, int>? streaks)
@@ -266,7 +315,8 @@ public sealed class OrderDraft
         DateTimeOffset updatedUtc,
         Guid? viaTerritoryId = null,
         bool destroyImmediately = false,
-        IReadOnlyList<Guid>? viaPath = null)
+        IReadOnlyList<Guid>? viaPath = null,
+        IReadOnlyList<Guid>? droppedItemObjectiveIds = null)
     {
         WindowId = windowId;
         ForceId = forceId;
@@ -277,6 +327,7 @@ public sealed class OrderDraft
         ViaTerritoryId = viaTerritoryId;
         DestroyImmediately = destroyImmediately;
         ViaPath = viaPath ?? [];
+        DroppedItemObjectiveIds = DistinctIds(droppedItemObjectiveIds);
     }
 
     /// <summary>Gets the action window.</summary>
@@ -305,6 +356,19 @@ public sealed class OrderDraft
 
     /// <summary>Gets extra hops between the first via and the destination when speed is greater than 2.</summary>
     public IReadOnlyList<Guid> ViaPath { get; }
+
+    /// <summary>Gets item objectives the force drops at the start of this Move, when any.</summary>
+    public IReadOnlyList<Guid> DroppedItemObjectiveIds { get; }
+
+    private static IReadOnlyList<Guid> DistinctIds(IReadOnlyList<Guid>? ids)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            return [];
+        }
+
+        return [.. ids.Where(static id => id != Guid.Empty).Distinct()];
+    }
 }
 
 /// <summary>
@@ -327,7 +391,8 @@ public sealed class OrderSubmission
         Guid actorUserId,
         Guid? viaTerritoryId = null,
         bool destroyImmediately = false,
-        IReadOnlyList<Guid>? viaPath = null)
+        IReadOnlyList<Guid>? viaPath = null,
+        IReadOnlyList<Guid>? droppedItemObjectiveIds = null)
     {
         Id = id;
         WindowId = windowId;
@@ -341,6 +406,7 @@ public sealed class OrderSubmission
         ViaTerritoryId = viaTerritoryId;
         DestroyImmediately = destroyImmediately;
         ViaPath = viaPath ?? [];
+        DroppedItemObjectiveIds = DistinctIds(droppedItemObjectiveIds);
     }
 
     /// <summary>Gets the submission identifier.</summary>
@@ -378,6 +444,19 @@ public sealed class OrderSubmission
 
     /// <summary>Gets extra hops between the first via and the destination when speed is greater than 2.</summary>
     public IReadOnlyList<Guid> ViaPath { get; }
+
+    /// <summary>Gets item objectives the force drops at the start of this Move, when any.</summary>
+    public IReadOnlyList<Guid> DroppedItemObjectiveIds { get; }
+
+    private static IReadOnlyList<Guid> DistinctIds(IReadOnlyList<Guid>? ids)
+    {
+        if (ids is null || ids.Count == 0)
+        {
+            return [];
+        }
+
+        return [.. ids.Where(static id => id != Guid.Empty).Distinct()];
+    }
 }
 
 /// <summary>
@@ -885,7 +964,7 @@ public sealed class RetreatOrder
         SubmittedUtc = submittedUtc;
         IsSurrender = isSurrender;
         IsStaffCorrection = isStaffCorrection;
-        IsCommitted = isCommitted || isSurrender || isDefault || isStaffCorrection;
+        IsCommitted = isCommitted || isDefault || isStaffCorrection;
     }
 
     /// <summary>Gets the retreat identifier.</summary>

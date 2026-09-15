@@ -279,6 +279,12 @@ public sealed class PlayForceResponse
 
     /// <summary>Gets chosen-teleport destinations when the viewer may pick one.</summary>
     public IReadOnlyList<Guid> TeleportTargets { get; init; } = [];
+
+    /// <summary>Gets whether this force is locked into resolving a random teleport.</summary>
+    public bool IsRandomTeleportLocked { get; init; }
+
+    /// <summary>Gets held item objectives that may still be dropped during Move.</summary>
+    public IReadOnlyList<Guid> DroppableItemObjectiveIds { get; init; } = [];
 }
 
 /// <summary>A two-territory Move hop.</summary>
@@ -363,6 +369,9 @@ public sealed class PlayDraftResponse
 
     /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
     public bool DestroyImmediately { get; init; }
+
+    /// <summary>Gets item objectives dropped at the start of this Move, when any.</summary>
+    public IReadOnlyList<Guid> DroppedItemObjectiveIds { get; init; } = [];
 }
 
 /// <summary>A submitted or revealed order.</summary>
@@ -465,6 +474,9 @@ public sealed class PlayBattleResponse
 
     /// <summary>Gets whether the viewer has committed a retreat for this battle.</summary>
     public bool IsRetreatCommitted { get; init; }
+
+    /// <summary>Gets whether the viewer has committed a surrender for this battle.</summary>
+    public bool IsSurrenderCommitted { get; init; }
 
     /// <summary>Gets the viewer's saved retreat destination, committed or still in draft.</summary>
     public Guid? RetreatDraftTargetId { get; init; }
@@ -694,6 +706,9 @@ public sealed class SaveOrderDraftRequest
 
     /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
     public bool DestroyImmediately { get; init; }
+
+    /// <summary>Gets item objectives dropped at the start of this Move, when any.</summary>
+    public IReadOnlyList<Guid>? DroppedItemObjectiveIds { get; init; }
 
     /// <summary>Gets whether to re-resolve the previous action instead of editing the current window.</summary>
     public bool ReResolvePrevious { get; init; }
@@ -1315,6 +1330,16 @@ public static class PlayResponses
                     CancelsStatusIds = status.CancelsStatusIds,
                     EnableOccurrences = status.EnableOccurrences,
                     ClearOccurrences = status.ClearOccurrences,
+                    ImmuneFactionIds = status.ImmuneFactionIds,
+                    ImmuneSubfactions =
+                    [
+                        .. status.ImmuneSubfactions.Select(static item => new ForceStatusImmuneSubfactionResponse
+                        {
+                            FactionId = item.FactionId,
+                            Subfaction = item.Subfaction,
+                        }),
+                    ],
+                    HasTokenImage = status.HasTokenImage,
                 }),
             ],
             PointsPerBattleWon = detail.PointsPerBattleWon,
@@ -1355,6 +1380,8 @@ public static class PlayResponses
                     Supply = CampaignResponses.FromSupply(force.Supply),
                     CanChooseTeleportDestination = force.CanChooseTeleportDestination,
                     TeleportTargets = force.TeleportTargets,
+                    IsRandomTeleportLocked = force.IsRandomTeleportLocked,
+                    DroppableItemObjectiveIds = force.DroppableItemObjectiveIds,
                 }),
             ],
             MyDrafts =
@@ -1368,6 +1395,7 @@ public static class PlayResponses
                     ViaTerritoryId = draft.ViaTerritoryId,
                     ViaPath = draft.ViaPath,
                     DestroyImmediately = draft.DestroyImmediately,
+                    DroppedItemObjectiveIds = draft.DroppedItemObjectiveIds,
                 }),
             ],
             Orders =
@@ -1391,6 +1419,7 @@ public static class PlayResponses
                     ViaTerritoryId = draft.ViaTerritoryId,
                     ViaPath = draft.ViaPath,
                     DestroyImmediately = draft.DestroyImmediately,
+                    DroppedItemObjectiveIds = draft.DroppedItemObjectiveIds,
                 }),
             ],
             Commitments =
@@ -1452,6 +1481,7 @@ public static class PlayResponses
                     NeedsRetreat = battle.NeedsRetreat,
                     AwaitingRetreat = battle.AwaitingRetreat,
                     IsRetreatCommitted = battle.IsRetreatCommitted,
+                    IsSurrenderCommitted = battle.IsSurrenderCommitted,
                     RetreatDraftTargetId = battle.RetreatDraftTargetId,
                     CanSurrender = battle.CanSurrender,
                     RetreatTargets = battle.RetreatTargets,

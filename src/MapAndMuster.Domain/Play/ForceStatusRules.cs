@@ -38,7 +38,12 @@ public static class ForceStatusRules
             bool pillaged = false,
             bool repaired = false,
             bool destroyed = false,
-            IReadOnlyList<Guid>? occupyingStatusTypeIds = null)
+            IReadOnlyList<Guid>? occupyingStatusTypeIds = null,
+            TerritoryAccessFacts? access = null,
+            TerritoryAccessFacts? previousAccess = null,
+            IReadOnlyList<Guid>? achievedStandardQuestionIds = null,
+            bool specialActionSucceeded = false,
+            bool specialActionFailed = false)
         {
             Held = held;
             Moved = moved;
@@ -61,6 +66,11 @@ public static class ForceStatusRules
             Repaired = repaired;
             Destroyed = destroyed;
             OccupyingStatusTypeIds = occupyingStatusTypeIds ?? [];
+            Access = access ?? TerritoryAccessFacts.None;
+            PreviousAccess = previousAccess ?? TerritoryAccessFacts.None;
+            AchievedStandardQuestionIds = achievedStandardQuestionIds ?? [];
+            SpecialActionSucceeded = specialActionSucceeded;
+            SpecialActionFailed = specialActionFailed;
         }
 
         /// <summary>Gets whether the force Held.</summary>
@@ -128,6 +138,26 @@ public static class ForceStatusRules
         /// action. Intermediate Move hops are not included.
         /// </summary>
         public IReadOnlyList<Guid> OccupyingStatusTypeIds { get; }
+
+        /// <summary>Gets current spawn and structure access along the force's territory chain.</summary>
+        public TerritoryAccessFacts Access { get; }
+
+        /// <summary>
+        /// Gets spawn and structure access from the previous action-window map, used to detect reunion.
+        /// </summary>
+        public TerritoryAccessFacts PreviousAccess { get; }
+
+        /// <summary>
+        /// Gets standard battle-result catalog identifiers achieved by this force or an opponent in
+        /// this battle window.
+        /// </summary>
+        public IReadOnlyList<Guid> AchievedStandardQuestionIds { get; }
+
+        /// <summary>Gets whether a special action such as teleport succeeded this action phase.</summary>
+        public bool SpecialActionSucceeded { get; }
+
+        /// <summary>Gets whether a special action such as teleport failed this action phase.</summary>
+        public bool SpecialActionFailed { get; }
 
         /// <summary>Gets whether this resolution is an action phase rather than a battle window.</summary>
         public bool IsActionPhase => UpdateWaterStreak;
@@ -447,7 +477,7 @@ public static class ForceStatusRules
             }
 
             if (change.SetStatus is { } next
-                && !FactionSpecialRulePolicies.AllowsStatus(force, next, rules))
+                && !FactionSpecialRulePolicies.AllowsStatus(force, next, rules, catalog: catalog))
             {
                 return (force, null);
             }
@@ -523,7 +553,7 @@ public static class ForceStatusRules
 
         var match = catalog.FirstOrDefault(status =>
             string.Equals(status.Name, statusName, StringComparison.OrdinalIgnoreCase));
-        if (match is null || !FactionSpecialRulePolicies.AllowsStatus(force, match.Name, rules))
+        if (match is null || !FactionSpecialRulePolicies.AllowsStatus(force, match.Name, rules, catalog: catalog))
         {
             return (force, null);
         }
@@ -686,10 +716,15 @@ public static class ForceStatusRules
         bool pillaged = false,
         bool repaired = false,
         bool destroyed = false,
-        IReadOnlyList<Guid>? occupyingStatusTypeIds = null)
+        IReadOnlyList<Guid>? occupyingStatusTypeIds = null,
+        TerritoryAccessFacts? access = null,
+        TerritoryAccessFacts? previousAccess = null,
+        bool? specialActionSucceeded = null)
     {
-        var held = kind is null or ActionKind.Hold;
-        var moved = kind is ActionKind.Move or ActionKind.Split or ActionKind.Retreat;
+        var held = kind is null or ActionKind.Hold
+            || (TeleportActionRules.IsRandomTeleport(kind.Value) && specialActionSucceeded is null);
+        var moved = kind is ActionKind.Move or ActionKind.Split or ActionKind.Retreat
+            || (specialActionSucceeded == true && kind is { } resolved && TeleportActionRules.IsTeleport(resolved));
         return new Facts(
             held,
             moved,
@@ -711,7 +746,11 @@ public static class ForceStatusRules
             pillaged,
             repaired,
             destroyed,
-            occupyingStatusTypeIds);
+            occupyingStatusTypeIds,
+            access,
+            previousAccess,
+            specialActionSucceeded: specialActionSucceeded == true,
+            specialActionFailed: specialActionSucceeded == false);
     }
 
     /// <summary>
@@ -725,7 +764,8 @@ public static class ForceStatusRules
         bool occupiesWater,
         bool surrendered = false,
         bool lostOnWater = false,
-        PlayTerritory? territory = null)
+        PlayTerritory? territory = null,
+        IReadOnlyList<Guid>? achievedStandardQuestionIds = null)
     {
         return new Facts(
             false,
@@ -743,7 +783,8 @@ public static class ForceStatusRules
             territory?.TerrainTypeId,
             territory?.TerrainTagIds,
             territory?.StructureTypeId,
-            territory?.StructureTagIds);
+            territory?.StructureTagIds,
+            achievedStandardQuestionIds: achievedStandardQuestionIds);
     }
 
     /// <summary>
@@ -772,7 +813,7 @@ public static class ForceStatusRules
     {
         var force = forces[index];
         var diseased = statuses.FirstOrDefault(static status => ForceStatusNames.IsDiseased(status.Name));
-        if (diseased is null || !FactionSpecialRulePolicies.AllowsStatus(force, ForceStatusNames.Diseased, rules))
+        if (diseased is null || !FactionSpecialRulePolicies.AllowsStatus(force, ForceStatusNames.Diseased, rules, catalog: statuses))
         {
             return false;
         }
@@ -814,7 +855,7 @@ public static class ForceStatusRules
         foreach (var candidate in statuses)
         {
             if (!candidate.EnableConditions.Any(condition => IsEnableReady(force, candidate, condition, facts))
-                || !FactionSpecialRulePolicies.AllowsStatus(force, candidate.Name, rules))
+                || !FactionSpecialRulePolicies.AllowsStatus(force, candidate.Name, rules, catalog: statuses))
             {
                 continue;
             }
@@ -855,7 +896,7 @@ public static class ForceStatusRules
         if (starting is not null
             && !startingCleared
             && !cancelled.Contains(starting.Id)
-            && FactionSpecialRulePolicies.AllowsStatus(force, starting.Name, rules))
+            && FactionSpecialRulePolicies.AllowsStatus(force, starting.Name, rules, catalog: statuses))
         {
             remaining.Add(starting);
         }
@@ -1127,7 +1168,14 @@ public static class ForceStatusRules
                 or ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus => facts.UpdateWaterStreak,
             ForceStatusEnableTrigger.AfterBattle
                 or ForceStatusEnableTrigger.BattleWon
-                or ForceStatusEnableTrigger.BattleLostOrRetreat => !facts.UpdateWaterStreak,
+                or ForceStatusEnableTrigger.BattleLostOrRetreat
+                or ForceStatusEnableTrigger.StandardBattleResultQuestion => !facts.UpdateWaterStreak,
+            ForceStatusEnableTrigger.CutOffFromStructure
+                or ForceStatusEnableTrigger.CutOffFromSpawn
+                or ForceStatusEnableTrigger.ReunitedWithSpawn
+                or ForceStatusEnableTrigger.ReunitedWithStructure
+                or ForceStatusEnableTrigger.SpecialActionSucceeded
+                or ForceStatusEnableTrigger.SpecialActionFailed => facts.UpdateWaterStreak,
             _ => false,
         };
     }
@@ -1155,7 +1203,12 @@ public static class ForceStatusRules
                 or ForceStatusClearTrigger.OccupyingWithSpecifiedStatus => facts.UpdateWaterStreak,
             ForceStatusClearTrigger.AfterBattle
                 or ForceStatusClearTrigger.BattleWon
-                or ForceStatusClearTrigger.BattleLostOrRetreat => !facts.UpdateWaterStreak,
+                or ForceStatusClearTrigger.BattleLostOrRetreat
+                or ForceStatusClearTrigger.StandardBattleResultQuestion => !facts.UpdateWaterStreak,
+            ForceStatusClearTrigger.CutOffFromStructure
+                or ForceStatusClearTrigger.CutOffFromSpawn
+                or ForceStatusClearTrigger.ReunitedWithSpawn
+                or ForceStatusClearTrigger.ReunitedWithStructure => facts.UpdateWaterStreak,
             ForceStatusClearTrigger.AfterMoveOrBattle => true,
             _ => false,
         };
@@ -1190,11 +1243,65 @@ public static class ForceStatusRules
 
     private static bool MatchesEnable(ForceStatusEnableCondition condition, Facts facts)
     {
+        if (ForceStatusTriggerKinds.RequiresQuestion(condition.Trigger))
+        {
+            return MatchesLocation(condition.Location, facts)
+                && condition.RequiredQuestionId is { } question
+                && facts.AchievedStandardQuestionIds.Contains(question);
+        }
+
+        if (condition.Trigger == ForceStatusEnableTrigger.CutOffFromSpawn)
+        {
+            return !facts.Access.HasFriendlySpawnAccess;
+        }
+
+        if (condition.Trigger == ForceStatusEnableTrigger.ReunitedWithSpawn)
+        {
+            return facts.Access.GainedSpawnAccess(facts.PreviousAccess);
+        }
+
+        if (condition.Trigger == ForceStatusEnableTrigger.CutOffFromStructure)
+        {
+            return !facts.Access.HasStructureAccess(condition.Location);
+        }
+
+        if (condition.Trigger == ForceStatusEnableTrigger.ReunitedWithStructure)
+        {
+            return facts.Access.GainedStructureAccess(facts.PreviousAccess, condition.Location);
+        }
+
         return MatchesEnableTrigger(condition.Trigger, facts) && MatchesLocation(condition.Location, facts);
     }
 
     private static bool MatchesClear(ForceStatusClearCondition condition, Facts facts)
     {
+        if (ForceStatusTriggerKinds.RequiresQuestion(condition.Trigger))
+        {
+            return MatchesLocation(condition.Location, facts)
+                && condition.RequiredQuestionId is { } question
+                && facts.AchievedStandardQuestionIds.Contains(question);
+        }
+
+        if (condition.Trigger == ForceStatusClearTrigger.CutOffFromSpawn)
+        {
+            return !facts.Access.HasFriendlySpawnAccess;
+        }
+
+        if (condition.Trigger == ForceStatusClearTrigger.ReunitedWithSpawn)
+        {
+            return facts.Access.GainedSpawnAccess(facts.PreviousAccess);
+        }
+
+        if (condition.Trigger == ForceStatusClearTrigger.CutOffFromStructure)
+        {
+            return !facts.Access.HasStructureAccess(condition.Location);
+        }
+
+        if (condition.Trigger == ForceStatusClearTrigger.ReunitedWithStructure)
+        {
+            return facts.Access.GainedStructureAccess(facts.PreviousAccess, condition.Location);
+        }
+
         return MatchesClearTrigger(condition.Trigger, facts) && MatchesLocation(condition.Location, facts);
     }
 
@@ -1279,6 +1386,15 @@ public static class ForceStatusRules
             ForceStatusEnableTrigger.Destroy => facts.Destroyed,
             ForceStatusEnableTrigger.OccupyingWithThisStatus => facts.IsActionPhase,
             ForceStatusEnableTrigger.OccupyingWithSpecifiedStatus => facts.IsActionPhase,
+            ForceStatusEnableTrigger.StandardBattleResultQuestion => facts.FoughtBattle,
+            ForceStatusEnableTrigger.CutOffFromStructure => !facts.Access.HasStructureAccess(ConditionLocation.Any),
+            ForceStatusEnableTrigger.CutOffFromSpawn => !facts.Access.HasFriendlySpawnAccess,
+            ForceStatusEnableTrigger.ReunitedWithSpawn => facts.Access.GainedSpawnAccess(facts.PreviousAccess),
+            ForceStatusEnableTrigger.ReunitedWithStructure => facts.Access.GainedStructureAccess(
+                facts.PreviousAccess,
+                ConditionLocation.Any),
+            ForceStatusEnableTrigger.SpecialActionSucceeded => facts.SpecialActionSucceeded,
+            ForceStatusEnableTrigger.SpecialActionFailed => facts.SpecialActionFailed,
             ForceStatusEnableTrigger.Disease => false,
             _ => false,
         };
@@ -1304,6 +1420,13 @@ public static class ForceStatusRules
             ForceStatusClearTrigger.Destroy => facts.Destroyed,
             ForceStatusClearTrigger.OccupyingWithThisStatus => facts.IsActionPhase,
             ForceStatusClearTrigger.OccupyingWithSpecifiedStatus => facts.IsActionPhase,
+            ForceStatusClearTrigger.StandardBattleResultQuestion => facts.FoughtBattle,
+            ForceStatusClearTrigger.CutOffFromStructure => !facts.Access.HasStructureAccess(ConditionLocation.Any),
+            ForceStatusClearTrigger.CutOffFromSpawn => !facts.Access.HasFriendlySpawnAccess,
+            ForceStatusClearTrigger.ReunitedWithSpawn => facts.Access.GainedSpawnAccess(facts.PreviousAccess),
+            ForceStatusClearTrigger.ReunitedWithStructure => facts.Access.GainedStructureAccess(
+                facts.PreviousAccess,
+                ConditionLocation.Any),
             _ => false,
         };
     }

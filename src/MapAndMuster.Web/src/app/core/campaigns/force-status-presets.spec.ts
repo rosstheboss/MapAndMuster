@@ -59,12 +59,14 @@ describe('force-status-presets', () => {
       }),
     ).toEqual([
       {
+        id: undefined,
         trigger: 'BattleLostOrRetreat',
         occurrences: 1,
         locationKind: 'Any',
         locationTypeId: null,
         locationTagId: null,
         requiredStatusId: null,
+        requiredQuestionId: null,
       },
     ]);
     expect(forceStatusEnableConditions({ enableTrigger: 'Hold', enableOccurrences: 3, enableConditions: [] })).toEqual([
@@ -92,6 +94,19 @@ describe('force-status-presets', () => {
     expect(FORCE_STATUS_ENABLE_OPTIONS.some((option) => option.id === 'OccupyingWithSpecifiedStatus')).toBe(true);
     expect(FORCE_STATUS_CLEAR_OPTIONS.some((option) => option.id === 'OccupyingWithThisStatus')).toBe(true);
     expect(FORCE_STATUS_CLEAR_OPTIONS.some((option) => option.id === 'OccupyingWithSpecifiedStatus')).toBe(true);
+  });
+
+  it('lists battle-result and territory-access triggers for enable and clear', () => {
+    expect(FORCE_STATUS_ENABLE_OPTIONS.some((option) => option.id === 'StandardBattleResultQuestion')).toBe(true);
+    expect(FORCE_STATUS_ENABLE_OPTIONS.some((option) => option.id === 'CutOffFromStructure')).toBe(true);
+    expect(FORCE_STATUS_ENABLE_OPTIONS.some((option) => option.id === 'CutOffFromSpawn')).toBe(true);
+    expect(FORCE_STATUS_ENABLE_OPTIONS.some((option) => option.id === 'ReunitedWithSpawn')).toBe(true);
+    expect(FORCE_STATUS_ENABLE_OPTIONS.some((option) => option.id === 'ReunitedWithStructure')).toBe(true);
+    expect(FORCE_STATUS_CLEAR_OPTIONS.some((option) => option.id === 'StandardBattleResultQuestion')).toBe(true);
+    expect(FORCE_STATUS_CLEAR_OPTIONS.some((option) => option.id === 'CutOffFromStructure')).toBe(true);
+    expect(FORCE_STATUS_CLEAR_OPTIONS.some((option) => option.id === 'CutOffFromSpawn')).toBe(true);
+    expect(FORCE_STATUS_CLEAR_OPTIONS.some((option) => option.id === 'ReunitedWithSpawn')).toBe(true);
+    expect(FORCE_STATUS_CLEAR_OPTIONS.some((option) => option.id === 'ReunitedWithStructure')).toBe(true);
   });
 
   it('picks the lowest unused priority for a new status', () => {

@@ -121,6 +121,18 @@ public static class ForceStatusCatalog
                         cancels);
                 }
 
+                if (string.Equals(preset.Name, "Exhausted", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new ForceStatusSetup(
+                        ids[preset.Name],
+                        preset.Name,
+                        preset.Effects,
+                        ExhaustedEnableConditions(),
+                        [new ForceStatusClearCondition(preset.ClearTrigger, preset.ClearOccurrences)],
+                        preset.Priority,
+                        cancels);
+                }
+
                 return new ForceStatusSetup(
                     ids[preset.Name],
                     preset.Name,
@@ -130,6 +142,19 @@ public static class ForceStatusCatalog
                     preset.Priority,
                     cancels);
             }),
+        ];
+    }
+
+    /// <summary>
+    /// Enable conditions for Exhausted: after any resolved battle, or after a special action succeeds or fails.
+    /// </summary>
+    public static IReadOnlyList<ForceStatusEnableCondition> ExhaustedEnableConditions()
+    {
+        return
+        [
+            new ForceStatusEnableCondition(ForceStatusEnableTrigger.AfterBattle),
+            new ForceStatusEnableCondition(ForceStatusEnableTrigger.SpecialActionSucceeded),
+            new ForceStatusEnableCondition(ForceStatusEnableTrigger.SpecialActionFailed),
         ];
     }
 

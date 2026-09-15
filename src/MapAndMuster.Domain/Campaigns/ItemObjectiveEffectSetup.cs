@@ -18,7 +18,9 @@ public sealed class ItemObjectiveEffectSetup
         bool suspendCurrentAllyGroup = false,
         string? forcedAllyGroupName = null,
         IReadOnlyList<ItemObjectiveAllianceTarget>? alliedFactions = null,
-        string? customText = null)
+        string? customText = null,
+        Guid? successStatusTypeId = null,
+        Guid? failureStatusTypeId = null)
     {
         Id = id;
         Kind = kind;
@@ -30,6 +32,8 @@ public sealed class ItemObjectiveEffectSetup
         ForcedAllyGroupName = string.IsNullOrWhiteSpace(forcedAllyGroupName) ? null : forcedAllyGroupName.Trim();
         AlliedFactions = alliedFactions ?? [];
         CustomText = string.IsNullOrWhiteSpace(customText) ? null : customText.Trim();
+        SuccessStatusTypeId = successStatusTypeId is { } success && success != Guid.Empty ? success : null;
+        FailureStatusTypeId = failureStatusTypeId is { } failure && failure != Guid.Empty ? failure : null;
     }
 
     /// <summary>Gets the effect identifier.</summary>
@@ -61,6 +65,12 @@ public sealed class ItemObjectiveEffectSetup
 
     /// <summary>Gets display-only reminder text for a custom battle effect.</summary>
     public string? CustomText { get; }
+
+    /// <summary>Gets the catalog status applied after this special action succeeds.</summary>
+    public Guid? SuccessStatusTypeId { get; }
+
+    /// <summary>Gets the catalog status applied after this special action fails.</summary>
+    public Guid? FailureStatusTypeId { get; }
 
     private static IReadOnlyList<Guid> DistinctIds(IReadOnlyList<Guid>? ids)
     {

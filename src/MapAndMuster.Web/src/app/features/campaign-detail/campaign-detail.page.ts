@@ -24,10 +24,13 @@ import { UpdateStreamService, type UpdateStreamSubscription } from '../../core/c
 import { ClockService } from '../../core/time/clock.service';
 import { MAP_EDIT_CLOSED_MESSAGE, MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
 import {
+  actionKindLabel,
   actionNumberAt,
   battleStatusLabel,
   DURATION_UNITS,
   forceStatusLabel,
+  forceStatusClearLabel,
+  forceStatusEnableLabel,
   formatCountdown,
   formatDuration,
   formatPhaseEndTimestamp,
@@ -45,40 +48,44 @@ import {
   type StandingsSort,
   type StandingsSortColumn,
 } from '../../core/campaigns/campaign-view-prefs.service';
-import type {
-  ArmyListSupplyCategory,
-  BattleParticipantReport,
-  CampaignChatSend,
-  CampaignDetail,
-  CampaignFaction,
-  CampaignMission,
-  CampaignParticipant,
-  CampaignPlayDetail,
-  CampaignPointSource,
-  CampaignPointStanding,
-  CampaignSpecialRule,
-  MapGraphDetail,
-  MissionResultQuestion,
-  PlayBattle,
-  PlayBattleForceSupply,
-  PlayBattleSubmission,
-  PlayDraft,
-  PlayerSupplyView,
-  PlayForce,
-  PlayItemObjective,
-  PlayMoveHop,
-  PrivateObjectiveAssignment,
-  PublicObjectiveLeader,
-  PublicObjectiveLeaderboard,
-  RivalObjectiveAssignment,
-  TraitorVictim,
-  UserSearchHit,
+import {
+  ITEM_OBJECTIVE_EFFECT_KINDS,
+  missionsForTerritory,
+  structureTypeById,
+  terrainTypeById,
+  type ArmyListSupplyCategory,
+  type BattleParticipantReport,
+  type CampaignChatSend,
+  type CampaignDetail,
+  type CampaignFaction,
+  type CampaignForceStatus,
+  type CampaignMission,
+  type CampaignParticipant,
+  type CampaignPlayDetail,
+  type CampaignPointSource,
+  type CampaignPointStanding,
+  type CampaignSpecialRule,
+  type MapGraphDetail,
+  type MissionResultQuestion,
+  type PlayBattle,
+  type PlayBattleForceSupply,
+  type PlayBattleSubmission,
+  type PlayDraft,
+  type PlayerSupplyView,
+  type PlayForce,
+  type PlayItemObjective,
+  type PlayMoveHop,
+  type PrivateObjectiveAssignment,
+  type PublicObjectiveLeader,
+  type PublicObjectiveLeaderboard,
+  type RivalObjectiveAssignment,
+  type TraitorVictim,
+  type UserSearchHit,
 } from '../../core/campaigns/campaign.models';
-import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import { findSubfactionAppearance, resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import { compareNames } from '../../core/campaigns/faction-presets';
-import { isWaterTagName } from '../../core/campaigns/force-status-presets';
+import { hidesForceStatusLocation, isWaterTagName } from '../../core/campaigns/force-status-presets';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { formatLocation } from '../../core/location/location';
@@ -114,9 +121,9 @@ const CAMPAIGN_SECTIONS = [
   'log',
   'participants',
   'faction',
+  'itemObjectives',
   'missingFaction',
   'map',
-  'itemObjectives',
   'privateObjectives',
   'orders',
   'battles',
@@ -126,6 +133,7 @@ const CAMPAIGN_SECTIONS = [
   'schedule',
   'details',
   'factions',
+  'forceStatusCatalog',
   'allies',
   'links',
   'standings',
@@ -191,6 +199,7 @@ interface OrderDraft {
   viaTerritoryId: string;
   viaPath: string[];
   destroyImmediately: boolean;
+  droppedItemObjectiveIds: string[];
 }
 
 interface MapActionFlow {
@@ -203,6 +212,7 @@ interface MapActionFlow {
   viaPath: string[];
   viaCandidates: string[];
   structureTypeId: string;
+  droppedItemObjectiveIds: string[];
   menuX: number;
   menuY: number;
 }
@@ -231,6 +241,7 @@ function emptyOrderDraft(overrides?: Partial<OrderDraft>): OrderDraft {
     viaTerritoryId: '',
     viaPath: [],
     destroyImmediately: false,
+    droppedItemObjectiveIds: [],
     ...overrides,
   };
 }
@@ -259,7 +270,10 @@ function defaultOpenSections(status: string): Record<CampaignSection, boolean> {
 }
 
 function openSections(): Record<CampaignSection, boolean> {
-  return Object.fromEntries(CAMPAIGN_SECTIONS.map((id) => [id, true])) as Record<CampaignSection, boolean>;
+  return Object.fromEntries(CAMPAIGN_SECTIONS.map((id) => [id, id !== 'forceStatusCatalog'])) as Record<
+    CampaignSection,
+    boolean
+  >;
 }
 
 @Component({
@@ -324,6 +338,7 @@ export class CampaignDetailPage {
   protected readonly chatBusy = signal(false);
   protected readonly chatError = signal<string | null>(null);
   protected readonly openSections = signal(openSections());
+  protected readonly openCatalogStatusIds = signal<ReadonlySet<string>>(new Set());
   protected readonly commitmentsRosterOpen = signal(false);
   protected readonly highlightMode = signal<MapHighlightMode>('configured');
   protected readonly standingsSort = signal<StandingsSort>({ ...DEFAULT_STANDINGS_SORT });
@@ -637,11 +652,16 @@ export class CampaignDetailPage {
     }
 
     const battles = this.play()?.battles ?? [];
-    if (battles.some((battle) => battle.canSurrender === true)) {
+    if (battles.some((battle) => battle.canSurrender === true || battle.isSurrenderCommitted === true)) {
       return 'Surrender';
     }
 
-    if (battles.some((battle) => battle.needsRetreat === true || battle.isRetreatCommitted === true)) {
+    if (
+      battles.some(
+        (battle) =>
+          battle.needsRetreat === true || battle.isRetreatCommitted === true || battle.isSurrenderCommitted === true,
+      )
+    ) {
       return 'Retreat';
     }
 
@@ -810,6 +830,60 @@ export class CampaignDetailPage {
         (ids) => this.specialRulesFor(ids),
       ),
     );
+  });
+  protected readonly forceStatusCatalog = computed(() => {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return [];
+    }
+
+    const statuses = [...(campaign.forceStatuses ?? [])].sort(
+      (left, right) => (left.priority ?? 0) - (right.priority ?? 0),
+    );
+    const names = new Map(statuses.map((status) => [status.id, status.name] as const));
+    const factions = new Map(campaign.factions.map((faction) => [faction.id, faction] as const));
+    const forces = this.play()?.forces ?? [];
+    const rosters = this.listedFactions();
+    return statuses.map((status) => ({
+      status,
+      enableConditions:
+        status.enableConditions && status.enableConditions.length > 0
+          ? status.enableConditions
+          : status.enableTrigger
+            ? [{ trigger: status.enableTrigger, occurrences: status.enableOccurrences ?? 1 }]
+            : [],
+      clearConditions:
+        status.clearConditions && status.clearConditions.length > 0
+          ? status.clearConditions
+          : status.clearTrigger
+            ? [{ trigger: status.clearTrigger, occurrences: status.clearOccurrences ?? 1 }]
+            : [],
+      cancelNames: (status.cancelsStatusIds ?? []).map((id) => names.get(id)).filter((name): name is string => !!name),
+      immuneFactions: (status.immuneFactionIds ?? []).flatMap((id) => {
+        const faction = factions.get(id);
+        return faction ? [{ id, name: faction.name }] : [];
+      }),
+      immuneSubfactions: (status.immuneSubfactions ?? []).flatMap((item) => {
+        const faction = factions.get(item.factionId);
+        return faction ? [{ label: `${faction.name} — ${item.subfaction}` }] : [];
+      }),
+      forces: forces
+        .filter((force) => compareNames(force.statusName ?? '', status.name) === 0)
+        .map((force) => {
+          const roster = rosters.find((entry) => entry.faction.id === force.factionId);
+          const players = [
+            firstNonEmpty(force.controllerUsername) ?? 'Player',
+            ...(roster?.players.map((player) => player.displayName) ?? []),
+            ...(roster?.subfactions.flatMap((subfaction) => subfaction.players.map((player) => player.displayName)) ??
+              []),
+          ].filter((name, index, listed) => listed.findIndex((item) => compareNames(item, name) === 0) === index);
+          return {
+            force,
+            factionName: this.factionName(force.factionId),
+            players,
+          };
+        }),
+    }));
   });
   protected readonly chosenSpecialRules = computed(() => {
     const parsed = parseMapFactionOptionValue(this.factionChoice());
@@ -1010,6 +1084,112 @@ export class CampaignDetailPage {
   protected setSection(id: CampaignSection, open: boolean): void {
     this.openSections.update((current) => ({ ...current, [id]: open }));
     this.persistViewPrefs();
+  }
+
+  protected isCatalogStatusOpen(statusId: string): boolean {
+    return this.openCatalogStatusIds().has(statusId);
+  }
+
+  protected toggleCatalogStatus(statusId: string): void {
+    this.openCatalogStatusIds.update((current) => {
+      const next = new Set(current);
+      if (next.has(statusId)) {
+        next.delete(statusId);
+      } else {
+        next.add(statusId);
+      }
+
+      return next;
+    });
+  }
+
+  protected forceStatusConditionLabel(
+    condition: { trigger: string; occurrences?: number },
+    side: 'enable' | 'clear',
+  ): string {
+    const trigger =
+      side === 'enable' ? forceStatusEnableLabel(condition.trigger) : forceStatusClearLabel(condition.trigger);
+    const times = condition.occurrences && condition.occurrences > 1 ? ` ×${condition.occurrences}` : '';
+    return `${trigger}${times}`;
+  }
+
+  protected forceStatusConditionDetail(condition: {
+    trigger: string;
+    locationKind?: string;
+    locationTypeId?: string | null;
+    locationTagId?: string | null;
+    requiredStatusId?: string | null;
+    requiredQuestionId?: string | null;
+  }): string | null {
+    const parts: string[] = [];
+    if (!hidesForceStatusLocation(condition.trigger)) {
+      const location = this.forceStatusLocationCaption(condition);
+      if (location) {
+        parts.push(location);
+      }
+    }
+
+    if (condition.requiredStatusId) {
+      const name = (this.campaign()?.forceStatuses ?? []).find(
+        (status) => status.id === condition.requiredStatusId,
+      )?.name;
+      if (name) {
+        parts.push(`occupying ${name}`);
+      }
+    }
+
+    if (condition.requiredQuestionId) {
+      const prompt = (this.campaign()?.standardBattleResultQuestions ?? []).find(
+        (question) => question.id === condition.requiredQuestionId,
+      )?.prompt;
+      if (prompt) {
+        parts.push(prompt);
+      }
+    }
+
+    return parts.length > 0 ? parts.join(' · ') : null;
+  }
+
+  protected forceStatusTokenSrc(status: CampaignForceStatus): string | null {
+    const campaign = this.campaign();
+    if (!campaign || !status.hasTokenImage) {
+      return null;
+    }
+
+    return this.campaignsApi.forceStatusTokenUrl(campaign.id, status.id, campaign.assetTags);
+  }
+
+  private forceStatusLocationCaption(condition: {
+    locationKind?: string;
+    locationTypeId?: string | null;
+    locationTagId?: string | null;
+  }): string | null {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return null;
+    }
+
+    if (condition.locationKind === 'TerrainType') {
+      const name = campaign.terrainTypes.find((item) => item.id === condition.locationTypeId)?.name;
+      return name ? `terrain ${name}` : 'a terrain type';
+    }
+
+    if (condition.locationKind === 'StructureType') {
+      const name = campaign.structureTypes.find((item) => item.id === condition.locationTypeId)?.name;
+      return name ? `structure ${name}` : 'a structure type';
+    }
+
+    if (condition.locationKind === 'TerrainTag') {
+      const name = campaign.terrainTags?.find((item) => item.id === condition.locationTagId)?.name;
+      return name ? `terrain tag ${name}` : 'a terrain tag';
+    }
+
+    if (condition.locationKind === 'StructureTag') {
+      const name = campaign.structureTags?.find((item) => item.id === condition.locationTagId)?.name;
+      return name ? `structure tag ${name}` : 'a structure tag';
+    }
+
+    return null;
   }
 
   protected delinquencyEntryId(userId: string): string | null {
@@ -1495,6 +1675,7 @@ export class CampaignDetailPage {
           viaPath: [],
           viaCandidates: [],
           structureTypeId: '',
+          droppedItemObjectiveIds: [],
           menuX: 0,
           menuY: 0,
         });
@@ -1529,6 +1710,7 @@ export class CampaignDetailPage {
       viaPath: [],
       viaCandidates: [],
       structureTypeId: '',
+      droppedItemObjectiveIds: [],
       menuX: x,
       menuY: y,
     });
@@ -2085,6 +2267,32 @@ export class CampaignDetailPage {
     return this.specialRulesFor(type?.specialRuleIds);
   }
 
+  protected heldItemsForForce(force: PlayForce): PlayItemObjective[] {
+    return (this.play()?.itemObjectives ?? []).filter((item) => item.possessorForceId === force.id);
+  }
+
+  protected itemEffectLabels(item: PlayItemObjective): string[] {
+    const type = this.campaign()?.itemObjectiveTypes?.find((entry) => entry.id === item.typeId);
+    return (type?.effects ?? []).map((effect) => {
+      if (effect.kind === 'Custom' && effect.customText?.trim()) {
+        return effect.customText.trim();
+      }
+
+      const kind = ITEM_OBJECTIVE_EFFECT_KINDS.find((entry) => entry.id === effect.kind);
+      let label = kind?.label ?? effect.kind;
+      if (effect.amount) {
+        label += ` (${effect.amount}${effect.amountIsPercent ? '%' : ''})`;
+      }
+
+      return label;
+    });
+  }
+
+  protected itemPowerLabels(item: PlayItemObjective): string[] {
+    const rules = this.itemSpecialRules(item).map((rule) => (rule.text ? `${rule.name} — ${rule.text}` : rule.name));
+    return [...this.itemEffectLabels(item), ...rules];
+  }
+
   protected canResolveItemChoice(item: PlayItemObjective): boolean {
     return !item.isDestroyed && !item.resolvedChoiceId && (item.choices?.length ?? 0) > 0;
   }
@@ -2258,6 +2466,69 @@ export class CampaignDetailPage {
 
   protected draftKindsFor(force: PlayForce): readonly string[] {
     return force.inBattle ? [] : force.availableActions;
+  }
+
+  protected actionKindLabel(kind: string): string {
+    return actionKindLabel(kind);
+  }
+
+  protected isChosenTeleportKind(kind: string): boolean {
+    return kind === 'TeleportToSpecificTerritory' || kind === 'Teleport';
+  }
+
+  protected droppableItemsFor(force: PlayForce): PlayItemObjective[] {
+    const ids = new Set(force.droppableItemObjectiveIds ?? []);
+    return this.heldItemsForForce(force).filter((item) => ids.has(item.id));
+  }
+
+  protected isItemDropSelected(forceId: string, itemId: string, debug = false): boolean {
+    const draft = debug ? this.debugDraftFor(forceId) : this.draftFor(forceId);
+    return draft.droppedItemObjectiveIds.includes(itemId);
+  }
+
+  protected onDraftDropItem(forceId: string, itemId: string, selected: boolean, debug = false): void {
+    const current = debug ? this.debugDraftFor(forceId) : this.draftFor(forceId);
+    const dropped = new Set(current.droppedItemObjectiveIds);
+    if (selected) {
+      dropped.add(itemId);
+    } else {
+      dropped.delete(itemId);
+    }
+
+    const next = { ...current, droppedItemObjectiveIds: [...dropped] };
+    if (debug) {
+      this.markDebugDraftDirty(forceId);
+      this.debugDrafts.update((drafts) => ({ ...drafts, [forceId]: next }));
+      return;
+    }
+
+    this.markDraftDirty(forceId);
+    this.drafts.update((drafts) => ({ ...drafts, [forceId]: next }));
+  }
+
+  protected isMapItemDropSelected(itemId: string): boolean {
+    return this.mapAction()?.droppedItemObjectiveIds.includes(itemId) === true;
+  }
+
+  protected onMapDropItem(itemId: string, selected: boolean): void {
+    const flow = this.mapAction();
+    if (!flow) {
+      return;
+    }
+
+    const dropped = new Set(flow.droppedItemObjectiveIds);
+    if (selected) {
+      dropped.add(itemId);
+    } else {
+      dropped.delete(itemId);
+    }
+
+    this.mapAction.set({ ...flow, droppedItemObjectiveIds: [...dropped] });
+  }
+
+  protected mapConfirmForce(): PlayForce | null {
+    const flow = this.mapAction();
+    return this.myForces().find((item) => item.id === flow?.forceId) ?? null;
   }
 
   protected privateObjectiveProgress(assignment: PrivateObjectiveAssignment): string | null {
@@ -2497,6 +2768,7 @@ export class CampaignDetailPage {
         viaTerritoryId: kind === 'Move' || kind === 'Split' ? current.viaTerritoryId : '',
         viaPath: kind === 'Move' || kind === 'Split' ? current.viaPath : [],
         destroyImmediately: kind === 'Pillage' ? current.destroyImmediately : false,
+        droppedItemObjectiveIds: kind === 'Move' ? current.droppedItemObjectiveIds : [],
       }),
     }));
     if (this.needsDraftDestinationKind(kind) && current.targetTerritoryId) {
@@ -2527,7 +2799,9 @@ export class CampaignDetailPage {
   }
 
   protected canChooseTeleport(force: PlayForce, kind = 'Teleport'): boolean {
-    return kind === 'Teleport' && force.canChooseTeleportDestination === true;
+    return (
+      kind === 'TeleportToSpecificTerritory' || (kind === 'Teleport' && force.canChooseTeleportDestination === true)
+    );
   }
 
   protected destinationTargets(force: PlayForce, kind: string): string[] {
@@ -2543,7 +2817,14 @@ export class CampaignDetailPage {
   }
 
   private needsDraftDestinationKind(kind: string): boolean {
-    return kind === 'Move' || kind === 'Split' || kind === 'Teleport' || kind === 'Surrender' || kind === 'Retreat';
+    return (
+      kind === 'Move' ||
+      kind === 'Split' ||
+      kind === 'Teleport' ||
+      kind === 'TeleportToSpecificTerritory' ||
+      kind === 'Surrender' ||
+      kind === 'Retreat'
+    );
   }
 
   protected destinationsForVia(force: PlayForce, viaTerritoryId: string): string[] {
@@ -2589,6 +2870,7 @@ export class CampaignDetailPage {
         viaTerritoryId: kind === 'Move' || kind === 'Split' ? current.viaTerritoryId : '',
         viaPath: kind === 'Move' || kind === 'Split' ? current.viaPath : [],
         destroyImmediately: kind === 'Pillage' ? current.destroyImmediately : false,
+        droppedItemObjectiveIds: kind === 'Move' ? current.droppedItemObjectiveIds : [],
       }),
     }));
     if (this.needsDraftDestinationKind(kind) && current.targetTerritoryId) {
@@ -2691,12 +2973,20 @@ export class CampaignDetailPage {
   }
 
   protected canUncommitBattleRetreat(battle: PlayBattle): boolean {
+    if (battle.isSurrenderCommitted === true) {
+      return true;
+    }
+
     return battle.isRetreatCommitted === true && (battle.retreatTargets?.length ?? 0) > 1;
   }
 
   private hasMapBattleCommit(): boolean {
     return (this.play()?.battles ?? []).some(
-      (battle) => battle.canSurrender === true || battle.needsRetreat === true || battle.isRetreatCommitted === true,
+      (battle) =>
+        battle.canSurrender === true ||
+        battle.needsRetreat === true ||
+        battle.isRetreatCommitted === true ||
+        battle.isSurrenderCommitted === true,
     );
   }
 
@@ -2720,9 +3010,9 @@ export class CampaignDetailPage {
 
     const chosen = this.retreatTarget()[battle.id] ?? '';
     const dest = chosen.length > 0 ? chosen : (battle.retreatDraftTargetId ?? null);
-    if (battle.isRetreatCommitted) {
+    if (battle.isRetreatCommitted || battle.isSurrenderCommitted) {
       return {
-        kind: 'Retreat',
+        kind: battle.isSurrenderCommitted ? 'Surrender' : 'Retreat',
         status: 'committed',
         detail: dest ? `to ${this.territoryName(dest)}` : null,
       };
@@ -3353,6 +3643,7 @@ export class CampaignDetailPage {
         viaTerritoryId: draft.viaTerritoryId || null,
         viaPath: draft.viaPath.length > 0 ? draft.viaPath : null,
         destroyImmediately: draft.destroyImmediately,
+        droppedItemObjectiveIds: draft.kind === 'Move' ? draft.droppedItemObjectiveIds : [],
       }),
     );
   }
@@ -3500,10 +3791,10 @@ export class CampaignDetailPage {
     );
     const opponent = this.factionName(opponentForce?.factionId);
     if (opponentForce && opponent !== 'Unknown faction') {
-      return `Surrender ${territory} to ${opponent}? This cannot be undone.`;
+      return `Surrender ${territory} to ${opponent}? You can uncommit while this window stays open.`;
     }
 
-    return `Surrender ${territory}? This cannot be undone.`;
+    return `Surrender ${territory}? You can uncommit while this window stays open.`;
   }
 
   protected async submitSurrender(battle: PlayBattle): Promise<void> {
@@ -3644,6 +3935,7 @@ export class CampaignDetailPage {
         viaTerritoryId: draft.viaTerritoryId || null,
         viaPath: draft.viaPath.length > 0 ? draft.viaPath : null,
         destroyImmediately: draft.destroyImmediately,
+        droppedItemObjectiveIds: draft.kind === 'Move' ? draft.droppedItemObjectiveIds : [],
         reResolvePrevious,
       }),
     );
@@ -3847,7 +4139,7 @@ export class CampaignDetailPage {
         return 'Pick a territory to split forces to...';
       }
 
-      if (flow.kind === 'Teleport') {
+      if (this.isChosenTeleportKind(flow.kind)) {
         return 'Pick a non-spawn territory to teleport to...';
       }
 
@@ -3891,18 +4183,18 @@ export class CampaignDetailPage {
     if (
       flow.kind === 'Move' ||
       flow.kind === 'Split' ||
-      flow.kind === 'Teleport' ||
+      this.isChosenTeleportKind(flow.kind) ||
       flow.kind === 'Surrender' ||
       flow.kind === 'Retreat'
     ) {
       const destination = this.territoryName(flow.targetTerritoryId);
       const hops = [flow.viaTerritoryId, ...flow.viaPath].filter((id) => id.length > 0);
-      if (hops.length === 0 || flow.kind === 'Teleport') {
-        return `${flow.kind} from ${origin} to ${destination}?`;
+      if (hops.length === 0 || this.isChosenTeleportKind(flow.kind)) {
+        return `${this.actionKindLabel(flow.kind)} from ${origin} to ${destination}?`;
       }
 
       const through = hops.map((id) => this.territoryName(id)).join(' and ');
-      return `${flow.kind} from ${origin} through ${through} to ${destination}?`;
+      return `${this.actionKindLabel(flow.kind)} from ${origin} through ${through} to ${destination}?`;
     }
 
     if (flow.kind === 'Build') {
@@ -3910,7 +4202,7 @@ export class CampaignDetailPage {
       return `Build ${name} in ${origin}?`;
     }
 
-    return `${flow.kind} in ${origin}?`;
+    return `${this.actionKindLabel(flow.kind)} in ${origin}?`;
   }
 
   protected onMapActionKind(kind: string): void {
@@ -3925,7 +4217,7 @@ export class CampaignDetailPage {
       kind === 'Split' ||
       kind === 'Surrender' ||
       kind === 'Retreat' ||
-      (kind === 'Teleport' && force && this.canChooseTeleport(force))
+      (force && this.canChooseTeleport(force, kind))
     ) {
       this.mapAction.set({
         ...flow,
@@ -3996,6 +4288,7 @@ export class CampaignDetailPage {
         structureTypeId: flow.structureTypeId,
         viaTerritoryId: flow.viaTerritoryId,
         viaPath: flow.viaPath,
+        droppedItemObjectiveIds: flow.kind === 'Move' ? flow.droppedItemObjectiveIds : [],
       }),
     }));
     this.cancelMapAction();
@@ -4068,8 +4361,8 @@ export class CampaignDetailPage {
       return !this.requiresViaChoice(force, draft.targetTerritoryId) || draft.viaTerritoryId.length > 0;
     }
 
-    if (draft.kind === 'Teleport') {
-      return !this.canChooseTeleport(force) || draft.targetTerritoryId.length > 0;
+    if (draft.kind === 'Teleport' || draft.kind === 'TeleportToSpecificTerritory') {
+      return !this.canChooseTeleport(force, draft.kind) || draft.targetTerritoryId.length > 0;
     }
 
     if (draft.kind === 'Build') {
@@ -4087,7 +4380,8 @@ export class CampaignDetailPage {
       (saved.structureTypeId ?? '') === draft.structureTypeId &&
       (saved.viaTerritoryId ?? '') === draft.viaTerritoryId &&
       (saved.viaPath ?? []).join(',') === draft.viaPath.join(',') &&
-      (saved.destroyImmediately === true) === draft.destroyImmediately
+      (saved.destroyImmediately === true) === draft.destroyImmediately &&
+      (saved.droppedItemObjectiveIds ?? []).join(',') === draft.droppedItemObjectiveIds.join(',')
     );
   }
 
@@ -4356,6 +4650,7 @@ export class CampaignDetailPage {
       viaTerritoryId: saved?.viaTerritoryId ?? '',
       viaPath: [...(saved?.viaPath ?? [])],
       destroyImmediately: saved?.destroyImmediately === true,
+      droppedItemObjectiveIds: [...(saved?.droppedItemObjectiveIds ?? [])],
     });
   }
 
@@ -4476,7 +4771,7 @@ export class CampaignDetailPage {
       return;
     }
 
-    if (flow.kind === 'Teleport' || this.isDirectMove(force, destId)) {
+    if (this.isChosenTeleportKind(flow.kind) || this.isDirectMove(force, destId)) {
       this.confirmMapMove(flow, destId, '', []);
       return;
     }

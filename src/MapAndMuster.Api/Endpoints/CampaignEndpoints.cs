@@ -163,6 +163,10 @@ public static class CampaignEndpoints
             .WithName("GetCampaignPresetItemObjectiveImage")
             .Produces(StatusCodes.Status200OK)
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+        presets.MapGet("/{presetId:guid}/force-statuses/{forceStatusId:guid}/token", GetPresetForceStatusTokenAsync)
+            .WithName("GetCampaignPresetForceStatusToken")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
         presets.MapGet("/{presetId:guid}/package", ExportNamedPresetPackageAsync)
             .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
             .WithName("ExportNamedCampaignPresetPackage")
@@ -255,6 +259,20 @@ public static class CampaignEndpoints
             .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
             .DisableAntiforgery()
             .WithName("UploadCampaignItemObjectiveImage")
+            .Produces<CampaignDetailResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{campaignId:guid}/force-statuses/{forceStatusId:guid}/token", GetForceStatusTokenAsync)
+            .WithName("GetCampaignForceStatusToken")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{campaignId:guid}/force-statuses/{forceStatusId:guid}/token", UploadForceStatusTokenAsync)
+            .RequireRateLimiting(IdentityHttp.UploadRateLimitPolicy)
+            .DisableAntiforgery()
+            .WithName("UploadCampaignForceStatusToken")
             .Produces<CampaignDetailResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
@@ -1273,6 +1291,24 @@ public static class CampaignEndpoints
             cancellationToken);
     }
 
+    private static Task<IResult> GetPresetForceStatusTokenAsync(
+        Guid presetId,
+        Guid forceStatusId,
+        ClaimsPrincipal principal,
+        HttpContext context,
+        GetCampaignPresetAssetHandler handler,
+        CancellationToken cancellationToken)
+    {
+        return GetPresetAssetAsync(
+            presetId,
+            forceStatusId,
+            CampaignPresetAssetKind.ForceStatusToken,
+            principal,
+            context,
+            handler,
+            cancellationToken);
+    }
+
     private static async Task<IResult> GetPresetAssetAsync(
         Guid presetId,
         Guid catalogId,
@@ -1915,6 +1951,89 @@ public static class CampaignEndpoints
         return Results.Ok(CampaignResponses.FromDetail(result.Value));
     }
 
+    private static async Task<IResult> GetForceStatusTokenAsync(
+        Guid campaignId,
+        Guid forceStatusId,
+        ClaimsPrincipal principal,
+        HttpContext context,
+        GetForceStatusTokenHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                campaignId,
+                forceStatusId,
+                userId.Value,
+                cancellationToken,
+                principal.IsAdministrator(),
+                CampaignAssetResults.IfNoneMatch(context.Request))
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return CampaignAssetResults.File(context.Response, result.Value);
+    }
+
+    private static async Task<IResult> UploadForceStatusTokenAsync(
+        Guid campaignId,
+        Guid forceStatusId,
+        ClaimsPrincipal principal,
+        HttpRequest request,
+        UploadForceStatusTokenHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (!request.HasFormContentType)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Upload a JPEG, PNG, or WebP image.");
+        }
+
+        var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+        var file = form.Files.GetFile("image") ?? form.Files.GetFile("file");
+        if (file is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.UploadInvalidType, "Choose a force status token to upload.");
+        }
+
+        if (!int.TryParse(form["revision"].ToString(), out var revision))
+        {
+            return IdentityHttp.Problem("campaign.revision.required", "The campaign revision is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await handler.HandleAsync(
+                new UploadForceStatusTokenCommand
+                {
+                    UserId = userId.Value,
+                    CampaignId = campaignId,
+                    ForceStatusId = forceStatusId,
+                    ExpectedRevision = revision,
+                    Content = stream,
+                    ContentType = file.ContentType,
+                    Length = file.Length,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            return IdentityHttp.Problem(result);
+        }
+
+        return Results.Ok(CampaignResponses.FromDetail(result.Value));
+    }
+
     private static async Task<IResult> GetFactionFlagAsync(
         Guid campaignId,
         Guid factionId,
@@ -2281,6 +2400,7 @@ public static class CampaignEndpoints
                     ViaTerritoryId = request.ViaTerritoryId,
                     ViaPath = request.ViaPath,
                     DestroyImmediately = request.DestroyImmediately,
+                    DroppedItemObjectiveIds = request.DroppedItemObjectiveIds,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -2688,6 +2808,7 @@ public static class CampaignEndpoints
                     ViaTerritoryId = request.ViaTerritoryId,
                     ViaPath = request.ViaPath,
                     DestroyImmediately = request.DestroyImmediately,
+                    DroppedItemObjectiveIds = request.DroppedItemObjectiveIds,
                     ReResolvePrevious = request.ReResolvePrevious,
                 },
                 cancellationToken)

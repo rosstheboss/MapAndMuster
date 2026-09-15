@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAP_ASSET_KEY, assetTagQuery, factionAssetKey, itemAssetKey, structureAssetKey } from './campaign-asset-tags';
+import {
+  MAP_ASSET_KEY,
+  assetTagQuery,
+  factionAssetKey,
+  forceStatusTokenAssetKey,
+  itemAssetKey,
+  structureAssetKey,
+} from './campaign-asset-tags';
 
 describe('campaign asset tag keys', () => {
   it('distinguishes a structure logo from its pillaged variant', () => {
@@ -10,6 +17,10 @@ describe('campaign asset tag keys', () => {
 
   it('keys an item objective by its type', () => {
     expect(itemAssetKey('relic-1')).toBe('item:relic-1');
+  });
+
+  it('keys a force-status token by its catalog id', () => {
+    expect(forceStatusTokenAssetKey('status-1')).toBe('force-status-token:status-1');
   });
 
   it('lowercases the subfaction so the key matches the server', () => {

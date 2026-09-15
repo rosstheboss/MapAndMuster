@@ -21,6 +21,7 @@ import {
   type CampaignStructureType,
   type CampaignTerrainType,
   type CatalogTag,
+  type ForceStatusImmuneSubfaction,
   type ItemObjectiveChoice,
   type ItemObjectiveChoiceResult,
   type ItemObjectiveEffect,
@@ -31,7 +32,13 @@ import {
   type SubfactionMovementSpeed,
 } from '../../core/campaigns/campaign.models';
 import { defaultStructureCatalog, defaultTerrainCatalog } from '../../core/campaigns/catalog-defaults';
-import { campaignFromPreset, campaignPresetApplyOptions } from '../../core/campaigns/campaign-presets';
+import {
+  campaignFromPreset,
+  campaignPresetApplyOptions,
+  huntImmuneFactionNames,
+  huntImmuneSubfactions,
+  HUNT_IN_ESTALIA_CAMPAIGN_PRESET_ID,
+} from '../../core/campaigns/campaign-presets';
 import { defaultArmyEscalations } from '../../core/campaigns/army-escalation-defaults';
 import {
   HUNT_IN_ESTALIA_DEFAULT_SUPPLY_POINTS,
@@ -57,6 +64,11 @@ import {
   isWaterTagName,
   nextForceStatusPriority,
   normalizeForceStatusOccurrences,
+  hidesForceStatusLocation,
+  isSpawnAccessTrigger,
+  isStructureAccessTrigger,
+  needsSpecifiedOccupyingStatus,
+  needsStandardBattleResultQuestion,
   STANDARD_FORCE_STATUSES,
   type ConditionLocationKind,
   type ForceStatusCondition,
@@ -241,6 +253,8 @@ type ItemEffectGroup = FormGroup<{
   forcedAllyGroupName: FormControl<string>;
   alliedFactions: FormArray<ItemEffectAllianceGroup>;
   customText: FormControl<string>;
+  successStatusTypeId: FormControl<string>;
+  failureStatusTypeId: FormControl<string>;
 }>;
 type ItemChoiceGroup = FormGroup<{
   id: FormControl<string>;
@@ -276,6 +290,7 @@ type ForceStatusConditionGroup = FormGroup<{
   locationTypeId: FormControl<string>;
   locationTagId: FormControl<string>;
   requiredStatusId: FormControl<string>;
+  requiredQuestionId: FormControl<string>;
 }>;
 type ForceStatusGroup = FormGroup<{
   id: FormControl<string>;
@@ -287,6 +302,7 @@ type ForceStatusGroup = FormGroup<{
   enablePickTypeId: FormControl<string>;
   enablePickTagId: FormControl<string>;
   enablePickRequiredStatusId: FormControl<string>;
+  enablePickRequiredQuestionId: FormControl<string>;
   enableConditions: FormArray<ForceStatusConditionGroup>;
   clearPick: FormControl<string>;
   clearPickOccurrences: FormControl<number>;
@@ -294,9 +310,13 @@ type ForceStatusGroup = FormGroup<{
   clearPickTypeId: FormControl<string>;
   clearPickTagId: FormControl<string>;
   clearPickRequiredStatusId: FormControl<string>;
+  clearPickRequiredQuestionId: FormControl<string>;
   clearConditions: FormArray<ForceStatusConditionGroup>;
   priority: FormControl<number>;
   cancelsStatusIds: FormControl<string[]>;
+  immuneFactionIds: FormControl<string[]>;
+  immuneSubfactions: FormControl<ForceStatusImmuneSubfaction[]>;
+  clearTokenImage: FormControl<boolean>;
 }>;
 type PrivateObjectiveGroup = FormGroup<{
   id: FormControl<string>;
@@ -365,6 +385,11 @@ const CONDITION_LOCATION_OPTIONS: readonly { id: ConditionLocationKind; label: s
   { id: 'Any', label: 'Any location' },
   { id: 'TerrainType', label: 'Specific terrain type' },
   { id: 'TerrainTag', label: 'Terrain tag' },
+  { id: 'StructureType', label: 'Specific structure type' },
+  { id: 'StructureTag', label: 'Structure tag' },
+];
+const STRUCTURE_ACCESS_LOCATION_OPTIONS: readonly { id: ConditionLocationKind; label: string }[] = [
+  { id: 'Any', label: 'Any structure' },
   { id: 'StructureType', label: 'Specific structure type' },
   { id: 'StructureTag', label: 'Structure tag' },
 ];
@@ -448,12 +473,14 @@ export class CampaignSetupPage {
   private readonly structureImages = new Map<string, File>();
   private readonly structurePillagedImages = new Map<string, File>();
   private readonly itemObjectiveImages = new Map<string, File>();
+  private readonly forceStatusTokens = new Map<string, File>();
   private readonly flagImages = new Map<string, File>();
   private readonly flagPreviewUrls = new Map<string, string>();
   private readonly missionFiles = new Map<string, File>();
   private readonly storedStructureImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedPillagedImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedItemObjectiveImages = signal<ReadonlySet<string>>(new Set());
+  private readonly storedForceStatusTokens = signal<ReadonlySet<string>>(new Set());
   private readonly storedFlagImages = signal<ReadonlySet<string>>(new Set());
   private readonly storedMissionFiles = signal<ReadonlySet<string>>(new Set());
   private pendingPresetMapId: string | null = null;
@@ -461,6 +488,7 @@ export class CampaignSetupPage {
   private pendingPresetFactionIds = new Map<string, string>();
   private pendingPresetStructureIds = new Map<string, string>();
   private pendingPresetItemIds = new Map<string, string>();
+  private pendingPresetForceStatusIds = new Map<string, string>();
   private presetsLoaded = false;
   private hydrating = false;
   private readonly forceStatusPriorityOriginal = new Map<number, number>();
@@ -1208,6 +1236,9 @@ export class CampaignSetupPage {
     );
     this.applyBattleScoringDefaults();
     this.remapDiseasedForceStatusLocations();
+    if (selected === HUNT_IN_ESTALIA_CAMPAIGN_PRESET_ID) {
+      this.applyHuntForceStatusImmunities();
+    }
   }
 
   private async applySavedCampaignPreset(presetId: string): Promise<void> {
@@ -1232,6 +1263,7 @@ export class CampaignSetupPage {
         this.pendingPresetFactionIds.clear();
         this.pendingPresetStructureIds.clear();
         this.pendingPresetItemIds.clear();
+        this.pendingPresetForceStatusIds.clear();
         this.applyCatalogFromDetail(preset);
         this.rememberCatalogFilesFrom(preset);
         this.bumpPendingUploads();
@@ -1278,17 +1310,21 @@ export class CampaignSetupPage {
     }
     this.replaceArray(
       this.forceStatuses,
-      incomingStatuses.map((status, index) =>
-        this.createForceStatusGroup(
-          appliedStatusIds.get(status.id) ?? this.newId(),
+      incomingStatuses.map((status, index) => {
+        const appliedId = appliedStatusIds.get(status.id) ?? this.newId();
+        if (this.pendingPresetMapId) {
+          this.pendingPresetForceStatusIds.set(appliedId, status.id);
+        }
+        return this.createForceStatusGroup(
+          appliedId,
           status.name,
           status.effects,
           forceStatusEnableConditions(status),
           forceStatusClearConditions(status),
           status.priority ?? index,
           (status.cancelsStatusIds ?? []).map((id) => appliedStatusIds.get(id)).filter((id): id is string => !!id),
-        ),
-      ),
+        );
+      }),
     );
     this.bumpCatalog();
     this.replaceArray(
@@ -1383,6 +1419,7 @@ export class CampaignSetupPage {
         )?.controls.id.value ?? status.id;
       appliedForceStatusIds.set(status.id, appliedId);
     }
+    this.patchForceStatusImmunities(campaign.forceStatuses ?? [], appliedForceStatusIds, appliedFactionIds);
     this.replaceArray(
       this.privateObjectiveTypes,
       (campaign.privateObjectiveTypes ?? []).map((item) =>
@@ -1518,7 +1555,19 @@ export class CampaignSetupPage {
       return;
     }
 
+    const factionId = this.factions.at(index).controls.id.value;
     this.factions.removeAt(index);
+    for (const status of this.forceStatuses.controls) {
+      const ids = status.controls.immuneFactionIds.value.filter((id) => id !== factionId);
+      if (ids.length !== status.controls.immuneFactionIds.value.length) {
+        status.controls.immuneFactionIds.setValue(ids);
+      }
+
+      const subfactions = status.controls.immuneSubfactions.value.filter((item) => item.factionId !== factionId);
+      if (subfactions.length !== status.controls.immuneSubfactions.value.length) {
+        status.controls.immuneSubfactions.setValue(subfactions);
+      }
+    }
   }
 
   protected addSubfaction(faction: FactionGroup): void {
@@ -1811,6 +1860,7 @@ export class CampaignSetupPage {
 
   protected removeForceStatus(index: number): void {
     const id = this.forceStatuses.at(index).controls.id.value;
+    this.forceStatusTokens.delete(id);
     this.forceStatuses.removeAt(index);
     for (const status of this.forceStatuses.controls) {
       const ids = status.controls.cancelsStatusIds.value.filter((item) => item !== id);
@@ -1818,6 +1868,7 @@ export class CampaignSetupPage {
         status.controls.cancelsStatusIds.setValue(ids);
       }
     }
+    this.bumpPendingUploads();
   }
 
   protected forceStatusEnableOptionLabel(trigger: string): string {
@@ -1836,20 +1887,64 @@ export class CampaignSetupPage {
     return [...FORCE_STATUS_CLEAR_OPTIONS];
   }
 
-  protected conditionLocationOptions(): readonly { id: ConditionLocationKind; label: string }[] {
-    return CONDITION_LOCATION_OPTIONS;
+  protected conditionLocationOptions(trigger: string): readonly { id: ConditionLocationKind; label: string }[] {
+    return isStructureAccessTrigger(trigger) ? STRUCTURE_ACCESS_LOCATION_OPTIONS : CONDITION_LOCATION_OPTIONS;
   }
 
   protected needsSpecifiedOccupyingStatus(trigger: string): boolean {
-    return trigger === 'OccupyingWithSpecifiedStatus';
+    return needsSpecifiedOccupyingStatus(trigger);
   }
 
-  protected canAddForceStatusCondition(trigger: string, requiredStatusId: string): boolean {
+  protected needsStandardBattleResultQuestion(trigger: string): boolean {
+    return needsStandardBattleResultQuestion(trigger);
+  }
+
+  protected hidesForceStatusLocation(trigger: string): boolean {
+    return hidesForceStatusLocation(trigger);
+  }
+
+  protected isStructureAccessTrigger(trigger: string): boolean {
+    return isStructureAccessTrigger(trigger);
+  }
+
+  protected canAddForceStatusCondition(status: ForceStatusGroup, side: 'enable' | 'clear'): boolean {
+    const trigger =
+      side === 'enable' ? status.controls.enablePick.value.trim() : status.controls.clearPick.value.trim();
     if (!trigger) {
       return false;
     }
 
-    return !this.needsSpecifiedOccupyingStatus(trigger) || requiredStatusId.length > 0;
+    if (needsSpecifiedOccupyingStatus(trigger)) {
+      const required =
+        side === 'enable'
+          ? status.controls.enablePickRequiredStatusId.value
+          : status.controls.clearPickRequiredStatusId.value;
+      return required.length > 0;
+    }
+
+    if (needsStandardBattleResultQuestion(trigger)) {
+      const required =
+        side === 'enable'
+          ? status.controls.enablePickRequiredQuestionId.value
+          : status.controls.clearPickRequiredQuestionId.value;
+      return required.length > 0;
+    }
+
+    if (isStructureAccessTrigger(trigger)) {
+      const kind =
+        side === 'enable' ? status.controls.enablePickLocationKind.value : status.controls.clearPickLocationKind.value;
+      const typeId = side === 'enable' ? status.controls.enablePickTypeId.value : status.controls.clearPickTypeId.value;
+      const tagId = side === 'enable' ? status.controls.enablePickTagId.value : status.controls.clearPickTagId.value;
+      if (kind === 'StructureType') {
+        return typeId.length > 0;
+      }
+
+      if (kind === 'StructureTag') {
+        return tagId.length > 0;
+      }
+    }
+
+    return true;
   }
 
   protected occupyingForceStatusOptions(status: ForceStatusGroup): { id: string; name: string }[] {
@@ -1860,13 +1955,28 @@ export class CampaignSetupPage {
   }
 
   protected occupyingStatusSuffix(condition: ForceStatusConditionGroup): string {
-    if (condition.controls.trigger.value !== 'OccupyingWithSpecifiedStatus') {
-      return '';
+    const extras: string[] = [];
+    if (condition.controls.trigger.value === 'OccupyingWithSpecifiedStatus') {
+      const id = condition.controls.requiredStatusId.value;
+      const name = this.forceStatuses.controls
+        .find((item) => item.controls.id.value === id)
+        ?.controls.name.value.trim();
+      if (name) {
+        extras.push(name);
+      }
     }
 
-    const id = condition.controls.requiredStatusId.value;
-    const name = this.forceStatuses.controls.find((item) => item.controls.id.value === id)?.controls.name.value.trim();
-    return name ? ` (${name})` : '';
+    if (condition.controls.trigger.value === 'StandardBattleResultQuestion') {
+      const id = condition.controls.requiredQuestionId.value;
+      const prompt = this.standardBattleResultQuestions.controls
+        .find((item) => item.controls.id.value === id)
+        ?.controls.prompt.value.trim();
+      if (prompt) {
+        extras.push(prompt);
+      }
+    }
+
+    return extras.length > 0 ? ` (${extras.join(', ')})` : '';
   }
 
   protected addForceStatusEnableCondition(status: ForceStatusGroup): void {
@@ -1878,6 +1988,7 @@ export class CampaignSetupPage {
       status.controls.enablePickTypeId,
       status.controls.enablePickTagId,
       status.controls.enablePickRequiredStatusId,
+      status.controls.enablePickRequiredQuestionId,
     );
   }
 
@@ -1890,6 +2001,7 @@ export class CampaignSetupPage {
       status.controls.clearPickTypeId,
       status.controls.clearPickTagId,
       status.controls.clearPickRequiredStatusId,
+      status.controls.clearPickRequiredQuestionId,
     );
   }
 
@@ -1901,23 +2013,37 @@ export class CampaignSetupPage {
     locationTypeId: FormControl<string>,
     locationTagId: FormControl<string>,
     requiredStatusId: FormControl<string>,
+    requiredQuestionId: FormControl<string>,
   ): void {
     const trigger = pick.value.trim();
     if (!trigger) {
       return;
     }
 
-    if (this.needsSpecifiedOccupyingStatus(trigger) && !requiredStatusId.value) {
+    if (needsSpecifiedOccupyingStatus(trigger) && !requiredStatusId.value) {
       return;
     }
 
+    if (needsStandardBattleResultQuestion(trigger) && !requiredQuestionId.value) {
+      return;
+    }
+
+    const kind = hidesForceStatusLocation(trigger)
+      ? 'Any'
+      : isStructureAccessTrigger(trigger) &&
+          locationKind.value !== 'Any' &&
+          locationKind.value !== 'StructureType' &&
+          locationKind.value !== 'StructureTag'
+        ? 'Any'
+        : ((locationKind.value || 'Any') as ConditionLocationKind);
     const condition = this.createForceStatusConditionGroup({
       trigger,
       occurrences: occurrences.value,
-      locationKind: (locationKind.value || 'Any') as ConditionLocationKind,
-      locationTypeId: locationTypeId.value || null,
-      locationTagId: locationTagId.value || null,
-      requiredStatusId: this.needsSpecifiedOccupyingStatus(trigger) ? requiredStatusId.value || null : null,
+      locationKind: kind,
+      locationTypeId: kind === 'TerrainType' || kind === 'StructureType' ? locationTypeId.value || null : null,
+      locationTagId: kind === 'TerrainTag' || kind === 'StructureTag' ? locationTagId.value || null : null,
+      requiredStatusId: needsSpecifiedOccupyingStatus(trigger) ? requiredStatusId.value || null : null,
+      requiredQuestionId: needsStandardBattleResultQuestion(trigger) ? requiredQuestionId.value || null : null,
     });
     const fingerprint = this.forceStatusConditionFingerprint(condition);
     if (list.controls.some((item) => this.forceStatusConditionFingerprint(item) === fingerprint)) {
@@ -1932,6 +2058,7 @@ export class CampaignSetupPage {
     locationTypeId.setValue('');
     locationTagId.setValue('');
     requiredStatusId.setValue('');
+    requiredQuestionId.setValue('');
   }
 
   protected removeForceStatusEnableCondition(status: ForceStatusGroup, index: number): void {
@@ -2091,6 +2218,10 @@ export class CampaignSetupPage {
   }
 
   protected forceStatusLocationLabel(condition: ForceStatusConditionGroup): string {
+    if (isSpawnAccessTrigger(condition.controls.trigger.value)) {
+      return 'the spawn chain';
+    }
+
     const kind = condition.controls.locationKind.value;
     if (kind === 'TerrainType') {
       const name = this.terrainTypes.controls.find(
@@ -2120,7 +2251,7 @@ export class CampaignSetupPage {
       return name ? `structure tag ${name}` : 'a structure tag';
     }
 
-    return 'any location';
+    return isStructureAccessTrigger(condition.controls.trigger.value) ? 'any structure' : 'any location';
   }
 
   protected namedTerrainTypes(): { id: string; name: string }[] {
@@ -2129,6 +2260,13 @@ export class CampaignSetupPage {
 
   protected namedStructureTypes(): { id: string; name: string }[] {
     return this.namedCatalogItems(this.structureTypes.controls);
+  }
+
+  protected namedStandardBattleResultQuestions(): { id: string; name: string }[] {
+    return this.standardBattleResultQuestions.controls.flatMap((question) => {
+      const prompt = question.controls.prompt.value.trim();
+      return prompt ? [{ id: question.controls.id.value, name: prompt }] : [];
+    });
   }
 
   protected namedTerrainTags(): { id: string; name: string }[] {
@@ -2232,6 +2370,125 @@ export class CampaignSetupPage {
 
     status.controls.cancelsStatusIds.setValue(next);
     status.controls.cancelsStatusIds.markAsDirty();
+  }
+
+  protected forceStatusImmuneFactionOptions(status: ForceStatusGroup): { id: string; name: string }[] {
+    const selected = new Set(status.controls.immuneFactionIds.value);
+    return this.factions.controls
+      .filter((faction) => faction.controls.name.value.trim().length > 0 && !selected.has(faction.controls.id.value))
+      .map((faction) => ({ id: faction.controls.id.value, name: faction.controls.name.value.trim() }));
+  }
+
+  protected forceStatusImmuneFactionEntries(status: ForceStatusGroup): { id: string; name: string }[] {
+    const names = new Map(
+      this.factions.controls.map((faction) => [faction.controls.id.value, faction.controls.name.value.trim()] as const),
+    );
+    return status.controls.immuneFactionIds.value.flatMap((id) => {
+      const name = names.get(id);
+      return name ? [{ id, name }] : [];
+    });
+  }
+
+  protected addForceStatusImmuneFaction(status: ForceStatusGroup, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const factionId = select.value;
+    select.value = '';
+    if (!factionId) {
+      return;
+    }
+
+    const current = status.controls.immuneFactionIds.value;
+    if (current.includes(factionId)) {
+      return;
+    }
+
+    status.controls.immuneFactionIds.setValue([...current, factionId]);
+    status.controls.immuneFactionIds.markAsDirty();
+  }
+
+  protected removeForceStatusImmuneFaction(status: ForceStatusGroup, factionId: string): void {
+    const next = status.controls.immuneFactionIds.value.filter((id) => id !== factionId);
+    if (next.length === status.controls.immuneFactionIds.value.length) {
+      return;
+    }
+
+    status.controls.immuneFactionIds.setValue(next);
+    status.controls.immuneFactionIds.markAsDirty();
+  }
+
+  protected forceStatusImmuneSubfactionOptions(
+    status: ForceStatusGroup,
+  ): { factionId: string; subfaction: string; label: string }[] {
+    const selected = new Set(
+      status.controls.immuneSubfactions.value.map((item) => `${item.factionId}:${item.subfaction.toLowerCase()}`),
+    );
+    return this.factions.controls.flatMap((faction) => {
+      const factionName = faction.controls.name.value.trim();
+      if (!factionName) {
+        return [];
+      }
+
+      return faction.controls.subfactions.controls.flatMap((subfaction) => {
+        const name = subfaction.controls.name.value.trim();
+        if (!name || selected.has(`${faction.controls.id.value}:${name.toLowerCase()}`)) {
+          return [];
+        }
+
+        return [{ factionId: faction.controls.id.value, subfaction: name, label: `${factionName} — ${name}` }];
+      });
+    });
+  }
+
+  protected forceStatusImmuneSubfactionEntries(
+    status: ForceStatusGroup,
+  ): { factionId: string; subfaction: string; label: string }[] {
+    const names = new Map(
+      this.factions.controls.map((faction) => [faction.controls.id.value, faction.controls.name.value.trim()] as const),
+    );
+    return status.controls.immuneSubfactions.value.flatMap((item) => {
+      const factionName = names.get(item.factionId);
+      return factionName
+        ? [{ factionId: item.factionId, subfaction: item.subfaction, label: `${factionName} — ${item.subfaction}` }]
+        : [];
+    });
+  }
+
+  protected addForceStatusImmuneSubfaction(status: ForceStatusGroup, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const value = select.value;
+    select.value = '';
+    const separator = value.indexOf('::');
+    if (separator < 0) {
+      return;
+    }
+
+    const factionId = value.slice(0, separator);
+    const subfaction = value.slice(separator + 2);
+    if (!factionId || !subfaction) {
+      return;
+    }
+
+    const current = status.controls.immuneSubfactions.value;
+    if (
+      current.some((item) => item.factionId === factionId && item.subfaction.toLowerCase() === subfaction.toLowerCase())
+    ) {
+      return;
+    }
+
+    status.controls.immuneSubfactions.setValue([...current, { factionId, subfaction }]);
+    status.controls.immuneSubfactions.markAsDirty();
+  }
+
+  protected removeForceStatusImmuneSubfaction(status: ForceStatusGroup, factionId: string, subfaction: string): void {
+    const next = status.controls.immuneSubfactions.value.filter(
+      (item) => !(item.factionId === factionId && item.subfaction.toLowerCase() === subfaction.toLowerCase()),
+    );
+    if (next.length === status.controls.immuneSubfactions.value.length) {
+      return;
+    }
+
+    status.controls.immuneSubfactions.setValue(next);
+    status.controls.immuneSubfactions.markAsDirty();
   }
 
   protected privateObjectiveExcludeFactionOptions(item: PrivateObjectiveGroup): { id: string; name: string }[] {
@@ -2417,6 +2674,10 @@ export class CampaignSetupPage {
 
   protected itemEffectNeedsCustom(kind: string): boolean {
     return kind === 'Custom';
+  }
+
+  protected itemEffectNeedsOutcomeStatuses(kind: string): boolean {
+    return kind === 'TeleportToRandomEmptyNonSpawn' || kind === 'TeleportToChosenNonSpawnOncePerRound';
   }
 
   protected namedForceStatuses(): { id: string; name: string }[] {
@@ -2724,6 +2985,17 @@ export class CampaignSetupPage {
     }
   }
 
+  protected onForceStatusTokenSelected(statusId: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    if (file) {
+      this.forceStatusTokens.set(statusId, file);
+      this.bumpPendingUploads();
+      const group = this.forceStatuses.controls.find((item) => item.controls.id.value === statusId);
+      group?.controls.clearTokenImage.setValue(false);
+    }
+  }
+
   protected onStructurePillagedImageSelected(structureId: string, event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
@@ -2922,6 +3194,43 @@ export class CampaignSetupPage {
     return this.itemObjectiveImages.get(itemId)?.name ?? null;
   }
 
+  protected hasPendingForceStatusToken(statusId: string): boolean {
+    this.pendingUploadsTick();
+    return this.forceStatusTokens.has(statusId);
+  }
+
+  protected hasStoredForceStatusToken(statusId: string): boolean {
+    return this.storedForceStatusTokens().has(statusId);
+  }
+
+  protected forceStatusTokenUrl(statusId: string): string | null {
+    if (!this.hasStoredForceStatusToken(statusId)) {
+      return null;
+    }
+
+    if (this.pendingPresetMapId) {
+      const presetId = this.pendingPresetForceStatusIds.get(statusId);
+      if (presetId) {
+        return this.campaignsApi.presetForceStatusTokenUrl(
+          this.pendingPresetMapId,
+          presetId,
+          this.pendingPresetAssetTags,
+        );
+      }
+    }
+
+    const campaignId = this.campaignId();
+    if (!campaignId) {
+      return null;
+    }
+
+    return this.campaignsApi.forceStatusTokenUrl(campaignId, statusId, this.assetTags);
+  }
+
+  protected pendingForceStatusTokenName(statusId: string): string | null {
+    return this.forceStatusTokens.get(statusId)?.name ?? null;
+  }
+
   protected async ensureSavedPresets(): Promise<void> {
     if (this.presetsLoaded) {
       return;
@@ -3105,6 +3414,7 @@ export class CampaignSetupPage {
       this.pendingPresetFactionIds.clear();
       this.pendingPresetStructureIds.clear();
       this.pendingPresetItemIds.clear();
+      this.pendingPresetForceStatusIds.clear();
     }
 
     if (this.mapFile) {
@@ -3149,6 +3459,15 @@ export class CampaignSetupPage {
       detail = await this.campaignsApi.uploadItemObjectiveImage(
         detail.id,
         this.catalogIdOnServer(itemId, this.itemObjectiveTypes.controls, detail.itemObjectiveTypes ?? []),
+        file,
+        detail.revision,
+      );
+    }
+
+    for (const [statusId, file] of this.forceStatusTokens) {
+      detail = await this.campaignsApi.uploadForceStatusToken(
+        detail.id,
+        this.catalogIdOnServer(statusId, this.forceStatuses.controls, detail.forceStatuses ?? []),
         file,
         detail.revision,
       );
@@ -3365,6 +3684,8 @@ export class CampaignSetupPage {
             forceStatusClearConditions(status),
             status.priority ?? index,
             status.cancelsStatusIds ?? [],
+            status.immuneFactionIds ?? [],
+            status.immuneSubfactions ?? [],
           ),
         ),
       );
@@ -3876,6 +4197,8 @@ export class CampaignSetupPage {
     clearConditions: readonly ForceStatusCondition[] = [],
     priority?: number,
     cancelsStatusIds: readonly string[] = [],
+    immuneFactionIds: readonly string[] = [],
+    immuneSubfactions: readonly ForceStatusImmuneSubfaction[] = [],
   ): ForceStatusGroup {
     const used = this.forceStatuses.controls.map((status) => status.controls.priority.value);
     const nextPriority = priority ?? nextForceStatusPriority(used);
@@ -3892,6 +4215,7 @@ export class CampaignSetupPage {
       enablePickTypeId: [''],
       enablePickTagId: [''],
       enablePickRequiredStatusId: [''],
+      enablePickRequiredQuestionId: [''],
       enableConditions: this.formBuilder.array<ForceStatusConditionGroup>(
         enableConditions.map((condition) => this.createForceStatusConditionGroup(condition)),
       ),
@@ -3904,11 +4228,15 @@ export class CampaignSetupPage {
       clearPickTypeId: [''],
       clearPickTagId: [''],
       clearPickRequiredStatusId: [''],
+      clearPickRequiredQuestionId: [''],
       clearConditions: this.formBuilder.array<ForceStatusConditionGroup>(
         clearConditions.map((condition) => this.createForceStatusConditionGroup(condition)),
       ),
       priority: [nextPriority, [minValue(FORCE_STATUS_PRIORITY_MIN), maxValue(FORCE_STATUS_PRIORITY_MAX)]],
       cancelsStatusIds: [cancelsStatusIds.concat()],
+      immuneFactionIds: [immuneFactionIds.concat()],
+      immuneSubfactions: [immuneSubfactions.map((item) => ({ ...item }))],
+      clearTokenImage: [false],
     });
   }
 
@@ -3925,6 +4253,7 @@ export class CampaignSetupPage {
       locationTypeId: [condition.locationTypeId ?? ''],
       locationTagId: [condition.locationTagId ?? ''],
       requiredStatusId: [condition.requiredStatusId ?? ''],
+      requiredQuestionId: [condition.requiredQuestionId ?? ''],
     });
   }
 
@@ -3963,6 +4292,68 @@ export class CampaignSetupPage {
       if (owner && !owner.controls.cancelsStatusIds.value.includes(id)) {
         owner.controls.cancelsStatusIds.setValue([...owner.controls.cancelsStatusIds.value, id]);
       }
+    }
+  }
+
+  private applyHuntForceStatusImmunities(): void {
+    const byName = new Map(
+      this.factions.controls.map((faction) => [faction.controls.name.value.trim(), faction] as const),
+    );
+    for (const group of this.forceStatuses.controls) {
+      const statusName = group.controls.name.value.trim();
+      const factionIds = huntImmuneFactionNames(statusName)
+        .map((name) => byName.get(name)?.controls.id.value)
+        .filter((id): id is string => !!id);
+      const subfactions = huntImmuneSubfactions(statusName).flatMap((item) => {
+        const faction = byName.get(item.factionName);
+        return faction ? [{ factionId: faction.controls.id.value, subfaction: item.subfaction }] : [];
+      });
+      group.controls.immuneFactionIds.setValue(factionIds);
+      group.controls.immuneSubfactions.setValue(subfactions);
+    }
+  }
+
+  private patchForceStatusImmunities(
+    statuses: readonly {
+      id: string;
+      immuneFactionIds?: readonly string[];
+      immuneSubfactions?: readonly ForceStatusImmuneSubfaction[];
+    }[],
+    statusIds: Map<string, string>,
+    factionIds: Map<string, string>,
+  ): void {
+    for (const status of statuses) {
+      const appliedId = statusIds.get(status.id);
+      const group = this.forceStatuses.controls.find(
+        (item) => item.controls.id.value === appliedId || item.controls.id.value === status.id,
+      );
+      if (!group) {
+        continue;
+      }
+
+      group.controls.immuneFactionIds.setValue(
+        (status.immuneFactionIds ?? [])
+          .map((id) => factionIds.get(id) ?? id)
+          .filter((id) => this.factions.controls.some((faction) => faction.controls.id.value === id)),
+      );
+      group.controls.immuneSubfactions.setValue(
+        (status.immuneSubfactions ?? []).flatMap((item) => {
+          const factionId = factionIds.get(item.factionId) ?? item.factionId;
+          const faction = this.factions.controls.find((entry) => entry.controls.id.value === factionId);
+          const name = item.subfaction.trim();
+          if (
+            !faction ||
+            !name ||
+            !faction.controls.subfactions.controls.some(
+              (subfaction) => compareNames(subfaction.controls.name.value, name) === 0,
+            )
+          ) {
+            return [];
+          }
+
+          return [{ factionId, subfaction: name }];
+        }),
+      );
     }
   }
 
@@ -4045,6 +4436,8 @@ export class CampaignSetupPage {
         (effect?.alliedFactions ?? []).map((target) => this.createItemEffectAllianceGroup(target)),
       ),
       customText: [effect?.customText ?? '', maxLength(2000)],
+      successStatusTypeId: [effect?.successStatusTypeId ?? ''],
+      failureStatusTypeId: [effect?.failureStatusTypeId ?? ''],
     });
   }
 
@@ -4203,6 +4596,7 @@ export class CampaignSetupPage {
       this.structureImages.size > 0 ||
       this.structurePillagedImages.size > 0 ||
       this.itemObjectiveImages.size > 0 ||
+      this.forceStatusTokens.size > 0 ||
       this.flagImages.size > 0 ||
       this.missionFiles.size > 0
     );
@@ -4220,9 +4614,11 @@ export class CampaignSetupPage {
     this.pendingPresetFactionIds.clear();
     this.pendingPresetStructureIds.clear();
     this.pendingPresetItemIds.clear();
+    this.pendingPresetForceStatusIds.clear();
     this.structureImages.clear();
     this.structurePillagedImages.clear();
     this.itemObjectiveImages.clear();
+    this.forceStatusTokens.clear();
     this.flagImages.clear();
     this.revokeFlagPreviews();
     this.missionFiles.clear();
@@ -4292,7 +4688,7 @@ export class CampaignSetupPage {
       case 'specialRules':
         return this.specialRules.dirty;
       case 'forceStatuses':
-        return this.forceStatuses.dirty;
+        return this.forceStatuses.dirty || this.forceStatusTokens.size > 0;
       case 'publicObjectives':
         return (
           this.publicObjectiveTypes.dirty ||
@@ -4740,6 +5136,7 @@ export class CampaignSetupPage {
       condition.controls.locationTypeId.value,
       condition.controls.locationTagId.value,
       condition.controls.requiredStatusId.value || '-',
+      condition.controls.requiredQuestionId.value || '-',
     ].join('|');
   }
 
@@ -4751,9 +5148,18 @@ export class CampaignSetupPage {
     locationTypeId: string;
     locationTagId: string;
     requiredStatusId?: string;
+    requiredQuestionId?: string;
   }): ForceStatusCondition {
-    const kind = (condition.locationKind || 'Any') as ConditionLocationKind;
-    const specified = condition.trigger === 'OccupyingWithSpecifiedStatus';
+    const kind = hidesForceStatusLocation(condition.trigger)
+      ? 'Any'
+      : isStructureAccessTrigger(condition.trigger) &&
+          condition.locationKind !== 'Any' &&
+          condition.locationKind !== 'StructureType' &&
+          condition.locationKind !== 'StructureTag'
+        ? 'Any'
+        : ((condition.locationKind || 'Any') as ConditionLocationKind);
+    const specified = needsSpecifiedOccupyingStatus(condition.trigger);
+    const question = needsStandardBattleResultQuestion(condition.trigger);
     return {
       id: condition.id,
       trigger: condition.trigger,
@@ -4762,6 +5168,7 @@ export class CampaignSetupPage {
       locationTypeId: kind === 'TerrainType' || kind === 'StructureType' ? condition.locationTypeId || null : null,
       locationTagId: kind === 'TerrainTag' || kind === 'StructureTag' ? condition.locationTagId || null : null,
       requiredStatusId: specified && condition.requiredStatusId ? condition.requiredStatusId : null,
+      requiredQuestionId: question && condition.requiredQuestionId ? condition.requiredQuestionId : null,
     };
   }
 
@@ -4903,6 +5310,8 @@ export class CampaignSetupPage {
               subfaction: target.subfaction.trim() || null,
             })),
           customText: effect.customText.trim() || null,
+          successStatusTypeId: effect.successStatusTypeId.trim() || null,
+          failureStatusTypeId: effect.failureStatusTypeId.trim() || null,
         })),
         choices: type.choices
           .filter((choice) => choice.name.trim().length > 0)
@@ -4942,6 +5351,9 @@ export class CampaignSetupPage {
         clearOccurrences: status.clearConditions[0] ? Number(status.clearConditions[0].occurrences) : undefined,
         priority: Number(status.priority),
         cancelsStatusIds: status.cancelsStatusIds,
+        immuneFactionIds: status.immuneFactionIds,
+        immuneSubfactions: status.immuneSubfactions,
+        clearTokenImage: status.clearTokenImage,
       }));
     const privateObjectiveTypes = value.privateObjectiveTypes
       .filter((type) => type.name.trim().length > 0)
@@ -5558,11 +5970,22 @@ export class CampaignSetupPage {
         }
 
         if (
-          this.needsSpecifiedOccupyingStatus(condition.controls.trigger.value) &&
+          needsSpecifiedOccupyingStatus(condition.controls.trigger.value) &&
           !condition.controls.requiredStatusId.value
         ) {
           failures.push(
             `Force status ${index + 1} enable condition ${conditionIndex + 1} needs the occupying force status.`,
+          );
+          sections.add('forceStatuses');
+          sections.add(`force-status-${index}`);
+        }
+
+        if (
+          needsStandardBattleResultQuestion(condition.controls.trigger.value) &&
+          !condition.controls.requiredQuestionId.value
+        ) {
+          failures.push(
+            `Force status ${index + 1} enable condition ${conditionIndex + 1} needs a standard battle result question.`,
           );
           sections.add('forceStatuses');
           sections.add(`force-status-${index}`);
@@ -5596,11 +6019,22 @@ export class CampaignSetupPage {
         }
 
         if (
-          this.needsSpecifiedOccupyingStatus(condition.controls.trigger.value) &&
+          needsSpecifiedOccupyingStatus(condition.controls.trigger.value) &&
           !condition.controls.requiredStatusId.value
         ) {
           failures.push(
             `Force status ${index + 1} clear condition ${conditionIndex + 1} needs the occupying force status.`,
+          );
+          sections.add('forceStatuses');
+          sections.add(`force-status-${index}`);
+        }
+
+        if (
+          needsStandardBattleResultQuestion(condition.controls.trigger.value) &&
+          !condition.controls.requiredQuestionId.value
+        ) {
+          failures.push(
+            `Force status ${index + 1} clear condition ${conditionIndex + 1} needs a standard battle result question.`,
           );
           sections.add('forceStatuses');
           sections.add(`force-status-${index}`);
@@ -5875,6 +6309,10 @@ export class CampaignSetupPage {
         ...type,
         id: idFor(type.name, this.itemObjectiveTypes.controls) ?? type.id,
       })),
+      forceStatuses: (source.forceStatuses ?? []).map((status) => ({
+        ...status,
+        id: idFor(status.name, this.forceStatuses.controls) ?? status.id,
+      })),
     });
   }
 
@@ -5933,6 +6371,9 @@ export class CampaignSetupPage {
     );
     this.storedItemObjectiveImages.set(
       new Set((campaign.itemObjectiveTypes ?? []).filter((type) => type.hasImage).map((type) => type.id)),
+    );
+    this.storedForceStatusTokens.set(
+      new Set((campaign.forceStatuses ?? []).filter((status) => status.hasTokenImage).map((status) => status.id)),
     );
     this.storedMissionFiles.set(
       new Set(

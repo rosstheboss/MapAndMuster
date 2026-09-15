@@ -65,6 +65,7 @@ internal static class PlayStateJson
                 ViaTerritoryId = draft.ViaTerritoryId,
                 ViaPath = [.. draft.ViaPath],
                 DestroyImmediately = draft.DestroyImmediately,
+                DroppedItemObjectiveIds = [.. draft.DroppedItemObjectiveIds],
             })],
             Submissions = [.. state.Submissions.Select(static item => new SubmissionDocument
             {
@@ -80,6 +81,7 @@ internal static class PlayStateJson
                 ViaTerritoryId = item.ViaTerritoryId,
                 ViaPath = [.. item.ViaPath],
                 DestroyImmediately = item.DestroyImmediately,
+                DroppedItemObjectiveIds = [.. item.DroppedItemObjectiveIds],
             })],
             Commitments = [.. state.Commitments.Select(static item => new CommitmentDocument
             {
@@ -362,7 +364,8 @@ internal static class PlayStateJson
                 draft.UpdatedUtc,
                 draft.ViaTerritoryId,
                 draft.DestroyImmediately,
-                draft.ViaPath))],
+                draft.ViaPath,
+                draft.DroppedItemObjectiveIds))],
             [.. document.Submissions.Select(static item => new OrderSubmission(
                 item.Id,
                 item.WindowId,
@@ -375,7 +378,8 @@ internal static class PlayStateJson
                 item.ActorUserId,
                 item.ViaTerritoryId,
                 item.DestroyImmediately,
-                item.ViaPath))],
+                item.ViaPath,
+                item.DroppedItemObjectiveIds))],
             [.. document.Commitments.Select(static item => new PlayerCommitment(item.WindowId, item.UserId, item.CommittedUtc))],
             [.. document.Battles.Select(static battle => new CampaignBattle(
                 battle.Id,
@@ -675,6 +679,10 @@ internal static class PlayStateJson
                 : force.ClearStreaks.ToDictionary(static pair => pair.Key, static pair => pair.Value),
             ClearStreak = force.ClearStreak,
             LastChosenTeleportRound = force.LastChosenTeleportRound,
+            ChosenTeleportCooldownRemaining = force.ChosenTeleportCooldownRemaining,
+            PendingRandomTeleportDestinationId = force.PendingRandomTeleportDestinationId,
+            PendingRandomTeleportSourceTerritoryId = force.PendingRandomTeleportSourceTerritoryId,
+            SpecialActionSucceeded = force.SpecialActionSucceeded,
         };
     }
 
@@ -692,7 +700,11 @@ internal static class PlayStateJson
             force.EnableStreaks,
             force.ClearStreaks,
             force.ClearStreak,
-            force.LastChosenTeleportRound);
+            force.LastChosenTeleportRound,
+            force.ChosenTeleportCooldownRemaining,
+            force.PendingRandomTeleportDestinationId,
+            force.PendingRandomTeleportSourceTerritoryId,
+            force.SpecialActionSucceeded);
     }
 
     private sealed class PlayDocument
@@ -757,6 +769,14 @@ internal static class PlayStateJson
         public int ClearStreak { get; set; }
 
         public int LastChosenTeleportRound { get; set; }
+
+        public int ChosenTeleportCooldownRemaining { get; set; }
+
+        public Guid? PendingRandomTeleportDestinationId { get; set; }
+
+        public Guid? PendingRandomTeleportSourceTerritoryId { get; set; }
+
+        public bool? SpecialActionSucceeded { get; set; }
     }
 
     private sealed class DraftDocument
@@ -770,6 +790,8 @@ internal static class PlayStateJson
         public Guid? ViaTerritoryId { get; set; }
         public List<Guid>? ViaPath { get; set; }
         public bool DestroyImmediately { get; set; }
+
+        public List<Guid>? DroppedItemObjectiveIds { get; set; }
     }
 
     private sealed class SubmissionDocument
@@ -786,6 +808,8 @@ internal static class PlayStateJson
         public Guid? ViaTerritoryId { get; set; }
         public List<Guid>? ViaPath { get; set; }
         public bool DestroyImmediately { get; set; }
+
+        public List<Guid>? DroppedItemObjectiveIds { get; set; }
     }
 
     private sealed class CommitmentDocument

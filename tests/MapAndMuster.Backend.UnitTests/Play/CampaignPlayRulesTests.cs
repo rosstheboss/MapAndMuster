@@ -622,7 +622,7 @@ public sealed class CampaignPlayRulesTests
     [Fact]
     public void MultipleRetreatDestinationsAreNotAutoCommitted()
     {
-        var map = CreateMapWithEast(adjacentToMidland: false);
+        var map = CreateMapWithEast(adjacentToMidland: true);
         var (state, seededMap, schedule) = Seeded(map: map);
         map = seededMap;
         state = ForceBattle(state, map, schedule);
@@ -658,7 +658,7 @@ public sealed class CampaignPlayRulesTests
     [Fact]
     public void SoleRetreatCannotBeUncommitted()
     {
-        var map = CreateMapWithEast(adjacentToMidland: false);
+        var map = CreateMapWithEast(adjacentToMidland: true);
         var (state, seededMap, schedule) = Seeded(map: map);
         map = seededMap;
         state = ForceBattle(state, map, schedule);
@@ -886,7 +886,7 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
-    public void StandardRetreatAcceptsANonAdjacentOwnedTerritory()
+    public void StandardRetreatRequiresOwnedAndAlliedTerritoriesToBeReachable()
     {
         var map = CreateMapWithEast(adjacentToMidland: false);
         var (state, seededMap, schedule) = Seeded(map: map);
@@ -900,6 +900,16 @@ public sealed class CampaignPlayRulesTests
         Assert.True(CampaignPlayRules.TryAcceptBattleResult(
             one!.State, PlayerTwo, battle.Id, now, out var accepted, out _));
         var retreatMap = accepted!.PreserveMap ? map : accepted.Map;
+        Assert.False(CampaignPlayRules.TrySubmitRetreat(
+            accepted.State,
+            retreatMap,
+            PlayerTwo,
+            battle.Id,
+            East,
+            now,
+            out _,
+            out var invalid));
+        Assert.Equal("retreat.target.invalid", invalid!.Code);
         Assert.True(CampaignPlayRules.TrySubmitRetreat(
             accepted.State,
             retreatMap,
@@ -908,7 +918,8 @@ public sealed class CampaignPlayRulesTests
             East,
             now,
             out var retreated,
-            out _));
+            out _,
+            specialRules: SpeedFor(South, 2)));
         Assert.Equal(East, retreated!.State.Forces.Single(force => force.FactionId == South).TerritoryId);
     }
 
@@ -967,7 +978,7 @@ public sealed class CampaignPlayRulesTests
             occupyingForces: state.Forces,
             factionAllyGroups: allies);
         Assert.Contains(Midland, retreats);
-        Assert.Contains(East, retreats);
+        Assert.DoesNotContain(East, retreats);
         Assert.DoesNotContain(SouthSpawn, retreats);
         Assert.DoesNotContain(NorthSpawn, retreats);
     }
@@ -1399,6 +1410,110 @@ public sealed class CampaignPlayRulesTests
         Assert.Contains(outcome.State.Log, item => item.Kind == PlayLogKind.PlayerSurrendered);
         Assert.Contains(northForce.Id, resolved.SurrenderedForceIds);
         _ = northForce;
+    }
+
+    [Fact]
+    public void SurrenderCanBeUncommittedWhileTheWindowRemainsOpen()
+    {
+        var (state, map, schedule) = Seeded();
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var southForce = state.Forces.Single(force => force.FactionId == South);
+        var now = schedule.StartsUtc.AddMinutes(1);
+        var extra = new CampaignForce(Guid.NewGuid(), PlayerOne, North, NorthSpawn, false);
+        var southExtra = new CampaignForce(Guid.NewGuid(), PlayerTwo, South, SouthSpawn, false);
+        var battle = new CampaignBattle(
+            Guid.NewGuid(),
+            Midland,
+            state.Windows[0].Id,
+            state.Windows[1].Id,
+            BattleStatus.AwaitingResults,
+            [northForce.Id, southForce.Id],
+            winnerForceId: null,
+            isDraw: false,
+            now);
+        var relic = new CampaignItemObjective(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Crown",
+            territoryId: null,
+            possessorForceId: northForce.Id,
+            isRevealed: true,
+            Midland,
+            false);
+        state = state.With(
+            forces:
+            [
+                northForce.With(territoryId: Midland, inBattle: true),
+                extra,
+                southForce.With(territoryId: Midland, inBattle: true),
+                southExtra,
+            ],
+            battles: [battle],
+            itemObjectives: [relic]);
+
+        Assert.True(CampaignPlayRules.TrySubmitSurrender(
+            state,
+            map,
+            PlayerOne,
+            battle.Id,
+            NorthSpawn,
+            now,
+            out var surrendered,
+            out _));
+        var resolved = surrendered!.State.Battles.Single(item => item.Id == battle.Id);
+        Assert.Equal(BattleStatus.Finalized, resolved.Status);
+        Assert.Equal(southForce.Id, resolved.WinnerForceId);
+        Assert.Equal(10, resolved.WinnerScore);
+        Assert.Equal(southForce.Id, surrendered.State.ItemObjectives[0].PossessorForceId);
+
+        Assert.True(CampaignPlayRules.TryUncommitRetreat(
+            surrendered.State,
+            PlayerOne,
+            battle.Id,
+            now,
+            out var uncommitted,
+            out _,
+            map));
+        var restored = uncommitted!.Battles.Single(item => item.Id == battle.Id);
+        Assert.Equal(BattleStatus.AwaitingResults, restored.Status);
+        Assert.Null(restored.WinnerForceId);
+        Assert.Equal(0, restored.WinnerScore);
+        Assert.DoesNotContain(northForce.Id, restored.SurrenderedForceIds);
+        Assert.False(uncommitted.HasCommittedRetreat(battle.Id, northForce.Id));
+        Assert.Equal(northForce.Id, uncommitted.ItemObjectives[0].PossessorForceId);
+        Assert.All(
+            uncommitted.Forces.Where(force => force.Id == northForce.Id || force.Id == southForce.Id),
+            force => Assert.True(force.InBattle));
+    }
+
+    [Fact]
+    public void SurrenderCannotBeUncommittedAfterTheBattlePhaseCloses()
+    {
+        var (state, map, schedule) = Seeded();
+        state = ForceBattle(state, map, schedule);
+        var battle = state.Battles[0];
+        var now = DuringOpenBattle(state);
+
+        Assert.True(CampaignPlayRules.TrySubmitSurrender(
+            state,
+            map,
+            PlayerOne,
+            battle.Id,
+            NorthSpawn,
+            now,
+            out var outcome,
+            out _));
+        Assert.Equal(PhaseWindowStatus.Resolved, outcome!.State.Windows[1].Status);
+        Assert.False(CampaignPlayRules.TryUncommitRetreat(
+            outcome.State,
+            PlayerOne,
+            battle.Id,
+            now,
+            out _,
+            out var error,
+            map));
+        Assert.Equal("surrender.window.closed", error!.Code);
+        Assert.Equal(10, outcome.State.Battles.Single(item => item.Id == battle.Id).WinnerScore);
     }
 
     [Fact]

@@ -69,6 +69,7 @@ public static class ForceStatusConditionCollapse
                 !conditions.Where((_, other) => other != index).Any(stronger =>
                     stronger.Trigger == candidate.Trigger
                     && stronger.RequiredStatusId == candidate.RequiredStatusId
+                    && stronger.RequiredQuestionId == candidate.RequiredQuestionId
                     && candidate.Occurrences >= stronger.Occurrences
                     && stronger.Location.StrictlySubsumes(candidate.Location, tagsForType))),
         ];
@@ -84,6 +85,7 @@ public static class ForceStatusConditionCollapse
                 !conditions.Where((_, other) => other != index).Any(stronger =>
                     stronger.Trigger == candidate.Trigger
                     && stronger.RequiredStatusId == candidate.RequiredStatusId
+                    && stronger.RequiredQuestionId == candidate.RequiredQuestionId
                     && candidate.Occurrences >= stronger.Occurrences
                     && stronger.Location.StrictlySubsumes(candidate.Location, tagsForType))),
         ];

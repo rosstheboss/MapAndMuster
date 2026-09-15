@@ -210,6 +210,8 @@ internal static class CatalogFileBinder
                     }),
                 ],
                 CustomText = effect.CustomText,
+                SuccessStatusTypeId = effect.SuccessStatusTypeId,
+                FailureStatusTypeId = effect.FailureStatusTypeId,
             }),
         ];
     }
@@ -233,7 +235,9 @@ internal static class CatalogFileBinder
                     .. effect.AlliedFactions.Select(static target =>
                         new ItemObjectiveAllianceTarget(target.FactionId, target.Subfaction)),
                 ],
-                effect.CustomText)),
+                effect.CustomText,
+                effect.SuccessStatusTypeId,
+                effect.FailureStatusTypeId)),
         ];
     }
 
@@ -282,23 +286,33 @@ internal static class CatalogFileBinder
         ];
     }
 
-    public static IReadOnlyList<StoredForceStatus> BindForceStatuses(IReadOnlyList<ForceStatusSetup> incoming)
+    public static IReadOnlyList<StoredForceStatus> BindForceStatuses(
+        IReadOnlyList<ForceStatusSetup> incoming,
+        IReadOnlyList<StoredForceStatus>? previous = null)
     {
+        var previousById = previous?.ToDictionary(static status => status.Id) ?? [];
         return
         [
-            .. incoming.Select(static status => new StoredForceStatus
+            .. incoming.Select(status =>
             {
-                Id = status.Id,
-                Name = status.Name,
-                Effects = status.Effects,
-                EnableTrigger = status.EnableTrigger.ToString(),
-                ClearTrigger = status.ClearTrigger.ToString(),
-                EnableConditions = BindEnableConditions(status.EnableConditions),
-                ClearConditions = BindClearConditions(status.ClearConditions),
-                Priority = status.Priority,
-                CancelsStatusIds = status.CancelsStatusIds,
-                EnableOccurrences = status.EnableOccurrences,
-                ClearOccurrences = status.ClearOccurrences,
+                previousById.TryGetValue(status.Id, out var existing);
+                return new StoredForceStatus
+                {
+                    Id = status.Id,
+                    Name = status.Name,
+                    Effects = status.Effects,
+                    EnableTrigger = status.EnableTrigger.ToString(),
+                    ClearTrigger = status.ClearTrigger.ToString(),
+                    EnableConditions = BindEnableConditions(status.EnableConditions),
+                    ClearConditions = BindClearConditions(status.ClearConditions),
+                    Priority = status.Priority,
+                    CancelsStatusIds = status.CancelsStatusIds,
+                    EnableOccurrences = status.EnableOccurrences,
+                    ClearOccurrences = status.ClearOccurrences,
+                    ImmuneFactionIds = status.ImmuneFactionIds,
+                    ImmuneSubfactions = BindImmuneSubfactions(status.ImmuneSubfactions),
+                    TokenImageStorageKey = status.ClearTokenImage ? null : existing?.TokenImageStorageKey,
+                };
             }),
         ];
     }
@@ -330,7 +344,9 @@ internal static class CatalogFileBinder
             enables,
             clears,
             status.Priority,
-            status.CancelsStatusIds);
+            status.CancelsStatusIds,
+            status.ImmuneFactionIds,
+            ParseImmuneSubfactions(status.ImmuneSubfactions));
     }
 
     private static IReadOnlyList<ForceStatusEnableCondition> ParseEnableConditions(StoredForceStatus status)
@@ -359,7 +375,8 @@ internal static class CatalogFileBinder
                     ForceStatusOccurrences.Normalize(condition.Occurrences),
                     condition.Id,
                     ParseLocation(condition),
-                    condition.RequiredStatusId))
+                    condition.RequiredStatusId,
+                    condition.RequiredQuestionId))
                 .DistinctBy(static condition => condition.Fingerprint()),
         ];
     }
@@ -390,7 +407,8 @@ internal static class CatalogFileBinder
                     ForceStatusOccurrences.Normalize(condition.Occurrences),
                     condition.Id,
                     ParseLocation(condition),
-                    condition.RequiredStatusId))
+                    condition.RequiredStatusId,
+                    condition.RequiredQuestionId))
                 .DistinctBy(static condition => condition.Fingerprint()),
         ];
     }
@@ -405,7 +423,8 @@ internal static class CatalogFileBinder
                 condition.Trigger.ToString(),
                 condition.Occurrences,
                 condition.Location,
-                condition.RequiredStatusId)),
+                condition.RequiredStatusId,
+                condition.RequiredQuestionId)),
         ];
     }
 
@@ -419,7 +438,8 @@ internal static class CatalogFileBinder
                 condition.Trigger.ToString(),
                 condition.Occurrences,
                 condition.Location,
-                condition.RequiredStatusId)),
+                condition.RequiredStatusId,
+                condition.RequiredQuestionId)),
         ];
     }
 
@@ -428,7 +448,8 @@ internal static class CatalogFileBinder
         string trigger,
         int occurrences,
         ConditionLocation location,
-        Guid? requiredStatusId)
+        Guid? requiredStatusId,
+        Guid? requiredQuestionId)
     {
         return new StoredForceStatusCondition
         {
@@ -439,6 +460,7 @@ internal static class CatalogFileBinder
             LocationTypeId = location.TypeId,
             LocationTagId = location.TagId,
             RequiredStatusId = requiredStatusId,
+            RequiredQuestionId = requiredQuestionId,
         };
     }
 
@@ -560,6 +582,30 @@ internal static class CatalogFileBinder
         }
     }
 
+    private static IReadOnlyList<StoredForceStatusImmuneSubfaction> BindImmuneSubfactions(
+        IReadOnlyList<ForceStatusImmuneSubfaction> listed)
+    {
+        return
+        [
+            .. listed.Select(static item => new StoredForceStatusImmuneSubfaction
+            {
+                FactionId = item.FactionId,
+                Subfaction = item.Subfaction,
+            }),
+        ];
+    }
+
+    private static IReadOnlyList<ForceStatusImmuneSubfaction> ParseImmuneSubfactions(
+        IReadOnlyList<StoredForceStatusImmuneSubfaction> listed)
+    {
+        return
+        [
+            .. listed
+                .Where(static item => item.FactionId != Guid.Empty && !string.IsNullOrWhiteSpace(item.Subfaction))
+                .Select(static item => new ForceStatusImmuneSubfaction(item.FactionId, item.Subfaction)),
+        ];
+    }
+
     public static IEnumerable<string> CollectCampaignStorageKeys(StoredCampaign campaign)
     {
         ArgumentNullException.ThrowIfNull(campaign);
@@ -575,6 +621,14 @@ internal static class CatalogFileBinder
             campaign.ItemObjectiveTypes))
         {
             yield return key;
+        }
+
+        foreach (var status in campaign.ForceStatuses)
+        {
+            if (IsUserUploadedFileKey(status.TokenImageStorageKey))
+            {
+                yield return status.TokenImageStorageKey;
+            }
         }
 
         foreach (var mission in campaign.Missions)

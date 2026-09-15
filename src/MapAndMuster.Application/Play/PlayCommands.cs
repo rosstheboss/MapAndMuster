@@ -58,6 +58,9 @@ public sealed class SaveOrderDraftCommand
     /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
     public bool DestroyImmediately { get; init; }
 
+    /// <summary>Gets item objectives dropped at the start of this Move, when any.</summary>
+    public IReadOnlyList<Guid>? DroppedItemObjectiveIds { get; init; }
+
     /// <summary>Gets whether to re-resolve the previous action instead of editing the current window.</summary>
     public bool ReResolvePrevious { get; init; }
 }
@@ -684,6 +687,12 @@ public sealed class PlayForceDetail
 
     /// <summary>Gets chosen-teleport destinations when the viewer may pick one.</summary>
     public IReadOnlyList<Guid> TeleportTargets { get; init; } = [];
+
+    /// <summary>Gets whether this force is locked into resolving a random teleport.</summary>
+    public bool IsRandomTeleportLocked { get; init; }
+
+    /// <summary>Gets held item objectives that may still be dropped during Move.</summary>
+    public IReadOnlyList<Guid> DroppableItemObjectiveIds { get; init; } = [];
 }
 
 /// <summary>A two-territory Move hop.</summary>
@@ -722,6 +731,9 @@ public sealed class PlayDraftDetail
 
     /// <summary>Gets whether a Pillage should destroy the structure immediately.</summary>
     public bool DestroyImmediately { get; init; }
+
+    /// <summary>Gets item objectives dropped at the start of this Move, when any.</summary>
+    public IReadOnlyList<Guid> DroppedItemObjectiveIds { get; init; } = [];
 }
 
 /// <summary>A submitted or revealed order.</summary>
@@ -824,6 +836,9 @@ public sealed class PlayBattleDetail
 
     /// <summary>Gets whether the viewer has committed a retreat for this battle.</summary>
     public bool IsRetreatCommitted { get; init; }
+
+    /// <summary>Gets whether the viewer has committed a surrender for this battle.</summary>
+    public bool IsSurrenderCommitted { get; init; }
 
     /// <summary>Gets the viewer's saved retreat destination, committed or still in draft.</summary>
     public Guid? RetreatDraftTargetId { get; init; }

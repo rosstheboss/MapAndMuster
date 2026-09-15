@@ -20,6 +20,11 @@ export function itemAssetKey(itemObjectiveTypeId: string): string {
   return `item:${itemObjectiveTypeId}`;
 }
 
+/** Key for a force-status chit or token image. */
+export function forceStatusTokenAssetKey(forceStatusId: string): string {
+  return `force-status-token:${forceStatusId}`;
+}
+
 /** Key for a faction or subfaction flag. */
 export function factionAssetKey(factionId: string, subfaction?: string | null): string {
   const trimmed = subfaction?.trim();

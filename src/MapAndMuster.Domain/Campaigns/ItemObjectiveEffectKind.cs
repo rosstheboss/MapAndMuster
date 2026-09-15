@@ -14,7 +14,7 @@ public enum ItemObjectiveEffectKind
     /// <summary>Adds or subtracts map supply, never below 1 while this effect applies.</summary>
     ModifySupply = 2,
 
-    /// <summary>Grants a Teleport action to a random empty non-spawn territory.</summary>
+    /// <summary>Grants the Teleport Randomly action to a secret allied or Neutral non-spawn territory.</summary>
     TeleportToRandomEmptyNonSpawn = 3,
 
     /// <summary>The holder has a catalog status while possessing the item.</summary>
@@ -39,7 +39,7 @@ public enum ItemObjectiveEffectKind
     Custom = 10,
 
     /// <summary>
-    /// Grants a Teleport action once per round to a player-chosen non-spawn territory.
+    /// Grants Teleport to Specific Territory, which recharges over three action phases.
     /// </summary>
     TeleportToChosenNonSpawnOncePerRound = 11,
 }

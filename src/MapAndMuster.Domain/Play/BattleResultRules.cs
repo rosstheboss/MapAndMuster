@@ -109,17 +109,55 @@ public static class BattleResultRules
                 continue;
             }
 
-            if (question.Kind == MissionResultQuestionKind.Boolean && answer.BooleanValue == true)
-            {
-                total += question.CampaignPoints;
-            }
-            else if (question.Kind == MissionResultQuestionKind.BattlePoints && (answer.BattlePointsValue ?? 0) > 0)
+            if (IsAchieved(answer, question.Kind))
             {
                 total += question.CampaignPoints;
             }
         }
 
         return total;
+    }
+
+    /// <summary>
+    /// Returns whether a reported answer scores as achieved for the question kind.
+    /// </summary>
+    public static bool IsAchieved(BattleQuestionAnswer answer, MissionResultQuestionKind kind)
+    {
+        ArgumentNullException.ThrowIfNull(answer);
+        return kind == MissionResultQuestionKind.Boolean
+            ? answer.BooleanValue == true
+            : (answer.BattlePointsValue ?? 0) > 0;
+    }
+
+    /// <summary>
+    /// Standard catalog question identifiers achieved by this force or any opposing report in
+    /// <paramref name="reports"/>. Unique mission questions without a catalog link are ignored.
+    /// </summary>
+    public static IReadOnlyList<Guid> AchievedStandardQuestionIds(
+        IEnumerable<BattleParticipantReport> reports,
+        IReadOnlyList<MissionResultQuestionSetup> questions)
+    {
+        ArgumentNullException.ThrowIfNull(reports);
+        ArgumentNullException.ThrowIfNull(questions);
+        var achieved = new HashSet<Guid>();
+        var byId = questions.ToDictionary(static question => question.Id);
+        foreach (var report in reports)
+        {
+            foreach (var answer in report.Answers)
+            {
+                if (!byId.TryGetValue(answer.QuestionId, out var question)
+                    || question.StandardQuestionId is not { } catalogId
+                    || catalogId == Guid.Empty
+                    || !IsAchieved(answer, question.Kind))
+                {
+                    continue;
+                }
+
+                achieved.Add(catalogId);
+            }
+        }
+
+        return [.. achieved];
     }
 
     /// <summary>

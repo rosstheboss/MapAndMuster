@@ -21,12 +21,14 @@ Required early suites:
   close when every result, surrender, and required retreat is committed even if the Battle-phase
   early-close checkbox is off, idle battle windows staying open for a ringer when that checkbox is
   off, auto-commit of a sole legal retreat destination including spawn, deadline use of an
-  uncommitted retreat draft, and default spawn when no retreat exists.
+  uncommitted retreat draft, and default spawn when no retreat exists. Surrender commit and
+  uncommit while the current window remains open; uncommitting restores the engagement so the
+  opponent does not keep maximum differential battle points.
   Players whose forces are all in battle (or otherwise owe no order) appear as committed on the
   action roster; Actions names the locked battle's territory and opponents.
 - Action validity and precedence, especially Battle overriding later actions.
 - Move adjacency, spawn restrictions (no landing on spawn; pass through own spawn only), split/rejoin with a play-log entry, backstab, pillage/repair, and retreat
-  (Neutral reachability at movement speed, blocked by enemies or battles on the path, allied
+  (Neutral, owned, and allied reachability at movement speed, blocked by enemies or battles on the path, allied
   occupation of the destination, two enemy landings both sent to spawn, pass-through of another
   enemy's landing hex).
   `UndergroundNetwork` uses the same Town/City pick for initial placement and a missing or
@@ -36,8 +38,10 @@ Required early suites:
   condition lists, location filters (any, type, or tag), consecutive occurrence counts, unique
   priorities when more than one trigger matches, save-time duplicate/redundancy collapse, and
   optional cancel-out pairs. Named Diseased catalog conditions plus remaining contagion/rejoin/
-  plague/immunity engine behavior. Catalog tags (uniqueness, scoped assignment, subfaction union,
-  Water replacing the former water-feature flag). Private and public objective tag filters.
+  plague/immunity engine behavior. Configured status immunities (factions and named subfactions)
+  with a special-rule fallback when a status lists none. Catalog tags (uniqueness, scoped assignment,
+  subfaction union, Water replacing the former water-feature flag). Private and public objective tag
+  filters.
 - Public/private objective visibility, completion, manager approval of private claims, automatic
   private-objective scoring and live `(current/required)` progress for authorized holders, and launch
   assignment (unique draws per holder-kind pool, then reshuffled duplicates until every holder in a
@@ -45,7 +49,11 @@ Required early suites:
   Player-held automatic progress counts only that player's credited holdings. Private-objective exclude lists skip named factions
   and ally groups. Rival objectives seed unique enemies, reveal on battle or surrender, and replenish
   closest unused rivals on later non-final action rounds.
-- Relic discovery, transfer, drop, choice resolution, destroy-and-replace, tie-breaking, and secrecy.
+- Relic discovery, transfer, optional unopened drop on Move, multi-item spoils, choice
+  resolution, destroy-and-replace, tie-breaking, and secrecy. Teleport Randomly is two action
+  phases with a secret destination omitted from client payloads; Teleport to Specific Territory
+  is instant with a 3-phase recharge. Exhausted applies after a completed teleport unless
+  canceled. Pickup, drop, and random-teleport-preparing log copy uses the player name.
 - Campaign-point components and graph objectives. Map holdings are attributed to individual
   players on a shared faction, not copied from a faction-wide total onto every co-faction player.
 - Public-objective award/revoke facts and hidden item-objective standings secrecy.
@@ -77,7 +85,7 @@ Cover:
 - Public site chat on All Campaigns, including unknown `@` mentions, prohibited language, mutual blocks, isolation from campaign logs, administrator announcements with notifications, and rejection of seeded test accounts.
 - Public profile campaign lists that include shared or publicly viewable campaigns and omit hidden private campaigns the viewer does not share.
 - Home notification board empty and populated states, dismiss and dismiss-all, five notices per
-  page, two news articles per page, and administrator-only news edits.
+  page newest first with timestamps, two news articles per page, and administrator-only news edits.
   Home's Needs your attention list is built from `GET /api/campaigns` (in-progress round,
   countdown, commit, remaining setup) and sits above Notifications and News.
 - Manager add and kick of players (including private campaigns without the join password), promoting a
@@ -99,7 +107,11 @@ Use Angular's Vitest integration.
 
 Cover components/services for:
 
-- Order drafting from the map menu or force-panel **Save draft**, including a chosen item-objective teleport destination, commit only when every required draft is saved, uncommit only while the action window is open, and a confirming last-commit dialog when every other player is already committed. Confirmation alertdialogs trap Tab, confirm on Enter, and cancel on Escape. A two-or-more-territory Move or Split always picks each via on the map, including a unique legal route. The Actions Commitments player list starts collapsed and keeps the "X of Y players committed. Waiting on …" summary under the Commitments heading. Expanding it shows players in alphabetical username order in up to three columns, filling left to right then top to bottom; each player lists username with a profile link and Drafting or Committed, then faction and subfaction, then that player's force locations as map links joined with "and".
+- Order drafting from the map menu or force-panel **Save draft**, including Teleport Randomly and
+  Teleport to Specific Territory titles, a chosen teleport destination, optional drop of unopened
+  item objectives on Move, commit only when every required draft is saved, uncommit only while the
+  action window is open, and a confirming last-commit dialog when every other player is already
+  committed. Confirmation alertdialogs trap Tab, confirm on Enter, and cancel on Escape. A two-or-more-territory Move or Split always picks each via on the map, including a unique legal route. The Actions Commitments player list starts collapsed and keeps the "X of Y players committed. Waiting on …" summary under the Commitments heading. Expanding it shows players in alphabetical username order in up to three columns, filling left to right then top to bottom; each player lists username with a profile link and Drafting or Committed, then faction and subfaction, then that player's force locations as map links joined with "and".
 - Campaign-page status bar (round/phase, throttled countdown live region, viewer commit chip, compact commitment count, Go to your orders). While a campaign is running, Actions, Chat, and Standings are open by default; other sections stay collapsed and the last set is stored in a per-campaign cookie. Staff tools are under collapsed Manage campaign. Battle, campaign, phase, and force-status enums use display labels. Summary ends with one Conduits of Power notice per adjacent force (`A hidden Relic is nearby the force at {territory}.`, bold and faction-colored glow) and each battle reminder renders once. The campaign log summary shows unread mention and private counts from `GET /log` without marking the log read on load. Log timestamps sit after the entry text (relative when under 24 hours). Scheduled campaign pages list faction and subfaction special rules in Factions and under the Summary faction selector from the campaign catalog, including when `GET /play` has not started or returns an empty rule list. Campaign, Edit campaign, and map editor pages end with Back to top.
 - Create/edit campaign starts with Campaign details, Schedule, Factions, Terrain types, and Campaign map expanded; optional sections start collapsed. The sticky toolbar shows remaining required sections, nested mission groups have unique names, and Edit map is hidden after a campaign starts. Force-status cancel-out is a dropdown that adds named statuses to a removable list. Private-objective exclude lists add factions and ally groups the same way. Secret rival objectives default on with 5 campaign points. The campaign page lists a secret rival with the award as `(5 CP)` and the viewer's private objectives with `(X CP)`. Hovering a standings points cell lists that column's sources and that cell's total. Enable and clear each have a consecutive-occurrence integer from 1 to 10, a location filter (any, type, or tag), and Add that does not hide a trigger already in the list. Each catalog section has a tag subpanel whose name field adds on Enter or comma without saving, and item chip comboboxes that suggest unassigned defined tags.
 - Countdown display without treating the browser clock as authoritative.
@@ -111,11 +123,13 @@ Cover components/services for:
   Debug) without hit targets, spawn ownership copy, required-
   subfaction spawn labels, disabled no-fixed-spawn factions, save-status check and X, and metadata forms.
   Map pinch-zoom and two-finger pan, full-screen toggle (M), map-image loading ellipsis, and force
-  markers staying inside their territory are covered in map-view tests. Conduits of Power force pins
-  adjacent to a still-hidden relic glow white. Own-force pins show a
-  green-and-white check emblem half the pin's size, centered on the circular pin's top-right
-  edge so half of it overlaps the pin, when that force has a saved draft or committed order, with hover and
-  accessible text naming the action and draft versus committed. Cycle forces sits next to Full
+  markers staying inside their territory are covered in map-view tests. Force pins glow white.
+  Conduits of Power force pins adjacent to a still-hidden relic keep that nearby notice. Own-force
+  pins show a green-and-white check emblem half the pin's size, centered on the circular pin's
+  top-right edge so half of it overlaps the pin, when that force has a saved draft or committed
+  order, with hover and accessible text naming the action and draft versus committed. A held item
+  objective uses the same relative size on the top-left edge. Unclaimed map items match structure
+  marker size and sit centered above the structure without overlapping it. Cycle forces sits next to Full
   screen, selects that force's territory, and zooms to the force, its territory, and reachable Move
   destinations, or Fit when that frame cannot be computed. Cycle forces uses Y. The same Commit or
   Uncommit control as Actions sits between Cycle forces and Show names, including last-commit
@@ -177,14 +191,15 @@ Cover components/services for:
 - Battles panel collapse, a top-of-panel list of who still needs to commit a result or retreat,
   required army-points and supply-costing fields for the inputting player,
   Awaiting Retreat Order while a committed retreat is still owed, and retreat and surrender
-  commit/uncommit on the map toolbar matching Action-phase commit.
+  commit/uncommit on the map toolbar matching Action-phase commit. Surrender may be uncommitted
+  while the current window remains open.
 - Public site chat on All Campaigns, including language filters, block toggles, administrator compose with bold announcement text, and cookie-stored language preferences.
 - Participants panel names, factions, and Manager/Player/Admin roles, including manager add/search/kick, staff faction assignment, and a May be kicked badge that opens the delinquency log entry.
 - Administrator test-users page (filter, Currently testing chip) and the impersonation banner with Return to admin.
 - Public profile campaign list, scores placeholder, and Back to the previous in-app screen.
 - Home notification board, including "No new notifications.", dismiss and dismiss all, five
-  notices per page, Needs your attention from the campaign list, empty join/create actions, and
-  two news articles per page.
+  notices per page newest first with timestamps, Needs your attention from the campaign list,
+  empty join/create actions, and two news articles per page.
 - Campaign cards show status, round, countdown, player count, role, remaining setup, commit
   state, and Open while collapsed. Duplicate campaign and deleting a completed campaign both
   require a confirmation dialog. Empty Your campaigns offers Join campaign. All campaigns
