@@ -5,6 +5,23 @@
       <span class="legend-swatch legend-swatch-ownership" aria-hidden="true"></span>
       Ownership tint
     </li>
+    @for (faction of factions(); track faction.id) {
+      <li>
+        <span
+          class="legend-swatch legend-faction"
+          [class.has-image]="!!faction.image"
+          [class.is-tinted]="!!faction.image && faction.tint"
+          [style.background]="faction.image && faction.tint ? faction.color : faction.image ? null : faction.color"
+          [style.--logo-mask]="faction.image && faction.tint ? 'url(' + faction.image + ')' : null"
+          aria-hidden="true"
+        >
+          @if (faction.image && !faction.tint) {
+            <img [src]="faction.image" alt="" />
+          }
+        </span>
+        {{ faction.name }}
+      </li>
+    }
     <li>
       <span class="legend-swatch legend-swatch-spawn" aria-hidden="true"></span>
       Spawn location
@@ -13,25 +30,67 @@
       <span class="legend-pin legend-pin-force" aria-hidden="true"></span>
       Force
     </li>
+    @if (showYourForce()) {
+      <li>
+        <span class="legend-pin legend-pin-force is-mine" aria-hidden="true"></span>
+        Your force
+      </li>
+    }
+    @if (showForceInBattle()) {
+      <li>
+        <span class="legend-pin legend-pin-force is-battle" aria-hidden="true"></span>
+        Force in battle
+      </li>
+    }
+    @for (structure of structures(); track structure.id) {
+      <li>
+        <span class="legend-pin legend-pin-structure" aria-hidden="true">
+          @if (structure.imageUrl; as src) {
+            <img [src]="src" alt="" />
+          } @else if (structure.builtinSymbol) {
+            <app-map-symbol kind="structure" [name]="structure.builtinSymbol" />
+          }
+        </span>
+        {{ structure.name }}
+      </li>
+    }
+    @if (pillageStructure(); as pillaged) {
+      <li>
+        <span class="legend-pin legend-pin-structure is-pillaged" aria-hidden="true">
+          @if (pillaged.pillagedImageUrl; as src) {
+            <img [src]="src" alt="" />
+          } @else if (pillaged.builtinSymbol) {
+            <app-map-symbol kind="structure" [name]="pillaged.builtinSymbol" [pillaged]="true" />
+          }
+        </span>
+        Pillaged {{ pillaged.name }}
+      </li>
+    }
+    @for (item of items(); track item.name) {
+      <li>
+        <span class="legend-pin legend-pin-item" [style.color]="item.color" aria-hidden="true">
+          @if (item.imageUrl; as src) {
+            <img [src]="src" alt="" />
+          } @else {
+            <app-map-symbol kind="item" [name]="item.builtinSymbol" />
+          }
+        </span>
+        {{ item.name }}
+      </li>
+    }
     <li>
-      <span class="legend-pin legend-pin-force is-mine" aria-hidden="true"></span>
-      Your force
+      <span class="legend-swatch legend-glow-selected" aria-hidden="true"></span>
+      Selected territory
     </li>
-    <li>
-      <span class="legend-pin legend-pin-force is-battle" aria-hidden="true"></span>
-      Force in battle
-    </li>
-    <li>
-      <span class="legend-pin legend-pin-structure" aria-hidden="true"></span>
-      Structure
-    </li>
-    <li>
-      <span class="legend-pin legend-pin-structure is-pillaged" aria-hidden="true"></span>
-      Pillaged structure
-    </li>
-    <li>
-      <span class="legend-pin legend-pin-item" aria-hidden="true"></span>
-      Item objective
-    </li>
+    @if (showPlayGlows()) {
+      <li>
+        <span class="legend-pin legend-pin-force is-relic" aria-hidden="true"></span>
+        Hidden relic nearby
+      </li>
+      <li>
+        <span class="legend-pin legend-pin-force is-teleport" aria-hidden="true"></span>
+        Teleporting
+      </li>
+    }
   </ul>
 </details>

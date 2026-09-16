@@ -296,6 +296,31 @@
   --glow-color: #fff;
 }
 
+.force-pin.is-teleporting {
+  --glow-color: #4b006e;
+
+  box-shadow:
+    0 0 0.7rem #4b006e,
+    0 0 1.4rem rgb(75 0 110 / 85%),
+    0 0 0 1px rgb(28 25 23 / 45%);
+}
+
+.force-pin.is-teleporting.is-mine {
+  box-shadow:
+    0 0 0.7rem #4b006e,
+    0 0 1.4rem rgb(75 0 110 / 85%),
+    0 0 0 2px #fff,
+    0 0 0 3px rgb(28 25 23 / 80%);
+}
+
+.force-pin.is-teleporting.is-battle {
+  box-shadow:
+    0 0 0.7rem #4b006e,
+    0 0 1.4rem rgb(75 0 110 / 85%),
+    0 0 0 2px #7c2d12,
+    0 0 0 4px rgb(254 243 226 / 90%);
+}
+
 .structure-pin,
 .force-pin,
 .item-pin,

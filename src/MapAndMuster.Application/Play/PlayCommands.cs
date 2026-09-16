@@ -664,7 +664,7 @@ public sealed class PlayForceDetail
     /// <summary>Gets how many adjacent territories this force may Move in one action.</summary>
     public int MovementSpeed { get; init; } = 1;
 
-    /// <summary>Gets whether Pillage may destroy the structure in one action.</summary>
+    /// <summary>Gets whether Pillage and Destroy are both available, including immediate destroy of an operational structure.</summary>
     public bool CanDestroyImmediately { get; init; }
 
     /// <summary>Gets whether this force may declare Extra Black Powder on a battle result.</summary>
@@ -690,6 +690,9 @@ public sealed class PlayForceDetail
 
     /// <summary>Gets whether this force is locked into resolving a random teleport.</summary>
     public bool IsRandomTeleportLocked { get; init; }
+
+    /// <summary>Gets whether this force is waiting to teleport or has a committed teleport this phase.</summary>
+    public bool IsTeleporting { get; init; }
 
     /// <summary>Gets held item objectives that may still be dropped during Move.</summary>
     public IReadOnlyList<Guid> DroppableItemObjectiveIds { get; init; } = [];

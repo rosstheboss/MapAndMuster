@@ -14,6 +14,20 @@ public sealed class PlayLogFactsTests
     }
 
     [Fact]
+    public void RoundTripsAnActionCancelledPayload()
+    {
+        var interrupter = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var place = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var message = PlayLogFacts.ActionCancelled(PlayLogFacts.InterruptEnemy, interrupter, place);
+        Assert.True(PlayLogFacts.TryReadActionCancelled(message, out var reason, out var readInterrupter, out var readPlace));
+        Assert.Equal(PlayLogFacts.InterruptEnemy, reason);
+        Assert.Equal(interrupter, readInterrupter);
+        Assert.Equal(place, readPlace);
+        Assert.False(PlayLogFacts.TryReadActionCancelled("enemy", out _, out _, out _));
+        Assert.False(PlayLogFacts.TryReadActionCancelled(PlayLogFacts.Betrayal(PlayLogFacts.BetrayalAttack, interrupter, place), out _, out _, out _));
+    }
+
+    [Fact]
     public void RoundTripsBetrayalPayloads()
     {
         var victim = Guid.Parse("11111111-1111-1111-1111-111111111111");

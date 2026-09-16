@@ -10,6 +10,13 @@
   [attr.title]="tooltip() || null"
   (click)="activate.emit($event)"
 >
+  @if (marks().forceDots.length) {
+    <span class="force-dots" aria-hidden="true">
+      @for (dot of marks().forceDots; track $index) {
+        <span class="force-dot" [style.background]="dot.color"></span>
+      }
+    </span>
+  }
   @if (marks().ownerColor; as color) {
     @if (marks().ownerLogoSrc; as src) {
       <app-faction-logo [src]="src" [color]="color" [tint]="marks().ownerTint" [alt]="''" />

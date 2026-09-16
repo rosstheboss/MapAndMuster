@@ -628,3 +628,24 @@ fieldset {
   height: 1.5rem;
   object-fit: contain;
 }
+
+.delinquency-audit {
+  display: inline-block;
+  margin-left: 0.35rem;
+}
+
+.delinquency-audit summary {
+  display: inline;
+  cursor: pointer;
+  list-style: none;
+}
+
+.delinquency-audit summary::-webkit-details-marker {
+  display: none;
+}
+
+.delinquency-audit ul,
+.delinquency-audit p {
+  margin: 0.35rem 0 0;
+  padding-left: 1rem;
+}

@@ -143,7 +143,13 @@ public static class SupplyRules
             }
             else if (previous.StructureTypeId is not null && next.StructureTypeId is null)
             {
-                awarded = rules.DestroySupplyPoints;
+                awarded = rules.PillageSupplyPoints;
+                if (actor is not null
+                    && previous.StructureCondition == StructureCondition.Operational
+                    && catalog.SpecialRules.Has(actor, SpecialRuleEffectKeys.OnlyBloodSatisfies))
+                {
+                    awarded *= 2;
+                }
             }
 
             if (awarded <= 0)

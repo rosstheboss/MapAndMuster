@@ -6,8 +6,13 @@ import { territoryLabel, type MapTerritory } from '../../core/maps/map-graph.mod
 import { FactionLogoComponent } from '../faction-logo/faction-logo.component';
 import { MapSymbolComponent } from '../map-symbol/map-symbol.component';
 
+export interface TerritoryListForceDot {
+  color: string;
+}
+
 export interface TerritoryListItemMarks {
   label: string;
+  forceDots: readonly TerritoryListForceDot[];
   terrainSymbol: string | null;
   structureSymbol: string | null;
   structureImageUrl: string | null;
@@ -48,6 +53,7 @@ export function territoryListItemMarks(
 
   return {
     label: territoryLabel(territory),
+    forceDots: [],
     terrainSymbol: terrain?.name ?? null,
     structureSymbol: structure?.builtinSymbol ?? null,
     structureImageUrl,

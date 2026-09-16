@@ -724,6 +724,22 @@ public static class CampaignPlayRules
             return false;
         }
 
+        if (kind == ActionKind.Destroy && !ActionResolution.IsValidDestroy(
+                map,
+                force,
+                factionAllyGroups,
+                state.BrokenAllyFactionIds,
+                rules,
+                state.BrokenAllySubfactions,
+                state.AllyBetrayals))
+        {
+            error = new DomainError(
+                "order.destroy.invalid",
+                "Destroy requires a destructible structure that is already pillaged, or a special rule that can destroy in one action.",
+                "kind");
+            return false;
+        }
+
         if (kind == ActionKind.Repair && !ActionResolution.IsValidRepair(
                 map,
                 force,
@@ -777,7 +793,8 @@ public static class CampaignPlayRules
     }
 
     /// <summary>
-    /// Commits the player's current drafts. The last required commitment closes the window.
+    /// Commits the player's current drafts. Forces waiting to teleport need no player draft.
+    /// The last required commitment closes the window.
     /// </summary>
     public static bool TryCommit(
         CampaignPlayState state,
@@ -818,7 +835,8 @@ public static class CampaignPlayRules
             return false;
         }
 
-        if (requiredForces.Any(force => state.DraftFor(window.Id, force.Id) is null))
+        var orderableForces = requiredForces.Where(static force => force.PendingRandomTeleportDestinationId is null).ToArray();
+        if (orderableForces.Any(force => state.DraftFor(window.Id, force.Id) is null))
         {
             error = new DomainError("order.draft.required", "Save a draft for every force before committing.");
             return false;
@@ -827,6 +845,26 @@ public static class CampaignPlayRules
         var submissions = state.Submissions.ToList();
         foreach (var force in requiredForces)
         {
+            if (state.LatestSubmission(window.Id, force.Id) is not null)
+            {
+                continue;
+            }
+
+            if (force.PendingRandomTeleportDestinationId is not null)
+            {
+                submissions.Add(new OrderSubmission(
+                    Guid.NewGuid(),
+                    window.Id,
+                    force.Id,
+                    ActionKind.TeleportRandomly,
+                    null,
+                    null,
+                    OrderSource.Commit,
+                    utcNow,
+                    userId));
+                continue;
+            }
+
             var draft = state.DraftFor(window.Id, force.Id)!;
             submissions.Add(new OrderSubmission(
                 Guid.NewGuid(),
@@ -2117,8 +2155,8 @@ public static class CampaignPlayRules
 
     /// <summary>
     /// Early-close is allowed when every player who still owes an order has committed, or when
-    /// nobody owes because remaining forces are in unresolved battles. An action window with no
-    /// forces at all waits for the deadline.
+    /// nobody owes because remaining forces are in unresolved battles or waiting to teleport. An
+    /// action window with no forces at all waits for the deadline.
     /// </summary>
     private static bool ActionWindowReadyToCloseEarly(CampaignPlayState state, PhaseWindow window)
     {
@@ -2130,11 +2168,10 @@ public static class CampaignPlayRules
         var required = state.RequiredOrderPlayers(window.Id);
         if (required.Count > 0)
         {
-            return required.All(userId =>
-                state.Commitments.Any(item => item.WindowId == window.Id && item.UserId == userId));
+            return required.All(userId => state.IsActionCommitted(window.Id, userId));
         }
 
-        return state.Forces.Any(static force => force.InBattle);
+        return state.Forces.Any(static force => force.InBattle || force.PendingRandomTeleportDestinationId is not null);
     }
 
     private static (CampaignPlayState State, PlayMap Map) CloseActionWindow(
@@ -4025,7 +4062,7 @@ public static class CampaignPlayRules
             {
                 var territory = map.Territory(force.TerritoryId);
                 var kind = state.LatestSubmission(window.Id, force.Id)?.Kind;
-                var destroyed = kind == ActionKind.Pillage && territory?.StructureTypeId is null;
+                var destroyed = (kind is ActionKind.Pillage or ActionKind.Destroy) && territory?.StructureTypeId is null;
                 var pillaged = kind == ActionKind.Pillage && territory?.StructureCondition == StructureCondition.Pillaged;
                 var access = ForceTerritoryAccessRules.Evaluate(
                     map,

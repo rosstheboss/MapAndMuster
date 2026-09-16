@@ -22,8 +22,8 @@ in an ADR or the relevant domain document and update tests.
 
 5. Resolved: simultaneous action processing order is movement and splits, then backstab alliance
    breaks, then battles from enemy co-location, then Build/Pillage/Repair for forces not in
-   battle. Player-facing action order is Hold, Move, Build, Pillage, Repair, Split, Backstab.
-   Competing Build, Pillage, or Repair on the same territory, and other collisions that still
+   battle. Player-facing action order is Hold, Move, Build, Pillage, Destroy, Repair, Split, Backstab.
+   Competing Build, Pillage, Destroy, or Repair on the same territory, and other collisions that still
    lack a documented ranking, become Hold. Retreat is battle-phase only. See `docs/DOMAIN.md`.
 6. Resolved: if two or more enemy factions would land in the same territory after retreat, every
     force that retreated onto that hex is sent to its spawn. Passing through a hex another enemy
@@ -130,6 +130,9 @@ in an ADR or the relevant domain document and update tests.
     and Edit campaign. After a campaign is completed, a manager or administrator may
     permanently delete it (with confirmation). Staff may promote a player to campaign manager
     or add a user as manager-only or as manager and player. See `docs/DOMAIN.md`.
-25. Decide whether play/participant contracts should expose a per-force missed-order offence
-    count so Participants can show the running tally. `UI-M14` shipped a **May be kicked** badge
-    and a Delinquency log filter without that field.
+25. Resolved: play and participant contracts expose the per-player missed-order offence count and
+    each recorded offence (round, Action/Battle ordinal, window end, and territory). In-progress and
+    completed campaign pages show `(N delinquencies)` next to the participant, collapsed by default,
+    so players can audit the tally and plead a case to the campaign manager. Offences 1 and 2 still
+    do not write a public Delinquency log fact. `UI-M14` retains the staff **May be kicked** badge
+    and Delinquency log filter. See `docs/DOMAIN.md`.

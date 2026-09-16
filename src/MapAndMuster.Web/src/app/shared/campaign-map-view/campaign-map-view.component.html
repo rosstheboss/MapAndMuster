@@ -55,10 +55,21 @@
         {{ commitButtonLabel() }}
       </button>
     }
-    <label class="layer-toggle" title="Show names (N)">
+    <label class="layer-toggle" title="Show Names (N)">
       <input type="checkbox" [checked]="showNames()" (change)="onShowNamesChange($event)" aria-keyshortcuts="N" />
-      Show names
+      Show Names
     </label>
+    @if (showTerritoryDirectory()) {
+      <label class="layer-toggle" title="Show Only Filtered Territories (T)">
+        <input
+          type="checkbox"
+          [checked]="showFilteredTerritories()"
+          (change)="onShowFilteredChange($event)"
+          aria-keyshortcuts="T"
+        />
+        Show Only Filtered Territories
+      </label>
+    }
     @if (layerToggles()) {
       <label class="layer-toggle">
         <input type="checkbox" [checked]="showOverlay()" (change)="onShowOverlayChange($event)" />
@@ -96,6 +107,7 @@
               : 'C commits ' + commitNoun().toLowerCase() + ' when that button is enabled. '
             : '') +
           'N toggles territory names. ' +
+          (showTerritoryDirectory() ? 'T toggles showing only filtered territories. ' : '') +
           'Tab to a territory and press Enter or Space to select it. Zoom up to 800 percent to trace fine coasts. ' +
           'Drawing requires a pointer.'
         "
@@ -283,7 +295,7 @@
             }
           </svg>
           @if (showOverlay()) {
-            @for (item of territoryLayouts(); track item.territory.id) {
+            @for (item of markerLayouts(); track item.territory.id) {
               <div
                 class="territory-markers"
                 [class.is-hover-motion]="isHoverMotion(item.territory.id)"
@@ -359,6 +371,7 @@
                       [class.is-emphasized]="pin.emphasized"
                       [class.has-action]="!!pin.force.action"
                       [class.is-relic-nearby]="!!pin.force.hiddenRelicNearby"
+                      [class.is-teleporting]="!!pin.force.isTeleporting"
                       [style.left.%]="pin.fit.x * 100"
                       [style.top.%]="pin.fit.y * 100"
                       [style.width.px]="markerSize(pin.fit).width"
@@ -396,6 +409,7 @@
                       [class.is-battle]="pin.force.inBattle"
                       [class.is-emphasized]="pin.emphasized"
                       [class.is-relic-nearby]="!!pin.force.hiddenRelicNearby"
+                      [class.is-teleporting]="!!pin.force.isTeleporting"
                       [style.left.%]="pin.fit.x * 100"
                       [style.top.%]="pin.fit.y * 100"
                       [style.width.px]="markerSize(pin.fit).width"
@@ -504,9 +518,21 @@
     </div>
     @if (showTerritoryDirectory()) {
       <aside class="map-guide">
-        <app-map-legend />
+        <app-map-legend
+          [factions]="legendFactions()"
+          [structures]="legendStructures()"
+          [pillageStructure]="legendPillageStructure()"
+          [items]="legendItems()"
+          [showYourForce]="legendShowYourForce()"
+          [showForceInBattle]="legendShowForceInBattle()"
+          [showPlayGlows]="legendShowPlayGlows()"
+        />
+        <app-territory-directory-filter
+          [context]="directoryFilterContext()"
+          (applied)="onDirectoryFilterApplied($event)"
+        />
         <details class="territory-directory" open>
-          <summary class="territory-directory-heading">Territories</summary>
+          <summary class="territory-directory-heading">Territories ({{ territoryDirectoryCount() }})</summary>
           <div class="territory-directory-body">
             <nav aria-label="Territories">
               <ul class="plain-list">

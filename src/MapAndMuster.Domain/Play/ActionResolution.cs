@@ -393,7 +393,7 @@ public static class ActionResolution
 
     /// <summary>
     /// Player-submittable actions available for a force in an open action window, in documented order:
-    /// Hold, Move, Teleport Randomly / Teleport to Specific Territory when granted, Build, Pillage, Repair, Split, then Backstab.
+    /// Hold, Move, Teleport Randomly / Teleport to Specific Territory when granted, Build, Pillage, Destroy, Repair, Split, then Backstab.
     /// Kinds that are not legal for the force's current territory are omitted.
     /// </summary>
     public static IReadOnlyList<ActionKind> EligibleActions(
@@ -466,9 +466,22 @@ public static class ActionResolution
             state.BrokenAllyFactionIds,
             rules,
             state.BrokenAllySubfactions,
-            state.AllyBetrayals))
+            state.AllyBetrayals)
+            && map.Territory(force.TerritoryId)?.StructureCondition == StructureCondition.Operational)
         {
             kinds.Add(ActionKind.Pillage);
+        }
+
+        if (IsValidDestroy(
+            map,
+            force,
+            factionAllyGroups,
+            state.BrokenAllyFactionIds,
+            rules,
+            state.BrokenAllySubfactions,
+            state.AllyBetrayals))
+        {
+            kinds.Add(ActionKind.Destroy);
         }
 
         if (IsValidRepair(map, force, factionAllyGroups, state.BrokenAllyFactionIds, state.AllyBetrayals))
@@ -641,6 +654,19 @@ public static class ActionResolution
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
 
+        if (kind == ActionKind.Destroy
+            && !IsValidDestroy(
+                map,
+                force,
+                factionAllyGroups,
+                state.BrokenAllyFactionIds,
+                rules,
+                state.BrokenAllySubfactions,
+                state.AllyBetrayals))
+        {
+            return Hold(force, OrderAdjustment.InvalidOrder);
+        }
+
         if (kind == ActionKind.Repair
             && !IsValidRepair(map, force, factionAllyGroups, state.BrokenAllyFactionIds, state.AllyBetrayals))
         {
@@ -663,7 +689,7 @@ public static class ActionResolution
             return new ResolvedOrder(force.Id, kind, force.TerritoryId, structureTypeId);
         }
 
-        if (kind is ActionKind.Hold or ActionKind.Pillage or ActionKind.Repair or ActionKind.Backstab)
+        if (kind is ActionKind.Hold or ActionKind.Pillage or ActionKind.Destroy or ActionKind.Repair or ActionKind.Backstab)
         {
             return new ResolvedOrder(
                 force.Id,
@@ -672,7 +698,8 @@ public static class ActionResolution
                 structureTypeId,
                 OrderAdjustment.None,
                 via,
-                destroyImmediately && FactionSpecialRulePolicies.CanDestroyImmediately(force, rules));
+                kind == ActionKind.Destroy
+                    || (destroyImmediately && FactionSpecialRulePolicies.CanDestroyImmediately(force, rules)));
         }
 
         return new ResolvedOrder(
@@ -690,7 +717,7 @@ public static class ActionResolution
     private static void DisallowConflictingStructureActions(Dictionary<Guid, ResolvedOrder> resolved)
     {
         var structureActions = resolved.Values
-            .Where(static order => order.Kind is ActionKind.Build or ActionKind.Pillage or ActionKind.Repair)
+            .Where(static order => order.Kind is ActionKind.Build or ActionKind.Pillage or ActionKind.Destroy or ActionKind.Repair)
             .GroupBy(static order => order.TargetTerritoryId);
         foreach (var group in structureActions)
         {
@@ -794,6 +821,41 @@ public static class ActionResolution
 
         _ = brokenSubfactions;
         return true;
+    }
+
+    internal static bool IsValidDestroy(
+        PlayMap map,
+        CampaignForce force,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlyCollection<Guid> broken,
+        SpecialRuleContext? specialRules = null,
+        IReadOnlyList<BrokenAllySubfaction>? brokenSubfactions = null,
+        IReadOnlyList<AllyBetrayal>? allyBetrayals = null)
+    {
+        if (!IsValidPillage(
+            map,
+            force,
+            factionAllyGroups,
+            broken,
+            specialRules,
+            brokenSubfactions,
+            allyBetrayals))
+        {
+            return false;
+        }
+
+        var territory = map.Territory(force.TerritoryId);
+        if (territory is null || !territory.IsDestructible)
+        {
+            return false;
+        }
+
+        if (territory.StructureCondition == StructureCondition.Pillaged)
+        {
+            return true;
+        }
+
+        return FactionSpecialRulePolicies.CanDestroyImmediately(force, specialRules ?? SpecialRuleContext.None);
     }
 
     internal static bool IsValidRepair(
@@ -1077,6 +1139,13 @@ public static class ActionResolution
                     structureCondition: StructureCondition.Operational,
                     isPillageable: structureRules?.IsPillageable ?? territory.IsPillageable,
                     isDestructible: structureRules?.IsDestructible ?? territory.IsDestructible);
+            }
+            else if (order.Kind == ActionKind.Destroy)
+            {
+                if (territory.IsDestructible)
+                {
+                    next[territory.Id] = territory.With(clearStructure: true);
+                }
             }
             else if (order.Kind == ActionKind.Pillage)
             {
@@ -1369,6 +1438,11 @@ public static class ActionResolution
             return;
         }
 
+        if (TeleportActionRules.IsTeleport(order.Kind) || force.PendingRandomTeleportDestinationId is not null)
+        {
+            return;
+        }
+
         log.Add(Entry(
             utcNow,
             PlayLogKind.ResolvedAction,
@@ -1382,12 +1456,12 @@ public static class ActionResolution
 
     private static string? StructureMessage(PlayMap map, CampaignForce force, ResolvedOrder order)
     {
-        if (order.Kind == ActionKind.Pillage && DestroysStructure(map, force, order))
+        if ((order.Kind is ActionKind.Pillage or ActionKind.Destroy) && DestroysStructure(map, force, order))
         {
             return PlayLogFacts.DestroyedStructure(TerritoryStructureName(map, force.TerritoryId));
         }
 
-        if (order.Kind is ActionKind.Pillage or ActionKind.Repair)
+        if (order.Kind is ActionKind.Pillage or ActionKind.Destroy or ActionKind.Repair)
         {
             return TerritoryStructureName(map, force.TerritoryId);
         }
@@ -1408,7 +1482,7 @@ public static class ActionResolution
             return false;
         }
 
-        if (order.DestroyImmediately && territory.IsDestructible)
+        if ((order.Kind == ActionKind.Destroy || order.DestroyImmediately) && territory.IsDestructible)
         {
             return true;
         }
@@ -1483,6 +1557,25 @@ public static class ActionResolution
             message);
     }
 
+    private static void AppendActionCancelled(
+        List<PlayLogEntry> log,
+        PhaseWindow window,
+        CampaignForce force,
+        ActionKind actionKind,
+        TeleportInterrupt interrupt,
+        DateTimeOffset utcNow)
+    {
+        log.Add(Entry(
+            utcNow,
+            PlayLogKind.ActionCancelled,
+            window.Id,
+            force,
+            actionKind,
+            force.TerritoryId,
+            targetTerritoryId: null,
+            PlayLogFacts.ActionCancelled(interrupt.Reason, interrupt.InterrupterUserId, interrupt.PlaceTerritoryId)));
+    }
+
     private static List<Guid> IntermediateHops(
         Guid originId,
         Guid destinationId,
@@ -1534,7 +1627,7 @@ public static class ActionResolution
             : isChosen
                 ? order.TargetTerritoryId
                 : null;
-        var interrupted = TeleportActionRules.IsInterrupted(
+        var interrupt = TeleportActionRules.DescribeInterrupt(
             force.TerritoryId,
             destination,
             force,
@@ -1546,7 +1639,7 @@ public static class ActionResolution
 
         if (isChosen)
         {
-            if (interrupted
+            if (interrupt is not null
                 || destination is not { } chosen
                 || !ItemObjectiveEffectRules.IsValidChosenTeleportTarget(
                     force,
@@ -1560,19 +1653,33 @@ public static class ActionResolution
                     broken,
                     betrayals))
             {
+                if (interrupt is not null)
+                {
+                    AppendActionCancelled(log, window, force, order.Kind, interrupt, utcNow);
+                }
+
                 return (force.With(
                     clearPendingTeleport: true,
                     specialActionSucceeded: false), order.Kind, false);
             }
 
+            log.Add(Entry(
+                utcNow,
+                PlayLogKind.ResolvedAction,
+                window.Id,
+                force,
+                order.Kind,
+                force.TerritoryId,
+                chosen));
             return (force.With(
                 territoryId: chosen,
                 clearPendingTeleport: true,
                 specialActionSucceeded: true), order.Kind, true);
         }
 
-        if (interrupted)
+        if (interrupt is not null)
         {
+            AppendActionCancelled(log, window, force, ActionKind.TeleportRandomly, interrupt, utcNow);
             return (force.With(
                 clearPendingTeleport: true,
                 specialActionSucceeded: false), ActionKind.TeleportRandomly, false);
@@ -1581,6 +1688,14 @@ public static class ActionResolution
         if (isPhaseTwo)
         {
             var dest = force.PendingRandomTeleportDestinationId!.Value;
+            log.Add(Entry(
+                utcNow,
+                PlayLogKind.ResolvedAction,
+                window.Id,
+                force,
+                ActionKind.TeleportRandomly,
+                force.TerritoryId,
+                dest));
             return (force.With(
                 territoryId: dest,
                 clearPendingTeleport: true,

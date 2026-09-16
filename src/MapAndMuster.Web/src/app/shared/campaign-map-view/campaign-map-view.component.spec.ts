@@ -187,6 +187,41 @@ describe('CampaignMapViewComponent', () => {
     expect(pin?.getAttribute('aria-label')).toContain('Relic nearby');
   });
 
+  it('glows a force pin purple while it is teleporting', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [territory]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: true,
+      },
+    ]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-1',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'North force in Coast',
+        isTeleporting: true,
+      },
+    ]);
+    fixture.detectChanges();
+
+    const pin = (fixture.nativeElement as HTMLElement).querySelector('.force-pin');
+    expect(pin).toBeTruthy();
+    expect(pin?.classList.contains('is-teleporting')).toBe(true);
+    expect(pin instanceof HTMLElement ? getComputedStyle(pin).boxShadow : null).toMatch(/75,\s*0,\s*110|#4b006e/i);
+    expect(pin?.getAttribute('aria-label')).toContain('Teleporting');
+  });
+
   it('colors a force pin with the occupying subfaction color', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
@@ -441,7 +476,7 @@ describe('CampaignMapViewComponent', () => {
     expect(commit!.getAttribute('title')).toBe('Commit Surrender (C)');
   });
 
-  it('places Commit between Cycle forces and Show names and emits on C when enabled', () => {
+  it('places Commit between Cycle forces and Show Names and emits on C when enabled', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
     fixture.componentRef.setInput('forces', [
@@ -467,7 +502,7 @@ describe('CampaignMapViewComponent', () => {
     const cycleIndex = toolbarItems.indexOf('Cycle forces');
     expect(cycleIndex).toBeGreaterThan(-1);
     expect(toolbarItems[cycleIndex + 1]).toBe('Commit Actions');
-    expect(toolbarItems[cycleIndex + 2]).toBe('Show names');
+    expect(toolbarItems[cycleIndex + 2]).toBe('Show Names');
 
     const view = fixture.componentInstance as unknown as { onDocumentKeydown: (event: KeyboardEvent) => void };
     view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'c' }));
@@ -790,15 +825,15 @@ describe('CampaignMapViewComponent', () => {
     expect(view.fullscreen()).toBe(false);
   });
 
-  it('toggles Show names on N and names the shortcut on the control', () => {
+  it('toggles Show Names on N and names the shortcut on the control', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
     fixture.componentRef.setInput('territories', [territory]);
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
-    const label = [...compiled.querySelectorAll('label')].find((item) => item.textContent.includes('Show names'));
-    expect(label?.getAttribute('title')).toBe('Show names (N)');
+    const label = [...compiled.querySelectorAll('label')].find((item) => item.textContent.includes('Show Names'));
+    expect(label?.getAttribute('title')).toBe('Show Names (N)');
     expect(label?.querySelector('input')?.getAttribute('aria-keyshortcuts')).toBe('N');
 
     const view = fixture.componentInstance as unknown as {
@@ -813,6 +848,90 @@ describe('CampaignMapViewComponent', () => {
     view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 'N' }));
     fixture.detectChanges();
     expect(view.showNames()).toBe(false);
+  });
+
+  it('filters the Territories directory on Apply and lists the visible count', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      { ...squareTerritory('t1', 0.1, 0.1), name: 'Coast', ownerFactionId: 'north' },
+      { ...squareTerritory('t2', 0.4, 0.1), name: 'Ridge', ownerFactionId: 'south' },
+    ]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#111111',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+      {
+        id: 'south',
+        name: 'South',
+        color: '#222222',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const guide = compiled.querySelector('.map-guide');
+    const filterPanel = compiled.querySelector<HTMLDetailsElement>('.territory-filter');
+    const directory = compiled.querySelector<HTMLDetailsElement>('.territory-directory');
+    expect(guide?.children[0]?.tagName.toLowerCase()).toBe('app-map-legend');
+    expect(guide?.children[1]?.tagName.toLowerCase()).toBe('app-territory-directory-filter');
+    expect(guide?.children[2]).toBe(directory);
+    expect(filterPanel?.open).toBe(false);
+    expect(compiled.querySelector('.territory-directory-heading')?.textContent.trim()).toBe('Territories (2/2)');
+    expect([...compiled.querySelectorAll('.territory-directory-item')].map((item) => item.textContent.trim())).toEqual([
+      'Coast',
+      'Ridge',
+    ]);
+
+    filterPanel?.querySelector('summary')?.click();
+    fixture.detectChanges();
+    expect(filterPanel?.open).toBe(true);
+
+    const north = [...compiled.querySelectorAll<HTMLInputElement>('.territory-filter input[type="checkbox"]')].find(
+      (input) => input.closest('label')?.textContent?.includes('North'),
+    );
+    const south = [...compiled.querySelectorAll<HTMLInputElement>('.territory-filter input[type="checkbox"]')].find(
+      (input) => input.closest('label')?.textContent?.includes('South'),
+    );
+    expect(north?.checked).toBe(true);
+    expect(south?.checked).toBe(true);
+    south?.click();
+    compiled.querySelector<HTMLButtonElement>('[aria-label="Apply"]')?.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('.territory-directory-heading')?.textContent.trim()).toBe('Territories (1/2)');
+    expect([...compiled.querySelectorAll('.territory-directory-item')].map((item) => item.textContent.trim())).toEqual([
+      'Coast',
+    ]);
+    expect(compiled.querySelectorAll('.territory-hit')).toHaveLength(2);
+
+    const view = fixture.componentInstance as unknown as {
+      onDocumentKeydown: (event: KeyboardEvent) => void;
+      showFilteredTerritories: () => boolean;
+    };
+    const filteredLabel = [...compiled.querySelectorAll('label')].find((item) =>
+      item.textContent.includes('Show Only Filtered Territories'),
+    );
+    expect(filteredLabel?.getAttribute('title')).toBe('Show Only Filtered Territories (T)');
+    expect(view.showFilteredTerritories()).toBe(false);
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 't' }));
+    fixture.detectChanges();
+    expect(view.showFilteredTerritories()).toBe(true);
+    expect(compiled.querySelectorAll('.territory-hit')).toHaveLength(1);
+
+    compiled.querySelector<HTMLButtonElement>('[aria-label="Clear"]')?.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('.territory-directory-heading')?.textContent.trim()).toBe('Territories (2/2)');
   });
 
   it('recenters a fitted map when the viewport grows', () => {
@@ -2053,8 +2172,8 @@ describe('CampaignMapViewComponent', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
     fixture.componentRef.setInput('territories', [
-      { ...squareTerritory('t2', 0.4, 0.1), displayNumber: 2, name: 'Ridge' },
-      { ...squareTerritory('t1', 0.1, 0.1), displayNumber: 1, name: 'Coast' },
+      { ...squareTerritory('t2', 0.4, 0.1), displayNumber: 1, name: 'Ridge' },
+      { ...squareTerritory('t1', 0.1, 0.1), displayNumber: 2, name: 'Coast' },
     ]);
     fixture.detectChanges();
 
@@ -2084,15 +2203,15 @@ describe('CampaignMapViewComponent', () => {
     expect(directory).toEqual(['Coast', 'Ridge']);
     expect(compiled.querySelector('.map-legend')).toBeTruthy();
     expect(compiled.textContent).toContain('Ownership tint');
-    expect(compiled.textContent).toContain('Show names');
+    expect(compiled.textContent).toContain('Show Names');
     const directoryPanel = compiled.querySelector<HTMLDetailsElement>('.territory-directory')!;
     expect(directoryPanel.open).toBe(true);
     const summary = directoryPanel.querySelector('summary');
-    expect(summary?.textContent).toContain('Territories');
+    expect(summary?.textContent).toContain('Territories (2/2)');
     summary?.click();
     fixture.detectChanges();
     expect(directoryPanel.open).toBe(false);
-    expect(summary?.textContent).toContain('Territories');
+    expect(summary?.textContent).toContain('Territories (2/2)');
   });
 
   it('shows owner, structure, and terrain marks in the Territories directory', () => {
@@ -2141,6 +2260,67 @@ describe('CampaignMapViewComponent', () => {
     expect(row?.getAttribute('title')).toContain('Owner: North');
     expect(row?.getAttribute('title')).toContain('Town');
     expect(row?.getAttribute('title')).toContain('Terrain: Plains');
+  });
+
+  it('puts occupying force dots ahead of other directory symbols', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('territories', [
+      {
+        ...squareTerritory('t1', 0.1, 0.1),
+        name: 'Coast',
+        terrainTypeId: 'plains',
+        ownerFactionId: 'north',
+      },
+    ]);
+    fixture.componentRef.setInput('terrainTypes', [{ id: 'plains', name: 'Plains', color: '#7CB342', missions: [] }]);
+    fixture.componentRef.setInput('factions', [
+      {
+        id: 'north',
+        name: 'North',
+        color: '#2563EB',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+      {
+        id: 'south',
+        name: 'South',
+        color: '#B91C1C',
+        subfactions: [],
+        allyGroupName: null,
+        requiresSubfaction: false,
+        hasFlagImage: false,
+      },
+    ]);
+    fixture.componentRef.setInput('forces', [
+      {
+        id: 'force-south',
+        territoryId: 't1',
+        factionId: 'south',
+        isMine: false,
+        inBattle: false,
+        label: 'South force in Coast',
+      },
+      {
+        id: 'force-north',
+        territoryId: 't1',
+        factionId: 'north',
+        isMine: true,
+        inBattle: false,
+        label: 'North force in Coast',
+      },
+    ]);
+    fixture.detectChanges();
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector('.territory-directory-item');
+    const dots = [...(row?.querySelectorAll<HTMLElement>('.force-dot') ?? [])];
+    expect(row?.querySelector('.force-dots')).toBe(row?.children[0] ?? null);
+    expect(dots).toHaveLength(2);
+    expect(dots[0]?.style.background).toBe('rgb(185, 28, 28)');
+    expect(dots[1]?.style.background).toBe('rgb(37, 99, 235)');
+    expect(row?.querySelector('.owner-flag')).toBeTruthy();
   });
 
   it('shows a hover tooltip for a territory on the map', () => {
@@ -2484,7 +2664,7 @@ describe('CampaignMapViewComponent', () => {
     expect(selected).toHaveBeenCalledWith(expect.objectContaining({ id: 't1', additive: false }));
   });
 
-  it('draws a name on the map when Show names is on, even when the polygon is small', () => {
+  it('draws a name on the map when Show Names is on, even when the polygon is small', () => {
     const fixture = TestBed.createComponent(CampaignMapViewComponent);
     fixture.componentRef.setInput('imageUrl', png);
     fixture.componentRef.setInput('territories', [
@@ -2495,7 +2675,7 @@ describe('CampaignMapViewComponent', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.territory-name')).toBeNull();
     const toggle = [...compiled.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) =>
-      (input.closest('label')?.textContent ?? '').includes('Show names'),
+      (input.closest('label')?.textContent ?? '').includes('Show Names'),
     );
     expect(toggle).toBeTruthy();
     toggle!.click();
@@ -2513,7 +2693,7 @@ describe('CampaignMapViewComponent', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     const toggle = [...compiled.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) =>
-      (input.closest('label')?.textContent ?? '').includes('Show names'),
+      (input.closest('label')?.textContent ?? '').includes('Show Names'),
     );
     toggle!.click();
     fixture.detectChanges();

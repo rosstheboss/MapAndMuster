@@ -67,6 +67,7 @@ import {
   type CampaignSpecialRule,
   type MapGraphDetail,
   type MissionResultQuestion,
+  type ParticipantDelinquency,
   type PlayBattle,
   type PlayBattleForceSupply,
   type PlayBattleSubmission,
@@ -85,6 +86,7 @@ import {
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import { findSubfactionAppearance, resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import { compareNames } from '../../core/campaigns/faction-presets';
+import { specialRuleNamesForFaction, specialRuleNamesForSubfaction } from '../../core/campaigns/special-rule-presets';
 import { hidesForceStatusLocation, isWaterTagName } from '../../core/campaigns/force-status-presets';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
@@ -463,13 +465,19 @@ export class CampaignDetailPage {
   );
   protected readonly anyForceHasChainSupply = computed(() => this.myForces().some((force) => !!force.supply));
   protected readonly orderableForces = computed(() =>
-    this.myForces().filter((force) => !force.inBattle && force.availableActions.length > 0),
+    this.myForces().filter(
+      (force) => !force.inBattle && force.isRandomTeleportLocked !== true && force.availableActions.length > 0,
+    ),
   );
   protected readonly canCommitActions = computed(() => {
     const play = this.play();
     const forces = this.orderableForces();
-    if (!play || play.isCommitted || forces.length === 0) {
+    if (!play || play.isCommitted) {
       return false;
+    }
+
+    if (forces.length === 0) {
+      return this.myForces().some((force) => !force.inBattle && force.isRandomTeleportLocked === true);
     }
 
     return forces.every((force) => play.myDrafts.some((draft) => draft.forceId === force.id));
@@ -743,6 +751,7 @@ export class CampaignDetailPage {
         ...this.forceOrderRouteFields(force),
         moveTargets: force.moveTargets,
         hiddenRelicNearby: !!force.hiddenRelicNearby,
+        isTeleporting: this.isForceTeleporting(force),
       };
     });
   });
@@ -820,6 +829,7 @@ export class CampaignDetailPage {
     }
 
     const playFactions = this.play()?.factions ?? [];
+    const catalog = mergeSpecialRuleCatalogs(this.play()?.specialRules, campaign.specialRules);
     return campaign.factions.map((faction) =>
       factionRoster(
         campaign,
@@ -828,6 +838,7 @@ export class CampaignDetailPage {
           playFactions.find((item) => item.id === faction.id),
         ),
         (ids) => this.specialRulesFor(ids),
+        catalog,
       ),
     );
   });
@@ -903,13 +914,8 @@ export class CampaignDetailPage {
       catalogFaction,
       this.play()?.factions.find((item) => item.id === catalogFaction.id),
     );
-    const factionRules = this.specialRulesFor(faction.specialRuleIds);
-    const assigned = subfaction
-      ? faction.subfactionSpecialRules?.find((item) => compareNames(item.name, subfaction) === 0)?.specialRuleIds
-      : undefined;
-    const subRules = this.specialRulesFor(assigned);
-    const seen = new Set(factionRules.map((rule) => rule.id.toLowerCase()));
-    return [...factionRules, ...subRules.filter((rule) => !seen.has(rule.id.toLowerCase()))];
+    const catalog = mergeSpecialRuleCatalogs(this.play()?.specialRules, campaign.specialRules);
+    return displaySpecialRulesFor(faction, catalog, (ids) => this.specialRulesFor(ids), subfaction);
   });
   protected readonly pendingRetreatTargets = computed(() => {
     const battles = this.play()?.battles ?? [];
@@ -1235,6 +1241,11 @@ export class CampaignDetailPage {
     }
 
     return roles.join(', ');
+  }
+
+  protected delinquencyPhaseLabel(offence: ParticipantDelinquency): string {
+    const kind = offence.phaseKind === 'Battle' ? 'Battle' : 'Action';
+    return `Round ${offence.roundNumber}, ${kind} ${offence.kindOrdinal}`;
   }
 
   protected canStaffMembers(): boolean {
@@ -1690,6 +1701,10 @@ export class CampaignDetailPage {
     }
 
     if (!this.isActionPhase() || play.isCommitted || force.availableActions.length === 0) {
+      return;
+    }
+
+    if (force.isRandomTeleportLocked === true) {
       return;
     }
 
@@ -2476,6 +2491,19 @@ export class CampaignDetailPage {
     return kind === 'TeleportToSpecificTerritory' || kind === 'Teleport';
   }
 
+  protected isTeleportKind(kind: string): boolean {
+    return kind === 'TeleportRandomly' || kind === 'TeleportToSpecificTerritory' || kind === 'Teleport';
+  }
+
+  protected isForceTeleporting(force: PlayForce): boolean {
+    if (force.isTeleporting === true || force.isRandomTeleportLocked === true) {
+      return true;
+    }
+
+    const action = this.ownForceMapAction(force);
+    return !!action && action.status === 'committed' && this.isTeleportKind(action.kind);
+  }
+
   protected droppableItemsFor(force: PlayForce): PlayItemObjective[] {
     const ids = new Set(force.droppableItemObjectiveIds ?? []);
     return this.heldItemsForForce(force).filter((item) => ids.has(item.id));
@@ -2782,12 +2810,6 @@ export class CampaignDetailPage {
 
   protected onDraftVia(forceId: string, viaTerritoryId: string): void {
     this.applyViaSelection(forceId, viaTerritoryId, false);
-  }
-
-  protected onDraftDestroyImmediately(forceId: string, destroyImmediately: boolean): void {
-    const current = this.draftFor(forceId);
-    this.markDraftDirty(forceId);
-    this.drafts.update((drafts) => ({ ...drafts, [forceId]: { ...current, destroyImmediately } }));
   }
 
   protected viaTargets(force: PlayForce): string[] {
@@ -4125,6 +4147,10 @@ export class CampaignDetailPage {
       return kinds;
     }
 
+    if (force.isRandomTeleportLocked === true) {
+      return [];
+    }
+
     return force.availableActions;
   }
 
@@ -5405,6 +5431,7 @@ function factionRoster(
   campaign: CampaignDetail,
   faction: CampaignFaction,
   rulesFor: (ids: readonly string[] | undefined) => CampaignSpecialRule[],
+  catalog: readonly CampaignSpecialRule[],
 ): FactionRoster {
   const members = (campaign.participants ?? []).filter((participant) => {
     if (!participant.isPlayer) {
@@ -5419,7 +5446,12 @@ function factionRoster(
     .sort(compareNames);
   return {
     faction,
-    specialRules: rulesFor(faction.specialRuleIds),
+    specialRules: resolvedSpecialRules(
+      faction.specialRuleIds,
+      specialRuleNamesForFaction(faction.name),
+      catalog,
+      rulesFor,
+    ),
     players: rosterPlayers(members.filter((participant) => !participant.subfaction?.trim())),
     subfactions: subfactionNames.map((name) => {
       const assigned = faction.subfactionSpecialRules?.find(
@@ -5427,7 +5459,12 @@ function factionRoster(
       )?.specialRuleIds;
       return {
         name,
-        specialRules: rulesFor(assigned),
+        specialRules: resolvedSpecialRules(
+          assigned,
+          specialRuleNamesForSubfaction(faction.name, name),
+          catalog,
+          rulesFor,
+        ),
         players: rosterPlayers(
           members.filter((participant) => compareNames(participant.subfaction?.trim() ?? '', name) === 0),
         ),
@@ -5440,6 +5477,53 @@ function rosterPlayers(participants: readonly CampaignParticipant[]): FactionRos
   return [...participants]
     .map((participant) => ({ userId: participant.userId, displayName: participant.displayName }))
     .sort((left, right) => compareNames(left.displayName, right.displayName));
+}
+
+function catalogRulesNamed(catalog: readonly CampaignSpecialRule[], names: readonly string[]): CampaignSpecialRule[] {
+  const byName = new Map(catalog.map((rule) => [rule.name.trim().toLocaleLowerCase(), rule] as const));
+  return names.flatMap((name) => {
+    const rule = byName.get(name.trim().toLocaleLowerCase());
+    return rule ? [rule] : [];
+  });
+}
+
+function resolvedSpecialRules(
+  ids: readonly string[] | undefined,
+  names: readonly string[],
+  catalog: readonly CampaignSpecialRule[],
+  rulesFor: (ids: readonly string[] | undefined) => CampaignSpecialRule[],
+): CampaignSpecialRule[] {
+  const fromIds = rulesFor(ids);
+  return fromIds.length > 0 ? fromIds : catalogRulesNamed(catalog, names);
+}
+
+function displaySpecialRulesFor(
+  faction: CampaignFaction,
+  catalog: readonly CampaignSpecialRule[],
+  rulesFor: (ids: readonly string[] | undefined) => CampaignSpecialRule[],
+  subfaction?: string | null,
+): CampaignSpecialRule[] {
+  const factionRules = resolvedSpecialRules(
+    faction.specialRuleIds,
+    specialRuleNamesForFaction(faction.name),
+    catalog,
+    rulesFor,
+  );
+  if (!subfaction) {
+    return factionRules;
+  }
+
+  const assigned = faction.subfactionSpecialRules?.find(
+    (item) => compareNames(item.name, subfaction) === 0,
+  )?.specialRuleIds;
+  const subRules = resolvedSpecialRules(
+    assigned,
+    specialRuleNamesForSubfaction(faction.name, subfaction),
+    catalog,
+    rulesFor,
+  );
+  const seen = new Set(factionRules.map((rule) => rule.id.toLowerCase()));
+  return [...factionRules, ...subRules.filter((rule) => !seen.has(rule.id.toLowerCase()))];
 }
 
 function mergeSpecialRuleCatalogs(

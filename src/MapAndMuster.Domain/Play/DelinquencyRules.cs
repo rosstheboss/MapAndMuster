@@ -28,18 +28,38 @@ public static class DelinquencyRules
             return state;
         }
 
-        var counts = state.Delinquencies.ToDictionary(static item => item.ForceId, static item => item.OffenceCount);
+        var existing = state.Delinquencies.ToDictionary(static item => item.ForceId);
         var log = new List<PlayLogEntry>();
+        var nextRecords = existing.ToDictionary(static pair => pair.Key, static pair => pair.Value);
         foreach (var forceId in ids.OrderBy(static id => id))
         {
-            var next = counts.GetValueOrDefault(forceId) + 1;
-            counts[forceId] = next;
-            if (next < NotifyFromOffence)
+            var prior = existing.GetValueOrDefault(forceId);
+            var nextCount = (prior?.OffenceCount ?? 0) + 1;
+            var force = state.Forces.FirstOrDefault(item => item.Id == forceId);
+            var kindOrdinal = state.Windows.Count(item =>
+                item.RoundNumber == window.RoundNumber
+                && item.Kind == window.Kind
+                && item.PhaseNumber <= window.PhaseNumber);
+            if (kindOrdinal < 1)
+            {
+                kindOrdinal = 1;
+            }
+
+            var offences = new List<DelinquencyOffence>(prior?.Offences ?? []);
+            offences.Add(new DelinquencyOffence(
+                window.Id,
+                window.RoundNumber,
+                window.PhaseNumber,
+                window.Kind,
+                kindOrdinal,
+                window.EndsUtc,
+                force?.TerritoryId));
+            nextRecords[forceId] = new ForceDelinquency(forceId, nextCount, offences);
+            if (nextCount < NotifyFromOffence)
             {
                 continue;
             }
 
-            var force = state.Forces.FirstOrDefault(item => item.Id == forceId);
             log.Add(new PlayLogEntry(
                 Guid.NewGuid(),
                 utcNow,
@@ -54,9 +74,9 @@ public static class DelinquencyRules
                 force is null ? [] : [force.Id]));
         }
 
-        var delinquencies = counts
+        var delinquencies = nextRecords
             .OrderBy(static pair => pair.Key)
-            .Select(static pair => new ForceDelinquency(pair.Key, pair.Value))
+            .Select(static pair => pair.Value)
             .ToArray();
         return state.With(delinquencies: delinquencies).AppendLog([.. log]);
     }

@@ -216,7 +216,9 @@ the same territory.
 - `DividedWeStand`: daemon-god subfactions of the same faction count as allies and may backstab
   each other by god. Backstab against one god makes only that god's players enemies of the traitor;
   other gods of the same faction remain allied to that traitor.
-- `OnlyBloodSatisfies`: Pillage may target an allied structure and may destroy it in one action.
+- `OnlyBloodSatisfies`: Pillage may target an allied structure. Destroy is also available for a
+  destructible structure: immediately on an operational one, or as the action that removes a
+  pillaged one. Destroying an unpillaged structure awards double the pillage temporary supply.
 - `BringersOfThePlague`: beating a force that is not already Diseased inflicts Diseased, including
   when that loser is Shaken. Hunt configures Nurgle as immune to Diseased and Well Rested on those
   catalog statuses rather than hard-coding the refusal on this key.
@@ -259,8 +261,8 @@ the same territory.
   supply points they used as one-per-battle casting or dispelling rerolls. Those leftover points
   are not spent from the campaign pool and cannot be saved for later battles.
 
-Tabletop-only Hunt keys stay as catalog text and battle reminders: `ExpertAmbushers`,
-`SafeInWater`, `Alluring`, `Treacherous`, `ItIsGoingInTheBook`, `RulersOfStone`,
+Tabletop-only Hunt keys stay as catalog text on the campaign Summary and Factions lists:
+`ExpertAmbushers`, `SafeInWater`, `Alluring`, `Treacherous`, `ItIsGoingInTheBook`, `RulersOfStone`,
 `Determined`, `ForHire`, `RelicOfAPastAge`, `FreshCorpses`,
 `NavigatorsOfTheForests`, and `HealedByNature`. The application does not resolve tabletop dice
 or army-list mercenary slots.
@@ -350,7 +352,11 @@ subfaction from one dropdown that lists subfactions as
 `Faction Name - Subfaction Name`. Choosing a value in that dropdown saves it. Player-managers
 can be assigned a faction the same way; kick and promote stay limited to non-manager players.
 From the third missed-order offence onward, staff also see a
-**May be kicked** badge on that participant that opens the matching campaign-log entry. Players may
+**May be kicked** badge on that participant that opens the matching campaign-log entry. In-progress
+and completed campaigns also show `(N delinquencies)` next to each participant, collapsed by
+default. Expanding it lists each recorded offence with the round, phase (Action 1, Battle 1, and so
+on), that window's end time, and the force's territory at the time, so players can audit the tally
+and plead a case to the campaign manager. Players may
 still change their own faction until the campaign starts; after launch only staff assignment
 changes it. A kicked player's forces, drafts, and unresolved battles are removed, and carried
 items drop on the territory they occupied.
@@ -556,14 +562,14 @@ When staff act for another party, record:
 5. `Resolved`: resulting map/battle state is committed once.
 6. `Reopened`: staff correction creates a new revision and a new controlled editing window.
 
-The final required commitment closes an open window atomically. A player may commit only after every required force that is not in battle has a saved draft. Before that instant, a player
+The final required commitment closes an open window atomically. A player may commit only after every required force that is not in battle and not already waiting to teleport has a saved draft. A force locked into a two-phase teleport is ready without a player draft and is treated as committed when it is the player's only remaining order. Before that instant, a player
 may uncommit a committed order back to draft. At the deadline, the latest valid draft is
 submitted. Missing slots become `Hold`. After the window closes, orders resolve and cannot be
 returned to draft. Loading or mutating play state advances every overdue window in one pass, so a
 campaign that sat idle past several deadlines catches up without a reload. Each force requires an action unless it is already in battle; same-player forces that occupy one territory
 rejoin into one surviving force and therefore one later action. A force locked in battle is named in
 Actions with its territory and opponents. Players whose forces all owe no action (locked in battle,
-or otherwise nothing to order) are listed as committed and do not block the remaining players.
+waiting to teleport, or otherwise nothing to order) are listed as committed and do not block the remaining players.
 Only users/forces that owe an
 order participate in the early-close calculation. If every remaining force is in battle, nobody
 owes an action and the window closes early when that setting is on. An action window with no
@@ -585,8 +591,8 @@ named effect key relocates them (`GreatCityOfMagritta` to the Capital City,
 
 Orders resolve simultaneously against the window's starting map state. Processing order is
 movement and splits, then backstab alliance breaks, then battles from enemy co-location, then
-`Build`, `Pillage`, and `Repair` for forces that are not in battle. An invalid `Move`, `Split`,
-`Build`, `Pillage`, `Repair`, or `Backstab` becomes `Hold`. A force may not enter or claim
+`Build`, `Pillage`, `Destroy`, and `Repair` for forces that are not in battle. An invalid `Move`, `Split`,
+`Build`, `Pillage`, `Destroy`, `Repair`, or `Backstab` becomes `Hold`. A force may not enter or claim
 another faction's spawn. A Move or Split may pass through the force's own spawn but cannot land
 on any spawn; a forced retreat may still use that force's spawn as a destination. After movement,
 enemy forces that occupy the same territory create a
@@ -600,7 +606,7 @@ two or more allied factions on Neutral land award the claim to the strongest usi
 strength (campaign points, territories, structures, supply including temporary, then recorded
 random). Enemy capture leaves the structure operational unless a configured special
 rule auto-pillages it. The territory owner owns the occupying structure. Collisions that still
-lack a documented ranking, including competing `Build`, `Pillage`, or `Repair` actions on the
+lack a documented ranking, including competing `Build`, `Pillage`, `Destroy`, or `Repair` actions on the
 same territory and competing arrivals, become `Hold` rather than an invented winner.
 
 ## Initial action vocabulary
@@ -620,22 +626,32 @@ Player-submittable actions in an open action window are listed in this order:
   already-interacted items cannot be dropped this way. The public log records
   `{player}'s force dropped {item} at {territory}.` before that force's move. Any other force
   that later occupies the territory alone and is not in battle picks the item up.
-- `Teleport Randomly`: available while holding an item that grants a random teleport. The first
-  action phase locks the force into teleporting (it auto-Holds). After that phase the app
+- `Teleport Randomly`: available while holding an item that grants a random teleport, in addition
+  to the usual actions. Hold remains the uncommitted default. The first committed Teleport
+  Randomly phase locks the force into teleporting (it auto-Holds). After that phase the app
   secretly chooses a Neutral or allied non-spawn territory with no open battle and no enemy
   occupants. The public log records `{player}'s force at {territory} is preparing to teleport
   to a random location.` The following action phase auto-resolves the teleport to that
   destination. A friendly force that enters the destination during the teleport does not cancel
-  it. The teleport fails and the force stays at its original territory if an enemy occupies the
+  it. During the waiting action phase the force is shown as teleporting, does not need a player
+  draft, and can be committed (or is auto-committed when it is the player's only remaining order).
+  The map pin uses a `#4b006e` glow at twice the usual white pin intensity until the teleport
+  resolves, including a committed same-phase teleport. The teleport fails and the force stays at its original territory if an enemy occupies the
   source or destination in either phase, or if an allied force backstabs the teleporter at the
-  source in either phase.
+  source in either phase. The public log then records
+  `{player}'s force at {territory} action {action} was cancelled because {reason}.`, where the
+  territory is where the force was when the action triggered. An enemy interruption uses
+  `enemy player {name} moved into {place}`; a Backstab interruption uses
+  `treacherous player {name} backstabbed {player} at {place}`.
 - `Teleport to Specific Territory`: available while holding an item that grants a chosen
   teleport and the ability is recharged. The player picks any non-spawn territory that currently
   has no enemy occupants (enemy-owned empty land is allowed). The teleport happens in the same
-  action phase. The ability then recharges for 3 action phases; each Hold during recharge
+  action phase. After commit the force is shown as teleporting with the same purple pin glow
+  until that phase resolves. The ability then recharges for 3 action phases; each Hold during recharge
   reduces the remaining wait by one extra phase, to a minimum of 0. If an enemy occupies the
   source or destination of that teleport, the action is canceled, the force stays at the source
-  (and may be locked in battle), and is Exhausted. After either teleport succeeds or fails as
+  (and may be locked in battle), and is Exhausted. The public log uses the same cancelled-action
+  sentence as Teleport Randomly. After either teleport succeeds or fails as
   a completed special action, the force gains Exhausted unless a higher-priority status applies
   or Exhausted is canceled by Well Rested. Each teleport effect may also configure a status
   granted on success and a status granted on failure.
@@ -644,10 +660,14 @@ Player-submittable actions in an open action window are listed in this order:
   start not buildable; Supply Depot and Fortification start buildable.
 - `Pillage`: progress a pillageable intact structure from operational to pillaged. The acting
   force may pillage a structure its faction owns. Allies cannot pillage an allied structure unless
-  `OnlyBloodSatisfies` applies, which may also destroy in a single Pillage. `NorthernRaiders`
-  awards two temporary supply points rather than one. A second Pillage against a pillaged
-  structure that is flagged destructible removes it from the map. Capital City starts not
-  pillageable. Capital City, City, and Castle start not destructible.
+  `OnlyBloodSatisfies` applies. `NorthernRaiders` awards two temporary supply points rather than
+  one. Pillaging never removes the structure.
+- `Destroy`: remove a destructible structure from the map and award spendable supply equal to its
+  pillage value (default 1). Available when the structure is already pillaged, or when
+  `OnlyBloodSatisfies` applies to an operational destructible structure. Destroying an unpillaged
+  structure with `OnlyBloodSatisfies` awards double the pillage supply. Non-destructible structures
+  cannot be destroyed. Capital City, City, and Castle start not destructible. Capital City starts
+  not pillageable.
 - `Repair`: restore a pillaged structure. Only the current territory owner or a current ally of
   that owner may repair.
 - `Split`: create a second force in an eligible adjacent territory; maximum two per player in
@@ -827,9 +847,9 @@ allowance plus the round bonus, then from the player's temporary pool.
 - Each structure type has Buildable, Pillageable, and Destructible flags configured in campaign
   setup.
 - Conditions are `Operational`, `Pillaged`, and `Destroyed`. Setup and the map editor may place
-  a structure as Operational or Pillaged. Play may destroy a pillaged structure that is
-  destructible; destroyed structures are removed from the map so a later Build can occupy the
-  empty territory.
+  a structure as Operational or Pillaged. Play may destroy a pillaged destructible structure, or
+  an operational destructible structure when `OnlyBloodSatisfies` applies; destroyed structures
+  are removed from the map so a later Build can occupy the empty territory.
 - A pillaged structure is shown with its pillaged icon and labeled as `Name (pillaged)`, for
   example `Town (pillaged)`. Repair restores the operational condition and operational icon.
 - Capital City starts not pillageable and not destructible. City and Castle start pillageable
@@ -995,18 +1015,31 @@ and the map editor is 22 rem; toolbar and directory controls wrap so that column
 horizontally. On the
 campaign page, the Territories directory beside the map is collapsible. That heading stays at the
 top of the right-hand column when collapsed, and the list scrolls inside the map height when
-expanded. Directory rows use the same bordered layout as the map editor: owning faction mark,
-optional structure symbol, terrain-type symbol, then territory name. Selected-territory details sit under the map in that left column rather than spanning the
+expanded. The directory is alphabetical by territory name. Directory rows use the same bordered
+layout as the map editor, with occupying force dots first, then owning faction mark, optional
+structure symbol, terrain-type symbol, then territory name. The heading reads
+`Territories (visible/total)` for the currently applied directory filter. A collapsible Filter
+panel sits above the Territories expander and starts collapsed. It filters by owner faction, faction
+tag, ally group, Neutral, spawn location, terrain type, terrain tag, structure type, structure tag,
+pillaged, structure exists, occupied, revealed item objectives, and whether to keep only territories
+adjacent to that matching set (or only those that are not). Multi-selects start fully selected and
+tri-state rows start at Any, except Adjacent to matching only which also starts at Any so every
+territory is listed. Apply (check) and Clear (x) commit or reset the filter. The list uses the
+applied filter immediately; the map overlay still shows every territory until Show Filtered
+Territories is on. Selected-territory details sit under the map in that left column rather than spanning the
 directory. Zoom
 controls sit across the top of the map in this order: zoom percent field, +, -, Fit, 100%, Full
 screen, Cycle forces when you own at least one force, then the same Commit / Uncommit control as
 Actions (including last-commit confirmation and a disabled Commit when drafts are incomplete), then
-Show names. Zoom is
+Show Names, then Show Only Filtered Territories. Zoom is
 10% to 800% of the map image's
 actual pixel size, in 10% steps. 100% shows the image at its native size and centers it. Fit scales
 the image to the view and recenters it.
 The F key fits the map; 1 (and 0) set 100 percent. Y cycles your forces. C commits when that map
-Commit control is enabled, or uncommits when Uncommit is shown. N toggles Show names. Confirmation
+Commit control is enabled, or uncommits when Uncommit is shown. N toggles Show Names. T toggles
+Show Only Filtered Territories, which hides overlay fills, ownership, structures, forces, item
+objectives, and selection marks on territories that the applied directory filter currently
+excludes. It starts off so the map still shows every territory. Confirmation
 alertdialogs (including last commit) keep Tab inside the dialog, confirm on Enter, and cancel on
 Escape. On the campaign page, scheduled and completed campaigns open the map at Fit. In-progress
 campaigns open as if Cycle forces had selected the viewer's first owned force; Fit if they have
@@ -1023,6 +1056,12 @@ overlaps the pin, when that force has a saved draft or a committed order. A held
 uses the same relative size on the top-left edge so half of it overlaps the pin. Both overlays
 stack above the force pin and its glow. An unclaimed item on the map uses the same marker size
 as a structure icon, centered above that structure without overlapping it.
+The Map legend lists ownership tint, spawn hatching, a generic force pin, Your force and Force in
+battle when those pins are present, each structure type that currently exists on the map, a
+pillaged sample of a pillageable structure, each represented item-objective symbol, selected-territory
+glow, hidden-relic-nearby glow, teleporting glow, and each faction that currently owns land, has a
+spawn, or has a force, with that faction's name and ownership mark. Unused catalog factions and
+subfactions are omitted.
 Hovering the pin names the action and whether it is draft or
 committed. After a Move, Split, or Retreat is drafted or committed, one-way black arrows mark each
 hop from the force's current territory to the destination. Those arrows use the same size and
@@ -1037,7 +1076,7 @@ opens, the panel shows a loading ellipsis and hides overlay markers until that i
 they do not cluster in the corner. Hover, selection, and later map updates do not show it again. Drawing coordinates stay normalized to the full-size image. Snap distance, minimum draw spacing, and
 overlay stroke widths are measured in screen pixels so zooming in lets a manager trace fine coasts and
 province borders. Territory names drawn on the map stay a readable screen size at Fit zoom and use
-the current theme's surface and text colors. Show names (N) draws the full territory name even when
+the current theme's surface and text colors. Show Names (N) draws the full territory name even when
 the polygon is small, and hides a display number when that number would not fit. Hovering a territory
 on the map or a row in the Territories list shows a tooltip with the territory name, owner or Neutral,
 structure type and pillaged state when a structure is present (`Town` or `Town (pillaged)`), terrain
@@ -1090,8 +1129,11 @@ parentheses, alphabetically, as `Subfaction: Territory`. Factions with no specif
 parenthetical. Each faction lists its special rules, then the players currently taking that faction
 without a subfaction, then each named subfaction with that subfaction's special rules and the players
 taking it. Choosing a faction (or subfaction) on the campaign page also lists those special rules
-under the selector, including on scheduled upcoming campaigns before play has started, and the
-Actions panel repeats the viewer's faction powers with the power names in bold. The campaign page,
+under the selector, including on scheduled upcoming campaigns before play has started. When stored
+faction special-rule identifiers are missing or no longer match the catalog, Hunt in Estalia
+campaigns still show the documented faction and subfaction rules whose names exist in that catalog.
+The Actions panel does not repeat faction or subfaction special rules; item-granted catalog rules
+and custom item reminders stay under each force. The campaign page,
 Edit campaign, and map editor each end with a Back to top control that scrolls to the page start.
 Faction and ally-group names elsewhere on the campaign page link to that faction's listing
 in Factions or that group's listing in Ally groups, scrolling the listing name into view below the
@@ -1203,7 +1245,11 @@ Managers are not notified for the first two offences. From the third offence onw
 on each later offence, every campaign manager is notified in-app and by email that the player
 is a possible kick. The player is not removed unless a manager kicks them. On the campaign page,
 staff see a **May be kicked** badge on that player in Participants; the badge opens the matching
-campaign-log entry. The log has a Delinquency filter in addition to public chat, private chats,
+campaign-log entry. Play and participant contracts expose the per-player missed-order count and
+each recorded offence (round, Action/Battle ordinal, window end, and territory). In-progress and
+completed campaign pages show that count next to the participant as `(N delinquencies)`; expanding
+it lists those offences. Offences 1 and 2 still do not write a public Delinquency log fact. The log
+has a Delinquency filter in addition to public chat, private chats,
 and the game log.
 
 ## Supply
@@ -1366,8 +1412,11 @@ with the absolute time in the `title` attribute; older entries show the absolute
 viewports the timestamp sits on a secondary line and the log uses the body font.
 When a phase closes, resolved actions and other close-of-phase facts for that window are written
 before the next round or phase heading, including when they share the same timestamp, so players
-can tell which phase those actions belonged to. Member chat stays in time order among those
-facts. Campaign-generated facts use the originator name `Campaign` and always belong to the
+can tell which phase those actions belonged to. Action-window game-log facts are grouped by the
+player who owns the resolving force, in alphabetical username order, then battle-lock facts at
+the end sorted by the earliest participant username. Battle-window game-log facts list battle
+results first, then retreats and surrender orders, each in that same alphabetical order. Member
+chat stays in time order among those facts. Campaign-generated facts use the originator name `Campaign` and always belong to the
 public channel.
 Member chat uses the author's display name
 snapshotted when the message was posted. Chat originators and `@` mentions of current members
@@ -1394,7 +1443,8 @@ objectives (a later manager score or item adjustment appends an updated final sn
 manager extensions of remaining phases or rounds (the extra duration and new window end, and/or
 how many rounds were added), resolved
 actions after an action window closes in natural language (move, hold, split, merge, build, pillage,
-destroy, repair, retreat, and treachery when Backstab breaks an alliance), attempted actions that
+destroy, repair, retreat, and treachery when Backstab breaks an alliance), committed actions that
+were interrupted and cancelled with the reason, attempted actions that
 were invalid or conflicted and became Hold, battles created or finalized, manager battle-result
 overrides, debug enter/exit and debug order corrections, player retreats, automatic force rejoins when the same player's forces occupy one
 territory, revealed rival-objective victories, and automatic substitutions: missing orders become Hold, deadline-submitted drafts,

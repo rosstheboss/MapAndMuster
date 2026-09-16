@@ -336,6 +336,16 @@ internal static class PlayStateJson
             {
                 ForceId = item.ForceId,
                 OffenceCount = item.OffenceCount,
+                Offences = [.. item.Offences.Select(static offence => new DelinquencyOffenceDocument
+                {
+                    WindowId = offence.WindowId,
+                    RoundNumber = offence.RoundNumber,
+                    PhaseNumber = offence.PhaseNumber,
+                    Kind = offence.Kind.ToString(),
+                    KindOrdinal = offence.KindOrdinal,
+                    WindowEndsUtc = offence.WindowEndsUtc,
+                    TerritoryId = offence.TerritoryId,
+                })],
             })],
         };
     }
@@ -488,7 +498,15 @@ internal static class PlayStateJson
                 Math.Max(0, item.TemporarySupplyPoints)))],
             [.. (document.Delinquencies ?? []).Select(static item => new ForceDelinquency(
                 item.ForceId,
-                Math.Max(0, item.OffenceCount)))],
+                Math.Max(0, item.OffenceCount),
+                [.. (item.Offences ?? []).Select(static offence => new DelinquencyOffence(
+                    offence.WindowId,
+                    offence.RoundNumber,
+                    offence.PhaseNumber,
+                    Enum.TryParse<RoundPhaseKind>(offence.Kind, true, out var kind) ? kind : RoundPhaseKind.Action,
+                    Math.Max(1, offence.KindOrdinal),
+                    offence.WindowEndsUtc,
+                    offence.TerritoryId))]))],
             [.. (document.BrokenAllySubfactions ?? []).Select(static item => new BrokenAllySubfaction(
                 item.FactionId,
                 item.Subfaction))],
@@ -956,6 +974,18 @@ internal static class PlayStateJson
     {
         public Guid ForceId { get; set; }
         public int OffenceCount { get; set; }
+        public List<DelinquencyOffenceDocument>? Offences { get; set; }
+    }
+
+    private sealed class DelinquencyOffenceDocument
+    {
+        public Guid WindowId { get; set; }
+        public int RoundNumber { get; set; }
+        public int PhaseNumber { get; set; }
+        public string Kind { get; set; } = "";
+        public int KindOrdinal { get; set; }
+        public DateTimeOffset WindowEndsUtc { get; set; }
+        public Guid? TerritoryId { get; set; }
     }
 
     private sealed class StructureDocument

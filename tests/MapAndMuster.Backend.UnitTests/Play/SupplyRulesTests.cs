@@ -306,6 +306,77 @@ public sealed class SupplyRulesTests
     }
 
     [Fact]
+    public void TemporarySupplyFromDestroyUsesPillageValue()
+    {
+        var forces = new[]
+        {
+            new CampaignForce(
+                Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                Player,
+                Faction,
+                Adjacent,
+                inBattle: false),
+        };
+        var before = MapWithKeep();
+        var after = new PlayMap(
+            [
+                before.Territory(Spawn)!,
+                new PlayTerritory(
+                    Adjacent,
+                    2,
+                    Faction,
+                    null,
+                    null,
+                    null,
+                    StructureCondition.Operational,
+                    terrainTypeId: Terrain),
+            ],
+            [(Spawn, Adjacent)],
+            [new StructureTypePlayRules(Keep, "Keep", true, true, true, 1, 1, 4)]);
+        var balances = SupplyRules.AwardTemporary([], before, after, forces, Catalog(destroySupply: 4));
+
+        Assert.Equal(1, Assert.Single(balances).TemporarySupplyPoints);
+    }
+
+    [Fact]
+    public void OnlyBloodSatisfiesDoublesPillageSupplyWhenDestroyingAnUnpillagedStructure()
+    {
+        var forces = new[]
+        {
+            new CampaignForce(
+                Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                Player,
+                Faction,
+                Adjacent,
+                inBattle: false),
+        };
+        var before = MapWithKeep();
+        var after = new PlayMap(
+            [
+                before.Territory(Spawn)!,
+                new PlayTerritory(
+                    Adjacent,
+                    2,
+                    Faction,
+                    null,
+                    null,
+                    null,
+                    StructureCondition.Operational,
+                    terrainTypeId: Terrain),
+            ],
+            [(Spawn, Adjacent)],
+            [new StructureTypePlayRules(Keep, "Keep", true, true, true, 1, 1, 1)]);
+        var balances = SupplyRules.AwardTemporary(
+            [],
+            before,
+            after,
+            forces,
+            Catalog(specialRules: BloodSatisfies()));
+
+        Assert.Equal(2, Assert.Single(balances).TemporarySupplyPoints);
+    }
+
+    [Fact]
     public void TemporarySpendOnSplitForcesRequiresAPointPerForce()
     {
         var balances = new[] { new PlayerSupplyBalance(Player, 1) };
@@ -452,15 +523,25 @@ public sealed class SupplyRulesTests
             [new StructureTypePlayRules(Keep, "Keep", true, true, true, 1, 1, 1)]);
     }
 
-    private static SupplyCatalog Catalog()
+    private static SupplyCatalog Catalog(int destroySupply = 1, SpecialRuleContext? specialRules = null)
     {
         return new SupplyCatalog(
             new Dictionary<Guid, int> { [Terrain] = 1 },
-            new Dictionary<Guid, StructureSupplyRules> { [Keep] = new(1, 1, 1) },
+            new Dictionary<Guid, StructureSupplyRules> { [Keep] = new(1, 1, destroySupply) },
             HuntInEstaliaDefaults.SplitForceSupplyPenaltyValue,
             HuntInEstaliaDefaults.ArmyEscalations(8),
             new Dictionary<Guid, Guid> { [Player] = Faction },
             new Dictionary<Guid, string?> { [Faction] = null },
-            new HashSet<Guid>());
+            new HashSet<Guid>(),
+            specialRules);
+    }
+
+    private static SpecialRuleContext BloodSatisfies()
+    {
+        var ruleId = Guid.NewGuid();
+        return new SpecialRuleContext(
+            [new SpecialRuleSetup(ruleId, "Only Blood Satisfies!", "Rule text.", SpecialRuleEffectKeys.OnlyBloodSatisfies)],
+            new Dictionary<Guid, IReadOnlyList<Guid>> { [Faction] = [ruleId] },
+            new Dictionary<(Guid, string), IReadOnlyList<Guid>>());
     }
 }

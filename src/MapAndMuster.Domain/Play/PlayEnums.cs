@@ -43,6 +43,9 @@ public enum ActionKind
 
     /// <summary>Instant teleport to a player-chosen non-spawn territory that has no enemy occupants.</summary>
     TeleportToSpecificTerritory = 12,
+
+    /// <summary>Remove a destructible structure. Pillaged structures, or an operational one when a special rule allows.</summary>
+    Destroy = 13,
 }
 
 /// <summary>
@@ -229,6 +232,9 @@ public enum PlayLogKind
 
     /// <summary>A force locked in a random teleport and will resolve it next action phase.</summary>
     RandomTeleportPreparing = 41,
+
+    /// <summary>A committed action was interrupted during resolution and did not complete.</summary>
+    ActionCancelled = 42,
 }
 
 /// <summary>

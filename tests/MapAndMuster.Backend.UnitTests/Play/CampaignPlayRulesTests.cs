@@ -258,6 +258,80 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
+    public void CommitDoesNotRequireADraftForAForceWaitingToTeleport()
+    {
+        var (state, map, schedule) = Seeded();
+        var force = state.Forces.Single(item => item.FactionId == North);
+        var pending = force.With(
+            pendingRandomTeleportDestinationId: Midland,
+            pendingRandomTeleportSourceTerritoryId: force.TerritoryId);
+        state = state.With(forces: [.. state.Forces.Select(item => item.Id == force.Id ? pending : item)]);
+
+        Assert.True(state.IsActionCommitted(state.CurrentWindow()!.Id, PlayerOne));
+        Assert.True(CampaignPlayRules.TryCommit(
+            state,
+            map,
+            PlayerOne,
+            AllyGroups(),
+            schedule.StartsUtc,
+            out var committed,
+            out var error));
+        Assert.Null(error);
+        Assert.Contains(
+            committed!.State.Submissions,
+            item => item.ForceId == pending.Id && item.Kind == ActionKind.TeleportRandomly);
+    }
+
+    [Fact]
+    public void CommitRequiresDraftsOnlyForForcesThatAreNotWaitingToTeleport()
+    {
+        var (state, map, schedule) = Seeded();
+        var north = state.Forces.Single(item => item.FactionId == North);
+        var extra = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var pending = north.With(
+            pendingRandomTeleportDestinationId: Midland,
+            pendingRandomTeleportSourceTerritoryId: north.TerritoryId);
+        state = state.With(forces: [pending, extra, .. state.Forces.Where(item => item.Id != north.Id)]);
+
+        Assert.False(state.IsActionCommitted(state.CurrentWindow()!.Id, PlayerOne));
+        Assert.False(CampaignPlayRules.TryCommit(
+            state,
+            map,
+            PlayerOne,
+            AllyGroups(),
+            schedule.StartsUtc,
+            out _,
+            out var error));
+        Assert.Equal("order.draft.required", error!.Code);
+
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state,
+            PlayerOne,
+            extra.Id,
+            ActionKind.Hold,
+            null,
+            null,
+            map,
+            schedule.StartsUtc,
+            out state,
+            out _));
+        Assert.True(CampaignPlayRules.TryCommit(
+            state,
+            map,
+            PlayerOne,
+            AllyGroups(),
+            schedule.StartsUtc,
+            out var committed,
+            out _));
+        Assert.Contains(
+            committed!.State.Submissions,
+            item => item.ForceId == pending.Id && item.Kind == ActionKind.TeleportRandomly);
+        Assert.Contains(
+            committed.State.Submissions,
+            item => item.ForceId == extra.Id && item.Kind == ActionKind.Hold);
+    }
+
+    [Fact]
     public void UncommitIsAllowedUntilTheWindowCloses()
     {
         var (state, map, schedule) = Seeded();

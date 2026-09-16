@@ -189,8 +189,8 @@ Surrender, Save schedule, and Save Map.
 ## UI-C2 — The map cannot be operated with a keyboard
 
 **Status:** implemented (2026-08-30). Territory hits are named buttons with Enter/Space selection,
-focus drives the details panel, empty copy is “Select a territory to see its details.”, and a
-display-number-ordered territory directory sits beside the map. The map editor keeps its own list
+focus drives the details panel, empty copy is “Select a territory to see its details.”, and an
+alphabetical territory directory sits beside the map. The map editor keeps its own list
 and hides the shared directory.
 
 **Areas:** Accessibility, Map usability
@@ -708,7 +708,7 @@ Worth doing, but a user can complete their task without it.
 
 ## UI-M1 — The map has no legend and no territory labels
 
-**Status:** implemented (2026-08-30). Collapsible legend, Show names toggle (full name, or a
+**Status:** implemented (2026-08-30). Collapsible legend, Show Names toggle (full name, or a
 display number only when it fits; N shortcut), and ownership fill opacity 0.5 / 0.62 / 0.7.
 Territory hover tips list owner, structure, terrain, forces, battle, and retreat (2026-08-31).
 
@@ -721,7 +721,7 @@ territory means hovering or selecting them one at a time and reading the details
 
 **Fix:** add a collapsible legend beside the map covering ownership tint, spawn hatching, force
 pins, your own force, in-battle state, structures, pillaged structures, and item objectives. Add
-a "Show names" toggle that draws the full name, or the display number when it still fits, at each territory
+a "Show Names" toggle that draws the full name, or the display number when it still fits, at each territory
 centroid. Raise the ownership fill opacity so ownership is readable at Fit zoom.
 
 ## UI-M2 — Order entry is hard to scan and the confirm control is unlabelled

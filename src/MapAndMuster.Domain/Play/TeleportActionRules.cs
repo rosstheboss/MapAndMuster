@@ -161,10 +161,7 @@ public static class TeleportActionRules
         ArgumentNullException.ThrowIfNull(factionAllyGroups);
         ArgumentNullException.ThrowIfNull(broken);
         ArgumentNullException.ThrowIfNull(betrayals);
-        return others.Any(item =>
-            item.Id != force.Id
-            && item.TerritoryId == territoryId
-            && IsEnemyOf(force, item, factionAllyGroups, broken, betrayals));
+        return FirstEnemyOccupant(territoryId, force, others, factionAllyGroups, broken, betrayals) is not null;
     }
 
     /// <summary>Returns whether an allied force is submitting Backstab in the teleporter's source territory.</summary>
@@ -213,26 +210,75 @@ public static class TeleportActionRules
         IReadOnlyCollection<Guid> broken,
         IReadOnlyList<AllyBetrayal> betrayals)
     {
+        return DescribeInterrupt(
+            sourceTerritoryId,
+            destinationTerritoryId,
+            force,
+            occupyingForces,
+            actionByForceId,
+            factionAllyGroups,
+            broken,
+            betrayals) is not null;
+    }
+
+    /// <summary>
+    /// Names the first interruption that cancels a teleport: an enemy at the source, then an enemy
+    /// at the destination, then an allied Backstab at the source.
+    /// </summary>
+    public static TeleportInterrupt? DescribeInterrupt(
+        Guid sourceTerritoryId,
+        Guid? destinationTerritoryId,
+        CampaignForce force,
+        IReadOnlyList<CampaignForce> occupyingForces,
+        IReadOnlyDictionary<Guid, ActionKind> actionByForceId,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlyCollection<Guid> broken,
+        IReadOnlyList<AllyBetrayal> betrayals)
+    {
+        ArgumentNullException.ThrowIfNull(force);
         ArgumentNullException.ThrowIfNull(occupyingForces);
         ArgumentNullException.ThrowIfNull(actionByForceId);
-        if (HasEnemyOccupant(sourceTerritoryId, force, occupyingForces, factionAllyGroups, broken, betrayals)
-            || (destinationTerritoryId is { } dest
-                && HasEnemyOccupant(dest, force, occupyingForces, factionAllyGroups, broken, betrayals)))
-        {
-            return true;
-        }
-
-        var sourceKinds = occupyingForces
-            .Where(item => item.TerritoryId == sourceTerritoryId && item.Id != force.Id)
-            .Select(item => actionByForceId.GetValueOrDefault(item.Id, ActionKind.Hold));
-        return HasSourceBackstab(
+        ArgumentNullException.ThrowIfNull(factionAllyGroups);
+        ArgumentNullException.ThrowIfNull(broken);
+        ArgumentNullException.ThrowIfNull(betrayals);
+        var sourceEnemy = FirstEnemyOccupant(
             sourceTerritoryId,
             force,
             occupyingForces,
-            sourceKinds,
             factionAllyGroups,
             broken,
             betrayals);
+        if (sourceEnemy is not null)
+        {
+            return new TeleportInterrupt(PlayLogFacts.InterruptEnemy, sourceEnemy.ControllerUserId, sourceTerritoryId);
+        }
+
+        if (destinationTerritoryId is { } dest)
+        {
+            var destEnemy = FirstEnemyOccupant(
+                dest,
+                force,
+                occupyingForces,
+                factionAllyGroups,
+                broken,
+                betrayals);
+            if (destEnemy is not null)
+            {
+                return new TeleportInterrupt(PlayLogFacts.InterruptEnemy, destEnemy.ControllerUserId, dest);
+            }
+        }
+
+        var backstabber = occupyingForces
+            .Where(item => item.Id != force.Id && item.TerritoryId == sourceTerritoryId)
+            .Where(item => actionByForceId.GetValueOrDefault(item.Id, ActionKind.Hold) == ActionKind.Backstab)
+            .Where(item =>
+                item.FactionId != force.FactionId
+                && !IsEnemyOf(force, item, factionAllyGroups, broken, betrayals))
+            .OrderBy(static item => item.Id)
+            .FirstOrDefault();
+        return backstabber is null
+            ? null
+            : new TeleportInterrupt(PlayLogFacts.InterruptBackstab, backstabber.ControllerUserId, sourceTerritoryId);
     }
 
     /// <summary>Reduces specified-teleport recharge; Hold subtracts one extra phase.</summary>
@@ -284,6 +330,23 @@ public static class TeleportActionRules
         return null;
     }
 
+    private static CampaignForce? FirstEnemyOccupant(
+        Guid territoryId,
+        CampaignForce force,
+        IEnumerable<CampaignForce> others,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        IReadOnlyCollection<Guid> broken,
+        IReadOnlyList<AllyBetrayal> betrayals)
+    {
+        return others
+            .Where(item =>
+                item.Id != force.Id
+                && item.TerritoryId == territoryId
+                && IsEnemyOf(force, item, factionAllyGroups, broken, betrayals))
+            .OrderBy(static item => item.Id)
+            .FirstOrDefault();
+    }
+
     private static bool IsNeutralOrAllied(
         PlayTerritory territory,
         CampaignForce force,
@@ -328,3 +391,6 @@ public static class TeleportActionRules
             .ToHashSet();
     }
 }
+
+/// <summary>Why a teleport did not complete, including who interrupted it and where.</summary>
+public sealed record TeleportInterrupt(string Reason, Guid InterrupterUserId, Guid PlaceTerritoryId);

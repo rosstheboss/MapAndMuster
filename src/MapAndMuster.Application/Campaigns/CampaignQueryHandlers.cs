@@ -214,7 +214,7 @@ public sealed class GetCampaignLogHandler
             .Select(static member => new CampaignChatMember(member.UserId, member.Username, member.DisplayName))
             .ToArray();
         var unread = CampaignChatRules.CountUnread(
-            CampaignPlayMapper.VisiblePlayLogEntries(campaign, userId, inspect),
+            CampaignPlayMapper.VisiblePlayLogEntries(campaign, userId, inspect, names),
             userId,
             lastReadUtc,
             chatMembers);

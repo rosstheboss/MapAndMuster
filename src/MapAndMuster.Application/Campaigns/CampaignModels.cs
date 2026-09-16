@@ -464,6 +464,39 @@ public sealed class CampaignParticipantDetail
 
     /// <summary>Gets players this member betrayed through Backstab, when they are a traitor.</summary>
     public IReadOnlyList<TraitorVictimDetail> TraitorVictims { get; init; } = [];
+
+    /// <summary>Gets this player's campaign-lifetime missed-order offence count across their forces.</summary>
+    public int DelinquencyCount { get; init; }
+
+    /// <summary>Gets recorded missed-order offences for audit, oldest first.</summary>
+    public IReadOnlyList<ParticipantDelinquencyDetail> Delinquencies { get; init; } = [];
+}
+
+/// <summary>
+/// One missed-order offence shown on Participants.
+/// </summary>
+public sealed class ParticipantDelinquencyDetail
+{
+    /// <summary>Gets the 1-based round.</summary>
+    public required int RoundNumber { get; init; }
+
+    /// <summary>Gets the 1-based phase index in the round.</summary>
+    public required int PhaseNumber { get; init; }
+
+    /// <summary>Gets Action or Battle.</summary>
+    public required string PhaseKind { get; init; }
+
+    /// <summary>Gets the 1-based ordinal of this kind in the round.</summary>
+    public required int KindOrdinal { get; init; }
+
+    /// <summary>Gets when that phase window ended, in UTC.</summary>
+    public required DateTimeOffset WindowEndsUtc { get; init; }
+
+    /// <summary>Gets the force's territory when the offence was recorded.</summary>
+    public Guid? TerritoryId { get; init; }
+
+    /// <summary>Gets the territory name or display number.</summary>
+    public string? TerritoryName { get; init; }
 }
 
 /// <summary>

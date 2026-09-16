@@ -395,7 +395,8 @@
             @if (orderableForces().length > 0) {
               <p>
                 Choose an action for each of your forces from the map or the list below. Commit is available after every
-                force that is not in battle has a saved draft. Missing drafts become Hold if time runs out.
+                force that is not in battle or already teleporting has a saved draft. Missing drafts become Hold if time
+                runs out.
               </p>
             }
             @if (play.isCommitted) {
@@ -407,8 +408,8 @@
                 <button type="button" class="button-secondary" (click)="uncommit()">Uncommit</button>
               } @else if (orderableForces().length === 0) {
                 <p>
-                  You have no actions to commit this phase. Players whose forces are locked in battle, or who otherwise
-                  have nothing to order, are committed automatically.
+                  You have no actions to commit this phase. Players whose forces are locked in battle, waiting to
+                  teleport, or who otherwise have nothing to order, are committed automatically.
                 </p>
               } @else {
                 <p>Your actions are committed. The phase has closed and the orders are resolving.</p>
@@ -421,18 +422,6 @@
               <button type="button" class="button" (click)="commit()" [disabled]="!canCommitActions()">
                 Commit Actions
               </button>
-            }
-            @if (chosenSpecialRules().length > 0) {
-              <ul class="plain-list">
-                @for (rule of chosenSpecialRules(); track rule.id) {
-                  <li>
-                    <strong>{{ rule.name }}</strong>
-                    @if (rule.text) {
-                      — {{ rule.text }}
-                    }
-                  </li>
-                }
-              </ul>
             }
             @for (force of myForces(); track force.id) {
               <fieldset class="stack force-card" [style.--force-accent]="forceAccent(force)">
@@ -461,6 +450,8 @@
                 }
                 @if (force.inBattle) {
                   <p class="muted">{{ battleLockCaption(force) }}</p>
+                } @else if (isForceTeleporting(force)) {
+                  <p class="muted">This force is teleporting. It resolves when this action phase closes.</p>
                 } @else if (draftKindsFor(force).length === 0) {
                   <p class="muted">This force has no actions to commit this phase.</p>
                 } @else {
@@ -573,23 +564,30 @@
                           (click)="selectTerritoryOnMap(force.territoryId)"
                         >
                           {{ territoryName(force.territoryId) }}</button
-                        >. Operational structures become pillaged; pillaged destructible structures are removed from the
-                        map.
+                        >. Operational structures become pillaged.
                       } @else {
                         Pillage requires an intact enemy or unowned pillageable structure in this territory.
                       }
                     </p>
-                    @if (force.canDestroyImmediately) {
-                      <label>
-                        <input
-                          type="checkbox"
-                          [ngModel]="draftFor(force.id).destroyImmediately"
-                          (ngModelChange)="onDraftDestroyImmediately(force.id, $event)"
-                          [name]="'destroy-' + force.id"
-                        />
-                        Destroy the structure in this Pillage
-                      </label>
-                    }
+                  }
+                  @if (draftFor(force.id).kind === 'Destroy') {
+                    <p class="muted">
+                      @if (structureAt(force.territoryId); as structure) {
+                        Destroy the {{ structure.condition }} {{ structure.name }} in
+                        <button
+                          type="button"
+                          class="territory-link"
+                          [class.is-selected]="selectedIds().includes(force.territoryId)"
+                          [disabled]="!!mapAction()"
+                          [attr.aria-label]="'Show ' + territoryName(force.territoryId) + ' on the map'"
+                          (click)="selectTerritoryOnMap(force.territoryId)"
+                        >
+                          {{ territoryName(force.territoryId) }}</button
+                        >. Destroying a structure grants spendable supply equal to its pillage value.
+                      } @else {
+                        Destroy requires a destructible structure in this territory.
+                      }
+                    </p>
                   }
                   @if (draftFor(force.id).kind === 'Repair') {
                     <p class="muted">
@@ -717,6 +715,10 @@
                 [factions]="campaign.factions"
                 [structures]="campaign.structureTypes"
                 [terrainTypes]="campaign.terrainTypes"
+                [factionTags]="campaign.factionTags ?? []"
+                [terrainTags]="campaign.terrainTags ?? []"
+                [structureTags]="campaign.structureTags ?? []"
+                [itemObjectiveTypes]="campaign.itemObjectiveTypes ?? []"
                 [structureImageUrl]="structureImageUrl"
                 [flagImageUrl]="flagImageUrl"
                 [forces]="mapForces()"
@@ -2383,6 +2385,27 @@
                   }
                   @if (participantRoles(participant); as roles) {
                     <span class="muted"> · {{ roles }}</span>
+                  }
+                  @if (campaign.status !== 'Scheduled') {
+                    <details class="delinquency-audit">
+                      <summary>
+                        ({{ participant.delinquencyCount ?? 0 }}
+                        {{ (participant.delinquencyCount ?? 0) === 1 ? 'delinquency' : 'delinquencies' }})
+                      </summary>
+                      @if ((participant.delinquencies ?? []).length === 0) {
+                        <p class="muted">No recorded phase details.</p>
+                      } @else {
+                        <ul class="plain-list">
+                          @for (offence of participant.delinquencies ?? []; track $index) {
+                            <li>
+                              {{ delinquencyPhaseLabel(offence) }}
+                              · {{ offence.windowEndsUtc | instantDate: timeZoneId() }} ·
+                              {{ offence.territoryName || 'Unknown location' }}
+                            </li>
+                          }
+                        </ul>
+                      }
+                    </details>
                   }
                   @if (canStaffMembers() && delinquencyEntryId(participant.userId); as entryId) {
                     <button type="button" class="status-chip is-drafting" (click)="openDelinquencyLog(entryId)">

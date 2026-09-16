@@ -1,0 +1,81 @@
+:host {
+  display: block;
+  flex: none;
+  min-width: 0;
+}
+
+.territory-filter summary {
+  min-height: var(--touch-min);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.territory-filter-heading {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.territory-filter-body {
+  display: grid;
+  gap: 0.4rem;
+  max-height: min(calc(40vh - var(--touch-min)), 18rem);
+  overflow: auto;
+}
+
+.territory-filter-toolbar {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.territory-filter-action {
+  display: grid;
+  place-items: center;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  padding: 0;
+  border: 1px solid rgb(28 25 23 / 25%);
+  background: var(--color-bg, #fff);
+  cursor: pointer;
+}
+
+.territory-filter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem 0.6rem;
+}
+
+fieldset {
+  margin: 0;
+  padding: 0.25rem 0.35rem;
+  min-width: 0;
+  max-height: 6.5rem;
+  overflow: auto;
+  border: 1px solid rgb(28 25 23 / 18%);
+}
+
+legend {
+  padding: 0 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+fieldset label,
+.tri-field {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+  min-height: 1.5rem;
+  font-size: 0.85rem;
+}
+
+.tri-field {
+  flex-wrap: wrap;
+}
+
+.tri-field select {
+  width: 100%;
+  min-height: var(--touch-min);
+}

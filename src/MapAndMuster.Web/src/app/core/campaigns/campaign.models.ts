@@ -921,6 +921,7 @@ export interface PlayForce {
   canChooseTeleportDestination?: boolean;
   teleportTargets?: string[];
   isRandomTeleportLocked?: boolean;
+  isTeleporting?: boolean;
   droppableItemObjectiveIds?: string[];
 }
 
@@ -1164,6 +1165,18 @@ export interface CampaignParticipant {
   splitPenaltyPoints?: number | null;
   contributions?: SupplyContribution[];
   traitorVictims?: TraitorVictim[];
+  delinquencyCount?: number;
+  delinquencies?: ParticipantDelinquency[];
+}
+
+export interface ParticipantDelinquency {
+  roundNumber: number;
+  phaseNumber: number;
+  phaseKind: string;
+  kindOrdinal: number;
+  windowEndsUtc: string;
+  territoryId?: string | null;
+  territoryName?: string | null;
 }
 
 export interface TraitorVictim {

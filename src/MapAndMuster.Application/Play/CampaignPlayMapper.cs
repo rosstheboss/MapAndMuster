@@ -1,5 +1,7 @@
+using System.Globalization;
 using MapAndMuster.Application.Campaigns;
 using MapAndMuster.Application.Identity;
+using MapAndMuster.Application.Maps;
 using MapAndMuster.Application.Ports;
 using MapAndMuster.Domain.Campaigns;
 using MapAndMuster.Domain.Play;
@@ -229,6 +231,11 @@ internal static class CampaignPlayMapper
                         : [],
                     IsRandomTeleportLocked = (force.ControllerUserId == viewerUserId || staffView)
                         && force.PendingRandomTeleportDestinationId is not null,
+                    IsTeleporting = force.PendingRandomTeleportDestinationId is not null
+                        || ((force.ControllerUserId == viewerUserId || staffView)
+                            && currentActionId is { } teleportWindow
+                            && play.LatestSubmission(teleportWindow, force.Id) is { } teleportOrder
+                            && TeleportActionRules.IsTeleport(teleportOrder.Kind)),
                     DroppableItemObjectiveIds = (force.ControllerUserId == viewerUserId || staffView)
                         ? [.. play.ItemObjectives
                             .Where(item => item.PossessorForceId == force.Id && TeleportActionRules.CanDropOnMove(item))
@@ -723,7 +730,7 @@ internal static class CampaignPlayMapper
         var map = CampaignLifecycle.ToPlayMap(campaign);
         return
         [
-            .. VisiblePlayLogEntries(campaign, viewerUserId, inspectPrivateChat)
+            .. VisiblePlayLogEntries(campaign, viewerUserId, inspectPrivateChat, names)
                 .Select(item => ToLogEntry(item, campaign, map, play, names)),
         ];
     }
@@ -731,28 +738,24 @@ internal static class CampaignPlayMapper
     internal static IReadOnlyList<PlayLogEntry> VisiblePlayLogEntries(
         StoredCampaign campaign,
         Guid viewerUserId,
-        bool inspectPrivateChat)
+        bool inspectPrivateChat,
+        IReadOnlyDictionary<Guid, string>? names = null)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var play = campaign.PlayState ?? CampaignPlayState.Empty;
         var memberships = CampaignChatContext.Memberships(campaign);
+        var displayNames = names ?? new Dictionary<Guid, string>();
         return
         [
-            .. play.Log
-                .Select(static (entry, index) => (entry, index))
-                .Where(item => CampaignChatRules.CanView(item.entry, viewerUserId, memberships, inspectPrivateChat))
-                .OrderBy(static item => item.entry.OccurredUtc)
-                .ThenBy(static item => PhaseHeadingSort(item.entry.Kind))
-                .ThenBy(static item => item.index)
-                .Select(static item => item.entry),
+            .. PlayLogDisplayOrder.Sort(
+                    play.Log
+                        .Select(static (entry, index) => (entry, index))
+                        .Where(item =>
+                            CampaignChatRules.CanView(item.entry, viewerUserId, memberships, inspectPrivateChat)),
+                    play,
+                    displayNames)
+                .Select(static item => item.Entry),
         ];
-    }
-
-    private static int PhaseHeadingSort(PlayLogKind kind)
-    {
-        return kind is PlayLogKind.PhaseChanged or PlayLogKind.CampaignEnded or PlayLogKind.CampaignClosed
-            ? 1
-            : 0;
     }
 
     /// <summary>
@@ -888,6 +891,7 @@ internal static class CampaignPlayMapper
                     inputs.Round);
             }
 
+            var delinquencies = DelinquenciesFor(campaign, membership.UserId);
             participants.Add(new CampaignParticipantDetail
             {
                 UserId = membership.UserId,
@@ -911,6 +915,8 @@ internal static class CampaignPlayMapper
                 FreeCharacterCount = supply?.FreeCharacterCount,
                 SplitPenaltyPoints = supply?.SplitPenaltyPoints,
                 Contributions = supply is null ? [] : ToContributions(supply, campaign),
+                DelinquencyCount = delinquencies.Count,
+                Delinquencies = delinquencies.Items,
             });
         }
 
@@ -1006,7 +1012,55 @@ internal static class CampaignPlayMapper
             SplitPenaltyPoints = participant.SplitPenaltyPoints,
             Contributions = participant.Contributions,
             TraitorVictims = victims,
+            DelinquencyCount = participant.DelinquencyCount,
+            Delinquencies = participant.Delinquencies,
         };
+    }
+
+    private static (int Count, IReadOnlyList<ParticipantDelinquencyDetail> Items) DelinquenciesFor(
+        StoredCampaign campaign,
+        Guid userId)
+    {
+        var play = campaign.PlayState;
+        if (play is null)
+        {
+            return (0, []);
+        }
+
+        var forceIds = play.Forces
+            .Where(force => force.ControllerUserId == userId)
+            .Select(force => force.Id)
+            .ToHashSet();
+        var records = play.Delinquencies.Where(item => forceIds.Contains(item.ForceId)).ToArray();
+        var count = records.Sum(item => item.OffenceCount);
+        var names = (campaign.MapGraph?.Territories ?? [])
+            .ToDictionary(static territory => territory.Id, static territory => TerritoryDisplayName(territory));
+        var items = records
+            .SelectMany(static item => item.Offences)
+            .OrderBy(static item => item.WindowEndsUtc)
+            .ThenBy(static item => item.WindowId)
+            .Select(item => new ParticipantDelinquencyDetail
+            {
+                RoundNumber = item.RoundNumber,
+                PhaseNumber = item.PhaseNumber,
+                PhaseKind = item.Kind.ToString(),
+                KindOrdinal = item.KindOrdinal,
+                WindowEndsUtc = item.WindowEndsUtc,
+                TerritoryId = item.TerritoryId,
+                TerritoryName = item.TerritoryId is { } territoryId && names.TryGetValue(territoryId, out var name)
+                    ? name
+                    : null,
+            })
+            .ToArray();
+        return (count, items);
+    }
+
+    private static string TerritoryDisplayName(TerritoryDetail territory)
+    {
+        var name = territory.Name?.Trim();
+        return string.IsNullOrWhiteSpace(name)
+            ? territory.DisplayNumber.ToString(CultureInfo.InvariantCulture)
+            : name;
     }
 
     private static IReadOnlyList<PlayItemObjectiveDetail> VisibleItems(
@@ -1124,6 +1178,8 @@ internal static class CampaignPlayMapper
                 $"{actor}'s submitted {action} was invalid and became Hold.",
             PlayLogKind.ConflictingBuildHold =>
                 $"Competing structure actions in {territory} became Hold for {actor}.",
+            PlayLogKind.ActionCancelled =>
+                FormatActionCancelled(entry, actor, territory, campaign, map, names),
             PlayLogKind.ResolvedAction =>
                 FormatResolvedAction(entry, actor, territory, target),
             PlayLogKind.BattleCreated =>
@@ -1242,6 +1298,43 @@ internal static class CampaignPlayMapper
             : message.Trim();
         var who = actor == "A force" ? "A manager" : actor;
         return $"{who} {body}";
+    }
+
+    private static string FormatActionCancelled(
+        PlayLogEntry entry,
+        string actor,
+        string territory,
+        StoredCampaign campaign,
+        PlayMap map,
+        IReadOnlyDictionary<Guid, string> names)
+    {
+        var action = ActionKindLabel(entry.ActionKind);
+        if (!PlayLogFacts.TryReadActionCancelled(entry.Message, out var reason, out var interrupterUserId, out var placeTerritoryId))
+        {
+            return $"{actor}'s force at {territory} action {action} was cancelled because the action was interrupted.";
+        }
+
+        var interrupter = ActorName(interrupterUserId, names);
+        var place = TerritoryLabel(campaign, map, placeTerritoryId);
+        return reason switch
+        {
+            PlayLogFacts.InterruptBackstab =>
+                $"{actor}'s force at {territory} action {action} was cancelled because treacherous player {interrupter} backstabbed {actor} at {place}.",
+            _ =>
+                $"{actor}'s force at {territory} action {action} was cancelled because enemy player {interrupter} moved into {place}.",
+        };
+    }
+
+    private static string ActionKindLabel(ActionKind? kind)
+    {
+        return kind switch
+        {
+            ActionKind.TeleportRandomly => "Teleport Randomly",
+            ActionKind.TeleportToSpecificTerritory => "Teleport to Specific Territory",
+            ActionKind.Teleport => "Teleport",
+            null => "Hold",
+            { } value => value.ToString(),
+        };
     }
 
     private static string FormatResolvedAction(PlayLogEntry entry, string actor, string territory, string target)
@@ -1397,9 +1490,7 @@ internal static class CampaignPlayMapper
         return
         [
             .. campaign.SpecialRules
-                .Where(rule => !string.IsNullOrWhiteSpace(rule.EffectKey)
-                    && rules.Has(force, rule.EffectKey!)
-                    && !string.IsNullOrWhiteSpace(rule.Text))
+                .Where(rule => rules.HeldItemHas(force, rule.Id) && !string.IsNullOrWhiteSpace(rule.Text))
                 .Select(static rule => $"{rule.Name}: {rule.Text}"),
             .. ItemObjectiveEffectRules.CustomReminders(force, map, play.ItemObjectives, rules),
         ];

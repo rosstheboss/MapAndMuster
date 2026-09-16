@@ -28,6 +28,12 @@ public sealed class DelinquencyRulesTests
         state = DelinquencyRules.Record(state, [ForceId], window, Now);
         Assert.Equal(1, state.Delinquencies.Single().OffenceCount);
         Assert.Empty(state.Log);
+        var first = Assert.Single(state.Delinquencies.Single().Offences);
+        Assert.Equal(WindowId, first.WindowId);
+        Assert.Equal(1, first.RoundNumber);
+        Assert.Equal(1, first.KindOrdinal);
+        Assert.Equal(RoundPhaseKind.Action, first.Kind);
+        Assert.Equal(force.TerritoryId, first.TerritoryId);
 
         state = DelinquencyRules.Record(state, [ForceId], window, Now);
         Assert.Equal(2, state.Delinquencies.Single().OffenceCount);
@@ -36,6 +42,7 @@ public sealed class DelinquencyRulesTests
         var previous = state.Log.Count;
         state = DelinquencyRules.Record(state, [ForceId], window, Now);
         Assert.Equal(3, state.Delinquencies.Single().OffenceCount);
+        Assert.Equal(3, state.Delinquencies.Single().Offences.Count);
         Assert.Contains(state.Log, item => item.Kind == PlayLogKind.DelinquencyThreshold);
         Assert.True(DelinquencyRules.ShouldNotifyManagers(state, previous));
     }

@@ -32,6 +32,13 @@
   overflow-wrap: anywhere;
 }
 
+.force-dots {
+  display: flex;
+  gap: 0.2rem;
+  flex: 0 0 auto;
+}
+
+.force-dot,
 app-faction-logo,
 app-map-symbol,
 .structure-mark,
@@ -39,6 +46,13 @@ app-map-symbol,
   width: 1.25rem;
   height: 1.25rem;
   flex: 0 0 auto;
+}
+
+.force-dot {
+  border-radius: 50%;
+  box-shadow:
+    0 0 0.2rem #fff,
+    0 0 0 1px rgb(28 25 23 / 45%);
 }
 
 .structure-mark {

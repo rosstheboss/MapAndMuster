@@ -124,14 +124,10 @@ public static class CampaignMapper
                 RequiresSubfaction = faction.RequiresSubfaction,
                 HasFlagImage = !string.IsNullOrWhiteSpace(faction.FlagImageStorageKey),
                 TintFlagImage = faction.TintFlagImage,
-                SpecialRuleIds = faction.SpecialRuleIds,
-                SubfactionSpecialRules = faction.SubfactionSpecialRules
-                    .Select(static item => new SubfactionSpecialRulesDetail
-                    {
-                        Name = item.Name,
-                        SpecialRuleIds = item.SpecialRuleIds,
-                    })
-                    .ToArray(),
+                SpecialRuleIds = HuntInEstaliaSpecialRuleBinder.FactionRuleIds(faction, campaign.SpecialRules),
+                SubfactionSpecialRules = HuntInEstaliaSpecialRuleBinder.SubfactionRuleAssignments(
+                    faction,
+                    campaign.SpecialRules),
                 TagIds = faction.TagIds,
                 SubfactionTags = faction.SubfactionTags,
                 SubfactionAppearances = faction.SubfactionAppearances

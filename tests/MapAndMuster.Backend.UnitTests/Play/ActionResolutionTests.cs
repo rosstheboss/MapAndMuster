@@ -85,7 +85,7 @@ public sealed class ActionResolutionTests
             repairMap,
             repairForce,
             UnalignedGroups());
-        Assert.Equal([ActionKind.Hold, ActionKind.Move, ActionKind.Pillage, ActionKind.Repair, ActionKind.Split], repairKinds);
+        Assert.Equal([ActionKind.Hold, ActionKind.Move, ActionKind.Destroy, ActionKind.Repair, ActionKind.Split], repairKinds);
     }
 
     [Fact]
@@ -98,7 +98,9 @@ public sealed class ActionResolutionTests
         var allyKinds = ActionResolution.EligibleActions(State(allyForce), map, allyForce, AlliedGroups());
 
         Assert.Contains(ActionKind.Pillage, ownerKinds);
+        Assert.DoesNotContain(ActionKind.Destroy, ownerKinds);
         Assert.DoesNotContain(ActionKind.Pillage, allyKinds);
+        Assert.DoesNotContain(ActionKind.Destroy, allyKinds);
 
         var alliedRepairMap = Map(
             midlandStructureId: TownId,
@@ -107,6 +109,64 @@ public sealed class ActionResolutionTests
             midlandCondition: StructureCondition.Pillaged);
         var allyRepair = ActionResolution.EligibleActions(State(allyForce), alliedRepairMap, allyForce, AlliedGroups());
         Assert.Contains(ActionKind.Repair, allyRepair);
+    }
+
+    [Fact]
+    public void EligibleActionsOfferDestroyInsteadOfPillageWhenTheStructureIsAlreadyPillagedAndDestructible()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var map = Map(
+            midlandStructureId: TownId,
+            midlandStructureName: "Town",
+            midlandOwner: South,
+            midlandCondition: StructureCondition.Pillaged,
+            midlandDestructible: true);
+        var kinds = ActionResolution.EligibleActions(State(force), map, force, UnalignedGroups());
+
+        Assert.Contains(ActionKind.Destroy, kinds);
+        Assert.DoesNotContain(ActionKind.Pillage, kinds);
+    }
+
+    [Fact]
+    public void EligibleActionsOfferPillageAndDestroyWhenOnlyBloodSatisfiesCanDestroyImmediately()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false, subfaction: "Khorne");
+        var map = Map(midlandStructureId: TownId, midlandStructureName: "Town", midlandOwner: South);
+        var kinds = ActionResolution.EligibleActions(State(force), map, force, UnalignedGroups(), BloodSatisfies(North));
+
+        Assert.Contains(ActionKind.Pillage, kinds);
+        Assert.Contains(ActionKind.Destroy, kinds);
+        var listed = kinds.ToList();
+        Assert.True(listed.IndexOf(ActionKind.Pillage) < listed.IndexOf(ActionKind.Destroy));
+    }
+
+    [Fact]
+    public void EligibleActionsOmitDestroyForNonDestructibleStructuresEvenWithOnlyBloodSatisfies()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false, subfaction: "Khorne");
+        var map = Map(
+            midlandStructureId: CityId,
+            midlandStructureName: "City",
+            midlandOwner: South,
+            midlandDestructible: false);
+        var kinds = ActionResolution.EligibleActions(State(force), map, force, UnalignedGroups(), BloodSatisfies(North));
+
+        Assert.Contains(ActionKind.Pillage, kinds);
+        Assert.DoesNotContain(ActionKind.Destroy, kinds);
+    }
+
+    [Fact]
+    public void OnlyBloodSatisfiesMayPillageOrDestroyAnAlliedStructure()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false, subfaction: "Khorne");
+        var map = Map(midlandStructureId: TownId, midlandStructureName: "Town", midlandOwner: South);
+        var withoutRule = ActionResolution.EligibleActions(State(force), map, force, AlliedGroups());
+        var withRule = ActionResolution.EligibleActions(State(force), map, force, AlliedGroups(), BloodSatisfies(North));
+
+        Assert.DoesNotContain(ActionKind.Pillage, withoutRule);
+        Assert.DoesNotContain(ActionKind.Destroy, withoutRule);
+        Assert.Contains(ActionKind.Pillage, withRule);
+        Assert.Contains(ActionKind.Destroy, withRule);
     }
 
     [Fact]
@@ -220,6 +280,49 @@ public sealed class ActionResolutionTests
         Assert.Equal(
             PlayLogFacts.DestroyedStructure("Town"),
             Assert.Single(second.State.Log, item => item.Kind == PlayLogKind.ResolvedAction).Message);
+    }
+
+    [Fact]
+    public void DestroyRemovesAPillagedDestructibleStructure()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var resolved = Resolve(
+            State(force, Submit(force.Id, ActionKind.Destroy)),
+            Map(
+                midlandStructureId: TownId,
+                midlandStructureName: "Town",
+                midlandCondition: StructureCondition.Pillaged,
+                midlandDestructible: true));
+        Assert.Null(resolved.Map.Territory(Midland)!.StructureTypeId);
+        Assert.Equal(
+            PlayLogFacts.DestroyedStructure("Town"),
+            Assert.Single(resolved.State.Log, item => item.Kind == PlayLogKind.ResolvedAction).Message);
+    }
+
+    [Fact]
+    public void DestroyRemovesAnOperationalDestructibleStructureWhenOnlyBloodSatisfiesApplies()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false, subfaction: "Khorne");
+        var resolved = Resolve(
+            State(force, Submit(force.Id, ActionKind.Destroy)),
+            Map(midlandStructureId: TownId, midlandStructureName: "Town"),
+            specialRules: BloodSatisfies(North));
+        Assert.Null(resolved.Map.Territory(Midland)!.StructureTypeId);
+        Assert.Equal(
+            PlayLogFacts.DestroyedStructure("Town"),
+            Assert.Single(resolved.State.Log, item => item.Kind == PlayLogKind.ResolvedAction).Message);
+    }
+
+    [Fact]
+    public void OnlyBloodSatisfiesPillageStillOnlyPillsAnOperationalStructure()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false, subfaction: "Khorne");
+        var resolved = Resolve(
+            State(force, Pillage(force.Id)),
+            Map(midlandStructureId: TownId, midlandStructureName: "Town"),
+            specialRules: BloodSatisfies(North));
+        Assert.Equal(StructureCondition.Pillaged, resolved.Map.Territory(Midland)!.StructureCondition);
+        Assert.Equal(TownId, resolved.Map.Territory(Midland)!.StructureTypeId);
     }
 
     [Fact]
@@ -546,6 +649,7 @@ public sealed class ActionResolutionTests
             midlandDestructible: false);
         var kinds = ActionResolution.EligibleActions(State(force), map, force, UnalignedGroups());
         Assert.DoesNotContain(ActionKind.Pillage, kinds);
+        Assert.DoesNotContain(ActionKind.Destroy, kinds);
 
         var resolved = Resolve(State(force, Pillage(force.Id)), map);
         Assert.Equal(StructureCondition.Operational, resolved.Map.Territory(Midland)!.StructureCondition);
@@ -569,6 +673,33 @@ public sealed class ActionResolutionTests
     }
 
     [Fact]
+    public void HoldingARandomTeleportItemKeepsNormalActionsAndDefaultsToHold()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var typeId = Guid.NewGuid();
+        var item = HeldItem(typeId, force.Id);
+        var rules = TeleportRules(typeId, ItemObjectiveEffectKind.TeleportToRandomEmptyNonSpawn);
+        var withoutItem = ActionResolution.EligibleActions(State(force), Map(), force, UnalignedGroups());
+        var withItem = ActionResolution.EligibleActions(
+            State(force, [], [item]),
+            Map(),
+            force,
+            UnalignedGroups(),
+            rules);
+
+        Assert.Equal(ActionKind.Hold, withItem[0]);
+        Assert.Equal(
+            [.. withoutItem],
+            withItem.Where(kind => kind != ActionKind.TeleportRandomly).ToArray());
+        Assert.Contains(ActionKind.TeleportRandomly, withItem);
+
+        var resolved = Resolve(State(force, [], [item]), Map(), specialRules: rules);
+        var idle = Assert.Single(resolved.State.Forces);
+        Assert.Equal(Midland, idle.TerritoryId);
+        Assert.Null(idle.PendingRandomTeleportDestinationId);
+    }
+
+    [Fact]
     public void RandomTeleportPreparesInSecretThenResolvesOnTheFollowingAction()
     {
         var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
@@ -588,6 +719,7 @@ public sealed class ActionResolutionTests
             entry.Kind == PlayLogKind.RandomTeleportPreparing
             && entry.TerritoryId == Midland
             && entry.TargetTerritoryId is null);
+        Assert.DoesNotContain(prepared.State.Log, entry => entry.Kind == PlayLogKind.ResolvedAction);
         Assert.Equal([ActionKind.TeleportRandomly], ActionResolution.EligibleActions(prepared.State, Map(), preparing, UnalignedGroups(), rules));
 
         var resolved = Resolve(
@@ -598,6 +730,11 @@ public sealed class ActionResolutionTests
         Assert.Equal(Eastland, arrived.TerritoryId);
         Assert.Null(arrived.PendingRandomTeleportDestinationId);
         Assert.True(arrived.SpecialActionSucceeded);
+        Assert.Contains(resolved.State.Log, entry =>
+            entry.Kind == PlayLogKind.ResolvedAction
+            && entry.ActionKind == ActionKind.TeleportRandomly
+            && entry.TerritoryId == Midland
+            && entry.TargetTerritoryId == Eastland);
     }
 
     [Fact]
@@ -618,6 +755,7 @@ public sealed class ActionResolutionTests
         Assert.Equal(Midland, teleporter.TerritoryId);
         Assert.Null(teleporter.PendingRandomTeleportDestinationId);
         Assert.False(teleporter.SpecialActionSucceeded);
+        AssertCancelled(resolved.State.Log, pending.Id, ActionKind.TeleportRandomly, PlayerOne, Midland, PlayLogFacts.InterruptEnemy, PlayerTwo, Eastland);
     }
 
     [Fact]
@@ -639,6 +777,11 @@ public sealed class ActionResolutionTests
         Assert.Equal(Eastland, arrived.TerritoryId);
         Assert.True(arrived.SpecialActionSucceeded);
         Assert.Equal(3, arrived.ChosenTeleportCooldownRemaining);
+        Assert.Contains(resolved.State.Log, entry =>
+            entry.Kind == PlayLogKind.ResolvedAction
+            && entry.ActionKind == ActionKind.TeleportToSpecificTerritory
+            && entry.TerritoryId == Midland
+            && entry.TargetTerritoryId == Eastland);
         Assert.DoesNotContain(
             ActionResolution.EligibleActions(resolved.State, Map(), arrived, UnalignedGroups(), rules),
             kind => kind == ActionKind.TeleportToSpecificTerritory);
@@ -667,6 +810,33 @@ public sealed class ActionResolutionTests
         Assert.Equal(Midland, teleporter.TerritoryId);
         Assert.False(teleporter.SpecialActionSucceeded);
         Assert.Equal(3, teleporter.ChosenTeleportCooldownRemaining);
+        AssertCancelled(resolved.State.Log, force.Id, ActionKind.TeleportToSpecificTerritory, PlayerOne, Midland, PlayLogFacts.InterruptEnemy, PlayerTwo, Eastland);
+    }
+
+    [Fact]
+    public void SpecifiedTeleportCancelsWhenAnAllyBackstabsAtTheSource()
+    {
+        var force = new CampaignForce(Guid.NewGuid(), PlayerOne, North, Midland, false);
+        var ally = new CampaignForce(Guid.NewGuid(), PlayerTwo, South, Midland, false);
+        var typeId = Guid.NewGuid();
+        var item = HeldItem(typeId, force.Id);
+        var rules = TeleportRules(typeId, ItemObjectiveEffectKind.TeleportToChosenNonSpawnOncePerRound);
+        var resolved = Resolve(
+            State(
+                [force, ally],
+                [
+                    Submit(force.Id, ActionKind.TeleportToSpecificTerritory, Eastland),
+                    Submit(ally.Id, ActionKind.Backstab, actorUserId: PlayerTwo),
+                ],
+                [item]),
+            Map(),
+            AlliedGroups(),
+            rules);
+
+        var teleporter = Assert.Single(resolved.State.Forces, item => item.Id == force.Id);
+        Assert.Equal(Midland, teleporter.TerritoryId);
+        Assert.False(teleporter.SpecialActionSucceeded);
+        AssertCancelled(resolved.State.Log, force.Id, ActionKind.TeleportToSpecificTerritory, PlayerOne, Midland, PlayLogFacts.InterruptBackstab, PlayerTwo, Midland);
     }
 
     [Fact]
@@ -692,6 +862,27 @@ public sealed class ActionResolutionTests
             entry.Kind == PlayLogKind.ResolvedAction && entry.ActionKind == ActionKind.Move);
         Assert.InRange(dropIndex, 0, moveIndex - 1);
         Assert.Equal(Eastland, Assert.Single(resolved.State.Forces).TerritoryId);
+    }
+
+    private static void AssertCancelled(
+        IReadOnlyList<PlayLogEntry> log,
+        Guid forceId,
+        ActionKind actionKind,
+        Guid actorUserId,
+        Guid sourceTerritoryId,
+        string reason,
+        Guid interrupterUserId,
+        Guid placeTerritoryId)
+    {
+        var cancelled = Assert.Single(log, entry => entry.Kind == PlayLogKind.ActionCancelled && entry.ForceId == forceId);
+        Assert.Equal(actionKind, cancelled.ActionKind);
+        Assert.Equal(actorUserId, cancelled.ActorUserId);
+        Assert.Equal(sourceTerritoryId, cancelled.TerritoryId);
+        Assert.True(PlayLogFacts.TryReadActionCancelled(cancelled.Message, out var readReason, out var readInterrupter, out var readPlace));
+        Assert.Equal(reason, readReason);
+        Assert.Equal(interrupterUserId, readInterrupter);
+        Assert.Equal(placeTerritoryId, readPlace);
+        Assert.DoesNotContain(log, entry => entry.Kind == PlayLogKind.ResolvedAction && entry.ForceId == forceId);
     }
 
     private static (CampaignPlayState State, PlayMap Map) Resolve(
@@ -793,6 +984,15 @@ public sealed class ActionResolutionTests
             isRevealed: true,
             Midland,
             false);
+    }
+
+    private static SpecialRuleContext BloodSatisfies(Guid factionId)
+    {
+        var ruleId = Guid.NewGuid();
+        return new SpecialRuleContext(
+            [new SpecialRuleSetup(ruleId, "Only Blood Satisfies!", "Rule text.", SpecialRuleEffectKeys.OnlyBloodSatisfies)],
+            new Dictionary<Guid, IReadOnlyList<Guid>> { [factionId] = [ruleId] },
+            new Dictionary<(Guid, string), IReadOnlyList<Guid>>());
     }
 
     private static SpecialRuleContext TeleportRules(Guid typeId, ItemObjectiveEffectKind kind)

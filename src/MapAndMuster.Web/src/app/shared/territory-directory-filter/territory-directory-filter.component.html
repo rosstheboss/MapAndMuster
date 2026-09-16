@@ -1,0 +1,183 @@
+<details class="territory-filter">
+  <summary class="territory-filter-heading">Filter</summary>
+  <div class="territory-filter-body">
+    <div class="territory-filter-toolbar">
+      <button type="button" class="territory-filter-action" title="Apply" aria-label="Apply" (click)="applyFilter()">
+        <app-icon name="check" />
+      </button>
+      <button type="button" class="territory-filter-action" title="Clear" aria-label="Clear" (click)="clearFilter()">
+        <app-icon name="x" />
+      </button>
+    </div>
+    <div class="territory-filter-grid">
+      @if (context().factions.length) {
+        <fieldset>
+          <legend>Owner</legend>
+          @for (faction of context().factions; track faction.id) {
+            <label>
+              <input
+                type="checkbox"
+                [checked]="isSelected('ownerFactionIds', faction.id)"
+                (change)="toggle('ownerFactionIds', faction.id)"
+              />
+              {{ faction.name }}
+            </label>
+          }
+        </fieldset>
+      }
+      @if (context().factionTags.length) {
+        <fieldset>
+          <legend>Faction tag</legend>
+          @for (tag of context().factionTags; track tag.id) {
+            <label>
+              <input
+                type="checkbox"
+                [checked]="isSelected('factionTagIds', tag.id)"
+                (change)="toggle('factionTagIds', tag.id)"
+              />
+              {{ tag.name }}
+            </label>
+          }
+        </fieldset>
+      }
+      @if (context().allyGroups.length) {
+        <fieldset>
+          <legend>Ally group</legend>
+          @for (group of context().allyGroups; track group.id) {
+            <label>
+              <input
+                type="checkbox"
+                [checked]="isSelected('allyGroupIds', group.id)"
+                (change)="toggle('allyGroupIds', group.id)"
+              />
+              {{ group.name }}
+            </label>
+          }
+        </fieldset>
+      }
+      <label class="tri-field">
+        Neutral
+        <select [value]="triValue('neutral')" (change)="setTri('neutral', $event)">
+          @for (option of triStates; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="tri-field">
+        Spawn location
+        <select [value]="triValue('spawn')" (change)="setTri('spawn', $event)">
+          @for (option of triStates; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      @if (context().terrainTypes.length) {
+        <fieldset>
+          <legend>Terrain</legend>
+          @for (type of context().terrainTypes; track type.id) {
+            <label>
+              <input
+                type="checkbox"
+                [checked]="isSelected('terrainTypeIds', type.id)"
+                (change)="toggle('terrainTypeIds', type.id)"
+              />
+              {{ type.name }}
+            </label>
+          }
+        </fieldset>
+      }
+      @if (context().terrainTags.length) {
+        <fieldset>
+          <legend>Terrain tag</legend>
+          @for (tag of context().terrainTags; track tag.id) {
+            <label>
+              <input
+                type="checkbox"
+                [checked]="isSelected('terrainTagIds', tag.id)"
+                (change)="toggle('terrainTagIds', tag.id)"
+              />
+              {{ tag.name }}
+            </label>
+          }
+        </fieldset>
+      }
+      @if (context().structures.length) {
+        <fieldset>
+          <legend>Structure</legend>
+          @for (type of context().structures; track type.id) {
+            <label>
+              <input
+                type="checkbox"
+                [checked]="isSelected('structureTypeIds', type.id)"
+                (change)="toggle('structureTypeIds', type.id)"
+              />
+              {{ type.name }}
+            </label>
+          }
+        </fieldset>
+      }
+      @if (context().structureTags.length) {
+        <fieldset>
+          <legend>Structure tag</legend>
+          @for (tag of context().structureTags; track tag.id) {
+            <label>
+              <input
+                type="checkbox"
+                [checked]="isSelected('structureTagIds', tag.id)"
+                (change)="toggle('structureTagIds', tag.id)"
+              />
+              {{ tag.name }}
+            </label>
+          }
+        </fieldset>
+      }
+      <label class="tri-field">
+        Pillaged
+        <select [value]="triValue('pillaged')" (change)="setTri('pillaged', $event)">
+          @for (option of triStates; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="tri-field">
+        Structure exists
+        <select [value]="triValue('hasStructure')" (change)="setTri('hasStructure', $event)">
+          @for (option of triStates; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="tri-field">
+        Occupied
+        <select [value]="triValue('occupied')" (change)="setTri('occupied', $event)">
+          @for (option of triStates; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      @if (itemKeys().length) {
+        <fieldset>
+          <legend>Revealed item</legend>
+          @for (key of itemKeys(); track key) {
+            <label>
+              <input
+                type="checkbox"
+                [checked]="isSelected('revealedItemKeys', key)"
+                (change)="toggle('revealedItemKeys', key)"
+              />
+              {{ key }}
+            </label>
+          }
+        </fieldset>
+      }
+      <label class="tri-field">
+        Adjacent to matching only
+        <select [value]="triValue('adjacent')" (change)="setTri('adjacent', $event)">
+          @for (option of triStates; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+    </div>
+  </div>
+</details>

@@ -105,6 +105,13 @@ public sealed class SpecialRuleContext
         return false;
     }
 
+    /// <summary>Returns whether a held item grants this catalog special rule to the force.</summary>
+    public bool HeldItemHas(CampaignForce force, Guid specialRuleId)
+    {
+        ArgumentNullException.ThrowIfNull(force);
+        return ForceItemRuleIds.TryGetValue(force.Id, out var itemIds) && itemIds.Contains(specialRuleId);
+    }
+
     /// <summary>Configured movement speed for the force before item and Called by the Relic bonuses.</summary>
     public int MovementSpeedFor(CampaignForce force)
     {

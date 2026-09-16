@@ -6,15 +6,15 @@ import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 
-import { AuthService } from '../../core/auth/auth.service';
 import type { OwnProfile } from '../../core/auth/auth.models';
+import { AuthService } from '../../core/auth/auth.service';
+import { MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
 import type { MapPoint } from '../../core/maps/geometry';
 import { OVERLAY_COLOR_MODE_STORAGE_PREFIX } from '../../core/maps/map-editor-preferences';
 import type { MapTerritory } from '../../core/maps/map-graph.models';
 import { serializeMapSvg } from '../../core/maps/map-svg';
 import { STRUCTURE_TYPES } from '../../core/maps/structures';
 import { TERRAIN_TYPES } from '../../core/maps/terrain';
-import { MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
 import { MapEditorPage } from './map-editor.page';
 
 const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -148,7 +148,7 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Show Overlay');
     expect(compiled.textContent).toContain('Show Connections');
     expect(compiled.textContent).toContain('Show names');
-    expect(compiled.querySelector('label[title="Show names (N)"]')).toBeTruthy();
+    expect(compiled.querySelector('label[title="Show Names (N)"]')).toBeTruthy();
     expect(compiled.textContent).toContain('Tools');
     expect(compiled.textContent).toContain('Connections');
     expect(compiled.textContent).toContain('Colors');

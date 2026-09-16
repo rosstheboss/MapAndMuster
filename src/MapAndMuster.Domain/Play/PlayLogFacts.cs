@@ -23,6 +23,12 @@ public static class PlayLogFacts
     /// <summary>Empty allied land claimed without auto-pillage.</summary>
     public const string BetrayalClaim = "claim";
 
+    /// <summary>An enemy occupied the source or destination of an interrupted action.</summary>
+    public const string InterruptEnemy = "enemy";
+
+    /// <summary>An ally backstabbed the acting force at its source territory.</summary>
+    public const string InterruptBackstab = "backstab";
+
     /// <summary>Marks a structure name as destroyed by Pillage.</summary>
     public static string DestroyedStructure(string name)
     {
@@ -90,6 +96,41 @@ public static class PlayLogFacts
             structureName = parts[3];
         }
 
+        return true;
+    }
+
+    /// <summary>Encodes why a committed action was interrupted.</summary>
+    public static string ActionCancelled(string reason, Guid interrupterUserId, Guid placeTerritoryId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        return $"{reason}:{interrupterUserId:N}:{placeTerritoryId:N}";
+    }
+
+    /// <summary>Reads an interruption cause encoded by <see cref="ActionCancelled"/>.</summary>
+    public static bool TryReadActionCancelled(
+        string? message,
+        [NotNullWhen(true)] out string? reason,
+        out Guid interrupterUserId,
+        out Guid placeTerritoryId)
+    {
+        reason = null;
+        interrupterUserId = default;
+        placeTerritoryId = default;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var parts = message.Split(':', 3);
+        if (parts.Length != 3
+            || parts[0] is not (InterruptEnemy or InterruptBackstab)
+            || !Guid.TryParseExact(parts[1], "N", out interrupterUserId)
+            || !Guid.TryParseExact(parts[2], "N", out placeTerritoryId))
+        {
+            return false;
+        }
+
+        reason = parts[0];
         return true;
     }
 }

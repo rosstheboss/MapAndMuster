@@ -932,6 +932,7 @@ public sealed class PlayLogEntry
         or PlayLogKind.MissingOrderHold
         or PlayLogKind.InvalidOrderHold
         or PlayLogKind.ConflictingBuildHold
+        or PlayLogKind.ActionCancelled
         or PlayLogKind.DefaultRetreat
         or PlayLogKind.UnresolvedBattleHeldOpen
         or PlayLogKind.ForcesRejoined;
@@ -1016,6 +1017,54 @@ public sealed class RetreatOrder
 }
 
 /// <summary>
+/// One recorded missed-order offence for a force.
+/// </summary>
+public sealed class DelinquencyOffence
+{
+    /// <summary>
+    /// Initializes an offence record.
+    /// </summary>
+    public DelinquencyOffence(
+        Guid windowId,
+        int roundNumber,
+        int phaseNumber,
+        RoundPhaseKind kind,
+        int kindOrdinal,
+        DateTimeOffset windowEndsUtc,
+        Guid? territoryId)
+    {
+        WindowId = windowId;
+        RoundNumber = roundNumber;
+        PhaseNumber = phaseNumber;
+        Kind = kind;
+        KindOrdinal = kindOrdinal;
+        WindowEndsUtc = windowEndsUtc;
+        TerritoryId = territoryId;
+    }
+
+    /// <summary>Gets the phase window.</summary>
+    public Guid WindowId { get; }
+
+    /// <summary>Gets the 1-based round.</summary>
+    public int RoundNumber { get; }
+
+    /// <summary>Gets the 1-based phase index in the round.</summary>
+    public int PhaseNumber { get; }
+
+    /// <summary>Gets the phase kind.</summary>
+    public RoundPhaseKind Kind { get; }
+
+    /// <summary>Gets the 1-based ordinal of this kind in the round (Action 1, Battle 1).</summary>
+    public int KindOrdinal { get; }
+
+    /// <summary>Gets when that window ended, in UTC.</summary>
+    public DateTimeOffset WindowEndsUtc { get; }
+
+    /// <summary>Gets the force's territory when the offence was recorded.</summary>
+    public Guid? TerritoryId { get; }
+}
+
+/// <summary>
 /// Campaign-lifetime missed-order offences for one force.
 /// </summary>
 public sealed class ForceDelinquency
@@ -1023,10 +1072,11 @@ public sealed class ForceDelinquency
     /// <summary>
     /// Initializes a delinquency count.
     /// </summary>
-    public ForceDelinquency(Guid forceId, int offenceCount)
+    public ForceDelinquency(Guid forceId, int offenceCount, IReadOnlyList<DelinquencyOffence>? offences = null)
     {
         ForceId = forceId;
-        OffenceCount = offenceCount;
+        Offences = offences ?? [];
+        OffenceCount = Math.Max(offenceCount, Offences.Count);
     }
 
     /// <summary>Gets the force.</summary>
@@ -1034,6 +1084,9 @@ public sealed class ForceDelinquency
 
     /// <summary>Gets how many offences this force has accumulated.</summary>
     public int OffenceCount { get; }
+
+    /// <summary>Gets the recorded offences, oldest first.</summary>
+    public IReadOnlyList<DelinquencyOffence> Offences { get; }
 }
 
 /// <summary>

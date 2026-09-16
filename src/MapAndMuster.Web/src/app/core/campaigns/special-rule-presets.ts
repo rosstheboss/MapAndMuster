@@ -38,8 +38,8 @@ export const OLD_WORLD_SPECIAL_RULES: readonly SpecialRulePreset[] = [
     name: 'Only Blood Satisfies!',
     effectKey: 'OnlyBloodSatisfies',
     description:
-      'Khorne, when pillaging, can choose to destroy the structure immediately in a single action. They can also pillage ' +
-      'and destroy allied structures.',
+      'Khorne may Pillage an operational structure normally or Destroy it in one action. Destroying an unpillaged ' +
+      'destructible structure awards double the pillage supply. They can also pillage and destroy allied structures.',
   },
   {
     name: 'Bringers of the Plague',

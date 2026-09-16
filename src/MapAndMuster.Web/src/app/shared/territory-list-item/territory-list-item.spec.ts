@@ -72,6 +72,7 @@ describe('territoryListItemMarks', () => {
   it('uses terrain by default and omits structure and owner when absent', () => {
     expect(marksFor()).toEqual({
       label: 'Coast',
+      forceDots: [],
       terrainSymbol: 'Plains',
       structureSymbol: null,
       structureImageUrl: null,
@@ -91,6 +92,7 @@ describe('territoryListItemMarks', () => {
       }),
     ).toEqual({
       label: 'Coast',
+      forceDots: [],
       terrainSymbol: 'Plains',
       structureSymbol: 'Town',
       structureImageUrl: null,
@@ -121,6 +123,26 @@ describe('TerritoryListItemComponent', () => {
       imports: [TerritoryListItemComponent],
       providers: [provideZonelessChangeDetection()],
     }).compileComponents();
+  });
+
+  it('renders force dots ahead of owner, structure, terrain, then name', () => {
+    const fixture = TestBed.createComponent(TerritoryListItemComponent);
+    fixture.componentRef.setInput('marks', {
+      ...marksFor({
+        structureTypeId: 'town',
+        ownerFactionId: 'north',
+      }),
+      forceDots: [{ color: '#111111' }, { color: '#eeeeee' }],
+    });
+    fixture.detectChanges();
+
+    const button = (fixture.nativeElement as HTMLElement).querySelector('button')!;
+    expect(button.querySelector('.force-dots')).toBe(button.children[0]);
+    expect(button.querySelectorAll('.force-dot')).toHaveLength(2);
+    expect(button.querySelector<HTMLElement>('.force-dot')?.style.background).toBe('rgb(17, 17, 17)');
+    expect(button.querySelector('.owner-flag')).toBeTruthy();
+    expect(button.querySelectorAll('app-map-symbol')).toHaveLength(2);
+    expect(button.querySelector('.item-label')?.textContent.trim()).toBe('Coast');
   });
 
   it('renders owner, structure, terrain, then name inside a bordered row', () => {

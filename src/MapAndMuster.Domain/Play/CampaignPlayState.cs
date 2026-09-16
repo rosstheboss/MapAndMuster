@@ -312,7 +312,8 @@ public sealed class CampaignPlayState
     }
 
     /// <summary>
-    /// Whether the player has committed, or owes no action because every force is locked in battle.
+    /// Whether the player has committed, or owes no action because every force is locked in battle
+    /// or already preparing a random teleport.
     /// </summary>
     public bool IsActionCommitted(Guid windowId, Guid userId)
     {
@@ -322,7 +323,8 @@ public sealed class CampaignPlayState
         }
 
         var mine = Forces.Where(force => force.ControllerUserId == userId).ToArray();
-        return mine.Length > 0 && mine.All(static force => force.InBattle);
+        return mine.Length > 0
+            && mine.All(static force => force.InBattle || force.PendingRandomTeleportDestinationId is not null);
     }
 
     /// <summary>

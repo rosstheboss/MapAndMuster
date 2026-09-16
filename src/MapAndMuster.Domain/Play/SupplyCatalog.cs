@@ -81,6 +81,6 @@ public sealed class SupplyCatalog
 /// Supply values for one structure type.
 /// </summary>
 /// <param name="SupplyPoints">Ongoing map supply while the structure is operational.</param>
-/// <param name="PillageSupplyPoints">Temporary supply awarded when the structure is pillaged.</param>
-/// <param name="DestroySupplyPoints">Temporary supply awarded when the structure is destroyed.</param>
+/// <param name="PillageSupplyPoints">Temporary supply awarded when the structure is pillaged or destroyed.</param>
+/// <param name="DestroySupplyPoints">Catalog destroy value; action-resolution destroy awards pillage supply.</param>
 public sealed record StructureSupplyRules(int SupplyPoints, int PillageSupplyPoints, int DestroySupplyPoints);

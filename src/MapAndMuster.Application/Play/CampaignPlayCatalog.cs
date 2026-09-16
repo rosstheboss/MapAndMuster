@@ -298,11 +298,13 @@ internal static class CampaignPlayCatalog
             .ToArray();
         var factionIds = campaign.Factions.ToDictionary(
             static faction => faction.Id,
-            static faction => (IReadOnlyList<Guid>)faction.SpecialRuleIds);
+            faction => HuntInEstaliaSpecialRuleBinder.FactionRuleIds(faction, campaign.SpecialRules));
         var subfactionIds = new Dictionary<(Guid FactionId, string Subfaction), IReadOnlyList<Guid>>();
         foreach (var faction in campaign.Factions)
         {
-            foreach (var assignment in faction.SubfactionSpecialRules)
+            foreach (var assignment in HuntInEstaliaSpecialRuleBinder.SubfactionRuleAssignments(
+                faction,
+                campaign.SpecialRules))
             {
                 subfactionIds[(faction.Id, assignment.Name)] = assignment.SpecialRuleIds;
             }
