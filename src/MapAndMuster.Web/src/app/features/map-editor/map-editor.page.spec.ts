@@ -147,7 +147,7 @@ describe('MapEditorPage', () => {
     expect(compiled.textContent).toContain('Save Map');
     expect(compiled.textContent).toContain('Show Overlay');
     expect(compiled.textContent).toContain('Show Connections');
-    expect(compiled.textContent).toContain('Show names');
+    expect(compiled.textContent).toContain('Show Names');
     expect(compiled.querySelector('label[title="Show Names (N)"]')).toBeTruthy();
     expect(compiled.textContent).toContain('Tools');
     expect(compiled.textContent).toContain('Connections');
@@ -1540,7 +1540,10 @@ describe('MapEditorPage', () => {
     expect(legend).toBeTruthy();
     expect(legend?.open).toBe(false);
     expect(legend?.textContent).toContain('Ownership tint');
-    expect(legend?.textContent).toContain('Item objective');
+    expect(legend?.textContent).toContain('Spawn location');
+    expect(legend?.textContent).toContain('Force');
+    expect(legend?.textContent).toContain('Selected territory');
+    expect(legend?.textContent).not.toContain('Item objective');
     expect(section?.querySelector('.territory-list')).toBeTruthy();
     expect(sidePane?.children[0]?.tagName.toLowerCase()).toBe('app-map-legend');
     expect(sidePane?.children[1]).toBe(section);

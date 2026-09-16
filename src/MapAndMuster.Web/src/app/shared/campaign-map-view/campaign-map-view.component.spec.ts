@@ -898,10 +898,10 @@ describe('CampaignMapViewComponent', () => {
     expect(filterPanel?.open).toBe(true);
 
     const north = [...compiled.querySelectorAll<HTMLInputElement>('.territory-filter input[type="checkbox"]')].find(
-      (input) => input.closest('label')?.textContent?.includes('North'),
+      (input) => (input.closest('label')?.textContent ?? '').includes('North'),
     );
     const south = [...compiled.querySelectorAll<HTMLInputElement>('.territory-filter input[type="checkbox"]')].find(
-      (input) => input.closest('label')?.textContent?.includes('South'),
+      (input) => (input.closest('label')?.textContent ?? '').includes('South'),
     );
     expect(north?.checked).toBe(true);
     expect(south?.checked).toBe(true);

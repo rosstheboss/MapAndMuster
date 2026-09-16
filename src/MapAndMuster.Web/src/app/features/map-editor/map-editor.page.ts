@@ -392,7 +392,11 @@ export class MapEditorPage {
 
       const buttons = this.territoryList()?.nativeElement.querySelectorAll<HTMLButtonElement>('[data-territory-id]');
       const target = [...(buttons ?? [])].find((button) => button.dataset['territoryId'] === id);
-      target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (!target || typeof target.scrollIntoView !== 'function') {
+        return;
+      }
+
+      target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     });
 
     if (this.campaignId) {
