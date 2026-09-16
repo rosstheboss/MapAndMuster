@@ -3,6 +3,8 @@ using MapAndMuster.Application.Notifications;
 using MapAndMuster.Application.Ports;
 using MapAndMuster.Domain.News;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace MapAndMuster.Infrastructure.Persistence;
 
@@ -90,14 +92,12 @@ public sealed class UserNotificationStore : IUserNotificationStore
             return accepted;
         }
 
-        foreach (var notification in pending)
-        {
-            _dbContext.UserNotifications.Add(ToRecord(notification, utcNow));
-        }
-
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            // One INSERT for the whole fan-out. SaveChanges emits one INSERT per row (or a
+            // small batch of them), so notifying eight members cost more statements than one.
+            await InsertPendingAsync([.. pending.Select(notification => ToRecord(notification, utcNow))], cancellationToken)
+                .ConfigureAwait(false);
             foreach (var notification in pending)
             {
                 accepted.Add(notification.DedupeKey);
@@ -105,7 +105,7 @@ public sealed class UserNotificationStore : IUserNotificationStore
 
             return accepted;
         }
-        catch (DbUpdateException)
+        catch (Exception exception) when (IsUniqueViolation(exception))
         {
             // A concurrent fan-out inserted one of these first. The batch is all-or-nothing, so
             // fall back to per-notice inserts rather than dropping the ones that would have
@@ -169,6 +169,55 @@ public sealed class UserNotificationStore : IUserNotificationStore
             .Where(item => item.UserId == userId && item.ReadUtc == null)
             .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ReadUtc, utcNow), cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task InsertPendingAsync(
+        IReadOnlyList<UserNotificationRecord> records,
+        CancellationToken cancellationToken)
+    {
+        object[] parameters =
+        [
+            ArrayParameter("ids", records.Select(static item => item.Id).ToArray(), NpgsqlDbType.Uuid),
+            ArrayParameter("userIds", records.Select(static item => item.UserId).ToArray(), NpgsqlDbType.Uuid),
+            ArrayParameter("kinds", records.Select(static item => item.Kind).ToArray(), NpgsqlDbType.Text),
+            ArrayParameter("campaignIds", records.Select(static item => item.CampaignId).ToArray(), NpgsqlDbType.Uuid),
+            ArrayParameter("campaignNames", records.Select(static item => item.CampaignName).ToArray(), NpgsqlDbType.Text),
+            ArrayParameter("titles", records.Select(static item => item.Title).ToArray(), NpgsqlDbType.Text),
+            ArrayParameter("bodies", records.Select(static item => item.Body).ToArray(), NpgsqlDbType.Text),
+            ArrayParameter("paths", records.Select(static item => item.Path).ToArray(), NpgsqlDbType.Text),
+            ArrayParameter("dedupeKeys", records.Select(static item => item.DedupeKey).ToArray(), NpgsqlDbType.Text),
+            ArrayParameter("created", records.Select(static item => item.CreatedUtc).ToArray(), NpgsqlDbType.TimestampTz),
+        ];
+
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            """
+            INSERT INTO "UserNotifications" ("Id", "UserId", "Kind", "CampaignId", "CampaignName", "Title", "Body", "Path", "DedupeKey", "CreatedUtc")
+            SELECT * FROM UNNEST(@ids, @userIds, @kinds, @campaignIds, @campaignNames, @titles, @bodies, @paths, @dedupeKeys, @created)
+            """,
+            parameters,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static NpgsqlParameter ArrayParameter<T>(string name, T[] values, NpgsqlDbType elementType)
+    {
+        return new NpgsqlParameter(name, NpgsqlDbType.Array | elementType)
+        {
+            Value = values,
+        };
+    }
+
+    private static bool IsUniqueViolation(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is PostgresException postgres
+                && postgres.SqlState == PostgresErrorCodes.UniqueViolation)
+            {
+                return true;
+            }
+        }
+
+        return exception is DbUpdateException;
     }
 
     private static string DedupeIdentity(Guid userId, string dedupeKey) => $"{userId:N}|{dedupeKey}";

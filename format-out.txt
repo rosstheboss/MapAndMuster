@@ -1,0 +1,55 @@
+The dotnet runtime version is '10.0.12'.
+Formatting code files in workspace 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\MapAndMuster.sln'.
+Loading workspace.
+  Determining projects to restore...
+  Restored C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\src\MapAndMuster.Domain\MapAndMuster.Domain.csproj (in 59 ms).
+  Restored C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\src\MapAndMuster.Application\MapAndMuster.Application.csproj (in 310 ms).
+  Restored C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\tests\MapAndMuster.Backend.UnitTests\MapAndMuster.Backend.UnitTests.csproj (in 312 ms).
+  Restored C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\src\MapAndMuster.Infrastructure\MapAndMuster.Infrastructure.csproj (in 322 ms).
+  Restored C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\src\MapAndMuster.Api\MapAndMuster.Api.csproj (in 322 ms).
+  Restored C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\tests\MapAndMuster.Api.IntegrationTests\MapAndMuster.Api.IntegrationTests.csproj (in 322 ms).
+Project MapAndMuster.Domain is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\.editorconfig'.
+Project MapAndMuster.Domain is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\src\MapAndMuster.Domain\obj\Debug\net10.0\MapAndMuster.Domain.GeneratedMSBuildEditorConfig.editorconfig'.
+Project MapAndMuster.Domain is using configuration from 'C:\Program Files\dotnet\sdk\10.0.401\Sdks\Microsoft.NET.Sdk\analyzers\build\config\analysislevel_10_recommended.globalconfig'.
+Project MapAndMuster.Application is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\.editorconfig'.
+Project MapAndMuster.Application is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\src\MapAndMuster.Application\obj\Debug\net10.0\MapAndMuster.Application.GeneratedMSBuildEditorConfig.editorconfig'.
+Project MapAndMuster.Application is using configuration from 'C:\Program Files\dotnet\sdk\10.0.401\Sdks\Microsoft.NET.Sdk\analyzers\build\config\analysislevel_10_recommended.globalconfig'.
+Project MapAndMuster.Infrastructure is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\.editorconfig'.
+Project MapAndMuster.Infrastructure is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\src\MapAndMuster.Infrastructure\obj\Debug\net10.0\MapAndMuster.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig'.
+Project MapAndMuster.Infrastructure is using configuration from 'C:\Program Files\dotnet\sdk\10.0.401\Sdks\Microsoft.NET.Sdk\analyzers\build\config\analysislevel_10_recommended.globalconfig'.
+Project MapAndMuster.Api is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\.editorconfig'.
+Project MapAndMuster.Api is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\src\MapAndMuster.Api\obj\Debug\net10.0\MapAndMuster.Api.GeneratedMSBuildEditorConfig.editorconfig'.
+Project MapAndMuster.Api is using configuration from 'C:\Program Files\dotnet\sdk\10.0.401\Sdks\Microsoft.NET.Sdk\analyzers\build\config\analysislevel_10_recommended.globalconfig'.
+Project MapAndMuster.Backend.UnitTests is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\.editorconfig'.
+Project MapAndMuster.Backend.UnitTests is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\tests\MapAndMuster.Backend.UnitTests\obj\Debug\net10.0\MapAndMuster.Backend.UnitTests.GeneratedMSBuildEditorConfig.editorconfig'.
+Project MapAndMuster.Backend.UnitTests is using configuration from 'C:\Program Files\dotnet\sdk\10.0.401\Sdks\Microsoft.NET.Sdk\analyzers\build\config\analysislevel_10_recommended.globalconfig'.
+Project MapAndMuster.Api.IntegrationTests is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\.editorconfig'.
+Project MapAndMuster.Api.IntegrationTests is using configuration from 'C:\Users\ross\Documents\Projects\MapAndMuster\MapAndMuster\tests\MapAndMuster.Api.IntegrationTests\obj\Debug\net10.0\MapAndMuster.Api.IntegrationTests.GeneratedMSBuildEditorConfig.editorconfig'.
+Project MapAndMuster.Api.IntegrationTests is using configuration from 'C:\Program Files\dotnet\sdk\10.0.401\Sdks\Microsoft.NET.Sdk\analyzers\build\config\analysislevel_10_recommended.globalconfig'.
+Complete in 3460ms.
+Determining formattable files.
+Complete in 1022ms.
+Running formatters.
+Running Code Style analysis.
+Determining diagnostics...
+Running 12 analyzers on MapAndMuster.Domain.
+Running 12 analyzers on MapAndMuster.Application.
+Running 12 analyzers on MapAndMuster.Infrastructure.
+Running 12 analyzers on MapAndMuster.Api.
+Running 12 analyzers on MapAndMuster.Backend.UnitTests.
+Running 12 analyzers on MapAndMuster.Api.IntegrationTests.
+Complete in 7795ms.
+Analysis complete in 7795ms.
+Running Analyzer Reference analysis.
+Determining diagnostics...
+Running 162 analyzers on MapAndMuster.Domain.
+Running 162 analyzers on MapAndMuster.Application.
+Running 198 analyzers on MapAndMuster.Infrastructure.
+Running 204 analyzers on MapAndMuster.Api.
+Running 218 analyzers on MapAndMuster.Backend.UnitTests.
+Running 233 analyzers on MapAndMuster.Api.IntegrationTests.
+Complete in 8515ms.
+Analysis complete in 8515ms.
+Complete in 17680ms.
+Formatted 0 of 473 files.
+Format complete in 22162ms.

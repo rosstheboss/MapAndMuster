@@ -235,11 +235,13 @@ public sealed class CampaignReadQueryBudgetTests
 internal sealed class EfCommandCounter : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
 {
     private readonly List<IDisposable> _subscriptions = [];
+    private readonly Func<string, bool>? _commandTextFilter;
     private int _count;
     private volatile bool _counting;
 
-    public EfCommandCounter()
+    public EfCommandCounter(Func<string, bool>? commandTextFilter = null)
     {
+        _commandTextFilter = commandTextFilter;
         _subscriptions.Add(DiagnosticListener.AllListeners.Subscribe(this));
     }
 
@@ -270,10 +272,20 @@ internal sealed class EfCommandCounter : IObserver<DiagnosticListener>, IObserve
 
     public void OnNext(KeyValuePair<string, object?> value)
     {
-        if (_counting && string.Equals(value.Key, RelationalEventId.CommandExecuting.Name, StringComparison.Ordinal))
+        if (!_counting || !string.Equals(value.Key, RelationalEventId.CommandExecuting.Name, StringComparison.Ordinal))
         {
-            Interlocked.Increment(ref _count);
+            return;
         }
+
+        if (_commandTextFilter is not null)
+        {
+            if (value.Value is not CommandEventData command || !_commandTextFilter(command.Command.CommandText))
+            {
+                return;
+            }
+        }
+
+        Interlocked.Increment(ref _count);
     }
 
     public void OnCompleted()

@@ -107,7 +107,8 @@ public sealed class StoreQueryShapeTests
         // Warm the query cache first so compilation is not attributed to the measured call.
         await notifications.TryAddManyAsync([Notice(Guid.NewGuid(), $"shape:warm:{run:N}")], DateTimeOffset.UnixEpoch, TestToken);
 
-        using var counter = new EfCommandCounter();
+        using var counter = new EfCommandCounter(static text =>
+            text.Contains("UserNotifications", StringComparison.Ordinal));
         counter.Start();
         var accepted = await notifications.TryAddManyAsync(notices, DateTimeOffset.UnixEpoch, TestToken);
         counter.Stop();
