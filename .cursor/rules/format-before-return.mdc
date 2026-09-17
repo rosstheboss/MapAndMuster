@@ -1,0 +1,16 @@
+---
+description: Run Prettier and lint on edited files before returning
+alwaysApply: true
+---
+
+# Format and lint before returning
+
+Before handing code changes back, run Prettier and the relevant linters
+on every file you edited in that turn (not the full repository suite unless
+asked). Fix any findings before reporting completion.
+
+- Angular/web: `npx prettier --write <files>` then `npx ng lint` and
+  `npx stylelint` for changed CSS.
+- Markdown: `npx prettier --write <files>` when docs changed.
+- C#: `dotnet format` on changed projects when C# changed.
+---
