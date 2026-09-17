@@ -13,7 +13,10 @@
 .map-legend .plain-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding-block: var(--space-1, 0.25rem);
+  padding-inline-end: var(--space-2, 0.5rem);
+  /* Keep marks inside the side pane; rings and glows extend past the 1rem box. */
+  padding-inline-start: var(--space-4, 1rem);
 }
 
 .map-legend li {

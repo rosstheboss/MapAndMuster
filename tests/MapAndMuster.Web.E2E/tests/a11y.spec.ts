@@ -454,6 +454,14 @@ test('campaign map territories are keyboard selectable', async ({ page }) => {
     (element as HTMLDetailsElement).open = true;
   });
   await expect(page.getByText('Ownership tint')).toBeVisible();
+  const legendSwatchInset = await page
+    .locator('.map-legend .legend-swatch')
+    .first()
+    .evaluate((swatch) => {
+      const legend = swatch.closest('.map-legend');
+      return legend ? swatch.getBoundingClientRect().left - legend.getBoundingClientRect().left : 0;
+    });
+  expect(legendSwatchInset).toBeGreaterThanOrEqual(16);
   const mapBodyWithLegend = await mapBody.boundingBox();
   expect(mapBodyWithLegend?.height).toBeCloseTo(mapBodyEmpty!.height, 1);
 
@@ -551,6 +559,14 @@ test('map editor has no axe violations', async ({ page }) => {
     (element as HTMLDetailsElement).open = true;
   });
   await expect(page.getByText('Ownership tint')).toBeVisible();
+  const editorSwatchInset = await page
+    .locator('.side-pane .map-legend .legend-swatch')
+    .first()
+    .evaluate((swatch) => {
+      const legend = swatch.closest('.map-legend');
+      return legend ? swatch.getBoundingClientRect().left - legend.getBoundingClientRect().left : 0;
+    });
+  expect(editorSwatchInset).toBeGreaterThanOrEqual(16);
   const layoutWithLegend = await editorLayout.boundingBox();
   expect(layoutWithLegend?.height).toBeCloseTo(layoutEmpty!.height, 1);
   await expectNoAxeViolations(page);
