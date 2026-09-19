@@ -83,6 +83,19 @@
           </a>
         }
         <span class="nav-user">{{ user.username }}</span>
+        @if (user.isGuestAccount) {
+          <a
+            routerLink="/register"
+            routerLinkActive="is-active"
+            #registerNav="routerLinkActive"
+            [attr.aria-current]="registerNav.isActive ? 'page' : null"
+            class="nav-link"
+            (click)="closeNav()"
+          >
+            <app-icon name="key" />
+            Sign up
+          </a>
+        }
         <button type="button" class="nav-link nav-button" (click)="logout()" [disabled]="loggingOut()">
           <app-icon name="logout" />
           Log out
@@ -106,6 +119,12 @@
   @if (navError()) {
     <p class="nav-error" role="alert">{{ navError() }}</p>
   }
+  @if (auth.currentUser()?.isGuestAccount) {
+    <p class="guest-session-banner" role="status">
+      Previewing as {{ auth.currentUser()?.username }}. You can look around, but nothing is saved.
+      <a routerLink="/register">Sign up</a>
+    </p>
+  }
   @if (auth.currentUser()?.isImpersonating) {
     <p class="impersonation-banner" role="status">
       Testing as
@@ -128,8 +147,11 @@
     </a>
     <nav class="app-footer-links" aria-label="Legal">
       <a routerLink="/privacy">Privacy</a>
+      <a routerLink="/cookies">Cookies</a>
       <a routerLink="/terms">Terms</a>
+      <button type="button" class="footer-text-button" (click)="openCookieSettings()">Cookie settings</button>
     </nav>
   </footer>
 </div>
+<app-cookie-consent-banner />
 <app-form-submit-overlay />

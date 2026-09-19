@@ -48,6 +48,43 @@ describe('AuthService', () => {
     http.verify();
   });
 
+  it('stores the current user after guest login', async () => {
+    const service = TestBed.inject(AuthService);
+    const http = TestBed.inject(HttpTestingController);
+    const loginPromise = service.loginAsGuest();
+    const request = http.expectOne('/api/auth/guest-login');
+    request.flush({
+      id: '22222222-2222-2222-2222-222222222222',
+      email: 'guest1@guests.invalid',
+      username: 'Guest001',
+      firstName: 'Guest',
+      middleInitial: null,
+      lastName: 'Account',
+      suffix: null,
+      city: 'Preview',
+      region: 'Preview',
+      country: 'Preview',
+      displayNameMode: 'Username',
+      timeZoneId: null,
+      hasAvatar: false,
+      createdUtc: '2026-09-19T00:00:00+00:00',
+      updatedUtc: '2026-09-19T00:00:00+00:00',
+      profileRevision: 1,
+      emailConfirmed: true,
+      isAdministrator: false,
+      inAppNotificationsEnabled: false,
+      emailNotificationsEnabled: false,
+      preferredChatLanguage: 'English',
+      isGuestAccount: true,
+      guestAccountNumber: 1,
+    });
+
+    await loginPromise;
+    expect(service.currentUser()?.username).toBe('Guest001');
+    expect(service.currentUser()?.isGuestAccount).toBe(true);
+    http.verify();
+  });
+
   it('starts external login on the configured API origin', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({

@@ -25,6 +25,11 @@ internal static class IdentityFieldErrors
             return new DomainError("email.invalid", "Email address is invalid.", "email");
         }
 
+        if (email.EndsWith("@guests.invalid", StringComparison.OrdinalIgnoreCase))
+        {
+            return new DomainError("email.invalid", "Email address is invalid.", "email");
+        }
+
         return null;
     }
 }

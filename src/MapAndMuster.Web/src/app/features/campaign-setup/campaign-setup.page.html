@@ -5,8 +5,10 @@
     </div>
     <div class="setup-toolbar-actions">
       <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
-      @if (isEdit() && campaignId(); as id) {
-        <a class="button-secondary" [routerLink]="['/campaigns', id, 'map']">Edit map</a>
+      @if (isEdit() || isGuestPreview()) {
+        <a class="button-secondary" [routerLink]="['/campaigns', mapEditorCampaignId(), 'map']">
+          {{ isGuestPreview() ? 'Open map editor' : 'Edit map' }}
+        </a>
       }
       <button type="button" class="button-secondary" (click)="expandAllSections()">Expand All</button>
       <button type="button" class="button-secondary" (click)="collapseAllSections()">Collapse All</button>
@@ -57,14 +59,16 @@
           End campaign
         </button>
       }
-      <button
-        class="button"
-        type="submit"
-        form="campaign-setup-form"
-        [disabled]="saving() || loading() || ending() || (isEdit() && !hasUnsavedChanges())"
-      >
-        {{ isEdit() ? 'Save campaign' : 'Create campaign' }}
-      </button>
+      @if (!isGuestPreview()) {
+        <button
+          class="button"
+          type="submit"
+          form="campaign-setup-form"
+          [disabled]="saving() || loading() || ending() || (isEdit() && !hasUnsavedChanges())"
+        >
+          {{ isEdit() ? 'Save campaign' : 'Create campaign' }}
+        </button>
+      }
       @if (!loading() && requiredRemainingCount() > 0) {
         <p class="muted required-remaining">
           {{ requiredRemainingCount() }} required
@@ -85,6 +89,9 @@
   @if (loading()) {
     <p>Loading campaign…</p>
   } @else {
+    @if (isGuestPreview()) {
+      <app-guest-preview-banner />
+    }
     <div class="setup-body">
       <nav class="setup-index" aria-label="Campaign setup sections">
         <ol>

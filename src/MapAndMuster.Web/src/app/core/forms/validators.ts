@@ -65,7 +65,11 @@ export const reservedUsername: ValidatorFn = (control) => {
     return null;
   }
 
-  return RESERVED_USERNAMES.has(value.toLowerCase()) ? { reservedUsername: true } : null;
+  if (RESERVED_USERNAMES.has(value.toLowerCase()) || /^guest[0-9]+$/i.test(value)) {
+    return { reservedUsername: true };
+  }
+
+  return null;
 };
 
 export function minValue(minimum: number): ValidatorFn {

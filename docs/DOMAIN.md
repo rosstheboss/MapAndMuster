@@ -35,7 +35,9 @@ Other users may see username, location, avatar, and either the username or the f
 according to that preference. Email, created/updated timestamps, time-zone preference, date-and-time display format, and the
 legal name when the owner chose username display are omitted from public queries. Created and
 last-edited times are visible only to the owning user. Light or dark appearance is a client
-preference stored in a cookie so it remains after sign-out; light mode is the default.
+preference stored in a cookie so it remains after sign-out, and only after the visitor accepts
+preference cookies; light mode is the default. Essential cookies authenticate signed-in and
+guest sessions, complete external sign-in, and remember that cookie choice.
 
 A public profile also lists campaigns the viewer may open: publicly viewable campaigns plus
 private campaigns the viewer shares with that player. Scores and rankings are not shown until
@@ -50,6 +52,14 @@ only (never email), cannot change their profile, and cannot use public site chat
 is allowed. Their public display name is always `Test {n}`. On API start, if the privileged
 administrator account is missing, it is created from `Identity:BootstrapAdminPassword` and
 `Identity:BootstrapAdminEmail`.
+
+Guest preview accounts are temporary Identity users named `Guest001`, `Guest002`, and so on.
+The number is the smallest unused value up to a concurrent cap and returns to the pool when the
+guest logs out, the session cookie is removed, or 24 hours have passed on the server clock.
+Real accounts cannot register those handles or the `@guests.invalid` mailbox. Guests may read
+public campaigns and public site chat. They cannot join, chat, save campaigns, change profile
+data, or create or edit presets. Campaign setup and the map editor opened from Your Campaigns
+stay on the device and are never POSTed. Guest public profiles are omitted.
 
 ## Campaign setup
 
@@ -422,7 +432,8 @@ current viewer: configured overlay colors, faction colors, or alliance colors (u
 factions, and factions whose alliance was broken by Backstab in older campaigns, use their faction color). The
 browser stores that highlight mode, which panels were expanded or collapsed, standings sort,
 last chat recipient, and last chat scroll position in a per-campaign cookie (`cv-{campaignId}`,
-Path=/, Max-Age one year, SameSite=Lax), following the same pattern as the color-theme cookie.
+Path=/, Max-Age one year, SameSite=Lax) when the visitor has accepted preference cookies,
+following the same pattern as the color-theme cookie.
 Map zoom (Fit vs a percent) is stored per campaign in `localStorage` under
 `map-view-zoom:{campaignId}`.
 Game state still refreshes from the server; only the viewer's layout is restored.
@@ -536,9 +547,12 @@ default on. When it is on, a window that can resolve closes immediately and the 
 opens with that next window's duration already in effect, not leftover time from the window
 that just ended. Later windows keep their scheduled start and end times so the campaign does
 not finish early. When the checkbox is off, an action window stays open until its deadline even
-if every order is committed, and an idle battle phase stays open so a manager can still inject
-a ringer fight. A battle phase that already has finalized engagements and committed retreats
-still ends. Simultaneous-action resolution runs immediately when an action window closes.
+if every order is committed. A battle phase with no engagements still closes as soon as it
+opens, whether or not the checkbox is on, and the log records that no battles occurred. A
+manager injects a ringer fight while another engagement is already open, not by holding an idle
+battle phase at 0/0. A battle phase that already has finalized engagements and committed
+retreats still ends. Simultaneous-action resolution runs immediately when an action window
+closes.
 
 ## Role and actor model
 
@@ -565,7 +579,7 @@ When staff act for another party, record:
 The final required commitment closes an open window atomically. A player may commit only after every required force that is not in battle and not already waiting to teleport has a saved draft. A force locked into a two-phase teleport is ready without a player draft and is treated as committed when it is the player's only remaining order. Before that instant, a player
 may uncommit a committed order back to draft. At the deadline, the latest valid draft is
 submitted. Missing slots become `Hold`. After the window closes, orders resolve and cannot be
-returned to draft. Loading or mutating play state advances every overdue window in one pass, so a
+returned to draft. Loading campaign metadata or play state, or mutating play, advances every overdue window in one pass, so a
 campaign that sat idle past several deadlines catches up without a reload. Each force requires an action unless it is already in battle; same-player forces that occupy one territory
 rejoin into one surviving force and therefore one later action. A force locked in battle is named in
 Actions with its territory and opponents. Players whose forces all owe no action (locked in battle,
@@ -631,7 +645,7 @@ Player-submittable actions in an open action window are listed in this order:
   Randomly phase locks the force into teleporting (it auto-Holds). After that phase the app
   secretly chooses a Neutral or allied non-spawn territory with no open battle and no enemy
   occupants. The public log records `{player}'s force at {territory} is preparing to teleport
-  to a random location.` The following action phase auto-resolves the teleport to that
+to a random location.` The following action phase auto-resolves the teleport to that
   destination. A friendly force that enters the destination during the teleport does not cancel
   it. During the waiting action phase the force is shown as teleporting, does not need a player
   draft, and can be committed (or is auto-committed when it is the player's only remaining order).
@@ -817,11 +831,10 @@ allowance plus the round bonus, then from the player's temporary pool.
   previous owner remains, that owner's flag stays (the ally is only defending). Otherwise a
   remaining uncontested occupant claims, or remaining opponents start a new battle.
 - A battle phase ends as soon as every engagement is finalized (including surrender) and every
-  required retreat is committed, and also when its "End phase early if able to resolve" checkbox is
-  on and no battles remain for anyone to report. The next window then runs for its own duration
-  rather than leftover time from the battle phase. When the checkbox is off and no battles occurred,
-  the window stays open until its deadline so a manager can still inject a ringer fight. The last
-  retreat or surrender commit that would close the phase early uses the same last-player warning as
+  required retreat is committed, and also as soon as no battles remain for anyone to report,
+  whether or not its "End phase early if able to resolve" checkbox is on. The log then records
+  that no battles occurred. The next window then runs for its own duration rather than leftover
+  time from the battle phase. The last retreat or surrender commit that would close the phase early uses the same last-player warning as
   the last Action-phase commit. The battle-phase commitment count is unique players who have a force
   in a battle this window. A player with two forces in two battles is one of that total and is not
   committed until every one of their battles has an agreed result or a manager/administrator entered
@@ -1248,7 +1261,9 @@ staff see a **May be kicked** badge on that player in Participants; the badge op
 campaign-log entry. Play and participant contracts expose the per-player missed-order count and
 each recorded offence (round, Action/Battle ordinal, window end, and territory). In-progress and
 completed campaign pages show that count next to the participant as `(N delinquencies)`; expanding
-it lists those offences. Offences 1 and 2 still do not write a public Delinquency log fact. The log
+it lists those offences. Offences 1 and 2 still do not write a public Delinquency log fact. GET
+campaign and GET play both persist that catch-up, including missed-order Holds, so Participants
+show the recorded count rather than a stale zero. The log
 has a Delinquency filter in addition to public chat, private chats,
 and the game log.
 
@@ -1310,8 +1325,8 @@ Private objectives are a campaign catalog assigned to a player, a faction, an al
 traitor (a player who successfully resolved Backstab). A player may score each catalog type only
 once. Unrevealed text and criteria are omitted from unauthorized payloads. The campaign page lists the
 viewer's own private objectives at the top of Private objectives and reiterates still-unclaimed
-ones in Summary, including Traitor-held assignments and the viewer's active secret rival, with automatic assignments showing live progress as `(current/required)` next to
-the description and each listed private objective showing its award as `(X CP)`. Other players' claimed or revealed private objectives appear in a collapsed
+ones in Summary, including Traitor-held assignments and the viewer's active secret rival, with still-unclaimed automatic assignments showing live progress as `(current/required)` next to
+the description and each listed private objective showing its award as `(X CP)`. Claimed or revealed automatic assignments omit `(current/required)` because the award already stands even if the holder later loses the qualifying items or holdings. Other players' claimed or revealed private objectives appear in a collapsed
 subpanel ordered by faction name. Unclaimed private objectives for other holders are not listed.
 When rival objectives are enabled, the viewer's secret rival is listed with their private
 objectives and in Summary, showing the rival's name, faction, and subfaction when one is selected,
@@ -1474,7 +1489,7 @@ are stored separately from campaign play logs and never appear in a campaign. Se
 form save: it does not show the saving overlay or the success banner. Failed sends show an error
 on the chat box. The board refreshes while the page is open.
 
-Every signed-in user may post except seeded test accounts. Player messages are public. `@` tags
+Every signed-in user may post except seeded test accounts and guest preview sessions. Player messages are public. `@` tags
 may name any non-test account on the site; unknown usernames are rejected with "You can only tag
 people who have an account on this site." `\@` is a literal `@`. Email-like text is not a tag.
 Mentions notify only tagged people who can see the message. Chat originators and mentions link
@@ -1496,7 +1511,8 @@ Dutch, Italian, Russian, Korean, Chinese, Japanese, Danish, Swedish, Norwegian, 
 and Arabic. New messages default to English unless the composer picks another flag. The viewer
 may hide languages; by default every language is visible. Compose language, language filter
 checkboxes, and the block list sit in a collapsed subpanel below Send. Compose language and
-language filters are stored in a `siteChat` cookie (`Path=/`, Max-Age one year, SameSite=Lax). A
+language filters are stored in a `siteChat` cookie (`Path=/`, Max-Age one year, SameSite=Lax)
+when the visitor has accepted preference cookies. A
 user may also set a default compose language on their profile; that value is used until they
 change language on All Campaigns.
 

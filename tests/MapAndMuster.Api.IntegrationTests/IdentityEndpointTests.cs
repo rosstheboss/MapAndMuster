@@ -446,6 +446,79 @@ public sealed class IdentityEndpointTests
     }
 
     [Fact]
+    public async Task GuestHandleIsReservedForRegistration()
+    {
+        using var client = _factory.CreateClient();
+        using var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            CreateRegisterBody("guestname@example.test", "Guest001"));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.NotNull(body);
+        Assert.Equal("username.reserved", body.Code);
+    }
+
+    [Fact]
+    public async Task GuestLoginAllocatesAReadOnlyPreviewSession()
+    {
+        using var client = _factory.CreateClient();
+        using var login = await client.PostAsJsonAsync("/api/auth/guest-login", new { });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        var profile = await login.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonOptions);
+        Assert.NotNull(profile);
+        Assert.True(profile.IsGuestAccount);
+        Assert.True(profile.GuestAccountNumber is > 0);
+        Assert.StartsWith("Guest", profile.Username, StringComparison.Ordinal);
+        Assert.NotNull(profile.GuestExpiresUtc);
+
+        using var me = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+
+        using var create = await client.PostAsJsonAsync("/api/campaigns", ValidOpenCampaign("Guest War"));
+        Assert.Equal(HttpStatusCode.Forbidden, create.StatusCode);
+        var denied = await create.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.NotNull(denied);
+        Assert.Equal("auth.guest.forbidden", denied.Code);
+
+        using var chat = await client.PostAsJsonAsync("/api/site-chat", new { message = "Hello", language = "English" });
+        Assert.Equal(HttpStatusCode.Forbidden, chat.StatusCode);
+
+        using var listed = await client.GetAsync("/api/campaigns/all");
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+
+        using var logout = await client.PostAsync("/api/auth/logout", null);
+        Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+
+        using var afterLogout = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, afterLogout.StatusCode);
+
+        using var recycled = await client.PostAsJsonAsync("/api/auth/guest-login", new { });
+        Assert.Equal(HttpStatusCode.OK, recycled.StatusCode);
+        var again = await recycled.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonOptions);
+        Assert.NotNull(again);
+        Assert.Equal(profile.Username, again.Username);
+    }
+
+    [Fact]
+    public async Task GuestEmailCannotSignInWithAPassword()
+    {
+        using var guest = _factory.CreateClient();
+        using var login = await guest.PostAsJsonAsync("/api/auth/guest-login", new { });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        var profile = await login.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonOptions);
+        Assert.NotNull(profile);
+
+        using var stranger = _factory.CreateClient();
+        using var passwordLogin = await stranger.PostAsJsonAsync(
+            "/api/auth/login",
+            new { email = profile.Email, password = ValidPassword });
+        Assert.Equal(HttpStatusCode.Unauthorized, passwordLogin.StatusCode);
+
+        using var logout = await guest.PostAsync("/api/auth/logout", null);
+        Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+    }
+
+    [Fact]
     public async Task ChangePasswordRequiresTheCurrentPassword()
     {
         using var client = _factory.CreateClient();

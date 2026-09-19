@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
 using MapAndMuster.Api.Contracts;
@@ -6,6 +7,7 @@ using MapAndMuster.Application.Identity;
 using MapAndMuster.Application.Ports;
 using MapAndMuster.Domain.Identity;
 using MapAndMuster.Infrastructure.Identity;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
@@ -41,6 +43,14 @@ public static class AuthEndpoints
             .Produces<OwnProfileResponse>()
             .Produces<ErrorResponse>(StatusCodes.Status401Unauthorized)
             .Produces<ErrorResponse>(StatusCodes.Status403Forbidden);
+
+        group.MapPost("/guest-login", GuestLoginAsync)
+            .AllowAnonymous()
+            .RequireRateLimiting(IdentityHttp.AuthRateLimitPolicy)
+            .WithName("GuestLogin")
+            .Produces<OwnProfileResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status503ServiceUnavailable);
 
         group.MapPost("/logout", LogoutAsync)
             .RequireAuthorization()
@@ -225,17 +235,19 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> LoginAsync(
+        ClaimsPrincipal principal,
         [FromBody] LoginRequest request,
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
         GetOwnProfileHandler profiles,
         IdentityMaintenance identity,
+        IUserAccountStore accounts,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var user = await userManager.FindByEmailAsync(request.Email).ConfigureAwait(false);
-        if (user is null || user.IsTestAccount)
+        if (user is null || user.IsTestAccount || user.IsGuestAccount)
         {
             return IdentityHttp.Problem(ErrorCodes.InvalidCredentials, "Email or password is incorrect.");
         }
@@ -257,6 +269,11 @@ public static class AuthEndpoints
             return IdentityHttp.Problem(ErrorCodes.InvalidCredentials, "Email or password is incorrect.");
         }
 
+        if (principal.IsGuest() && principal.GetUserId() is { } previousGuest)
+        {
+            await accounts.RecycleGuestAccountAsync(previousGuest, cancellationToken).ConfigureAwait(false);
+        }
+
         await identity.PromoteIfPrivilegedAsync(user).ConfigureAwait(false);
 
         var profile = await profiles.HandleAsync(user.Id, cancellationToken).ConfigureAwait(false);
@@ -270,9 +287,76 @@ public static class AuthEndpoints
             await signInManager.UserManager.IsInRoleAsync(user, IdentityMaintenance.AdministratorRole).ConfigureAwait(false)));
     }
 
-    private static async Task<IResult> LogoutAsync(SignInManager<ApplicationUser> signInManager)
+    private static async Task<IResult> GuestLoginAsync(
+        ClaimsPrincipal principal,
+        SignInManager<ApplicationUser> signInManager,
+        IUserAccountStore accounts,
+        GetOwnProfileHandler profiles,
+        CancellationToken cancellationToken)
     {
+        var existingId = principal.GetUserId();
+        if (existingId is not null && !principal.IsGuest())
+        {
+            return IdentityHttp.Problem(
+                ErrorCodes.GuestForbidden,
+                "Sign out before previewing as a guest.");
+        }
+
+        if (principal.IsGuest() && existingId is not null)
+        {
+            var current = await profiles.HandleAsync(existingId.Value, cancellationToken).ConfigureAwait(false);
+            if (current.IsSuccess && current.Value is not null && current.Value.IsGuestAccount)
+            {
+                return Results.Ok(ProfileResponses.FromAccount(current.Value));
+            }
+        }
+
+        var allocated = await accounts.AllocateGuestAccountAsync(cancellationToken).ConfigureAwait(false);
+        if (!allocated.IsSuccess || allocated.Account is null || allocated.ExpiresUtc is null)
+        {
+            return IdentityHttp.Problem(
+                allocated.ErrorCode ?? ErrorCodes.GuestUnavailable,
+                allocated.Message ?? "Guest preview is unavailable.");
+        }
+
+        var guest = await signInManager.UserManager.FindByIdAsync(allocated.Account.Id.ToString()).ConfigureAwait(false);
+        if (guest is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.GuestUnavailable, "Guest preview is unavailable.");
+        }
+
+        var expires = allocated.ExpiresUtc.Value;
+        await signInManager.SignInWithClaimsAsync(
+                guest,
+                new AuthenticationProperties
+                {
+                    IsPersistent = true,
+                    AllowRefresh = false,
+                    IssuedUtc = expires - GuestAccountCatalog.Lifetime,
+                    ExpiresUtc = expires,
+                },
+                [
+                    new Claim(IdentityHttp.GuestClaimType, "true"),
+                    new Claim(IdentityHttp.GuestExpiresClaimType, expires.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture)),
+                ])
+            .ConfigureAwait(false);
+
+        return Results.Ok(ProfileResponses.FromAccount(allocated.Account));
+    }
+
+    private static async Task<IResult> LogoutAsync(
+        ClaimsPrincipal principal,
+        SignInManager<ApplicationUser> signInManager,
+        IUserAccountStore accounts,
+        CancellationToken cancellationToken)
+    {
+        var guestId = principal.IsGuest() ? principal.GetUserId() : null;
         await signInManager.SignOutAsync().ConfigureAwait(false);
+        if (guestId is not null)
+        {
+            await accounts.RecycleGuestAccountAsync(guestId.Value, cancellationToken).ConfigureAwait(false);
+        }
+
         return Results.NoContent();
     }
 

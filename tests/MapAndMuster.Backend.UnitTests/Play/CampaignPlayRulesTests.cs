@@ -155,6 +155,7 @@ public sealed class CampaignPlayRulesTests
                 && item.entry.Message == "Round 1 — Battle phase began.")
             .index;
         Assert.True(lastResolved < nextPhase);
+        Assert.Contains(closed.State.Log, item => item.Kind == PlayLogKind.NoBattlesOccurred);
         _ = window;
         _ = battle;
     }
@@ -351,6 +352,7 @@ public sealed class CampaignPlayRulesTests
     {
         var (state, map, schedule) = Seeded();
         var northForce = state.Forces.Single(force => force.FactionId == North);
+        var southForce = state.Forces.Single(force => force.FactionId == South);
         Assert.True(CampaignPlayRules.TrySaveDraft(
             state,
             PlayerOne,
@@ -373,6 +375,8 @@ public sealed class CampaignPlayRulesTests
         Assert.DoesNotContain(advanced.State.Log, item => item.Kind == PlayLogKind.ResolvedAction && item.ForceId != northForce.Id && item.ActionKind != ActionKind.Hold);
         Assert.Equal(Midland, advanced.State.Forces.Single(force => force.FactionId == North).TerritoryId);
         Assert.Equal(North, advanced.Map.Territory(Midland)?.OwnerFactionId);
+        Assert.Contains(advanced.State.Delinquencies, item => item.ForceId == southForce.Id && item.OffenceCount == 1);
+        Assert.DoesNotContain(advanced.State.Delinquencies, item => item.ForceId == northForce.Id);
     }
 
     [Fact]
@@ -383,6 +387,22 @@ public sealed class CampaignPlayRulesTests
         Assert.NotEqual(PhaseWindowStatus.Open, advanced.State.Windows[0].Status);
         Assert.True(advanced.State.Windows.Count(window => window.Status == PhaseWindowStatus.Resolved) >= 2);
         Assert.Contains(advanced.State.Log, item => item.Kind == PlayLogKind.MissingOrderHold);
+        Assert.Equal(2, advanced.State.Delinquencies.Count);
+        Assert.All(advanced.State.Delinquencies, item => Assert.Equal(3, item.OffenceCount));
+        Assert.Contains(advanced.State.Log, item => item.Kind == PlayLogKind.NoBattlesOccurred);
+    }
+
+    [Fact]
+    public void TwoMissedActionWindowsRecordTwoOffencesPerForce()
+    {
+        var (state, map, schedule) = Seeded(twoActionWindows: true);
+        var afterBothActions = schedule.StartsUtc.AddMinutes(12);
+        var advanced = CampaignPlayRules.Advance(state, map, schedule, AllyGroups(), afterBothActions);
+        Assert.Equal(2, advanced.State.Delinquencies.Count);
+        Assert.All(advanced.State.Delinquencies, item => Assert.Equal(2, item.OffenceCount));
+        Assert.Contains(advanced.State.Log, item => item.Kind == PlayLogKind.NoBattlesOccurred);
+        Assert.Equal(RoundPhaseKind.Action, advanced.State.CurrentWindow()!.Kind);
+        Assert.Equal(2, advanced.State.CurrentWindow()!.RoundNumber);
     }
 
     [Fact]
@@ -2119,28 +2139,41 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
-    public void IdleBattlePhaseStaysOpenWhenTheCheckboxIsOff()
+    public void IdleEmptyBattlePhaseClosesEvenWhenTheCheckboxIsOff()
     {
-        var (state, map, schedule) = OpenIdleBattlePhase();
-        var now = state.CurrentWindow()!.StartsUtc.AddMinutes(1);
-        var stillOpen = CampaignPlayRules.Advance(state, map, schedule, AllyGroups(), now);
-        Assert.Equal(PhaseWindowStatus.Open, stillOpen.State.CurrentWindow()!.Status);
-        Assert.Equal(RoundPhaseKind.Battle, stillOpen.State.CurrentWindow()!.Kind);
-        Assert.Empty(stillOpen.State.Battles);
+        var (state, map, schedule) = Seeded();
+        state = WithBattleEarlyClose(state, enabled: false);
+        var northForce = state.Forces.Single(force => force.FactionId == North);
+        var southForce = state.Forces.Single(force => force.FactionId == South);
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            state, PlayerOne, northForce.Id, ActionKind.Hold, null, null, map, schedule.StartsUtc, out var northDraft, out _));
+        Assert.True(CampaignPlayRules.TryCommit(northDraft!, map, PlayerOne, AllyGroups(), schedule.StartsUtc, out var afterNorth, out _));
+        Assert.True(CampaignPlayRules.TrySaveDraft(
+            afterNorth!.State, PlayerTwo, southForce.Id, ActionKind.Hold, null, null, map, schedule.StartsUtc, out var southDraft, out _));
+        Assert.True(CampaignPlayRules.TryCommit(southDraft!, map, PlayerTwo, AllyGroups(), schedule.StartsUtc, out var closed, out _));
+        Assert.Equal(PhaseWindowStatus.Resolved, closed!.State.Windows[1].Status);
+        Assert.Equal(RoundPhaseKind.Action, closed.State.CurrentWindow()!.Kind);
+        Assert.Contains(closed.State.Log, item => item.Kind == PlayLogKind.NoBattlesOccurred);
+        Assert.Contains(
+            closed.State.Log,
+            item => item.Kind == PlayLogKind.PhaseChanged && item.Message == "Round 1 — Battle phase began.");
+        var advanced = CampaignPlayRules.Advance(closed.State, closed.Map, schedule, AllyGroups(), closed.State.CurrentWindow()!.StartsUtc.AddMinutes(1));
+        Assert.Equal(RoundPhaseKind.Action, advanced.State.CurrentWindow()!.Kind);
+        Assert.Equal(PhaseWindowStatus.Open, advanced.State.CurrentWindow()!.Status);
     }
 
     [Fact]
     public void RingerBattleFinalizesFromOneReportAndVoidsWhenNobodyReports()
     {
-        var (state, map, schedule) = OpenIdleBattlePhase();
-        var southForce = state.Forces.Single(force => force.FactionId == South);
+        var (state, map, schedule) = OpenBattlePhaseWithIdleForce();
+        var idleForce = state.Forces.Single(force => force.TerritoryId == East);
         var now = state.CurrentWindow()!.StartsUtc.AddMinutes(1);
         Assert.True(
             CampaignPlayRules.TryInjectRingerBattle(
                 state,
                 map,
                 PlayerOne,
-                southForce.Id,
+                idleForce.Id,
                 North,
                 null,
                 playerIsDefender: true,
@@ -2153,25 +2186,25 @@ public sealed class CampaignPlayRulesTests
                 out var injectError),
             injectError?.Code + ": " + injectError?.Message);
         Assert.Contains(injected!.State.Battles, battle => battle.IsRinger);
-        Assert.True(injected.State.Forces.Single(force => force.Id == southForce.Id).InBattle);
+        Assert.True(injected.State.Forces.Single(force => force.Id == idleForce.Id).InBattle);
 
         Assert.True(CampaignPlayRules.TrySubmitBattleResult(
             injected.State,
             PlayerTwo,
             injected.State.Battles.Single(battle => battle.IsRinger).Id,
-            southForce.Id,
+            idleForce.Id,
             false,
             now,
             out var won,
             out _));
         Assert.Equal(BattleStatus.Finalized, won!.State.Battles.Single(battle => battle.IsRinger).Status);
-        Assert.Equal(southForce.Id, won.State.Battles.Single(battle => battle.IsRinger).WinnerForceId);
+        Assert.Equal(idleForce.Id, won.State.Battles.Single(battle => battle.IsRinger).WinnerForceId);
 
         Assert.True(CampaignPlayRules.TryInjectRingerBattle(
             state,
             map,
             PlayerOne,
-            southForce.Id,
+            idleForce.Id,
             North,
             null,
             true,
@@ -2186,13 +2219,13 @@ public sealed class CampaignPlayRulesTests
         var afterDeadline = CampaignPlayRules.Advance(pending.State, map, schedule, AllyGroups(), battleWindow.EndsUtc);
         Assert.DoesNotContain(afterDeadline.State.Battles, battle => battle.IsRinger);
         Assert.Contains(afterDeadline.State.Log, item => item.Kind == PlayLogKind.RingerBattleVoided);
-        Assert.False(afterDeadline.State.Forces.Single(force => force.Id == southForce.Id).InBattle);
+        Assert.False(afterDeadline.State.Forces.Single(force => force.Id == idleForce.Id).InBattle);
     }
 
     [Fact]
     public void RingerBattleCannotTargetTheInitiatingGmPlayerForce()
     {
-        var (state, map, _) = OpenIdleBattlePhase();
+        var (state, map, _) = OpenBattlePhaseWithIdleForce();
         var northForce = state.Forces.Single(force => force.FactionId == North);
         var now = state.CurrentWindow()!.StartsUtc.AddMinutes(1);
         Assert.False(CampaignPlayRules.TryInjectRingerBattle(
@@ -2486,22 +2519,17 @@ public sealed class CampaignPlayRulesTests
         return (state, map);
     }
 
-    private static (CampaignPlayState State, PlayMap Map, CampaignSchedule Schedule) OpenIdleBattlePhase()
+    private static (CampaignPlayState State, PlayMap Map, CampaignSchedule Schedule) OpenBattlePhaseWithIdleForce()
     {
-        var (state, map, schedule) = Seeded();
-        state = WithBattleEarlyClose(state, enabled: false);
-        var northForce = state.Forces.Single(force => force.FactionId == North);
-        var southForce = state.Forces.Single(force => force.FactionId == South);
-        Assert.True(CampaignPlayRules.TrySaveDraft(
-            state, PlayerOne, northForce.Id, ActionKind.Hold, null, null, map, schedule.StartsUtc, out var northDraft, out _));
-        Assert.True(CampaignPlayRules.TryCommit(northDraft!, map, PlayerOne, AllyGroups(), schedule.StartsUtc, out var afterNorth, out _));
-        Assert.True(CampaignPlayRules.TrySaveDraft(
-            afterNorth!.State, PlayerTwo, southForce.Id, ActionKind.Move, Midland, null, map, schedule.StartsUtc, out var southDraft, out _));
-        Assert.True(CampaignPlayRules.TryCommit(southDraft!, map, PlayerTwo, AllyGroups(), schedule.StartsUtc, out var closed, out _));
-        state = closed!.State;
-        map = closed.Map;
+        var map = CreateMapWithEast(adjacentToMidland: true);
+        var (state, seededMap, schedule) = Seeded(map: map);
+        map = seededMap;
+        state = ForceBattle(state, map, schedule);
+        var idle = new CampaignForce(Guid.NewGuid(), PlayerTwo, South, East, false);
+        state = state.With(forces: [.. state.Forces, idle]);
         Assert.Equal(RoundPhaseKind.Battle, state.CurrentWindow()!.Kind);
         Assert.Equal(PhaseWindowStatus.Open, state.CurrentWindow()!.Status);
+        Assert.Contains(state.Battles, battle => battle.Status == BattleStatus.AwaitingResults);
         return (state, map, schedule);
     }
 

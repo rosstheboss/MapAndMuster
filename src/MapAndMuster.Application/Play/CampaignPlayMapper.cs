@@ -129,6 +129,7 @@ internal static class CampaignPlayMapper
             CanChat = membership is not null,
             CanInspectPrivateChat = CampaignChatContext.CanInspectPrivateChat(isAdministrator, viewerUserId, play),
             MentionableMembers = mentionable,
+            Participants = participants,
             ChatChannels = membership is null ? [] : CampaignChatContext.Channels(campaign, viewerUserId, mentionable),
             Status = progress.Status.ToString(),
             CurrentRound = progress.CurrentRound,
@@ -1232,6 +1233,8 @@ internal static class CampaignPlayMapper
                 "The campaign started.",
             PlayLogKind.PhaseChanged =>
                 entry.Message ?? "A new phase began.",
+            PlayLogKind.NoBattlesOccurred =>
+                entry.Message ?? "No battles occurred.",
             PlayLogKind.RivalObjectiveRevealed =>
                 FormatRivalObjectiveRevealed(entry, actor, names),
             PlayLogKind.ScheduleExtended =>

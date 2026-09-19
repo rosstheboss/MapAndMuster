@@ -23,6 +23,7 @@ test('unauthenticated visitors are sent to sign in', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Sign in' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByLabel('Email')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Login as Guest' })).toBeVisible();
 });
 
 test('register page collects profile fields on a phone-sized screen', async ({ page }) => {
@@ -223,4 +224,61 @@ test('home lists notifications newest first with timestamps', async ({ page }) =
   await expect(notices.nth(0).locator('time')).toContainText('August 16, 2026');
   await expect(notices.nth(1).locator('time')).toContainText('August 15, 2026');
   await expect(notices.nth(2).locator('time')).toContainText('August 14, 2026');
+});
+
+test('guest preview reaches home without credentials', async ({ page }) => {
+  const guest = {
+    id: '33333333-3333-3333-3333-333333333333',
+    email: 'guest1@guests.invalid',
+    username: 'Guest001',
+    firstName: 'Guest',
+    middleInitial: null,
+    lastName: 'Account',
+    suffix: null,
+    city: 'Preview',
+    region: 'Preview',
+    country: 'Preview',
+    displayNameMode: 'Username',
+    timeZoneId: null,
+    hasAvatar: false,
+    createdUtc: '2026-09-19T00:00:00+00:00',
+    updatedUtc: '2026-09-19T00:00:00+00:00',
+    profileRevision: 1,
+    emailConfirmed: true,
+    isAdministrator: false,
+    inAppNotificationsEnabled: false,
+    emailNotificationsEnabled: false,
+    preferredChatLanguage: 'English',
+    isGuestAccount: true,
+    guestAccountNumber: 1,
+  };
+
+  await page.route('**/api/auth/external-providers', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/auth/guest-login', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(guest) });
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(guest) });
+  });
+  await page.route('**/api/notifications', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/campaigns', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/news**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ page: 1, totalPages: 0, articles: [], article: null }),
+    });
+  });
+
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Login as Guest' }).click();
+  await expect(page.getByText('Previewing as Guest001')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Sign up' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 });

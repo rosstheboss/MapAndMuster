@@ -1367,6 +1367,39 @@ public sealed class CampaignParticipantResponse
 
     /// <summary>Gets players this member betrayed through Backstab, when they are a traitor.</summary>
     public IReadOnlyList<TraitorVictimResponse> TraitorVictims { get; init; } = [];
+
+    /// <summary>Gets this player's campaign-lifetime missed-order offence count across their forces.</summary>
+    public int DelinquencyCount { get; init; }
+
+    /// <summary>Gets recorded missed-order offences for audit, oldest first.</summary>
+    public IReadOnlyList<ParticipantDelinquencyResponse> Delinquencies { get; init; } = [];
+}
+
+/// <summary>
+/// One missed-order offence shown on Participants.
+/// </summary>
+public sealed class ParticipantDelinquencyResponse
+{
+    /// <summary>Gets the 1-based round.</summary>
+    public required int RoundNumber { get; init; }
+
+    /// <summary>Gets the 1-based phase index in the round.</summary>
+    public required int PhaseNumber { get; init; }
+
+    /// <summary>Gets Action or Battle.</summary>
+    public required string PhaseKind { get; init; }
+
+    /// <summary>Gets the 1-based ordinal of this kind in the round.</summary>
+    public required int KindOrdinal { get; init; }
+
+    /// <summary>Gets when that phase window ended, in UTC.</summary>
+    public required DateTimeOffset WindowEndsUtc { get; init; }
+
+    /// <summary>Gets the force's territory when the offence was recorded.</summary>
+    public Guid? TerritoryId { get; init; }
+
+    /// <summary>Gets the territory name or display number.</summary>
+    public string? TerritoryName { get; init; }
 }
 
 /// <summary>
@@ -2641,6 +2674,65 @@ public static class CampaignResponses
     }
 
     /// <summary>
+    /// Maps one campaign participant, including missed-order offences.
+    /// </summary>
+    /// <param name="participant">The participant.</param>
+    /// <returns>The HTTP response.</returns>
+    public static CampaignParticipantResponse FromParticipant(CampaignParticipantDetail participant)
+    {
+        ArgumentNullException.ThrowIfNull(participant);
+        return new CampaignParticipantResponse
+        {
+            UserId = participant.UserId,
+            Username = participant.Username,
+            DisplayName = participant.DisplayName,
+            IsPlayer = participant.IsPlayer,
+            IsGameMaster = participant.IsGameMaster,
+            IsAdministrator = participant.IsAdministrator,
+            FactionName = participant.FactionName,
+            Subfaction = participant.Subfaction,
+            FactionId = participant.FactionId,
+            FactionColor = participant.FactionColor,
+            HasFlagImage = participant.HasFlagImage,
+            TintFlagImage = participant.TintFlagImage,
+            AllyGroupName = participant.AllyGroupName,
+            CurrentSupplyPoints = participant.CurrentSupplyPoints,
+            TemporarySupplyPoints = participant.TemporarySupplyPoints,
+            MapSupplyPoints = participant.MapSupplyPoints,
+            RoundFreeSupplyPoints = participant.RoundFreeSupplyPoints,
+            MaxArmyPoints = participant.MaxArmyPoints,
+            FreeCharacterCount = participant.FreeCharacterCount,
+            SplitPenaltyPoints = participant.SplitPenaltyPoints,
+            Contributions = FromContributions(participant.Contributions),
+            TraitorVictims =
+            [
+                .. participant.TraitorVictims.Select(static victim => new TraitorVictimResponse
+                {
+                    UserId = victim.UserId,
+                    Username = victim.Username,
+                    DisplayName = victim.DisplayName,
+                    FactionName = victim.FactionName,
+                    Subfaction = victim.Subfaction,
+                }),
+            ],
+            DelinquencyCount = participant.DelinquencyCount,
+            Delinquencies =
+            [
+                .. participant.Delinquencies.Select(static offence => new ParticipantDelinquencyResponse
+                {
+                    RoundNumber = offence.RoundNumber,
+                    PhaseNumber = offence.PhaseNumber,
+                    PhaseKind = offence.PhaseKind,
+                    KindOrdinal = offence.KindOrdinal,
+                    WindowEndsUtc = offence.WindowEndsUtc,
+                    TerritoryId = offence.TerritoryId,
+                    TerritoryName = offence.TerritoryName,
+                }),
+            ],
+        };
+    }
+
+    /// <summary>
     /// Maps a campaign detail. Join password hashes are not present on the source model.
     /// </summary>
     /// <param name="detail">The detail.</param>
@@ -3036,41 +3128,7 @@ public static class CampaignResponses
             CanInspectPrivateChat = detail.CanInspectPrivateChat,
             Participants =
             [
-                .. detail.Participants.Select(static participant => new CampaignParticipantResponse
-                {
-                    UserId = participant.UserId,
-                    Username = participant.Username,
-                    DisplayName = participant.DisplayName,
-                    IsPlayer = participant.IsPlayer,
-                    IsGameMaster = participant.IsGameMaster,
-                    IsAdministrator = participant.IsAdministrator,
-                    FactionName = participant.FactionName,
-                    Subfaction = participant.Subfaction,
-                    FactionId = participant.FactionId,
-                    FactionColor = participant.FactionColor,
-                    HasFlagImage = participant.HasFlagImage,
-                    TintFlagImage = participant.TintFlagImage,
-                    AllyGroupName = participant.AllyGroupName,
-                    CurrentSupplyPoints = participant.CurrentSupplyPoints,
-                    TemporarySupplyPoints = participant.TemporarySupplyPoints,
-                    MapSupplyPoints = participant.MapSupplyPoints,
-                    RoundFreeSupplyPoints = participant.RoundFreeSupplyPoints,
-                    MaxArmyPoints = participant.MaxArmyPoints,
-                    FreeCharacterCount = participant.FreeCharacterCount,
-                    SplitPenaltyPoints = participant.SplitPenaltyPoints,
-                    Contributions = FromContributions(participant.Contributions),
-                    TraitorVictims =
-                    [
-                        .. participant.TraitorVictims.Select(static victim => new TraitorVictimResponse
-                        {
-                            UserId = victim.UserId,
-                            Username = victim.Username,
-                            DisplayName = victim.DisplayName,
-                            FactionName = victim.FactionName,
-                            Subfaction = victim.Subfaction,
-                        }),
-                    ],
-                }),
+                .. detail.Participants.Select(FromParticipant),
             ],
             MentionableMembers =
             [

@@ -53,6 +53,12 @@ public sealed class ChangePasswordHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        var existing = await _accounts.FindByIdAsync(command.UserId, cancellationToken).ConfigureAwait(false);
+        if (existing is { IsGuestAccount: true })
+        {
+            return GuestRestrictions.Deny();
+        }
+
         var errors = new List<DomainError>();
         if (string.IsNullOrEmpty(command.CurrentPassword))
         {

@@ -1,3 +1,4 @@
+import { writeCookieConsent } from '../cookies/cookie-consent';
 import {
   OVERLAY_COLOR_MODE_STORAGE_PREFIX,
   readStoredOverlayColorMode,
@@ -8,6 +9,7 @@ const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 describe('map-editor-preferences', () => {
   beforeEach(() => {
+    writeCookieConsent({ version: 1, preferences: true });
     localStorage.removeItem(OVERLAY_COLOR_MODE_STORAGE_PREFIX + campaignId);
   });
 

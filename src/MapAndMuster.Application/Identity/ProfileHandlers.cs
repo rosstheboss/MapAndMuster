@@ -36,6 +36,12 @@ public sealed class UpdateProfileHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        var existing = await _accounts.FindByIdAsync(command.UserId, cancellationToken).ConfigureAwait(false);
+        if (existing is { IsGuestAccount: true })
+        {
+            return GuestRestrictions.Deny<UserAccount>();
+        }
+
         _ = AccountProfileRules.TryCreate(
             command.Username,
             command.FirstName,
@@ -259,7 +265,7 @@ public sealed class GetPublicProfileHandler
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
 
         var account = await _accounts.FindByUsernameAsync(username, cancellationToken).ConfigureAwait(false);
-        if (account is null)
+        if (account is null || account.IsGuestAccount)
         {
             return OperationResults.Failure<PublicProfile>(ErrorCodes.ProfileNotFound, "The profile was not found.");
         }

@@ -29,7 +29,15 @@ separate response models for public, participant, and staff views.
 - Registration and profile updates require username, first name, last name, city, state or
   province, country, and time zone. Middle initial, suffix, and avatar are optional.
 - Secure, HTTP-only, same-site cookies for the same-origin web application.
-- Secure, HTTP-only, same-site cookies for the same-origin web application.
+- Guest preview allocates a temporary Identity user named `Guest001`, `Guest002`, and so on.
+  Numbers return to the pool on logout, cookie removal, or 24-hour expiry. Guests have no
+  password, cannot post chat, join, save campaigns, or mutate account data. Middleware rejects
+  unsafe HTTP methods except sign-out and converting the session into a real account. Hidden
+  orders, relics, and private campaigns stay omitted for guests the same way they do for any
+  other non-member.
+- Preference cookies (theme, chat filters, campaign layout) are off until the visitor accepts
+  them. Essential cookies authenticate the session, complete external sign-in, and remember the
+  cookie choice. Rejecting non-essential cookies is as easy as accepting them.
 - External providers are optional and configuration-gated. A matching email does not auto-link;
   the player must sign in to the existing verified account.
 - Other users receive only username, location, avatar, the chosen display name, and campaigns

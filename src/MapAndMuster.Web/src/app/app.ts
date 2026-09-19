@@ -4,7 +4,9 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { filter } from 'rxjs';
 
 import { AuthService, readApiError } from './core/auth/auth.service';
+import { CookieConsentService } from './core/cookies/cookie-consent.service';
 import { FormSubmitOverlayService } from './core/forms/form-submit-overlay.service';
+import { CookieConsentBannerComponent } from './shared/cookie-consent-banner/cookie-consent-banner.component';
 import { AppDialogService } from './shared/dialog/dialog.service';
 import { FormSubmitOverlayComponent } from './shared/form-submit-overlay/form-submit-overlay.component';
 import { IconComponent } from './shared/icon/icon.component';
@@ -19,6 +21,7 @@ import { ThemeToggleComponent } from './shared/theme-toggle/theme-toggle.compone
     IconComponent,
     FormSubmitOverlayComponent,
     ThemeToggleComponent,
+    CookieConsentBannerComponent,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -26,6 +29,7 @@ import { ThemeToggleComponent } from './shared/theme-toggle/theme-toggle.compone
 export class App {
   private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
+  protected readonly cookieConsent = inject(CookieConsentService);
   protected readonly submitOverlay = inject(FormSubmitOverlayService);
   protected readonly dialogs = inject(AppDialogService);
   protected readonly loggingOut = signal(false);
@@ -55,6 +59,10 @@ export class App {
 
   protected closeNav(): void {
     this.navOpen.set(false);
+  }
+
+  protected openCookieSettings(): void {
+    this.cookieConsent.openSettings();
   }
 
   protected async logout(): Promise<void> {

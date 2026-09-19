@@ -201,6 +201,16 @@ public sealed class UserAccountStore : IUserAccountStore
             };
         }
 
+        if (user.IsGuestAccount)
+        {
+            return new UpdateProfileOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.GuestForbidden,
+                Message = GuestRestrictions.Message,
+            };
+        }
+
         user.UserName = request.Username.Value;
         user.FirstName = request.Name.FirstName;
         user.MiddleInitial = request.Name.MiddleInitial?.ToString();
@@ -298,7 +308,7 @@ public sealed class UserAccountStore : IUserAccountStore
         cancellationToken.ThrowIfCancellationRequested();
         var users = await _userManager.Users
             .AsNoTracking()
-            .Where(user => !user.IsTestAccount)
+            .Where(user => !user.IsTestAccount && !user.IsGuestAccount)
             .OrderBy(user => user.UserName)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -316,6 +326,7 @@ public sealed class UserAccountStore : IUserAccountStore
         cancellationToken.ThrowIfCancellationRequested();
         var users = await _userManager.Users
             .AsNoTracking()
+            .Where(user => !user.IsGuestAccount)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return [.. users.Select(Map)];
@@ -340,6 +351,16 @@ public sealed class UserAccountStore : IUserAccountStore
                 IsSuccess = false,
                 ErrorCode = ErrorCodes.ProfileNotFound,
                 Message = "The profile was not found.",
+            };
+        }
+
+        if (user.IsGuestAccount)
+        {
+            return new ChangePasswordOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.GuestForbidden,
+                Message = GuestRestrictions.Message,
             };
         }
 
@@ -394,11 +415,12 @@ public sealed class UserAccountStore : IUserAccountStore
         var users = await _userManager.Users
             .AsNoTracking()
             .Where(user =>
-                EF.Functions.ILike(user.UserName!, pattern, "\\")
+                !user.IsGuestAccount
+                && (EF.Functions.ILike(user.UserName!, pattern, "\\")
                 || EF.Functions.ILike(user.FirstName, pattern, "\\")
                 || EF.Functions.ILike(user.LastName, pattern, "\\")
                 || EF.Functions.ILike(user.FirstName + " " + user.LastName, pattern, "\\")
-                || user.IsTestAccount)
+                || user.IsTestAccount))
             .OrderBy(user => user.UserName)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -433,6 +455,170 @@ public sealed class UserAccountStore : IUserAccountStore
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return [.. users.Select(Map)];
+    }
+
+    /// <inheritdoc />
+    public async Task<AllocateGuestAccountOutcome> AllocateGuestAccountAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await RecycleExpiredGuestAccountsAsync(cancellationToken).ConfigureAwait(false);
+
+        const int maxAttempts = 5;
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            var outcome = await TryAllocateGuestAccountAsync(cancellationToken).ConfigureAwait(false);
+            if (outcome.IsSuccess || outcome.ErrorCode != ErrorCodes.ConcurrencyConflict)
+            {
+                return outcome;
+            }
+        }
+
+        return new AllocateGuestAccountOutcome
+        {
+            IsSuccess = false,
+            ErrorCode = ErrorCodes.GuestUnavailable,
+            Message = "Guest preview is busy. Try again in a moment.",
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task RecycleGuestAccountAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var user = await _userManager.FindByIdAsync(userId.ToString()).ConfigureAwait(false);
+        if (user is null || !user.IsGuestAccount)
+        {
+            return;
+        }
+
+        await _userManager.DeleteAsync(user).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task RecycleExpiredGuestAccountsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var now = _clock.UtcNow;
+        var expired = await _userManager.Users
+            .Where(user => user.IsGuestAccount && user.GuestExpiresUtc != null && user.GuestExpiresUtc <= now)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var user in expired)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await _userManager.DeleteAsync(user).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<AllocateGuestAccountOutcome> TryAllocateGuestAccountAsync(CancellationToken cancellationToken)
+    {
+        var used = await _userManager.Users
+            .Where(user => user.IsGuestAccount && user.GuestAccountNumber != null)
+            .Select(user => user.GuestAccountNumber!.Value)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (used.Count >= GuestAccountCatalog.MaxConcurrent)
+        {
+            return new AllocateGuestAccountOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.GuestUnavailable,
+                Message = "Guest preview is at capacity. Try again later.",
+            };
+        }
+
+        var taken = used.ToHashSet();
+        var number = 1;
+        while (taken.Contains(number))
+        {
+            number++;
+        }
+
+        if (!Username.TryCreate(GuestAccountCatalog.Username(number), out var username, out _)
+            || !PersonName.TryCreate("Guest", null, "Account", null, out var name, out _)
+            || !GeographicLocation.TryCreate(
+                GuestAccountCatalog.Location,
+                GuestAccountCatalog.Location,
+                GuestAccountCatalog.Location,
+                out var location,
+                out _))
+        {
+            return new AllocateGuestAccountOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.GuestUnavailable,
+                Message = "Guest preview is unavailable.",
+            };
+        }
+
+        var now = _clock.UtcNow;
+        var expires = now + GuestAccountCatalog.Lifetime;
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            Email = GuestAccountCatalog.Email(number),
+            UserName = username.Value,
+            FirstName = name.FirstName,
+            LastName = name.LastName,
+            City = location.City,
+            Region = location.Region,
+            Country = location.Country,
+            DisplayNameMode = DisplayNameMode.Username,
+            InAppNotificationsEnabled = false,
+            EmailNotificationsEnabled = false,
+            EmailConfirmed = true,
+            PreferredChatLanguage = "English",
+            DateTimeDisplayFormat = DateTimeDisplayFormats.Default,
+            IsGuestAccount = true,
+            GuestAccountNumber = number,
+            GuestExpiresUtc = expires,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ProfileRevision = 1,
+        };
+
+        IdentityResult created;
+        try
+        {
+            created = await _userManager.CreateAsync(user).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            return new AllocateGuestAccountOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.ConcurrencyConflict,
+                Message = "Guest preview is busy. Try again in a moment.",
+            };
+        }
+
+        if (!created.Succeeded)
+        {
+            if (created.Errors.Any(error =>
+                    error.Code.Contains("Duplicate", StringComparison.OrdinalIgnoreCase)))
+            {
+                return new AllocateGuestAccountOutcome
+                {
+                    IsSuccess = false,
+                    ErrorCode = ErrorCodes.ConcurrencyConflict,
+                    Message = "Guest preview is busy. Try again in a moment.",
+                };
+            }
+
+            return new AllocateGuestAccountOutcome
+            {
+                IsSuccess = false,
+                ErrorCode = ErrorCodes.GuestUnavailable,
+                Message = "Guest preview is unavailable.",
+            };
+        }
+
+        return new AllocateGuestAccountOutcome
+        {
+            IsSuccess = true,
+            Account = Map(user),
+            ExpiresUtc = expires,
+        };
     }
 
     private ApplicationUser CreateUser(
@@ -505,6 +691,9 @@ public sealed class UserAccountStore : IUserAccountStore
             DateTimeDisplayFormat = user.DateTimeDisplayFormat,
             IsTestAccount = user.IsTestAccount,
             TestAccountNumber = user.TestAccountNumber,
+            IsGuestAccount = user.IsGuestAccount,
+            GuestAccountNumber = user.GuestAccountNumber,
+            GuestExpiresUtc = user.GuestExpiresUtc,
         };
     }
 

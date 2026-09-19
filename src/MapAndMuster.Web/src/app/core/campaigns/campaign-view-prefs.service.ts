@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 
+import { preferencesAllowed } from '../cookies/cookie-consent';
+
 import type { CampaignPointStanding } from './campaign.models';
 
 export type MapHighlightMode = 'configured' | 'faction' | 'alliance';
@@ -73,6 +75,10 @@ export function readStoredPrefs(campaignId: string): CampaignViewPrefs | null {
 }
 
 export function writeStoredPrefs(campaignId: string, prefs: CampaignViewPrefs): void {
+  if (!preferencesAllowed()) {
+    return;
+  }
+
   document.cookie = `${cookieNameFor(campaignId)}=${encodeURIComponent(JSON.stringify(prefs))}; Path=/; Max-Age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
 }
 

@@ -245,6 +245,45 @@ public sealed class CampaignHandlerTests
     }
 
     [Fact]
+    public async Task GetCampaignAdvancesOverdueWindowsAndExposesDelinquencies()
+    {
+        var campaign = PlayableInProgressCampaign();
+        var store = new FakeCampaignStore { Existing = campaign };
+        var accounts = new FakeAccounts();
+        var clock = new FakeClock(Now.AddDays(7));
+        var get = new GetCampaignHandler(store, clock, accounts);
+
+        var result = await get.HandleAsync(campaign.Id, UserId, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        var participant = Assert.Single(result.Value.Participants, item => item.UserId == UserId);
+        Assert.Equal(2, participant.DelinquencyCount);
+        Assert.Equal(2, participant.Delinquencies.Count);
+        Assert.All(participant.Delinquencies, item => Assert.Equal("Action", item.PhaseKind));
+        Assert.NotNull(store.Existing?.PlayState);
+        Assert.Equal(2, Assert.Single(store.Existing!.PlayState!.Delinquencies).OffenceCount);
+    }
+
+    [Fact]
+    public async Task GetPlayExposesParticipantDelinquenciesAfterCatchUp()
+    {
+        var campaign = PlayableInProgressCampaign();
+        var store = new FakeCampaignStore { Existing = campaign };
+        var accounts = new FakeAccounts();
+        var clock = new FakeClock(Now.AddDays(7));
+        var get = new GetCampaignPlayHandler(store, clock, accounts);
+
+        var result = await get.HandleAsync(campaign.Id, UserId, false, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        var participant = Assert.Single(result.Value.Participants, item => item.UserId == UserId);
+        Assert.Equal(2, participant.DelinquencyCount);
+        Assert.Equal(2, participant.Delinquencies.Count);
+    }
+
+    [Fact]
     public async Task PublicViewerCanReadPlayStateButCannotDraft()
     {
         var campaign = WithCopied(
@@ -1162,14 +1201,17 @@ public sealed class CampaignHandlerTests
 
         var holder = await handler.HandleAsync(campaign.Id, UserId, CancellationToken.None);
         Assert.True(holder.IsSuccess);
-        var holderAssignment = Assert.Single(holder.Value!.PrivateObjectives);
+        var holderAssignment = Assert.Single(holder.Value!.PrivateObjectives, item => item.HolderId == UserId);
         Assert.Equal("Control five territories.", holderAssignment.Description);
         Assert.Equal(2, holderAssignment.CurrentCount);
         Assert.Equal(5, holderAssignment.RequiredCount);
 
         var other = await handler.HandleAsync(campaign.Id, OtherUserId, CancellationToken.None);
         Assert.True(other.IsSuccess);
-        var hidden = Assert.Single(other.Value!.PrivateObjectives);
+        Assert.DoesNotContain(
+            other.Value!.PrivateObjectives,
+            item => item.HolderId == UserId && item.Description is not null);
+        var hidden = Assert.Single(other.Value.PrivateObjectives, item => item.HolderId == UserId);
         Assert.Null(hidden.Name);
         Assert.Null(hidden.Description);
         Assert.Null(hidden.CurrentCount);
@@ -2747,7 +2789,14 @@ public sealed class CampaignHandlerTests
 
     private sealed class FakeClock : IClock
     {
-        public DateTimeOffset UtcNow => Now;
+        private readonly DateTimeOffset _utcNow;
+
+        public FakeClock(DateTimeOffset? utcNow = null)
+        {
+            _utcNow = utcNow ?? Now;
+        }
+
+        public DateTimeOffset UtcNow => _utcNow;
     }
 
     private sealed class FakeNoticeStore : IUserNotificationStore
@@ -3166,12 +3215,27 @@ public sealed class CampaignHandlerTests
                 Phases = Existing.Phases,
                 MapGraph = mapGraph ?? Existing.MapGraph,
                 TerrainTypes = Existing.TerrainTypes,
+                TerrainTags = Existing.TerrainTags,
+                StructureTags = Existing.StructureTags,
+                FactionTags = Existing.FactionTags,
+                MissionTags = Existing.MissionTags,
                 StructureTypes = Existing.StructureTypes,
                 ItemObjectiveTypes = Existing.ItemObjectiveTypes,
                 PublicObjectiveTypes = Existing.PublicObjectiveTypes,
+                SpecialRules = Existing.SpecialRules,
+                StandardBattleResultQuestions = Existing.StandardBattleResultQuestions,
+                Missions = Existing.Missions,
+                ForceStatuses = Existing.ForceStatuses,
+                PrivateObjectiveTypes = Existing.PrivateObjectiveTypes,
+                RivalObjectivesEnabled = Existing.RivalObjectivesEnabled,
+                RivalObjectiveCampaignPoints = Existing.RivalObjectiveCampaignPoints,
                 BattleScoring = Existing.BattleScoring,
                 RankingObjectivePoints = Existing.RankingObjectivePoints,
+                SplitForceSupplyPenaltyPercent = Existing.SplitForceSupplyPenaltyPercent,
+                SplitForceSupplyPenaltyIsPercent = Existing.SplitForceSupplyPenaltyIsPercent,
+                ArmyEscalations = Existing.ArmyEscalations,
                 PlayState = playState,
+                ClosedUtc = Existing.ClosedUtc,
             };
             Updated = Existing;
             return Task.FromResult(new UpdateStoredCampaignOutcome { IsSuccess = true, Campaign = Existing });

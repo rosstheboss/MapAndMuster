@@ -7,6 +7,8 @@ import { App } from './app';
 
 describe('App', () => {
   beforeEach(async () => {
+    document.cookie = 'cookie_consent=; Path=/; Max-Age=0; SameSite=Lax';
+    TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [provideZonelessChangeDetection(), provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -54,7 +56,10 @@ describe('App', () => {
     expect(menu?.getAttribute('aria-expanded')).toBe('false');
     const footerLinks = [...compiled.querySelectorAll('.app-footer-links a')].map((node) => node.textContent.trim());
     expect(footerLinks).toContain('Privacy');
+    expect(footerLinks).toContain('Cookies');
     expect(footerLinks).toContain('Terms');
+    expect(compiled.querySelector('.footer-text-button')?.textContent).toContain('Cookie settings');
+    expect(compiled.querySelector('#cookie-banner-title')?.textContent).toContain('Cookies');
     const signIn = [...(nav?.querySelectorAll('a') ?? [])].find((link) => link.textContent.includes('Sign in'));
     expect(signIn).toBeTruthy();
     expect(signIn?.getAttribute('aria-current')).toBeNull();

@@ -48,5 +48,8 @@ describe('form validators', () => {
 
     const allowed = new FormControl('bobisthebest', { validators: reservedUsername });
     expect(allowed.valid).toBe(true);
+
+    const guestHandle = new FormControl('Guest001', { validators: reservedUsername });
+    expect(guestHandle.hasError('reservedUsername')).toBe(true);
   });
 });

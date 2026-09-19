@@ -65,4 +65,28 @@ public sealed class AccountProfileRulesTests
         Assert.Equal("Halifax, Nova Scotia, Canada", location!.Format());
         Assert.Equal("America/Halifax", timeZone!.Id);
     }
+
+    [Fact]
+    public void RejectsAllocatedGuestHandles()
+    {
+        var created = AccountProfileRules.TryCreate(
+            "Guest001",
+            "Ada",
+            null,
+            "Lovelace",
+            null,
+            "Halifax",
+            "Nova Scotia",
+            "Canada",
+            "America/Halifax",
+            out var username,
+            out _,
+            out _,
+            out _,
+            out var errors);
+
+        Assert.False(created);
+        Assert.Null(username);
+        Assert.Contains(errors, error => error.Code == "username.reserved" && error.Field == "username");
+    }
 }

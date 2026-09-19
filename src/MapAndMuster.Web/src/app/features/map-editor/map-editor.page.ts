@@ -13,9 +13,11 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { readApiErrorMessages } from '../../core/auth/auth.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { GUEST_PREVIEW_CAMPAIGN_ID, GUEST_PREVIEW_MESSAGE } from '../../core/auth/guest-preview';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import type { CampaignDetail, CampaignMission, MapGraphDetail } from '../../core/campaigns/campaign.models';
+import { guestPreviewCampaign } from '../../core/campaigns/guest-preview-campaign';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
@@ -82,6 +84,7 @@ import {
 } from '../../shared/territory-list-item/territory-list-item';
 import { AppDialogComponent } from '../../shared/dialog/dialog.component';
 import { IconComponent, type AppIconName } from '../../shared/icon/icon.component';
+import { GuestPreviewBannerComponent } from '../../shared/guest-preview-banner/guest-preview-banner.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
@@ -104,6 +107,7 @@ export type { OverlayColorMode };
     ConfirmButtonComponent,
     AppDialogComponent,
     SaveCampaignPresetDialogComponent,
+    GuestPreviewBannerComponent,
   ],
   templateUrl: './map-editor.page.html',
   styleUrl: './map-editor.page.css',
@@ -163,6 +167,9 @@ export class MapEditorPage {
 
   protected readonly canManage = computed(() => this.campaign()?.canManage === true);
   protected readonly isAdministrator = computed(() => this.auth.currentUser()?.isAdministrator === true);
+  protected readonly isGuestPreview = computed(
+    () => this.auth.currentUser()?.isGuestAccount === true || this.campaignId === GUEST_PREVIEW_CAMPAIGN_ID,
+  );
   protected readonly canUndo = computed(() => {
     this.historyVersion();
     return this.drawing().length > 0 || this.undoStack.length > 0;
@@ -399,7 +406,10 @@ export class MapEditorPage {
       target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     });
 
-    if (this.campaignId) {
+    if (this.campaignId === GUEST_PREVIEW_CAMPAIGN_ID) {
+      this.campaign.set(guestPreviewCampaign());
+      this.loading.set(false);
+    } else if (this.campaignId) {
       const stored = readStoredOverlayColorMode(this.campaignId);
       if (stored) {
         this.colorMode.set(stored);
@@ -1126,6 +1136,12 @@ export class MapEditorPage {
   }
 
   protected async save(): Promise<boolean> {
+    if (this.isGuestPreview()) {
+      this.saveStatus.set('failure');
+      this.revealErrors([GUEST_PREVIEW_MESSAGE]);
+      return false;
+    }
+
     const campaign = this.campaign();
     if (!campaign || !this.canManage()) {
       return false;

@@ -35,6 +35,9 @@ export interface OwnProfile {
   dateTimeDisplayFormat?: string;
   isTestAccount?: boolean;
   testAccountNumber?: number | null;
+  isGuestAccount?: boolean;
+  guestAccountNumber?: number | null;
+  guestExpiresUtc?: string | null;
   isImpersonating?: boolean;
 }
 

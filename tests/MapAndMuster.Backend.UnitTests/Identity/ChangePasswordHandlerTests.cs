@@ -79,7 +79,21 @@ public sealed class ChangePasswordHandlerTests
 
         public Task<UserAccount?> FindByIdAsync(Guid userId, CancellationToken cancellationToken)
         {
-            throw new NotSupportedException();
+            return Task.FromResult<UserAccount?>(new UserAccount
+            {
+                Id = userId,
+                Email = "ada@example.test",
+                Username = "ada",
+                FirstName = "Ada",
+                LastName = "Lovelace",
+                City = "Halifax",
+                Country = "Canada",
+                DisplayNameMode = MapAndMuster.Domain.Identity.DisplayNameMode.Username,
+                CreatedUtc = DateTimeOffset.UtcNow,
+                UpdatedUtc = DateTimeOffset.UtcNow,
+                ProfileRevision = 1,
+                EmailConfirmed = true,
+            });
         }
 
         public Task<UserAccount?> FindByUsernameAsync(string username, CancellationToken cancellationToken)

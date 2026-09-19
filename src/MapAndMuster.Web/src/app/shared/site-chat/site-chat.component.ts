@@ -24,7 +24,7 @@ import {
 })
 export class SiteChatComponent {
   private readonly router = inject(Router);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
   readonly messages = input<readonly SiteChatMessage[]>([]);
   readonly members = input<readonly SiteChatMember[]>([]);
   readonly blockedUsers = input<readonly SiteChatMember[]>([]);
@@ -214,7 +214,7 @@ export class SiteChatComponent {
 
   protected canBlock(message: SiteChatMessage): boolean {
     const viewer = this.viewerUserId();
-    return !!viewer && message.authorUserId !== viewer;
+    return !!viewer && message.authorUserId !== viewer && this.auth.currentUser()?.isGuestAccount !== true;
   }
 
   protected isBlocked(userId: string): boolean {

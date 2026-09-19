@@ -89,6 +89,12 @@ public static class ErrorCodes
     /// <summary>The caller cannot impersonate or stop impersonation.</summary>
     public const string ImpersonationForbidden = "auth.impersonation.forbidden";
 
+    /// <summary>A guest preview session attempted a mutation or a real-account-only action.</summary>
+    public const string GuestForbidden = "auth.guest.forbidden";
+
+    /// <summary>No guest number could be allocated, usually because the concurrent cap was reached.</summary>
+    public const string GuestUnavailable = "auth.guest.unavailable";
+
     /// <summary>The campaign has launched and the requested setup field is locked.</summary>
     public const string CampaignLocked = "campaign.locked";
 

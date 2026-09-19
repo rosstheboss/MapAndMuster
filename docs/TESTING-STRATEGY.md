@@ -20,8 +20,9 @@ Required early suites:
   A force waiting to teleport does not need a player draft and is auto-committed when it is the
   player's only remaining order. Retreat commit and uncommit while the applying battle window is open, last-commit early battle
   close when every result, surrender, and required retreat is committed even if the Battle-phase
-  early-close checkbox is off, idle battle windows staying open for a ringer when that checkbox is
-  off, auto-commit of a sole legal retreat destination including spawn, deadline use of an
+  early-close checkbox is off, idle empty battle windows closing immediately with a no-battles
+  log fact even when that checkbox is off (ringer injection still requires an already-open
+  engagement), auto-commit of a sole legal retreat destination including spawn, deadline use of an
   uncommitted retreat draft, and default spawn when no retreat exists. Surrender commit and
   uncommit while the current window remains open; uncommitting restores the engagement so the
   opponent does not keep maximum differential battle points.
@@ -44,7 +45,7 @@ Required early suites:
   subfaction union, Water replacing the former water-feature flag). Private and public objective tag
   filters.
 - Public/private objective visibility, completion, manager approval of private claims, automatic
-  private-objective scoring and live `(current/required)` progress for authorized holders, and launch
+  private-objective scoring and live `(current/required)` progress for authorized holders of still-unclaimed automatic assignments (omitted after claim or reveal), and launch
   assignment (unique draws per holder-kind pool, then reshuffled duplicates until every holder in a
   non-empty pool has an independent assignment; required subfactions are separate faction holders).
   Player-held automatic progress counts only that player's credited holdings. Private-objective exclude lists skip named factions
@@ -128,7 +129,7 @@ Cover components/services for:
   Debug) without hit targets, spawn ownership copy, required-
   subfaction spawn labels, disabled no-fixed-spawn factions, save-status check and X, and metadata forms.
   Map pinch-zoom and two-finger pan, full-screen toggle (M), map-image loading ellipsis, and force
-  markers staying inside their territory are covered in map-view tests.   Force pins glow white.
+  markers staying inside their territory are covered in map-view tests. Force pins glow white.
   A force waiting to teleport, or with a committed teleport this phase, glows `#4b006e` at twice
   that intensity. Conduits of Power force pins adjacent to a still-hidden relic keep that nearby notice. Own-force
   pins show a green-and-white check emblem half the pin's size, centered on the circular pin's
@@ -201,14 +202,16 @@ Cover components/services for:
 - Password fields include a show/hide toggle that restores `type=password`.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
 - Campaign log display, member chat including typable recipient autocomplete and public/private/game-log/delinquency filters, live log refresh, chat send errors without the save success
-  banner, `@` mention autocomplete limited to current members, clickable originator and mention names, bold campaign start/round/phase/end entries, resolved actions of a closed phase appearing before the next round/phase heading, action-phase resolution facts grouped by owning player then battle locks, battle-phase results before retreats, interrupted teleports logged as cancelled with a reason, and manager or administrator download of public chat and/or game-log facts as text or CSV.
+  banner, `@` mention autocomplete limited to current members, clickable originator and mention names, bold campaign start/round/phase/no-battles/end entries, resolved actions of a closed phase appearing before the next round/phase heading, action-phase resolution facts grouped by owning player then battle locks, battle-phase results before retreats, interrupted teleports logged as cancelled with a reason, and manager or administrator download of public chat and/or game-log facts as text or CSV.
 - Battles panel collapse, a top-of-panel list of who still needs to commit a result or retreat,
   required army-points and supply-costing fields for the inputting player,
   Awaiting Retreat Order while a committed retreat is still owed, and retreat and surrender
   commit/uncommit on the map toolbar matching Action-phase commit. Surrender may be uncommitted
   while the current window remains open.
 - Public site chat on All Campaigns, including language filters, block toggles, administrator compose with bold announcement text, and cookie-stored language preferences.
-- Participants panel names, factions, and Manager/Player/Admin roles, including manager add/search/kick, staff faction assignment, a May be kicked badge that opens the delinquency log entry, and on in-progress or completed campaigns a collapsed `(N delinquencies)` audit of round, phase, window end, and territory.
+- Guest preview login (`GuestXXX`, 24-hour recycled sessions), read-only public chat and public campaigns, local campaign setup/map preview that never POSTs, and Sign up from the main menu.
+- Cookie banner with accept, reject non-essential, and settings; preference cookies stay off until accepted. Playwright sets a default consent cookie so existing flows keep a clean page.
+- Participants panel names, factions, and Manager/Player/Admin roles, including manager add/search/kick, staff faction assignment, a May be kicked badge that opens the delinquency log entry, and on in-progress or completed campaigns a collapsed `(N delinquencies)` audit of round, phase, window end, and territory that refreshes from play after overdue windows catch up.
 - Administrator test-users page (filter, Currently testing chip) and the impersonation banner with Return to admin.
 - Public profile campaign list, scores placeholder, and Back to the previous in-app screen.
 - Home notification board, including "No new notifications.", dismiss and dismiss all, five

@@ -1,12 +1,17 @@
 <section class="page">
   <h1>Your profile</h1>
+  @if (isGuest()) {
+    <app-guest-preview-banner />
+  }
   @if (loading()) {
     <p>Loading profile…</p>
   } @else {
     @if (username(); as name) {
-      <div class="actions">
-        <a class="button-secondary" [routerLink]="['/users', name]">View public profile</a>
-      </div>
+      @if (!isGuest()) {
+        <div class="actions">
+          <a class="button-secondary" [routerLink]="['/users', name]">View public profile</a>
+        </div>
+      }
     }
     <form class="panel stack" [formGroup]="form" (ngSubmit)="save()" novalidate>
       @if (errorMessages().length > 0 || successMessage()) {
@@ -199,7 +204,9 @@
       <p class="muted">Created {{ createdUtc() | instantDate: timeZoneValue() : dateTimeFormatValue() }}</p>
       <p class="muted">Last edited {{ updatedUtc() | instantDate: timeZoneValue() : dateTimeFormatValue() }}</p>
       <div class="actions form-sticky-actions">
-        <button class="button" type="submit" [disabled]="saving()">Save changes</button>
+        @if (!isGuest()) {
+          <button class="button" type="submit" [disabled]="saving()">Save changes</button>
+        }
       </div>
     </form>
   }

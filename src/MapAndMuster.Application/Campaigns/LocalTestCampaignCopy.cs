@@ -221,7 +221,7 @@ public static class LocalTestCampaignCopy
                     Kind = nameof(RoundPhaseKind.Battle),
                     DurationAmount = BattleMinutes,
                     DurationUnit = nameof(DurationUnit.Minutes),
-                    EndPhaseEarlyIfAble = false,
+                    EndPhaseEarlyIfAble = true,
                 },
             ],
             MapGraph = duplicated.MapGraph,

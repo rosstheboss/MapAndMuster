@@ -118,4 +118,13 @@ public sealed class UserAccount
 
     /// <summary>Gets the test-account number when this is a seeded test user.</summary>
     public int? TestAccountNumber { get; init; }
+
+    /// <summary>Gets whether this is a temporary guest preview session.</summary>
+    public bool IsGuestAccount { get; init; }
+
+    /// <summary>Gets the recycled guest number when this is a guest session.</summary>
+    public int? GuestAccountNumber { get; init; }
+
+    /// <summary>Gets when the guest session must end, in UTC.</summary>
+    public DateTimeOffset? GuestExpiresUtc { get; init; }
 }

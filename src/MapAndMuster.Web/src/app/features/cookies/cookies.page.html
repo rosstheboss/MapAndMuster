@@ -1,0 +1,37 @@
+<section class="page">
+  <h1>Cookies</h1>
+  <p>
+    This notice describes cookies and similar storage used by Map &amp; Muster. It is written for visitors in the United
+    Kingdom, the European Union, Canada, Australia, and New Zealand. You can accept all cookies, reject non-essential
+    cookies, or change that choice later from this page’s banner controls in the site footer.
+  </p>
+
+  <h2>Essential cookies</h2>
+  <p>
+    These are required to operate the site and do not need prior consent under UK PECR, EU ePrivacy, or equivalent
+    rules. They authenticate a signed-in or guest session (<code>mapandmuster.auth</code>), complete external sign-in
+    (<code>campaign.external</code>), and remember your cookie choice (<code>cookie_consent</code>). Guest preview also
+    uses the essential session cookie and ends after 24 hours, when you log out, or when that cookie is removed.
+  </p>
+
+  <h2>Preference cookies</h2>
+  <p>
+    These remember display choices: light or dark theme (<code>theme</code>), public chat language filters
+    (<code>siteChat</code>), and per-campaign map and panel layout (<code>cv-*</code>). The map editor may also store
+    overlay color mode in local storage. Preference storage is off until you accept it. Rejecting non-essential cookies
+    still lets you use the site, including guest preview and sign-in.
+  </p>
+
+  <h2>Your choices</h2>
+  <p>
+    Accept all turns preference storage on. Reject non-essential keeps only essential cookies and deletes stored
+    preferences. Cookie settings lets you change that later. We do not use advertising or analytics cookies. See
+    <a routerLink="/privacy">Privacy</a>
+    for account data.
+  </p>
+  <div class="actions">
+    <button type="button" class="button-secondary" (click)="consent.rejectNonEssential()">Reject non-essential</button>
+    <button type="button" class="button-secondary" (click)="consent.openSettings()">Cookie settings</button>
+    <button type="button" class="button" (click)="consent.acceptAll()">Accept all</button>
+  </div>
+</section>

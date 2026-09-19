@@ -45,6 +45,15 @@ export class AuthService {
     return profile;
   }
 
+  async loginAsGuest(): Promise<OwnProfile> {
+    const profile = await firstValueFrom(
+      this.http.post<OwnProfile>('/api/auth/guest-login', {}, { withCredentials: true }),
+    );
+    this.currentUser.set(profile);
+    this.sessionChecked.set(true);
+    return profile;
+  }
+
   async register(payload: RegisterPayload): Promise<void> {
     if (payload.avatar) {
       const form = new FormData();

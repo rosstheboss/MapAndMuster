@@ -53,7 +53,14 @@ public sealed class GetSiteChatHandler
         var preferred = ChatLanguages.TryParse(account.PreferredChatLanguage, out _, out var language)
             ? language.ToString()
             : ChatLanguages.Default.ToString();
-        return SiteChatMapper.ToBoard(messages, members, blocks, account.Id, isAdministrator, preferred);
+        return SiteChatMapper.ToBoard(
+            messages,
+            members,
+            blocks,
+            account.Id,
+            isAdministrator,
+            preferred,
+            canChat: !account.IsTestAccount && !account.IsGuestAccount);
     }
 }
 
@@ -109,6 +116,11 @@ public sealed class PostSiteChatHandler
             return OperationResults.Failure<SiteChatBoard>(
                 "sitechat.test_account",
                 "Test accounts cannot use public site chat.");
+        }
+
+        if (account.IsGuestAccount)
+        {
+            return GuestRestrictions.Deny<SiteChatBoard>();
         }
 
         var members = await SiteChatMembers.LoadAsync(_accounts, cancellationToken).ConfigureAwait(false);
@@ -168,6 +180,11 @@ public sealed class SetSiteChatBlockHandler
         if (account is null)
         {
             return OperationResults.Failure<SiteChatBoard>(ErrorCodes.ProfileNotFound, "The profile was not found.");
+        }
+
+        if (account.IsGuestAccount)
+        {
+            return GuestRestrictions.Deny<SiteChatBoard>();
         }
 
         var members = await SiteChatMembers.LoadAsync(_accounts, cancellationToken).ConfigureAwait(false);

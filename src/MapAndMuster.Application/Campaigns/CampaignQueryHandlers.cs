@@ -71,19 +71,22 @@ public sealed class ListDiscoverableCampaignsHandler
     /// </summary>
     /// <param name="userId">The authenticated user identifier.</param>
     /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <param name="isGuestAccount">Whether the caller is a temporary guest preview session.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The campaign list.</returns>
     public async Task<OperationResult<IReadOnlyList<CampaignListItem>>> HandleAsync(
         Guid userId,
         bool isAdministrator,
+        bool isGuestAccount,
         CancellationToken cancellationToken)
     {
         var utcNow = _clock.UtcNow;
         var campaigns = await _campaigns.ListDiscoverableAsync(userId, isAdministrator, utcNow, cancellationToken)
             .ConfigureAwait(false);
         var items = campaigns
+            .Where(campaign => !isGuestAccount || campaign.IsPubliclyViewable)
             .Where(campaign => CampaignAccess.CanList(campaign, userId, isAdministrator, utcNow))
-            .Select(campaign => CampaignMapper.ToListItem(campaign, userId, utcNow, isAdministrator))
+            .Select(campaign => CampaignMapper.ToListItem(campaign, userId, utcNow, isAdministrator, isGuestAccount))
             .ToArray();
         return OperationResults.Success<IReadOnlyList<CampaignListItem>>(items);
     }
@@ -97,6 +100,7 @@ public sealed class GetCampaignHandler
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
     private readonly IUserAccountStore _accounts;
+    private readonly CampaignNotificationPublisher? _notifications;
 
     /// <summary>
     /// Initializes a new handler.
@@ -104,7 +108,12 @@ public sealed class GetCampaignHandler
     /// <param name="campaigns">The campaign store.</param>
     /// <param name="clock">The clock.</param>
     /// <param name="accounts">The user account store.</param>
-    public GetCampaignHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore accounts)
+    /// <param name="notifications">Notification publisher, when configured.</param>
+    public GetCampaignHandler(
+        ICampaignStore campaigns,
+        IClock clock,
+        IUserAccountStore accounts,
+        CampaignNotificationPublisher? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
@@ -112,10 +121,12 @@ public sealed class GetCampaignHandler
         _campaigns = campaigns;
         _clock = clock;
         _accounts = accounts;
+        _notifications = notifications;
     }
 
     /// <summary>
-    /// Returns campaign metadata for a member. Non-members receive not-found.
+    /// Returns campaign metadata for a member. Non-members receive not-found. Started campaigns
+    /// catch up overdue windows first so Participants include recorded missed-order offences.
     /// </summary>
     /// <param name="campaignId">The campaign identifier.</param>
     /// <param name="userId">The authenticated user identifier.</param>
@@ -132,6 +143,35 @@ public sealed class GetCampaignHandler
         if (campaign is null || !CampaignAccess.CanView(campaign, userId, isAdministrator))
         {
             return OperationResults.Failure<CampaignDetail>(ErrorCodes.CampaignNotFound, "The campaign was not found.");
+        }
+
+        if (campaign.ClosedUtc is null && CampaignLifecycle.HasLaunched(campaign, _clock.UtcNow))
+        {
+            var loaded = await CampaignPlayPipeline.LoadAsync(
+                    _campaigns,
+                    _clock,
+                    campaignId,
+                    userId,
+                    isAdministrator,
+                    cancellationToken,
+                    _accounts)
+                .ConfigureAwait(false);
+            if (loaded.IsSuccess && loaded.Campaign is not null)
+            {
+                var persisted = await CampaignPlayPipeline
+                    .PersistIfChangedAsync(_campaigns, loaded, cancellationToken)
+                    .ConfigureAwait(false);
+                if (persisted.IsSuccess && persisted.Campaign is not null)
+                {
+                    campaign = persisted.Campaign;
+                    if (_notifications is not null && loaded.Changed && loaded.Previous is not null)
+                    {
+                        await _notifications
+                            .PublishPlayAdvanceAsync(loaded.Previous, persisted.Campaign, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                }
+            }
         }
 
         var accountContext = await CampaignPlayMapper.ResolveAccountsAsync(campaign, _accounts, cancellationToken)

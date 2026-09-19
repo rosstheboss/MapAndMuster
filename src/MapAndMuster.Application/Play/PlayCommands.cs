@@ -402,6 +402,9 @@ public sealed class CampaignPlayDetail
     /// <summary>Gets current members who may be tagged in chat.</summary>
     public required IReadOnlyList<Campaigns.CampaignLogMemberDetail> MentionableMembers { get; init; }
 
+    /// <summary>Gets members attached to the campaign, including missed-order offences.</summary>
+    public IReadOnlyList<Campaigns.CampaignParticipantDetail> Participants { get; init; } = [];
+
     /// <summary>Gets compose targets: public, members, factions, and ally groups.</summary>
     public IReadOnlyList<Campaigns.ChatChannelDetail> ChatChannels { get; init; } = [];
 

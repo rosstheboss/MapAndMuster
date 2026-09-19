@@ -29,6 +29,7 @@ describe('LoginPage', () => {
     expect(compiled.querySelector('#password')?.getAttribute('type')).toBe('password');
     expect(compiled.querySelector('[aria-label="Show password"]')).toBeTruthy();
     expect(compiled.querySelector('button[type="submit"]')?.textContent).toContain('Sign in');
+    expect(compiled.textContent).toContain('Login as Guest');
     http.verify();
   });
 

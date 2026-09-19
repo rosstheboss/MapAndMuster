@@ -11,6 +11,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
 import type { MapPoint } from '../../core/maps/geometry';
 import { OVERLAY_COLOR_MODE_STORAGE_PREFIX } from '../../core/maps/map-editor-preferences';
+import { writeCookieConsent } from '../../core/cookies/cookie-consent';
 import type { MapTerritory } from '../../core/maps/map-graph.models';
 import { serializeMapSvg } from '../../core/maps/map-svg';
 import { STRUCTURE_TYPES } from '../../core/maps/structures';
@@ -1162,6 +1163,7 @@ describe('MapEditorPage', () => {
   });
 
   it('restores the last overlay color mode for the campaign without recoloring', async () => {
+    writeCookieConsent({ version: 1, preferences: true });
     const fixture = TestBed.createComponent(MapEditorPage);
     const http = TestBed.inject(HttpTestingController);
     const graph = {

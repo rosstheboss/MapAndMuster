@@ -235,6 +235,9 @@ public enum PlayLogKind
 
     /// <summary>A committed action was interrupted during resolution and did not complete.</summary>
     ActionCancelled = 42,
+
+    /// <summary>A battle phase closed because no engagements were waiting.</summary>
+    NoBattlesOccurred = 43,
 }
 
 /// <summary>

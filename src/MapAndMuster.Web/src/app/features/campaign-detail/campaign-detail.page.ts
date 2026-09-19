@@ -2561,6 +2561,7 @@ export class CampaignDetailPage {
 
   protected privateObjectiveProgress(assignment: PrivateObjectiveAssignment): string | null {
     if (
+      assignment.status !== 'Assigned' ||
       assignment.scoringKind !== 'Automatic' ||
       assignment.currentCount === null ||
       assignment.currentCount === undefined ||
@@ -4481,6 +4482,7 @@ export class CampaignDetailPage {
             mentionableMembers: play.mentionableMembers,
             chatChannels: play.chatChannels,
             log: play.log,
+            participants: play.participants ?? current.participants,
             standings: play.standings ?? current.standings,
             publicObjectiveLeaderboards: play.publicObjectiveLeaderboards ?? current.publicObjectiveLeaderboards,
             brokenAllyFactionIds: play.brokenAllyFactionIds ?? current.brokenAllyFactionIds,

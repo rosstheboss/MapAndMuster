@@ -99,6 +99,47 @@ public sealed class PhaseDeadlineAdvanceTests
         Assert.Equal(created.Revision, after.Revision);
     }
 
+    [Fact]
+    public void ParticipantHttpContractIncludesDelinquencyFields()
+    {
+        var mapped = CampaignResponses.FromParticipant(new Application.Campaigns.CampaignParticipantDetail
+        {
+            UserId = Guid.NewGuid(),
+            Username = "northplayer",
+            DisplayName = "northplayer",
+            IsPlayer = true,
+            IsGameMaster = false,
+            IsAdministrator = false,
+            DelinquencyCount = 2,
+            Delinquencies =
+            [
+                new Application.Campaigns.ParticipantDelinquencyDetail
+                {
+                    RoundNumber = 1,
+                    PhaseNumber = 1,
+                    PhaseKind = "Action",
+                    KindOrdinal = 1,
+                    WindowEndsUtc = DateTimeOffset.UtcNow,
+                    TerritoryName = "Coast",
+                },
+                new Application.Campaigns.ParticipantDelinquencyDetail
+                {
+                    RoundNumber = 1,
+                    PhaseNumber = 2,
+                    PhaseKind = "Action",
+                    KindOrdinal = 2,
+                    WindowEndsUtc = DateTimeOffset.UtcNow,
+                    TerritoryName = "Coast",
+                },
+            ],
+        });
+
+        Assert.Equal(2, mapped.DelinquencyCount);
+        Assert.Equal(2, mapped.Delinquencies.Count);
+        Assert.All(mapped.Delinquencies, item => Assert.Equal("Action", item.PhaseKind));
+        Assert.Equal("Coast", mapped.Delinquencies[0].TerritoryName);
+    }
+
     private async Task<DateTimeOffset?> RunDueAdvanceAsync()
     {
         using var scope = _factory.Services.CreateScope();

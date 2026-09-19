@@ -1,19 +1,23 @@
 import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { readApiError } from '../../core/auth/auth.service';
+import { AuthService, readApiError } from '../../core/auth/auth.service';
+import { GUEST_PREVIEW_CAMPAIGN_ID } from '../../core/auth/guest-preview';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
 import { CampaignListComponent } from '../../shared/campaign-list/campaign-list.component';
+import { GuestPreviewBannerComponent } from '../../shared/guest-preview-banner/guest-preview-banner.component';
 
 @Component({
   selector: 'app-campaigns-page',
-  imports: [RouterLink, CampaignListComponent],
+  imports: [RouterLink, CampaignListComponent, GuestPreviewBannerComponent],
   templateUrl: './campaigns.page.html',
   styleUrl: './campaigns.page.css',
 })
 export class CampaignsPage {
   private readonly campaignsApi = inject(CampaignService);
+  protected readonly auth = inject(AuthService);
+  protected readonly previewCampaignId = GUEST_PREVIEW_CAMPAIGN_ID;
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
   protected readonly campaigns = signal<CampaignListItem[]>([]);

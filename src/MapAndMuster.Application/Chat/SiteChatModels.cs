@@ -140,7 +140,8 @@ public static class SiteChatMapper
         IReadOnlyList<SiteChatBlock> blocks,
         Guid viewerUserId,
         bool isAdministrator,
-        string preferredLanguage)
+        string preferredLanguage,
+        bool canChat = true)
     {
         ArgumentNullException.ThrowIfNull(messages);
         ArgumentNullException.ThrowIfNull(members);
@@ -170,7 +171,7 @@ public static class SiteChatMapper
             ],
             Languages = [.. ChatLanguages.All.Select(static language => language.ToString())],
             PreferredLanguage = preferredLanguage,
-            CanChat = true,
+            CanChat = canChat,
             CanSendAdminMessages = isAdministrator,
         };
     }

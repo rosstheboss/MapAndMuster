@@ -39,6 +39,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/privacy/privacy.page').then((module) => module.PrivacyPage),
   },
   {
+    path: 'cookies',
+    loadComponent: () => import('./features/cookies/cookies.page').then((module) => module.CookiesPage),
+  },
+  {
     path: 'terms',
     loadComponent: () => import('./features/terms/terms.page').then((module) => module.TermsPage),
   },

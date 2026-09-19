@@ -23,7 +23,7 @@ export class AllCampaignsPage {
   private readonly siteChatApi = inject(SiteChatService);
   private readonly siteChatPrefs = inject(SiteChatPrefsService);
   private readonly updates = inject(UpdateStreamService);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly loading = signal(true);
   protected readonly chatLoading = signal(true);

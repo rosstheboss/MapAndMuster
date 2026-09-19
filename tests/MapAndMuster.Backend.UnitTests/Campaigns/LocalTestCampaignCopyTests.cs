@@ -31,7 +31,7 @@ public sealed class LocalTestCampaignCopyTests
         Assert.Equal(nameof(DurationUnit.Minutes), copy.RoundLengthUnit);
         Assert.Equal(["Action", "Action", "Battle"], copy.Phases.Select(phase => phase.Kind).ToArray());
         Assert.Equal([10, 10, 40], copy.Phases.Select(phase => phase.DurationAmount).ToArray());
-        Assert.False(copy.Phases[^1].EndPhaseEarlyIfAble);
+        Assert.True(copy.Phases[^1].EndPhaseEarlyIfAble);
         Assert.Equal(Now.AddSeconds(-15), copy.StartsUtc);
         Assert.Equal(TimeSpan.FromHours(8), copy.EndsUtc - copy.StartsUtc);
         Assert.Single(copy.Memberships, member => member.UserId == ManagerId && member.IsGameMaster && !member.IsPlayer);

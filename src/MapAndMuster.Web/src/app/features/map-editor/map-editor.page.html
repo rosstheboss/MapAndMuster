@@ -22,10 +22,13 @@
             (change)="onSvgFile($event)"
           />
         }
-        @if (canManage() && campaign.status === 'Scheduled') {
+        @if (canManage() && campaign.status === 'Scheduled' && !isGuestPreview()) {
           <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit campaign</a>
         }
-        @if (isAdministrator()) {
+        @if (isGuestPreview()) {
+          <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'edit']">Campaign setup</a>
+        }
+        @if (isAdministrator() && !isGuestPreview()) {
           <button
             type="button"
             class="button-secondary"
@@ -35,7 +38,11 @@
             Save as Preset
           </button>
         }
-        <a class="button-secondary" [routerLink]="['/campaigns', campaign.id]">Back to campaign</a>
+        @if (isGuestPreview()) {
+          <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
+        } @else {
+          <a class="button-secondary" [routerLink]="['/campaigns', campaign.id]">Back to campaign</a>
+        }
       }
     </div>
   </div>
@@ -43,6 +50,9 @@
   @if (loading()) {
     <p>Loading map…</p>
   } @else {
+    @if (isGuestPreview()) {
+      <app-guest-preview-banner />
+    }
     @if (confirmingDownload()) {
       <app-dialog
         [open]="true"
@@ -186,9 +196,11 @@
           <div class="tool-cluster">
             <p class="tool-cluster-label">File</p>
             <div class="tool-group">
-              <button type="button" class="button" (click)="save()" [disabled]="saving() || !hasUnsavedEdits()">
-                Save Map
-              </button>
+              @if (!isGuestPreview()) {
+                <button type="button" class="button" (click)="save()" [disabled]="saving() || !hasUnsavedEdits()">
+                  Save Map
+                </button>
+              }
               <app-confirm-button
                 appearance="button-danger"
                 label="Clear Unsaved Changes"

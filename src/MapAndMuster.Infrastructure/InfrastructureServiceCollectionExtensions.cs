@@ -55,6 +55,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddDbContext<CampaignDbContext>(options => options.UseNpgsql(connectionString));
         RegisterPhaseDeadlineWorker(services, configuration);
+        RegisterGuestCleanupWorker(services, configuration);
         services
             .AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
             {
@@ -123,6 +124,24 @@ public static class InfrastructureServiceCollectionExtensions
         }
 
         services.AddHostedService<PhaseDeadlineWorker>();
+    }
+
+    /// <summary>
+    /// Registers guest-number recycling unless a host opts out.
+    /// </summary>
+    private static void RegisterGuestCleanupWorker(IServiceCollection services, IConfiguration configuration)
+    {
+        if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("Campaign")))
+        {
+            return;
+        }
+
+        if (!configuration.GetValue("Identity:RunGuestCleanupWorker", defaultValue: true))
+        {
+            return;
+        }
+
+        services.AddHostedService<GuestAccountCleanupWorker>();
     }
 
     private static void RegisterEmailDelivery(IServiceCollection services, IConfiguration configuration)

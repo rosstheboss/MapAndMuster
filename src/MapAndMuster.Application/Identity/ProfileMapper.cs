@@ -87,9 +87,11 @@ public static class ProfileMapper
         var showsFullName = account.DisplayNameMode == DisplayNameMode.FullName;
         var displayName = TestAccountCatalog.TryDisplayName(account, out var testName)
             ? testName
-            : showsFullName
-                ? FormatFullName(account.FirstName, account.MiddleInitial, account.LastName, account.Suffix)
-                : account.Username;
+            : GuestAccountCatalog.TryDisplayName(account, out var guestName)
+                ? guestName
+                : showsFullName
+                    ? FormatFullName(account.FirstName, account.MiddleInitial, account.LastName, account.Suffix)
+                    : account.Username;
 
         return new PublicProfile
         {

@@ -13,11 +13,19 @@
         <p>Loading campaigns…</p>
       } @else if (attentionCampaigns().length === 0) {
         @if (campaigns().length === 0) {
-          <p>You are not in a running campaign.</p>
-          <div class="actions">
-            <a class="button" routerLink="/campaigns/all">Join campaign</a>
-            <a class="button-secondary" routerLink="/campaigns/new">Create a campaign</a>
-          </div>
+          @if (user.isGuestAccount) {
+            <p>Guest preview does not join campaigns. Browse public campaigns or open the setup preview.</p>
+            <div class="actions">
+              <a class="button" routerLink="/campaigns/all">Browse public campaigns</a>
+              <a class="button-secondary" routerLink="/campaigns">Preview campaign setup</a>
+            </div>
+          } @else {
+            <p>You are not in a running campaign.</p>
+            <div class="actions">
+              <a class="button" routerLink="/campaigns/all">Join campaign</a>
+              <a class="button-secondary" routerLink="/campaigns/new">Create a campaign</a>
+            </div>
+          }
         } @else {
           <p>None of your campaigns are in progress right now.</p>
           <div class="actions">

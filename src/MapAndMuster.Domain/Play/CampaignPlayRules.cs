@@ -2428,6 +2428,23 @@ public static class CampaignPlayRules
         next = ApplyRetreats(next, map, window, closeAt, pickIndex ?? (static count => 0), specialRules, allies);
         next = ApplyBattleStatuses(next, map, window, forceStatuses, specialRules, closeAt, missions);
         var claimedMap = ApplyOccupationClaims(next, map, allies, choose, specialRules);
+        if (!next.Battles.Any(item => item.BattleWindowId == window.Id))
+        {
+            next = next.AppendLog(new PlayLogEntry(
+                Guid.NewGuid(),
+                closeAt,
+                PlayLogKind.NoBattlesOccurred,
+                window.Id,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                [],
+                "No battles occurred."));
+        }
+
         return FinishWindow(next, claimedMap, window, closeAt, due, forceStatuses, allies, choose);
     }
 
@@ -2856,11 +2873,6 @@ public static class CampaignPlayRules
                     return false;
                 }
             }
-        }
-
-        if (!window.EndPhaseEarlyIfAble && battles.Length == 0)
-        {
-            return false;
         }
 
         return true;

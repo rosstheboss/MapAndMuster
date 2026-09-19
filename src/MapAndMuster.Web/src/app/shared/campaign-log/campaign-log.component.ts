@@ -266,6 +266,7 @@ export class CampaignLogComponent {
     return (
       entry.kind === 'CampaignStarted' ||
       entry.kind === 'PhaseChanged' ||
+      entry.kind === 'NoBattlesOccurred' ||
       entry.kind === 'CampaignEnded' ||
       entry.kind === 'CampaignClosed'
     );

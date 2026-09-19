@@ -45,9 +45,11 @@
           Upcoming campaigns appear here so you can join. Active and completed campaigns appear when they are publicly
           viewable.
         </p>
-        <div class="actions">
-          <a class="button" routerLink="/campaigns/new">Create a campaign</a>
-        </div>
+        @if (!auth.currentUser()?.isGuestAccount) {
+          <div class="actions">
+            <a class="button" routerLink="/campaigns/new">Create a campaign</a>
+          </div>
+        }
       </div>
     } @else {
       <app-campaign-list [campaigns]="campaigns()" (membershipChanged)="reload()" />

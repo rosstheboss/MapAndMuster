@@ -161,6 +161,8 @@
           Send
         </button>
       </div>
+    } @else if (auth.currentUser()?.isGuestAccount) {
+      <p class="muted">Guest accounts can read public chat but cannot post.</p>
     } @else {
       <p class="muted">Sign in to chat here.</p>
     }

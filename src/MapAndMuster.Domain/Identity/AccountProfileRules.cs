@@ -48,6 +48,11 @@ public static class AccountProfileRules
         {
             collected.Add(usernameError);
         }
+        else if (GuestUsernames.Matches(parsedUsername.Value))
+        {
+            collected.Add(GuestUsernames.Error());
+            parsedUsername = null;
+        }
 
         collected.AddRange(PersonName.CollectErrors(firstName, middleInitial, lastName, suffix));
         collected.AddRange(GeographicLocation.CollectErrors(city, region, country));

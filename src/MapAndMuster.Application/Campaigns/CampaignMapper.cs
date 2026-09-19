@@ -17,12 +17,14 @@ public static class CampaignMapper
     /// <param name="viewerUserId">The viewing user's identifier.</param>
     /// <param name="utcNow">The current UTC instant.</param>
     /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
+    /// <param name="isGuestAccount">Whether the caller is a temporary guest preview session.</param>
     /// <returns>The list item.</returns>
     public static CampaignListItem ToListItem(
         StoredCampaign campaign,
         Guid viewerUserId,
         DateTimeOffset utcNow,
-        bool isAdministrator = false)
+        bool isAdministrator = false,
+        bool isGuestAccount = false)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
@@ -39,7 +41,7 @@ public static class CampaignMapper
             CanManage = membership?.IsGameMaster == true || isAdministrator,
             IsParticipant = membership?.IsPlayer == true,
             CanView = CampaignAccess.CanView(campaign, viewerUserId, isAdministrator),
-            CanJoin = CampaignAccess.CanJoin(campaign, viewerUserId, utcNow),
+            CanJoin = !isGuestAccount && CampaignAccess.CanJoin(campaign, viewerUserId, utcNow),
             CanLeave = CampaignAccess.CanLeave(campaign, viewerUserId),
             City = campaign.City,
             Region = campaign.Region,

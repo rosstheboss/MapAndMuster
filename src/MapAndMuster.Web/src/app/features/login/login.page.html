@@ -36,4 +36,23 @@
   }
 
   <p>Need an account? <a routerLink="/register">Create one</a></p>
+
+  <div class="panel stack">
+    <h2>Preview without an account</h2>
+    <p class="muted">
+      Guest preview lasts 24 hours. You can look at public campaigns, public chat, and campaign setup, but nothing is
+      saved and you cannot post.
+    </p>
+    @if (errorMessage() && guestSubmitting()) {
+      <p class="error" role="alert">{{ errorMessage() }}</p>
+    }
+    <button
+      class="button-secondary"
+      type="button"
+      (click)="loginAsGuest()"
+      [disabled]="submitting() || guestSubmitting()"
+    >
+      Login as Guest
+    </button>
+  </div>
 </section>

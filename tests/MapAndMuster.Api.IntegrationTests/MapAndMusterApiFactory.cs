@@ -48,6 +48,7 @@ public sealed class MapAndMusterApiFactory : WebApplicationFactory<Program>, IAs
         // Tests drive AdvanceDueCampaignsHandler directly. A background pass would otherwise race
         // assertions on database state and on per-request statement counts.
         builder.UseSetting("Campaigns:RunPhaseDeadlineWorker", "false");
+        builder.UseSetting("Identity:RunGuestCleanupWorker", "false");
     }
 }
 

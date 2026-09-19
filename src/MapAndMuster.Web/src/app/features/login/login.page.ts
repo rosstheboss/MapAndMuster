@@ -23,6 +23,7 @@ export class LoginPage {
   private readonly formBuilder = inject(FormBuilder);
 
   protected readonly submitting = signal(false);
+  protected readonly guestSubmitting = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly infoMessage = signal<string | null>(null);
   protected readonly providers = signal<ExternalProvider[]>([]);
@@ -71,5 +72,20 @@ export class LoginPage {
 
   protected startExternal(provider: string): void {
     this.auth.startExternalLogin(provider);
+  }
+
+  protected async loginAsGuest(): Promise<void> {
+    this.guestSubmitting.set(true);
+    this.errorMessage.set(null);
+    try {
+      await this.overlay.run(async () => {
+        await this.auth.loginAsGuest();
+        await this.router.navigateByUrl('/');
+      });
+    } catch (error: unknown) {
+      this.errorMessage.set(readApiError(error, 'Unable to start guest preview.'));
+    } finally {
+      this.guestSubmitting.set(false);
+    }
   }
 }

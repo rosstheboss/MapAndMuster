@@ -6,6 +6,7 @@ import {
   sortStandings,
   writeStoredPrefs,
 } from './campaign-view-prefs.service';
+import { writeCookieConsent } from '../cookies/cookie-consent';
 import type { CampaignPointStanding } from './campaign.models';
 
 function standing(overrides: Partial<CampaignPointStanding>): CampaignPointStanding {
@@ -33,6 +34,7 @@ describe('campaign view prefs', () => {
         document.cookie = `${name}=; Path=/; Max-Age=0`;
       }
     });
+    writeCookieConsent({ version: 1, preferences: true });
   });
 
   it('round-trips highlight, sections, sort, and chat position in a cookie', () => {

@@ -1,0 +1,11 @@
+:host {
+  display: block;
+}
+
+.guest-preview-banner {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-glow);
+  color: #1c1917;
+  border-radius: 0.5rem;
+}

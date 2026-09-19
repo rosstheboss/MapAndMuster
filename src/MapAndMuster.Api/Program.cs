@@ -1,8 +1,14 @@
+using System.Globalization;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using MapAndMuster.Api;
 using MapAndMuster.Api.Endpoints;
+using MapAndMuster.Application.Ports;
 using MapAndMuster.Infrastructure;
+using MapAndMuster.Infrastructure.Identity;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,6 +57,7 @@ builder.Services.ConfigureApplicationCookie(options =>
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         return Task.CompletedTask;
     };
+    options.Events.OnValidatePrincipal = ValidateGuestPrincipalAsync;
 });
 
 builder.Services.AddRateLimiter(options =>
@@ -114,6 +121,7 @@ if (!app.Environment.IsEnvironment("Testing"))
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseGuestReadOnly();
 app.MapCampaignHealthChecks();
 app.MapAuthEndpoints();
 app.MapProfileEndpoints();
@@ -125,6 +133,37 @@ app.MapSiteChatEndpoints();
 await DatabaseStartup.ApplyMigrationsAsync(app).ConfigureAwait(false);
 
 app.Run();
+
+static async Task ValidateGuestPrincipalAsync(CookieValidatePrincipalContext context)
+{
+    if (context.Principal is null || !context.Principal.IsGuest())
+    {
+        return;
+    }
+
+    var clock = context.HttpContext.RequestServices.GetRequiredService<IClock>();
+    var expiresValue = context.Principal.FindFirstValue(IdentityHttp.GuestExpiresClaimType);
+    var expired = !long.TryParse(expiresValue, CultureInfo.InvariantCulture, out var millis)
+        || DateTimeOffset.FromUnixTimeMilliseconds(millis) <= clock.UtcNow;
+    if (!expired)
+    {
+        return;
+    }
+
+    context.RejectPrincipal();
+    await context.HttpContext.RequestServices
+        .GetRequiredService<SignInManager<ApplicationUser>>()
+        .SignOutAsync()
+        .ConfigureAwait(false);
+    var userId = context.Principal.GetUserId();
+    if (userId is not null)
+    {
+        await context.HttpContext.RequestServices
+            .GetRequiredService<IUserAccountStore>()
+            .RecycleGuestAccountAsync(userId.Value, context.HttpContext.RequestAborted)
+            .ConfigureAwait(false);
+    }
+}
 
 /// <summary>
 /// ASP.NET Core entry point for the campaign API host.

@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, type FormArray, type FormControl, typ
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { GUEST_PREVIEW_CAMPAIGN_ID, GUEST_PREVIEW_MESSAGE } from '../../core/auth/guest-preview';
 import { BackToTopComponent } from '../../shared/back-to-top/back-to-top.component';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
@@ -104,6 +105,7 @@ import { listCountries, listTimeZones, regionsForCountry } from '../../core/loca
 import { CampaignMapPreviewComponent } from '../../shared/campaign-map-preview/campaign-map-preview.component';
 import { FactionLogoComponent } from '../../shared/faction-logo/faction-logo.component';
 import { IconComponent } from '../../shared/icon/icon.component';
+import { GuestPreviewBannerComponent } from '../../shared/guest-preview-banner/guest-preview-banner.component';
 import { MapSymbolComponent } from '../../shared/map-symbol/map-symbol.component';
 import { PasswordInputComponent } from '../../shared/password-input/password-input.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
@@ -432,6 +434,7 @@ const SETUP_INDEX_SECTIONS: readonly {
     CampaignMapPreviewComponent,
     PasswordInputComponent,
     FactionLogoComponent,
+    GuestPreviewBannerComponent,
   ],
   templateUrl: './campaign-setup.page.html',
   styleUrl: './campaign-setup.page.css',
@@ -523,6 +526,9 @@ export class CampaignSetupPage {
   protected readonly savedPresets = signal<CampaignPresetListItem[]>([]);
   protected readonly savePresetOpen = signal(false);
   protected readonly isAdministrator = computed(() => this.auth.currentUser()?.isAdministrator === true);
+  protected readonly isGuestPreview = computed(
+    () => this.auth.currentUser()?.isGuestAccount === true || this.campaignId() === GUEST_PREVIEW_CAMPAIGN_ID,
+  );
   protected readonly allCampaignPresets = computed(() => campaignPresetApplyOptions(this.savedPresets()));
   protected readonly forceStatusEnableOptions = FORCE_STATUS_ENABLE_OPTIONS;
   protected readonly forceStatusClearOptions = FORCE_STATUS_CLEAR_OPTIONS;
@@ -648,7 +654,10 @@ export class CampaignSetupPage {
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
     this.campaignId.set(id);
-    if (id) {
+    if (id === GUEST_PREVIEW_CAMPAIGN_ID) {
+      this.ensureDefaultWaterTags();
+      this.loading.set(false);
+    } else if (id) {
       void this.loadCampaign(id);
     } else {
       this.ensureDefaultWaterTags();
@@ -755,6 +764,10 @@ export class CampaignSetupPage {
 
   protected isEdit(): boolean {
     return this.campaignId() !== null;
+  }
+
+  protected mapEditorCampaignId(): string {
+    return this.campaignId() ?? GUEST_PREVIEW_CAMPAIGN_ID;
   }
 
   protected canEndCampaign(): boolean {
@@ -1249,7 +1262,7 @@ export class CampaignSetupPage {
         this.form.controls.name.setValue(preset.name);
       }
 
-      if (this.isEdit() && this.campaignId()) {
+      if (this.isEdit() && this.campaignId() && !this.isGuestPreview()) {
         this.applyCatalogFromDetail(preset);
         this.rememberCatalogFilesFrom(preset);
         const detail = await this.campaignsApi.applyPresetMap(this.campaignId()!, presetId, this.revision);
@@ -3360,6 +3373,12 @@ export class CampaignSetupPage {
   }
 
   protected async save(): Promise<void> {
+    if (this.isGuestPreview()) {
+      this.revealErrors([GUEST_PREVIEW_MESSAGE]);
+      this.saveStatus.set('failure');
+      return;
+    }
+
     this.saving.set(true);
     this.errorMessages.set([]);
     try {
@@ -3388,6 +3407,11 @@ export class CampaignSetupPage {
   }
 
   private async persistCampaignCore(): Promise<{ detail: CampaignDetail; isNew: boolean } | null> {
+    if (this.isGuestPreview()) {
+      this.revealErrors([GUEST_PREVIEW_MESSAGE]);
+      return null;
+    }
+
     this.form.markAllAsTouched();
     this.serverFields.set(new Set());
     this.successMessage.set(null);

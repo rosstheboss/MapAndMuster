@@ -158,6 +158,18 @@ describe('CampaignLogComponent', () => {
         battleId: null,
         isSystemAdjustment: false,
       },
+      {
+        id: 'log-no-battles',
+        occurredUtc: '2026-08-15T20:47:23-04:00',
+        kind: 'NoBattlesOccurred',
+        originator: 'Campaign',
+        originatorUsername: null,
+        summary: 'No battles occurred.',
+        territoryId: null,
+        forceId: null,
+        battleId: null,
+        isSystemAdjustment: false,
+      },
     ]);
     fixture.detectChanges();
 
@@ -169,6 +181,9 @@ describe('CampaignLogComponent', () => {
       [...compiled.querySelectorAll('strong')].some((node) =>
         node.textContent.includes('Round 1 — Action phase began.'),
       ),
+    ).toBe(true);
+    expect(
+      [...compiled.querySelectorAll('strong')].some((node) => node.textContent.includes('No battles occurred.')),
     ).toBe(true);
   });
 

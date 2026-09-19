@@ -260,6 +260,15 @@ public sealed class OwnProfileResponse
     /// <summary>Gets the test-account number when this is a seeded test user.</summary>
     public int? TestAccountNumber { get; init; }
 
+    /// <summary>Gets whether this is a temporary guest preview session.</summary>
+    public bool IsGuestAccount { get; init; }
+
+    /// <summary>Gets the recycled guest number when this is a guest session.</summary>
+    public int? GuestAccountNumber { get; init; }
+
+    /// <summary>Gets when the guest session must end, in UTC.</summary>
+    public DateTimeOffset? GuestExpiresUtc { get; init; }
+
     /// <summary>Gets whether the caller is signed in as a test account on behalf of an administrator.</summary>
     public bool IsImpersonating { get; init; }
 }
@@ -409,6 +418,9 @@ public static class ProfileResponses
             DateTimeDisplayFormat = account.DateTimeDisplayFormat,
             IsTestAccount = account.IsTestAccount,
             TestAccountNumber = account.TestAccountNumber,
+            IsGuestAccount = account.IsGuestAccount,
+            GuestAccountNumber = account.GuestAccountNumber,
+            GuestExpiresUtc = account.GuestExpiresUtc,
             IsImpersonating = isImpersonating,
         };
     }

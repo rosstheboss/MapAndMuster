@@ -18,6 +18,11 @@ with the ability to extend the campaign.
   ringer battles, inspects/corrects state with mandatory auditing and notifications, and resolves
   disputes.
 - **Administrator:** manages the application and may perform GM or player capabilities.
+- **Guest:** a temporary preview session with no credentials. The handle is `Guest001` (then
+  `Guest002`, recycling freed numbers). The session lasts 24 hours or until logout or removal of
+  the essential auth cookie. Guests may read public chat, public campaigns, and a local campaign
+  setup/map-editor preview that is never saved. They cannot post, join, save, or edit presets.
+  Sign-up from the top menu creates a real account.
 
 Roles are campaign-scoped except for the system-wide Administrator role. A user may be both
 Player and Game Master in the same campaign.
@@ -59,6 +64,9 @@ Player and Game Master in the same campaign.
 - In-app and email notifications.
 - Public site-wide chat on All Campaigns, with language flags, block lists, and administrator announcements.
 - Seeded administrator test accounts (Test 1–Test 45) that skip email and public site chat.
+- Guest preview login with recycled `GuestXXX` names, a 24-hour session, and read-only access.
+- Cookie notice with accept, reject non-essential, and later settings, covering UK/EU/CA/AU/NZ
+  essential-vs-preference rules. Preference storage is off until accepted.
 
 ## Product boundaries
 

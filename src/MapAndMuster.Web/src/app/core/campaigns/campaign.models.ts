@@ -835,6 +835,7 @@ export interface CampaignPlayDetail {
   canChat: boolean;
   canInspectPrivateChat?: boolean;
   mentionableMembers: CampaignLogMember[];
+  participants?: CampaignParticipant[];
   chatChannels?: ChatChannel[];
   status: string;
   currentRound: number | null;

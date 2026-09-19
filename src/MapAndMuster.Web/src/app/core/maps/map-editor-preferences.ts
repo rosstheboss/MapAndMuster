@@ -1,3 +1,5 @@
+import { preferencesAllowed } from '../cookies/cookie-consent';
+
 export type OverlayColorMode = 'random' | 'terrain' | 'manual';
 
 export const OVERLAY_COLOR_MODE_STORAGE_PREFIX = 'map-editor-color-mode:';
@@ -16,6 +18,10 @@ export function readStoredOverlayColorMode(campaignId: string): OverlayColorMode
 }
 
 export function writeStoredOverlayColorMode(campaignId: string, mode: OverlayColorMode): void {
+  if (!preferencesAllowed()) {
+    return;
+  }
+
   try {
     localStorage.setItem(OVERLAY_COLOR_MODE_STORAGE_PREFIX + campaignId, mode);
   } catch {

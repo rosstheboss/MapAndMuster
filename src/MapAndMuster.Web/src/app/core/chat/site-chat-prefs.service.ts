@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 
+import { preferencesAllowed } from '../cookies/cookie-consent';
 import { CHAT_LANGUAGES, DEFAULT_CHAT_LANGUAGE, isChatLanguage, type ChatLanguage } from './chat-languages';
 
 export const SITE_CHAT_COOKIE_NAME = 'siteChat';
@@ -50,5 +51,9 @@ export function readStoredSiteChatPrefs(preferredLanguage?: string | null): Site
 }
 
 export function writeStoredSiteChatPrefs(prefs: SiteChatPrefs): void {
+  if (!preferencesAllowed()) {
+    return;
+  }
+
   document.cookie = `${SITE_CHAT_COOKIE_NAME}=${encodeURIComponent(JSON.stringify(prefs))}; Path=/; Max-Age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
 }

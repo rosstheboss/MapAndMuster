@@ -36,6 +36,16 @@ public static class IdentityHttp
     public const string ImpersonatorClaimType = "campaign.impersonator";
 
     /// <summary>
+    /// Claim type marking a temporary guest preview session.
+    /// </summary>
+    public const string GuestClaimType = "campaign.guest";
+
+    /// <summary>
+    /// Claim type storing the guest session expiry as UTC milliseconds.
+    /// </summary>
+    public const string GuestExpiresClaimType = "campaign.guest_expires";
+
+    /// <summary>
     /// Reads the authenticated user's identifier.
     /// </summary>
     /// <param name="user">The user principal.</param>
@@ -66,6 +76,15 @@ public static class IdentityHttp
         ArgumentNullException.ThrowIfNull(user);
         var value = user.FindFirstValue(ImpersonatorClaimType);
         return Guid.TryParse(value, out var userId) ? userId : null;
+    }
+
+    /// <summary>
+    /// Whether the caller is a temporary guest preview session.
+    /// </summary>
+    public static bool IsGuest(this ClaimsPrincipal user)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return user.HasClaim(GuestClaimType, "true");
     }
 
     /// <summary>
@@ -136,13 +155,15 @@ public static class IdentityHttp
             ErrorCodes.LockedOut or ErrorCodes.EmailNotConfirmed => StatusCodes.Status403Forbidden,
             ErrorCodes.ProfileNotFound or ErrorCodes.CampaignNotFound or ErrorCodes.CampaignMemberNotFound
                 or ErrorCodes.TestAccountNotFound => StatusCodes.Status404NotFound,
-            ErrorCodes.CampaignForbidden or ErrorCodes.CampaignLocked or ErrorCodes.ImpersonationForbidden => StatusCodes.Status403Forbidden,
+            ErrorCodes.CampaignForbidden or ErrorCodes.CampaignLocked or ErrorCodes.ImpersonationForbidden
+                or ErrorCodes.GuestForbidden => StatusCodes.Status403Forbidden,
             ErrorCodes.EmailTaken or ErrorCodes.UsernameTaken or ErrorCodes.ConcurrencyConflict
                 or ErrorCodes.ExternalLinkRequired
                 or ErrorCodes.CampaignAlreadyMember
                 or ErrorCodes.CampaignJoinFull => StatusCodes.Status409Conflict,
             ErrorCodes.UploadTooLarge => StatusCodes.Status413PayloadTooLarge,
             ErrorCodes.ExternalProviderUnavailable => StatusCodes.Status404NotFound,
+            ErrorCodes.GuestUnavailable => StatusCodes.Status503ServiceUnavailable,
             _ => StatusCodes.Status400BadRequest,
         };
     }

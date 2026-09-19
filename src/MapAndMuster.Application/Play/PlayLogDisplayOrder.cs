@@ -34,7 +34,10 @@ internal static class PlayLogDisplayOrder
 
     internal static int PhaseHeadingSort(PlayLogKind kind)
     {
-        return kind is PlayLogKind.PhaseChanged or PlayLogKind.CampaignEnded or PlayLogKind.CampaignClosed
+        return kind is PlayLogKind.PhaseChanged
+            or PlayLogKind.NoBattlesOccurred
+            or PlayLogKind.CampaignEnded
+            or PlayLogKind.CampaignClosed
             ? 1
             : 0;
     }

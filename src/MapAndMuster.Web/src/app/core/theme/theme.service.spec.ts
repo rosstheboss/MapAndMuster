@@ -3,11 +3,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 
+import { writeCookieConsent } from '../cookies/cookie-consent';
 import { THEME_COOKIE_NAME, ThemeService, writeStoredTheme } from './theme.service';
 
 describe('ThemeService', () => {
   beforeEach(() => {
     clearThemeCookie();
+    clearConsentCookie();
+    writeCookieConsent({ version: 1, preferences: true });
     document.documentElement.removeAttribute('data-theme');
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), ThemeService],
@@ -16,6 +19,7 @@ describe('ThemeService', () => {
 
   afterEach(() => {
     clearThemeCookie();
+    clearConsentCookie();
     document.documentElement.removeAttribute('data-theme');
   });
 
@@ -44,8 +48,25 @@ describe('ThemeService', () => {
     expect(document.documentElement.dataset['theme']).toBe('light');
     expect(document.cookie).toContain(`${THEME_COOKIE_NAME}=light`);
   });
+
+  it('does not persist theme when preference cookies are declined', () => {
+    clearConsentCookie();
+    writeCookieConsent({ version: 1, preferences: false });
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), ThemeService],
+    });
+    const theme = TestBed.inject(ThemeService);
+    theme.toggle();
+    expect(theme.isDark()).toBe(true);
+    expect(document.cookie).not.toContain(`${THEME_COOKIE_NAME}=dark`);
+  });
 });
 
 function clearThemeCookie(): void {
   document.cookie = `${THEME_COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
+function clearConsentCookie(): void {
+  document.cookie = 'cookie_consent=; Path=/; Max-Age=0; SameSite=Lax';
 }

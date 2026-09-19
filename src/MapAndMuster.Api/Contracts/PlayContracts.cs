@@ -40,6 +40,9 @@ public sealed class CampaignPlayResponse
     /// <summary>Gets current members who may be tagged in chat.</summary>
     public required IReadOnlyList<CampaignLogMemberResponse> MentionableMembers { get; init; }
 
+    /// <summary>Gets members attached to the campaign, including missed-order offences.</summary>
+    public IReadOnlyList<CampaignParticipantResponse> Participants { get; init; } = [];
+
     /// <summary>Gets compose targets: public, members, factions, and ally groups.</summary>
     public IReadOnlyList<ChatChannelResponse> ChatChannels { get; init; } = [];
 
@@ -1103,6 +1106,7 @@ public static class PlayResponses
                     DisplayName = member.DisplayName,
                 }),
             ],
+            Participants = [.. detail.Participants.Select(CampaignResponses.FromParticipant)],
             ChatChannels =
             [
                 .. detail.ChatChannels.Select(static channel => new ChatChannelResponse

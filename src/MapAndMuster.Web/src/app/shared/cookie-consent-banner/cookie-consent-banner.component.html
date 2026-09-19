@@ -1,0 +1,51 @@
+@if (consent.needsDecision()) {
+  <aside
+    class="cookie-banner"
+    role="region"
+    aria-labelledby="cookie-banner-title"
+    aria-describedby="cookie-banner-copy"
+  >
+    <div class="cookie-banner-copy">
+      <h2 id="cookie-banner-title">Cookies</h2>
+      <p id="cookie-banner-copy">
+        We use essential cookies to keep you signed in, including guest preview. Preference cookies remember theme, chat
+        filters, and map layout. They are off until you choose. Read the
+        <a routerLink="/cookies">cookie notice</a>
+        and
+        <a routerLink="/privacy">privacy policy</a>.
+      </p>
+    </div>
+    <div class="cookie-banner-actions">
+      <button type="button" class="button-secondary" (click)="consent.rejectNonEssential()">
+        Reject non-essential
+      </button>
+      <button type="button" class="button-secondary" (click)="openSettings()">Cookie settings</button>
+      <button type="button" class="button" (click)="consent.acceptAll()">Accept all</button>
+    </div>
+  </aside>
+}
+
+<app-dialog
+  [open]="consent.settingsOpen()"
+  labelledBy="cookie-settings-title"
+  describedBy="cookie-settings-copy"
+  (cancelled)="consent.closeSettings()"
+>
+  <h2 id="cookie-settings-title">Cookie settings</h2>
+  <p id="cookie-settings-copy">
+    Essential cookies are always on. They authenticate your session and remember this choice. Preference cookies are
+    optional.
+  </p>
+  <label class="cookie-setting">
+    <input type="checkbox" checked disabled />
+    Essential (required)
+  </label>
+  <label class="cookie-setting">
+    <input type="checkbox" [checked]="settingsPreferences()" (change)="onPreferencesChange($event)" />
+    Preferences (theme, chat filters, campaign layout)
+  </label>
+  <div class="actions">
+    <button type="button" class="button-secondary" (click)="consent.closeSettings()">Cancel</button>
+    <button type="button" class="button" (click)="saveSettings()">Save choices</button>
+  </div>
+</app-dialog>

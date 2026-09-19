@@ -1,3 +1,4 @@
+using MapAndMuster.Application.Common;
 using MapAndMuster.Application.Identity;
 using MapAndMuster.Domain.Identity;
 
@@ -178,6 +179,56 @@ public interface IUserAccountStore
     {
         return Task.FromResult<IReadOnlyList<UserAccount>>([]);
     }
+
+    /// <summary>
+    /// Allocates or reuses a guest preview account and returns the new expiry.
+    /// </summary>
+    Task<AllocateGuestAccountOutcome> AllocateGuestAccountAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult(new AllocateGuestAccountOutcome
+        {
+            IsSuccess = false,
+            ErrorCode = ErrorCodes.GuestUnavailable,
+            Message = "Guest preview is unavailable.",
+        });
+    }
+
+    /// <summary>
+    /// Deletes a guest account so its number can be reused. No-op for missing or non-guest users.
+    /// </summary>
+    Task RecycleGuestAccountAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Deletes guest accounts whose expiry has passed so their numbers return to the pool.
+    /// </summary>
+    Task RecycleExpiredGuestAccountsAsync(CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Outcome of allocating a guest preview session.
+/// </summary>
+public sealed class AllocateGuestAccountOutcome
+{
+    /// <summary>Gets a value indicating whether allocation succeeded.</summary>
+    public required bool IsSuccess { get; init; }
+
+    /// <summary>Gets the guest account when successful.</summary>
+    public UserAccount? Account { get; init; }
+
+    /// <summary>Gets when the guest session must end, in UTC.</summary>
+    public DateTimeOffset? ExpiresUtc { get; init; }
+
+    /// <summary>Gets the error code when allocation failed.</summary>
+    public string? ErrorCode { get; init; }
+
+    /// <summary>Gets the error message when allocation failed.</summary>
+    public string? Message { get; init; }
 }
 
 /// <summary>

@@ -9,6 +9,7 @@ import { of } from 'rxjs';
 import type { OwnProfile } from '../../core/auth/auth.models';
 import { AuthService } from '../../core/auth/auth.service';
 import { cookieNameFor, writeStoredPrefs } from '../../core/campaigns/campaign-view-prefs.service';
+import { writeCookieConsent } from '../../core/cookies/cookie-consent';
 import type { CampaignPlayDetail } from '../../core/campaigns/campaign.models';
 import type { MapTerritory } from '../../core/maps/map-graph.models';
 import type { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
@@ -4182,6 +4183,57 @@ describe('CampaignDetailPage', () => {
     http.verify();
   });
 
+  it('omits live progress on claimed private objectives and keeps the campaign points', async () => {
+    TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: true,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        privateObjectives: [
+          {
+            id: 'po-auto',
+            typeId: 'type-auto',
+            holderKind: 'Player',
+            holderId: 'user-1',
+            status: 'Revealed',
+            scoringKind: 'Automatic',
+            name: 'Procure two relics',
+            description: 'Hold two relics.',
+            campaignPoints: 4,
+            currentCount: 1,
+            requiredCount: 2,
+            canClaim: false,
+            canModerate: false,
+          },
+        ],
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    openSection(fixture, 'privateObjectives');
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Hold two relics.');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('(4 CP)');
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('(1/2)');
+    http.verify();
+  });
+
   it('does not require an action from a force that is already in battle', async () => {
     TestBed.inject(AuthService).currentUser.set(viewerProfile('user-1'));
     const fixture = TestBed.createComponent(CampaignDetailPage);
@@ -4429,6 +4481,7 @@ describe('CampaignDetailPage', () => {
   });
 
   it('restores map highlight mode and collapsed panels from the view cookie', async () => {
+    writeCookieConsent({ version: 1, preferences: true });
     writeStoredPrefs(campaign.id, {
       highlightMode: 'faction',
       sections: { map: false, standings: true },
@@ -6873,6 +6926,72 @@ describe('CampaignDetailPage', () => {
     badge!.click();
     fixture.detectChanges();
     expect(compiled.querySelector('#log-entry-log-delinquency')).toBeTruthy();
+    http.verify();
+  });
+
+  it('refreshes participant delinquencies from play when campaign metadata was stale', async () => {
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({
+      ...campaign,
+      status: 'InProgress',
+      hasMap: false,
+      canPlay: true,
+      canChooseFaction: false,
+      factionId: '1',
+      participants: campaign.participants.map((participant) => ({
+        ...participant,
+        delinquencyCount: 0,
+        delinquencies: [],
+      })),
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: campaign.revision,
+      canManage: true,
+      territories: [],
+      adjacencies: [],
+    });
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush(
+      playState({
+        participants: campaign.participants.map((participant) => ({
+          ...participant,
+          delinquencyCount: 2,
+          delinquencies: [
+            {
+              roundNumber: 1,
+              phaseNumber: 1,
+              phaseKind: 'Action',
+              kindOrdinal: 1,
+              windowEndsUtc: '2026-08-14T12:00:00+00:00',
+              territoryId: 't1',
+              territoryName: 'Coast',
+            },
+            {
+              roundNumber: 1,
+              phaseNumber: 2,
+              phaseKind: 'Action',
+              kindOrdinal: 2,
+              windowEndsUtc: '2026-08-14T18:00:00+00:00',
+              territoryId: 't1',
+              territoryName: 'Coast',
+            },
+          ],
+        })),
+      }),
+    );
+    flushLog(http);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    openSection(fixture, 'participants');
+    const compiled = fixture.nativeElement as HTMLElement;
+    const audit = compiled.querySelector<HTMLDetailsElement>('.delinquency-audit');
+    expect(audit?.textContent).toContain('2 delinquencies');
+    audit?.querySelector('summary')?.click();
+    fixture.detectChanges();
+    expect(audit?.textContent).toContain('Round 1, Action 1');
+    expect(audit?.textContent).toContain('Round 1, Action 2');
     http.verify();
   });
 });

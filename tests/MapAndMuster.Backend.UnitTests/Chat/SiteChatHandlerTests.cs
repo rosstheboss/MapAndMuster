@@ -1,4 +1,5 @@
 using MapAndMuster.Application.Chat;
+using MapAndMuster.Application.Common;
 using MapAndMuster.Application.Identity;
 using MapAndMuster.Application.Notifications;
 using MapAndMuster.Application.Ports;
@@ -13,6 +14,7 @@ public sealed class SiteChatHandlerTests
     private static readonly Guid Ada = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid Bob = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid TestUser = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    private static readonly Guid GuestUser = Guid.Parse("44444444-4444-4444-4444-444444444444");
     private static readonly DateTimeOffset Now = new(2026, 8, 17, 20, 0, 0, TimeSpan.Zero);
 
     [Fact]
@@ -144,6 +146,22 @@ public sealed class SiteChatHandlerTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal("sitechat.test_account", result.ErrorCode);
+        Assert.Empty(chat.Messages);
+    }
+
+    [Fact]
+    public async Task GuestAccountCannotPostSiteChat()
+    {
+        var chat = new FakeChatStore();
+        var accounts = new FakeAccounts();
+        var handler = CreatePost(chat, accounts, new FakeNoticeStore());
+
+        var result = await handler.HandleAsync(
+            new PostSiteChatCommand { UserId = GuestUser, IsAdministrator = false, Message = "Hello from a guest." },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorCodes.GuestForbidden, result.ErrorCode);
         Assert.Empty(chat.Messages);
     }
 
@@ -343,6 +361,29 @@ public sealed class SiteChatHandlerTests
                     PreferredChatLanguage = "English",
                     IsTestAccount = true,
                     TestAccountNumber = 1,
+                };
+            }
+
+            if (userId == GuestUser)
+            {
+                return new UserAccount
+                {
+                    Id = userId,
+                    Email = "guest1@guests.invalid",
+                    Username = "Guest001",
+                    FirstName = "Guest",
+                    LastName = "Account",
+                    City = "Preview",
+                    Region = "Preview",
+                    Country = "Preview",
+                    DisplayNameMode = DisplayNameMode.Username,
+                    CreatedUtc = Now,
+                    UpdatedUtc = Now,
+                    ProfileRevision = 1,
+                    EmailConfirmed = true,
+                    PreferredChatLanguage = "English",
+                    IsGuestAccount = true,
+                    GuestAccountNumber = 1,
                 };
             }
 

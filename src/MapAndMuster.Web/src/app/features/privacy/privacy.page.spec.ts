@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { PrivacyPage } from './privacy.page';
 
@@ -7,7 +8,7 @@ describe('PrivacyPage', () => {
   it('explains what the site stores', async () => {
     await TestBed.configureTestingModule({
       imports: [PrivacyPage],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(PrivacyPage);

@@ -1,3 +1,4 @@
+import { writeCookieConsent } from '../cookies/cookie-consent';
 import { DEFAULT_CHAT_LANGUAGE } from './chat-languages';
 import {
   defaultSiteChatPrefs,
@@ -7,6 +8,10 @@ import {
 } from './site-chat-prefs.service';
 
 describe('site chat prefs cookie', () => {
+  beforeEach(() => {
+    writeCookieConsent({ version: 1, preferences: true });
+  });
+
   afterEach(() => {
     document.cookie = `${SITE_CHAT_COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax`;
   });

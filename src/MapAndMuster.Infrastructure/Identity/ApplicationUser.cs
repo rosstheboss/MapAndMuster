@@ -100,4 +100,13 @@ public sealed class ApplicationUser : IdentityUser<Guid>
 
     /// <summary>Gets or sets the test-account number when <see cref="IsTestAccount"/> is true.</summary>
     public int? TestAccountNumber { get; set; }
+
+    /// <summary>Gets or sets whether this account is a temporary guest preview session.</summary>
+    public bool IsGuestAccount { get; set; }
+
+    /// <summary>Gets or sets the recycled guest number when <see cref="IsGuestAccount"/> is true.</summary>
+    public int? GuestAccountNumber { get; set; }
+
+    /// <summary>Gets or sets when the guest session must end, in UTC.</summary>
+    public DateTimeOffset? GuestExpiresUtc { get; set; }
 }

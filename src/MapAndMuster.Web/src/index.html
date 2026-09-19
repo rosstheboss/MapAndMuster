@@ -11,7 +11,15 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <script>
       (function () {
-        var match = document.cookie.match(/(?:^|; )theme=(dark|light)/);
+        var consent = document.cookie.match(/(?:^|; )cookie_consent=([^;]*)/);
+        var allowTheme = false;
+        if (consent && consent[1]) {
+          try {
+            var parsed = JSON.parse(decodeURIComponent(consent[1]));
+            allowTheme = parsed && parsed.preferences === true;
+          } catch (e) {}
+        }
+        var match = allowTheme && document.cookie.match(/(?:^|; )theme=(dark|light)/);
         document.documentElement.setAttribute('data-theme', match && match[1] === 'dark' ? 'dark' : 'light');
       })();
     </script>

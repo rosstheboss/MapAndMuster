@@ -91,6 +91,11 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(user => user.IsTestAccount).IsRequired().HasDefaultValue(false);
             entity.Property(user => user.TestAccountNumber);
             entity.HasIndex(user => user.TestAccountNumber).IsUnique().HasFilter("\"TestAccountNumber\" IS NOT NULL");
+            entity.Property(user => user.IsGuestAccount).IsRequired().HasDefaultValue(false);
+            entity.Property(user => user.GuestAccountNumber);
+            entity.Property(user => user.GuestExpiresUtc);
+            entity.HasIndex(user => user.GuestAccountNumber).IsUnique().HasFilter("\"GuestAccountNumber\" IS NOT NULL");
+            entity.HasIndex(user => user.GuestExpiresUtc).HasFilter("\"IsGuestAccount\" = TRUE");
             entity.Property(user => user.ProfileRevision).IsConcurrencyToken();
             entity.HasIndex(user => user.NormalizedEmail).IsUnique();
         });

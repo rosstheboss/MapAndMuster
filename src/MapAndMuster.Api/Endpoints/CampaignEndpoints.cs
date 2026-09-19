@@ -2,6 +2,7 @@ using System.Security.Claims;
 using MapAndMuster.Api.Contracts;
 using MapAndMuster.Application.Campaigns;
 using MapAndMuster.Application.Common;
+using MapAndMuster.Application.Identity;
 using MapAndMuster.Application.Maps;
 using MapAndMuster.Application.Play;
 using MapAndMuster.Application.Ports;
@@ -572,7 +573,11 @@ public static class CampaignEndpoints
             return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
         }
 
-        var result = await handler.HandleAsync(userId.Value, principal.IsAdministrator(), cancellationToken)
+        var result = await handler.HandleAsync(
+                userId.Value,
+                principal.IsAdministrator(),
+                principal.IsGuest(),
+                cancellationToken)
             .ConfigureAwait(false);
         if (!result.IsSuccess || result.Value is null)
         {
@@ -593,6 +598,11 @@ public static class CampaignEndpoints
         if (userId is null)
         {
             return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (principal.IsGuest())
+        {
+            return IdentityHttp.Problem(ErrorCodes.GuestForbidden, GuestRestrictions.Message);
         }
 
         var result = await handler.HandleAsync(
@@ -821,6 +831,11 @@ public static class CampaignEndpoints
         if (userId is null)
         {
             return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        if (principal.IsGuest())
+        {
+            return IdentityHttp.Problem(ErrorCodes.GuestForbidden, GuestRestrictions.Message);
         }
 
         var result = await handler.HandleAsync(

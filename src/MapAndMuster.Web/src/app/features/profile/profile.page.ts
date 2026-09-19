@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { GUEST_PREVIEW_MESSAGE } from '../../core/auth/guest-preview';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
@@ -30,6 +31,7 @@ import {
 } from '../../core/time/date-time-display';
 import { listCountries, listTimeZones, regionsForCountry } from '../../core/location/location';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
+import { GuestPreviewBannerComponent } from '../../shared/guest-preview-banner/guest-preview-banner.component';
 import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 import { PasswordInputComponent } from '../../shared/password-input/password-input.component';
 import { ThemeToggleComponent } from '../../shared/theme-toggle/theme-toggle.component';
@@ -43,6 +45,7 @@ import { ThemeToggleComponent } from '../../shared/theme-toggle/theme-toggle.com
     InstantDatePipe,
     ThemeToggleComponent,
     PasswordInputComponent,
+    GuestPreviewBannerComponent,
   ],
   templateUrl: './profile.page.html',
   styleUrl: './profile.page.css',
@@ -100,6 +103,7 @@ export class ProfilePage {
     initialValue: this.form.controls.dateTimeDisplayFormat.value,
   });
   protected readonly regionOptions = computed(() => regionsForCountry(this.countryValue()));
+  protected readonly isGuest = computed(() => this.auth.currentUser()?.isGuestAccount === true);
 
   constructor() {
     void this.loadProfile();
@@ -137,6 +141,9 @@ export class ProfilePage {
       this.updatedUtc.set(profile.updatedUtc);
       this.username.set(profile.username);
       this.hasAvatar.set(profile.hasAvatar);
+      if (profile.isGuestAccount) {
+        this.form.disable();
+      }
     } catch (error: unknown) {
       this.revealErrors(readApiErrorMessages(error, 'Unable to load your profile.'));
     } finally {
@@ -154,6 +161,11 @@ export class ProfilePage {
   }
 
   protected async save(): Promise<void> {
+    if (this.isGuest()) {
+      this.revealErrors([GUEST_PREVIEW_MESSAGE]);
+      return;
+    }
+
     this.form.markAllAsTouched();
     this.serverFields.set(new Set());
     this.successMessage.set(null);

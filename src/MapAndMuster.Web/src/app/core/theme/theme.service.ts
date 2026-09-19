@@ -1,5 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 
+import { preferencesAllowed } from '../cookies/cookie-consent';
+
 export type ColorTheme = 'light' | 'dark';
 
 export const THEME_COOKIE_NAME = 'theme';
@@ -12,7 +14,7 @@ export class ThemeService {
   readonly isDark = this.dark.asReadonly();
 
   constructor() {
-    this.apply(readStoredTheme() === 'dark');
+    this.apply(preferencesAllowed() && readStoredTheme() === 'dark');
   }
 
   toggle(): void {
@@ -21,7 +23,9 @@ export class ThemeService {
 
   set(theme: ColorTheme): void {
     this.apply(theme === 'dark');
-    writeStoredTheme(theme);
+    if (preferencesAllowed()) {
+      writeStoredTheme(theme);
+    }
   }
 
   private apply(isDark: boolean): void {
