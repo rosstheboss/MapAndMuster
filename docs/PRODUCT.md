@@ -61,7 +61,8 @@ Player and Game Master in the same campaign.
   manager-only or as manager and player, delinquency kick recommendations from the third missed-order
   offence, and staff assignment of another player's faction.
 - Ending a campaign (closing play while keeping the final state for logs and duplication).
-- In-app and email notifications.
+- In-app and email notifications. Home links to the community Discord and the Map & Muster
+  tutorial video.
 - Public site-wide chat on All Campaigns, with language flags, block lists, and administrator announcements.
 - Seeded administrator test accounts (Test 1–Test 45) that skip email and public site chat.
 - Guest preview login with recycled `GuestXXX` names, a 24-hour session, and read-only access.

@@ -116,6 +116,10 @@ test('home shows the signed-in player and logout', async ({ page }) => {
     'href',
     'https://discord.gg/ATVt97DMnx',
   );
+  await expect(page.getByRole('link', { name: 'Map & Muster tutorials' })).toHaveAttribute(
+    'href',
+    'https://youtu.be/MVTdwaomRAE?si=ZXnswNKBDHyPQMUx',
+  );
   await expect(page.getByText('No new notifications.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'News' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Your campaigns' })).toBeVisible();
@@ -281,4 +285,65 @@ test('guest preview reaches home without credentials', async ({ page }) => {
   await expect(page.getByText('Previewing as Guest001')).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Sign up' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+});
+
+test('profile notification checkboxes stay left-aligned with their labels', async ({ page }) => {
+  const profile = {
+    id: '11111111-1111-1111-1111-111111111111',
+    email: 'ada@example.test',
+    username: 'ada',
+    firstName: 'Ada',
+    middleInitial: null,
+    lastName: 'Lovelace',
+    suffix: null,
+    city: 'Halifax',
+    region: 'Nova Scotia',
+    country: 'Canada',
+    displayNameMode: 'Username',
+    timeZoneId: 'America/Halifax',
+    hasAvatar: false,
+    createdUtc: '2026-08-13T00:00:00+00:00',
+    updatedUtc: '2026-08-13T00:00:00+00:00',
+    profileRevision: 1,
+    emailConfirmed: true,
+    isAdministrator: false,
+    inAppNotificationsEnabled: true,
+    emailNotificationsEnabled: true,
+    preferredChatLanguage: 'English',
+  };
+
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profile) });
+  });
+  await page.route('**/api/profiles/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(profile) });
+  });
+  await page.route('**/api/auth/external-providers', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/notifications', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.route('**/api/campaigns', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+
+  await page.goto('/profile');
+  const inApp = page.getByRole('checkbox', { name: 'Show notices on the home board' });
+  const email = page.getByRole('checkbox', { name: /Email me about mentions/ });
+  await expect(inApp).toBeVisible();
+  await expect(email).toBeVisible();
+
+  const inAppBox = await inApp.boundingBox();
+  const emailBox = await email.boundingBox();
+  const panel = page.locator('fieldset').filter({ hasText: 'Notifications' });
+  const panelBox = await panel.boundingBox();
+  expect(inAppBox).toBeTruthy();
+  expect(emailBox).toBeTruthy();
+  expect(panelBox).toBeTruthy();
+  expect(Math.abs((inAppBox?.x ?? 0) - (emailBox?.x ?? 0))).toBeLessThan(2);
+  expect(inAppBox?.width ?? 0).toBeLessThan(40);
+  expect(emailBox?.width ?? 0).toBeLessThan(40);
+  expect(inAppBox?.x ?? 0).toBeGreaterThanOrEqual(panelBox?.x ?? 0);
+  expect((inAppBox?.x ?? 0) - (panelBox?.x ?? 0)).toBeLessThan(48);
 });

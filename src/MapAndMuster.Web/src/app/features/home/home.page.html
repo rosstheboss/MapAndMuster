@@ -1,8 +1,13 @@
 <section class="page">
   <h1>Home</h1>
-  <p class="discord-invite">
-    <a [href]="discordInviteUrl" target="_blank" rel="noopener noreferrer">Join the Discord server</a>
-  </p>
+  <div class="home-links">
+    <p>
+      <a [href]="discordInviteUrl" target="_blank" rel="noopener noreferrer">Join the Discord server</a>
+    </p>
+    <p>
+      <a [href]="tutorialPlaylistUrl" target="_blank" rel="noopener noreferrer">Map & Muster tutorials</a>
+    </p>
+  </div>
   @if (auth.currentUser(); as user) {
     <section class="panel stack" aria-labelledby="attention-heading">
       <h2 id="attention-heading">Needs your attention</h2>

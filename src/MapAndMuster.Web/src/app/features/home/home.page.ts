@@ -33,6 +33,7 @@ export class HomePage {
   private readonly campaignsApi = inject(CampaignService);
   private readonly router = inject(Router);
   protected readonly discordInviteUrl = 'https://discord.gg/ATVt97DMnx';
+  protected readonly tutorialPlaylistUrl = 'https://youtu.be/MVTdwaomRAE?si=ZXnswNKBDHyPQMUx';
 
   protected readonly notifications = signal<HomeAttentionItem[]>([]);
   protected readonly notificationPage = signal(1);

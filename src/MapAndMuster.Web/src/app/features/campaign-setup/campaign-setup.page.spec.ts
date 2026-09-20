@@ -95,6 +95,7 @@ describe('CampaignSetupPage', () => {
       (input.closest('label')?.textContent ?? '').includes('Publicly viewable'),
     );
     expect(publicView?.checked).toBe(true);
+    expect(publicView).toBe(publicView?.closest('label')?.firstElementChild);
 
     const page = fixture.componentInstance as unknown as { save: () => Promise<void> };
     await page.save();

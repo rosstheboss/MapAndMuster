@@ -91,7 +91,8 @@ Cover:
 - Home notification board empty and populated states, dismiss and dismiss-all, five notices per
   page newest first with timestamps, two news articles per page, and administrator-only news edits.
   Home's Needs your attention list is built from `GET /api/campaigns` (in-progress round,
-  countdown, commit, remaining setup) and sits above Notifications and News.
+  countdown, commit, remaining setup) and sits above Notifications and News. Home also links to
+  the Discord invite and the Map & Muster YouTube tutorial playlist.
 - Manager add and kick of players (including private campaigns without the join password), promoting a
   player to campaign manager, adding a manager-only member, staff faction assignment, ending a
   campaign while keeping its final state (including a stale client revision after play has advanced),
@@ -197,8 +198,9 @@ Cover components/services for:
 - Permission-based navigation without relying on it as backend security. Below 45 rem the primary
   nav collapses behind a Menu button; Home and the theme toggle stay visible. Nav labels use
   sentence case. The theme toggle names the action, not the current mode.
-- Registration and profile field rows, a Choose image file picker, visible fieldsets, and sticky
-  Save on profile.
+- Registration and profile field rows, a Choose image file picker, visible fieldsets, sticky
+  Save on profile, and checkbox or radio rows left-aligned in their panel with the label text
+  after the control.
 - Password fields include a show/hide toggle that restores `type=password`.
 - Battle submissions, dispute state, notifications, objectives, relic visibility, and audits.
 - Campaign log display, member chat including typable recipient autocomplete and public/private/game-log/delinquency filters, live log refresh, chat send errors without the save success
@@ -216,7 +218,8 @@ Cover components/services for:
 - Public profile campaign list, scores placeholder, and Back to the previous in-app screen.
 - Home notification board, including "No new notifications.", dismiss and dismiss all, five
   notices per page newest first with timestamps, Needs your attention from the campaign list,
-  empty join/create actions, and two news articles per page.
+  empty join/create actions, two news articles per page, a Discord invite, and a Map & Muster
+  tutorials video link.
 - Campaign cards show status, round, countdown, player count, role, remaining setup, commit
   state, and Open while collapsed. Duplicate campaign and deleting a completed campaign both
   require a confirmation dialog. Empty Your campaigns offers Join campaign. All campaigns

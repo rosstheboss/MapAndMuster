@@ -58,6 +58,14 @@ describe('ProfilePage', () => {
     expect(compiled.querySelector('.form-sticky-actions')).toBeTruthy();
     expect(compiled.textContent).toContain('Choose image');
 
+    const notificationRows = [...compiled.querySelectorAll<HTMLLabelElement>('.checkbox-row')];
+    expect(notificationRows).toHaveLength(2);
+    expect(notificationRows[0]?.textContent).toContain('Show notices on the home board');
+    expect(notificationRows[1]?.textContent).toContain('Email me about mentions');
+    for (const row of notificationRows) {
+      expect(row.querySelector('input[type="checkbox"]')).toBe(row.firstElementChild);
+    }
+
     const page = fixture.componentInstance as unknown as {
       form: {
         controls: {

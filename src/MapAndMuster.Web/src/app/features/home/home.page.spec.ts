@@ -100,9 +100,11 @@ describe('HomePage', () => {
     expect(compiled.querySelector('a[href="/campaigns/new"]')?.textContent).toContain('Create a campaign');
     expect(compiled.textContent).toContain('No new notifications.');
     expect(compiled.textContent).toContain('No news has been published yet.');
-    const discord = compiled.querySelector<HTMLAnchorElement>('.discord-invite a');
-    expect(discord?.getAttribute('href')).toBe('https://discord.gg/ATVt97DMnx');
-    expect(discord?.textContent).toContain('Join the Discord server');
+    const links = [...compiled.querySelectorAll<HTMLAnchorElement>('.home-links a')];
+    expect(links[0]?.getAttribute('href')).toBe('https://discord.gg/ATVt97DMnx');
+    expect(links[0]?.textContent).toContain('Join the Discord server');
+    expect(links[1]?.getAttribute('href')).toBe('https://youtu.be/MVTdwaomRAE?si=ZXnswNKBDHyPQMUx');
+    expect(links[1]?.textContent).toContain('Map & Muster tutorials');
     const headings = [...compiled.querySelectorAll('h2')].map((node) => node.textContent.trim());
     expect(headings).toEqual(['Needs your attention', 'Notifications', 'News']);
     http.verify();
