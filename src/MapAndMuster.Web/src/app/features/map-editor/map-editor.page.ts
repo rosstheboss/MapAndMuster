@@ -80,7 +80,21 @@ import { territoryHoverTooltip } from '../../core/maps/territory-tooltip';
 import { BackToTopComponent } from '../../shared/back-to-top/back-to-top.component';
 import { CampaignMapViewComponent } from '../../shared/campaign-map-view/campaign-map-view.component';
 import { ConfirmButtonComponent } from '../../shared/confirm-button/confirm-button.component';
+import {
+  legendPillageSample,
+  representedLegendFactions,
+  representedLegendItems,
+  representedLegendStructures,
+} from '../../shared/map-legend/map-legend-marks';
 import { MapLegendComponent } from '../../shared/map-legend/map-legend.component';
+import { TerritoryDirectoryFilterComponent } from '../../shared/territory-directory-filter/territory-directory-filter.component';
+import {
+  applyTerritoryDirectoryFilter,
+  catalogTagsFrom,
+  createDefaultTerritoryDirectoryFilter,
+  type TerritoryDirectoryFilterContext,
+  type TerritoryDirectoryFilterState,
+} from '../../shared/territory-directory-filter/territory-directory-filter';
 import {
   TerritoryListItemComponent,
   territoryListItemMarks,
@@ -107,6 +121,7 @@ export type { OverlayColorMode };
     IconComponent,
     MapLegendComponent,
     MapSymbolComponent,
+    TerritoryDirectoryFilterComponent,
     TerritoryListItemComponent,
     InstantDatePipe,
     ConfirmButtonComponent,
@@ -255,13 +270,94 @@ export class MapEditorPage {
   protected readonly sortedTerritories = computed(() =>
     [...this.graph().territories].sort((left, right) => territoryLabel(left).localeCompare(territoryLabel(right))),
   );
+  protected readonly appliedDirectoryFilter = signal<TerritoryDirectoryFilterState | null>(null);
+  protected readonly directoryFilterContext = computed((): TerritoryDirectoryFilterContext => {
+    const campaign = this.campaign();
+    const graph = this.graph();
+    const factions = campaign?.factions ?? [];
+    const terrainTypes = campaign?.terrainTypes ?? [];
+    const structures = campaign?.structureTypes ?? [];
+    const itemTypes = campaign?.itemObjectiveTypes ?? [];
+    return {
+      factions,
+      terrainTypes,
+      structures,
+      allyGroups: campaign?.allyGroups ?? [],
+      factionTags: campaign?.factionTags?.length ? campaign.factionTags : catalogTagsFrom(factions),
+      terrainTags: campaign?.terrainTags?.length ? campaign.terrainTags : catalogTagsFrom(terrainTypes),
+      structureTags: campaign?.structureTags?.length ? campaign.structureTags : catalogTagsFrom(structures),
+      forces: [],
+      items: (graph.itemObjectivePlacements ?? []).flatMap((placement) => {
+        const type = itemTypes.find((item) => item.id === placement.typeId);
+        return type ? [{ territoryId: placement.territoryId, key: type.name }] : [];
+      }),
+      adjacencies: graph.adjacencies,
+    };
+  });
+  protected readonly activeDirectoryFilter = computed(
+    () => this.appliedDirectoryFilter() ?? createDefaultTerritoryDirectoryFilter(this.directoryFilterContext()),
+  );
+  protected readonly filteredTerritoryIds = computed(() =>
+    applyTerritoryDirectoryFilter(
+      this.graph().territories,
+      this.activeDirectoryFilter(),
+      this.directoryFilterContext(),
+    ),
+  );
+  protected readonly territoryDirectoryCount = computed(
+    () => `${this.filteredTerritoryIds().length}/${this.graph().territories.length}`,
+  );
+  protected readonly visibleTerritories = computed(() => {
+    const visible = new Set(this.filteredTerritoryIds());
+    return this.sortedTerritories().filter((territory) => visible.has(territory.id));
+  });
+  protected readonly legendFactions = computed(() =>
+    representedLegendFactions({
+      territories: this.graph().territories,
+      forceFactionIds: [],
+      factions: this.campaign()?.factions ?? [],
+      flagImageUrl: this.flagImageUrl,
+    }),
+  );
+  protected readonly legendStructures = computed(() =>
+    representedLegendStructures({
+      territories: this.graph().territories,
+      structures: this.campaign()?.structureTypes ?? [],
+      structureImageUrl: this.structureImageUrl,
+    }),
+  );
+  protected readonly legendPillageStructure = computed(() => legendPillageSample(this.legendStructures()));
+  protected readonly legendItems = computed(() => {
+    const types = this.campaign()?.itemObjectiveTypes ?? [];
+    const placed = this.graph().itemObjectivePlacements ?? [];
+    return representedLegendItems({
+      itemObjectiveTypes: types,
+      items: placed.flatMap((placement) => {
+        const type = types.find((item) => item.id === placement.typeId);
+        if (!type) {
+          return [];
+        }
+
+        return [
+          {
+            name: type.name,
+            builtinSymbol: type.builtinSymbol,
+            color: type.color,
+            imageUrl: type.hasImage ? this.itemObjectiveImageUrl(type.id) : null,
+          },
+        ];
+      }),
+      heldItems: [],
+      itemImageUrl: this.itemObjectiveImageUrl,
+    });
+  });
   private readonly topSelectedTerritoryId = computed(() => {
     const selected = new Set(this.selectedIds());
     if (selected.size === 0) {
       return null;
     }
 
-    return this.sortedTerritories().find((territory) => selected.has(territory.id))?.id ?? null;
+    return this.visibleTerritories().find((territory) => selected.has(territory.id))?.id ?? null;
   });
   protected readonly factionOptions = computed(() => {
     const campaign = this.campaign();
@@ -309,6 +405,10 @@ export class MapEditorPage {
 
   protected toggleTerritoryList(): void {
     this.territoryListCollapsed.update((collapsed) => !collapsed);
+  }
+
+  protected onDirectoryFilterApplied(filter: TerritoryDirectoryFilterState): void {
+    this.appliedDirectoryFilter.set(filter);
   }
 
   protected setShowOverlay(visible: boolean): void {
@@ -1074,6 +1174,16 @@ export class MapEditorPage {
     }
 
     return this.campaignsApi.structureImageUrl(campaign.id, structureTypeId, campaign.assetTags);
+  };
+
+  protected itemObjectiveImageUrl = (typeId: string): string | null => {
+    const campaign = this.campaign();
+    const type = campaign?.itemObjectiveTypes?.find((item) => item.id === typeId);
+    if (!campaign || !type?.hasImage) {
+      return null;
+    }
+
+    return this.campaignsApi.itemObjectiveImageUrl(campaign.id, typeId, campaign.assetTags);
   };
 
   protected flagImageUrl = (factionId: string, subfaction?: string | null): string | null => {

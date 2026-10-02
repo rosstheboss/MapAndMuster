@@ -223,6 +223,19 @@ function intersects(left: readonly string[] | undefined, right: readonly string[
   return (left ?? []).some((id) => right.includes(id));
 }
 
+export function catalogTagsFrom(items: readonly { tagIds?: string[] }[]): CatalogTag[] {
+  const names = new Map<string, CatalogTag>();
+  for (const item of items) {
+    for (const id of item.tagIds ?? []) {
+      if (!names.has(id)) {
+        names.set(id, { id, name: id });
+      }
+    }
+  }
+
+  return [...names.values()];
+}
+
 export function revealedItemKeys(context: TerritoryDirectoryFilterContext): string[] {
   return [...new Set(context.items.filter((item) => !item.hidden).map((item) => item.key))].sort((left, right) =>
     left.localeCompare(right),

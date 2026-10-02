@@ -59,7 +59,7 @@
       <input type="checkbox" [checked]="showNames()" (change)="onShowNamesChange($event)" aria-keyshortcuts="N" />
       Show Names
     </label>
-    @if (showTerritoryDirectory()) {
+    @if (territoryFilterAvailable()) {
       <label class="layer-toggle" title="Show Only Filtered Territories (T)">
         <input
           type="checkbox"
@@ -107,7 +107,7 @@
               : 'C commits ' + commitNoun().toLowerCase() + ' when that button is enabled. '
             : '') +
           'N toggles territory names. ' +
-          (showTerritoryDirectory() ? 'T toggles showing only filtered territories. ' : '') +
+          (territoryFilterAvailable() ? 'T toggles showing only filtered territories. ' : '') +
           'Tab to a territory and press Enter or Space to select it. Zoom up to 800 percent to trace fine coasts. ' +
           'Drawing requires a pointer.'
         "

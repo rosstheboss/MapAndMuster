@@ -2721,6 +2721,30 @@ describe('CampaignMapViewComponent', () => {
     expect(compiled.querySelector('.map-legend')).toBeNull();
     expect(compiled.querySelector('.map-guide')).toBeNull();
     expect(compiled.querySelector('.map-body')?.classList.contains('has-guide')).toBe(false);
+    expect(compiled.textContent).not.toContain('Show Only Filtered Territories');
+  });
+
+  it('filters the overlay from host territory ids when the directory is hidden', () => {
+    const fixture = TestBed.createComponent(CampaignMapViewComponent);
+    fixture.componentRef.setInput('imageUrl', png);
+    fixture.componentRef.setInput('showTerritoryDirectory', false);
+    fixture.componentRef.setInput('hostFilteredTerritoryIds', ['t1']);
+    fixture.componentRef.setInput('territories', [
+      { ...squareTerritory('t1', 0.1, 0.1), name: 'Coast' },
+      { ...squareTerritory('t2', 0.4, 0.1), name: 'Ridge' },
+    ]);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.map-guide')).toBeNull();
+    expect(compiled.querySelectorAll('.territory-hit')).toHaveLength(2);
+    const view = fixture.componentInstance as unknown as {
+      onDocumentKeydown: (event: KeyboardEvent) => void;
+    };
+    view.onDocumentKeydown(new KeyboardEvent('keydown', { key: 't' }));
+    fixture.detectChanges();
+    expect(compiled.querySelectorAll('.territory-hit')).toHaveLength(1);
+    expect(compiled.querySelector('.territory-hit')?.getAttribute('aria-label')).toContain('Coast');
   });
 });
 

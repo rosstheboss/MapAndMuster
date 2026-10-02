@@ -932,6 +932,9 @@ to an existing vertex. Managers may undo, redo, or erase segments, assign an opt
 description (otherwise the display number 1, 2, 3… is used), select a required terrain type,
 select at most one optional structure and whether that structure starts Operational or Pillaged,
 assign optional ownership (otherwise Neutral), and mark a territory as a spawn location.
+Saving stores Neutral when the owner is blank, empty, or not one of the campaign's current factions,
+including an owner left behind after that faction was removed. That save still succeeds, and any
+owner subfaction on that territory is cleared.
 The spawn faction list starts with Neutral, a neutral spawn that is not owned by a faction.
 When random spawn locations is on, that list is hidden and every spawn location is neutral.
 At most one spawn is allowed per faction, or per required subfaction when that faction requires
@@ -1081,8 +1084,10 @@ pillaged, structure exists, occupied, revealed item objectives, and whether to k
 adjacent to that matching set (or only those that are not). Multi-selects start fully selected and
 tri-state rows start at Any, except Adjacent to matching only which also starts at Any so every
 territory is listed. Apply (check) and Clear (x) commit or reset the filter. The list uses the
-applied filter immediately; the map overlay still shows every territory until Show Filtered
-Territories is on. Selected-territory details sit under the map in that left column rather than spanning the
+applied filter immediately; the map overlay still shows every territory until Show Only Filtered
+Territories is on. The map editor uses that same Filter panel, Map legend, and row iconography.
+Changing ownership, a spawn location, terrain, a structure, or a placed item on the unsaved graph
+updates the row marks, the legend, and which rows the applied filter keeps. Selected-territory details sit under the map in that left column rather than spanning the
 directory. Zoom
 controls sit across the top of the map in this order: zoom percent field, +, -, Fit, 100%, Full
 screen, Cycle forces when you own at least one force, then the same Commit / Uncommit control as
@@ -1161,9 +1166,12 @@ color as other dark-background fields in dark mode.
 The instruction paragraph under the toolbar is omitted. Editable territory fields sit in a
 collapsible horizontal bar below the map and zoom controls. The territory list stays in the side
 panel as a collapsible toolbar; when expanded it scrolls, and its max height matches the map, zoom
-controls, and territory-edit section combined so the list never extends below that column. Selecting a
+controls, and territory-edit section combined so the list never extends below that column. The same
+Map legend and Filter panel sit above that list. The heading reads `Territories (visible/total)`.
+Rows use the campaign directory marks, without occupying-force dots. Selecting a
 territory that is outside the visible list range scrolls that row into view; a multi-selection
-scrolls to the topmost selected name. Zoom controls include Show Overlay (on by default) and
+scrolls to the topmost selected name that the applied filter still shows. Show Only Filtered
+Territories on the editor map uses that applied filter and starts off. Zoom controls include Show Overlay (on by default) and
 Show Connections (on by default). Turning off Show Overlay hides the territory overlay, markers, and
 connections. Show Connections has no effect while Show Overlay is off. When one or more territories
 are selected, other territories that are not selected, hovered, or connected to the selection drop

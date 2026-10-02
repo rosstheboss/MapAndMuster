@@ -1546,9 +1546,14 @@ describe('MapEditorPage', () => {
     expect(legend?.textContent).toContain('Force');
     expect(legend?.textContent).toContain('Selected territory');
     expect(legend?.textContent).not.toContain('Item objective');
+    expect(legend?.textContent).toContain('Hidden relic nearby');
     expect(section?.querySelector('.territory-list')).toBeTruthy();
+    expect(sidePane?.textContent).toContain('Territories (1/1)');
+    const filter = sidePane?.querySelector<HTMLDetailsElement>('.territory-filter');
+    expect(filter?.open).toBe(false);
     expect(sidePane?.children[0]?.tagName.toLowerCase()).toBe('app-map-legend');
-    expect(sidePane?.children[1]).toBe(section);
+    expect(sidePane?.children[1]?.tagName.toLowerCase()).toBe('app-territory-directory-filter');
+    expect(sidePane?.children[2]).toBe(section);
 
     legend?.querySelector('summary')?.click();
     fixture.detectChanges();
@@ -1557,7 +1562,114 @@ describe('MapEditorPage', () => {
     compiled.querySelector<HTMLButtonElement>('.side-pane-toggle')?.click();
     fixture.detectChanges();
     expect(compiled.querySelector('.side-pane .map-legend')).toBeNull();
+    expect(compiled.querySelector('.side-pane .territory-filter')).toBeNull();
     expect(compiled.querySelector('.territory-list')).toBeNull();
+    http.verify();
+  });
+
+  it('updates the territory list, legend, and filter as ownership, spawn, and features change', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({
+      ...campaign,
+      itemObjectiveTypes: [
+        {
+          id: 'crown',
+          name: 'Crown',
+          isHiddenUntilFound: false,
+          placement: 'Placed',
+          allowOnSpawn: true,
+          builtinSymbol: 'Crown',
+          color: '#C45C26',
+          hasImage: false,
+        },
+      ],
+    });
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1), namedSquare('t2', 2, 'Southmarch', 0.4)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      setOwner: (value: string) => void;
+      setStructure: (value: string) => void;
+      setSpawnLocation: (enabled: boolean) => void;
+      setItemPlacedHere: (typeId: string, placed: boolean) => void;
+    };
+    const names = (): string[] =>
+      [...compiled.querySelectorAll('.territory-list .item-label')].map((item) => item.textContent.trim());
+    const heading = (): string => {
+      const text = compiled.querySelector('.side-pane-toggle')?.textContent;
+      return text ? text.replace(/\s+/g, ' ').trim() : '';
+    };
+
+    expect(heading()).toContain('Territories (2/2)');
+    expect(names()).toEqual(['Northmarch', 'Southmarch']);
+    expect(compiled.querySelector('.map-legend')?.textContent).not.toContain('North');
+    expect(compiled.querySelector('.map-legend')?.textContent).not.toContain('Town');
+    expect(compiled.querySelector('.map-legend')?.textContent).not.toContain('Crown');
+
+    page.onTerritorySelect({ id: 't1', additive: false });
+    page.setOwner('north');
+    page.setStructure('town');
+    page.setItemPlacedHere('crown', true);
+    fixture.detectChanges();
+
+    const northRow = compiled.querySelector('[data-territory-id="t1"]');
+    expect(northRow?.querySelector('.owner-flag')).toBeTruthy();
+    expect(northRow?.querySelectorAll('app-map-symbol')).toHaveLength(2);
+    expect(compiled.querySelector('.map-legend')?.textContent).toContain('North');
+    expect(compiled.querySelector('.map-legend')?.textContent).toContain('Town');
+    expect(compiled.querySelector('.map-legend')?.textContent).toContain('Pillaged Town');
+    expect(compiled.querySelector('.map-legend')?.textContent).toContain('Crown');
+    expect(compiled.querySelector('.territory-filter')?.textContent).toContain('Crown');
+
+    compiled.querySelector<HTMLElement>('.territory-filter summary')?.click();
+    fixture.detectChanges();
+    setEditorTri(compiled, 'Structure exists', 'yes');
+    compiled.querySelector<HTMLButtonElement>('.territory-filter [aria-label="Apply"]')?.click();
+    fixture.detectChanges();
+    expect(heading()).toContain('Territories (1/2)');
+    expect(names()).toEqual(['Northmarch']);
+
+    page.setStructure('');
+    fixture.detectChanges();
+    expect(heading()).toContain('Territories (0/2)');
+    expect(names()).toEqual([]);
+    expect(compiled.querySelector('.map-legend')?.textContent).not.toContain('Town');
+
+    page.setStructure('town');
+    fixture.detectChanges();
+    expect(names()).toEqual(['Northmarch']);
+
+    compiled.querySelector<HTMLButtonElement>('.territory-filter [aria-label="Clear"]')?.click();
+    fixture.detectChanges();
+    expect(heading()).toContain('Territories (2/2)');
+    expect(names()).toEqual(['Northmarch', 'Southmarch']);
+
+    page.setSpawnLocation(true);
+    fixture.detectChanges();
+    setEditorTri(compiled, 'Spawn location', 'yes');
+    compiled.querySelector<HTMLButtonElement>('.territory-filter [aria-label="Apply"]')?.click();
+    fixture.detectChanges();
+    expect(names()).toEqual(['Northmarch']);
+
+    page.setSpawnLocation(false);
+    fixture.detectChanges();
+    expect(names()).toEqual([]);
+
+    page.setSpawnLocation(true);
+    fixture.detectChanges();
+    expect(names()).toEqual(['Northmarch']);
+
+    const filtered = [...compiled.querySelectorAll('label')].find((item) =>
+      item.textContent.includes('Show Only Filtered Territories'),
+    );
+    expect(filtered?.getAttribute('title')).toBe('Show Only Filtered Territories (T)');
     http.verify();
   });
 
@@ -1937,6 +2049,19 @@ describe('MapEditorPage', () => {
     http.verify();
   });
 });
+
+function setEditorTri(compiled: HTMLElement, label: string, value: string): void {
+  const field = [...compiled.querySelectorAll('.territory-filter .tri-field')].find((item) =>
+    item.textContent.includes(label),
+  );
+  const select = field?.querySelector('select');
+  if (!select) {
+    throw new Error(`Missing ${label} filter`);
+  }
+
+  select.value = value;
+  select.dispatchEvent(new Event('change'));
+}
 
 function namedSquare(id: string, displayNumber: number, name: string, x: number): MapTerritory {
   return {

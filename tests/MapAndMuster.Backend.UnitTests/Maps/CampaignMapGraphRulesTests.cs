@@ -239,6 +239,64 @@ public sealed class CampaignMapGraphRulesTests
     }
 
     [Fact]
+    public void SavesBlankOrUnknownOwnersAsNeutral()
+    {
+        var removedFactionId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+        var ok = CampaignMapGraphRules.TryCreate(
+            [
+                Territory(
+                    Guid.NewGuid(),
+                    1,
+                    "Northmarch",
+                    Square(0.1, 0.1, 0.3),
+                    PlainsId,
+                    null,
+                    null,
+                    removedFactionId,
+                    null,
+                    ownerSubfaction: "Khorne"),
+                Territory(
+                    Guid.NewGuid(),
+                    2,
+                    "Southmarch",
+                    Square(0.4, 0.1, 0.3),
+                    SeaId,
+                    null,
+                    null,
+                    Guid.Empty,
+                    null,
+                    ownerSubfaction: "Nurgle"),
+                Territory(
+                    Guid.NewGuid(),
+                    3,
+                    null,
+                    Square(0.7, 0.1, 0.3),
+                    SwampId,
+                    null,
+                    null,
+                    null,
+                    null),
+            ],
+            [],
+            new HashSet<Guid> { NorthId },
+            TerrainIds,
+            StructureIds,
+            out var graph,
+            out var errors);
+
+        Assert.True(ok, string.Join("; ", errors.Select(error => error.Message)));
+        Assert.NotNull(graph);
+        Assert.All(graph.Territories, territory =>
+        {
+            Assert.Null(territory.OwnerFactionId);
+            Assert.Null(territory.OwnerSubfaction);
+        });
+        Assert.DoesNotContain(
+            errors,
+            error => error.Code is "territories.owner.invalid" or "territories.ownerSubfaction.invalid");
+    }
+
+    [Fact]
     public void RejectsMissingTerrainAndDuplicateSpawns()
     {
         var missingTerrain = CampaignMapGraphRules.TryCreate(

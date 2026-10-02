@@ -59,11 +59,18 @@ import { territoryLabel, type MapAdjacency, type MapTerritory } from '../../core
 import { territoryHoverTooltip, type TerritoryTooltipBattle } from '../../core/maps/territory-tooltip';
 import { AppDialogService } from '../dialog/dialog.service';
 import { IconComponent } from '../icon/icon.component';
+import {
+  legendPillageSample,
+  representedLegendFactions,
+  representedLegendItems,
+  representedLegendStructures,
+} from '../map-legend/map-legend-marks';
 import { MapLegendComponent } from '../map-legend/map-legend.component';
 import { MapSymbolComponent } from '../map-symbol/map-symbol.component';
 import { TerritoryDirectoryFilterComponent } from '../territory-directory-filter/territory-directory-filter.component';
 import {
   applyTerritoryDirectoryFilter,
+  catalogTagsFrom,
   createDefaultTerritoryDirectoryFilter,
   type TerritoryDirectoryFilterContext,
   type TerritoryDirectoryFilterState,
@@ -171,6 +178,11 @@ export class CampaignMapViewComponent {
   readonly layerToggles = input(false);
   /** When false, the host supplies the right-hand Map legend and Territories column. */
   readonly showTerritoryDirectory = input(true);
+  /**
+   * Applied directory-filter territory ids when the host draws the filter outside this view.
+   * Null leaves overlay filtering to the built-in directory.
+   */
+  readonly hostFilteredTerritoryIds = input<readonly string[] | null>(null);
   readonly showConnectionsToggle = input(true);
   readonly adjacenciesInteractive = input(false);
   readonly focusSelectedTerritories = input(false);
@@ -463,11 +475,11 @@ export class CampaignMapViewComponent {
         tooltip: this.territoryTooltip(territory),
       };
     });
-    if (!this.showFilteredTerritories()) {
+    const visible = this.overlayVisibleIds();
+    if (!visible) {
       return rows;
     }
 
-    const visible = this.visibleTerritoryIdSet();
     return rows.filter((item) => visible.has(item.territory.id));
   });
 
@@ -494,119 +506,66 @@ export class CampaignMapViewComponent {
 
   private readonly visibleTerritoryIdSet = computed(() => new Set(this.filteredTerritoryIds()));
 
+  protected readonly territoryFilterAvailable = computed(
+    () => this.showTerritoryDirectory() || this.hostFilteredTerritoryIds() !== null,
+  );
+
+  /** Null while the overlay still draws every territory. */
+  private readonly overlayVisibleIds = computed((): ReadonlySet<string> | null => {
+    if (!this.showFilteredTerritories()) {
+      return null;
+    }
+
+    if (this.showTerritoryDirectory()) {
+      return this.visibleTerritoryIdSet();
+    }
+
+    const hostIds = this.hostFilteredTerritoryIds();
+    return hostIds ? new Set(hostIds) : null;
+  });
+
   protected readonly territoryDirectoryCount = computed(
     () => `${this.filteredTerritoryIds().length}/${this.territories().length}`,
   );
 
   protected readonly markerLayouts = computed(() => {
     const layouts = this.territoryLayouts();
-    if (!this.showFilteredTerritories()) {
+    const visible = this.overlayVisibleIds();
+    if (!visible) {
       return layouts;
     }
 
-    const visible = this.visibleTerritoryIdSet();
     return layouts.filter((layout) => visible.has(layout.territory.id));
   });
 
-  protected readonly legendFactions = computed(() => {
-    const used = new Set<string>();
-    for (const territory of this.territories()) {
-      if (territory.ownerFactionId) {
-        used.add(territory.ownerFactionId);
-      }
+  protected readonly legendFactions = computed(() =>
+    representedLegendFactions({
+      territories: this.territories(),
+      forceFactionIds: this.forces().map((force) => force.factionId),
+      factions: this.factions(),
+      flagImageUrl: this.flagImageUrl(),
+      failedFlagUrls: this.failedFlagUrls(),
+    }),
+  );
 
-      if (territory.spawnFactionId) {
-        used.add(territory.spawnFactionId);
-      }
-    }
+  protected readonly legendStructures = computed(() =>
+    representedLegendStructures({
+      territories: this.territories(),
+      structures: this.structures(),
+      structureImageUrl: this.structureImageUrl(),
+    }),
+  );
 
-    for (const force of this.forces()) {
-      used.add(force.factionId);
-    }
+  protected readonly legendPillageStructure = computed(() => legendPillageSample(this.legendStructures()));
 
-    return this.factions()
-      .filter((faction) => used.has(faction.id))
-      .map((faction) => {
-        const appearance = resolveFactionAppearance(faction, null);
-        const flagUrl = appearance.hasFlagImage ? this.flagImageUrl()(faction.id, null) : null;
-        return {
-          id: faction.id,
-          name: faction.name,
-          color: appearance.color,
-          image: flagUrl && !this.failedFlagUrls().has(flagUrl) ? flagUrl : null,
-          tint: appearance.tint,
-        };
-      });
-  });
-
-  protected readonly legendStructures = computed(() => {
-    const used = new Set(
-      this.territories()
-        .filter((territory) => territory.structureTypeId && territory.structureCondition !== 'Destroyed')
-        .map((territory) => territory.structureTypeId!),
-    );
-    return this.structures()
-      .filter((structure) => used.has(structure.id))
-      .map((structure) => ({
-        id: structure.id,
-        name: structure.name,
-        builtinSymbol: structure.builtinSymbol,
-        hasImage: structure.hasImage,
-        hasPillagedImage: structure.hasPillagedImage,
-        isPillageable: structure.isPillageable,
-        imageUrl: structure.hasImage ? this.structureImageUrl()(structure.id, false) : null,
-        pillagedImageUrl: structure.hasPillagedImage ? this.structureImageUrl()(structure.id, true) : null,
-      }));
-  });
-
-  protected readonly legendPillageStructure = computed(() => {
-    const structures = this.legendStructures();
-    return structures.find((structure) => structure.isPillageable) ?? structures.at(0) ?? null;
-  });
-
-  protected readonly legendItems = computed(() => {
-    const seen = new Map<string, { name: string; builtinSymbol: string; color: string; imageUrl: string | null }>();
-    const add = (
-      name: string,
-      builtinSymbol: string | undefined,
-      color: string | undefined,
-      imageUrl: string | null,
-    ): void => {
-      if (!seen.has(name)) {
-        seen.set(name, {
-          name,
-          builtinSymbol: builtinSymbol ?? 'Crown',
-          color: color ?? '#C45C26',
-          imageUrl,
-        });
-      }
-    };
-
-    for (const type of this.itemObjectiveTypes()) {
-      const represented =
-        this.items().some((item) => !item.hidden && item.name === type.name) ||
-        this.forces().some((force) => (force.heldItems ?? []).some((held) => held.name === type.name));
-      if (represented) {
-        add(type.name, type.builtinSymbol, type.color, type.hasImage ? this.itemImageUrl()(type.id) : null);
-      }
-    }
-
-    for (const item of this.items()) {
-      if (item.hidden) {
-        continue;
-      }
-
-      add(item.name, item.builtinSymbol, item.color, item.imageUrl ?? null);
-    }
-
-    for (const force of this.forces()) {
-      for (const held of force.heldItems ?? []) {
-        add(held.name, held.builtinSymbol, held.color, held.imageUrl);
-      }
-    }
-
-    return [...seen.values()].sort((left, right) => left.name.localeCompare(right.name));
-  });
+  protected readonly legendItems = computed(() =>
+    representedLegendItems({
+      itemObjectiveTypes: this.itemObjectiveTypes(),
+      items: this.items(),
+      heldItems: this.forces().flatMap((force) => force.heldItems ?? []),
+      itemImageUrl: this.itemImageUrl(),
+    }),
+  );
 
   protected readonly legendShowYourForce = computed(() => this.ownForces().length > 0);
   protected readonly legendShowForceInBattle = computed(() => this.forces().some((force) => force.inBattle));
@@ -779,11 +738,9 @@ export class CampaignMapViewComponent {
           continue;
         }
 
-        if (this.showFilteredTerritories()) {
-          const visible = this.visibleTerritoryIdSet();
-          if (!visible.has(fromId) && !visible.has(toId)) {
-            continue;
-          }
+        const visible = this.overlayVisibleIds();
+        if (visible && !visible.has(fromId) && !visible.has(toId)) {
+          continue;
         }
 
         const ends = adjacencyArrowEndpoints(from.polygon, to.polygon, inset);
@@ -1446,7 +1403,7 @@ export class CampaignMapViewComponent {
       return;
     }
 
-    if ((event.key === 't' || event.key === 'T') && this.showTerritoryDirectory()) {
+    if ((event.key === 't' || event.key === 'T') && this.territoryFilterAvailable()) {
       event.preventDefault();
       this.toggleShowFilteredTerritories();
       return;
@@ -2302,17 +2259,4 @@ function clampAxis(pan: number, viewport: number, scaled: number): number {
 
 function spawnStripePatternId(color: string): string {
   return `spawn-stripe-${color.replace(/[^a-zA-Z0-9]/g, '')}`;
-}
-
-function catalogTagsFrom(items: readonly { tagIds?: string[] }[]): CatalogTag[] {
-  const names = new Map<string, CatalogTag>();
-  for (const item of items) {
-    for (const id of item.tagIds ?? []) {
-      if (!names.has(id)) {
-        names.set(id, { id, name: id });
-      }
-    }
-  }
-
-  return [...names.values()];
 }

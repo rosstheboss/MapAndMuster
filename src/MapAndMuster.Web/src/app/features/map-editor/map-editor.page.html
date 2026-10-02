@@ -252,6 +252,7 @@
               [showConnectionsToggle]="showConnections()"
               [layerToggles]="true"
               [showTerritoryDirectory]="false"
+              [hostFilteredTerritoryIds]="filteredTerritoryIds()"
               [focusSelectedTerritories]="true"
               [adjacenciesInteractive]="tool() === 'select' || tool() === 'erase'"
               [interactive]="true"
@@ -638,7 +639,17 @@
 
         <aside class="side-pane panel" [class.is-collapsed]="territoryListCollapsed()" aria-live="polite">
           @if (!territoryListCollapsed()) {
-            <app-map-legend />
+            <app-map-legend
+              [factions]="legendFactions()"
+              [structures]="legendStructures()"
+              [pillageStructure]="legendPillageStructure()"
+              [items]="legendItems()"
+              [showPlayGlows]="true"
+            />
+            <app-territory-directory-filter
+              [context]="directoryFilterContext()"
+              (applied)="onDirectoryFilterApplied($event)"
+            />
           }
           <div class="territory-list-section">
             <button
@@ -651,12 +662,12 @@
             >
               <app-icon class="side-pane-chevron" name="chevron-down" />
               @if (!territoryListCollapsed()) {
-                <span>Territories</span>
+                <span>Territories ({{ territoryDirectoryCount() }})</span>
               }
             </button>
             @if (!territoryListCollapsed()) {
               <ul #territoryList class="plain-list territory-list" aria-label="Territories">
-                @for (territory of sortedTerritories(); track territory.id) {
+                @for (territory of visibleTerritories(); track territory.id) {
                   <li>
                     <app-territory-list-item
                       [marks]="territoryListMarks(territory)"
@@ -668,7 +679,9 @@
                     />
                   </li>
                 } @empty {
-                  <li class="muted">No territories yet.</li>
+                  <li class="muted">
+                    {{ graph().territories.length ? 'No matching territories.' : 'No territories yet.' }}
+                  </li>
                 }
               </ul>
             }

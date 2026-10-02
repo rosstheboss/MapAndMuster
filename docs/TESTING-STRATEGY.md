@@ -167,8 +167,13 @@ Cover components/services for:
   empty or populated and scrolls overflow so hovering or selecting a territory does not grow the
   campaign page or shrink the full-screen map. The campaign map Territories list stays within the
   map column height, scrolls vertically, and shrinks when Map legend is expanded so the Map panel
-  does not grow. The map editor uses the same collapsible Map legend above its Territories list in the
-  right column; expanding the legend shrinks the list so the editor layout does not grow. Show-names
+  does not grow. The map editor uses the same collapsible Map legend and Filter panel above its
+  Territories list in the right column; expanding either shrinks the list so the editor layout does
+  not grow. The heading includes `(visible/total)`. Unsaved ownership, spawn, terrain, structure, and
+  placed-item edits update the row marks, the legend, and which rows the applied filter keeps.
+  Saving a map stores Neutral when a territory owner is blank, empty, or not a current campaign
+  faction, including an owner left after that faction was removed, and clears that owner subfaction.
+  Show-names
   labels stay screen-sized while zoomed and
   use theme surface/text colors. Named territories keep their full name at any size; unnamed display
   numbers hide when they would not fit. N toggles Show Names. T toggles Show Only Filtered Territories.
@@ -186,8 +191,8 @@ Cover components/services for:
   within the map column height, scrolls vertically, and scrolls the topmost selected territory into
   view. Mode tools are grouped separately from Connections, Colors, and File commands, with Select
   first and selected by default, and the
-  active mode does not use the primary Save Map color. Campaign Territories rows show occupying force dots first, then owner mark, optional structure,
-  terrain type, then name. Map-editor Territories rows show owner mark, optional structure, terrain type, then name. Edit map is hidden once a campaign is no
+  active mode does not use the primary Save Map color. Campaign and map-editor Territories rows use the same marks: occupying force dots when a force is present, then owner mark, optional structure,
+  terrain type, then name. The map editor has no forces, so those dots are absent. Show Only Filtered Territories (T) on the editor map uses the applied filter and starts off. Edit map is hidden once a campaign is no
   longer Scheduled; opening the editor anyway returns to the campaign page with a notice.
   Administrators can save as a preset from the map editor; the save-name lookup includes The Hunt in
   Estalia. Edit campaign exposes administrator Download Preset and Upload Preset for a portable

@@ -180,22 +180,16 @@ public static class CampaignMapGraphRules
                 ? suppliedSpawn
                 : null;
 
+            // A blank owner, an empty identifier, or a faction removed from the campaign is Neutral.
+            // Saving keeps the territory and drops that stale owner instead of rejecting the graph.
             if (ownerFactionId is { } ownerId && !knownFactionIds.Contains(ownerId))
             {
-                errors.Add(new DomainError(
-                    "territories.owner.invalid",
-                    $"Territory {displayNumber} owner is not a faction in this campaign.",
-                    $"{field}.ownerFactionId"));
                 ownerFactionId = null;
                 ownerSubfaction = null;
             }
 
             if (ownerSubfaction is not null && ownerFactionId is null)
             {
-                errors.Add(new DomainError(
-                    "territories.ownerSubfaction.invalid",
-                    $"Territory {displayNumber} owner subfaction requires an owner faction.",
-                    $"{field}.ownerSubfaction"));
                 ownerSubfaction = null;
             }
 
