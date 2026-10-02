@@ -470,7 +470,35 @@
                         }
                       </select>
                     </div>
-                    @if (needsDraftDestination(force, draftFor(force.id).kind)) {
+                    @if (draftFor(force.id).kind === 'Move') {
+                      @for (step of moveStepFields(force); track step.index) {
+                        <div class="field grow">
+                          <label [attr.for]="'move-step-' + force.id + '-' + step.index">
+                            {{ step.index === 0 ? 'First territory' : 'Next territory' }}
+                          </label>
+                          <select
+                            [id]="step.index === 0 ? 'target-' + force.id : 'move-step-' + force.id + '-' + step.index"
+                            [ngModel]="step.value"
+                            (ngModelChange)="onMoveStep(force.id, step.index, $event)"
+                            [name]="'move-step-' + force.id + '-' + step.index"
+                          >
+                            <option value="">Select a territory</option>
+                            @for (target of step.options; track target) {
+                              <option [value]="target">{{ territoryName(target) }}</option>
+                            }
+                          </select>
+                        </div>
+                      }
+                      <button
+                        type="button"
+                        class="button"
+                        [id]="'finish-move-' + force.id"
+                        [disabled]="!movementPathReady(force, movementSteps(force))"
+                        (click)="finishMoveDraft(force)"
+                      >
+                        Finish
+                      </button>
+                    } @else if (needsDraftDestination(force, draftFor(force.id).kind)) {
                       <div class="field grow">
                         <label [attr.for]="'target-' + force.id">Destination</label>
                         <select
@@ -693,7 +721,9 @@
             >
               <option value="configured">Configured colors</option>
               <option value="faction">Faction colors</option>
-              <option value="alliance">Alliance colors</option>
+              @if (!campaign.isFreeForAll) {
+                <option value="alliance">Alliance colors</option>
+              }
             </select>
           </label>
         }
@@ -702,6 +732,42 @@
         @if (mapSrc(); as src) {
           <div class="map-view">
             <div class="map-board" #mapBoard>
+              @if (movementWalkActive()) {
+                <div class="movement-bar panel">
+                  <p>Movement points: {{ movementRemaining() }} remaining</p>
+                  <button
+                    type="button"
+                    class="button"
+                    id="finish-movement"
+                    [disabled]="!movementCanFinish()"
+                    (click)="finishMovement()"
+                  >
+                    Finish
+                  </button>
+                  <button
+                    type="button"
+                    class="button-secondary"
+                    [disabled]="!movementCanBackUp()"
+                    (click)="backUpMovement()"
+                  >
+                    Back Up
+                  </button>
+                  <button type="button" class="button-secondary" (click)="cancelMovement()">Cancel</button>
+                  @if (movementForce(); as moving) {
+                    @for (item of droppableItemsFor(moving); track item.id) {
+                      <label>
+                        <input
+                          type="checkbox"
+                          [ngModel]="isMapItemDropSelected(item.id)"
+                          (ngModelChange)="onMapDropItem(item.id, $event)"
+                          [name]="'map-drop-' + item.id"
+                        />
+                        Drop {{ item.name }}
+                      </label>
+                    }
+                  }
+                </div>
+              }
               <app-campaign-map-view
                 [imageUrl]="src"
                 [campaignId]="campaign.id"
@@ -727,6 +793,7 @@
                 [items]="mapItems()"
                 [colorMode]="highlightMode()"
                 [allyGroups]="campaign.allyGroups"
+                [isFreeForAll]="campaign.isFreeForAll === true"
                 [brokenAllyFactionIds]="campaign.brokenAllyFactionIds ?? play()?.brokenAllyFactionIds ?? []"
                 [itemImageUrl]="itemObjectiveImageUrl"
                 [focusSelectedTerritories]="true"
@@ -826,8 +893,10 @@
                       }
                     </p>
                     <p [class.app-glow]="!!territory.spawnFactionId">
-                      Spawn location faction:
-                      @if (territory.spawnFactionId; as spawnId) {
+                      Spawn location:
+                      @if (isNeutralSpawn(territory.spawnFactionId)) {
+                        Neutral
+                      } @else if (territory.spawnFactionId; as spawnId) {
                         <a
                           class="territory-link"
                           [attr.href]="'#campaign-faction-' + spawnId"
@@ -835,7 +904,7 @@
                           >{{ factionName(spawnId) }}</a
                         >
                       } @else {
-                        None
+                        No
                       }
                     </p>
                     <p>Forces: {{ forcesInTerritory(territory.id).join(', ') || 'None' }}</p>
@@ -2079,7 +2148,7 @@
       </div>
     }
 
-    @if (campaign.allyGroups.length > 0) {
+    @if (!campaign.isFreeForAll && campaign.allyGroups.length > 0) {
       <div class="panel stack">
         <h2>
           <button

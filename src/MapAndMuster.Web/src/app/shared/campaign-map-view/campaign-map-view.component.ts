@@ -22,6 +22,7 @@ import type {
   CatalogTag,
 } from '../../core/campaigns/campaign.models';
 import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
+import { freeForAllPlayerColors } from '../../core/campaigns/free-for-all-colors';
 import type { MapHighlightMode } from '../../core/campaigns/campaign-view-prefs.service';
 import { adjacencyArrowEndpoints, adjacencyArrowGeometry, directedArrowGeometry } from '../../core/maps/adjacency';
 import {
@@ -97,6 +98,7 @@ export interface MapForceMarker {
   id: string;
   territoryId: string;
   factionId: string;
+  controllerUserId?: string | null;
   subfaction?: string | null;
   isMine: boolean;
   inBattle: boolean;
@@ -188,6 +190,7 @@ export class CampaignMapViewComponent {
   readonly items = input<readonly MapItemMarker[]>([]);
   readonly colorMode = input<MapHighlightMode>('configured');
   readonly allyGroups = input<readonly CampaignAllyGroup[]>([]);
+  readonly isFreeForAll = input(false);
   readonly factionTags = input<readonly CatalogTag[]>([]);
   readonly terrainTags = input<readonly CatalogTag[]>([]);
   readonly structureTags = input<readonly CatalogTag[]>([]);
@@ -373,7 +376,7 @@ export class CampaignMapViewComponent {
         return {
           force,
           fit,
-          color: forceAppearance.color,
+          color: this.playerColor(force) ?? forceAppearance.color,
           emphasized: this.emphasizedForceIds().includes(force.id),
         };
       });
@@ -642,7 +645,7 @@ export class CampaignMapViewComponent {
       .filter((force) => force.territoryId === territoryId)
       .map((force) => {
         const owner = this.factions().find((faction) => faction.id === force.factionId) ?? null;
-        return { color: resolveFactionAppearance(owner, force.subfaction).color };
+        return { color: this.playerColor(force) ?? resolveFactionAppearance(owner, force.subfaction).color };
       });
   }
 
@@ -1560,6 +1563,27 @@ export class CampaignMapViewComponent {
     return fitSquareInPolygon(polygon, preferred, maxWidth, maxHeight, logos, options);
   }
 
+  private playerColor(force: MapForceMarker): string | null {
+    if (!this.isFreeForAll() || !force.controllerUserId) {
+      return null;
+    }
+
+    const players = this.forces()
+      .filter((item) => item.controllerUserId)
+      .map((item) => {
+        const faction = this.factions().find((candidate) => candidate.id === item.factionId);
+        const appearance = resolveFactionAppearance(faction, item.subfaction);
+        return {
+          userId: item.controllerUserId ?? '',
+          factionId: item.factionId,
+          subfaction: item.subfaction,
+          factionColor: faction?.color ?? appearance.color,
+          subfactionColor: item.subfaction ? appearance.color : null,
+        };
+      });
+    return freeForAllPlayerColors(players).get(force.controllerUserId) ?? null;
+  }
+
   private territoryFill(territory: MapTerritory, owner: CampaignFaction | null, factionColor?: string): string {
     const mode = this.colorMode();
     if (mode === 'configured') {
@@ -1570,7 +1594,12 @@ export class CampaignMapViewComponent {
       return 'transparent';
     }
 
-    if (mode === 'alliance' && owner.allyGroupName && !this.brokenAllyFactionIds().includes(owner.id)) {
+    if (
+      mode === 'alliance' &&
+      !this.isFreeForAll() &&
+      owner.allyGroupName &&
+      !this.brokenAllyFactionIds().includes(owner.id)
+    ) {
       const group = this.allyGroups().find((item) => item.name.toLowerCase() === owner.allyGroupName?.toLowerCase());
       if (group?.color) {
         return group.color;

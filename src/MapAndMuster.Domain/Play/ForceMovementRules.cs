@@ -49,7 +49,8 @@ public static class ForceMovementRules
         IReadOnlyList<CampaignItemObjective> items,
         SpecialRuleContext rules,
         IReadOnlyList<Guid>? viaPath = null,
-        IReadOnlyList<CampaignForce>? occupyingForces = null)
+        IReadOnlyList<CampaignForce>? occupyingForces = null,
+        IReadOnlyList<CampaignBattle>? battles = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(force);
@@ -60,6 +61,7 @@ public static class ForceMovementRules
             return false;
         }
 
+        var locked = LockedBattleTerritories(occupyingForces ?? [], battles);
         var intermediates = Intermediates(viaId, viaPath, targetId.Value, force.TerritoryId);
         if (intermediates.Count > 0)
         {
@@ -69,7 +71,12 @@ public static class ForceMovementRules
                 return false;
             }
 
-            return IsLegalPath(map, force, [force.TerritoryId, .. intermediates, targetId.Value]);
+            return IsLegalPath(map, force, [force.TerritoryId, .. intermediates, targetId.Value], locked);
+        }
+
+        if (locked.Contains(targetId.Value))
+        {
+            return false;
         }
 
         if (map.AreAdjacent(force.TerritoryId, targetId.Value)
@@ -78,7 +85,8 @@ public static class ForceMovementRules
             return true;
         }
 
-        return FactionSpecialRulePolicies.RelicAdjacentMoveTargets(map, force, items, rules).Contains(targetId.Value);
+        return FactionSpecialRulePolicies.RelicAdjacentMoveTargets(map, force, items, rules).Contains(targetId.Value)
+            && !locked.Contains(targetId.Value);
     }
 
     /// <summary>
@@ -195,14 +203,18 @@ public static class ForceMovementRules
         CampaignForce force,
         int speed,
         IReadOnlyList<CampaignItemObjective> items,
-        SpecialRuleContext rules)
+        SpecialRuleContext rules,
+        IReadOnlySet<Guid>? blockedTerritoryIds = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(force);
+        var blocked = blockedTerritoryIds ?? new HashSet<Guid>();
         var ids = new List<Guid>();
         foreach (var neighborId in map.Neighbors(force.TerritoryId))
         {
-            if (!FactionSpecialRulePolicies.CanLandOnForMove(map, force, neighborId) || ids.Contains(neighborId))
+            if (blocked.Contains(neighborId)
+                || !FactionSpecialRulePolicies.CanLandOnForMove(map, force, neighborId)
+                || ids.Contains(neighborId))
             {
                 continue;
             }
@@ -210,7 +222,7 @@ public static class ForceMovementRules
             ids.Add(neighborId);
         }
 
-        foreach (var hop in EligibleHops(map, force, speed))
+        foreach (var hop in EligibleHops(map, force, speed, blocked))
         {
             if (!ids.Contains(hop.TargetTerritoryId))
             {
@@ -220,7 +232,7 @@ public static class ForceMovementRules
 
         foreach (var extra in FactionSpecialRulePolicies.RelicAdjacentMoveTargets(map, force, items, rules))
         {
-            if (!ids.Contains(extra))
+            if (!blocked.Contains(extra) && !ids.Contains(extra))
             {
                 ids.Add(extra);
             }
@@ -232,7 +244,11 @@ public static class ForceMovementRules
     /// <summary>
     /// Every legal path of 1..<paramref name="speed"/> hops. Adjacent destinations use an empty via.
     /// </summary>
-    public static IReadOnlyList<MoveHop> EligibleHops(PlayMap map, CampaignForce force, int speed)
+    public static IReadOnlyList<MoveHop> EligibleHops(
+        PlayMap map,
+        CampaignForce force,
+        int speed,
+        IReadOnlySet<Guid>? blockedTerritoryIds = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(force);
@@ -242,8 +258,128 @@ public static class ForceMovementRules
             return hops;
         }
 
-        Walk(map, force, force.TerritoryId, speed, [], hops);
+        Walk(map, force, force.TerritoryId, speed, [], hops, blockedTerritoryIds ?? new HashSet<Guid>());
         return hops;
+    }
+
+    /// <summary>
+    /// Territories where two or more players are locked in battle. Other forces cannot enter or
+    /// pass through until that battle is no longer open.
+    /// </summary>
+    public static HashSet<Guid> LockedBattleTerritories(
+        IReadOnlyList<CampaignForce> forces,
+        IReadOnlyList<CampaignBattle>? battles = null)
+    {
+        ArgumentNullException.ThrowIfNull(forces);
+        var locked = new HashSet<Guid>();
+        foreach (var group in forces.Where(static force => force.InBattle).GroupBy(static force => force.TerritoryId))
+        {
+            if (group.Select(static force => force.ControllerUserId).Distinct().Count() >= 2)
+            {
+                locked.Add(group.Key);
+            }
+        }
+
+        if (battles is null)
+        {
+            return locked;
+        }
+
+        foreach (var battle in battles)
+        {
+            if (battle.Status is not (BattleStatus.Pending or BattleStatus.AwaitingResults or BattleStatus.Disputed))
+            {
+                continue;
+            }
+
+            var players = forces
+                .Where(force => battle.ParticipantForceIds.Contains(force.Id))
+                .Select(static force => force.ControllerUserId)
+                .Distinct()
+                .Count();
+            if (players >= 2 || battle.IsRinger)
+            {
+                locked.Add(battle.TerritoryId);
+            }
+        }
+
+        return locked;
+    }
+
+    /// <summary>
+    /// Spawn relocation offered when every normal move would enter a locked battle.
+    /// The move spends the force's whole speed and is not a hop path.
+    /// </summary>
+    public static IReadOnlyList<Guid> EscapeSpawnTargets(
+        PlayMap map,
+        CampaignForce force,
+        IReadOnlyList<CampaignForce> forces,
+        IReadOnlyList<CampaignBattle>? battles,
+        IReadOnlyList<CampaignItemObjective> items,
+        SpecialRuleContext rules,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(force);
+        ArgumentNullException.ThrowIfNull(forces);
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(factionAllyGroups);
+        var locked = LockedBattleTerritories(forces, battles);
+        var speed = EffectiveSpeed(force, rules, map, items, forces);
+        var open = EligibleDestinations(map, force, speed, items, rules, locked);
+        if (open.Count > 0)
+        {
+            return [];
+        }
+
+        var ignoringLocks = EligibleDestinations(map, force, speed, items, rules);
+        if (ignoringLocks.Count == 0)
+        {
+            return [];
+        }
+
+        var usingAllies = !rules.IsFreeForAll
+            && factionAllyGroups.Values.Any(static group => !string.IsNullOrWhiteSpace(group));
+        var targets = new List<Guid>();
+        var factionSpawn = map.SpawnFor(force.FactionId, force.Subfaction);
+        if (factionSpawn is not null && IsUsableEscapeSpawn(map, force, factionSpawn.Id, forces, locked, usingAllies, factionAllyGroups, rules))
+        {
+            targets.Add(factionSpawn.Id);
+        }
+
+        var neutral = ClosestGeneralSpawn(
+            map,
+            force.TerritoryId,
+            candidate => candidate != factionSpawn?.Id
+                && IsUsableEscapeSpawn(map, force, candidate, forces, locked, usingAllies, factionAllyGroups, rules));
+        if (neutral is { } neutralId && !targets.Contains(neutralId))
+        {
+            targets.Add(neutralId);
+        }
+
+        return targets;
+    }
+
+    /// <summary>Returns whether a Move lands on an escape spawn instead of walking a path.</summary>
+    public static bool IsEscapeSpawnMove(
+        PlayMap map,
+        CampaignForce force,
+        Guid? targetId,
+        Guid? viaId,
+        IReadOnlyList<Guid>? viaPath,
+        IReadOnlyList<CampaignForce> forces,
+        IReadOnlyList<CampaignBattle>? battles,
+        IReadOnlyList<CampaignItemObjective> items,
+        SpecialRuleContext rules,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups)
+    {
+        if (targetId is null || viaId is { } via && via != Guid.Empty || viaPath is { Count: > 0 })
+        {
+            return false;
+        }
+
+        return EscapeSpawnTargets(map, force, forces, battles, items, rules, factionAllyGroups).Contains(targetId.Value);
     }
 
     private static void Walk(
@@ -252,7 +388,8 @@ public static class ForceMovementRules
         Guid current,
         int remaining,
         List<Guid> path,
-        List<MoveHop> hops)
+        List<MoveHop> hops,
+        IReadOnlySet<Guid> blocked)
     {
         if (remaining <= 0)
         {
@@ -263,6 +400,7 @@ public static class ForceMovementRules
         {
             if (next == force.TerritoryId
                 || path.Contains(next)
+                || blocked.Contains(next)
                 || !FactionSpecialRulePolicies.CanEnter(map, force, next))
             {
                 continue;
@@ -274,7 +412,7 @@ public static class ForceMovementRules
                 hops.Add(new MoveHop(nextPath[0], next, nextPath.Count == 2 ? [] : [.. nextPath.Skip(1).Take(nextPath.Count - 2)]));
             }
 
-            Walk(map, force, next, remaining - 1, nextPath, hops);
+            Walk(map, force, next, remaining - 1, nextPath, hops, blocked);
         }
     }
 
@@ -283,10 +421,15 @@ public static class ForceMovementRules
         return map.AreAdjacent(from, to) && FactionSpecialRulePolicies.CanEnter(map, force, to);
     }
 
-    private static bool IsLegalPath(PlayMap map, CampaignForce force, IReadOnlyList<Guid> path)
+    private static bool IsLegalPath(PlayMap map, CampaignForce force, IReadOnlyList<Guid> path, HashSet<Guid> locked)
     {
         for (var i = 1; i < path.Count; i++)
         {
+            if (locked.Contains(path[i]))
+            {
+                return false;
+            }
+
             var landing = i == path.Count - 1;
             if (!map.AreAdjacent(path[i - 1], path[i]))
             {
@@ -330,6 +473,52 @@ public static class ForceMovementRules
         }
 
         return hops;
+    }
+
+    private static bool IsUsableEscapeSpawn(
+        PlayMap map,
+        CampaignForce force,
+        Guid territoryId,
+        IReadOnlyList<CampaignForce> forces,
+        HashSet<Guid> locked,
+        bool usingAllies,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        SpecialRuleContext rules)
+    {
+        if (territoryId == force.TerritoryId || locked.Contains(territoryId))
+        {
+            return false;
+        }
+
+        foreach (var occupant in forces)
+        {
+            if (occupant.Id == force.Id || occupant.TerritoryId != territoryId || occupant.ControllerUserId == force.ControllerUserId)
+            {
+                continue;
+            }
+
+            var allied = usingAllies
+                && FactionSpecialRulePolicies.AreAllies(
+                    force,
+                    occupant,
+                    factionAllyGroups,
+                    [],
+                    [],
+                    rules);
+            if (!allied)
+            {
+                return false;
+            }
+        }
+
+        return map.Neighbors(territoryId).Any(neighbor =>
+            !locked.Contains(neighbor) && FactionSpecialRulePolicies.CanLandOnForMove(map, force, neighbor));
+    }
+
+    private static Guid? ClosestGeneralSpawn(PlayMap map, Guid fromTerritoryId, Func<Guid, bool> accept)
+    {
+        var candidates = RandomSpawnRules.GeneralSpawnIds(map).Where(accept).ToArray();
+        return candidates.Length == 0 ? null : RandomSpawnRules.Nearest(map, fromTerritoryId, candidates);
     }
 
     private static bool HasEnemy(

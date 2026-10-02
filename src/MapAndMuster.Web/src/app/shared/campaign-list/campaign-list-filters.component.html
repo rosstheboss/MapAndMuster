@@ -1,0 +1,178 @@
+<section class="campaign-filters panel">
+  <div class="campaign-filters-heading">
+    <button type="button" class="section-toggle" [attr.aria-expanded]="open()" (click)="open.set(!open())">
+      Campaign filters
+    </button>
+    <div class="territory-filter-toolbar">
+      <button type="button" class="territory-filter-action" title="Apply" aria-label="Apply" (click)="apply()">
+        <app-icon name="check" />
+      </button>
+      <button type="button" class="territory-filter-action" title="Clear" aria-label="Clear" (click)="clear()">
+        <app-icon name="x" />
+      </button>
+    </div>
+  </div>
+  @if (open()) {
+    <div class="filter-grid">
+      <label>
+        Public or private
+        <select [ngModel]="draft().visibility" (ngModelChange)="patch({ visibility: $event })">
+          <option value="any">Any</option>
+          <option value="public">Public</option>
+          <option value="private">Private</option>
+        </select>
+      </label>
+      <label>
+        Country
+        <select [ngModel]="draft().country" (ngModelChange)="patch({ country: $event })">
+          <option value="">Any</option>
+          <option value="unspecified">Unspecified</option>
+          @for (value of distinct(campaigns().map((item) => item.country)); track value) {
+            <option [value]="value">{{ value }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        State or province
+        <select [ngModel]="draft().region" (ngModelChange)="patch({ region: $event })">
+          <option value="">Any</option>
+          <option value="unspecified">Unspecified</option>
+          @for (value of distinct(campaigns().map((item) => item.region)); track value) {
+            <option [value]="value">{{ value }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        City
+        <select [ngModel]="draft().city" (ngModelChange)="patch({ city: $event })">
+          <option value="">Any</option>
+          <option value="unspecified">Unspecified</option>
+          @for (value of distinct(campaigns().map((item) => item.city)); track value) {
+            <option [value]="value">{{ value }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Starts after
+        <input type="datetime-local" [ngModel]="draft().startsAfter" (ngModelChange)="patch({ startsAfter: $event })" />
+      </label>
+      <label>
+        Ends before
+        <input type="datetime-local" [ngModel]="draft().endsBefore" (ngModelChange)="patch({ endsBefore: $event })" />
+      </label>
+      <label>
+        Round length
+        <select [ngModel]="draft().roundLength" (ngModelChange)="patch({ roundLength: $event })">
+          <option value="">Any</option>
+          @for (value of roundLengths(); track value) {
+            <option [value]="value">{{ value }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Number of rounds
+        <select [ngModel]="draft().roundCount" (ngModelChange)="patch({ roundCount: $event })">
+          <option value="">Any</option>
+          @for (value of roundCounts(); track value) {
+            <option [value]="value">{{ value }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Game system
+        <select [ngModel]="draft().gameSystem" (ngModelChange)="patch({ gameSystem: $event })">
+          <option value="">Any</option>
+          @for (value of distinct(campaigns().map((item) => item.gameSystem)); track value) {
+            <option [value]="value">{{ value }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Free-for-all or allied
+        <select [ngModel]="draft().alliance" (ngModelChange)="patch({ alliance: $event })">
+          <option value="any">Any</option>
+          <option value="free-for-all">Free-for-all</option>
+          <option value="allied">Allied</option>
+        </select>
+      </label>
+      <label>
+        Title
+        <input [ngModel]="draft().title" (ngModelChange)="patch({ title: $event })" placeholder="Partial title" />
+      </label>
+      <div class="name-filter">
+        <label for="filter-managers">Campaign manager</label>
+        <ul class="tag-chip-list">
+          @for (name of draft().managers; track name) {
+            <li class="tag-chip">
+              {{ name }}
+              <button
+                type="button"
+                class="icon-button"
+                [attr.aria-label]="'Remove ' + name"
+                (click)="removeName('managers', name)"
+              >
+                <app-icon name="x" />
+              </button>
+            </li>
+          }
+        </ul>
+        <input
+          id="filter-managers"
+          [ngModel]="managerQuery()"
+          (ngModelChange)="managerQuery.set($event)"
+          (keydown)="onNameKey('managers', $event)"
+          placeholder="Type a username and press Enter"
+          aria-autocomplete="list"
+        />
+        @if (suggestions(managerQuery(), draft().managers); as hits) {
+          @if (hits.length > 0) {
+            <ul class="name-suggestions">
+              @for (name of hits; track name) {
+                <li>
+                  <button type="button" (click)="addName('managers', name)">{{ name }}</button>
+                </li>
+              }
+            </ul>
+          }
+        }
+      </div>
+      <div class="name-filter">
+        <label for="filter-participants">Player username</label>
+        <ul class="tag-chip-list">
+          @for (name of draft().participants; track name) {
+            <li class="tag-chip">
+              {{ name }}
+              <button
+                type="button"
+                class="icon-button"
+                [attr.aria-label]="'Remove ' + name"
+                (click)="removeName('participants', name)"
+              >
+                <app-icon name="x" />
+              </button>
+            </li>
+          }
+        </ul>
+        <input
+          id="filter-participants"
+          [ngModel]="participantQuery()"
+          (ngModelChange)="participantQuery.set($event)"
+          (keydown)="onNameKey('participants', $event)"
+          placeholder="Public campaigns. Press Enter to add."
+          aria-autocomplete="list"
+        />
+        @if (suggestions(participantQuery(), draft().participants); as hits) {
+          @if (hits.length > 0) {
+            <ul class="name-suggestions">
+              @for (name of hits; track name) {
+                <li>
+                  <button type="button" (click)="addName('participants', name)">{{ name }}</button>
+                </li>
+              }
+            </ul>
+          }
+        }
+      </div>
+    </div>
+  }
+</section>

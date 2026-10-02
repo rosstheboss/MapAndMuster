@@ -720,6 +720,76 @@ describe('CampaignSetupPage', () => {
     TestBed.inject(HttpTestingController).verify();
   });
 
+  it('shows the parent color and flag when an optional subfaction inherits', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const page = fixture.componentInstance as unknown as {
+      presetId: { setValue: (value: string) => void };
+      applySelectedPreset: () => void;
+    };
+    page.presetId.setValue(WARHAMMER_OLD_WORLD_PRESET_ID);
+    page.applySelectedPreset();
+    fixture.detectChanges();
+
+    const names = factionNames(compiled);
+    const empireIndex = names.indexOf('Empire of Man');
+    expect(empireIndex).toBeGreaterThan(-1);
+    const empireToggle = [...compiled.querySelectorAll<HTMLButtonElement>('button.section-toggle')].find((button) =>
+      button.textContent.includes('Empire of Man'),
+    );
+    empireToggle?.click();
+    fixture.detectChanges();
+
+    const flagChoice = compiled.querySelector(`input[name="faction-flag-${empireIndex}"]`);
+    expect(flagChoice).toBeTruthy();
+    expect(compiled.querySelector(`#subfaction-color-${empireIndex}-0`)).toBeNull();
+    const block = compiled.querySelector(`#subfaction-${empireIndex}-0`)?.closest('.subfaction-block');
+    expect(block?.textContent).toContain('Uses this faction’s color and flag.');
+    expect(block?.querySelector('.faction-flag-preview')).toBeTruthy();
+    TestBed.inject(HttpTestingController).verify();
+  });
+
+  it('adds a preferred terrain type from the autocomplete', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled.querySelector<HTMLButtonElement>('#setup-factions button.nested-toggle')?.click();
+    fixture.detectChanges();
+
+    expect(compiled.querySelector('select#faction-pref-terrain-0')).toBeNull();
+    const page = fixture.componentInstance as unknown as {
+      factions: {
+        at: (index: number) => {
+          controls: {
+            preferredTerrainTypeIds: { value: string[] };
+          };
+        };
+      };
+      namedTerrainTypes: () => { id: string; name: string }[];
+      preferenceDraft: (faction: unknown, kind: string) => { setValue: (value: string) => void; value: string };
+      assignPreference: (
+        control: { value: string[] },
+        options: { id: string; name: string }[],
+        draft: { setValue: (value: string) => void; value: string },
+      ) => void;
+    };
+    const faction = page.factions.at(0);
+    const terrain = page.namedTerrainTypes()[0];
+    const draft = page.preferenceDraft(faction, 'terrain');
+    draft.setValue(terrain.name);
+    page.assignPreference(faction.controls.preferredTerrainTypeIds, page.namedTerrainTypes(), draft);
+    fixture.detectChanges();
+
+    expect(faction.controls.preferredTerrainTypeIds.value).toEqual([terrain.id]);
+    expect(compiled.querySelector('[aria-label="Remove terrain type ' + terrain.name + '"]')).toBeTruthy();
+    TestBed.inject(HttpTestingController).verify();
+  });
+
   it('replaces terrain, structures, and catalogs from presets without mutating the source', async () => {
     const fixture = TestBed.createComponent(CampaignSetupPage);
     await fixture.whenStable();
@@ -1454,6 +1524,18 @@ describe('CampaignSetupPage', () => {
 describe('CampaignSetupPage edit', () => {
   const campaignId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
+  function flushMapGraph(http: HttpTestingController): void {
+    for (const request of http.match(`/api/campaigns/${campaignId}/map/graph`)) {
+      request.flush({
+        campaignId,
+        revision: 1,
+        canManage: true,
+        territories: [],
+        adjacencies: [],
+      });
+    }
+  }
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [CampaignSetupPage],
@@ -1575,6 +1657,7 @@ describe('CampaignSetupPage edit', () => {
     expect(compiled.querySelector('app-campaign-map-preview img')?.getAttribute('src')).toContain(
       `/api/campaigns/${campaignId}/map?t=d00dfeed1234abcd`,
     );
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -1606,6 +1689,7 @@ describe('CampaignSetupPage edit', () => {
     expect(document.querySelector('[role="alertdialog"]')).toBeNull();
     fixture.destroy();
     expect(document.querySelector('.app-dialog-backdrop')).toBeNull();
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -1627,6 +1711,7 @@ describe('CampaignSetupPage edit', () => {
     expect(tint).toBeTruthy();
     expect(tint?.checked).toBe(true);
     expect(compiled.querySelector('app-faction-logo .is-tinted')).toBeTruthy();
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -1693,6 +1778,7 @@ describe('CampaignSetupPage edit', () => {
     fixture.detectChanges();
     expect(tintCheckbox()?.checked).toBe(false);
     expect(compiled.querySelector('app-faction-logo .is-tinted')).toBeNull();
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -1718,6 +1804,7 @@ describe('CampaignSetupPage edit', () => {
     fixture.detectChanges();
 
     expect(compiled.textContent).toContain('Downloaded campaign preset.');
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -1748,6 +1835,7 @@ describe('CampaignSetupPage edit', () => {
     fixture.detectChanges();
 
     expect(compiled.textContent).toContain('Imported preset Border War. Apply it with Add preset.');
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -1791,6 +1879,49 @@ describe('CampaignSetupPage edit', () => {
 
     expect(page.factions.at(0).controls.id.value).toBe('1');
     expect(page.hasStoredFlagImage('1')).toBe(true);
+    flushMapGraph(http);
+    http.verify();
+  });
+
+  it('loads a subfaction logo with no file as inherit or a color flag', async () => {
+    const fixture = TestBed.createComponent(CampaignSetupPage);
+    const http = TestBed.inject(HttpTestingController);
+    const campaign = scheduledEditCampaign(campaignId);
+    campaign.factions = [
+      {
+        ...campaign.factions[0],
+        subfactions: ['Wild Herd', 'Errantry Crusade'],
+        subfactionAppearances: [
+          { name: 'Wild Herd', color: null, flagSource: 'image', hasFlagImage: false },
+          { name: 'Errantry Crusade', color: null, flagSource: 'image', hasFlagImage: true },
+        ],
+      },
+      {
+        ...campaign.factions[1],
+        requiresSubfaction: true,
+        subfactions: ['Khorne'],
+        subfactionAppearances: [{ name: 'Khorne', color: '#B91C1C', flagSource: 'image', hasFlagImage: false }],
+      },
+    ];
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      factions: {
+        at(index: number): {
+          controls: {
+            subfactions: {
+              at(subfactionIndex: number): { controls: { flagSource: { value: string } } };
+            };
+          };
+        };
+      };
+    };
+    expect(page.factions.at(0).controls.subfactions.at(0).controls.flagSource.value).toBe('inherit');
+    expect(page.factions.at(0).controls.subfactions.at(1).controls.flagSource.value).toBe('image');
+    expect(page.factions.at(1).controls.subfactions.at(0).controls.flagSource.value).toBe('color');
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -1884,6 +2015,16 @@ describe('CampaignSetupPage edit', () => {
     expect(page.hasUnsavedChanges()).toBe(true);
     expect(name?.classList.contains('ng-dirty')).toBe(true);
 
+    page.form.controls.name.setValue('Border War');
+    fixture.detectChanges();
+    expect(page.hasUnsavedChanges()).toBe(false);
+    expect(name?.classList.contains('ng-dirty')).toBe(false);
+
+    page.form.controls.name.setValue('Frontier War');
+    fixture.detectChanges();
+    expect(page.hasUnsavedChanges()).toBe(true);
+    expect(name?.classList.contains('ng-dirty')).toBe(true);
+
     const save = [...compiled.querySelectorAll('button')].find(
       (button) => button.textContent.trim() === 'Save campaign',
     );
@@ -1906,6 +2047,7 @@ describe('CampaignSetupPage edit', () => {
     expect(page.form.controls.name.value).toBe('Border War');
     expect(save?.disabled).toBe(true);
     expect(detailsToggle?.classList.contains('has-dirty')).toBe(false);
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -1960,6 +2102,7 @@ describe('CampaignSetupPage edit', () => {
     expect(compiled.querySelector('.save-status.is-failure')).toBeTruthy();
     expect(compiled.querySelector('[aria-label="Campaign save failed"]')).toBeTruthy();
     expect(compiled.textContent).toContain('Last saved');
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -1990,6 +2133,7 @@ describe('CampaignSetupPage edit', () => {
 
     expect(warn.mock.calls.filter((call) => String(call[0]).includes('NG0956'))).toEqual([]);
     warn.mockRestore();
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -2053,6 +2197,7 @@ describe('CampaignSetupPage edit', () => {
     expect(body.structureTypes[0].destroySupplyPoints).toBe(0);
     put.flush({ ...campaign, revision: 3 });
     await saving;
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -2116,6 +2261,7 @@ describe('CampaignSetupPage edit', () => {
     expect(body.structureTypes[0].destroySupplyPoints).toBe(0);
     put.flush({ ...campaign, revision: 3 });
     await saving;
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -2209,6 +2355,7 @@ describe('CampaignSetupPage edit', () => {
     expect(compiled.querySelector<HTMLInputElement>('#round-escalation-supply-3')?.value).toBe('1');
     expect(compiled.querySelector<HTMLInputElement>('#round-escalation-characters-3')?.value).toBe('1');
     expect(compiled.querySelector<HTMLInputElement>('#round-escalation-points-7')?.value).toBe('1000');
+    flushMapGraph(http);
     http.verify();
   });
 
@@ -2341,6 +2488,7 @@ describe('CampaignSetupPage edit', () => {
       { kind: 'Action', durationAmount: 2, durationUnit: 'Minutes', endPhaseEarlyIfAble: true },
       { kind: 'Battle', durationAmount: 54, durationUnit: 'Minutes', endPhaseEarlyIfAble: true },
     ]);
+    flushMapGraph(http);
     http.verify();
   });
 });

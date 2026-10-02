@@ -23,6 +23,9 @@ internal static class CampaignPresetSettingsJson
                 Description = campaign.Description,
                 PlayerSlotCount = campaign.PlayerSlotCount,
                 CreatorIsParticipant = campaign.CreatorIsParticipant,
+                IsFreeForAll = campaign.IsFreeForAll,
+                RandomSpawnLocations = campaign.RandomSpawnLocations,
+                GameSystem = campaign.GameSystem,
                 TimeZoneId = campaign.TimeZoneId,
                 RoundCount = campaign.RoundCount,
                 RoundLengthAmount = campaign.RoundLengthAmount,
@@ -52,6 +55,12 @@ internal static class CampaignPresetSettingsJson
         public int PlayerSlotCount { get; set; } = 8;
 
         public bool CreatorIsParticipant { get; set; } = true;
+
+        public bool IsFreeForAll { get; set; }
+
+        public bool RandomSpawnLocations { get; set; }
+
+        public string? GameSystem { get; set; }
 
         public string TimeZoneId { get; set; } = "UTC";
 

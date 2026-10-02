@@ -47,6 +47,18 @@ export function resolveFactionAppearance(
   };
 }
 
+export function flagImageSubfaction(
+  faction: CampaignFaction | null | undefined,
+  subfactionName?: string | null,
+): string | null {
+  const appearance = faction ? findSubfactionAppearance(faction, subfactionName) : null;
+  if (appearance?.flagSource !== 'image') {
+    return null;
+  }
+
+  return subfactionName?.trim() ?? null;
+}
+
 export function findSubfactionAppearance(
   faction: CampaignFaction,
   subfactionName?: string | null,

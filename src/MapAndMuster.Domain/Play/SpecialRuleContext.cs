@@ -19,7 +19,10 @@ public sealed class SpecialRuleContext
         IReadOnlyDictionary<(Guid FactionId, string Subfaction), int>? subfactionMovementSpeeds = null,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>? forceItemRuleIds = null,
         IReadOnlyDictionary<Guid, IReadOnlyList<ItemObjectiveEffectSetup>>? itemEffectsByTypeId = null,
-        IReadOnlyDictionary<Guid, string>? forceStatusNames = null)
+        IReadOnlyDictionary<Guid, string>? forceStatusNames = null,
+        bool isFreeForAll = false,
+        bool randomSpawnLocations = false,
+        IReadOnlyDictionary<Guid, FactionPreference>? factionPreferences = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(factionRuleIds);
@@ -33,6 +36,9 @@ public sealed class SpecialRuleContext
         ForceItemRuleIds = forceItemRuleIds ?? new Dictionary<Guid, IReadOnlyList<Guid>>();
         ItemEffectsByTypeId = itemEffectsByTypeId ?? new Dictionary<Guid, IReadOnlyList<ItemObjectiveEffectSetup>>();
         ForceStatusNames = forceStatusNames ?? new Dictionary<Guid, string>();
+        IsFreeForAll = isFreeForAll;
+        RandomSpawnLocations = randomSpawnLocations;
+        FactionPreferences = factionPreferences ?? new Dictionary<Guid, FactionPreference>();
         EffectById = catalog
             .Where(static rule => SpecialRuleEffectKeys.IsKnown(rule.EffectKey))
             .ToDictionary(static rule => rule.Id, static rule => rule.EffectKey!, EqualityComparer<Guid>.Default);
@@ -70,6 +76,21 @@ public sealed class SpecialRuleContext
 
     /// <summary>Gets catalog force-status names keyed by type identifier.</summary>
     public IReadOnlyDictionary<Guid, string> ForceStatusNames { get; }
+
+    /// <summary>Gets whether every other player is an enemy and ally rules are off.</summary>
+    public bool IsFreeForAll { get; }
+
+    /// <summary>Gets whether players are placed on general spawns instead of faction spawns.</summary>
+    public bool RandomSpawnLocations { get; }
+
+    /// <summary>Gets terrain and structure preferences keyed by faction.</summary>
+    public IReadOnlyDictionary<Guid, FactionPreference> FactionPreferences { get; }
+
+    /// <summary>Returns the faction preference, or an empty list.</summary>
+    public FactionPreference PreferenceFor(Guid factionId)
+    {
+        return FactionPreferences.TryGetValue(factionId, out var preference) ? preference : FactionPreference.None;
+    }
 
     private IReadOnlyDictionary<Guid, string> EffectById { get; }
 

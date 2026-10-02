@@ -110,6 +110,7 @@ public sealed class MapGraphHandlerTests
                 UserId = UserId,
                 CampaignId = store.Existing.Id,
                 ExpectedRevision = 1,
+                RandomSpawnLocations = true,
                 Territories =
                 [
                     Territory(leftId, 1, Square(0.1, 0.1, 0.3), "North"),
@@ -156,6 +157,7 @@ public sealed class MapGraphHandlerTests
                 UserId = UserId,
                 CampaignId = store.Existing.Id,
                 ExpectedRevision = 1,
+                RandomSpawnLocations = true,
                 Territories =
                 [
                     Territory(khorneId, 1, Square(0.1, 0.1, 0.3), "Khornehold", DaemonsFactionId, "Khorne"),
@@ -271,6 +273,31 @@ public sealed class MapGraphHandlerTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorCodes.CampaignForbidden, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task SaveRejectsAFactionWithNoSpawnWhenNoNeutralSpawnExists()
+    {
+        var store = new FakeCampaignStore { Existing = StoredCampaignFor(UserId) };
+        var handler = new SaveCampaignMapGraphHandler(store, new FakeClock());
+
+        var result = await handler.HandleAsync(
+            new SaveCampaignMapGraphCommand
+            {
+                UserId = UserId,
+                CampaignId = store.Existing.Id,
+                ExpectedRevision = 1,
+                RandomSpawnLocations = false,
+                Territories = [Territory(Guid.NewGuid(), 1, Square(0.1, 0.1, 0.3), "North")],
+                Adjacencies = [],
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Errors, error => error.Code == "territories.spawn.missing");
+        Assert.Contains(
+            result.Errors,
+            error => error.Message == "No neutral spawn locations exist, and North, South have no specific spawn location.");
     }
 
     private static TerritoryInput Territory(
@@ -450,7 +477,8 @@ public sealed class MapGraphHandlerTests
             StoredMapGraph graph,
             int expectedRevision,
             DateTimeOffset updatedUtc,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool? randomSpawnLocations = null)
         {
             if (Existing is null || Existing.Revision != expectedRevision)
             {

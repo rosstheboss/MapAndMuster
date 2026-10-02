@@ -1,9 +1,15 @@
 <section class="page">
   <div class="page-header">
     <h1>Your campaigns</h1>
-    @if (!auth.currentUser()?.isGuestAccount) {
-      <a class="button" routerLink="/campaigns/new">Create campaign</a>
-    }
+    <div class="actions">
+      @if (campaigns().length > 0) {
+        <button type="button" class="button-secondary" (click)="expandAll()">Expand All</button>
+        <button type="button" class="button-secondary" (click)="collapseAll()">Collapse All</button>
+      }
+      @if (!auth.currentUser()?.isGuestAccount) {
+        <a class="button" routerLink="/campaigns/new">Create campaign</a>
+      }
+    </div>
   </div>
 
   @if (auth.currentUser()?.isGuestAccount) {
@@ -35,6 +41,11 @@
       </div>
     </div>
   } @else {
-    <app-campaign-list [campaigns]="campaigns()" [allowDuplicate]="true" (membershipChanged)="reload()" />
+    <app-campaign-list-filters [campaigns]="campaigns()" (filtered)="filteredCampaigns.set($event)" />
+    @if (filteredCampaigns().length === 0) {
+      <p class="panel">No campaigns meet your filter criteria.</p>
+    } @else {
+      <app-campaign-list [campaigns]="filteredCampaigns()" [allowDuplicate]="true" (membershipChanged)="reload()" />
+    }
   }
 </section>

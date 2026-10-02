@@ -656,6 +656,9 @@ public static class CampaignEndpoints
                     PointsPerTerritoryTerrainTagId = request.PointsPerTerritoryTerrainTagId,
                     RivalObjectivesEnabled = request.RivalObjectivesEnabled,
                     RivalObjectiveCampaignPoints = request.RivalObjectiveCampaignPoints,
+                    IsFreeForAll = request.IsFreeForAll,
+                    RandomSpawnLocations = request.RandomSpawnLocations,
+                    GameSystem = request.GameSystem,
                     SplitForceSupplyPenaltyPercent = request.SplitForceSupplyPenaltyPercent,
                     SplitForceSupplyPenaltyIsPercent = request.SplitForceSupplyPenaltyIsPercent,
                 },
@@ -1081,6 +1084,9 @@ public static class CampaignEndpoints
                     PointsPerTerritoryTerrainTagId = request.PointsPerTerritoryTerrainTagId,
                     RivalObjectivesEnabled = request.RivalObjectivesEnabled,
                     RivalObjectiveCampaignPoints = request.RivalObjectiveCampaignPoints,
+                    IsFreeForAll = request.IsFreeForAll,
+                    RandomSpawnLocations = request.RandomSpawnLocations,
+                    GameSystem = request.GameSystem,
                     SplitForceSupplyPenaltyPercent = request.SplitForceSupplyPenaltyPercent,
                     SplitForceSupplyPenaltyIsPercent = request.SplitForceSupplyPenaltyIsPercent,
                 },
@@ -1741,6 +1747,7 @@ public static class CampaignEndpoints
                             TerritoryId = item.TerritoryId,
                         }),
                     ],
+                    RandomSpawnLocations = request.RandomSpawnLocations,
                 },
                 cancellationToken)
             .ConfigureAwait(false);

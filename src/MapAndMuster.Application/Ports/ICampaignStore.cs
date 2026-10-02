@@ -128,13 +128,15 @@ public interface ICampaignStore
     /// <param name="expectedRevision">The last observed revision.</param>
     /// <param name="updatedUtc">The edit instant.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
+    /// <param name="randomSpawnLocations">When set, stores whether spawn placement is random.</param>
     /// <returns>The updated campaign, or a concurrency/not-found failure.</returns>
     Task<UpdateStoredCampaignOutcome> UpdateMapGraphAsync(
         Guid campaignId,
         StoredMapGraph graph,
         int expectedRevision,
         DateTimeOffset updatedUtc,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool? randomSpawnLocations = null);
 
     /// <summary>
     /// Replaces launched play state, map ownership, and schedule bounds when the revision matches.

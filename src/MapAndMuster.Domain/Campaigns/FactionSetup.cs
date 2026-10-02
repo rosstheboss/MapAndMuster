@@ -23,6 +23,7 @@ public sealed class FactionSetup
     /// <param name="subfactionTags">Extra faction-catalog tags for named subfactions.</param>
     /// <param name="forceMovementSpeed"></param>
     /// <param name="subfactionMovementSpeeds"></param>
+    /// <param name="preference">Preferred terrain and structures.</param>
     public FactionSetup(
         Guid id,
         string name,
@@ -38,7 +39,8 @@ public sealed class FactionSetup
         IReadOnlyList<Guid>? tagIds = null,
         IReadOnlyList<SubfactionTagsSetup>? subfactionTags = null,
         int forceMovementSpeed = ForceMovementSpeeds.Default,
-        IReadOnlyList<SubfactionMovementSpeedSetup>? subfactionMovementSpeeds = null)
+        IReadOnlyList<SubfactionMovementSpeedSetup>? subfactionMovementSpeeds = null,
+        FactionPreference? preference = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(color);
@@ -60,6 +62,7 @@ public sealed class FactionSetup
         SubfactionTags = subfactionTags ?? [];
         ForceMovementSpeed = forceMovementSpeed;
         SubfactionMovementSpeeds = subfactionMovementSpeeds ?? [];
+        Preference = preference ?? FactionPreference.None;
     }
 
     /// <summary>Gets the faction identifier.</summary>
@@ -106,6 +109,9 @@ public sealed class FactionSetup
 
     /// <summary>Gets movement-speed overrides for named subfactions.</summary>
     public IReadOnlyList<SubfactionMovementSpeedSetup> SubfactionMovementSpeeds { get; }
+
+    /// <summary>Gets preferred terrain and structures.</summary>
+    public FactionPreference Preference { get; }
 
     /// <summary>
     /// Returns parent faction tags unioned with extra tags for <paramref name="subfactionName"/>.

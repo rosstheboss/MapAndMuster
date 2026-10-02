@@ -63,6 +63,32 @@ public sealed class ForceMovementRulesTests
     }
 
     [Fact]
+    public void CalledByTheRelicAddsOneToAConfiguredSpeedOfTwo()
+    {
+        var rules = CalledByTheRelicContext(Bretonnia, 2);
+        var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Origin, false);
+        var ally = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), Bretonnia, Via, false);
+        var map = Map();
+        var hidden = new CampaignItemObjective(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Relic",
+            Dest,
+            null,
+            false,
+            Dest,
+            true);
+        var revealed = hidden.With(isRevealed: true);
+
+        Assert.Equal(2, ForceMovementRules.EffectiveSpeed(force, rules, map, [hidden], [force, ally]));
+        Assert.Equal(3, ForceMovementRules.EffectiveSpeed(force, rules, map, [revealed], [force, ally]));
+        Assert.True(ForceMovementRules.IsValidMove(map, force, Dest, Via, [revealed], rules, occupyingForces: [force, ally]));
+
+        var heldByAlly = revealed.With(possessorForceId: ally.Id, clearTerritory: true);
+        Assert.Equal(2, ForceMovementRules.EffectiveSpeed(force, rules, map, [heldByAlly], [force, ally]));
+    }
+
+    [Fact]
     public void HeldItemAddsMovementSpeed()
     {
         var typeId = Guid.NewGuid();
@@ -157,6 +183,45 @@ public sealed class ForceMovementRulesTests
     }
 
     [Fact]
+    public void LockedBattleBlocksPassageAndOffersTheFactionSpawn()
+    {
+        var rules = SpeedContext(Bretonnia, 2);
+        var force = new CampaignForce(Guid.NewGuid(), Player, Bretonnia, Dest, false);
+        var left = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), ChaosDwarfs, Via, true);
+        var right = new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), Bretonnia, Via, true);
+        var forces = new[] { force, left, right };
+        var map = Map();
+        var groups = new Dictionary<Guid, string?>();
+
+        Assert.False(ForceMovementRules.IsValidMove(map, force, Origin, Via, [], rules, occupyingForces: forces));
+        Assert.Empty(ForceMovementRules.EligibleDestinations(
+            map,
+            force,
+            2,
+            [],
+            rules,
+            ForceMovementRules.LockedBattleTerritories(forces)));
+        Assert.Contains(
+            Origin,
+            ForceMovementRules.EscapeSpawnTargets(map, force, forces, null, [], rules, groups));
+        Assert.True(ForceMovementRules.IsEscapeSpawnMove(
+            map,
+            force,
+            Origin,
+            null,
+            null,
+            forces,
+            null,
+            [],
+            rules,
+            groups));
+
+        var clear = new[] { force };
+        Assert.Empty(ForceMovementRules.EscapeSpawnTargets(map, force, clear, null, [], rules, groups));
+        Assert.True(ForceMovementRules.IsValidMove(map, force, Via, null, [], rules, occupyingForces: clear));
+    }
+
+    [Fact]
     public void AlliedForceOnAnIntermediateHopDoesNotInterrupt()
     {
         var rules = SpeedContext(Bretonnia, 2);
@@ -191,13 +256,14 @@ public sealed class ForceMovementRulesTests
             factionMovementSpeeds: new Dictionary<Guid, int> { [factionId] = speed });
     }
 
-    private static SpecialRuleContext CalledByTheRelicContext(Guid factionId)
+    private static SpecialRuleContext CalledByTheRelicContext(Guid factionId, int speed = 0)
     {
         var ruleId = Guid.NewGuid();
         return new SpecialRuleContext(
             [new SpecialRuleSetup(ruleId, SpecialRuleEffectKeys.CalledByTheRelic, "Rule text.", SpecialRuleEffectKeys.CalledByTheRelic)],
             new Dictionary<Guid, IReadOnlyList<Guid>> { [factionId] = [ruleId] },
-            new Dictionary<(Guid, string), IReadOnlyList<Guid>>());
+            new Dictionary<(Guid, string), IReadOnlyList<Guid>>(),
+            factionMovementSpeeds: speed > 0 ? new Dictionary<Guid, int> { [factionId] = speed } : null);
     }
 
     private static CampaignItemObjective HeldItem(Guid typeId, Guid forceId)

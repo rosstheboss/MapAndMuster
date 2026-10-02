@@ -47,7 +47,8 @@ public static class BattleMatchRules
     }
 
     /// <summary>
-    /// Returns the two strongest remaining forces from different sides for the next tabletop game.
+    /// Returns the two weakest remaining forces from different sides for the next tabletop game.
+    /// The winner then plays the next-weakest force, up to the strongest.
     /// When only two sides remain, every remaining fighting force plays in one game.
     /// </summary>
     public static IReadOnlyList<Guid> NextActiveForceIds(
@@ -72,7 +73,7 @@ public static class BattleMatchRules
             return [.. fighting.Select(static force => force.Id)];
         }
 
-        var ranked = CombatantStrengthRules.Rank(fighting, strengthOf, pickIndex);
+        var ranked = CombatantStrengthRules.Rank(fighting, strengthOf, pickIndex, weakestFirst: true);
         if (ranked.Count < 2)
         {
             return [.. ranked.Select(static force => force.Id)];

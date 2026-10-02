@@ -6,6 +6,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
 import { GUEST_PREVIEW_CAMPAIGN_ID, GUEST_PREVIEW_MESSAGE } from '../../core/auth/guest-preview';
 import { BackToTopComponent } from '../../shared/back-to-top/back-to-top.component';
+import { freeForAllSpawnWarning } from '../../core/campaigns/free-for-all-colors';
 import { FilterableComboboxComponent } from '../../shared/filterable-combobox/filterable-combobox.component';
 import { SaveCampaignPresetDialogComponent } from '../../shared/save-campaign-preset-dialog/save-campaign-preset-dialog.component';
 import { AppDialogComponent } from '../../shared/dialog/dialog.component';
@@ -194,6 +195,10 @@ type FactionGroup = FormGroup<{
   subfactionTagIds: FormControl<Record<string, string[]>>;
   tagDraft: FormControl<string>;
   forceMovementSpeed: FormControl<number>;
+  preferredTerrainTypeIds: FormControl<string[]>;
+  preferredTerrainTagIds: FormControl<string[]>;
+  preferredStructureTypeIds: FormControl<string[]>;
+  preferredStructureTagIds: FormControl<string[]>;
 }>;
 type TerrainGroup = FormGroup<{
   id: FormControl<string>;
@@ -451,6 +456,7 @@ export class CampaignSetupPage {
   private readonly presetUpload = viewChild<ElementRef<HTMLInputElement>>('presetUpload');
 
   protected readonly loading = signal(true);
+  protected readonly spawnLocationCount = signal(0);
   protected readonly saving = signal(false);
   protected readonly errorMessages = signal<string[]>([]);
   protected readonly successMessage = signal<string | null>(null);
@@ -565,6 +571,7 @@ export class CampaignSetupPage {
   protected readonly factionTagDraft = this.formBuilder.nonNullable.control('', { validators: [maxLength(60)] });
   protected readonly missionTagDraft = this.formBuilder.nonNullable.control('', { validators: [maxLength(60)] });
   protected readonly subfactionTagDrafts = new Map<string, FormControl<string>>();
+  private readonly preferenceDrafts = new Map<string, FormControl<string>>();
   private readonly catalogTick = signal(0);
   private readonly assignmentPicks = new Map<string, FormControl<string>>();
 
@@ -588,6 +595,9 @@ export class CampaignSetupPage {
       this.createFactionGroup('', '', [''], { color: FACTION_COLOR_PALETTE[0] ?? '#2563EB' }),
       this.createFactionGroup('', '', [''], { color: FACTION_COLOR_PALETTE[1] ?? '#DC2626' }),
     ]),
+    isFreeForAll: [false],
+    randomSpawnLocations: [false],
+    gameSystem: ['', maxLength(80)],
     allyGroups: this.formBuilder.array<AllyGroupForm>([]),
     links: this.formBuilder.array<LinkGroup>([]),
     terrainTypes: this.formBuilder.array<TerrainGroup>(this.createDefaultTerrainGroups()),
@@ -1374,6 +1384,10 @@ export class CampaignSetupPage {
             tagIds: faction.tagIds ?? [],
             subfactionTagIds: this.subfactionTagIdsFromDetail(faction.subfactionTags),
             forceMovementSpeed: faction.forceMovementSpeed ?? 1,
+            preferredTerrainTypeIds: faction.preferredTerrainTypeIds ?? [],
+            preferredTerrainTagIds: faction.preferredTerrainTagIds ?? [],
+            preferredStructureTypeIds: faction.preferredStructureTypeIds ?? [],
+            preferredStructureTagIds: faction.preferredStructureTagIds ?? [],
             subfactionMovementSpeeds: faction.subfactionMovementSpeeds,
           },
         );
@@ -2064,7 +2078,6 @@ export class CampaignSetupPage {
     }
 
     list.push(condition);
-    list.markAsDirty();
     pick.setValue('');
     occurrences.setValue(FORCE_STATUS_OCCURRENCES_MIN);
     locationKind.setValue('Any');
@@ -2076,12 +2089,10 @@ export class CampaignSetupPage {
 
   protected removeForceStatusEnableCondition(status: ForceStatusGroup, index: number): void {
     status.controls.enableConditions.removeAt(index);
-    status.controls.enableConditions.markAsDirty();
   }
 
   protected removeForceStatusClearCondition(status: ForceStatusGroup, index: number): void {
     status.controls.clearConditions.removeAt(index);
-    status.controls.clearConditions.markAsDirty();
   }
 
   protected onCatalogTagKey(
@@ -2213,6 +2224,69 @@ export class CampaignSetupPage {
       ...faction.controls.subfactionTagIds.value,
       [subfaction]: current.filter((id) => id !== tagId),
     });
+  }
+
+  protected preferenceDraft(
+    faction: FactionGroup,
+    kind: 'terrain' | 'terrainTag' | 'structure' | 'structureTag',
+  ): FormControl<string> {
+    const key = `${faction.controls.id.value}:${kind}`;
+    const existing = this.preferenceDrafts.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const control = this.formBuilder.nonNullable.control('');
+    this.preferenceDrafts.set(key, control);
+    return control;
+  }
+
+  protected assignedPreferences(
+    assignedIds: readonly string[],
+    options: readonly { id: string; name: string }[],
+  ): { id: string; name: string }[] {
+    const names = new Map(options.map((option) => [option.id, option.name] as const));
+    return assignedIds.flatMap((id) => {
+      const name = names.get(id);
+      return name ? [{ id, name }] : [];
+    });
+  }
+
+  protected unassignedPreferenceNames(
+    assignedIds: readonly string[],
+    options: readonly { id: string; name: string }[],
+  ): string[] {
+    const assigned = new Set(assignedIds);
+    return options.filter((option) => !assigned.has(option.id)).map((option) => option.name);
+  }
+
+  protected assignPreference(
+    control: FormControl<string[]>,
+    options: readonly { id: string; name: string }[],
+    draft: FormControl<string>,
+  ): void {
+    const key = draft.value.trim().toLowerCase();
+    draft.setValue('');
+    const match = key ? options.find((option) => option.name.trim().toLowerCase() === key) : undefined;
+    if (!match || control.value.includes(match.id)) {
+      return;
+    }
+
+    control.setValue([...control.value, match.id]);
+  }
+
+  protected onPreferenceKey(
+    event: KeyboardEvent,
+    control: FormControl<string[]>,
+    options: readonly { id: string; name: string }[],
+    draft: FormControl<string>,
+  ): void {
+    if (event.key !== 'Enter' && event.key !== ',') {
+      return;
+    }
+
+    event.preventDefault();
+    this.assignPreference(control, options, draft);
   }
 
   protected assignDefinedTag(
@@ -2372,7 +2446,6 @@ export class CampaignSetupPage {
     }
 
     status.controls.cancelsStatusIds.setValue([...current, targetId]);
-    status.controls.cancelsStatusIds.markAsDirty();
   }
 
   protected removeForceStatusCancel(status: ForceStatusGroup, targetId: string): void {
@@ -2382,7 +2455,6 @@ export class CampaignSetupPage {
     }
 
     status.controls.cancelsStatusIds.setValue(next);
-    status.controls.cancelsStatusIds.markAsDirty();
   }
 
   protected forceStatusImmuneFactionOptions(status: ForceStatusGroup): { id: string; name: string }[] {
@@ -2416,7 +2488,6 @@ export class CampaignSetupPage {
     }
 
     status.controls.immuneFactionIds.setValue([...current, factionId]);
-    status.controls.immuneFactionIds.markAsDirty();
   }
 
   protected removeForceStatusImmuneFaction(status: ForceStatusGroup, factionId: string): void {
@@ -2426,7 +2497,6 @@ export class CampaignSetupPage {
     }
 
     status.controls.immuneFactionIds.setValue(next);
-    status.controls.immuneFactionIds.markAsDirty();
   }
 
   protected forceStatusImmuneSubfactionOptions(
@@ -2489,7 +2559,6 @@ export class CampaignSetupPage {
     }
 
     status.controls.immuneSubfactions.setValue([...current, { factionId, subfaction }]);
-    status.controls.immuneSubfactions.markAsDirty();
   }
 
   protected removeForceStatusImmuneSubfaction(status: ForceStatusGroup, factionId: string, subfaction: string): void {
@@ -2501,7 +2570,6 @@ export class CampaignSetupPage {
     }
 
     status.controls.immuneSubfactions.setValue(next);
-    status.controls.immuneSubfactions.markAsDirty();
   }
 
   protected privateObjectiveExcludeFactionOptions(item: PrivateObjectiveGroup): { id: string; name: string }[] {
@@ -2555,7 +2623,6 @@ export class CampaignSetupPage {
       }
 
       item.controls.excludedFactionIds.setValue([...current, id]);
-      item.controls.excludedFactionIds.markAsDirty();
       return;
     }
 
@@ -2566,7 +2633,6 @@ export class CampaignSetupPage {
       }
 
       item.controls.excludedAllyGroupIds.setValue([...current, id]);
-      item.controls.excludedAllyGroupIds.markAsDirty();
     }
   }
 
@@ -2577,14 +2643,12 @@ export class CampaignSetupPage {
   ): void {
     if (kind === 'faction') {
       item.controls.excludedFactionIds.setValue(item.controls.excludedFactionIds.value.filter((id) => id !== targetId));
-      item.controls.excludedFactionIds.markAsDirty();
       return;
     }
 
     item.controls.excludedAllyGroupIds.setValue(
       item.controls.excludedAllyGroupIds.value.filter((id) => id !== targetId),
     );
-    item.controls.excludedAllyGroupIds.markAsDirty();
   }
 
   protected commitForceStatusPriority(index: number, event?: Event): void {
@@ -3579,11 +3643,34 @@ export class CampaignSetupPage {
     }
   }
 
+  protected spawnWarning(): string | null {
+    return freeForAllSpawnWarning(
+      Number(this.form.controls.playerCount.value) || 0,
+      this.spawnLocationCount(),
+      this.form.controls.isFreeForAll.value,
+    );
+  }
+
+  private async refreshSpawnCount(campaign: CampaignDetail): Promise<void> {
+    if (!campaign.hasMap) {
+      this.spawnLocationCount.set(0);
+      return;
+    }
+
+    try {
+      const graph = await this.campaignsApi.getMapGraph(campaign.id);
+      this.spawnLocationCount.set(graph.territories.filter((territory) => !!territory.spawnFactionId).length);
+    } catch {
+      this.spawnLocationCount.set(0);
+    }
+  }
+
   private applyCampaignMetadata(campaign: CampaignDetail): void {
     this.revision = campaign.revision;
     this.assetTags = campaign.assetTags;
     this.hasExistingMap.set(campaign.hasMap);
     this.setStoredMapPreview(campaign.id, campaign.assetTags, campaign.hasMap);
+    void this.refreshSpawnCount(campaign);
     this.rememberStoredFiles(campaign);
     this.form.patchValue(
       {
@@ -3636,6 +3723,9 @@ export class CampaignSetupPage {
     this.applyRankingTagFilters(campaign);
     this.applySplitForcePenalty(campaign);
     this.form.controls.rivalObjectivesEnabled.setValue(campaign.rivalObjectivesEnabled ?? true, { emitEvent: false });
+    this.form.controls.isFreeForAll.setValue(campaign.isFreeForAll === true, { emitEvent: false });
+    this.form.controls.randomSpawnLocations.setValue(campaign.randomSpawnLocations === true, { emitEvent: false });
+    this.form.controls.gameSystem.setValue(campaign.gameSystem ?? '', { emitEvent: false });
     this.form.controls.rivalObjectiveCampaignPoints.setValue(campaign.rivalObjectiveCampaignPoints ?? 5, {
       emitEvent: false,
     });
@@ -3660,6 +3750,10 @@ export class CampaignSetupPage {
             tagIds: faction.tagIds ?? [],
             subfactionTagIds: this.subfactionTagIdsFromDetail(faction.subfactionTags),
             forceMovementSpeed: faction.forceMovementSpeed ?? 1,
+            preferredTerrainTypeIds: faction.preferredTerrainTypeIds ?? [],
+            preferredTerrainTagIds: faction.preferredTerrainTagIds ?? [],
+            preferredStructureTypeIds: faction.preferredStructureTypeIds ?? [],
+            preferredStructureTagIds: faction.preferredStructureTagIds ?? [],
             subfactionMovementSpeeds: faction.subfactionMovementSpeeds,
           }),
         ),
@@ -3763,6 +3857,10 @@ export class CampaignSetupPage {
       subfactionTagIds?: Record<string, string[]>;
       forceMovementSpeed?: number;
       subfactionMovementSpeeds?: readonly SubfactionMovementSpeed[];
+      preferredTerrainTypeIds?: readonly string[];
+      preferredTerrainTagIds?: readonly string[];
+      preferredStructureTypeIds?: readonly string[];
+      preferredStructureTagIds?: readonly string[];
     },
   ): FactionGroup {
     const names = subfactions.length > 0 ? subfactions : [''];
@@ -3786,6 +3884,7 @@ export class CampaignSetupPage {
           return this.createNamedGroup(value, {
             color: appearance?.color,
             flagSource: appearance?.flagSource,
+            hasFlagImage: appearance !== undefined && 'hasFlagImage' in appearance && appearance.hasFlagImage === true,
             tintFlagImage:
               appearance !== undefined && 'tintFlagImage' in appearance && appearance.tintFlagImage === true,
             requiresSubfaction: options?.requiresSubfaction === true,
@@ -3804,6 +3903,10 @@ export class CampaignSetupPage {
       ),
       tagDraft: [''],
       forceMovementSpeed: [factionSpeed, [minValue(1), maxValue(10)]],
+      preferredTerrainTypeIds: [[...(options?.preferredTerrainTypeIds ?? [])]],
+      preferredTerrainTagIds: [[...(options?.preferredTerrainTagIds ?? [])]],
+      preferredStructureTypeIds: [[...(options?.preferredStructureTypeIds ?? [])]],
+      preferredStructureTagIds: [[...(options?.preferredStructureTagIds ?? [])]],
     });
   }
 
@@ -3812,6 +3915,7 @@ export class CampaignSetupPage {
     options?: {
       color?: string | null;
       flagSource?: SubfactionFlagSource;
+      hasFlagImage?: boolean;
       tintFlagImage?: boolean;
       requiresSubfaction?: boolean;
       inheritMovementSpeed?: boolean;
@@ -3820,7 +3924,12 @@ export class CampaignSetupPage {
   ): NamedGroup {
     const required = options?.requiresSubfaction === true;
     const inheritColor = !required && !options?.color;
-    const flagSource: SubfactionFlagSource = options?.flagSource ?? (required ? 'color' : 'inherit');
+    // An uploaded-logo choice with no file is not a usable default. Optional subfactions
+    // inherit the parent flag; a required subfaction, or one that already has a color, uses the color flag.
+    let flagSource: SubfactionFlagSource = options?.flagSource ?? (required ? 'color' : 'inherit');
+    if (flagSource === 'image' && options?.hasFlagImage !== true) {
+      flagSource = required || (options?.color ?? '').trim().length > 0 ? 'color' : 'inherit';
+    }
     return this.formBuilder.nonNullable.group({
       name: [name, maxLength(60)],
       color: [options?.color ?? (required ? nextUnusedFactionColor(this.usedFactionAndSubfactionColors()) : '')],
@@ -5267,6 +5376,10 @@ export class CampaignSetupPage {
           .filter(([name]) => faction.subfactions.some((item) => item.name.trim() === name))
           .map(([name, tagIds]) => ({ name, tagIds })),
         forceMovementSpeed: faction.forceMovementSpeed,
+        preferredTerrainTypeIds: faction.preferredTerrainTypeIds,
+        preferredTerrainTagIds: faction.preferredTerrainTagIds,
+        preferredStructureTypeIds: faction.preferredStructureTypeIds,
+        preferredStructureTagIds: faction.preferredStructureTagIds,
         subfactionMovementSpeeds: faction.subfactions
           .filter((item) => item.name.trim().length > 0 && !item.inheritMovementSpeed)
           .map((item) => ({ name: item.name.trim(), speed: item.movementSpeed })),
@@ -5496,6 +5609,9 @@ export class CampaignSetupPage {
         endPhaseEarlyIfAble: phase.endPhaseEarlyIfAble,
       })),
       rivalObjectivesEnabled: value.rivalObjectivesEnabled,
+      isFreeForAll: value.isFreeForAll,
+      randomSpawnLocations: value.randomSpawnLocations,
+      gameSystem: value.gameSystem.trim() || null,
       rivalObjectiveCampaignPoints: Number(value.rivalObjectiveCampaignPoints) || 0,
     };
   }

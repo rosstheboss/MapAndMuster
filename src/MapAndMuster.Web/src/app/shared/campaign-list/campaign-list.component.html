@@ -27,6 +27,12 @@
                   (click)="toggleCampaign(campaign.id)"
                 >
                   {{ campaign.name }}
+                  @if (campaign.isFreeForAll) {
+                    <span class="status-chip">Free-for-all</span>
+                  }
+                  @if (campaign.gameSystem) {
+                    <span class="status-chip">{{ campaign.gameSystem }}</span>
+                  }
                 </button>
                 @if (canOpen(campaign)) {
                   <a

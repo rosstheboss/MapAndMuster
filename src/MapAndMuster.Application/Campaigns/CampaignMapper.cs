@@ -18,13 +18,15 @@ public static class CampaignMapper
     /// <param name="utcNow">The current UTC instant.</param>
     /// <param name="isAdministrator">Whether the caller is a system administrator.</param>
     /// <param name="isGuestAccount">Whether the caller is a temporary guest preview session.</param>
+    /// <param name="usernames">Usernames keyed by account, used for list filters.</param>
     /// <returns>The list item.</returns>
     public static CampaignListItem ToListItem(
         StoredCampaign campaign,
         Guid viewerUserId,
         DateTimeOffset utcNow,
         bool isAdministrator = false,
-        bool isGuestAccount = false)
+        bool isGuestAccount = false,
+        IReadOnlyDictionary<Guid, string>? usernames = null)
     {
         ArgumentNullException.ThrowIfNull(campaign);
         var membership = MembershipFor(campaign, viewerUserId);
@@ -37,6 +39,11 @@ public static class CampaignMapper
             PlayerSlotCount = campaign.PlayerSlotCount,
             OccupiedPlayerSlots = OccupiedPlayerSlots(campaign),
             IsPrivate = campaign.IsPrivate,
+            IsFreeForAll = campaign.IsFreeForAll,
+            RandomSpawnLocations = campaign.RandomSpawnLocations,
+            GameSystem = campaign.GameSystem,
+            ManagerUsername = ManagerUsername(campaign, usernames),
+            PublicParticipantUsernames = campaign.IsPrivate ? [] : ParticipantUsernames(campaign, usernames),
             IsPubliclyViewable = campaign.IsPubliclyViewable,
             CanManage = membership?.IsGameMaster == true || isAdministrator,
             IsParticipant = membership?.IsPlayer == true,
@@ -49,6 +56,9 @@ public static class CampaignMapper
             Status = progress.Status.ToString(),
             StartsUtc = campaign.StartsUtc,
             EndsUtc = campaign.ClosedUtc ?? campaign.EndsUtc,
+            RoundCount = campaign.RoundCount,
+            RoundLengthAmount = campaign.RoundLengthAmount,
+            RoundLengthUnit = campaign.RoundLengthUnit,
             CurrentRound = progress.CurrentRound,
             CurrentPhaseLabel = FormatCurrentPhaseLabel(campaign, progress),
             CurrentPhaseKind = progress.CurrentPhaseKind?.ToString(),
@@ -103,6 +113,9 @@ public static class CampaignMapper
             PlayerSlotCount = campaign.PlayerSlotCount,
             OccupiedPlayerSlots = OccupiedPlayerSlots(campaign),
             IsPrivate = campaign.IsPrivate,
+            IsFreeForAll = campaign.IsFreeForAll,
+            RandomSpawnLocations = campaign.RandomSpawnLocations,
+            GameSystem = campaign.GameSystem,
             IsPubliclyViewable = campaign.IsPubliclyViewable,
             CreatorIsParticipant = campaign.CreatorIsParticipant,
             City = campaign.City,
@@ -144,6 +157,10 @@ public static class CampaignMapper
                     .ToArray(),
                 ForceMovementSpeed = faction.ForceMovementSpeed,
                 SubfactionMovementSpeeds = faction.SubfactionMovementSpeeds,
+                PreferredTerrainTypeIds = faction.Preference.TerrainTypeIds,
+                PreferredTerrainTagIds = faction.Preference.TerrainTagIds,
+                PreferredStructureTypeIds = faction.Preference.StructureTypeIds,
+                PreferredStructureTagIds = faction.Preference.StructureTagIds,
             })],
             TerrainTypes = [.. campaign.TerrainTypes.Select(static type => new TerrainTypeDetail
             {
@@ -367,6 +384,40 @@ public static class CampaignMapper
     {
         ArgumentNullException.ThrowIfNull(campaign);
         return campaign.Memberships.FirstOrDefault(membership => membership.UserId == viewerUserId);
+    }
+
+    private static string? ManagerUsername(StoredCampaign campaign, IReadOnlyDictionary<Guid, string>? usernames)
+    {
+        if (usernames is null)
+        {
+            return null;
+        }
+
+        var manager = campaign.Memberships.FirstOrDefault(member =>
+            member.IsGameMaster && member.UserId == campaign.CreatedByUserId)
+            ?? campaign.Memberships.FirstOrDefault(static member => member.IsGameMaster);
+        return manager is null ? null : usernames.GetValueOrDefault(manager.UserId);
+    }
+
+    private static IReadOnlyList<string> ParticipantUsernames(
+        StoredCampaign campaign,
+        IReadOnlyDictionary<Guid, string>? usernames)
+    {
+        if (usernames is null)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. campaign.Memberships
+                .Where(static member => member.IsPlayer)
+                .Select(member => usernames.GetValueOrDefault(member.UserId))
+                .Where(static name => !string.IsNullOrWhiteSpace(name))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase),
+        ];
     }
 
     private static ItemObjectiveTypeDetail ToItemObjectiveType(StoredItemObjectiveType type, bool includeSecrets)

@@ -210,7 +210,11 @@ public static class CampaignMapGraphRules
 
             if (spawnFactionId is { } spawnId)
             {
-                if (!knownFactionIds.Contains(spawnId))
+                if (SpawnMarkers.IsGeneral(spawnId))
+                {
+                    spawnSubfaction = null;
+                }
+                else if (!knownFactionIds.Contains(spawnId))
                 {
                     errors.Add(new DomainError(
                         "territories.spawn.invalid",
@@ -236,8 +240,11 @@ public static class CampaignMapGraphRules
                         spawnByKey[spawnKey] = displayNumber;
                     }
 
-                    ownerFactionId = spawnId;
-                    ownerSubfaction = spawnSubfaction;
+                    if (!SpawnMarkers.IsGeneral(spawnId))
+                    {
+                        ownerFactionId = spawnId;
+                        ownerSubfaction = spawnSubfaction;
+                    }
                 }
             }
 

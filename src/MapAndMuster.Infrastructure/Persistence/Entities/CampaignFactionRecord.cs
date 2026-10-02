@@ -32,6 +32,9 @@ public sealed class CampaignFactionRecord
     /// <summary>Gets or sets the display order.</summary>
     public int SortOrder { get; set; }
 
+    /// <summary>Gets or sets preferred terrain and structure identifiers as JSON.</summary>
+    public string? PreferenceJson { get; set; }
+
     /// <summary>Gets or sets the campaign.</summary>
     public CampaignRecord? Campaign { get; set; }
 

@@ -321,7 +321,10 @@ internal static class CampaignPlayCatalog
             campaign.ItemObjectiveTypes.ToDictionary(
                 static type => type.Id,
                 static type => CatalogFileBinder.ToEffectSetups(type.Effects)),
-            campaign.ForceStatuses.ToDictionary(static status => status.Id, static status => status.Name));
+            campaign.ForceStatuses.ToDictionary(static status => status.Id, static status => status.Name),
+            campaign.IsFreeForAll,
+            campaign.RandomSpawnLocations,
+            campaign.Factions.ToDictionary(static faction => faction.Id, static faction => faction.Preference));
     }
 
     private static Dictionary<(Guid FactionId, string Subfaction), int> SubfactionSpeeds(StoredCampaign campaign)

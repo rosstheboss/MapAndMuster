@@ -1,3 +1,4 @@
+using MapAndMuster.Domain.Maps;
 using MapAndMuster.Domain.Play;
 
 namespace MapAndMuster.Backend.UnitTests.Play;
@@ -37,5 +38,37 @@ public sealed class PlayMapSpawnTests
         Assert.True(FactionSpecialRulePolicies.CanEnter(map, khorne, KhorneLand));
         Assert.False(FactionSpecialRulePolicies.CanEnter(map, khorne, NurgleLand));
         Assert.True(FactionSpecialRulePolicies.IsEnemySpawn(map.Territory(NurgleLand)!, khorne));
+    }
+
+    [Fact]
+    public void StartingPlacementUsesAnUnoccupiedNeutralSpawnWhenTheFactionHasNone()
+    {
+        var faction = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa20");
+        var first = Guid.Parse("33333333-3333-3333-3333-333333333331");
+        var second = Guid.Parse("33333333-3333-3333-3333-333333333332");
+        var map = new PlayMap(
+            [
+                new PlayTerritory(first, 1, null, SpawnMarkers.General, null, null, StructureCondition.Operational),
+                new PlayTerritory(second, 2, null, SpawnMarkers.General, null, null, StructureCondition.Operational),
+            ],
+            []);
+
+        var placed = FactionSpecialRulePolicies.StartingPlacement(
+            map,
+            faction,
+            null,
+            [],
+            SpecialRuleContext.None,
+            static _ => 0);
+        Assert.Equal((first, false), placed);
+
+        var next = FactionSpecialRulePolicies.StartingPlacement(
+            map,
+            faction,
+            null,
+            [new CampaignForce(Guid.NewGuid(), Guid.NewGuid(), faction, first, false)],
+            SpecialRuleContext.None,
+            static _ => 0);
+        Assert.Equal((second, false), next);
     }
 }

@@ -10,6 +10,9 @@
           {{ isGuestPreview() ? 'Open map editor' : 'Edit map' }}
         </a>
       }
+      @if (spawnWarning(); as warning) {
+        <p class="error error-banner" role="alert">{{ warning }}</p>
+      }
       <button type="button" class="button-secondary" (click)="expandAllSections()">Expand All</button>
       <button type="button" class="button-secondary" (click)="collapseAllSections()">Collapse All</button>
       @if (isAdministrator()) {
@@ -1849,53 +1852,69 @@
             </button>
           </legend>
           <div [hidden]="!isOpen('allies')">
-            <p class="muted">
-              Two or more factions can join a group. All factions cannot belong to a single group. Select factions for a
-              group here; that also updates the ally-group field on each faction below.
-            </p>
-            <div class="choice-row">
-              <button type="button" class="button-secondary" (click)="addAllyGroup()">Add ally group</button>
-              <button type="button" class="button-secondary" (click)="clearAllyGroups()">Clear allies</button>
-            </div>
-            <div formArrayName="allyGroups" class="stack">
-              @for (group of allyGroups.controls; track group; let index = $index) {
-                <div class="nested-row" [formGroupName]="index">
-                  <div class="field grow">
-                    <label [attr.for]="'ally-group-' + index">Ally group {{ index + 1 }} name</label>
-                    <input [id]="'ally-group-' + index" formControlName="name" maxlength="60" />
+            <label class="choice-row">
+              <input type="checkbox" formControlName="isFreeForAll" />
+              Free-for-all. No ally groups, and every player fights alone.
+            </label>
+            <label>
+              Game system
+              <input formControlName="gameSystem" maxlength="80" placeholder="Optional, such as Bolt Action" />
+            </label>
+            @if (form.controls.isFreeForAll.value) {
+              <p class="muted">Ally groups stay hidden while free-for-all is on.</p>
+            } @else {
+              <p class="muted">
+                Two or more factions can join a group. All factions cannot belong to a single group. Select factions for
+                a group here; that also updates the ally-group field on each faction below.
+              </p>
+              <div class="choice-row">
+                <button type="button" class="button-secondary" (click)="addAllyGroup()">Add ally group</button>
+                <button type="button" class="button-secondary" (click)="clearAllyGroups()">Clear allies</button>
+              </div>
+              <div formArrayName="allyGroups" class="stack">
+                @for (group of allyGroups.controls; track group; let index = $index) {
+                  <div class="nested-row" [formGroupName]="index">
+                    <div class="field grow">
+                      <label [attr.for]="'ally-group-' + index">Ally group {{ index + 1 }} name</label>
+                      <input [id]="'ally-group-' + index" formControlName="name" maxlength="60" />
+                    </div>
+                    <div class="field color-field">
+                      <label [attr.for]="'ally-group-color-' + index">Color</label>
+                      <input [id]="'ally-group-color-' + index" type="color" formControlName="color" />
+                    </div>
+                    <div class="field grow">
+                      <label [attr.for]="'ally-group-factions-' + index">Factions in this group</label>
+                      <select
+                        [id]="'ally-group-factions-' + index"
+                        (change)="onAllyGroupFactionPicked(group.controls.id.value, $event)"
+                      >
+                        <option value="">Select a faction</option>
+                        @for (faction of allyGroupFactionChoices(group.controls.id.value); track faction.id) {
+                          <option [value]="faction.id">{{ faction.name }}</option>
+                        }
+                      </select>
+                    </div>
+                    <button type="button" class="button-secondary" (click)="removeAllyGroup(index)">Remove</button>
                   </div>
-                  <div class="field color-field">
-                    <label [attr.for]="'ally-group-color-' + index">Color</label>
-                    <input [id]="'ally-group-color-' + index" type="color" formControlName="color" />
-                  </div>
-                  <div class="field grow">
-                    <label [attr.for]="'ally-group-factions-' + index">Factions in this group</label>
-                    <select
-                      [id]="'ally-group-factions-' + index"
-                      (change)="onAllyGroupFactionPicked(group.controls.id.value, $event)"
-                    >
-                      <option value="">Select a faction</option>
-                      @for (faction of allyGroupFactionChoices(group.controls.id.value); track faction.id) {
-                        <option [value]="faction.id">{{ faction.name }}</option>
-                      }
-                    </select>
-                  </div>
-                  <button type="button" class="button-secondary" (click)="removeAllyGroup(index)">Remove</button>
-                </div>
-                @if (group.controls.name.value.trim()) {
-                  <p class="muted ally-members">
-                    {{ allyMembers(group.controls.id.value) || 'No factions assigned yet.' }}
-                  </p>
+                  @if (group.controls.name.value.trim()) {
+                    <p class="muted ally-members">
+                      {{ allyMembers(group.controls.id.value) || 'No factions assigned yet.' }}
+                    </p>
+                  }
                 }
+              </div>
+              @if (allyGroups.length > 0 && unalignedFactions(); as unaligned) {
+                <p class="muted ally-members">Unaligned: {{ unaligned }}</p>
               }
-            </div>
-            @if (allyGroups.length > 0 && unalignedFactions(); as unaligned) {
-              <p class="muted ally-members">Unaligned: {{ unaligned }}</p>
             }
           </div>
         </fieldset>
 
         <fieldset id="setup-factions" class="field setup-section">
+          <label class="choice-row">
+            <input type="checkbox" formControlName="randomSpawnLocations" />
+            Random spawn locations
+          </label>
           <legend>
             <button
               type="button"
@@ -2014,6 +2033,71 @@
                         </button>
                       }
                     </div>
+                    <fieldset class="field">
+                      <legend>Flag</legend>
+                      <div class="choice-row">
+                        <label>
+                          <input
+                            type="radio"
+                            [attr.name]="'faction-flag-' + index"
+                            [checked]="faction.controls.flagSource.value === 'color'"
+                            (change)="setFlagSource(faction, 'color')"
+                          />
+                          Color flag
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            [attr.name]="'faction-flag-' + index"
+                            [checked]="faction.controls.flagSource.value === 'image'"
+                            (change)="setFlagSource(faction, 'image')"
+                          />
+                          Uploaded image
+                        </label>
+                      </div>
+                      @if (faction.controls.flagSource.value === 'color') {
+                        <p class="muted">
+                          Default flag uses this faction’s color. Uploaded logos keep original colors unless tinting is
+                          enabled.
+                        </p>
+                        <div
+                          class="faction-flag-preview"
+                          [style.background]="faction.controls.color.value"
+                          aria-hidden="true"
+                        ></div>
+                      } @else {
+                        <div class="field" [class.is-dirty]="hasPendingFlag(faction.controls.id.value)">
+                          <label [attr.for]="'faction-flag-image-' + index">Flag image</label>
+                          <input
+                            [id]="'faction-flag-image-' + index"
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            (change)="onFlagImageSelected(faction.controls.id.value, $event)"
+                          />
+                          <p class="muted">
+                            Maximum size {{ flagImageMaxPx }}px × {{ flagImageMaxPx }}px. Larger images are shrunk to
+                            that size. Uploaded logos keep original colors unless tinting is enabled.
+                          </p>
+                          <label class="checkbox-row">
+                            <input type="checkbox" formControlName="tintFlagImage" />
+                            Tint logo with faction color
+                          </label>
+                          @if (flagImageName(faction.controls.id.value); as fileName) {
+                            <p class="muted">Selected: {{ fileName }}</p>
+                          } @else if (factionFlagUrl(faction.controls.id.value)) {
+                            <p class="muted">A flag is already stored.</p>
+                          }
+                          @if (flagPreviewUrl(faction.controls.id.value); as src) {
+                            <app-faction-logo
+                              class="structure-logo-preview"
+                              [src]="src"
+                              [color]="faction.controls.color.value"
+                              [tint]="faction.controls.tintFlagImage.value"
+                            />
+                          }
+                        </div>
+                      }
+                    </fieldset>
                     <label class="checkbox-row">
                       <input type="checkbox" formControlName="requiresSubfaction" />
                       Players who choose this faction must pick a subfaction
@@ -2170,6 +2254,16 @@
                               />
                               Inherit faction color
                             </label>
+                            @if (
+                              subfaction.controls.inheritColor.value &&
+                              subfaction.controls.flagSource.value !== 'inherit'
+                            ) {
+                              <div
+                                class="faction-flag-preview"
+                                [style.background]="faction.controls.color.value"
+                                aria-hidden="true"
+                              ></div>
+                            }
                             @if (!subfaction.controls.inheritColor.value) {
                               <div class="field color-field">
                                 <label [attr.for]="'subfaction-color-' + index + '-' + subIndex">Color</label>
@@ -2214,7 +2308,35 @@
                                 Uploaded image
                               </label>
                             </div>
-                            @if (subfaction.controls.flagSource.value === 'color') {
+                            @if (subfaction.controls.flagSource.value === 'inherit') {
+                              <p class="muted">Uses this faction’s color and flag.</p>
+                              @if (
+                                faction.controls.flagSource.value === 'image' &&
+                                  flagPreviewUrl(faction.controls.id.value);
+                                as src
+                              ) {
+                                <app-faction-logo
+                                  class="structure-logo-preview"
+                                  [src]="src"
+                                  [color]="
+                                    subfaction.controls.inheritColor.value
+                                      ? faction.controls.color.value
+                                      : subfaction.controls.color.value
+                                  "
+                                  [tint]="faction.controls.tintFlagImage.value"
+                                />
+                              } @else {
+                                <div
+                                  class="faction-flag-preview"
+                                  [style.background]="
+                                    subfaction.controls.inheritColor.value
+                                      ? faction.controls.color.value
+                                      : subfaction.controls.color.value
+                                  "
+                                  aria-hidden="true"
+                                ></div>
+                              }
+                            } @else if (subfaction.controls.flagSource.value === 'color') {
                               <p class="muted">
                                 Default flag uses this subfaction’s color, or the parent faction color when inherited.
                               </p>
@@ -2297,6 +2419,205 @@
                       <button type="button" class="button-secondary" (click)="addSubfaction(faction)">
                         Add subfaction
                       </button>
+                    </fieldset>
+                    <fieldset class="field">
+                      <legend>Preferred terrain and structures</legend>
+                      <p class="muted">
+                        Used when a choice must prefer this faction, including random spawn placement.
+                      </p>
+                      <label [attr.for]="'faction-pref-terrain-' + index">Terrain types</label>
+                      <ul class="tag-chip-list">
+                        @for (
+                          item of assignedPreferences(
+                            faction.controls.preferredTerrainTypeIds.value,
+                            namedTerrainTypes()
+                          );
+                          track item.id
+                        ) {
+                          <li class="tag-chip">
+                            <span>{{ item.name }}</span>
+                            <button
+                              type="button"
+                              class="button-danger icon-button"
+                              [attr.aria-label]="'Remove terrain type ' + item.name"
+                              (click)="removeAssignedTag(faction.controls.preferredTerrainTypeIds, item.id)"
+                            >
+                              <app-icon name="x" />
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                      <app-filterable-combobox
+                        [inputId]="'faction-pref-terrain-' + index"
+                        [options]="
+                          unassignedPreferenceNames(faction.controls.preferredTerrainTypeIds.value, namedTerrainTypes())
+                        "
+                        [maxLength]="60"
+                        placeholder="Type a terrain type"
+                        [formControl]="preferenceDraft(faction, 'terrain')"
+                        (optionChosen)="
+                          assignPreference(
+                            faction.controls.preferredTerrainTypeIds,
+                            namedTerrainTypes(),
+                            preferenceDraft(faction, 'terrain')
+                          )
+                        "
+                        (keydown)="
+                          onPreferenceKey(
+                            $event,
+                            faction.controls.preferredTerrainTypeIds,
+                            namedTerrainTypes(),
+                            preferenceDraft(faction, 'terrain')
+                          )
+                        "
+                      />
+                      <label [attr.for]="'faction-pref-terrain-tag-' + index">Terrain tags</label>
+                      <ul class="tag-chip-list">
+                        @for (
+                          item of assignedPreferences(
+                            faction.controls.preferredTerrainTagIds.value,
+                            namedTerrainTags()
+                          );
+                          track item.id
+                        ) {
+                          <li class="tag-chip">
+                            <span>{{ item.name }}</span>
+                            <button
+                              type="button"
+                              class="button-danger icon-button"
+                              [attr.aria-label]="'Remove terrain tag ' + item.name"
+                              (click)="removeAssignedTag(faction.controls.preferredTerrainTagIds, item.id)"
+                            >
+                              <app-icon name="x" />
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                      <app-filterable-combobox
+                        [inputId]="'faction-pref-terrain-tag-' + index"
+                        [options]="
+                          unassignedPreferenceNames(faction.controls.preferredTerrainTagIds.value, namedTerrainTags())
+                        "
+                        [maxLength]="60"
+                        placeholder="Type a terrain tag"
+                        [formControl]="preferenceDraft(faction, 'terrainTag')"
+                        (optionChosen)="
+                          assignPreference(
+                            faction.controls.preferredTerrainTagIds,
+                            namedTerrainTags(),
+                            preferenceDraft(faction, 'terrainTag')
+                          )
+                        "
+                        (keydown)="
+                          onPreferenceKey(
+                            $event,
+                            faction.controls.preferredTerrainTagIds,
+                            namedTerrainTags(),
+                            preferenceDraft(faction, 'terrainTag')
+                          )
+                        "
+                      />
+                      <label [attr.for]="'faction-pref-structure-' + index">Structure types</label>
+                      <ul class="tag-chip-list">
+                        @for (
+                          item of assignedPreferences(
+                            faction.controls.preferredStructureTypeIds.value,
+                            namedStructureTypes()
+                          );
+                          track item.id
+                        ) {
+                          <li class="tag-chip">
+                            <span>{{ item.name }}</span>
+                            <button
+                              type="button"
+                              class="button-danger icon-button"
+                              [attr.aria-label]="'Remove structure type ' + item.name"
+                              (click)="removeAssignedTag(faction.controls.preferredStructureTypeIds, item.id)"
+                            >
+                              <app-icon name="x" />
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                      <app-filterable-combobox
+                        [inputId]="'faction-pref-structure-' + index"
+                        [options]="
+                          unassignedPreferenceNames(
+                            faction.controls.preferredStructureTypeIds.value,
+                            namedStructureTypes()
+                          )
+                        "
+                        [maxLength]="60"
+                        placeholder="Type a structure type"
+                        [formControl]="preferenceDraft(faction, 'structure')"
+                        (optionChosen)="
+                          assignPreference(
+                            faction.controls.preferredStructureTypeIds,
+                            namedStructureTypes(),
+                            preferenceDraft(faction, 'structure')
+                          )
+                        "
+                        (keydown)="
+                          onPreferenceKey(
+                            $event,
+                            faction.controls.preferredStructureTypeIds,
+                            namedStructureTypes(),
+                            preferenceDraft(faction, 'structure')
+                          )
+                        "
+                      />
+                      <label [attr.for]="'faction-pref-structure-tag-' + index">Structure tags</label>
+                      <ul class="tag-chip-list">
+                        @for (
+                          item of assignedPreferences(
+                            faction.controls.preferredStructureTagIds.value,
+                            namedStructureTags()
+                          );
+                          track item.id
+                        ) {
+                          <li class="tag-chip">
+                            <span>{{ item.name }}</span>
+                            <button
+                              type="button"
+                              class="button-danger icon-button"
+                              [attr.aria-label]="'Remove structure tag ' + item.name"
+                              (click)="removeAssignedTag(faction.controls.preferredStructureTagIds, item.id)"
+                            >
+                              <app-icon name="x" />
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                      <app-filterable-combobox
+                        [inputId]="'faction-pref-structure-tag-' + index"
+                        [options]="
+                          unassignedPreferenceNames(
+                            faction.controls.preferredStructureTagIds.value,
+                            namedStructureTags()
+                          )
+                        "
+                        [maxLength]="60"
+                        placeholder="Type a structure tag"
+                        [formControl]="preferenceDraft(faction, 'structureTag')"
+                        (optionChosen)="
+                          assignPreference(
+                            faction.controls.preferredStructureTagIds,
+                            namedStructureTags(),
+                            preferenceDraft(faction, 'structureTag')
+                          )
+                        "
+                        (keydown)="
+                          onPreferenceKey(
+                            $event,
+                            faction.controls.preferredStructureTagIds,
+                            namedStructureTags(),
+                            preferenceDraft(faction, 'structureTag')
+                          )
+                        "
+                      />
+                      <p class="muted">
+                        Type a catalog name and press Enter, or pick a match. Unknown names are not created.
+                      </p>
                     </fieldset>
                     <div class="field">
                       <label [attr.for]="'faction-movement-speed-' + index">Force movement speed</label>
@@ -2385,70 +2706,6 @@
                         </div>
                       </fieldset>
                     }
-                    <fieldset class="field">
-                      <legend>Flag</legend>
-                      <div class="choice-row">
-                        <label>
-                          <input
-                            type="radio"
-                            [attr.name]="'faction-flag-' + index"
-                            [checked]="faction.controls.flagSource.value === 'color'"
-                            (change)="setFlagSource(faction, 'color')"
-                          />
-                          Color flag
-                        </label>
-                        <label>
-                          <input
-                            type="radio"
-                            [attr.name]="'faction-flag-' + index"
-                            [checked]="faction.controls.flagSource.value === 'image'"
-                            (change)="setFlagSource(faction, 'image')"
-                          />
-                          Uploaded image
-                        </label>
-                      </div>
-                      @if (faction.controls.flagSource.value === 'color') {
-                        <p class="muted">
-                          Default flag uses this faction’s color. Uploaded logos keep original colors unless tinting is
-                          enabled.
-                        </p>
-                        <div
-                          class="faction-flag-preview"
-                          [style.background]="faction.controls.color.value"
-                          aria-hidden="true"
-                        ></div>
-                      } @else {
-                        <div class="field" [class.is-dirty]="hasPendingFlag(faction.controls.id.value)">
-                          <input
-                            [id]="'faction-flag-image-' + index"
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            (change)="onFlagImageSelected(faction.controls.id.value, $event)"
-                          />
-                          <p class="muted">
-                            Maximum size {{ flagImageMaxPx }}px × {{ flagImageMaxPx }}px. Larger images are shrunk to
-                            that size. Uploaded logos keep original colors unless tinting is enabled.
-                          </p>
-                          <label class="checkbox-row">
-                            <input type="checkbox" formControlName="tintFlagImage" />
-                            Tint logo with faction color
-                          </label>
-                          @if (flagImageName(faction.controls.id.value); as fileName) {
-                            <p class="muted">Selected: {{ fileName }}</p>
-                          } @else if (factionFlagUrl(faction.controls.id.value)) {
-                            <p class="muted">A flag is already stored.</p>
-                          }
-                          @if (flagPreviewUrl(faction.controls.id.value); as src) {
-                            <app-faction-logo
-                              class="structure-logo-preview"
-                              [src]="src"
-                              [color]="faction.controls.color.value"
-                              [tint]="faction.controls.tintFlagImage.value"
-                            />
-                          }
-                        </div>
-                      }
-                    </fieldset>
                   </div>
                 </div>
               }

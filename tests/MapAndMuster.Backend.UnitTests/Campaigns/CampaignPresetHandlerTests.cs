@@ -112,6 +112,9 @@ public sealed class CampaignPresetHandlerTests
         Assert.True(result.Value!.HasMap);
         Assert.Equal(originalKey, campaigns.Campaign.MapStorageKey);
         Assert.Equal(originalGraph!.Territories[0].Name, campaigns.Campaign.MapGraph!.Territories[0].Name);
+        Assert.True(campaigns.Campaign.IsFreeForAll);
+        Assert.True(campaigns.Campaign.RandomSpawnLocations);
+        Assert.Equal("Warhammer: The Old World", campaigns.Campaign.GameSystem);
     }
 
     [Fact]
@@ -459,6 +462,102 @@ public sealed class CampaignPresetHandlerTests
     }
 
     [Fact]
+    public void MissingPackagedSubfactionLogoFallsBackFromAnUploadedImage()
+    {
+        var campaign = new StoredCampaign
+        {
+            Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            Name = "Frontier War",
+            PlayerSlotCount = 8,
+            IsPrivate = false,
+            IsPubliclyViewable = true,
+            CreatorIsParticipant = true,
+            Revision = 1,
+            CreatedUtc = DateTimeOffset.UnixEpoch,
+            UpdatedUtc = DateTimeOffset.UnixEpoch,
+            CreatedByUserId = Guid.Empty,
+            Memberships = [],
+            Factions =
+            [
+                new StoredFaction
+                {
+                    Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                    Name = "Empire of Man",
+                    Color = "#DC2626",
+                    Subfactions = ["Wild Herd", "City-state of Nuln"],
+                    RequiresSubfaction = false,
+                    SubfactionAppearances =
+                    [
+                        new StoredSubfactionAppearance
+                        {
+                            Name = "Wild Herd",
+                            FlagSource = SubfactionFlagSource.Image,
+                            FlagImageStorageKey = "flags/missing.png",
+                            TintFlagImage = true,
+                        },
+                        new StoredSubfactionAppearance
+                        {
+                            Name = "City-state of Nuln",
+                            FlagSource = SubfactionFlagSource.Image,
+                            FlagImageStorageKey = "flags/nuln.png",
+                        },
+                    ],
+                },
+                new StoredFaction
+                {
+                    Id = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                    Name = "Daemons of Chaos",
+                    Color = "#7C3AED",
+                    Subfactions = ["Khorne"],
+                    RequiresSubfaction = true,
+                    SubfactionAppearances =
+                    [
+                        new StoredSubfactionAppearance
+                        {
+                            Name = "Khorne",
+                            Color = "#B91C1C",
+                            FlagSource = SubfactionFlagSource.Image,
+                            FlagImageStorageKey = "flags/khorne-missing.png",
+                        },
+                    ],
+                },
+            ],
+            AllyGroups = [],
+            Links = [],
+            TimeZoneId = "UTC",
+            StartsUtc = DateTimeOffset.UnixEpoch,
+            EndsUtc = DateTimeOffset.UnixEpoch,
+            RoundCount = 8,
+            RoundLengthAmount = 1,
+            RoundLengthUnit = "Weeks",
+            Phases = [],
+            TerrainTypes = [],
+            StructureTypes = [],
+            BattleScoring = BattleScoringSetup.Default,
+        };
+
+        var remapped = CampaignPresetKeyRemap.Remap(
+            campaign,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["flags/nuln.png"] = "flags/saved-nuln.png",
+            });
+
+        var empire = remapped.Factions.Single(faction => faction.Name == "Empire of Man");
+        var wildHerd = empire.SubfactionAppearances.Single(appearance => appearance.Name == "Wild Herd");
+        Assert.Equal(SubfactionFlagSource.Inherit, wildHerd.FlagSource);
+        Assert.Null(wildHerd.FlagImageStorageKey);
+        Assert.False(wildHerd.TintFlagImage);
+        var nuln = empire.SubfactionAppearances.Single(appearance => appearance.Name == "City-state of Nuln");
+        Assert.Equal(SubfactionFlagSource.Image, nuln.FlagSource);
+        Assert.Equal("flags/saved-nuln.png", nuln.FlagImageStorageKey);
+        var khorne = remapped.Factions.Single(faction => faction.Name == "Daemons of Chaos")
+            .SubfactionAppearances.Single();
+        Assert.Equal(SubfactionFlagSource.Color, khorne.FlagSource);
+        Assert.Null(khorne.FlagImageStorageKey);
+    }
+
+    [Fact]
     public async Task ImportReprocessesStoredMapsUsingThePackageSizeLimit()
     {
         var presets = new FakePresetStore();
@@ -751,6 +850,9 @@ file sealed class FakePresetStore : ICampaignPresetStore
             PlayerSlotCount = campaign.PlayerSlotCount,
             IsPrivate = false,
             IsPubliclyViewable = true,
+            IsFreeForAll = campaign.IsFreeForAll,
+            RandomSpawnLocations = campaign.RandomSpawnLocations,
+            GameSystem = campaign.GameSystem,
             CreatorIsParticipant = campaign.CreatorIsParticipant,
             MapStorageKey = campaign.MapStorageKey,
             Revision = 1,
@@ -943,6 +1045,9 @@ file sealed class PresetCampaignStore : ICampaignStore
             PlayerSlotCount = 8,
             IsPrivate = false,
             IsPubliclyViewable = true,
+            IsFreeForAll = true,
+            RandomSpawnLocations = true,
+            GameSystem = "Warhammer: The Old World",
             CreatorIsParticipant = true,
             MapStorageKey = "maps/border.png",
             Revision = 2,
@@ -1045,6 +1150,9 @@ file sealed class PresetCampaignStore : ICampaignStore
             PlayerSlotCount = campaign.PlayerSlotCount,
             IsPrivate = campaign.IsPrivate,
             IsPubliclyViewable = campaign.IsPubliclyViewable,
+            IsFreeForAll = campaign.IsFreeForAll,
+            RandomSpawnLocations = campaign.RandomSpawnLocations,
+            GameSystem = campaign.GameSystem,
             JoinPasswordHash = campaign.JoinPasswordHash,
             CreatorIsParticipant = campaign.CreatorIsParticipant,
             City = campaign.City,
@@ -1103,7 +1211,8 @@ file sealed class PresetCampaignStore : ICampaignStore
         StoredMapGraph graph,
         int expectedRevision,
         DateTimeOffset updatedUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool? randomSpawnLocations = null)
     {
         throw new NotSupportedException();
     }

@@ -247,6 +247,9 @@ public sealed class PlayForceResponse
     /// <summary>Gets two-territory Move hops when the force can travel more than one territory.</summary>
     public IReadOnlyList<PlayMoveHopResponse> MoveHops { get; init; } = [];
 
+    /// <summary>Gets spawn territories this force may relocate to when locked battles block every path.</summary>
+    public IReadOnlyList<Guid> EscapeMoveTargets { get; init; } = [];
+
     /// <summary>Gets player-submittable action kinds available for this force.</summary>
     public required IReadOnlyList<string> AvailableActions { get; init; }
 
@@ -1372,6 +1375,7 @@ public static class PlayResponses
                             IntermediateTerritoryIds = hop.IntermediateTerritoryIds,
                         }),
                     ],
+                    EscapeMoveTargets = force.EscapeMoveTargets,
                     AvailableActions = force.AvailableActions,
                     Subfaction = force.Subfaction,
                     CanMoveTwoTerritories = force.CanMoveTwoTerritories,

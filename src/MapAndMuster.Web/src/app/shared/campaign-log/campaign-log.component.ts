@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../core/auth/auth.service';
+import { NgModelBaselineDirective } from '../../core/forms/ng-model-baseline.directive';
 import type { CampaignChatSend, ChatChannel, PlayLogEntry } from '../../core/campaigns/campaign.models';
 import {
   campaignLogComposerSize,
@@ -26,7 +27,7 @@ import { AppDialogComponent } from '../dialog/dialog.component';
 
 @Component({
   selector: 'app-campaign-log',
-  imports: [FormsModule, RouterLink, AppDialogComponent],
+  imports: [FormsModule, NgModelBaselineDirective, RouterLink, AppDialogComponent],
   templateUrl: './campaign-log.component.html',
   styleUrl: './campaign-log.component.css',
 })

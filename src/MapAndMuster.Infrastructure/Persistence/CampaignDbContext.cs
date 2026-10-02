@@ -132,6 +132,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(campaign => campaign.CatalogJson).HasColumnType("jsonb");
             entity.Property(campaign => campaign.TimeZoneId).HasMaxLength(64).IsRequired();
             entity.Property(campaign => campaign.RoundLengthUnit).HasMaxLength(16).IsRequired();
+            entity.Property(campaign => campaign.GameSystem).HasMaxLength(80);
             entity.Property(campaign => campaign.Revision).IsConcurrencyToken().ValueGeneratedNever();
             entity.HasIndex(campaign => campaign.CreatedByUserId);
 
@@ -191,6 +192,7 @@ public sealed class CampaignDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.Property(faction => faction.RequiresSubfaction).IsRequired();
             entity.Property(faction => faction.FlagImageStorageKey).HasMaxLength(260);
             entity.Property(faction => faction.TintFlagImage).IsRequired();
+            entity.Property(faction => faction.PreferenceJson).HasColumnType("jsonb");
             entity.HasOne(faction => faction.AllyGroup)
                 .WithMany(group => group.Factions)
                 .HasForeignKey(faction => faction.AllyGroupId)

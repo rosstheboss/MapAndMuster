@@ -1,4 +1,4 @@
-import { resolveFactionAppearance } from './faction-appearance';
+import { flagImageSubfaction, resolveFactionAppearance } from './faction-appearance';
 
 describe('faction appearance', () => {
   const faction = {
@@ -45,6 +45,33 @@ describe('faction appearance', () => {
       hasFlagImage: true,
       tint: true,
     });
+  });
+
+  it('loads the parent flag when a subfaction inherits and its own logo only when uploaded', () => {
+    expect(flagImageSubfaction(faction, 'Khorne')).toBeNull();
+    expect(
+      flagImageSubfaction(
+        {
+          ...faction,
+          requiresSubfaction: false,
+          subfactionAppearances: [
+            { name: 'Khorne', color: null, flagSource: 'inherit', hasFlagImage: false, tintFlagImage: false },
+          ],
+        },
+        'Khorne',
+      ),
+    ).toBeNull();
+    expect(
+      flagImageSubfaction(
+        {
+          ...faction,
+          subfactionAppearances: [
+            { name: 'Khorne', color: '#B91C1C', flagSource: 'image', hasFlagImage: true, tintFlagImage: true },
+          ],
+        },
+        'Khorne',
+      ),
+    ).toBe('Khorne');
   });
 
   it('uses a subfaction uploaded logo when the flag source is image', () => {

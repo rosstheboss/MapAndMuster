@@ -269,7 +269,8 @@ public sealed class GetPublicProfileHandlerTests
             StoredMapGraph graph,
             int expectedRevision,
             DateTimeOffset updatedUtc,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool? randomSpawnLocations = null)
         {
             throw new NotSupportedException();
         }

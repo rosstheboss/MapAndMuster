@@ -319,7 +319,8 @@ file sealed class EmptyCampaignStore : ICampaignStore
         StoredMapGraph graph,
         int expectedRevision,
         DateTimeOffset updatedUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool? randomSpawnLocations = null)
     {
         throw new NotSupportedException();
     }

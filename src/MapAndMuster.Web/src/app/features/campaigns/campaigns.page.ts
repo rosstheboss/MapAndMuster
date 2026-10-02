@@ -1,16 +1,17 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { GUEST_PREVIEW_CAMPAIGN_ID } from '../../core/auth/guest-preview';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
+import { CampaignListFiltersComponent } from '../../shared/campaign-list/campaign-list-filters.component';
 import { CampaignListComponent } from '../../shared/campaign-list/campaign-list.component';
 import { GuestPreviewBannerComponent } from '../../shared/guest-preview-banner/guest-preview-banner.component';
 
 @Component({
   selector: 'app-campaigns-page',
-  imports: [RouterLink, CampaignListComponent, GuestPreviewBannerComponent],
+  imports: [RouterLink, CampaignListComponent, CampaignListFiltersComponent, GuestPreviewBannerComponent],
   templateUrl: './campaigns.page.html',
   styleUrl: './campaigns.page.css',
 })
@@ -21,6 +22,16 @@ export class CampaignsPage {
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
   protected readonly campaigns = signal<CampaignListItem[]>([]);
+  protected readonly filteredCampaigns = signal<readonly CampaignListItem[]>([]);
+  private readonly list = viewChild(CampaignListComponent);
+
+  protected expandAll(): void {
+    this.list()?.expandAll();
+  }
+
+  protected collapseAll(): void {
+    this.list()?.collapseAll();
+  }
 
   constructor() {
     void this.load();

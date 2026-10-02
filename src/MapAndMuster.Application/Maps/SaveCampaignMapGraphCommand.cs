@@ -24,6 +24,9 @@ public sealed class SaveCampaignMapGraphCommand
 
     /// <summary>Gets manager-assigned item objective placements.</summary>
     public IReadOnlyList<ItemObjectivePlacementInput>? ItemObjectivePlacements { get; init; }
+
+    /// <summary>Gets whether players are placed on general spawn locations, when the editor is changing that mode.</summary>
+    public bool? RandomSpawnLocations { get; init; }
 }
 
 /// <summary>

@@ -30,9 +30,9 @@ in an ADR or the relevant domain document and update tests.
     is landing in is allowed and does not start a battle. See `docs/DOMAIN.md`.
 7. Resolved: allied extra players on one side raise that side's round army-point cap by 25
     percent per extra player, then split the total evenly and round each force up to the next
-    10. More than two opposing sides who do not retreat: the two strongest play first, then
-    remaining opponents strongest-to-weakest in the same battle phase. A force that never
-    played stays in the territory for the next round's battle phase. See `docs/DOMAIN.md`.
+    10. More than two opposing sides who do not retreat: the two weakest play first, then the
+    winner plays the next-weakest in the same battle phase. A force that never played stays
+    in the territory for the next round's battle phase. See `docs/DOMAIN.md`.
 8. Resolved: surrender may be submitted during an action or battle window while the force is
     engaged. Click the force on the map and commit from the map toolbar. A committed surrender
     may be uncommitted while the current window remains open; uncommitting restores the

@@ -6,6 +6,7 @@ import { AuthService, readApiError } from '../../core/auth/auth.service';
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import { statusLabel } from '../../core/campaigns/campaign-schedule';
+import { NgModelBaselineDirective } from '../../core/forms/ng-model-baseline.directive';
 import {
   HomeBoardService,
   storedNotificationRouteId,
@@ -23,7 +24,7 @@ import { InstantDatePipe } from '../../shared/time/instant-date.pipe';
 
 @Component({
   selector: 'app-home-page',
-  imports: [InstantDatePipe, FormsModule, RouterLink, PhaseCountdownComponent],
+  imports: [InstantDatePipe, FormsModule, NgModelBaselineDirective, RouterLink, PhaseCountdownComponent],
   templateUrl: './home.page.html',
   styleUrl: './home.page.css',
 })

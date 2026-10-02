@@ -95,7 +95,10 @@ public sealed class CreateCampaignHandler
                 command.MostStructurePointsStructureTagId,
                 command.PointsPerTerritoryTerrainTagId,
                 command.RivalObjectivesEnabled,
-                command.RivalObjectiveCampaignPoints))
+                command.RivalObjectiveCampaignPoints,
+                command.IsFreeForAll,
+                command.RandomSpawnLocations,
+                command.GameSystem))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -240,7 +243,10 @@ public sealed class UpdateCampaignHandler
                 command.MostStructurePointsStructureTagId,
                 command.PointsPerTerritoryTerrainTagId,
                 command.RivalObjectivesEnabled,
-                command.RivalObjectiveCampaignPoints))
+                command.RivalObjectiveCampaignPoints,
+                command.IsFreeForAll,
+                command.RandomSpawnLocations,
+                command.GameSystem))
         {
             return OperationResults.Failure<CampaignDetail>(errors);
         }
@@ -395,6 +401,7 @@ internal static class CampaignPersistenceFactory
                         SubfactionTags = faction.SubfactionTags,
                         ForceMovementSpeed = faction.ForceMovementSpeed,
                         SubfactionMovementSpeeds = faction.SubfactionMovementSpeeds,
+                        Preference = faction.Preference,
                     };
                 }),
             ];
@@ -509,6 +516,9 @@ internal static class CampaignPersistenceFactory
             PrivateObjectiveTypes = privateObjectiveTypes,
             RivalObjectivesEnabled = setup.RivalObjectivesEnabled,
             RivalObjectiveCampaignPoints = setup.RivalObjectiveCampaignPoints,
+            IsFreeForAll = setup.IsFreeForAll,
+            RandomSpawnLocations = setup.RandomSpawnLocations,
+            GameSystem = setup.GameSystem,
             BattleScoring = setup.BattleScoring,
             RankingObjectivePoints = setup.RankingObjectivePoints,
             SplitForceSupplyPenaltyPercent = setup.SplitForceSupplyPenaltyPercent,

@@ -214,6 +214,9 @@ public sealed class CampaignStore : ICampaignStore
                     .SetProperty(item => item.Description, campaign.Description)
                     .SetProperty(item => item.PlayerSlotCount, campaign.PlayerSlotCount)
                     .SetProperty(item => item.IsPrivate, campaign.IsPrivate)
+                    .SetProperty(item => item.IsFreeForAll, campaign.IsFreeForAll)
+                    .SetProperty(item => item.RandomSpawnLocations, campaign.RandomSpawnLocations)
+                    .SetProperty(item => item.GameSystem, campaign.GameSystem)
                     .SetProperty(item => item.IsPubliclyViewable, campaign.IsPubliclyViewable)
                     .SetProperty(item => item.JoinPasswordHash, campaign.JoinPasswordHash)
                     .SetProperty(item => item.CreatorIsParticipant, campaign.CreatorIsParticipant)
@@ -353,7 +356,8 @@ public sealed class CampaignStore : ICampaignStore
         StoredMapGraph graph,
         int expectedRevision,
         DateTimeOffset updatedUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool? randomSpawnLocations = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
 
@@ -377,7 +381,10 @@ public sealed class CampaignStore : ICampaignStore
                 setters => setters
                     .SetProperty(item => item.MapGraphJson, json)
                     .SetProperty(item => item.UpdatedUtc, updatedUtc)
-                    .SetProperty(item => item.Revision, expectedRevision + 1),
+                    .SetProperty(item => item.Revision, expectedRevision + 1)
+                    .SetProperty(
+                        item => item.RandomSpawnLocations,
+                        item => randomSpawnLocations ?? item.RandomSpawnLocations),
                 cancellationToken)
             .ConfigureAwait(false);
         if (affected == 0)
@@ -604,6 +611,9 @@ public sealed class CampaignStore : ICampaignStore
             Description = campaign.Description,
             PlayerSlotCount = campaign.PlayerSlotCount,
             IsPrivate = campaign.IsPrivate,
+            IsFreeForAll = campaign.IsFreeForAll,
+            RandomSpawnLocations = campaign.RandomSpawnLocations,
+            GameSystem = campaign.GameSystem,
             IsPubliclyViewable = campaign.IsPubliclyViewable,
             JoinPasswordHash = campaign.JoinPasswordHash,
             CreatorIsParticipant = campaign.CreatorIsParticipant,
@@ -704,6 +714,7 @@ public sealed class CampaignStore : ICampaignStore
                 TintFlagImage = faction.TintFlagImage,
                 AllyGroup = allyGroup,
                 SortOrder = factionOrder++,
+                PreferenceJson = FactionPreferenceJson.Serialize(faction.Preference),
             };
             var subOrder = 0;
             foreach (var name in faction.Subfactions)
@@ -776,6 +787,9 @@ public sealed class CampaignStore : ICampaignStore
             Description = record.Description,
             PlayerSlotCount = record.PlayerSlotCount,
             IsPrivate = record.IsPrivate,
+            IsFreeForAll = record.IsFreeForAll,
+            RandomSpawnLocations = record.RandomSpawnLocations,
+            GameSystem = record.GameSystem,
             IsPubliclyViewable = record.IsPubliclyViewable,
             JoinPasswordHash = record.JoinPasswordHash,
             CreatorIsParticipant = record.CreatorIsParticipant,
@@ -871,6 +885,7 @@ public sealed class CampaignStore : ICampaignStore
                         SubfactionTags = SubfactionTagIds.GetValueOrDefault(faction.Id) ?? [],
                         ForceMovementSpeed = FactionSpeeds.GetValueOrDefault(faction.Id, 1),
                         SubfactionMovementSpeeds = SubfactionSpeeds.GetValueOrDefault(faction.Id) ?? [],
+                        Preference = FactionPreferenceJson.Deserialize(faction.PreferenceJson),
                     }),
             ],
             Links =

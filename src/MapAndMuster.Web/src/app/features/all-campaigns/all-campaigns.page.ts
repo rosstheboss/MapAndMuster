@@ -1,4 +1,4 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
@@ -9,12 +9,13 @@ import { CHAT_LANGUAGES, type ChatLanguage } from '../../core/chat/chat-language
 import { SiteChatPrefsService } from '../../core/chat/site-chat-prefs.service';
 import { SiteChatService } from '../../core/chat/site-chat.service';
 import type { SiteChatBoard, SiteChatSend } from '../../core/chat/site-chat.models';
+import { CampaignListFiltersComponent } from '../../shared/campaign-list/campaign-list-filters.component';
 import { CampaignListComponent } from '../../shared/campaign-list/campaign-list.component';
 import { SiteChatComponent } from '../../shared/site-chat/site-chat.component';
 
 @Component({
   selector: 'app-all-campaigns-page',
-  imports: [CampaignListComponent, SiteChatComponent, RouterLink],
+  imports: [CampaignListComponent, CampaignListFiltersComponent, SiteChatComponent, RouterLink],
   templateUrl: './all-campaigns.page.html',
   styleUrl: './all-campaigns.page.css',
 })
@@ -30,6 +31,16 @@ export class AllCampaignsPage {
   protected readonly error = signal<string | null>(null);
   protected readonly chatLoadError = signal<string | null>(null);
   protected readonly campaigns = signal<CampaignListItem[]>([]);
+  protected readonly filteredCampaigns = signal<readonly CampaignListItem[]>([]);
+  private readonly list = viewChild(CampaignListComponent);
+
+  protected expandAll(): void {
+    this.list()?.expandAll();
+  }
+
+  protected collapseAll(): void {
+    this.list()?.collapseAll();
+  }
   protected readonly chat = signal<SiteChatBoard | null>(null);
   protected readonly chatSending = signal(false);
   protected readonly chatError = signal<string | null>(null);

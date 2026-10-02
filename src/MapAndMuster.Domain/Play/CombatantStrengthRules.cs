@@ -48,7 +48,8 @@ public static class CombatantStrengthRules
     public static IReadOnlyList<T> Rank<T>(
         IReadOnlyList<T> items,
         Func<T, Strength> strengthOf,
-        Func<int, int> pickIndex)
+        Func<int, int> pickIndex,
+        bool weakestFirst = false)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(strengthOf);
@@ -63,7 +64,7 @@ public static class CombatantStrengthRules
             for (var index = 1; index < remaining.Count; index++)
             {
                 var compared = Compare(strengthOf(remaining[index]), strongestScore);
-                if (compared > 0)
+                if (weakestFirst ? compared < 0 : compared > 0)
                 {
                     strongest = remaining[index];
                     strongestScore = strengthOf(strongest);

@@ -167,6 +167,16 @@ public static class ActionResolution
             }
         }
 
+        ApplyMovementCrossings(
+            tentative,
+            state,
+            resolved,
+            factionAllyGroups,
+            rules,
+            log,
+            window,
+            utcNow);
+
         var occupying = tentative.Values.ToArray();
         var actionByForceId = arrivalKinds;
         foreach (var force in state.Forces.OrderBy(static item => item.Id))
@@ -419,7 +429,7 @@ public static class ActionResolution
         }
 
         var kinds = new List<ActionKind> { ActionKind.Hold };
-        var moves = CampaignPlayRules.EligibleMoves(map, force, state.ItemObjectives, rules, state.Forces);
+        var moves = CampaignPlayRules.EligibleMoves(map, force, state.ItemObjectives, rules, state.Forces, state.Battles);
         if (moves.Count > 0)
         {
             kinds.Add(ActionKind.Move);
@@ -591,7 +601,18 @@ public static class ActionResolution
         }
 
         if (kind == ActionKind.Move
-            && !FactionSpecialRulePolicies.IsValidMove(map, force, target, via, state.ItemObjectives, rules, viaPath, state.Forces))
+            && !FactionSpecialRulePolicies.IsValidMove(map, force, target, via, state.ItemObjectives, rules, viaPath, state.Forces, state.Battles)
+            && !ForceMovementRules.IsEscapeSpawnMove(
+                map,
+                force,
+                target,
+                via,
+                viaPath,
+                state.Forces,
+                state.Battles,
+                state.ItemObjectives,
+                rules,
+                factionAllyGroups))
         {
             return Hold(force, OrderAdjustment.InvalidOrder);
         }
@@ -752,7 +773,16 @@ public static class ActionResolution
             return false;
         }
 
-        return FactionSpecialRulePolicies.IsValidMove(map, force, targetId, viaId, state.ItemObjectives, rules, viaPath, state.Forces);
+        return FactionSpecialRulePolicies.IsValidMove(
+            map,
+            force,
+            targetId,
+            viaId,
+            state.ItemObjectives,
+            rules,
+            viaPath,
+            state.Forces,
+            state.Battles);
     }
 
     internal static bool CanBuildInTerritory(PlayMap map, CampaignForce force)
@@ -1733,6 +1763,93 @@ public static class ActionResolution
         return (force.With(
             pendingRandomTeleportDestinationId: picked,
             pendingRandomTeleportSourceTerritoryId: force.TerritoryId), ActionKind.TeleportRandomly, false);
+    }
+
+    private static void ApplyMovementCrossings(
+        Dictionary<Guid, CampaignForce> tentative,
+        CampaignPlayState state,
+        Dictionary<Guid, ResolvedOrder> resolved,
+        IReadOnlyDictionary<Guid, string?> factionAllyGroups,
+        SpecialRuleContext rules,
+        List<PlayLogEntry> log,
+        PhaseWindow window,
+        DateTimeOffset utcNow)
+    {
+        var movers = new List<MovementCrossingRules.Mover>();
+        foreach (var force in state.Forces)
+        {
+            if (!resolved.TryGetValue(force.Id, out var order) || order.Kind != ActionKind.Move)
+            {
+                continue;
+            }
+
+            if (!tentative.TryGetValue(force.Id, out var moved) || moved.TerritoryId == force.TerritoryId)
+            {
+                continue;
+            }
+
+            var steps = new List<Guid>();
+            if (order.ViaPath is { Count: > 0 })
+            {
+                steps.AddRange(order.ViaPath);
+            }
+            else if (order.ViaTerritoryId is { } via && via != force.TerritoryId)
+            {
+                steps.Add(via);
+            }
+
+            if (moved.TerritoryId != force.TerritoryId && (steps.Count == 0 || steps[^1] != moved.TerritoryId))
+            {
+                steps.Add(moved.TerritoryId);
+            }
+
+            steps.RemoveAll(id => id == force.TerritoryId);
+            if (steps.Count >= 2)
+            {
+                movers.Add(new MovementCrossingRules.Mover(force.Id, force.TerritoryId, steps));
+            }
+        }
+
+        if (movers.Count < 2)
+        {
+            return;
+        }
+
+        var stops = MovementCrossingRules.StopTerritories(
+            movers,
+            (leftId, rightId) =>
+            {
+                var left = state.Forces.Single(force => force.Id == leftId);
+                var right = state.Forces.Single(force => force.Id == rightId);
+                return FactionSpecialRulePolicies.AreEnemies(
+                    left,
+                    right,
+                    factionAllyGroups,
+                    state.BrokenAllyFactionIds,
+                    state.BrokenAllySubfactions,
+                    rules,
+                    state.AllyBetrayals);
+            });
+        foreach (var pair in stops)
+        {
+            var original = state.Forces.Single(force => force.Id == pair.Key);
+            var current = tentative[pair.Key];
+            if (current.TerritoryId == pair.Value)
+            {
+                continue;
+            }
+
+            tentative[pair.Key] = current.With(territoryId: pair.Value);
+            log.Add(Entry(
+                utcNow,
+                PlayLogKind.ActionCancelled,
+                window.Id,
+                original,
+                ActionKind.Move,
+                original.TerritoryId,
+                pair.Value,
+                "Movement failed. The force stopped where it crossed an enemy."));
+        }
     }
 
     private static ResolvedOrder Hold(CampaignForce force, OrderAdjustment adjustment)

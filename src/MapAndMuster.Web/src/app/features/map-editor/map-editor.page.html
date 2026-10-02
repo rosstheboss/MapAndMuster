@@ -115,6 +115,17 @@
     } @else if (mapSrc(); as mapUrl) {
       @if (canManage()) {
         <div class="toolbar panel">
+          @if (spawnWarning(); as warning) {
+            <p class="error error-banner" role="alert">{{ warning }}</p>
+          }
+          <label class="choice-row">
+            <input
+              type="checkbox"
+              [checked]="campaign()?.randomSpawnLocations === true"
+              (change)="toggleRandomSpawn($event)"
+            />
+            Random spawn locations
+          </label>
           <div class="tool-row">
             <div class="tool-cluster">
               <p class="tool-cluster-label">Tools</p>
@@ -415,13 +426,9 @@
                         </dd>
                       </div>
                       <div>
-                        <dt>Spawn location faction</dt>
+                        <dt>Spawn location</dt>
                         <dd [class.app-glow]="!!territory.spawnFactionId">
-                          {{
-                            territory.spawnFactionId
-                              ? factionName(territory.spawnFactionId, territory.spawnSubfaction)
-                              : 'None'
-                          }}
+                          {{ spawnLocationLabel(territory) }}
                         </dd>
                       </div>
                       <div>
@@ -530,25 +537,37 @@
                           </select>
                         </div>
                         <div
-                          class="field"
+                          class="field spawn-location-field"
                           [class.is-dirty]="
                             isTerritoryFieldDirty('spawnFactionId') || isTerritoryFieldDirty('spawnSubfaction')
                           "
                         >
-                          <label for="territory-spawn">Spawn location faction</label>
-                          <select
-                            id="territory-spawn"
-                            [ngModel]="spawnValue(selected)"
-                            [ngModelOptions]="{ standalone: true }"
-                            (ngModelChange)="setSpawn($event)"
-                          >
-                            <option value="">None</option>
-                            @for (option of factionOptions(); track option.value) {
-                              <option [value]="option.value" [disabled]="option.spawnDisabled || spawnTaken(option)">
-                                {{ option.label }}
-                              </option>
-                            }
-                          </select>
+                          <label class="choice-row" for="territory-is-spawn">
+                            <input
+                              id="territory-is-spawn"
+                              type="checkbox"
+                              [ngModel]="isSpawnTerritory(selected)"
+                              [ngModelOptions]="{ standalone: true }"
+                              (ngModelChange)="setSpawnLocation($event)"
+                            />
+                            Spawn location
+                          </label>
+                          @if (isSpawnTerritory(selected) && campaign()?.randomSpawnLocations !== true) {
+                            <label for="territory-spawn">Spawn location faction</label>
+                            <select
+                              id="territory-spawn"
+                              [ngModel]="spawnValue(selected)"
+                              [ngModelOptions]="{ standalone: true }"
+                              (ngModelChange)="setSpawn($event)"
+                            >
+                              <option value="">Neutral</option>
+                              @for (option of factionOptions(); track option.value) {
+                                <option [value]="option.value" [disabled]="option.spawnDisabled || spawnTaken(option)">
+                                  {{ option.label }}
+                                </option>
+                              }
+                            </select>
+                          }
                         </div>
                         @if (selectedIds().length > 0) {
                           <button

@@ -1,3 +1,5 @@
+using MapAndMuster.Domain.Campaigns;
+
 namespace MapAndMuster.Application.Campaigns;
 
 /// <summary>
@@ -17,6 +19,9 @@ internal static class CampaignPresetKeyRemap
             PlayerSlotCount = campaign.PlayerSlotCount,
             IsPrivate = campaign.IsPrivate,
             IsPubliclyViewable = campaign.IsPubliclyViewable,
+            IsFreeForAll = campaign.IsFreeForAll,
+            RandomSpawnLocations = campaign.RandomSpawnLocations,
+            GameSystem = campaign.GameSystem,
             CreatorIsParticipant = campaign.CreatorIsParticipant,
             MapStorageKey = RemapKey(campaign.MapStorageKey, keys),
             Revision = campaign.Revision,
@@ -34,14 +39,8 @@ internal static class CampaignPresetKeyRemap
                     Subfactions = faction.Subfactions,
                     SubfactionAppearances =
                     [
-                        .. faction.SubfactionAppearances.Select(appearance => new StoredSubfactionAppearance
-                        {
-                            Name = appearance.Name,
-                            Color = appearance.Color,
-                            FlagSource = appearance.FlagSource,
-                            FlagImageStorageKey = RemapKey(appearance.FlagImageStorageKey, keys),
-                            TintFlagImage = appearance.TintFlagImage,
-                        }),
+                        .. faction.SubfactionAppearances.Select(appearance =>
+                            RemapAppearance(appearance, faction.RequiresSubfaction, keys)),
                     ],
                     AllyGroupName = faction.AllyGroupName,
                     RequiresSubfaction = faction.RequiresSubfaction,
@@ -185,6 +184,38 @@ internal static class CampaignPresetKeyRemap
             SupplyPointsAdvantageAmount = mission.SupplyPointsAdvantageAmount,
             StatusChanges = mission.StatusChanges,
             TagIds = mission.TagIds,
+        };
+    }
+
+    /// <summary>
+    /// A packaged logo that did not survive the download is not an uploaded image.
+    /// Optional subfactions inherit the parent flag. A required subfaction, or one that
+    /// already chose its own color, uses the color flag.
+    /// </summary>
+    private static StoredSubfactionAppearance RemapAppearance(
+        StoredSubfactionAppearance appearance,
+        bool requiresSubfaction,
+        IReadOnlyDictionary<string, string> keys)
+    {
+        var flagKey = RemapKey(appearance.FlagImageStorageKey, keys);
+        var flagSource = appearance.FlagSource;
+        var tint = appearance.TintFlagImage;
+        if (string.Equals(flagSource, SubfactionFlagSource.Image, StringComparison.OrdinalIgnoreCase)
+            && !CatalogFileBinder.IsUserUploadedFileKey(flagKey))
+        {
+            flagSource = requiresSubfaction || !string.IsNullOrWhiteSpace(appearance.Color)
+                ? SubfactionFlagSource.Color
+                : SubfactionFlagSource.Inherit;
+            tint = false;
+        }
+
+        return new StoredSubfactionAppearance
+        {
+            Name = appearance.Name,
+            Color = appearance.Color,
+            FlagSource = flagSource,
+            FlagImageStorageKey = flagKey,
+            TintFlagImage = tint,
         };
     }
 

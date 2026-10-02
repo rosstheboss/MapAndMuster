@@ -88,8 +88,14 @@ change the preset. The initial catalog includes Warhammer: The Old World. In tha
 Daemons of Chaos includes the subfactions Khorne, Nurgle, Slaanesh, and Tzeentch (alphabetical)
 and requires a subfaction choice. Those four use unique colors (Khorne red `#B91C1C`, Nurgle
 dark yellow-green `#3F6212`, Slaanesh pink `#F472B6`, Tzeentch teal `#0E7490`) and color flags.
-On Edit campaign, expanding a faction shows that faction’s subfaction names, colors, flags, and
-logo uploads on the same card. Setup can also clear the faction list (back to two empty
+On Edit campaign, expanding a faction shows that faction’s flag choices beside its color, then its
+subfaction names, colors, flags, and logo uploads on the same card. An optional subfaction that
+inherits shows the parent color and flag. A subfaction recorded as an uploaded logo with no file
+loads as inheriting the parent flag, or as a color flag when the faction requires a subfaction or
+the subfaction already has its own color. Importing a preset package that names a logo the archive
+does not contain uses the same fallback. Preferred terrain types, terrain tags, structure types,
+and structure tags are removable tokens with an autocomplete field; only names already in the
+catalog can be added. Setup can also clear the faction list (back to two empty
 slots) or clear all ally groups. Armies of infamy are out of application scope as a dedicated
 feature. They are ordinary subfaction configuration; if needed later they may be added to a
 campaign preset or faction catalog.
@@ -633,8 +639,19 @@ Player-submittable actions in an open action window are listed in this order:
   territories it may traverse in one action (default 1). Kingdom of Bretonnia's preset speed is 2.
   Item objectives can add speed. `CalledByTheRelic` adds +1 speed while a revealed item exists and
   no force of that faction holds an item. Only the final destination is claimed. When several
-  routes exist, the player names the territory to move through. An enemy on an intermediate
-  territory stops the force there; allies do not. A Move cannot land on a spawn. `ConduitsOfPower`
+  routes exist, the player names each territory in order. Movement points remaining are shown on
+  the map. The player selects the next highlighted territory until the points are spent or they
+  click Finish. Finish is required even when the move is shorter than the force's speed, and it
+  is unavailable until at least one step is taken. Back Up removes the latest step and is
+  unavailable on the first step. Cancel discards the path. The path cannot revisit a territory.
+  A movement arrow is drawn for each step. The same arrows are shown for that player's Split and
+  Retreat. An enemy on an intermediate
+  territory stops the force there; allies do not. A territory where two or more players are locked
+  in battle cannot be entered or crossed by anyone else until the phase after that battle is
+  cleared. When every normal path is blocked by those battles during an action phase, the force
+  may instead spend its whole speed to move to its faction spawn or the closest neutral spawn.
+  That spawn cannot be occupied except by an ally when the campaign uses allies, and it cannot
+  itself be a locked battle if the force would have no legal step from there. A Move cannot land on a spawn except for that relocation. `ConduitsOfPower`
   can add destinations after a relic is involved. A force that holds an unopened item objective
   may drop that item at the start of a Move; the player must choose to drop it. Opened or
   already-interacted items cannot be dropped this way. The public log records
@@ -793,8 +810,8 @@ allowance plus the round bonus, then from the player's temporary pool.
   (rejoin). `ArtOfWar` may also enter any other non-enemy-spawn territory and may capture it. An
   uncommitted retreat draft is submitted at the battle-phase deadline, the same way an
   uncommitted action draft is. A missing retreat, or a force with no remaining eligible
-  destination, is assigned to that force's spawn (`UndergroundNetwork` uses the same Town or City
-  pick as its initial placement).
+  destination, is assigned to that force's faction spawn, or the closest neutral spawn when the
+  faction has no spawn (`UndergroundNetwork` still uses its Town or City pick).
   If two or more enemy factions would land in the same territory after retreat, none of them
   keep it: every force that retreated onto that hex is sent to its spawn, and the play log
   records the collision. Passing through (but not landing in) a territory another enemy is
@@ -816,12 +833,34 @@ allowance plus the round bonus, then from the player's temporary pool.
   transfer.
 - When more than one player fights on the same side, that side's round army-point cap increases
   by 25 percent per extra player, then is divided evenly and each force's share rounds up to
-  the next 10. More than two opposing sides who do not all retreat: the two strongest play the
-  first tabletop game, then remaining opponents play strongest-to-weakest in that same battle
-  phase. A force that never received a game stays in the territory, still in battle, for the
-  next round's battle phase. If a correction adds a force to an already fighting pair, keep the
-  current report; the new force waits and then plays whoever remains as in this multi-force
-  sequence rather than re-pairing by strongest first.
+  the next 10. More than two opposing sides who do not all retreat: the two weakest play the
+  first tabletop game, then the winner plays the next-weakest force until the strongest has
+  played, in that same battle phase. A loser who agreed the report may retreat during the
+  remaining battle phase while later pairings continue. If the phase ends first, a missing
+  retreat is assigned to spawn. A force that never received a game stays in the territory,
+  still in battle, for the next round's battle phase. If a correction adds a force to an
+  already fighting pair, keep the current report; the new force waits and then plays whoever
+  remains as in this weakest-first sequence.
+- A free-for-all campaign has no ally groups. Every other player is an enemy, including players
+  of the same faction. Backstab, ally sharing, alliance colors, and faction, ally-group, and
+  Traitor private objectives are omitted. A lone player of a faction or subfaction keeps that
+  color; extra players of the same faction receive a different color. Two forces with movement
+  speed of 2 or more that would cross stop at the first shared step after leaving their origins,
+  and the play log records that the move failed.
+- Random spawn locations are general spawns. At launch, factions with more terrain and structure
+  preferences are placed first onto the spawn that matches the most preferences. One faction
+  occupies a spawn until no empty spawns remain. Skaven underground placement and Magritta still
+  use their special rules. A force sent back to a random spawn uses the nearest general spawn.
+  When random spawn locations is off, a faction with no spawn of its own is placed on a neutral
+  spawn chosen at random, using an unoccupied neutral spawn first. A later retreat to spawn uses
+  the nearest neutral spawn. Saving the map fails when random spawn locations is off, no neutral
+  spawn exists, and a faction or required subfaction has no specific spawn. Magritta and the
+  Underground Network are not part of that check.
+  General spawns do not supply and cannot host a battle. A free-for-all cannot start until spawn
+  locations are at least one quarter of the player slots, rounded up. If the planned start passes
+  while that configuration is invalid, the campaign chat log says the start is delayed and the
+  manager must fix it. When the configuration is valid, a late start begins immediately and the
+  end instant moves by the same delay so phase durations stay the same.
 - If neither side submits a result by the battle-phase deadline, the engagement is a no-contest:
   every force that fought that tabletop game, including silent allies, is forced to retreat.
   Those retreats are chosen after all other retreats in the phase, using safest remaining
@@ -892,11 +931,14 @@ The drawing cursor highlights when it is about to snap
 to an existing vertex. Managers may undo, redo, or erase segments, assign an optional unique name and
 description (otherwise the display number 1, 2, 3… is used), select a required terrain type,
 select at most one optional structure and whether that structure starts Operational or Pillaged,
-assign optional ownership (otherwise Neutral), assign an optional spawn faction (at most one
-spawn per faction, or per required subfaction when that faction requires a subfaction choice),
+assign optional ownership (otherwise Neutral), and mark a territory as a spawn location.
+The spawn faction list starts with Neutral, a neutral spawn that is not owned by a faction.
+When random spawn locations is on, that list is hidden and every spawn location is neutral.
+At most one spawn is allowed per faction, or per required subfaction when that faction requires
+a subfaction choice.
 place catalog item objectives that use Placed launch placement, and apply a
-transparent overlay color. Setting a spawn always sets ownership to the same faction or required
-subfaction. The spawn list disables factions whose special rules include `UndergroundNetwork`
+transparent overlay color. Choosing a faction spawn sets ownership to that faction or required
+subfaction. Neutral does not change ownership. The spawn list disables factions whose special rules include `UndergroundNetwork`
 because those forces have no fixed spawn. Factions that require a subfaction are listed as
 "Faction Name - Subfaction Name" rather than the parent name; map flags and colors use that
 subfaction's chosen color and logo when configured, otherwise the parent faction's logo and color. The collapsible
@@ -904,7 +946,8 @@ Territory editor below the map keeps a fixed field area, tall enough for its thr
 without a scrollbar, while it is open so hover, selection, deselection, zoom, and drag on the map
 do not shift the map up or down the page. Fields are name
 and description on the first row, terrain, structure, structure condition, and overlay color on the
-second, and ownership, spawn, and delete on the third. Hovering a territory does not open those
+second, and ownership, the spawn-location checkbox, the spawn faction when it is a spawn and
+random placement is off, and delete on the third. Hovering a territory does not open those
 fields; a selection does. The Territories side panel is a narrow sliver with an expand control until opened, then
 grows horizontally to list territories. Each row shows the owning faction's mark (uploaded logo,
 tinted when that setting is on, otherwise a color flag), then an optional structure symbol of the
@@ -1111,7 +1154,7 @@ red X in that same place. Clear Unsaved Changes is disabled until there are unsa
 discards those edits, restores the last saved graph without resetting zoom or pan, and clears the
 checkmark or X. Overlay fields that differ from the last saved graph show a small orange (#C87606)
 triangle in the top-right corner, including placed-item
-checkboxes. Dirty territories are also marked that way in the territory list. The Map editor title
+checkboxes. Changing a field and then changing it back to the last saved value clears that marker. Dirty territories are also marked that way in the territory list. The Map editor title
 is not marked dirty. Territory names and terrain symbols in the editor list use the same light text
 color as other dark-background fields in dark mode.
 
@@ -1129,7 +1172,7 @@ to 25% opacity. Connection arrows that touch a selected territory are white with
 Edit campaign Save campaign is disabled until the form or pending uploads differ from the last saved
 campaign. Clear Unsaved Changes is disabled until then and restores the last loaded campaign, including
 clearing pending map, flag, structure, item, and mission files. Dirty fields show a small orange
-triangle in the top-right corner. Collapsed section and subsection headers that contain at least one
+triangle in the top-right corner. Changing a field and then changing it back to the last saved value clears that marker. Collapsed section and subsection headers that contain at least one
 dirty field use an orange underline instead. The Campaign map title is underlined whenever a new map
 file or preset map is pending. Pending uploaded files and edited link fields are marked dirty as well.
 

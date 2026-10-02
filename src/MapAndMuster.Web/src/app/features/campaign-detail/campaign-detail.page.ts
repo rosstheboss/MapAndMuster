@@ -84,16 +84,26 @@ import {
   type UserSearchHit,
 } from '../../core/campaigns/campaign.models';
 import { CampaignService } from '../../core/campaigns/campaign.service';
-import { findSubfactionAppearance, resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
+import { flagImageSubfaction, resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import { compareNames } from '../../core/campaigns/faction-presets';
 import { specialRuleNamesForFaction, specialRuleNamesForSubfaction } from '../../core/campaigns/special-rule-presets';
 import { hidesForceStatusLocation, isWaterTagName } from '../../core/campaigns/force-status-presets';
+import { NgModelBaselineDirective } from '../../core/forms/ng-model-baseline.directive';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { formatLocation } from '../../core/location/location';
 import { adjacentTerritoryIds, findConnection } from '../../core/maps/adjacency';
+import {
+  decodeMovePath,
+  encodeMovePath,
+  nextMoveSteps,
+  pathIsComplete,
+  shortestPath,
+  stoppingPaths,
+} from '../../core/play/movement-path';
 import { downloadBlob, mapDownloadFilename, rasterizeMapPng } from '../../core/maps/map-export';
 import {
+  GENERAL_SPAWN_FACTION_ID,
   mapFactionOptionValue,
   parseMapFactionOptionValue,
   playerFactionOptions,
@@ -202,10 +212,11 @@ interface OrderDraft {
   viaPath: string[];
   destroyImmediately: boolean;
   droppedItemObjectiveIds: string[];
+  moveFinished: boolean;
 }
 
 interface MapActionFlow {
-  step: 'menu' | 'pick-target' | 'pick-via' | 'pick-structure' | 'confirm';
+  step: 'menu' | 'pick-target' | 'pick-via' | 'pick-structure' | 'walk' | 'confirm';
   forceId: string;
   originId: string;
   kind: string;
@@ -244,6 +255,7 @@ function emptyOrderDraft(overrides?: Partial<OrderDraft>): OrderDraft {
     viaPath: [],
     destroyImmediately: false,
     droppedItemObjectiveIds: [],
+    moveFinished: false,
     ...overrides,
   };
 }
@@ -282,6 +294,7 @@ function openSections(): Record<CampaignSection, boolean> {
   selector: 'app-campaign-detail-page',
   imports: [
     FormsModule,
+    NgModelBaselineDirective,
     NgTemplateOutlet,
     RouterLink,
     InstantDatePipe,
@@ -429,6 +442,10 @@ export class CampaignDetailPage {
   });
   protected readonly adjacentTerritoryIds = computed(() => {
     const flow = this.mapAction();
+    if (flow?.step === 'walk') {
+      return this.movementNextSteps();
+    }
+
     if (flow?.step === 'pick-target') {
       const force = this.myForces().find((item) => item.id === flow.forceId);
       return force ? this.destinationTargets(force, flow.kind) : [];
@@ -739,6 +756,7 @@ export class CampaignDetailPage {
         id: force.id,
         territoryId: force.territoryId,
         factionId: force.factionId,
+        controllerUserId: force.controllerUserId,
         subfaction: force.subfaction ?? participant?.subfaction ?? null,
         isMine: force.isMine,
         inBattle: force.inBattle,
@@ -1820,6 +1838,10 @@ export class CampaignDetailPage {
     return standingFactionId ? [standingFactionId] : [];
   }
 
+  protected isNeutralSpawn(spawnFactionId: string | null | undefined): boolean {
+    return spawnFactionId === GENERAL_SPAWN_FACTION_ID;
+  }
+
   protected factionName(id: string | null | undefined): string {
     if (!id) {
       return 'Neutral';
@@ -2400,9 +2422,12 @@ export class CampaignDetailPage {
       return null;
     }
 
-    const source = findSubfactionAppearance(faction, subfaction)?.flagSource ?? 'inherit';
-    const scopedSubfaction = source === 'image' ? subfaction : null;
-    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.assetTags, scopedSubfaction);
+    return this.campaignsApi.flagImageUrl(
+      campaign.id,
+      factionId,
+      campaign.assetTags,
+      flagImageSubfaction(faction, subfaction),
+    );
   };
 
   protected standingSubfaction(userId: string): string | null {
@@ -2552,6 +2577,9 @@ export class CampaignDetailPage {
     }
 
     this.mapAction.set({ ...flow, droppedItemObjectiveIds: [...dropped] });
+    if (flow.step === 'walk') {
+      this.onDraftDropItem(flow.forceId, itemId, selected);
+    }
   }
 
   protected mapConfirmForce(): PlayForce | null {
@@ -2744,6 +2772,22 @@ export class CampaignDetailPage {
       const dest = this.retreatTarget()[battle.id];
       if (!dest) {
         continue;
+      }
+
+      const speed = force.movementSpeed ?? 1;
+      const blocked = this.lockedBattleTerritoryIds();
+      const steps = shortestPath(
+        force.territoryId,
+        dest,
+        (territoryId) =>
+          this.graph()
+            .adjacencies.filter((edge) => edge.territoryAId === territoryId || edge.territoryBId === territoryId)
+            .map((edge) => (edge.territoryAId === territoryId ? edge.territoryBId : edge.territoryAId)),
+        speed,
+        blocked,
+      );
+      if (steps && steps.length > 0) {
+        return this.routeFromSteps('Retreat', force.territoryId, dest, steps[0] ?? '', steps.slice(1, -1));
       }
 
       return this.routeFromSteps('Retreat', force.territoryId, dest, '', []);
@@ -4155,8 +4199,228 @@ export class CampaignDetailPage {
     return force.availableActions;
   }
 
+  protected movementWalkActive(): boolean {
+    return this.mapAction()?.step === 'walk' && this.mapAction()?.kind === 'Move';
+  }
+
+  protected movementRemaining(): number {
+    const force = this.movementForce();
+    if (!force) {
+      return 0;
+    }
+
+    const speed = force.movementSpeed ?? 1;
+    const steps = this.movementSteps(force);
+    if (steps.length === 1 && (force.escapeMoveTargets ?? []).includes(steps[0] ?? '')) {
+      return 0;
+    }
+
+    return Math.max(speed - steps.length, 0);
+  }
+
+  protected movementCanFinish(): boolean {
+    const force = this.movementForce();
+    return !!force && this.movementPathReady(force, this.movementSteps(force));
+  }
+
+  protected movementCanBackUp(): boolean {
+    const force = this.movementForce();
+    return !!force && this.movementSteps(force).length > 0;
+  }
+
+  protected moveStepFields(force: PlayForce): { index: number; value: string; options: string[] }[] {
+    const steps = decodeMovePath(this.draftFor(force.id));
+    const fields = steps.map((value, index) => ({
+      index,
+      value,
+      options: this.movementOptions(force, steps.slice(0, index)),
+    }));
+    const next = this.movementOptions(force, steps);
+    if (next.length > 0 && steps.length < (force.movementSpeed ?? 1)) {
+      fields.push({ index: steps.length, value: '', options: next });
+    }
+
+    return fields;
+  }
+
+  protected onMoveStep(forceId: string, index: number, territoryId: string): void {
+    const force = this.play()?.forces.find((item) => item.id === forceId);
+    if (!force) {
+      return;
+    }
+
+    const current = decodeMovePath(this.draftFor(forceId)).slice(0, index);
+    const steps = territoryId ? [...current, territoryId] : current;
+    this.writeMovePath(force, steps, false);
+  }
+
+  protected finishMoveDraft(force: PlayForce): Promise<void> {
+    const steps = decodeMovePath(this.draftFor(force.id));
+    if (!this.movementPathReady(force, steps)) {
+      return Promise.resolve();
+    }
+
+    this.writeMovePath(force, steps, true);
+    return this.saveDraft(force);
+  }
+
+  protected backUpMovement(): void {
+    const force = this.movementForce();
+    if (!force) {
+      return;
+    }
+
+    const steps = this.movementSteps(force);
+    this.writeMovePath(force, steps.slice(0, -1), false);
+  }
+
+  protected finishMovement(): Promise<void> {
+    const force = this.movementForce();
+    if (!force || !this.movementCanFinish()) {
+      return Promise.resolve();
+    }
+
+    this.writeMovePath(force, this.movementSteps(force), true);
+    this.cancelMapAction();
+    return this.saveDraft(force);
+  }
+
+  protected cancelMovement(): void {
+    const flow = this.mapAction();
+    const force = this.movementForce();
+    if (flow && force) {
+      const saved = this.play()?.myDrafts.find((draft) => draft.forceId === force.id);
+      this.drafts.update((drafts) => ({
+        ...drafts,
+        [force.id]: this.orderDraftFromSaved(saved),
+      }));
+      this.mapAction.set({
+        ...flow,
+        step: 'menu',
+        kind: '',
+        targetTerritoryId: '',
+        viaTerritoryId: '',
+        viaPath: [],
+      });
+      this.selectedIds.set([flow.originId]);
+      return;
+    }
+
+    this.cancelMapAction();
+  }
+
+  private lockedBattleTerritoryIds(): Set<string> {
+    const play = this.play();
+    const locked = new Set<string>();
+    if (!play) {
+      return locked;
+    }
+
+    const controllersByTerritory = new Map<string, Set<string>>();
+    for (const force of play.forces) {
+      if (!force.inBattle) {
+        continue;
+      }
+
+      const controllers = controllersByTerritory.get(force.territoryId) ?? new Set<string>();
+      controllers.add(force.controllerUserId);
+      controllersByTerritory.set(force.territoryId, controllers);
+    }
+
+    for (const [territoryId, controllers] of controllersByTerritory) {
+      if (controllers.size >= 2) {
+        locked.add(territoryId);
+      }
+    }
+
+    const open = new Set(['Pending', 'AwaitingResults', 'Disputed']);
+    for (const battle of play.battles) {
+      if (!open.has(battle.status) && battle.needsRetreat !== true) {
+        continue;
+      }
+
+      const players = new Set(
+        play.forces
+          .filter((force) => battle.participantForceIds.includes(force.id))
+          .map((force) => force.controllerUserId),
+      );
+      if (players.size >= 2 || battle.isRinger === true) {
+        locked.add(battle.territoryId);
+      }
+    }
+
+    return locked;
+  }
+
+  protected movementForce(): PlayForce | null {
+    const flow = this.mapAction();
+    if (flow?.step !== 'walk') {
+      return null;
+    }
+
+    return this.myForces().find((item) => item.id === flow.forceId) ?? null;
+  }
+
+  protected movementSteps(force: PlayForce): string[] {
+    return decodeMovePath(this.draftFor(force.id));
+  }
+
+  private movementOptions(force: PlayForce, taken: readonly string[]): string[] {
+    const paths = this.movementStoppingPaths(force);
+    const locked = this.lockedBattleTerritoryIds();
+    const next = nextMoveSteps(paths, taken).filter((id) => !locked.has(id));
+    if (taken.length === 0 && next.length === 0) {
+      return [...(force.escapeMoveTargets ?? [])];
+    }
+
+    return next;
+  }
+
+  private movementNextSteps(): string[] {
+    const force = this.movementForce();
+    return force ? this.movementOptions(force, this.movementSteps(force)) : [];
+  }
+
+  protected movementPathReady(force: PlayForce, steps: readonly string[]): boolean {
+    if (steps.length === 1 && (force.escapeMoveTargets ?? []).includes(steps[0] ?? '')) {
+      return true;
+    }
+
+    return pathIsComplete(this.movementStoppingPaths(force), steps);
+  }
+
+  private movementStoppingPaths(force: PlayForce): string[][] {
+    return stoppingPaths(
+      force,
+      (territoryId) => !!findConnection(this.graph().adjacencies, force.territoryId, territoryId),
+    );
+  }
+
+  private writeMovePath(force: PlayForce, steps: readonly string[], finished: boolean): void {
+    const encoded = encodeMovePath(steps);
+    const current = this.draftFor(force.id);
+    this.markDraftDirty(force.id);
+    this.drafts.update((drafts) => ({
+      ...drafts,
+      [force.id]: {
+        ...current,
+        kind: 'Move',
+        ...encoded,
+        moveFinished: finished,
+      },
+    }));
+    const flow = this.mapAction();
+    if (flow?.forceId === force.id && flow.step === 'walk') {
+      this.selectedIds.set([flow.originId, ...steps]);
+    }
+  }
+
   protected mapActionPrompt(): string | null {
     const flow = this.mapAction();
+    if (flow?.step === 'walk') {
+      return this.movementRemaining() > 0 ? 'Pick the next territory.' : 'Finish the move or back up.';
+    }
+
     if (flow?.step === 'pick-target') {
       if (flow.kind === 'Move') {
         return 'Pick a territory to move to...';
@@ -4239,8 +4503,30 @@ export class CampaignDetailPage {
     }
 
     const force = this.myForces().find((item) => item.id === flow.forceId);
+    if (kind === 'Move') {
+      this.markDraftDirty(flow.forceId);
+      this.drafts.update((drafts) => ({
+        ...drafts,
+        [flow.forceId]: emptyOrderDraft({
+          kind: 'Move',
+          droppedItemObjectiveIds: flow.droppedItemObjectiveIds,
+        }),
+      }));
+      this.mapAction.set({
+        ...flow,
+        step: 'walk',
+        kind,
+        targetTerritoryId: '',
+        viaTerritoryId: '',
+        viaPath: [],
+        viaCandidates: [],
+        structureTypeId: '',
+      });
+      this.selectedIds.set([flow.originId]);
+      return;
+    }
+
     if (
-      kind === 'Move' ||
       kind === 'Split' ||
       kind === 'Surrender' ||
       kind === 'Retreat' ||
@@ -4329,7 +4615,16 @@ export class CampaignDetailPage {
     }
 
     const flow = this.mapAction();
-    if (flow?.step === 'pick-via') {
+    if (flow?.step === 'walk') {
+      if (this.movementNextSteps().includes(event.id)) {
+        const force = this.myForces().find((item) => item.id === flow.forceId);
+        if (force) {
+          this.writeMovePath(force, [...this.movementSteps(force), event.id], false);
+        }
+      }
+
+      return true;
+    } else if (flow?.step === 'pick-via') {
       if (flow.viaCandidates.includes(event.id)) {
         this.applyMapVia(flow, event.id);
         return true;
@@ -4382,6 +4677,10 @@ export class CampaignDetailPage {
 
     if (draft.kind === 'Move' || draft.kind === 'Split') {
       if (draft.targetTerritoryId.length === 0) {
+        return false;
+      }
+
+      if (draft.kind === 'Move' && !draft.moveFinished) {
         return false;
       }
 
@@ -4679,6 +4978,7 @@ export class CampaignDetailPage {
       viaPath: [...(saved?.viaPath ?? [])],
       destroyImmediately: saved?.destroyImmediately === true,
       droppedItemObjectiveIds: [...(saved?.droppedItemObjectiveIds ?? [])],
+      moveFinished: (saved?.kind ?? 'Hold') === 'Move' && !!saved?.targetTerritoryId,
     });
   }
 

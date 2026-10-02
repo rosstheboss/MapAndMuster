@@ -69,7 +69,8 @@ internal static class CampaignPlayPipeline
             CampaignPlayCatalog.AllyGroupByFaction(campaign),
             campaign.RivalObjectivesEnabled,
             campaign.RivalObjectiveCampaignPoints,
-            CampaignPlayCatalog.FactionAllyGroupNames(campaign));
+            CampaignPlayCatalog.FactionAllyGroupNames(campaign),
+            campaign.PlayerSlotCount);
         var schedule = CampaignMapper.ToSchedule(campaign);
         var advanced = CampaignPlayRules.Advance(
             seeded.State,

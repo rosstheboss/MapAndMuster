@@ -366,7 +366,8 @@ public sealed class CampaignLogExportTests
             StoredMapGraph graph,
             int expectedRevision,
             DateTimeOffset updatedUtc,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool? randomSpawnLocations = null)
         {
             throw new NotSupportedException();
         }

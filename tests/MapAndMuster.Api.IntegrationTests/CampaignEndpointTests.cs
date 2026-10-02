@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using MapAndMuster.Api.Contracts;
 using MapAndMuster.Application.Campaigns;
+using MapAndMuster.Domain.Maps;
 using MapAndMuster.Infrastructure.Email;
 using MapAndMuster.Infrastructure.Identity;
 using MapAndMuster.Infrastructure.Persistence;
@@ -625,7 +626,7 @@ public sealed class CampaignEndpointTests
             new SaveMapGraphRequest
             {
                 Revision = mapped.Revision,
-                Territories = [GraphTerritory(territoryId, 1, 0.1, 0.1, 0.3, "Northmarch", plainsId)],
+                Territories = [GraphTerritory(territoryId, 1, 0.1, 0.1, 0.3, "Northmarch", plainsId, spawnFactionId: SpawnMarkers.General)],
             });
         Assert.Equal(HttpStatusCode.OK, graphResponse.StatusCode);
 
@@ -742,7 +743,7 @@ public sealed class CampaignEndpointTests
             new SaveMapGraphRequest
             {
                 Revision = mapped.Revision,
-                Territories = [GraphTerritory(territoryId, 1, 0.1, 0.1, 0.3, "Westmarch", plainsId)],
+                Territories = [GraphTerritory(territoryId, 1, 0.1, 0.1, 0.3, "Westmarch", plainsId, spawnFactionId: SpawnMarkers.General)],
             });
         Assert.Equal(HttpStatusCode.OK, graphResponse.StatusCode);
 
@@ -1064,7 +1065,7 @@ public sealed class CampaignEndpointTests
                 Revision = created.Revision,
                 Territories =
                 [
-                    GraphTerritory(leftId, 1, 0.1, 0.1, 0.3, "Northmarch", plainsId, townId),
+                    GraphTerritory(leftId, 1, 0.1, 0.1, 0.3, "Northmarch", plainsId, townId, SpawnMarkers.General),
                     GraphTerritory(rightId, 2, 0.4, 0.1, 0.3, terrainTypeId: plainsId),
                 ],
                 Adjacencies =
@@ -1749,6 +1750,15 @@ public sealed class CampaignEndpointTests
                 Territories =
                 [
                     GraphTerritory(spawnId, 1, 0.1, 0.1, 0.3, "Southmarch", plainsId, spawnFactionId: south.Id),
+                    GraphTerritory(
+                        Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                        2,
+                        0.6,
+                        0.6,
+                        0.2,
+                        "Neutral camp",
+                        plainsId,
+                        spawnFactionId: SpawnMarkers.General),
                 ],
             });
         Assert.Equal(HttpStatusCode.OK, mapResponse.StatusCode);

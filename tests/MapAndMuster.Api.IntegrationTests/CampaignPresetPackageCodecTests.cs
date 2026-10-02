@@ -190,6 +190,9 @@ public sealed class CampaignPresetPackageCodecTests
             PlayerSlotCount = 8,
             IsPrivate = false,
             IsPubliclyViewable = true,
+            IsFreeForAll = true,
+            RandomSpawnLocations = true,
+            GameSystem = "Warhammer: The Old World",
             CreatorIsParticipant = true,
             MapStorageKey = "maps/board.png",
             Revision = 1,
@@ -264,5 +267,105 @@ public sealed class CampaignPresetPackageCodecTests
         Assert.NotNull(unpacked.Value);
         Assert.Equal("Northmarch", unpacked.Value.Campaign.MapGraph?.Territories[0].Name);
         Assert.Equal([9, 8, 7], unpacked.Value.Files[unpacked.Value.Campaign.MapStorageKey!]);
+        Assert.True(unpacked.Value.Campaign.IsFreeForAll);
+        Assert.True(unpacked.Value.Campaign.RandomSpawnLocations);
+        Assert.Equal("Warhammer: The Old World", unpacked.Value.Campaign.GameSystem);
+    }
+
+    [Fact]
+    public void LegacyPresetPackageKeepsLogosWhenNewSettingsAreAbsent()
+    {
+        using var output = new MemoryStream();
+        using (var zip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            WriteZipText(
+                zip,
+                "manifest.json",
+                """
+                {"format":"mapandmuster.campaign-preset","version":1,"name":"The Hunt in Estalia"}
+                """);
+            WriteZipText(
+                zip,
+                "settings.json",
+                """
+                {
+                  "playerSlotCount": 6,
+                  "creatorIsParticipant": true,
+                  "timeZoneId": "UTC",
+                  "roundCount": 8,
+                  "roundLengthAmount": 1,
+                  "roundLengthUnit": "Weeks",
+                  "factions": [
+                    {
+                      "id": "11111111-1111-1111-1111-111111111111",
+                      "name": "Empire",
+                      "color": "#FF0000",
+                      "subfactions": ["Reikland"],
+                      "requiresSubfaction": false,
+                      "flagImageStorageKey": "flags/empire.png",
+                      "tintFlagImage": true,
+                      "subfactionAppearances": [
+                        {
+                          "name": "Reikland",
+                          "flagSource": "image",
+                          "flagImageStorageKey": "flags/reikland.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "phases": [
+                    { "kind": "Action", "durationAmount": 1, "durationUnit": "Days" },
+                    { "kind": "Battle", "durationAmount": 5, "durationUnit": "Days" }
+                  ]
+                }
+                """);
+            WriteZipText(
+                zip,
+                "catalog.json",
+                """
+                {
+                  "structureTypes": [
+                    {
+                      "id": "22222222-2222-2222-2222-222222222222",
+                      "name": "Town",
+                      "imageStorageKey": "structures/town.png",
+                      "pillagedImageStorageKey": "structures/town-pillaged.png"
+                    }
+                  ]
+                }
+                """);
+            WriteZipText(zip, "assets/flags/empire.png", "empire-logo");
+            WriteZipText(zip, "assets/flags/reikland.png", "reikland-logo");
+            WriteZipText(zip, "assets/structures/town.png", "town-logo");
+            WriteZipText(zip, "assets/structures/town-pillaged.png", "town-pillaged-logo");
+        }
+
+        output.Position = 0;
+        var unpacked = new CampaignPresetPackageCodec().Read(output);
+
+        Assert.True(unpacked.IsSuccess, unpacked.Message);
+        Assert.NotNull(unpacked.Value);
+        var faction = unpacked.Value.Campaign.Factions.Single();
+        Assert.Equal("flags/empire.png", faction.FlagImageStorageKey);
+        Assert.True(faction.TintFlagImage);
+        Assert.Equal("flags/reikland.png", faction.SubfactionAppearances.Single().FlagImageStorageKey);
+        Assert.Equal("image", faction.SubfactionAppearances.Single().FlagSource);
+        var town = unpacked.Value.Campaign.StructureTypes.Single();
+        Assert.Equal("structures/town.png", town.ImageStorageKey);
+        Assert.Equal("structures/town-pillaged.png", town.PillagedImageStorageKey);
+        Assert.False(unpacked.Value.Campaign.IsFreeForAll);
+        Assert.False(unpacked.Value.Campaign.RandomSpawnLocations);
+        Assert.Null(unpacked.Value.Campaign.GameSystem);
+        Assert.Equal("empire-logo"u8.ToArray(), unpacked.Value.Files["flags/empire.png"]);
+        Assert.Equal("reikland-logo"u8.ToArray(), unpacked.Value.Files["flags/reikland.png"]);
+        Assert.Equal("town-logo"u8.ToArray(), unpacked.Value.Files["structures/town.png"]);
+        Assert.Equal("town-pillaged-logo"u8.ToArray(), unpacked.Value.Files["structures/town-pillaged.png"]);
+    }
+
+    private static void WriteZipText(ZipArchive zip, string name, string text)
+    {
+        var entry = zip.CreateEntry(name);
+        using var stream = entry.Open();
+        stream.Write(Encoding.UTF8.GetBytes(text));
     }
 }

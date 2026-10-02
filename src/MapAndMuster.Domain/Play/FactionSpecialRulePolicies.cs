@@ -18,9 +18,10 @@ public static class FactionSpecialRulePolicies
         IReadOnlyList<CampaignItemObjective> items,
         SpecialRuleContext rules,
         IReadOnlyList<Guid>? viaPath = null,
-        IReadOnlyList<CampaignForce>? occupyingForces = null)
+        IReadOnlyList<CampaignForce>? occupyingForces = null,
+        IReadOnlyList<CampaignBattle>? battles = null)
     {
-        return ForceMovementRules.IsValidMove(map, force, targetId, viaId, items, rules, viaPath, occupyingForces);
+        return ForceMovementRules.IsValidMove(map, force, targetId, viaId, items, rules, viaPath, occupyingForces, battles);
     }
 
     /// <summary>
@@ -163,6 +164,11 @@ public static class FactionSpecialRulePolicies
             return false;
         }
 
+        if (rules.IsFreeForAll)
+        {
+            return true;
+        }
+
         if (AllyBetrayalRules.AreHostile(left, right, allyBetrayals ?? []))
         {
             return true;
@@ -200,7 +206,7 @@ public static class FactionSpecialRulePolicies
         PlayMap? map = null,
         IReadOnlyList<CampaignItemObjective>? items = null)
     {
-        if (left.ControllerUserId == right.ControllerUserId)
+        if (left.ControllerUserId == right.ControllerUserId || rules.IsFreeForAll)
         {
             return false;
         }
@@ -594,7 +600,17 @@ public static class FactionSpecialRulePolicies
         }
 
         var spawn = map.SpawnFor(factionId, subfaction);
-        return spawn is null ? null : (spawn.Id, false);
+        if (spawn is not null)
+        {
+            return (spawn.Id, false);
+        }
+
+        if (rules.RandomSpawnLocations)
+        {
+            return null;
+        }
+
+        return NeutralSpawn(map, existingForces, pickIndex, blockedTerritoryIds: null);
     }
 
     /// <summary>
@@ -608,7 +624,8 @@ public static class FactionSpecialRulePolicies
         IReadOnlyList<CampaignForce> existingForces,
         SpecialRuleContext rules,
         Func<int, int> pickIndex,
-        IReadOnlySet<Guid>? blockedTerritoryIds = null)
+        IReadOnlySet<Guid>? blockedTerritoryIds = null,
+        Guid? fromTerritoryId = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(existingForces);
@@ -619,8 +636,59 @@ public static class FactionSpecialRulePolicies
             return UndergroundNetworkPlacement(map, existingForces, pickIndex, blockedTerritoryIds);
         }
 
+        if (rules.RandomSpawnLocations)
+        {
+            var ids = RandomSpawnRules.GeneralSpawnIds(map)
+                .Where(id => blockedTerritoryIds is null || !blockedTerritoryIds.Contains(id))
+                .ToArray();
+            if (ids.Length == 0)
+            {
+                return null;
+            }
+
+            var chosen = RandomSpawnRules.Nearest(map, fromTerritoryId ?? ids[0], ids);
+            return chosen is null ? null : (chosen.Value, false);
+        }
+
         var spawn = map.SpawnFor(factionId, subfaction);
-        return spawn is null ? null : (spawn.Id, false);
+        if (spawn is not null)
+        {
+            return (spawn.Id, false);
+        }
+
+        return NeutralSpawn(map, existingForces, pickIndex, blockedTerritoryIds, fromTerritoryId);
+    }
+
+    /// <summary>
+    /// A neutral spawn for a faction that has no spawn of its own. Unoccupied neutral spawns
+    /// are used first. A retreat uses the nearest one.
+    /// </summary>
+    private static (Guid TerritoryId, bool Capture)? NeutralSpawn(
+        PlayMap map,
+        IReadOnlyList<CampaignForce> existingForces,
+        Func<int, int> pickIndex,
+        IReadOnlySet<Guid>? blockedTerritoryIds,
+        Guid? fromTerritoryId = null)
+    {
+        var ids = RandomSpawnRules.GeneralSpawnIds(map)
+            .Where(id => blockedTerritoryIds is null || !blockedTerritoryIds.Contains(id))
+            .ToArray();
+        if (ids.Length == 0)
+        {
+            return null;
+        }
+
+        if (fromTerritoryId is { } from)
+        {
+            var nearest = RandomSpawnRules.Nearest(map, from, ids);
+            return nearest is null ? null : (nearest.Value, false);
+        }
+
+        var occupied = existingForces.Select(static force => force.TerritoryId).ToHashSet();
+        var open = ids.Where(id => !occupied.Contains(id)).ToArray();
+        var pool = open.Length > 0 ? open : ids;
+        var index = Math.Clamp(pickIndex(pool.Length), 0, pool.Length - 1);
+        return (pool[index], false);
     }
 
     /// <summary>

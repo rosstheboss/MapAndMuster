@@ -166,6 +166,15 @@ public sealed class SaveCampaignRequest
     /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
     public int? RivalObjectiveCampaignPoints { get; init; }
 
+    /// <summary>Gets whether players fight alone, with no ally groups.</summary>
+    public bool? IsFreeForAll { get; init; }
+
+    /// <summary>Gets whether players are placed on general spawn locations.</summary>
+    public bool? RandomSpawnLocations { get; init; }
+
+    /// <summary>Gets the optional game system named by the campaign manager.</summary>
+    public string? GameSystem { get; init; }
+
     /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int? SplitForceSupplyPenaltyPercent { get; init; }
 
@@ -264,6 +273,18 @@ public sealed class FactionRequest
 
     /// <summary>Gets movement-speed overrides for named subfactions.</summary>
     public IReadOnlyList<SubfactionMovementSpeedRequest>? SubfactionMovementSpeeds { get; init; }
+
+    /// <summary>Gets preferred terrain type identifiers.</summary>
+    public IReadOnlyList<Guid>? PreferredTerrainTypeIds { get; init; }
+
+    /// <summary>Gets preferred terrain tag identifiers.</summary>
+    public IReadOnlyList<Guid>? PreferredTerrainTagIds { get; init; }
+
+    /// <summary>Gets preferred structure type identifiers.</summary>
+    public IReadOnlyList<Guid>? PreferredStructureTypeIds { get; init; }
+
+    /// <summary>Gets preferred structure tag identifiers.</summary>
+    public IReadOnlyList<Guid>? PreferredStructureTagIds { get; init; }
 }
 
 /// <summary>
@@ -931,6 +952,21 @@ public sealed class CampaignListItemResponse
     /// <summary>Gets whether the campaign is private.</summary>
     public required bool IsPrivate { get; init; }
 
+    /// <summary>Gets whether players fight alone, with no ally groups.</summary>
+    public bool IsFreeForAll { get; init; }
+
+    /// <summary>Gets whether players are placed on general spawn locations.</summary>
+    public bool RandomSpawnLocations { get; init; }
+
+    /// <summary>Gets the optional game system named by the campaign manager.</summary>
+    public string? GameSystem { get; init; }
+
+    /// <summary>Gets the campaign manager username when known.</summary>
+    public string? ManagerUsername { get; init; }
+
+    /// <summary>Gets participant usernames for a public campaign.</summary>
+    public IReadOnlyList<string> PublicParticipantUsernames { get; init; } = [];
+
     /// <summary>Gets whether non-members may view the campaign.</summary>
     public required bool IsPubliclyViewable { get; init; }
 
@@ -987,6 +1023,15 @@ public sealed class CampaignListItemResponse
 
     /// <summary>Gets whether the viewer has committed required orders for the open action window.</summary>
     public required bool IsCommitted { get; init; }
+
+    /// <summary>Gets the number of rounds.</summary>
+    public int RoundCount { get; init; }
+
+    /// <summary>Gets the round-length amount.</summary>
+    public int RoundLengthAmount { get; init; }
+
+    /// <summary>Gets the round-length unit name.</summary>
+    public string RoundLengthUnit { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -1163,6 +1208,15 @@ public sealed class CampaignDetailResponse
 
     /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
     public int RivalObjectiveCampaignPoints { get; init; } = 5;
+
+    /// <summary>Gets whether players fight alone, with no ally groups.</summary>
+    public bool IsFreeForAll { get; init; }
+
+    /// <summary>Gets whether players are placed on general spawn locations.</summary>
+    public bool RandomSpawnLocations { get; init; }
+
+    /// <summary>Gets the optional game system named by the campaign manager.</summary>
+    public string? GameSystem { get; init; }
 
     /// <summary>Gets the amount subtracted from map supply when a player has split forces.</summary>
     public int SplitForceSupplyPenaltyPercent { get; init; }
@@ -1589,6 +1643,18 @@ public sealed class FactionResponse
 
     /// <summary>Gets movement-speed overrides for named subfactions.</summary>
     public IReadOnlyList<SubfactionMovementSpeedResponse> SubfactionMovementSpeeds { get; init; } = [];
+
+    /// <summary>Gets preferred terrain type identifiers.</summary>
+    public IReadOnlyList<Guid> PreferredTerrainTypeIds { get; init; } = [];
+
+    /// <summary>Gets preferred terrain tag identifiers.</summary>
+    public IReadOnlyList<Guid> PreferredTerrainTagIds { get; init; } = [];
+
+    /// <summary>Gets preferred structure type identifiers.</summary>
+    public IReadOnlyList<Guid> PreferredStructureTypeIds { get; init; } = [];
+
+    /// <summary>Gets preferred structure tag identifiers.</summary>
+    public IReadOnlyList<Guid> PreferredStructureTagIds { get; init; } = [];
 }
 
 /// <summary>
@@ -2635,6 +2701,11 @@ public static class CampaignResponses
             PlayerSlotCount = item.PlayerSlotCount,
             OccupiedPlayerSlots = item.OccupiedPlayerSlots,
             IsPrivate = item.IsPrivate,
+            IsFreeForAll = item.IsFreeForAll,
+            RandomSpawnLocations = item.RandomSpawnLocations,
+            GameSystem = item.GameSystem,
+            ManagerUsername = item.ManagerUsername,
+            PublicParticipantUsernames = item.PublicParticipantUsernames,
             IsPubliclyViewable = item.IsPubliclyViewable,
             CanManage = item.CanManage,
             IsParticipant = item.IsParticipant,
@@ -2654,6 +2725,9 @@ public static class CampaignResponses
             CanPlay = item.CanPlay,
             CanChooseFaction = item.CanChooseFaction,
             IsCommitted = item.IsCommitted,
+            RoundCount = item.RoundCount,
+            RoundLengthAmount = item.RoundLengthAmount,
+            RoundLengthUnit = item.RoundLengthUnit,
         };
     }
 
@@ -2803,6 +2877,10 @@ public static class CampaignResponses
                         }),
                     ],
                     ForceMovementSpeed = faction.ForceMovementSpeed,
+                    PreferredTerrainTypeIds = faction.PreferredTerrainTypeIds,
+                    PreferredTerrainTagIds = faction.PreferredTerrainTagIds,
+                    PreferredStructureTypeIds = faction.PreferredStructureTypeIds,
+                    PreferredStructureTagIds = faction.PreferredStructureTagIds,
                     SubfactionMovementSpeeds =
                     [
                         .. faction.SubfactionMovementSpeeds.Select(static item => new SubfactionMovementSpeedResponse
@@ -3063,6 +3141,9 @@ public static class CampaignResponses
             MostStructurePointsStructureTagId = detail.MostStructurePointsStructureTagId,
             PointsPerTerritoryTerrainTagId = detail.PointsPerTerritoryTerrainTagId,
             RivalObjectivesEnabled = detail.RivalObjectivesEnabled,
+            IsFreeForAll = detail.IsFreeForAll,
+            RandomSpawnLocations = detail.RandomSpawnLocations,
+            GameSystem = detail.GameSystem,
             RivalObjectiveCampaignPoints = detail.RivalObjectiveCampaignPoints,
             SplitForceSupplyPenaltyPercent = detail.SplitForceSupplyPenaltyPercent,
             SplitForceSupplyPenaltyIsPercent = detail.SplitForceSupplyPenaltyIsPercent,
@@ -3369,6 +3450,10 @@ public static class CampaignResponses
                     })
                     .ToArray(),
                 ForceMovementSpeed = faction.ForceMovementSpeed,
+                PreferredTerrainTypeIds = faction.PreferredTerrainTypeIds,
+                PreferredTerrainTagIds = faction.PreferredTerrainTagIds,
+                PreferredStructureTypeIds = faction.PreferredStructureTypeIds,
+                PreferredStructureTagIds = faction.PreferredStructureTagIds,
                 SubfactionMovementSpeeds = faction.SubfactionMovementSpeeds?
                     .Select(static item => new SubfactionMovementSpeedInput
                     {
@@ -3975,6 +4060,9 @@ public sealed class SaveMapGraphRequest
 
     /// <summary>Gets manager-assigned item objective placements.</summary>
     public IReadOnlyList<ItemObjectivePlacementRequest>? ItemObjectivePlacements { get; init; }
+
+    /// <summary>Gets whether players are placed on general spawn locations.</summary>
+    public bool? RandomSpawnLocations { get; init; }
 }
 
 /// <summary>

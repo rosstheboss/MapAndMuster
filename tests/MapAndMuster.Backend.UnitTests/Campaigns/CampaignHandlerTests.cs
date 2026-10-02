@@ -3081,7 +3081,8 @@ public sealed class CampaignHandlerTests
             StoredMapGraph graph,
             int expectedRevision,
             DateTimeOffset updatedUtc,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool? randomSpawnLocations = null)
         {
             if (Existing is null || Existing.Id != campaignId)
             {

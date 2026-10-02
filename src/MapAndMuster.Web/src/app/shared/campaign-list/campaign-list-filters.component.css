@@ -1,0 +1,84 @@
+:host {
+  display: block;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.campaign-filters {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.campaign-filters-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.territory-filter-toolbar {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.territory-filter-action {
+  display: grid;
+  place-items: center;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  padding: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-3);
+}
+
+.filter-grid label,
+.name-filter {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.tag-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem 0.35rem 0.15rem 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-nested);
+}
+
+.tag-chip .icon-button {
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  color: #dc2626;
+}
+
+.name-suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.name-suggestions button {
+  width: 100%;
+  text-align: left;
+}

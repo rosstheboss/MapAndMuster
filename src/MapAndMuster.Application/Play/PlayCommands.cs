@@ -655,6 +655,9 @@ public sealed class PlayForceDetail
     /// <summary>Gets two-territory Move hops when the force can travel more than one territory.</summary>
     public IReadOnlyList<PlayMoveHopDetail> MoveHops { get; init; } = [];
 
+    /// <summary>Gets spawn territories this force may relocate to when locked battles block every path.</summary>
+    public IReadOnlyList<Guid> EscapeMoveTargets { get; init; } = [];
+
     /// <summary>Gets player-submittable action kinds available for this force.</summary>
     public required IReadOnlyList<string> AvailableActions { get; init; }
 

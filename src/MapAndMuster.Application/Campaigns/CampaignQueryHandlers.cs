@@ -14,18 +14,21 @@ public sealed class ListCampaignsHandler
 {
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
+    private readonly IUserAccountStore? _accounts;
 
     /// <summary>
     /// Initializes a new handler.
     /// </summary>
     /// <param name="campaigns">The campaign store.</param>
     /// <param name="clock">The clock.</param>
-    public ListCampaignsHandler(ICampaignStore campaigns, IClock clock)
+    /// <param name="accounts">Accounts used to show usernames on the list.</param>
+    public ListCampaignsHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore? accounts = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
         _campaigns = campaigns;
         _clock = clock;
+        _accounts = accounts;
     }
 
     /// <summary>
@@ -39,7 +42,10 @@ public sealed class ListCampaignsHandler
         CancellationToken cancellationToken)
     {
         var campaigns = await _campaigns.ListForUserAsync(userId, cancellationToken).ConfigureAwait(false);
-        var items = campaigns.Select(campaign => CampaignMapper.ToListItem(campaign, userId, _clock.UtcNow)).ToArray();
+        var usernames = await CampaignListUsernames.LoadAsync(campaigns, _accounts, cancellationToken).ConfigureAwait(false);
+        var items = campaigns
+            .Select(campaign => CampaignMapper.ToListItem(campaign, userId, _clock.UtcNow, usernames: usernames))
+            .ToArray();
         return OperationResults.Success<IReadOnlyList<CampaignListItem>>(items);
     }
 }
@@ -52,18 +58,21 @@ public sealed class ListDiscoverableCampaignsHandler
 {
     private readonly ICampaignStore _campaigns;
     private readonly IClock _clock;
+    private readonly IUserAccountStore? _accounts;
 
     /// <summary>
     /// Initializes a new handler.
     /// </summary>
     /// <param name="campaigns">The campaign store.</param>
     /// <param name="clock">The clock.</param>
-    public ListDiscoverableCampaignsHandler(ICampaignStore campaigns, IClock clock)
+    /// <param name="accounts">Accounts used to show usernames on the list.</param>
+    public ListDiscoverableCampaignsHandler(ICampaignStore campaigns, IClock clock, IUserAccountStore? accounts = null)
     {
         ArgumentNullException.ThrowIfNull(campaigns);
         ArgumentNullException.ThrowIfNull(clock);
         _campaigns = campaigns;
         _clock = clock;
+        _accounts = accounts;
     }
 
     /// <summary>
@@ -83,10 +92,19 @@ public sealed class ListDiscoverableCampaignsHandler
         var utcNow = _clock.UtcNow;
         var campaigns = await _campaigns.ListDiscoverableAsync(userId, isAdministrator, utcNow, cancellationToken)
             .ConfigureAwait(false);
-        var items = campaigns
+        var visible = campaigns
             .Where(campaign => !isGuestAccount || campaign.IsPubliclyViewable)
             .Where(campaign => CampaignAccess.CanList(campaign, userId, isAdministrator, utcNow))
-            .Select(campaign => CampaignMapper.ToListItem(campaign, userId, utcNow, isAdministrator, isGuestAccount))
+            .ToArray();
+        var usernames = await CampaignListUsernames.LoadAsync(visible, _accounts, cancellationToken).ConfigureAwait(false);
+        var items = visible
+            .Select(campaign => CampaignMapper.ToListItem(
+                campaign,
+                userId,
+                utcNow,
+                isAdministrator,
+                isGuestAccount,
+                usernames))
             .ToArray();
         return OperationResults.Success<IReadOnlyList<CampaignListItem>>(items);
     }

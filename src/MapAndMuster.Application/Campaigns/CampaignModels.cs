@@ -28,6 +28,21 @@ public sealed class CampaignListItem
     /// <summary>Gets whether the campaign is private.</summary>
     public required bool IsPrivate { get; init; }
 
+    /// <summary>Gets whether players fight alone, with no ally groups.</summary>
+    public bool IsFreeForAll { get; init; }
+
+    /// <summary>Gets whether players are placed on general spawn locations.</summary>
+    public bool RandomSpawnLocations { get; init; }
+
+    /// <summary>Gets the optional game system named by the campaign manager.</summary>
+    public string? GameSystem { get; init; }
+
+    /// <summary>Gets the campaign manager username when known.</summary>
+    public string? ManagerUsername { get; init; }
+
+    /// <summary>Gets participant usernames for a public campaign. Empty for private campaigns.</summary>
+    public IReadOnlyList<string> PublicParticipantUsernames { get; init; } = [];
+
     /// <summary>Gets whether non-members may view the campaign.</summary>
     public required bool IsPubliclyViewable { get; init; }
 
@@ -84,6 +99,15 @@ public sealed class CampaignListItem
 
     /// <summary>Gets whether the viewer has committed required orders for the open action window.</summary>
     public required bool IsCommitted { get; init; }
+
+    /// <summary>Gets the number of rounds.</summary>
+    public int RoundCount { get; init; }
+
+    /// <summary>Gets the round-length amount.</summary>
+    public int RoundLengthAmount { get; init; }
+
+    /// <summary>Gets the round-length unit name.</summary>
+    public string RoundLengthUnit { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -108,6 +132,15 @@ public sealed class CampaignDetail
 
     /// <summary>Gets whether the campaign is private.</summary>
     public required bool IsPrivate { get; init; }
+
+    /// <summary>Gets whether players fight alone, with no ally groups.</summary>
+    public bool IsFreeForAll { get; init; }
+
+    /// <summary>Gets whether players are placed on general spawn locations.</summary>
+    public bool RandomSpawnLocations { get; init; }
+
+    /// <summary>Gets the optional game system named by the campaign manager.</summary>
+    public string? GameSystem { get; init; }
 
     /// <summary>Gets whether non-members may view the campaign.</summary>
     public required bool IsPubliclyViewable { get; init; }
@@ -678,6 +711,18 @@ public sealed class FactionDetail
     /// <summary>Gets movement-speed overrides for named subfactions.</summary>
     public IReadOnlyList<StoredSubfactionMovementSpeed> SubfactionMovementSpeeds { get; init; } = [];
 
+    /// <summary>Gets preferred terrain type identifiers.</summary>
+    public IReadOnlyList<Guid> PreferredTerrainTypeIds { get; init; } = [];
+
+    /// <summary>Gets preferred terrain tag identifiers.</summary>
+    public IReadOnlyList<Guid> PreferredTerrainTagIds { get; init; } = [];
+
+    /// <summary>Gets preferred structure type identifiers.</summary>
+    public IReadOnlyList<Guid> PreferredStructureTypeIds { get; init; } = [];
+
+    /// <summary>Gets preferred structure tag identifiers.</summary>
+    public IReadOnlyList<Guid> PreferredStructureTagIds { get; init; } = [];
+
     /// <summary>Gets color, flag, and logo choices for named subfactions.</summary>
     public IReadOnlyList<SubfactionAppearanceDetail> SubfactionAppearances { get; init; } = [];
 }
@@ -764,6 +809,15 @@ public sealed class StoredCampaign
 
     /// <summary>Gets whether the campaign is private.</summary>
     public required bool IsPrivate { get; init; }
+
+    /// <summary>Gets whether players fight alone, with no ally groups.</summary>
+    public bool IsFreeForAll { get; init; }
+
+    /// <summary>Gets whether players are placed on general spawn locations.</summary>
+    public bool RandomSpawnLocations { get; init; }
+
+    /// <summary>Gets the optional game system named by the campaign manager.</summary>
+    public string? GameSystem { get; init; }
 
     /// <summary>Gets whether non-members may view the campaign.</summary>
     public required bool IsPubliclyViewable { get; init; }
@@ -1034,6 +1088,9 @@ public sealed class StoredFaction
 
     /// <summary>Gets movement-speed overrides for named subfactions.</summary>
     public IReadOnlyList<StoredSubfactionMovementSpeed> SubfactionMovementSpeeds { get; init; } = [];
+
+    /// <summary>Gets preferred terrain and structures.</summary>
+    public FactionPreference Preference { get; init; } = FactionPreference.None;
 }
 
 /// <summary>

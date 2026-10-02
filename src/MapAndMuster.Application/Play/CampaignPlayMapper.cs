@@ -183,15 +183,25 @@ internal static class CampaignPlayMapper
                         .FirstOrDefault(status => string.Equals(status.Name, force.StatusName, StringComparison.OrdinalIgnoreCase))
                         ?.Effects,
                     MoveTargets = force.ControllerUserId == viewerUserId || staffView
-                        ? CampaignPlayRules.EligibleMoves(map, force, play.ItemObjectives, specialRules, play.Forces)
+                        ? CampaignPlayRules.EligibleMoves(map, force, play.ItemObjectives, specialRules, play.Forces, play.Battles)
                         : [],
                     MoveHops = force.ControllerUserId == viewerUserId || staffView
-                        ? [.. CampaignPlayRules.EligibleMoveHops(map, force, specialRules, play.ItemObjectives, play.Forces).Select(static hop => new PlayMoveHopDetail
+                        ? [.. CampaignPlayRules.EligibleMoveHops(map, force, specialRules, play.ItemObjectives, play.Forces, play.Battles).Select(static hop => new PlayMoveHopDetail
                         {
                             ViaTerritoryId = hop.ViaTerritoryId,
                             TargetTerritoryId = hop.TargetTerritoryId,
                             IntermediateTerritoryIds = hop.IntermediateTerritoryIds,
                         })]
+                        : [],
+                    EscapeMoveTargets = force.ControllerUserId == viewerUserId || staffView
+                        ? ForceMovementRules.EscapeSpawnTargets(
+                            map,
+                            force,
+                            play.Forces,
+                            play.Battles,
+                            play.ItemObjectives,
+                            specialRules,
+                            allyGroups)
                         : [],
                     AvailableActions = force.ControllerUserId == viewerUserId || staffView
                         ? [.. ActionResolution.EligibleActions(play, map, force, allyGroups, specialRules).Select(static kind => kind.ToString())]

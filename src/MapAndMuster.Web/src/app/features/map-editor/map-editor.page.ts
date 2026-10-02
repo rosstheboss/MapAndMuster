@@ -15,11 +15,13 @@ import { readApiErrorMessages } from '../../core/auth/auth.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { GUEST_PREVIEW_CAMPAIGN_ID, GUEST_PREVIEW_MESSAGE } from '../../core/auth/guest-preview';
 import { CampaignService } from '../../core/campaigns/campaign.service';
-import { resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
+import { freeForAllSpawnWarning } from '../../core/campaigns/free-for-all-colors';
+import { flagImageSubfaction, resolveFactionAppearance } from '../../core/campaigns/faction-appearance';
 import type { CampaignDetail, CampaignMission, MapGraphDetail } from '../../core/campaigns/campaign.models';
 import { guestPreviewCampaign } from '../../core/campaigns/guest-preview-campaign';
 import { missionsForTerritory, structureTypeById, terrainTypeById } from '../../core/campaigns/campaign.models';
 import { MAP_EDIT_CLOSED_QUERY } from '../../core/campaigns/campaign-notices';
+import { NgModelBaselineDirective } from '../../core/forms/ng-model-baseline.directive';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
 import { isAdditiveModifier } from '../../core/maps/pointer';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
@@ -55,9 +57,11 @@ import {
 import { downloadBlob, mapDownloadFilename, rasterizeMapPng } from '../../core/maps/map-export';
 import { mapSvgCatalogFrom, parseMapSvg, serializeMapSvg, svgDownloadFilename } from '../../core/maps/map-svg';
 import {
+  GENERAL_SPAWN_FACTION_ID,
   mapFactionOptionLabel,
   mapFactionOptions,
   mapFactionOptionValue,
+  missingFixedSpawnMessage,
   parseMapFactionOptionValue,
   spawnIdentity,
   type MapFactionOption,
@@ -96,6 +100,7 @@ export type { OverlayColorMode };
   selector: 'app-map-editor-page',
   imports: [
     FormsModule,
+    NgModelBaselineDirective,
     RouterLink,
     BackToTopComponent,
     CampaignMapViewComponent,
@@ -446,6 +451,40 @@ export class MapEditorPage {
       case 'connect':
         return 'link';
     }
+  }
+
+  protected readonly generalSpawnId = GENERAL_SPAWN_FACTION_ID;
+
+  protected spawnWarning(): string | null {
+    const campaign = this.campaign();
+    if (!campaign) {
+      return null;
+    }
+
+    const spawnCount = this.graph().territories.filter((territory) => !!territory.spawnFactionId).length;
+    return freeForAllSpawnWarning(campaign.playerSlotCount, spawnCount, campaign.isFreeForAll === true);
+  }
+
+  protected toggleRandomSpawn(event: Event): void {
+    const checked = event.target instanceof HTMLInputElement && event.target.checked;
+    const current = this.campaign();
+    if (!current) {
+      return;
+    }
+
+    this.campaign.set({ ...current, randomSpawnLocations: checked });
+    if (checked) {
+      this.graph.update((graph) => ({
+        ...graph,
+        territories: graph.territories.map((territory) =>
+          territory.spawnFactionId
+            ? { ...territory, spawnFactionId: this.generalSpawnId, spawnSubfaction: null }
+            : territory,
+        ),
+      }));
+    }
+
+    void this.save();
   }
 
   protected onToolChange(tool: MapEditorTool): void {
@@ -886,7 +925,7 @@ export class MapEditorPage {
   }
 
   protected setOwner(value: string): void {
-    if (this.selected()?.spawnFactionId) {
+    if (this.factionSpawnLocked()) {
       return;
     }
 
@@ -898,11 +937,24 @@ export class MapEditorPage {
     }));
   }
 
+  protected setSpawnLocation(enabled: boolean): void {
+    if (enabled) {
+      this.patchSelected((territory) =>
+        territory.spawnFactionId
+          ? territory
+          : { ...territory, spawnFactionId: this.generalSpawnId, spawnSubfaction: null },
+      );
+      return;
+    }
+
+    this.patchSelected((territory) => ({ ...territory, spawnFactionId: null, spawnSubfaction: null }));
+  }
+
   protected setSpawn(value: string): void {
     const parsed = parseMapFactionOptionValue(value);
     this.patchSelected((territory) => ({
       ...territory,
-      spawnFactionId: parsed.factionId || null,
+      spawnFactionId: parsed.factionId || this.generalSpawnId,
       spawnSubfaction: parsed.factionId ? parsed.subfaction : null,
       ...(parsed.factionId ? { ownerFactionId: parsed.factionId, ownerSubfaction: parsed.subfaction } : {}),
     }));
@@ -953,11 +1005,36 @@ export class MapEditorPage {
   }
 
   protected spawnValue(territory: MapTerritory): string {
-    return territory.spawnFactionId ? mapFactionOptionValue(territory.spawnFactionId, territory.spawnSubfaction) : '';
+    if (!territory.spawnFactionId || territory.spawnFactionId === this.generalSpawnId) {
+      return '';
+    }
+
+    return mapFactionOptionValue(territory.spawnFactionId, territory.spawnSubfaction);
+  }
+
+  protected isSpawnTerritory(territory: MapTerritory): boolean {
+    return !!territory.spawnFactionId;
+  }
+
+  protected spawnLocationLabel(territory: MapTerritory): string {
+    if (!territory.spawnFactionId) {
+      return 'No';
+    }
+
+    if (territory.spawnFactionId === this.generalSpawnId) {
+      return 'Neutral';
+    }
+
+    return this.factionName(territory.spawnFactionId, territory.spawnSubfaction);
   }
 
   protected ownerLocked(): boolean {
-    return !!this.selected()?.spawnFactionId;
+    return this.factionSpawnLocked();
+  }
+
+  protected factionSpawnLocked(): boolean {
+    const spawnFactionId = this.selected()?.spawnFactionId;
+    return !!spawnFactionId && spawnFactionId !== this.generalSpawnId;
   }
 
   protected adjacentLabels(territory: MapTerritory): string {
@@ -1011,7 +1088,12 @@ export class MapEditorPage {
       return null;
     }
 
-    return this.campaignsApi.flagImageUrl(campaign.id, factionId, campaign.assetTags, subfaction);
+    return this.campaignsApi.flagImageUrl(
+      campaign.id,
+      factionId,
+      campaign.assetTags,
+      flagImageSubfaction(faction, subfaction),
+    );
   };
 
   protected missionFileUrl(mission: CampaignMission): string | null {
@@ -1164,10 +1246,22 @@ export class MapEditorPage {
 
     const spawnIds = this.graph()
       .territories.map((territory) => spawnIdentity(territory.spawnFactionId, territory.spawnSubfaction))
-      .filter((id): id is string => !!id);
+      .filter((id): id is string => !!id && !id.startsWith(this.generalSpawnId));
     if (new Set(spawnIds).size !== spawnIds.length) {
       this.saveStatus.set('failure');
       this.revealErrors(['Each faction or required subfaction can have only one spawn location.']);
+      return false;
+    }
+
+    const missingSpawn = missingFixedSpawnMessage(
+      campaign.randomSpawnLocations === true,
+      campaign.factions,
+      campaign.specialRules ?? [],
+      this.graph().territories,
+    );
+    if (missingSpawn) {
+      this.saveStatus.set('failure');
+      this.revealErrors([missingSpawn]);
       return false;
     }
 
@@ -1202,6 +1296,7 @@ export class MapEditorPage {
             markerY: edge.marker.y,
           })),
           itemObjectivePlacements: this.graph().itemObjectivePlacements ?? [],
+          randomSpawnLocations: this.campaign()?.randomSpawnLocations === true,
         }),
       );
       this.revision = saved.revision;

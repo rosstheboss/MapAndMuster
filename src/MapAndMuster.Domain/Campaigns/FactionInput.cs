@@ -52,4 +52,16 @@ public sealed class FactionInput
 
     /// <summary>Gets movement-speed overrides for named subfactions.</summary>
     public IReadOnlyList<SubfactionMovementSpeedInput>? SubfactionMovementSpeeds { get; init; }
+
+    /// <summary>Gets preferred terrain type identifiers.</summary>
+    public IReadOnlyList<Guid>? PreferredTerrainTypeIds { get; init; }
+
+    /// <summary>Gets preferred terrain tag identifiers.</summary>
+    public IReadOnlyList<Guid>? PreferredTerrainTagIds { get; init; }
+
+    /// <summary>Gets preferred structure type identifiers.</summary>
+    public IReadOnlyList<Guid>? PreferredStructureTypeIds { get; init; }
+
+    /// <summary>Gets preferred structure tag identifiers.</summary>
+    public IReadOnlyList<Guid>? PreferredStructureTagIds { get; init; }
 }

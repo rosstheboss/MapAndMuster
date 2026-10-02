@@ -114,6 +114,21 @@ public sealed class CampaignNotificationPublisher
             .ToArray();
         var path = $"/campaigns/{next.Id}";
 
+        if (newEntries.Any(static item => item.Kind == PlayLogKind.CampaignDelayed))
+        {
+            var reason = newEntries.First(static item => item.Kind == PlayLogKind.CampaignDelayed).Message
+                ?? "Campaign delayed due to a campaign configuration error. The campaign manager must rectify it.";
+            await NotifyManagersAsync(
+                    next,
+                    NotificationKind.ActionRequired,
+                    "Campaign start delayed",
+                    $"{next.Name}: {reason}",
+                    $"/campaigns/{next.Id}/edit",
+                    $"delayed:{next.Id:N}",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         if (newEntries.Any(static item => item.Kind == PlayLogKind.CampaignStarted))
         {
             await NotifyMembersAsync(

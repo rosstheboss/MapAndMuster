@@ -1,6 +1,7 @@
 using MapAndMuster.Application.Campaigns;
 using MapAndMuster.Application.Common;
 using MapAndMuster.Application.Ports;
+using MapAndMuster.Domain.Campaigns;
 using MapAndMuster.Domain.Maps;
 
 namespace MapAndMuster.Application.Maps;
@@ -74,9 +75,24 @@ public sealed class SaveCampaignMapGraphHandler
             return OperationResults.Failure<CampaignMapGraphDetail>(errors);
         }
 
+        var spawnError = SpawnAssignmentRules.RequireSpawnOrNeutral(
+            command.RandomSpawnLocations ?? existing.RandomSpawnLocations,
+            SpawnChecks(existing),
+            [.. graph.Territories.Select(static territory => new TerritorySpawn(territory.SpawnFactionId, territory.SpawnSubfaction))]);
+        if (spawnError is not null)
+        {
+            return OperationResults.Failure<CampaignMapGraphDetail>([spawnError]);
+        }
+
         var stored = MapGraphMapper.ToStored(graph, BindPlacements(command, graph, existing));
         var outcome = await _campaigns
-            .UpdateMapGraphAsync(command.CampaignId, stored, command.ExpectedRevision, _clock.UtcNow, cancellationToken)
+            .UpdateMapGraphAsync(
+                command.CampaignId,
+                stored,
+                command.ExpectedRevision,
+                _clock.UtcNow,
+                cancellationToken,
+                command.RandomSpawnLocations)
             .ConfigureAwait(false);
         if (!outcome.IsSuccess || outcome.Campaign is null)
         {
@@ -87,6 +103,28 @@ public sealed class SaveCampaignMapGraphHandler
 
         return OperationResults.Success(
             MapGraphMapper.ToDetail(outcome.Campaign.Id, outcome.Campaign.Revision, canManage: true, graph, stored.ItemObjectivePlacements));
+    }
+
+    private static IReadOnlyList<FactionSpawnCheck> SpawnChecks(StoredCampaign campaign)
+    {
+        var alternateRuleIds = campaign.SpecialRules
+            .Where(static rule =>
+                rule.EffectKey is SpecialRuleEffectKeys.UndergroundNetwork or SpecialRuleEffectKeys.GreatCityOfMagritta)
+            .Select(static rule => rule.Id)
+            .ToHashSet();
+        return
+        [
+            .. campaign.Factions.Select(faction => new FactionSpawnCheck(
+                faction.Id,
+                faction.Name,
+                faction.RequiresSubfaction,
+                faction.Subfactions,
+                faction.SpecialRuleIds.Any(alternateRuleIds.Contains),
+                faction.SubfactionSpecialRules
+                    .Where(rule => rule.SpecialRuleIds.Any(alternateRuleIds.Contains))
+                    .Select(static rule => rule.Name)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase))),
+        ];
     }
 
     private static IReadOnlyList<ItemObjectivePlacementDetail> BindPlacements(

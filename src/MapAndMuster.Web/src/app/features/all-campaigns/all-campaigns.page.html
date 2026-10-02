@@ -1,6 +1,12 @@
 <section class="page">
   <div class="page-header">
     <h1>All campaigns</h1>
+    @if (campaigns().length > 0) {
+      <div class="actions">
+        <button type="button" class="button-secondary" (click)="expandAll()">Expand All</button>
+        <button type="button" class="button-secondary" (click)="collapseAll()">Collapse All</button>
+      </div>
+    }
   </div>
 
   @if (error()) {
@@ -52,7 +58,12 @@
         }
       </div>
     } @else {
-      <app-campaign-list [campaigns]="campaigns()" (membershipChanged)="reload()" />
+      <app-campaign-list-filters [campaigns]="campaigns()" (filtered)="filteredCampaigns.set($event)" />
+      @if (filteredCampaigns().length === 0) {
+        <p class="panel">No campaigns meet your filter criteria.</p>
+      } @else {
+        <app-campaign-list [campaigns]="filteredCampaigns()" (membershipChanged)="reload()" />
+      }
     }
   </section>
 </section>

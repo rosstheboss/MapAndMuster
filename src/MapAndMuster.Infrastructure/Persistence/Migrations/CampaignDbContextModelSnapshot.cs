@@ -287,6 +287,9 @@ namespace MapAndMuster.Infrastructure.Persistence.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)");
 
+                    b.Property<string>("PreferenceJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<bool>("RequiresSubfaction")
                         .HasColumnType("boolean");
 
@@ -469,6 +472,13 @@ namespace MapAndMuster.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("EndsUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("GameSystem")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<bool>("IsFreeForAll")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsPrivate")
                         .HasColumnType("boolean");
 
@@ -496,6 +506,9 @@ namespace MapAndMuster.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("PlayerSlotCount")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("RandomSpawnLocations")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Region")
                         .HasMaxLength(100)

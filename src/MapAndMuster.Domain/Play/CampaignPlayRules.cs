@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using MapAndMuster.Domain.Campaigns;
 using MapAndMuster.Domain.Common;
+using MapAndMuster.Domain.Maps;
 
 namespace MapAndMuster.Domain.Play;
 
@@ -34,7 +35,8 @@ public static class CampaignPlayRules
         IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null,
         bool rivalObjectivesEnabled = false,
         int rivalObjectiveCampaignPoints = RivalObjectiveRules.DefaultCampaignPoints,
-        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null)
+        IReadOnlyDictionary<Guid, string?>? factionAllyGroups = null,
+        int playerSlotCount = 0)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(map);
@@ -73,7 +75,44 @@ public static class CampaignPlayRules
             return new PlayOutcome(state, seededMap, schedule.EndsUtc, schedule.RoundCount);
         }
 
-        var windows = MaterializeWindows(schedule);
+        var spawnCount = seededMap.Territories.Count(static territory => territory.IsSpawn);
+        var block = CampaignConfigurationRules.StartBlockReason(rules.IsFreeForAll, playerSlotCount, spawnCount);
+        if (block is not null)
+        {
+            var delayed = state.Log.Any(static entry => entry.Kind == PlayLogKind.CampaignDelayed)
+                ? state
+                : state.AppendLog(new PlayLogEntry(
+                    Guid.NewGuid(),
+                    utcNow,
+                    PlayLogKind.CampaignDelayed,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    [],
+                    "Campaign delayed due to a campaign configuration error. The campaign manager must rectify it."));
+            return new PlayOutcome(delayed, seededMap, schedule.EndsUtc, schedule.RoundCount);
+        }
+
+        // A campaign blocked by configuration starts when that block clears. Every other late
+        // open keeps the original schedule so missed orders are caught up.
+        var delay = state.Log.Any(static entry => entry.Kind == PlayLogKind.CampaignDelayed)
+            ? utcNow - schedule.StartsUtc
+            : TimeSpan.Zero;
+        var effectiveSchedule = delay <= TimeSpan.Zero
+            ? schedule
+            : new CampaignSchedule(
+                schedule.TimeZone,
+                utcNow,
+                schedule.EndsUtc + delay,
+                schedule.RoundCount,
+                schedule.RoundLength,
+                schedule.Phases,
+                schedule.ArmyEscalations);
+        var windows = MaterializeWindows(effectiveSchedule);
         if (windows.Count > 0 && utcNow >= windows[0].StartsUtc)
         {
             windows[0] = windows[0].With(status: PhaseWindowStatus.Open);
@@ -81,15 +120,31 @@ public static class CampaignPlayRules
 
         var forces = new List<CampaignForce>();
         var nextMap = seededMap;
+        var randomSpawns = rules.RandomSpawnLocations
+            ? RandomSpawnRules.Assign(
+                [.. players.Where(item => item.FactionId.HasValue && !UsesSpecialSpawn(rules, item)).Select(item => new RandomSpawnRules.Player(
+                    item.UserId,
+                    item.FactionId!.Value,
+                    rules.PreferenceFor(item.FactionId!.Value)))],
+                [.. seededMap.Territories.Where(static territory => SpawnMarkers.IsGeneral(territory.SpawnFactionId) || territory.IsSpawn).Select(static territory => new RandomSpawnRules.Spawn(
+                    territory.Id,
+                    territory.TerrainTypeId ?? Guid.Empty,
+                    territory.TerrainTagIds.ToHashSet(),
+                    territory.StructureTypeId,
+                    territory.StructureTagIds.ToHashSet()))],
+                choose)
+            : new Dictionary<Guid, Guid>();
         foreach (var player in players.Where(static item => item.FactionId.HasValue).OrderBy(static item => item.UserId))
         {
-            var placement = FactionSpecialRulePolicies.StartingPlacement(
-                nextMap,
-                player.FactionId!.Value,
-                player.Subfaction,
-                forces,
-                rules,
-                choose);
+            var placement = randomSpawns.TryGetValue(player.UserId, out var randomTerritory)
+                ? (randomTerritory, false)
+                : FactionSpecialRulePolicies.StartingPlacement(
+                    nextMap,
+                    player.FactionId!.Value,
+                    player.Subfaction,
+                    forces,
+                    rules,
+                    choose);
             if (placement is null)
             {
                 continue;
@@ -98,7 +153,7 @@ public static class CampaignPlayRules
             forces.Add(new CampaignForce(
                 Guid.NewGuid(),
                 player.UserId,
-                player.FactionId.Value,
+                player.FactionId!.Value,
                 placement.Value.TerritoryId,
                 false,
                 subfaction: player.Subfaction));
@@ -121,8 +176,8 @@ public static class CampaignPlayRules
         var privateObjectives = PrivateObjectiveRules.SeedInitial(
             privateObjectiveTypes ?? [],
             [.. players.Where(static item => item.FactionId.HasValue).Select(static item => item.UserId)],
-            factionIds ?? [],
-            allyGroupIds ?? [],
+            rules.IsFreeForAll ? [] : factionIds ?? [],
+            rules.IsFreeForAll ? [] : allyGroupIds ?? [],
             utcNow,
             pickIndex ?? (static count => 0),
             players
@@ -171,7 +226,7 @@ public static class CampaignPlayRules
             rivalObjectiveCampaignPoints,
             factionAllyGroups);
 
-        return new PlayOutcome(started, nextMap, schedule.EndsUtc, schedule.RoundCount);
+        return new PlayOutcome(started, nextMap, effectiveSchedule.EndsUtc, effectiveSchedule.RoundCount);
     }
 
     /// <summary>
@@ -652,7 +707,19 @@ public static class CampaignPlayRules
             && targetTerritoryId is { } moveDestinationId)
         {
             var destination = map.Territory(moveDestinationId);
-            if (destination is not null && destination.IsSpawn)
+            var escape = kind == ActionKind.Move
+                && ForceMovementRules.IsEscapeSpawnMove(
+                    map,
+                    force,
+                    moveDestinationId,
+                    viaTerritoryId,
+                    viaPath,
+                    state.Forces,
+                    state.Battles,
+                    state.ItemObjectives,
+                    rules,
+                    factionAllyGroups);
+            if (destination is not null && destination.IsSpawn && !escape)
             {
                 error = new DomainError("order.spawn.forbidden", "A force cannot move into a spawn territory.", "targetTerritoryId");
                 return false;
@@ -668,7 +735,20 @@ public static class CampaignPlayRules
                 state.ItemObjectives,
                 rules,
                 viaPath,
-                state.Forces))
+                state.Forces,
+                state.Battles)
+            && !(kind == ActionKind.Move
+                && ForceMovementRules.IsEscapeSpawnMove(
+                    map,
+                    force,
+                    targetTerritoryId,
+                    viaTerritoryId,
+                    viaPath,
+                    state.Forces,
+                    state.Battles,
+                    state.ItemObjectives,
+                    rules,
+                    factionAllyGroups)))
         {
             error = new DomainError("order.target.invalid", "That territory is not a legal destination.", "targetTerritoryId");
             return false;
@@ -1842,19 +1922,22 @@ public static class CampaignPlayRules
         CampaignForce force,
         IReadOnlyList<CampaignItemObjective>? items = null,
         SpecialRuleContext? specialRules = null,
-        IReadOnlyList<CampaignForce>? occupyingForces = null)
+        IReadOnlyList<CampaignForce>? occupyingForces = null,
+        IReadOnlyList<CampaignBattle>? battles = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(force);
         var rules = specialRules ?? SpecialRuleContext.None;
         var catalogItems = items ?? [];
         var occupants = occupyingForces ?? [];
+        var blocked = ForceMovementRules.LockedBattleTerritories(occupants, battles);
         return ForceMovementRules.EligibleDestinations(
             map,
             force,
             ForceMovementRules.EffectiveSpeed(force, rules, map, catalogItems, occupants),
             catalogItems,
-            rules);
+            rules,
+            blocked);
     }
 
     /// <summary>
@@ -1865,16 +1948,19 @@ public static class CampaignPlayRules
         CampaignForce force,
         SpecialRuleContext? specialRules = null,
         IReadOnlyList<CampaignItemObjective>? items = null,
-        IReadOnlyList<CampaignForce>? occupyingForces = null)
+        IReadOnlyList<CampaignForce>? occupyingForces = null,
+        IReadOnlyList<CampaignBattle>? battles = null)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(force);
         var rules = specialRules ?? SpecialRuleContext.None;
         var catalogItems = items ?? [];
+        var occupants = occupyingForces ?? [];
         return ForceMovementRules.EligibleHops(
             map,
             force,
-            ForceMovementRules.EffectiveSpeed(force, rules, map, catalogItems, occupyingForces));
+            ForceMovementRules.EffectiveSpeed(force, rules, map, catalogItems, occupants),
+            ForceMovementRules.LockedBattleTerritories(occupants, battles));
     }
 
     /// <summary>
@@ -1964,10 +2050,21 @@ public static class CampaignPlayRules
 
         if (ids.Count == 0)
         {
-            var spawn = map.SpawnFor(force.FactionId);
+            var spawn = map.SpawnFor(force.FactionId, force.Subfaction);
             if (spawn is not null && spawn.Id != force.TerritoryId && !ids.Contains(spawn.Id))
             {
                 ids.Add(spawn.Id);
+            }
+            else
+            {
+                var neutralIds = RandomSpawnRules.GeneralSpawnIds(map)
+                    .Where(id => id != force.TerritoryId && id != spawn?.Id)
+                    .ToArray();
+                var nearest = RandomSpawnRules.Nearest(map, force.TerritoryId, neutralIds);
+                if (nearest is { } neutralId && !ids.Contains(neutralId))
+                {
+                    ids.Add(neutralId);
+                }
             }
         }
 
@@ -4897,7 +4994,8 @@ public static class CampaignPlayRules
                 others,
                 rules,
                 pickIndex,
-                blocked);
+                blocked,
+                origins[forceId]);
             var target = placement?.TerritoryId
                 ?? map.SpawnFor(force.FactionId, force.Subfaction)?.Id
                 ?? origins[forceId];
@@ -5014,7 +5112,8 @@ public static class CampaignPlayRules
             others,
             specialRules ?? SpecialRuleContext.None,
             pickIndex ?? (static count => 0),
-            blocked);
+            blocked,
+            force.TerritoryId);
         return fallback?.TerritoryId ?? spawn?.Id ?? force.TerritoryId;
     }
 
@@ -5106,6 +5205,12 @@ public static class CampaignPlayRules
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase),
                 ]);
+    }
+
+    private static bool UsesSpecialSpawn(SpecialRuleContext rules, PlayerFactionAssignment player)
+    {
+        return rules.Has(player.FactionId!.Value, player.Subfaction, SpecialRuleEffectKeys.UndergroundNetwork)
+            || rules.Has(player.FactionId.Value, player.Subfaction, SpecialRuleEffectKeys.GreatCityOfMagritta);
     }
 }
 

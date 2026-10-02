@@ -2561,7 +2561,7 @@ describe('CampaignDetailPage', () => {
       onTerritorySelect: (event: { id: string; additive: boolean; clientX: number; clientY: number }) => void;
       onMapActionKind: (kind: string) => void;
       onMapBackgroundSelect: () => void;
-      confirmMapAction: () => Promise<void>;
+      finishMovement: () => Promise<void>;
       mapAction: () => { step: string; kind: string; targetTerritoryId: string } | null;
     };
 
@@ -2583,16 +2583,15 @@ describe('CampaignDetailPage', () => {
     page.onTerritorySelect({ id: 't1', additive: false, clientX: 40, clientY: 12 });
     page.onMapActionKind('Move');
     fixture.detectChanges();
-    expect(page.mapAction()?.step).toBe('pick-target');
-    expect(compiled.textContent).toContain('Pick a territory to move to...');
+    expect(page.mapAction()?.step).toBe('walk');
+    expect(compiled.textContent).toContain('Movement points: 1 remaining');
 
     page.onTerritorySelect({ id: 't2', additive: false, clientX: 90, clientY: 12 });
     fixture.detectChanges();
-    expect(page.mapAction()?.step).toBe('confirm');
-    expect(compiled.textContent).toContain('Confirm action');
-    expect(compiled.textContent).toContain('Move from Coast to Ridge?');
+    expect(page.mapAction()?.step).toBe('walk');
+    expect(compiled.querySelector('#finish-movement')).toBeTruthy();
 
-    const pending = page.confirmMapAction();
+    const pending = page.finishMovement();
     const draft = http.expectOne(`/api/campaigns/${campaign.id}/play/draft`);
     expect((draft.request.body as { kind: string; targetTerritoryId: string }).kind).toBe('Move');
     expect((draft.request.body as { kind: string; targetTerritoryId: string }).targetTerritoryId).toBe('t2');
@@ -3219,7 +3218,7 @@ describe('CampaignDetailPage', () => {
     const page = fixture.componentInstance as unknown as {
       onTerritorySelect: (event: { id: string; additive: boolean; clientX: number; clientY: number }) => void;
       onMapActionKind: (kind: string) => void;
-      confirmMapAction: () => Promise<void>;
+      finishMovement: () => Promise<void>;
       mapAction: () => { step: string; kind: string; targetTerritoryId: string; viaTerritoryId: string } | null;
       mapForces: () => { id: string; routeSteps?: readonly string[] }[];
     };
@@ -3227,23 +3226,20 @@ describe('CampaignDetailPage', () => {
     page.onTerritorySelect({ id: 't1', additive: false, clientX: 40, clientY: 12 });
     page.onMapActionKind('Move');
     fixture.detectChanges();
-    expect(page.mapAction()?.step).toBe('pick-target');
-    expect(compiled.textContent).toContain('Pick a territory to move to...');
-
-    page.onTerritorySelect({ id: 't4', additive: false, clientX: 90, clientY: 12 });
-    fixture.detectChanges();
-    expect(page.mapAction()?.step).toBe('pick-via');
-    expect(compiled.textContent).toContain('Select the territory to move through.');
+    expect(page.mapAction()?.step).toBe('walk');
+    expect(compiled.textContent).toContain('Movement points:');
 
     page.onTerritorySelect({ id: 't2', additive: false, clientX: 70, clientY: 12 });
     fixture.detectChanges();
-    expect(page.mapAction()?.step).toBe('confirm');
-    expect(compiled.textContent).toContain('Move from Coast through Vale to Ridge?');
+    expect(page.mapForces().find((force) => force.id === 'force-1')?.routeSteps).toEqual(['t1', 't2']);
+
+    page.onTerritorySelect({ id: 't4', additive: false, clientX: 90, clientY: 12 });
+    fixture.detectChanges();
     expect(page.mapForces().find((force) => force.id === 'force-1')?.routeSteps).toEqual(['t1', 't2', 't4']);
     expect(compiled.querySelectorAll('.order-route')).toHaveLength(2);
     expect(compiled.querySelectorAll('.order-route-head')).toHaveLength(2);
 
-    const pending = page.confirmMapAction();
+    const pending = page.finishMovement();
     const draft = http.expectOne(`/api/campaigns/${campaign.id}/play/draft`);
     expect(draft.request.body as { kind: string; targetTerritoryId: string; viaTerritoryId: string }).toEqual(
       expect.objectContaining({
@@ -3345,15 +3341,10 @@ describe('CampaignDetailPage', () => {
 
     page.onTerritorySelect({ id: 't1', additive: false, clientX: 40, clientY: 12 });
     page.onMapActionKind('Move');
+    page.onTerritorySelect({ id: 't2', additive: false, clientX: 70, clientY: 12 });
     page.onTerritorySelect({ id: 't4', additive: false, clientX: 90, clientY: 12 });
     fixture.detectChanges();
-    expect(page.mapAction()?.step).toBe('pick-via');
-    expect(compiled.textContent).toContain('Select the territory to move through.');
-
-    page.onTerritorySelect({ id: 't2', additive: false, clientX: 70, clientY: 12 });
-    fixture.detectChanges();
-    expect(page.mapAction()).toEqual(expect.objectContaining({ step: 'confirm', viaTerritoryId: 't2', viaPath: [] }));
-    expect(compiled.textContent).toContain('Move from Coast through Vale to Ridge?');
+    expect(page.mapAction()?.step).toBe('walk');
     expect(page.mapForces().find((force) => force.id === 'force-1')?.routeSteps).toEqual(['t1', 't2', 't4']);
     expect(compiled.querySelectorAll('.order-route')).toHaveLength(2);
     http.verify();
@@ -3423,21 +3414,14 @@ describe('CampaignDetailPage', () => {
 
     page.onTerritorySelect({ id: 't1', additive: false, clientX: 40, clientY: 12 });
     page.onMapActionKind('Move');
-    page.onTerritorySelect({ id: 't4', additive: false, clientX: 90, clientY: 12 });
-    fixture.detectChanges();
-    expect(page.mapAction()?.step).toBe('pick-via');
-
     page.onTerritorySelect({ id: 't2', additive: false, clientX: 70, clientY: 12 });
     fixture.detectChanges();
-    expect(page.mapAction()?.step).toBe('pick-via');
-    expect(compiled.textContent).toContain('Select the territory to move through.');
+    expect(page.mapForces().find((force) => force.id === 'force-1')?.routeSteps).toEqual(['t1', 't2']);
 
     page.onTerritorySelect({ id: 't3', additive: false, clientX: 80, clientY: 12 });
+    page.onTerritorySelect({ id: 't4', additive: false, clientX: 90, clientY: 12 });
     fixture.detectChanges();
-    expect(page.mapAction()).toEqual(
-      expect.objectContaining({ step: 'confirm', viaTerritoryId: 't2', viaPath: ['t3'] }),
-    );
-    expect(compiled.textContent).toContain('Move from Coast through Vale and Pass to Ridge?');
+    expect(page.mapAction()?.step).toBe('walk');
     expect(page.mapForces().find((force) => force.id === 'force-1')?.routeSteps).toEqual(['t1', 't2', 't3', 't4']);
     expect(compiled.querySelectorAll('.order-route')).toHaveLength(3);
     expect(compiled.querySelectorAll('.order-route-head')).toHaveLength(3);
@@ -3630,7 +3614,7 @@ describe('CampaignDetailPage', () => {
     expect(compiled.textContent).toContain('Drop Crown');
     page.onDraftDropItem('force-1', 'item-1', true);
     fixture.detectChanges();
-    const saveDraft = compiled.querySelector<HTMLButtonElement>('button[aria-label^="Save draft"]');
+    const saveDraft = compiled.querySelector<HTMLButtonElement>('#finish-move-force-1');
     expect(saveDraft).toBeTruthy();
     saveDraft!.click();
     const draft = http.expectOne(`/api/campaigns/${campaign.id}/play/draft`);

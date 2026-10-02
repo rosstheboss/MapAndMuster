@@ -75,6 +75,16 @@ export class CampaignListComponent {
     });
   }
 
+  expandAll(): void {
+    this.closedGroups.set(new Set());
+    this.openCampaigns.set(new Set(this.campaigns().map((campaign) => campaign.id)));
+  }
+
+  collapseAll(): void {
+    this.closedGroups.set(new Set(groupCampaigns(this.campaigns()).map((group) => group.id)));
+    this.openCampaigns.set(new Set());
+  }
+
   protected toggleGroup(groupId: string): void {
     this.closedGroups.update((current) => {
       const next = new Set(current);

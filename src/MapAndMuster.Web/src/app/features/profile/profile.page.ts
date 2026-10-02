@@ -1,11 +1,12 @@
 import { Component, computed, inject, signal, viewChild, type ElementRef } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
 import { GUEST_PREVIEW_MESSAGE } from '../../core/auth/guest-preview';
 import { FORM_SAVE_SUCCESS_MESSAGE } from '../../core/forms/form-messages';
+import { syncDirtyFromBaseline } from '../../core/forms/sync-form-dirty';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
   collectFormFailures,
@@ -74,6 +75,7 @@ export class ProfilePage {
   protected readonly chatLanguages = CHAT_LANGUAGES;
   protected readonly dateTimeDisplayFormats = DATE_TIME_DISPLAY_FORMATS;
   protected profileRevision = 0;
+  private savedProfile: unknown = null;
   protected readonly form = this.formBuilder.nonNullable.group({
     username: ['', [required, minLength(3), maxLength(32), reservedUsername]],
     firstName: ['', [required, minLength(2), maxLength(50)]],
@@ -106,6 +108,11 @@ export class ProfilePage {
   protected readonly isGuest = computed(() => this.auth.currentUser()?.isGuestAccount === true);
 
   constructor() {
+    this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
+      if (this.savedProfile !== null) {
+        syncDirtyFromBaseline(this.form, this.savedProfile);
+      }
+    });
     void this.loadProfile();
   }
 
@@ -144,6 +151,8 @@ export class ProfilePage {
       if (profile.isGuestAccount) {
         this.form.disable();
       }
+
+      this.captureProfileBaseline();
     } catch (error: unknown) {
       this.revealErrors(readApiErrorMessages(error, 'Unable to load your profile.'));
     } finally {
@@ -218,6 +227,7 @@ export class ProfilePage {
           this.form.controls.confirmPassword.markAsUntouched();
         }
       });
+      this.captureProfileBaseline();
       this.revealSuccess();
     } catch (error: unknown) {
       this.serverFields.set(new Set(readApiFieldErrors(error)));
@@ -253,6 +263,12 @@ export class ProfilePage {
       this.uploading.set(false);
       input.value = '';
     }
+  }
+
+  private captureProfileBaseline(): void {
+    this.savedProfile = this.form.getRawValue();
+    this.form.markAsPristine();
+    syncDirtyFromBaseline(this.form, this.savedProfile);
   }
 
   private isChangingPassword(): boolean {

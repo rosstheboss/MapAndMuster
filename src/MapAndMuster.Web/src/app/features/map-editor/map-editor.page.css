@@ -138,7 +138,7 @@
 .territory-editor-body {
   /* Keep this tall enough that the three field rows fit without a scrollbar, so the
      list and page below the map do not shift when hovering or selecting territories. */
-  height: calc(7.25rem + (2.5rem + 0.35rem + var(--touch-min)) * 2 + 0.65rem * 2);
+  height: calc(7.25rem + (2.5rem + 0.35rem + var(--touch-min)) * 2 + 0.65rem * 2 + 3.2rem);
   overflow: auto;
 }
 
@@ -163,6 +163,12 @@
 
 .editor-row-control {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.spawn-location-field {
+  display: grid;
+  gap: 0.35rem;
+  align-content: end;
 }
 
 .territory-editor .field textarea {

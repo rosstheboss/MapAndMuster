@@ -86,6 +86,54 @@ describe('ProfilePage', () => {
     http.verify();
   });
 
+  it('clears a profile field when its value returns to the saved profile', async () => {
+    const fixture = TestBed.createComponent(ProfilePage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/profiles/me').flush({
+      id: '11111111-1111-1111-1111-111111111111',
+      email: 'ada@example.test',
+      username: 'ada',
+      firstName: 'Ada',
+      middleInitial: null,
+      lastName: 'Lovelace',
+      suffix: null,
+      city: 'Halifax',
+      region: 'Nova Scotia',
+      country: 'Canada',
+      displayNameMode: 'Username',
+      timeZoneId: 'America/Halifax',
+      hasAvatar: false,
+      createdUtc: '2026-08-13T00:00:00+00:00',
+      updatedUtc: '2026-08-13T00:00:00+00:00',
+      profileRevision: 1,
+      emailConfirmed: true,
+      isAdministrator: false,
+      inAppNotificationsEnabled: true,
+      emailNotificationsEnabled: true,
+      preferredChatLanguage: 'English',
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const firstName = compiled.querySelector<HTMLInputElement>('#firstName');
+    const page = fixture.componentInstance as unknown as {
+      form: { dirty: boolean; controls: { firstName: { setValue: (value: string) => void } } };
+    };
+    expect(firstName?.classList.contains('ng-dirty')).toBe(false);
+
+    page.form.controls.firstName.setValue('Augusta');
+    fixture.detectChanges();
+    expect(firstName?.classList.contains('ng-dirty')).toBe(true);
+    expect(page.form.dirty).toBe(true);
+
+    page.form.controls.firstName.setValue('Ada');
+    fixture.detectChanges();
+    expect(firstName?.classList.contains('ng-dirty')).toBe(false);
+    expect(page.form.dirty).toBe(false);
+    http.verify();
+  });
+
   it('shows a green success banner after saving changes', async () => {
     const fixture = TestBed.createComponent(ProfilePage);
     const http = TestBed.inject(HttpTestingController);

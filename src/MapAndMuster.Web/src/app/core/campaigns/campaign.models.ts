@@ -9,6 +9,10 @@ export interface CampaignListItem {
   playerSlotCount: number;
   occupiedPlayerSlots: number;
   isPrivate: boolean;
+  isFreeForAll?: boolean;
+  gameSystem?: string | null;
+  managerUsername?: string | null;
+  publicParticipantUsernames?: string[];
   isPubliclyViewable: boolean;
   canManage: boolean;
   isParticipant: boolean;
@@ -28,6 +32,9 @@ export interface CampaignListItem {
   canPlay: boolean;
   canChooseFaction: boolean;
   isCommitted: boolean;
+  roundCount?: number;
+  roundLengthAmount?: number;
+  roundLengthUnit?: string;
 }
 
 export interface CampaignDetail {
@@ -37,6 +44,9 @@ export interface CampaignDetail {
   playerSlotCount: number;
   occupiedPlayerSlots: number;
   isPrivate: boolean;
+  isFreeForAll?: boolean;
+  randomSpawnLocations?: boolean;
+  gameSystem?: string | null;
   isPubliclyViewable: boolean;
   creatorIsParticipant: boolean;
   city: string | null;
@@ -144,6 +154,10 @@ export interface CampaignFaction {
   subfactionAppearances?: SubfactionAppearance[];
   forceMovementSpeed?: number;
   subfactionMovementSpeeds?: SubfactionMovementSpeed[];
+  preferredTerrainTypeIds?: string[];
+  preferredTerrainTagIds?: string[];
+  preferredStructureTypeIds?: string[];
+  preferredStructureTagIds?: string[];
 }
 
 export interface SubfactionMovementSpeed {
@@ -530,6 +544,9 @@ export interface SaveCampaignPayload {
   privateObjectiveTypes?: SavePrivateObjectiveTypePayload[];
   rivalObjectivesEnabled?: boolean;
   rivalObjectiveCampaignPoints?: number;
+  isFreeForAll?: boolean;
+  randomSpawnLocations?: boolean;
+  gameSystem?: string | null;
   pointsPerBattleWon?: number;
   pointsPerBattleDraw?: number;
   useDifferentialBattleScoring?: boolean;
@@ -821,6 +838,7 @@ export interface SaveMapGraphPayload {
   territories: MapTerritoryPayload[];
   adjacencies: MapAdjacencyPayload[];
   itemObjectivePlacements?: ItemObjectivePlacementPayload[];
+  randomSpawnLocations?: boolean;
 }
 
 export interface CampaignPlayDetail {
@@ -907,6 +925,7 @@ export interface PlayForce {
   inBattle: boolean;
   moveTargets: string[];
   moveHops?: PlayMoveHop[];
+  escapeMoveTargets?: string[];
   availableActions: string[];
   statusName?: string | null;
   statusEffects?: string | null;

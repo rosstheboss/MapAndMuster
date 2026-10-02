@@ -266,6 +266,9 @@ public static class CampaignSetupRules
     /// <param name="pointsPerTerritoryTerrainTagId">Optional terrain tag that limits points-per-territory scoring.</param>
     /// <param name="rivalObjectivesEnabled">Whether occupying players receive a secret rival objective.</param>
     /// <param name="rivalObjectiveCampaignPoints">Campaign points awarded when a player reveals their rival.</param>
+    /// <param name="isFreeForAll">Whether players fight alone, with no ally groups.</param>
+    /// <param name="randomSpawnLocations">Whether players are placed on general spawn locations.</param>
+    /// <param name="gameSystem">The optional game system named by the campaign manager.</param>
     /// <param name="setup">The validated setup when successful.</param>
     /// <param name="validatedJoinPassword">The join password to hash when a new password was supplied.</param>
     /// <param name="errors">Every field error, in a stable order.</param>
@@ -327,7 +330,10 @@ public static class CampaignSetupRules
         Guid? mostStructurePointsStructureTagId = null,
         Guid? pointsPerTerritoryTerrainTagId = null,
         bool? rivalObjectivesEnabled = null,
-        int? rivalObjectiveCampaignPoints = null)
+        int? rivalObjectiveCampaignPoints = null,
+        bool? isFreeForAll = null,
+        bool? randomSpawnLocations = null,
+        string? gameSystem = null)
     {
         var collected = new List<DomainError>();
         setup = null;
@@ -372,6 +378,12 @@ public static class CampaignSetupRules
             collected.AddRange(locationErrors);
         }
 
+        var freeForAll = isFreeForAll == true;
+        if (freeForAll)
+        {
+            allyGroups = [];
+        }
+
         var usedIds = new HashSet<Guid>();
         var parsedGroups = ParseAllyGroups(allyGroups, usedIds, collected);
         var missionIndex = new MissionIndex();
@@ -390,8 +402,13 @@ public static class CampaignSetupRules
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var specialRuleIds = parsedSpecialRules.Select(static rule => rule.Id).ToHashSet();
         var factionTagIds = parsedFactionTags.Select(static tag => tag.Id).ToHashSet();
-        var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, specialRuleIds, factionTagIds, collected);
-        ValidateAllyMembership(parsedFactions, parsedGroups, collected);
+        var parsedFactions = ParseFactions(factions, parsedGroups, usedIds, specialRuleIds, factionTagIds, collected, freeForAll);
+        if (!freeForAll)
+        {
+            ValidateAllyMembership(parsedFactions, parsedGroups, collected);
+        }
+
+        var parsedGameSystem = ParseOptionalGameSystem(gameSystem, collected);
         var parsedLinks = ParseLinks(links, collected);
         var missionTagIds = parsedMissionTags.Select(static tag => tag.Id).ToHashSet();
         _ = ParseMissions(
@@ -536,9 +553,32 @@ public static class CampaignSetupRules
             parsedFactionTags,
             parsedMissionTags,
             rivalsEnabled,
-            rivalPoints);
+            rivalPoints,
+            freeForAll,
+            randomSpawnLocations == true,
+            parsedGameSystem);
         errors = collected;
         return true;
+    }
+
+    private static string? ParseOptionalGameSystem(string? raw, List<DomainError> errors)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var trimmed = raw.Trim();
+        if (trimmed.Length > 80)
+        {
+            errors.Add(new DomainError(
+                "gameSystem.invalid",
+                "Game system must be 80 characters or fewer.",
+                "gameSystem"));
+            return null;
+        }
+
+        return trimmed;
     }
 
     private static string? ParseRequiredName(
@@ -707,7 +747,8 @@ public static class CampaignSetupRules
         HashSet<Guid> usedIds,
         HashSet<Guid> knownSpecialRuleIds,
         HashSet<Guid> knownFactionTagIds,
-        List<DomainError> errors)
+        List<DomainError> errors,
+        bool freeForAll = false)
     {
         var parsed = new List<FactionSetup>();
         if (factions is null || factions.Count < MinFactionCount)
@@ -753,7 +794,9 @@ public static class CampaignSetupRules
                 errors);
 
             var subfactions = ParseSubfactions(faction.Subfactions, index, errors);
-            var allyGroupName = ResolveAllyGroupName(faction, allyGroups, groupsById, groupNames, index, errors);
+            var allyGroupName = freeForAll
+                ? null
+                : ResolveAllyGroupName(faction, allyGroups, groupsById, groupNames, index, errors);
 
             if (name is null || color is null)
             {
@@ -821,7 +864,12 @@ public static class CampaignSetupRules
                     $"factions[{index}].forceMovementSpeed",
                     $"Faction {index + 1} movement speed",
                     errors),
-                ParseSubfactionMovementSpeeds(faction.SubfactionMovementSpeeds, subfactions, index, errors)));
+                ParseSubfactionMovementSpeeds(faction.SubfactionMovementSpeeds, subfactions, index, errors),
+                new FactionPreference(
+                    faction.PreferredTerrainTypeIds,
+                    faction.PreferredTerrainTagIds,
+                    faction.PreferredStructureTypeIds,
+                    faction.PreferredStructureTagIds)));
         }
 
         return parsed;

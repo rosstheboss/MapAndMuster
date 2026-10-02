@@ -1699,7 +1699,7 @@ public sealed class CampaignPlayRulesTests
     }
 
     [Fact]
-    public void ThreeOpposingSidesPairTheTwoStrongestFirst()
+    public void ThreeOpposingSidesPairTheTwoWeakestFirst()
     {
         var east = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
         var eastSpawn = Guid.Parse("44444444-4444-4444-4444-444444444440");
@@ -1759,9 +1759,9 @@ public sealed class CampaignPlayRulesTests
             force => new CombatantStrengthRules.Strength(force.FactionId == North ? 5 : force.FactionId == South ? 3 : 1, 1, 0, 0),
             static _ => 0);
         Assert.Equal(2, active.Count);
-        Assert.Contains(northForce.Id, active);
+        Assert.Contains(eastForce.Id, active);
         Assert.Contains(southForce.Id, active);
-        Assert.DoesNotContain(eastForce.Id, active);
+        Assert.DoesNotContain(northForce.Id, active);
         _ = ownedMap;
         _ = now;
     }

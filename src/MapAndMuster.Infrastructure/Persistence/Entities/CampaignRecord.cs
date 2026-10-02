@@ -22,6 +22,15 @@ public sealed class CampaignRecord
     /// <summary>Gets or sets whether a join password is required.</summary>
     public bool IsPrivate { get; set; }
 
+    /// <summary>Gets or sets whether players fight alone, with no ally groups.</summary>
+    public bool IsFreeForAll { get; set; }
+
+    /// <summary>Gets or sets whether players are placed on general spawn locations.</summary>
+    public bool RandomSpawnLocations { get; set; }
+
+    /// <summary>Gets or sets the optional game system named by the campaign manager.</summary>
+    public string? GameSystem { get; set; }
+
     /// <summary>Gets or sets whether non-members may view the campaign.</summary>
     public bool IsPubliclyViewable { get; set; } = true;
 

@@ -374,6 +374,23 @@
   position: relative;
 }
 
+.movement-bar {
+  position: absolute;
+  z-index: 16;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.4rem 0.7rem;
+}
+
+.movement-bar p {
+  margin: 0;
+}
+
 .action-context-menu {
   position: absolute;
   z-index: 15;

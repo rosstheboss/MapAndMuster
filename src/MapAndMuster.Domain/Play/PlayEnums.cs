@@ -238,6 +238,9 @@ public enum PlayLogKind
 
     /// <summary>A battle phase closed because no engagements were waiting.</summary>
     NoBattlesOccurred = 43,
+
+    /// <summary>The planned start passed while campaign configuration was still invalid.</summary>
+    CampaignDelayed = 44,
 }
 
 /// <summary>

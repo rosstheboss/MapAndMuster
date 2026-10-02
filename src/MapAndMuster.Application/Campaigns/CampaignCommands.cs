@@ -153,6 +153,15 @@ public sealed class CreateCampaignCommand
 
     /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
     public int? RivalObjectiveCampaignPoints { get; init; }
+
+    /// <summary>Gets whether players fight alone, with no ally groups.</summary>
+    public bool? IsFreeForAll { get; init; }
+
+    /// <summary>Gets whether players are placed on general spawn locations.</summary>
+    public bool? RandomSpawnLocations { get; init; }
+
+    /// <summary>Gets the optional game system named by the campaign manager.</summary>
+    public string? GameSystem { get; init; }
 }
 
 /// <summary>
@@ -312,6 +321,15 @@ public sealed class UpdateCampaignCommand
 
     /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
     public int? RivalObjectiveCampaignPoints { get; init; }
+
+    /// <summary>Gets whether players fight alone, with no ally groups.</summary>
+    public bool? IsFreeForAll { get; init; }
+
+    /// <summary>Gets whether players are placed on general spawn locations.</summary>
+    public bool? RandomSpawnLocations { get; init; }
+
+    /// <summary>Gets the optional game system named by the campaign manager.</summary>
+    public string? GameSystem { get; init; }
 }
 
 /// <summary>

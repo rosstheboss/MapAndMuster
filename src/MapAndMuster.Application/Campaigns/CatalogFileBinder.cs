@@ -64,6 +64,7 @@ internal static class CatalogFileBinder
                         }),
                     ],
                     ForceMovementSpeed = faction.ForceMovementSpeed,
+                    Preference = faction.Preference,
                     SubfactionMovementSpeeds =
                     [
                         .. faction.SubfactionMovementSpeeds.Select(static item => new StoredSubfactionMovementSpeed

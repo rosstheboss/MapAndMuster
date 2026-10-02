@@ -789,7 +789,7 @@ describe('MapEditorPage', () => {
   it('commits and can save a closed drawing that traces a shared border', async () => {
     const fixture = TestBed.createComponent(MapEditorPage);
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({ ...campaign, randomSpawnLocations: true });
     http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
       ...emptyGraph,
       territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
@@ -960,7 +960,7 @@ describe('MapEditorPage', () => {
       ...emptyGraph,
       territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
     };
-    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({ ...campaign, randomSpawnLocations: true });
     http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush(graph);
     await fixture.whenStable();
     fixture.detectChanges();
@@ -1470,7 +1470,7 @@ describe('MapEditorPage', () => {
   it('collapses the territory editor and list and reports a failed save with an X', async () => {
     const fixture = TestBed.createComponent(MapEditorPage);
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({ ...campaign, randomSpawnLocations: true });
     http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
       ...emptyGraph,
       territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
@@ -1639,6 +1639,7 @@ describe('MapEditorPage', () => {
 
     const page = fixture.componentInstance as unknown as {
       onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      setSpawnLocation: (enabled: boolean) => void;
       setSpawn: (value: string) => void;
       setOwner: (value: string) => void;
       ownerLocked: () => boolean;
@@ -1652,9 +1653,11 @@ describe('MapEditorPage', () => {
       };
     };
     page.onTerritorySelect({ id: 't1', additive: false });
+    page.setSpawnLocation(true);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     const labels = [...compiled.querySelectorAll('#territory-spawn option')].map((option) => option.textContent.trim());
+    expect(labels[0]).toBe('Neutral');
     expect(labels).toContain('Daemons of Chaos - Khorne');
     expect(labels).toContain('Daemons of Chaos - Nurgle');
     expect(labels).not.toContain('Daemons of Chaos');
@@ -1671,6 +1674,123 @@ describe('MapEditorPage', () => {
     page.setOwner('north');
     expect(page.graph().territories[0]?.ownerFactionId).toBe('daemons');
     expect(compiled.querySelector('#territory-owner')?.getAttribute('disabled')).toBe('true');
+    http.verify();
+  });
+
+  it('hides the spawn faction list when random placement is on and treats Neutral as a general spawn', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({ ...campaign, randomSpawnLocations: true });
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      setSpawnLocation: (enabled: boolean) => void;
+      graph: () => { territories: { spawnFactionId: string | null; spawnSubfaction?: string | null }[] };
+    };
+    page.onTerritorySelect({ id: 't1', additive: false });
+    page.setSpawnLocation(true);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('#territory-is-spawn')).toBeTruthy();
+    expect(compiled.querySelector('#territory-spawn')).toBeNull();
+    expect(page.graph().territories[0]?.spawnFactionId).toBe('00000000-0000-4000-8000-000000000001');
+    expect(compiled.textContent).toContain('Neutral');
+    http.verify();
+  });
+
+  it('clears the spawn checkbox and name when they return to the saved values', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush({ ...campaign, randomSpawnLocations: true });
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [
+        {
+          ...namedSquare('t1', 1, 'Northmarch', 0.1),
+          spawnFactionId: '00000000-0000-4000-8000-000000000001',
+          spawnSubfaction: null,
+        },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      hasUnsavedEdits: () => boolean;
+    };
+    page.onTerritorySelect({ id: 't1', additive: false });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const spawn = compiled.querySelector<HTMLInputElement>('#territory-is-spawn');
+    const name = compiled.querySelector<HTMLInputElement>('#territory-name');
+    const save = [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Save Map');
+    expect(spawn?.checked).toBe(true);
+    expect(spawn?.classList.contains('ng-dirty')).toBe(false);
+    expect(save?.disabled).toBe(true);
+
+    spawn?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(spawn?.classList.contains('ng-dirty')).toBe(true);
+    expect(compiled.querySelector('.spawn-location-field')?.classList.contains('is-dirty')).toBe(true);
+    expect(page.hasUnsavedEdits()).toBe(true);
+    expect(save?.disabled).toBe(false);
+
+    spawn?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(spawn?.checked).toBe(true);
+    expect(spawn?.classList.contains('ng-dirty')).toBe(false);
+    expect(compiled.querySelector('.spawn-location-field')?.classList.contains('is-dirty')).toBe(false);
+    expect(page.hasUnsavedEdits()).toBe(false);
+    expect(save?.disabled).toBe(true);
+
+    if (name) {
+      name.value = 'Changed';
+      name.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(name.classList.contains('ng-dirty')).toBe(true);
+
+      name.value = 'Northmarch';
+      name.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(name.classList.contains('ng-dirty')).toBe(false);
+      expect(page.hasUnsavedEdits()).toBe(false);
+    }
+
+    http.verify();
+  });
+
+  it('refuses to save when a faction has no spawn and no neutral spawn exists', async () => {
+    const fixture = TestBed.createComponent(MapEditorPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(`/api/campaigns/${campaignId}`).flush(campaign);
+    http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
+      ...emptyGraph,
+      territories: [namedSquare('t1', 1, 'Northmarch', 0.1)],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const page = fixture.componentInstance as unknown as {
+      save: () => Promise<boolean>;
+      errorMessages: () => string[];
+    };
+    await expect(page.save()).resolves.toBe(false);
+    expect(page.errorMessages()[0]).toBe(
+      'No neutral spawn locations exist, and North, South have no specific spawn location.',
+    );
     http.verify();
   });
 
@@ -1694,13 +1814,21 @@ describe('MapEditorPage', () => {
     });
     http.expectOne(`/api/campaigns/${campaignId}/map/graph`).flush({
       ...emptyGraph,
-      territories: [namedSquare('t1', 1, 'Khornehold', 0.1), namedSquare('t2', 2, 'Nurglefen', 0.4)],
+      territories: [
+        namedSquare('t1', 1, 'Khornehold', 0.1),
+        namedSquare('t2', 2, 'Nurglefen', 0.4),
+        {
+          ...namedSquare('t3', 3, 'Neutral shore', 0.7),
+          spawnFactionId: '00000000-0000-4000-8000-000000000001',
+        },
+      ],
     });
     await fixture.whenStable();
     fixture.detectChanges();
 
     const page = fixture.componentInstance as unknown as {
       onTerritorySelect: (event: { id: string; additive: boolean }) => void;
+      setSpawnLocation: (enabled: boolean) => void;
       setSpawn: (value: string) => void;
       save: () => Promise<boolean>;
       errorMessages: () => string[];
@@ -1712,6 +1840,7 @@ describe('MapEditorPage', () => {
     page.onTerritorySelect({ id: 't1', additive: false });
     page.setSpawn('daemons::Khorne');
     page.onTerritorySelect({ id: 't2', additive: false });
+    page.setSpawnLocation(true);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('#territory-spawn option[value="daemons::Khorne"]')?.hasAttribute('disabled')).toBe(
@@ -1722,12 +1851,17 @@ describe('MapEditorPage', () => {
     );
 
     page.setSpawn('daemons::Nurgle');
-    expect(page.graph().territories.map((territory) => territory.spawnSubfaction)).toEqual(['Khorne', 'Nurgle']);
+    expect(
+      page
+        .graph()
+        .territories.slice(0, 2)
+        .map((territory) => territory.spawnSubfaction),
+    ).toEqual(['Khorne', 'Nurgle']);
 
     const saving = page.save();
     const put = http.expectOne(`/api/campaigns/${campaignId}/map/graph`);
     const body = put.request.body as { territories: { spawnSubfaction: string | null }[] };
-    expect(body.territories.map((territory) => territory.spawnSubfaction)).toEqual(['Khorne', 'Nurgle']);
+    expect(body.territories.slice(0, 2).map((territory) => territory.spawnSubfaction)).toEqual(['Khorne', 'Nurgle']);
     put.flush({
       ...emptyGraph,
       revision: 3,

@@ -40,6 +40,9 @@ public sealed class CampaignSetup
     /// <param name="missionTags">Mission-catalog tags.</param>
     /// <param name="rivalObjectivesEnabled">Whether occupying players receive a secret rival objective.</param>
     /// <param name="rivalObjectiveCampaignPoints">Campaign points awarded when a player reveals their rival.</param>
+    /// <param name="isFreeForAll">Whether players fight alone, with no ally groups.</param>
+    /// <param name="randomSpawnLocations">Whether players are placed on general spawn locations.</param>
+    /// <param name="gameSystem">The optional game system named by the campaign manager.</param>
     public CampaignSetup(
         string name,
         string? description,
@@ -72,7 +75,10 @@ public sealed class CampaignSetup
         IReadOnlyList<CatalogTag>? factionTags = null,
         IReadOnlyList<CatalogTag>? missionTags = null,
         bool rivalObjectivesEnabled = true,
-        int rivalObjectiveCampaignPoints = 5)
+        int rivalObjectiveCampaignPoints = 5,
+        bool isFreeForAll = false,
+        bool randomSpawnLocations = false,
+        string? gameSystem = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(factions);
@@ -115,6 +121,9 @@ public sealed class CampaignSetup
         MissionTags = missionTags ?? [];
         RivalObjectivesEnabled = rivalObjectivesEnabled;
         RivalObjectiveCampaignPoints = rivalObjectiveCampaignPoints;
+        IsFreeForAll = isFreeForAll;
+        RandomSpawnLocations = randomSpawnLocations;
+        GameSystem = string.IsNullOrWhiteSpace(gameSystem) ? null : gameSystem.Trim();
     }
 
     /// <summary>Gets the campaign name.</summary>
@@ -209,6 +218,15 @@ public sealed class CampaignSetup
 
     /// <summary>Gets campaign points awarded when a player reveals their rival.</summary>
     public int RivalObjectiveCampaignPoints { get; }
+
+    /// <summary>Gets whether players fight alone, with no ally groups.</summary>
+    public bool IsFreeForAll { get; }
+
+    /// <summary>Gets whether players are placed on general spawn locations.</summary>
+    public bool RandomSpawnLocations { get; }
+
+    /// <summary>Gets the optional game system named by the campaign manager.</summary>
+    public string? GameSystem { get; }
 
     /// <summary>Gets campaign points awarded to the winner when differential scoring is off.</summary>
     public int PointsPerBattleWon => BattleScoring.PointsPerWin;
