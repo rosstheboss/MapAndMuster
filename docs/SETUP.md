@@ -105,7 +105,9 @@ Run `eng/verify.ps1` or `eng/verify.sh` from the repository root. GitHub Actions
 logical checks plus API Docker image builds and EF migration bundles against a temporary PostgreSQL
 service (`.github/workflows/ci.yml`). A scheduled nightly workflow (`.github/workflows/nightly.yml`)
 repeats CI and adds NuGet/npm audits. Nightly `npm audit` retries when the registry advisory
-endpoint times out; high and critical findings still fail the job. Neither workflow deploys
+endpoint times out; high and critical findings still fail the job. A dated entry in
+`eng/npm-audit-allowlist.txt` can accept one advisory that has no patched release. The entry
+stops applying on its review date. Neither workflow deploys
 production. After a host is live,
 run `scripts/smoke-test.ps1` or GitHub **Actions → Smoke test**. Operator steps are in
 `docs/human-deployment-checklist.md`.

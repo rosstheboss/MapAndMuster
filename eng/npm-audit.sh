@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Retries npm audit when the registry advisory API times out.
-# High and critical findings still fail immediately.
+# High and critical findings still fail immediately, except dated entries in
+# npm-audit-allowlist.txt that have no patched release yet.
 set -euo pipefail
 
 attempts="${NPM_AUDIT_ATTEMPTS:-5}"
 delay="${NPM_AUDIT_RETRY_SECONDS:-15}"
 level="${NPM_AUDIT_LEVEL:-high}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+allowlist="${script_dir}/npm-audit-allowlist.txt"
+filter="${script_dir}/npm-audit-filter.mjs"
 
 is_transient() {
   grep -Eqi \
@@ -15,17 +19,24 @@ is_transient() {
 
 attempt=1
 while (( attempt <= attempts )); do
+  stdout="$(mktemp)"
+  stderr="$(mktemp)"
   set +e
-  output="$(npm audit --audit-level="$level" 2>&1)"
-  status=$?
+  npm audit --json --audit-level="$level" >"$stdout" 2>"$stderr"
   set -e
-  printf '%s\n' "$output"
 
-  if (( status == 0 )); then
+  set +e
+  node "$filter" "$stdout" "$allowlist" "$level"
+  filter_status=$?
+  set -e
+  combined="$(cat "$stderr" "$stdout")"
+  rm -f "$stdout" "$stderr"
+
+  if (( filter_status == 0 )); then
     exit 0
   fi
 
-  if is_transient "$output" && (( attempt < attempts )); then
+  if (( filter_status == 2 )) && is_transient "$combined" && (( attempt < attempts )); then
     echo "npm audit endpoint failed (attempt ${attempt}/${attempts}); retrying in ${delay}s..." >&2
     sleep "$delay"
     delay=$(( delay * 2 ))
@@ -33,9 +44,9 @@ while (( attempt <= attempts )); do
     continue
   fi
 
-  if is_transient "$output"; then
+  if (( filter_status == 2 )) && is_transient "$combined"; then
     echo "npm audit could not reach the advisory endpoint after ${attempts} attempts." >&2
   fi
 
-  exit "$status"
+  exit "$filter_status"
 done

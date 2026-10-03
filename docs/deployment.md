@@ -79,11 +79,11 @@ Local run of the API container is documented at the end of this file.
 
 `render.yaml` defines:
 
-| Resource | Render name | Role |
-| --- | --- | --- |
-| Postgres 17 | `mapandmuster-db` | Authoritative store |
+| Resource           | Render name        | Role                                              |
+| ------------------ | ------------------ | ------------------------------------------------- |
+| Postgres 17        | `mapandmuster-db`  | Authoritative store                               |
 | Docker web service | `mapandmuster-api` | API, Identity, health, email outbox, uploads disk |
-| Static site | `mapandmuster-web` | Angular `dist/mapandmuster-web/browser` |
+| Static site        | `mapandmuster-web` | Angular `dist/mapandmuster-web/browser`           |
 
 There is no Worker. Do not add one.
 
@@ -97,13 +97,13 @@ Auto-deploy is `checksPass`: Render deploys `master` only after GitHub checks pa
 
 ### Values to enter at apply time
 
-| Render key | What to type | Where to get it |
-| --- | --- | --- |
-| `PublicWeb__Origin` | `https://mapandmuster.com` | The public site origin after Cloudflare is live. Until then you may use `https://<WEB_RENDER_HOST>` for a first bring-up, then change it. Production rejects a hostname with a `staging` DNS label. |
-| `Email__FromAddress` | `noreply@mapandmuster.com` | Address on a domain you will verify in Resend |
-| `Email__Resend__ApiKey` | `<RESEND_API_KEY>` | Resend dashboard → API Keys |
-| `Identity__BootstrapAdminPassword` | A unique password that meets the site policy (12+ characters, upper, lower, digit, special) | Password manager. Used only if `rosstheboss` does not exist yet |
-| `Identity__BootstrapAdminEmail` | Operator mailbox for a new `rosstheboss` account | Host secret store. Do not commit a personal address |
+| Render key                         | What to type                                                                                | Where to get it                                                                                                                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PublicWeb__Origin`                | `https://mapandmuster.com`                                                                  | The public site origin after Cloudflare is live. Until then you may use `https://<WEB_RENDER_HOST>` for a first bring-up, then change it. Production rejects a hostname with a `staging` DNS label. |
+| `Email__FromAddress`               | `noreply@mapandmuster.com`                                                                  | Address on a domain you will verify in Resend                                                                                                                                                       |
+| `Email__Resend__ApiKey`            | `<RESEND_API_KEY>`                                                                          | Resend dashboard → API Keys                                                                                                                                                                         |
+| `Identity__BootstrapAdminPassword` | A unique password that meets the site policy (12+ characters, upper, lower, digit, special) | Password manager. Used only if `rosstheboss` does not exist yet                                                                                                                                     |
+| `Identity__BootstrapAdminEmail`    | Operator mailbox for a new `rosstheboss` account                                            | Host secret store. Do not commit a personal address                                                                                                                                                 |
 
 `Email__FromName` defaults to `Map & Muster`.
 
@@ -208,11 +208,11 @@ that contains a `staging` label, and a Staging origin that does not.
 
 ## Health checks
 
-| Path | Meaning |
-| --- | --- |
-| `GET /health/live` | Process is running. Used by the Render platform probe |
+| Path                | Meaning                                                        |
+| ------------------- | -------------------------------------------------------------- |
+| `GET /health/live`  | Process is running. Used by the Render platform probe          |
 | `GET /health/ready` | PostgreSQL is reachable when a connection string is configured |
-| `GET /health` | Same checks as ready (operators and load balancers) |
+| `GET /health`       | Same checks as ready (operators and load balancers)            |
 
 Responses are `{"status":"Healthy"}` or an equivalent status string. They omit connection
 strings, exceptions, and check details. Unhealthy ready checks use HTTP 503.
@@ -271,10 +271,7 @@ export default {
     const api = new URL(env.API_ORIGIN);
     const web = new URL(env.WEB_ORIGIN);
     const path = url.pathname;
-    const useApi =
-      path === '/health' ||
-      path.startsWith('/health/') ||
-      path.startsWith('/api/');
+    const useApi = path === '/health' || path.startsWith('/health/') || path.startsWith('/api/');
     const origin = useApi ? api : web;
     url.protocol = 'https:';
     url.hostname = origin.hostname;
@@ -479,4 +476,5 @@ It does not deploy.
 `.github/workflows/nightly.yml` runs around 02:00 America/Indiana/Indianapolis (06:00 UTC
 during EDT) and on `workflow_dispatch`. It reuses `ci.yml` and adds NuGet/npm audits.
 `npm audit` retries registry advisory timeouts; high and critical findings still fail
-the job. It does not deploy.
+the job. A dated entry in `eng/npm-audit-allowlist.txt` can accept one advisory that has no
+patched release, and stops applying on its review date. It does not deploy.

@@ -1,0 +1,9 @@
+# Accepted advisories for eng/npm-audit.sh. Each line is:
+# GHSA-id YYYY-MM-DD reason
+# The date is the last day the exception is honored (UTC). After that, the advisory fails the audit
+# again. Remove a line as soon as a patched release is on npm.
+
+# braces <=3.0.3 (CVE-2026-93687) has no release newer than 3.0.3. npm audit fix --force would
+# install stylelint 7.7.0. The package is only reached through Stylelint globbing of maintainer-
+# authored patterns, not through the application runtime.
+GHSA-vfj7-8cjw-p6xm 2026-11-03 braces <=3.0.3 has no patched release; Stylelint devDependency only
