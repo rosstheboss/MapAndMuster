@@ -18,7 +18,7 @@
       @if (isGroupOpen(group.id)) {
         <ul class="campaign-list">
           @for (campaign of group.campaigns; track campaign.id) {
-            <li class="panel campaign-card">
+            <li class="panel campaign-card" [id]="'campaign-' + campaign.id">
               <div class="campaign-card-summary">
                 <button
                   type="button"
@@ -87,6 +87,7 @@
                     {{ campaign.endsUtc | instantDate: timeZoneId() }}
                   </p>
                   <div class="choice-row">
+                    <app-campaign-share-button [campaignId]="campaign.id" [name]="campaign.name" />
                     @if (campaign.canManage && campaign.status === 'Scheduled') {
                       <a class="button-secondary" [routerLink]="['/campaigns', campaign.id, 'edit']">Edit</a>
                     }

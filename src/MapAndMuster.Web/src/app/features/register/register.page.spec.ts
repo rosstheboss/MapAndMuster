@@ -15,7 +15,9 @@ describe('RegisterPage', () => {
   });
 
   it('renders required signup fields', async () => {
+    sessionStorage.setItem('mapandmuster.auth-return', JSON.stringify({ url: '/campaigns/abc', at: Date.now() }));
     const fixture = TestBed.createComponent(RegisterPage);
+    expect(sessionStorage.getItem('mapandmuster.auth-return')).toBeNull();
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     http.expectOne('/api/auth/external-providers').flush([]);

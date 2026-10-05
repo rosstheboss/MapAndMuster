@@ -1,0 +1,18 @@
+<button type="button" class="button-secondary" [attr.aria-label]="'Share ' + name()" (click)="share()">Share</button>
+@if (copied()) {
+  <span class="muted" role="status">Link copied.</span>
+}
+@if (pendingLink(); as link) {
+  <app-dialog [open]="true" labelledBy="share-title" describedBy="share-desc" (cancelled)="dismissLink()">
+    <h2 id="share-title">Share {{ name() }}</h2>
+    <p id="share-desc">Copy this link to share the campaign.</p>
+    <div class="field">
+      <label for="share-campaign-link">Campaign link</label>
+      <input id="share-campaign-link" class="share-link" type="text" readonly [value]="link" />
+    </div>
+    <div class="choice-row">
+      <button type="button" class="button" (click)="copyShownLink()">Copy link</button>
+      <button type="button" class="button-secondary" data-dialog-safe (click)="dismissLink()">Close</button>
+    </div>
+  </app-dialog>
+}

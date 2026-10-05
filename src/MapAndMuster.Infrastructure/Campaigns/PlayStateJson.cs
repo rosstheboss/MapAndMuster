@@ -153,6 +153,31 @@ internal static class PlayStateJson
                     })],
                 })],
             })],
+            WithdrawnPrivateObjectiveTypeIds = [.. state.WithdrawnPrivateObjectiveTypeIds],
+            PrivateObjectiveReissues = [.. state.PrivateObjectiveReissues.Select(static item => new PrivateObjectiveReissueDocument
+            {
+                Id = item.Id,
+                AssignmentId = item.AssignmentId,
+                TypeId = item.TypeId,
+                AffectedUserId = item.AffectedUserId,
+                RequestedByUserId = item.RequestedByUserId,
+                RequestedUtc = item.RequestedUtc,
+                Status = item.Status.ToString(),
+                ResolvedByUserId = item.ResolvedByUserId,
+                ResolvedUtc = item.ResolvedUtc,
+                Note = item.Note,
+                ReplacementAssignmentId = item.ReplacementAssignmentId,
+            })],
+            PrivateObjectiveClaimDecisions = [.. state.PrivateObjectiveClaimDecisions.Select(static item => new PrivateObjectiveClaimDecisionDocument
+            {
+                Id = item.Id,
+                AssignmentId = item.AssignmentId,
+                SubjectUserId = item.SubjectUserId,
+                ActorUserId = item.ActorUserId,
+                Approved = item.Approved,
+                Note = item.Note,
+                OccurredUtc = item.OccurredUtc,
+            })],
             ArmyLists = [.. state.ArmyLists.Select(static item => new ArmyListDocument
             {
                 Id = item.Id,
@@ -556,6 +581,35 @@ internal static class PlayStateJson
             armyLists:
             [
                 .. (document.ArmyLists ?? []).Select(FromArmyList),
+            ],
+            withdrawnPrivateObjectiveTypeIds: document.WithdrawnPrivateObjectiveTypeIds ?? [],
+            privateObjectiveReissues:
+            [
+                .. (document.PrivateObjectiveReissues ?? []).Select(static item => new PrivateObjectiveReissueRequest(
+                    item.Id,
+                    item.AssignmentId,
+                    item.TypeId,
+                    item.AffectedUserId,
+                    item.RequestedByUserId,
+                    item.RequestedUtc,
+                    Enum.TryParse<PrivateObjectiveReissueStatus>(item.Status, true, out var status)
+                        ? status
+                        : PrivateObjectiveReissueStatus.Pending,
+                    item.ResolvedByUserId,
+                    item.ResolvedUtc,
+                    item.Note,
+                    item.ReplacementAssignmentId)),
+            ],
+            privateObjectiveClaimDecisions:
+            [
+                .. (document.PrivateObjectiveClaimDecisions ?? []).Select(static item => new PrivateObjectiveClaimDecision(
+                    item.Id,
+                    item.AssignmentId,
+                    item.SubjectUserId,
+                    item.ActorUserId,
+                    item.Approved,
+                    item.Note,
+                    item.OccurredUtc)),
             ]);
     }
 
@@ -748,6 +802,9 @@ internal static class PlayStateJson
         public DateTimeOffset? DebugStartedUtc { get; set; }
         public List<PublicObjectiveAwardDocument>? PublicObjectiveAwards { get; set; }
         public List<PrivateObjectiveDocument>? PrivateObjectives { get; set; }
+        public List<Guid>? WithdrawnPrivateObjectiveTypeIds { get; set; }
+        public List<PrivateObjectiveReissueDocument>? PrivateObjectiveReissues { get; set; }
+        public List<PrivateObjectiveClaimDecisionDocument>? PrivateObjectiveClaimDecisions { get; set; }
         public List<StructureDestructionDocument>? StructureDestructions { get; set; }
         public List<StructureWorkDocument>? StructureWorks { get; set; }
         public List<ForceStatusChangeDocument>? ForceStatusChanges { get; set; }
@@ -1117,5 +1174,31 @@ internal static class PlayStateJson
         public DateTimeOffset OccurredUtc { get; set; }
         public string? Source { get; set; }
         public string? SourceDetail { get; set; }
+    }
+
+    private sealed class PrivateObjectiveReissueDocument
+    {
+        public Guid Id { get; set; }
+        public Guid AssignmentId { get; set; }
+        public Guid TypeId { get; set; }
+        public Guid AffectedUserId { get; set; }
+        public Guid RequestedByUserId { get; set; }
+        public DateTimeOffset RequestedUtc { get; set; }
+        public string Status { get; set; } = "";
+        public Guid? ResolvedByUserId { get; set; }
+        public DateTimeOffset? ResolvedUtc { get; set; }
+        public string? Note { get; set; }
+        public Guid? ReplacementAssignmentId { get; set; }
+    }
+
+    private sealed class PrivateObjectiveClaimDecisionDocument
+    {
+        public Guid Id { get; set; }
+        public Guid AssignmentId { get; set; }
+        public Guid SubjectUserId { get; set; }
+        public Guid ActorUserId { get; set; }
+        public bool Approved { get; set; }
+        public string? Note { get; set; }
+        public DateTimeOffset OccurredUtc { get; set; }
     }
 }

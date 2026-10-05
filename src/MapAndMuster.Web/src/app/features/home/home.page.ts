@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
+import { takeReturnUrl } from '../../core/auth/return-url';
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import { statusLabel } from '../../core/campaigns/campaign-schedule';
@@ -74,7 +75,28 @@ export class HomePage {
   protected readonly remainingSetupLabel = campaignRemainingSetupLabel;
 
   constructor() {
+    const pending = takeReturnUrl();
+    if (pending) {
+      void this.followReturnUrl(pending);
+      return;
+    }
+
     void this.loadBoard();
+  }
+
+  private async followReturnUrl(url: string): Promise<void> {
+    try {
+      const landed = await this.router.navigateByUrl(url);
+      if (!landed && url !== '/') {
+        await this.router.navigateByUrl('/');
+      }
+    } catch {
+      await this.router.navigateByUrl('/');
+    }
+
+    if (this.router.url === '/' || this.router.url === '') {
+      void this.loadBoard();
+    }
   }
 
   protected async openNotice(item: HomeAttentionItem): Promise<void> {

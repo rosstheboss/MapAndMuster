@@ -374,6 +374,15 @@ public static class PrivateObjectiveRules
                 return false;
             }
 
+            if (state.WithdrawnPrivateObjectiveTypeIds.Contains(type.Id))
+            {
+                error = new DomainError(
+                    "privateObjective.withdrawn",
+                    "That private objective was removed from this campaign.",
+                    "typeId");
+                return false;
+            }
+
             if (!PrivateObjectiveExclusionRules.IsEligible(
                     type,
                     holderKind,
@@ -407,7 +416,8 @@ public static class PrivateObjectiveRules
                 pickIndex,
                 factionByPlayer,
                 allyGroupByFaction,
-                holderSubfaction);
+                holderSubfaction,
+                state.WithdrawnPrivateObjectiveTypeIds);
             if (type is null)
             {
                 error = new DomainError("privateObjective.none_available", "No available private objective remains for that holder.");
@@ -622,6 +632,220 @@ public static class PrivateObjectiveRules
 
         next = Replace(state, assignment.With(status: PrivateObjectiveAssignmentStatus.Assigned, clearClaim: true));
         return true;
+    }
+
+    /// <summary>
+    /// Accepts an optional manager note of at most <see cref="PrivateObjectiveReissueRequest.NoteMaxLength"/> characters.
+    /// </summary>
+    public static bool TryNormalizeNote(string? note, out string? normalized, out DomainError? error)
+    {
+        normalized = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        error = null;
+        if (normalized is { Length: > PrivateObjectiveReissueRequest.NoteMaxLength })
+        {
+            error = new DomainError("privateObjective.note", "The note must be 500 characters or fewer.", "note");
+            normalized = null;
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Records a holder's request to replace an unrevealed private objective.
+    /// </summary>
+    public static bool TryRequestReissue(
+        CampaignPlayState state,
+        Guid assignmentId,
+        Guid actorUserId,
+        DateTimeOffset utcNow,
+        out CampaignPlayState next,
+        out DomainError? error)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        next = state;
+        error = null;
+        if (!TryOpenReissue(state, assignmentId, out var assignment, out error) || assignment is null)
+        {
+            return false;
+        }
+
+        var request = new PrivateObjectiveReissueRequest(
+            Guid.NewGuid(),
+            assignment.Id,
+            assignment.TypeId,
+            AffectedUser(assignment, actorUserId),
+            actorUserId,
+            utcNow,
+            PrivateObjectiveReissueStatus.Pending);
+        next = state.With(privateObjectiveReissues: [.. state.PrivateObjectiveReissues, request]);
+        return true;
+    }
+
+    /// <summary>
+    /// Approves or denies a pending reissue. Approval removes the catalog type from the pool and issues a replacement.
+    /// </summary>
+    public static bool TryDecideReissue(
+        CampaignPlayState state,
+        Guid assignmentId,
+        Guid actorUserId,
+        bool approved,
+        string? note,
+        DateTimeOffset utcNow,
+        IReadOnlyList<PrivateObjectiveTypePlayRules> types,
+        Func<int, int> pickIndex,
+        out CampaignPlayState next,
+        out DomainError? error,
+        IReadOnlyDictionary<Guid, Guid>? factionByPlayer = null,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null,
+        IReadOnlyList<Guid>? playerUserIds = null,
+        IReadOnlyList<Guid>? factionIds = null,
+        IReadOnlyList<Guid>? allyGroupIds = null)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(types);
+        ArgumentNullException.ThrowIfNull(pickIndex);
+        next = state;
+        error = null;
+        if (!TryNormalizeNote(note, out var normalized, out error))
+        {
+            return false;
+        }
+
+        var request = state.PrivateObjectiveReissues.FirstOrDefault(item =>
+            item.AssignmentId == assignmentId && item.Status == PrivateObjectiveReissueStatus.Pending);
+        if (request is null)
+        {
+            error = new DomainError("privateObjective.reissue.none", "That private objective is not waiting for reissue.");
+            return false;
+        }
+
+        if (!approved)
+        {
+            next = ReplaceReissue(
+                state,
+                request.Resolved(PrivateObjectiveReissueStatus.Denied, actorUserId, utcNow, normalized, null));
+            return true;
+        }
+
+        var assignment = state.PrivateObjectives.FirstOrDefault(item => item.Id == assignmentId);
+        if (assignment is null
+            || !TryReplaceHeldObjective(
+                state,
+                assignment,
+                utcNow,
+                types,
+                pickIndex,
+                out var replaced,
+                out var replacementId,
+                out error,
+                factionByPlayer,
+                allyGroupByFaction,
+                playerUserIds,
+                factionIds,
+                allyGroupIds)
+            || replaced is null)
+        {
+            return false;
+        }
+
+        next = ReplaceReissue(
+            replaced,
+            request.Resolved(PrivateObjectiveReissueStatus.Approved, actorUserId, utcNow, normalized, replacementId));
+        return true;
+    }
+
+    /// <summary>
+    /// Replaces an unrevealed assignment immediately and removes its catalog type from the pool.
+    /// </summary>
+    public static bool TryReissueImmediately(
+        CampaignPlayState state,
+        Guid assignmentId,
+        Guid actorUserId,
+        string? note,
+        DateTimeOffset utcNow,
+        IReadOnlyList<PrivateObjectiveTypePlayRules> types,
+        Func<int, int> pickIndex,
+        out CampaignPlayState next,
+        out DomainError? error,
+        IReadOnlyDictionary<Guid, Guid>? factionByPlayer = null,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction = null,
+        IReadOnlyList<Guid>? playerUserIds = null,
+        IReadOnlyList<Guid>? factionIds = null,
+        IReadOnlyList<Guid>? allyGroupIds = null)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(types);
+        ArgumentNullException.ThrowIfNull(pickIndex);
+        next = state;
+        error = null;
+        if (!TryNormalizeNote(note, out var normalized, out error))
+        {
+            return false;
+        }
+
+        if (!TryOpenReissue(state, assignmentId, out var assignment, out error) || assignment is null)
+        {
+            return false;
+        }
+
+        if (!TryReplaceHeldObjective(
+                state,
+                assignment,
+                utcNow,
+                types,
+                pickIndex,
+                out var replaced,
+                out var replacementId,
+                out error,
+                factionByPlayer,
+                allyGroupByFaction,
+                playerUserIds,
+                factionIds,
+                allyGroupIds)
+            || replaced is null)
+        {
+            return false;
+        }
+
+        var request = new PrivateObjectiveReissueRequest(
+            Guid.NewGuid(),
+            assignment.Id,
+            assignment.TypeId,
+            AffectedUser(assignment, actorUserId),
+            actorUserId,
+            utcNow,
+            PrivateObjectiveReissueStatus.Approved,
+            actorUserId,
+            utcNow,
+            normalized,
+            replacementId);
+        next = replaced.With(privateObjectiveReissues: [.. replaced.PrivateObjectiveReissues, request]);
+        return true;
+    }
+
+    /// <summary>
+    /// Appends a private record of a manual-claim approval or denial.
+    /// </summary>
+    public static CampaignPlayState AppendClaimDecision(
+        CampaignPlayState state,
+        Guid assignmentId,
+        Guid subjectUserId,
+        Guid actorUserId,
+        bool approved,
+        string? note,
+        DateTimeOffset utcNow)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var decision = new PrivateObjectiveClaimDecision(
+            Guid.NewGuid(),
+            assignmentId,
+            subjectUserId,
+            actorUserId,
+            approved,
+            note,
+            utcNow);
+        return state.With(privateObjectiveClaimDecisions: [.. state.PrivateObjectiveClaimDecisions, decision]);
     }
 
     /// <summary>
@@ -940,6 +1164,108 @@ public static class PrivateObjectiveRules
         }
     }
 
+    private static bool TryOpenReissue(
+        CampaignPlayState state,
+        Guid assignmentId,
+        out PrivateObjectiveAssignment? assignment,
+        out DomainError? error)
+    {
+        assignment = state.PrivateObjectives.FirstOrDefault(item => item.Id == assignmentId);
+        error = null;
+        if (assignment is null)
+        {
+            error = new DomainError("privateObjective.unknown", "That private objective was not found.", "assignmentId");
+            return false;
+        }
+
+        if (assignment.Status == PrivateObjectiveAssignmentStatus.Revealed)
+        {
+            error = new DomainError("privateObjective.revealed", "A revealed private objective cannot be reissued.");
+            return false;
+        }
+
+        if (state.PrivateObjectiveReissues.Any(item =>
+            item.AssignmentId == assignmentId && item.Status == PrivateObjectiveReissueStatus.Pending))
+        {
+            error = new DomainError("privateObjective.reissue.pending", "That private objective is already waiting for reissue.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryReplaceHeldObjective(
+        CampaignPlayState state,
+        PrivateObjectiveAssignment assignment,
+        DateTimeOffset utcNow,
+        IReadOnlyList<PrivateObjectiveTypePlayRules> types,
+        Func<int, int> pickIndex,
+        out CampaignPlayState? next,
+        out Guid replacementId,
+        out DomainError? error,
+        IReadOnlyDictionary<Guid, Guid>? factionByPlayer,
+        IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction,
+        IReadOnlyList<Guid>? playerUserIds,
+        IReadOnlyList<Guid>? factionIds,
+        IReadOnlyList<Guid>? allyGroupIds)
+    {
+        next = null;
+        replacementId = Guid.Empty;
+        var withdrawn = state.WithdrawnPrivateObjectiveTypeIds.Contains(assignment.TypeId)
+            ? state.WithdrawnPrivateObjectiveTypeIds
+            : [.. state.WithdrawnPrivateObjectiveTypeIds, assignment.TypeId];
+        var remaining = state.PrivateObjectives.Where(item => item.Id != assignment.Id).ToArray();
+        var stripped = state.With(
+            privateObjectives: remaining,
+            withdrawnPrivateObjectiveTypeIds: withdrawn);
+        if (!TryGrant(
+                stripped,
+                types,
+                assignment.HolderKind,
+                assignment.HolderId,
+                null,
+                utcNow,
+                pickIndex,
+                out var granted,
+                out error,
+                factionByPlayer,
+                allyGroupByFaction,
+                playerUserIds,
+                factionIds,
+                allyGroupIds,
+                assignment.HolderSubfaction)
+            || granted is null)
+        {
+            return false;
+        }
+
+        var replacement = granted.PrivateObjectives.FirstOrDefault(item => remaining.All(old => old.Id != item.Id));
+        if (replacement is null)
+        {
+            error = new DomainError("privateObjective.none_available", "No available private objective remains for that holder.");
+            return false;
+        }
+
+        next = granted;
+        replacementId = replacement.Id;
+        return true;
+    }
+
+    private static CampaignPlayState ReplaceReissue(CampaignPlayState state, PrivateObjectiveReissueRequest request)
+    {
+        return state.With(privateObjectiveReissues:
+        [
+            .. state.PrivateObjectiveReissues.Select(item => item.Id == request.Id ? request : item),
+        ]);
+    }
+
+    private static Guid AffectedUser(PrivateObjectiveAssignment assignment, Guid actorUserId)
+    {
+        return assignment.HolderKind is PrivateObjectiveHolderKind.Player or PrivateObjectiveHolderKind.Traitor
+            ? assignment.HolderId
+            : actorUserId;
+    }
+
     private static PrivateObjectiveTypePlayRules? PickFromPool(
         IReadOnlyList<PrivateObjectiveTypePlayRules> types,
         IReadOnlyList<PrivateObjectiveAssignment> existing,
@@ -948,9 +1274,11 @@ public static class PrivateObjectiveRules
         Func<int, int> pickIndex,
         IReadOnlyDictionary<Guid, Guid>? factionByPlayer,
         IReadOnlyDictionary<Guid, Guid?>? allyGroupByFaction,
-        string? holderSubfaction)
+        string? holderSubfaction,
+        IReadOnlyList<Guid> withdrawnTypeIds)
     {
-        var pool = PoolFor(types, holderKind);
+        var withdrawn = withdrawnTypeIds.ToHashSet();
+        var pool = PoolFor(types, holderKind).Where(item => !withdrawn.Contains(item.Id)).ToArray();
         if (pool.Length == 0)
         {
             return null;

@@ -1,0 +1,7 @@
+:host {
+  display: contents;
+}
+
+.share-link {
+  width: min(100%, 36rem);
+}

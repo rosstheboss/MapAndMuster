@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 
 import type { ExternalProvider } from '../../core/auth/auth.models';
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { clearReturnUrl } from '../../core/auth/return-url';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
   collectFormFailures,
@@ -77,6 +78,7 @@ export class RegisterPage {
   protected avatar: File | null = null;
 
   constructor() {
+    clearReturnUrl();
     void this.auth.getExternalProviders().then((providers) => this.providers.set(providers));
   }
 

@@ -1724,6 +1724,12 @@ public sealed class ModeratePrivateObjectiveHandler
                         "Only a campaign manager can approve private objectives."));
                 }
 
+                if (!PrivateObjectiveRules.TryNormalizeNote(command.Note, out var note, out var noteError))
+                {
+                    return PlayMutation.Fail(noteError);
+                }
+
+                var assignment = state.PrivateObjectives.FirstOrDefault(item => item.Id == command.AssignmentId);
                 CampaignPlayState? next;
                 Domain.Common.DomainError? error;
                 if (command.Approved)
@@ -1744,6 +1750,22 @@ public sealed class ModeratePrivateObjectiveHandler
                 else if (!PrivateObjectiveRules.TryDeny(state, command.AssignmentId, out next, out error) || next is null)
                 {
                     return PlayMutation.Fail(error);
+                }
+
+                var subjectUserId = assignment?.ClaimedByUserId
+                    ?? (assignment?.HolderKind is PrivateObjectiveHolderKind.Player or PrivateObjectiveHolderKind.Traitor
+                        ? assignment.HolderId
+                        : (Guid?)null);
+                if (subjectUserId is { } subject)
+                {
+                    next = PrivateObjectiveRules.AppendClaimDecision(
+                        next,
+                        command.AssignmentId,
+                        subject,
+                        command.UserId,
+                        command.Approved,
+                        note,
+                        utcNow);
                 }
 
                 return PlayMutation.Ok(next, new PlayMap([], []), preserveMap: true);

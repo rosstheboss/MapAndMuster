@@ -2,7 +2,9 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
+
+import { rememberReturnUrl } from '../../core/auth/return-url';
 
 import type { OwnProfile } from '../../core/auth/auth.models';
 import { AuthService } from '../../core/auth/auth.service';
@@ -75,6 +77,7 @@ const profile: OwnProfile = {
 
 describe('HomePage', () => {
   beforeEach(async () => {
+    sessionStorage.clear();
     await TestBed.configureTestingModule({
       imports: [HomePage],
       providers: [provideZonelessChangeDetection(), provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -469,5 +472,17 @@ describe('HomePage', () => {
     expect(compiled.textContent).toContain('None of your campaigns are in progress right now.');
     expect(compiled.querySelector('a[href="/campaigns"]')?.textContent).toContain('View your campaigns');
     http.verify();
+  });
+
+  it('follows a saved return address from external sign-in', async () => {
+    rememberReturnUrl('/profile');
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/profile');
+    TestBed.createComponent(HomePage);
+    await Promise.resolve();
+    expect(navigate).toHaveBeenCalledWith('/profile');
+    expect(sessionStorage.getItem('mapandmuster.auth-return')).toBeNull();
+    TestBed.inject(HttpTestingController).verify();
   });
 });

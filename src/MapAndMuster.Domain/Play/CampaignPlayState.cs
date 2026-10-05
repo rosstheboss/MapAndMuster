@@ -36,7 +36,10 @@ public sealed class CampaignPlayState
         IReadOnlyList<StructureWorkFact>? structureWorks = null,
         IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
         IReadOnlyList<RivalObjectiveAssignment>? rivalObjectives = null,
-        IReadOnlyList<BattleArmyListSubmission>? armyLists = null)
+        IReadOnlyList<BattleArmyListSubmission>? armyLists = null,
+        IReadOnlyList<Guid>? withdrawnPrivateObjectiveTypeIds = null,
+        IReadOnlyList<PrivateObjectiveReissueRequest>? privateObjectiveReissues = null,
+        IReadOnlyList<PrivateObjectiveClaimDecision>? privateObjectiveClaimDecisions = null)
     {
         ArgumentNullException.ThrowIfNull(windows);
         ArgumentNullException.ThrowIfNull(forces);
@@ -76,6 +79,9 @@ public sealed class CampaignPlayState
         AllyBetrayals = allyBetrayals ?? [];
         RivalObjectives = rivalObjectives ?? [];
         ArmyLists = armyLists ?? [];
+        WithdrawnPrivateObjectiveTypeIds = withdrawnPrivateObjectiveTypeIds ?? [];
+        PrivateObjectiveReissues = privateObjectiveReissues ?? [];
+        PrivateObjectiveClaimDecisions = privateObjectiveClaimDecisions ?? [];
     }
 
     /// <summary>Gets an empty play state.</summary>
@@ -162,6 +168,15 @@ public sealed class CampaignPlayState
     /// <summary>Gets append-only army-list submissions, independent of battle-result agreement.</summary>
     public IReadOnlyList<BattleArmyListSubmission> ArmyLists { get; }
 
+    /// <summary>Gets catalog private-objective types removed from this campaign's assignment pool.</summary>
+    public IReadOnlyList<Guid> WithdrawnPrivateObjectiveTypeIds { get; }
+
+    /// <summary>Gets private-objective reissue requests. Notes stay off the public log.</summary>
+    public IReadOnlyList<PrivateObjectiveReissueRequest> PrivateObjectiveReissues { get; }
+
+    /// <summary>Gets manager decisions on manual private-objective claims. Notes stay off the public log.</summary>
+    public IReadOnlyList<PrivateObjectiveClaimDecision> PrivateObjectiveClaimDecisions { get; }
+
     /// <summary>
     /// Returns a copy with replaced collections.
     /// </summary>
@@ -192,7 +207,10 @@ public sealed class CampaignPlayState
         IReadOnlyList<StructureWorkFact>? structureWorks = null,
         IReadOnlyList<AllyBetrayal>? allyBetrayals = null,
         IReadOnlyList<RivalObjectiveAssignment>? rivalObjectives = null,
-        IReadOnlyList<BattleArmyListSubmission>? armyLists = null)
+        IReadOnlyList<BattleArmyListSubmission>? armyLists = null,
+        IReadOnlyList<Guid>? withdrawnPrivateObjectiveTypeIds = null,
+        IReadOnlyList<PrivateObjectiveReissueRequest>? privateObjectiveReissues = null,
+        IReadOnlyList<PrivateObjectiveClaimDecision>? privateObjectiveClaimDecisions = null)
     {
         return new CampaignPlayState(
             windows ?? Windows,
@@ -220,7 +238,10 @@ public sealed class CampaignPlayState
             structureWorks ?? StructureWorks,
             allyBetrayals ?? AllyBetrayals,
             rivalObjectives ?? RivalObjectives,
-            armyLists ?? ArmyLists);
+            armyLists ?? ArmyLists,
+            withdrawnPrivateObjectiveTypeIds ?? WithdrawnPrivateObjectiveTypeIds,
+            privateObjectiveReissues ?? PrivateObjectiveReissues,
+            privateObjectiveClaimDecisions ?? PrivateObjectiveClaimDecisions);
     }
 
     /// <summary>

@@ -5,8 +5,10 @@ import { AuthService, readApiError } from '../../core/auth/auth.service';
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
 import { CampaignService } from '../../core/campaigns/campaign.service';
 import { statusLabel } from '../../core/campaigns/campaign-schedule';
+import { campaignNeedsJoinPrompt } from '../../core/campaigns/campaign-share';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { formatLocation } from '../../core/location/location';
+import { CampaignShareButtonComponent } from '../campaign-share-button/campaign-share-button.component';
 import { ConfirmButtonComponent } from '../confirm-button/confirm-button.component';
 import { AppDialogComponent } from '../dialog/dialog.component';
 import { PasswordInputComponent } from '../password-input/password-input.component';
@@ -30,6 +32,7 @@ import {
     PasswordInputComponent,
     ConfirmButtonComponent,
     AppDialogComponent,
+    CampaignShareButtonComponent,
   ],
   templateUrl: './campaign-list.component.html',
   styleUrl: './campaign-list.component.css',
@@ -83,6 +86,42 @@ export class CampaignListComponent {
   collapseAll(): void {
     this.closedGroups.set(new Set(groupCampaigns(this.campaigns()).map((group) => group.id)));
     this.openCampaigns.set(new Set());
+  }
+
+  focusForJoin(campaignId: string): void {
+    const campaign = this.campaigns().find((item) => item.id === campaignId);
+    if (!campaign) {
+      return;
+    }
+
+    const group = groupCampaigns(this.campaigns()).find((item) =>
+      item.campaigns.some((entry) => entry.id === campaignId),
+    );
+    if (group) {
+      this.closedGroups.update((current) => {
+        if (!current.has(group.id)) {
+          return current;
+        }
+
+        const next = new Set(current);
+        next.delete(group.id);
+        return next;
+      });
+    }
+
+    this.openCampaigns.update((current) => {
+      if (current.has(campaignId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.add(campaignId);
+      return next;
+    });
+
+    if (campaignNeedsJoinPrompt(campaign)) {
+      this.requestJoin(campaign);
+    }
   }
 
   protected toggleGroup(groupId: string): void {

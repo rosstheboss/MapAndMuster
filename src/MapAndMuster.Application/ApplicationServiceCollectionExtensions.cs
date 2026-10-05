@@ -97,6 +97,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<GrantPrivateObjectiveHandler>();
         services.AddScoped<ClaimPrivateObjectiveHandler>();
         services.AddScoped<ModeratePrivateObjectiveHandler>();
+        services.AddScoped<RequestPrivateObjectiveReissueHandler>();
+        services.AddScoped<DecidePrivateObjectiveReissueHandler>();
+        services.AddScoped<ReissuePrivateObjectiveHandler>();
         services.AddScoped<ResolveItemObjectiveChoiceHandler>();
 
         services.AddScoped<CampaignNotificationPublisher>();

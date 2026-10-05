@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 
 import type { CampaignListItem } from '../../core/campaigns/campaign.models';
 import { emptySiteChatBoard } from '../../core/chat/site-chat.fixtures';
@@ -37,10 +37,28 @@ function item(
 }
 
 describe('AllCampaignsPage', () => {
+  let joinId: string | null = null;
+
   beforeEach(async () => {
+    joinId = null;
     await TestBed.configureTestingModule({
       imports: [AllCampaignsPage],
-      providers: [provideZonelessChangeDetection(), provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        {
+          provide: ActivatedRoute,
+          useFactory: () => ({
+            snapshot: {
+              queryParamMap: {
+                get: (key: string) => (key === 'join' ? joinId : null),
+              },
+            },
+          }),
+        },
+      ],
     }).compileComponents();
   });
 
@@ -145,6 +163,40 @@ describe('AllCampaignsPage', () => {
 
     expect(compiled.textContent).toContain('Site chat');
     expect(compiled.textContent).not.toContain('Loading public chat...');
+    http.verify();
+  });
+
+  it('expands a shared private campaign and asks for the join password', async () => {
+    const id = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+    joinId = id;
+    const fixture = TestBed.createComponent(AllCampaignsPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/campaigns/all').flush([
+      item({
+        id,
+        name: 'Secret War',
+        description: 'Invite only.',
+        isPrivate: true,
+        isPubliclyViewable: false,
+        canView: false,
+        canJoin: true,
+        status: 'Scheduled',
+        startsUtc: '2099-02-01T12:00:00+00:00',
+        endsUtc: '2099-04-01T12:00:00+00:00',
+      }),
+    ]);
+    http.expectOne('/api/site-chat').flush(emptySiteChatBoard());
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const card = (fixture.nativeElement as HTMLElement).querySelector(`#campaign-${id}`);
+    expect(card?.querySelector('button.campaign-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    expect(card?.textContent).toContain('Invite only.');
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain('Join Secret War');
+    expect(dialog?.textContent).toContain('Cancel');
     http.verify();
   });
 });

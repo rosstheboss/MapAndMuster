@@ -1251,6 +1251,121 @@ public sealed class PrivateObjectiveRulesTests
             Evaluate(state, type, territories, new Dictionary<Guid, Guid> { [player] = faction }).PrivateObjectives[0].Status);
     }
 
+    [Fact]
+    public void ReissueRemovesTheCatalogTypeAndIssuesAnotherObjective()
+    {
+        var firstId = Guid.Parse("00000000-0000-0000-0000-000000000011");
+        var secondId = Guid.Parse("00000000-0000-0000-0000-000000000012");
+        var first = Manual("First hunt", firstId, PrivateObjectiveHolderKind.Player);
+        var second = Manual("Second hunt", secondId, PrivateObjectiveHolderKind.Player);
+        var player = Guid.NewGuid();
+        var now = new DateTimeOffset(2026, 10, 5, 16, 0, 0, TimeSpan.Zero);
+        var seeded = PrivateObjectiveRules.SeedInitial([first, second], [player], [], [], now, static _ => 0);
+        var held = seeded.Single(item => item.HolderKind == PrivateObjectiveHolderKind.Player);
+        var state = CampaignPlayState.Empty.With(privateObjectives: seeded);
+
+        var requested = PrivateObjectiveRules.TryRequestReissue(state, held.Id, player, now, out var pending, out var requestError);
+
+        Assert.True(requested);
+        Assert.Null(requestError);
+        Assert.Contains(pending!.PrivateObjectiveReissues, item => item.Status == PrivateObjectiveReissueStatus.Pending);
+
+        var decided = PrivateObjectiveRules.TryDecideReissue(
+            pending,
+            held.Id,
+            Guid.NewGuid(),
+            approved: true,
+            note: "Cannot be achieved",
+            now,
+            [first, second],
+            static _ => 0,
+            out var next,
+            out var decideError);
+
+        Assert.True(decided);
+        Assert.Null(decideError);
+        Assert.Contains(held.TypeId, next!.WithdrawnPrivateObjectiveTypeIds);
+        Assert.DoesNotContain(next.PrivateObjectives, item => item.Id == held.Id);
+        Assert.Contains(next.PrivateObjectives, item => item.HolderId == player && item.TypeId != held.TypeId);
+        Assert.Contains(
+            next.PrivateObjectiveReissues,
+            item => item.Status == PrivateObjectiveReissueStatus.Approved && item.Note == "Cannot be achieved");
+    }
+
+    [Fact]
+    public void DenyingAReissueKeepsTheOriginalObjective()
+    {
+        var first = Manual("First hunt", Guid.Parse("00000000-0000-0000-0000-000000000021"), PrivateObjectiveHolderKind.Player);
+        var second = Manual("Second hunt", Guid.Parse("00000000-0000-0000-0000-000000000022"), PrivateObjectiveHolderKind.Player);
+        var player = Guid.NewGuid();
+        var now = new DateTimeOffset(2026, 10, 5, 16, 0, 0, TimeSpan.Zero);
+        var seeded = PrivateObjectiveRules.SeedInitial([first, second], [player], [], [], now, static _ => 0);
+        var held = seeded.Single(item => item.HolderKind == PrivateObjectiveHolderKind.Player);
+        var state = CampaignPlayState.Empty.With(privateObjectives: seeded);
+        Assert.True(PrivateObjectiveRules.TryRequestReissue(state, held.Id, player, now, out var pending, out _));
+
+        var denied = PrivateObjectiveRules.TryDecideReissue(
+            pending!,
+            held.Id,
+            Guid.NewGuid(),
+            approved: false,
+            note: new string('n', 501),
+            now,
+            [first, second],
+            static _ => 0,
+            out var tooLong,
+            out var noteError);
+
+        Assert.False(denied);
+        Assert.Equal("privateObjective.note", noteError!.Code);
+        Assert.Same(pending, tooLong);
+
+        Assert.True(PrivateObjectiveRules.TryDecideReissue(
+            pending,
+            held.Id,
+            Guid.NewGuid(),
+            approved: false,
+            note: "Still achievable",
+            now,
+            [first, second],
+            static _ => 0,
+            out var next,
+            out var error));
+        Assert.Null(error);
+        Assert.Contains(next!.PrivateObjectives, item => item.Id == held.Id);
+        Assert.Empty(next.WithdrawnPrivateObjectiveTypeIds);
+        Assert.Contains(
+            next.PrivateObjectiveReissues,
+            item => item.Status == PrivateObjectiveReissueStatus.Denied && item.Note == "Still achievable");
+    }
+
+    [Fact]
+    public void ReissueFailsWhenNoReplacementRemains()
+    {
+        var only = Manual("Only hunt", Guid.Parse("00000000-0000-0000-0000-000000000031"), PrivateObjectiveHolderKind.Player);
+        var player = Guid.NewGuid();
+        var now = new DateTimeOffset(2026, 10, 5, 16, 0, 0, TimeSpan.Zero);
+        var seeded = PrivateObjectiveRules.SeedInitial([only], [player], [], [], now, static _ => 0);
+        var held = seeded.Single();
+        var state = CampaignPlayState.Empty.With(privateObjectives: seeded);
+
+        var replaced = PrivateObjectiveRules.TryReissueImmediately(
+            state,
+            held.Id,
+            player,
+            null,
+            now,
+            [only],
+            static _ => 0,
+            out var next,
+            out var error);
+
+        Assert.False(replaced);
+        Assert.Equal("privateObjective.none_available", error!.Code);
+        Assert.Same(state, next);
+        Assert.Contains(state.PrivateObjectives, item => item.Id == held.Id);
+    }
+
     private static PrivateObjectiveTypePlayRules Manual(string name, params PrivateObjectiveHolderKind[] kinds)
     {
         return Manual(name, Guid.NewGuid(), kinds);

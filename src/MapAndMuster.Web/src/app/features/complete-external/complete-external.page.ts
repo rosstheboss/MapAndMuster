@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiErrorMessages, readApiFieldErrors } from '../../core/auth/auth.service';
+import { clearReturnUrl } from '../../core/auth/return-url';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import {
   collectFormFailures,
@@ -70,6 +71,7 @@ export class CompleteExternalPage {
   protected readonly regionOptions = computed(() => regionsForCountry(this.countryValue()));
 
   constructor() {
+    clearReturnUrl();
     void this.loadPending();
   }
 

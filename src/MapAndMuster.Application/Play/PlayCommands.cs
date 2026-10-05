@@ -1191,6 +1191,75 @@ public sealed class ModeratePrivateObjectiveCommand
 
     /// <summary>Gets whether to approve and reveal the objective.</summary>
     public required bool Approved { get; init; }
+
+    /// <summary>Gets an optional note of at most 500 characters for the affected player.</summary>
+    public string? Note { get; init; }
+}
+
+/// <summary>Command for a holder to ask for a different private objective.</summary>
+public sealed class RequestPrivateObjectiveReissueCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the assignment.</summary>
+    public required Guid AssignmentId { get; init; }
+}
+
+/// <summary>Command for a manager to approve or deny a reissue request.</summary>
+public sealed class DecidePrivateObjectiveReissueCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the assignment.</summary>
+    public required Guid AssignmentId { get; init; }
+
+    /// <summary>Gets whether to replace the objective.</summary>
+    public required bool Approved { get; init; }
+
+    /// <summary>Gets an optional note of at most 500 characters.</summary>
+    public string? Note { get; init; }
+}
+
+/// <summary>Command for a manager to reissue an objective without a pending request.</summary>
+public sealed class ReissuePrivateObjectiveCommand
+{
+    /// <summary>Gets the caller.</summary>
+    public required Guid UserId { get; init; }
+
+    /// <summary>Gets whether the caller is an administrator.</summary>
+    public required bool IsAdministrator { get; init; }
+
+    /// <summary>Gets the campaign identifier.</summary>
+    public required Guid CampaignId { get; init; }
+
+    /// <summary>Gets the last observed revision.</summary>
+    public required int ExpectedRevision { get; init; }
+
+    /// <summary>Gets the assignment.</summary>
+    public required Guid AssignmentId { get; init; }
+
+    /// <summary>Gets an optional note of at most 500 characters.</summary>
+    public string? Note { get; init; }
 }
 
 /// <summary>

@@ -293,6 +293,7 @@ describe('CampaignDetailPage', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Border War');
+    expect(compiled.querySelector('button[aria-label="Share Border War"]')).toBeTruthy();
     expect(compiled.textContent).toContain('A contested frontier.');
     expect(compiled.textContent).toContain('Halifax, Nova Scotia, Canada');
     expect(compiled.textContent).toContain('North');
@@ -341,6 +342,54 @@ describe('CampaignDetailPage', () => {
     expect(compiled.querySelector('[role="alertdialog"]')?.getAttribute('aria-modal')).toBe('true');
     expect(compiled.querySelector('app-campaign-map-preview')).toBeNull();
     expect(compiled.textContent).not.toContain('Download map');
+    http.verify();
+  });
+
+  it('sends a private campaign the viewer cannot open to All Campaigns for the join password', async () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(CampaignDetailPage);
+    const http = TestBed.inject(HttpTestingController);
+    const missing = { status: 404, statusText: 'Not Found' };
+    http.expectOne(`/api/campaigns/${campaign.id}`).flush({ message: 'The campaign was not found.' }, missing);
+    http
+      .expectOne(`/api/campaigns/${campaign.id}/map/graph`)
+      .flush({ message: 'The campaign was not found.' }, missing);
+    http.expectOne(`/api/campaigns/${campaign.id}/play`).flush({ message: 'The campaign was not found.' }, missing);
+    http.expectOne(`/api/campaigns/${campaign.id}/log`).flush({ message: 'The campaign was not found.' }, missing);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    http.expectOne('/api/campaigns/all').flush([
+      {
+        id: campaign.id,
+        name: 'Border War',
+        description: null,
+        playerSlotCount: 8,
+        occupiedPlayerSlots: 1,
+        isPrivate: true,
+        isPubliclyViewable: false,
+        canManage: false,
+        isParticipant: false,
+        canView: false,
+        canJoin: true,
+        canLeave: false,
+        city: null,
+        region: null,
+        country: null,
+        status: 'Scheduled',
+        startsUtc: '2099-01-05T12:00:00+00:00',
+        endsUtc: '2099-03-02T12:00:00+00:00',
+        currentRound: null,
+        currentPhaseLabel: null,
+        currentPhaseKind: null,
+        currentPhaseEndsUtc: null,
+        canPlay: false,
+        canChooseFaction: false,
+        isCommitted: false,
+      },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await fixture.whenStable();
+
+    expect(navigate).toHaveBeenCalledWith(['/campaigns/all'], { queryParams: { join: campaign.id } });
     http.verify();
   });
 
@@ -2660,15 +2709,40 @@ describe('CampaignDetailPage', () => {
     const page = fixture.componentInstance as unknown as {
       onTerritorySelect: (event: { id: string; additive: boolean; clientX: number; clientY: number }) => void;
       onMapActionKind: (kind: string) => void;
+      finishMovement: () => Promise<void>;
+      mapAction: () => { step: string; kind: string } | null;
     };
     page.onTerritorySelect({ id: 't1', additive: false, clientX: 40, clientY: 12 });
     page.onMapActionKind('Split');
     fixture.detectChanges();
 
-    expect(compiled.textContent).toContain('Pick a territory to split forces to...');
-    expect(compiled.querySelector('.map-action-prompt')?.textContent).toContain(
-      'Pick a territory to split forces to...',
+    expect(page.mapAction()?.step).toBe('walk');
+    expect(page.mapAction()?.kind).toBe('Split');
+    expect(compiled.textContent).toContain('Movement points: 1 remaining');
+    expect(compiled.textContent).toContain('Pick the next territory.');
+
+    page.onTerritorySelect({ id: 't2', additive: false, clientX: 90, clientY: 12 });
+    fixture.detectChanges();
+    const pending = page.finishMovement();
+    const draft = http.expectOne(`/api/campaigns/${campaign.id}/play/draft`);
+    expect((draft.request.body as { kind: string; targetTerritoryId: string }).kind).toBe('Split');
+    expect((draft.request.body as { kind: string; targetTerritoryId: string }).targetTerritoryId).toBe('t2');
+    draft.flush(
+      playState({
+        revision: 3,
+        myDrafts: [{ forceId: 'force-1', kind: 'Split', targetTerritoryId: 't2', structureTypeId: null }],
+      }),
     );
+    await pending;
+    await fixture.whenStable();
+    http.expectOne(`/api/campaigns/${campaign.id}/map/graph`).flush({
+      campaignId: campaign.id,
+      revision: 3,
+      canManage: true,
+      territories,
+      adjacencies: [],
+    });
+    await fixture.whenStable();
     http.verify();
   });
 

@@ -533,6 +533,30 @@ public static class CampaignEndpoints
             .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
             .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
 
+        group.MapPost("/{campaignId:guid}/play/private-objectives/reissue/request", RequestPrivateObjectiveReissueAsync)
+            .WithName("RequestPrivateObjectiveReissue")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/private-objectives/reissue/decide", DecidePrivateObjectiveReissueAsync)
+            .WithName("DecidePrivateObjectiveReissue")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
+        group.MapPost("/{campaignId:guid}/play/private-objectives/reissue", ReissuePrivateObjectiveAsync)
+            .WithName("ReissuePrivateObjective")
+            .Produces<CampaignPlayResponse>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponse>(StatusCodes.Status403Forbidden)
+            .Produces<ErrorResponse>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponse>(StatusCodes.Status409Conflict);
+
         group.MapPost("/{campaignId:guid}/play/item-objectives/choices", ResolveItemObjectiveChoiceAsync)
             .WithName("ResolveItemObjectiveChoice")
             .Produces<CampaignPlayResponse>()
@@ -2960,6 +2984,94 @@ public static class CampaignEndpoints
                     ExpectedRevision = request.Revision,
                     AssignmentId = request.AssignmentId,
                     Approved = request.Approved,
+                    Note = request.Note,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> RequestPrivateObjectiveReissueAsync(
+        Guid campaignId,
+        RequestPrivateObjectiveReissueRequest request,
+        ClaimsPrincipal principal,
+        RequestPrivateObjectiveReissueHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new RequestPrivateObjectiveReissueCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    AssignmentId = request.AssignmentId,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> DecidePrivateObjectiveReissueAsync(
+        Guid campaignId,
+        DecidePrivateObjectiveReissueRequest request,
+        ClaimsPrincipal principal,
+        DecidePrivateObjectiveReissueHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new DecidePrivateObjectiveReissueCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    AssignmentId = request.AssignmentId,
+                    Approved = request.Approved,
+                    Note = request.Note,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return PlayResult(result);
+    }
+
+    private static async Task<IResult> ReissuePrivateObjectiveAsync(
+        Guid campaignId,
+        ReissuePrivateObjectiveRequest request,
+        ClaimsPrincipal principal,
+        ReissuePrivateObjectiveHandler handler,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var userId = principal.GetUserId();
+        if (userId is null)
+        {
+            return IdentityHttp.Problem(ErrorCodes.Unauthorized, "Sign in to continue.");
+        }
+
+        var result = await handler.HandleAsync(
+                new ReissuePrivateObjectiveCommand
+                {
+                    UserId = userId.Value,
+                    IsAdministrator = principal.IsAdministrator(),
+                    CampaignId = campaignId,
+                    ExpectedRevision = request.Revision,
+                    AssignmentId = request.AssignmentId,
+                    Note = request.Note,
                 },
                 cancellationToken)
             .ConfigureAwait(false);

@@ -1,5 +1,15 @@
-import { Component, DestroyRef, inject, signal, viewChild } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import {
+  afterNextRender,
+  afterRenderEffect,
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  Injector,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, readApiError } from '../../core/auth/auth.service';
 import { CampaignService } from '../../core/campaigns/campaign.service';
@@ -24,6 +34,9 @@ export class AllCampaignsPage {
   private readonly siteChatApi = inject(SiteChatService);
   private readonly siteChatPrefs = inject(SiteChatPrefsService);
   private readonly updates = inject(UpdateStreamService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly injector = inject(Injector);
   protected readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly loading = signal(true);
@@ -32,7 +45,19 @@ export class AllCampaignsPage {
   protected readonly chatLoadError = signal<string | null>(null);
   protected readonly campaigns = signal<CampaignListItem[]>([]);
   protected readonly filteredCampaigns = signal<readonly CampaignListItem[]>([]);
+  protected readonly pinnedCampaignId = signal<string | null>(null);
+  protected readonly listedCampaigns = computed(() => {
+    const filtered = this.filteredCampaigns();
+    const pinnedId = this.pinnedCampaignId();
+    if (!pinnedId || filtered.some((campaign) => campaign.id === pinnedId)) {
+      return filtered;
+    }
+
+    const pinned = this.campaigns().find((campaign) => campaign.id === pinnedId);
+    return pinned ? [pinned, ...filtered] : filtered;
+  });
   private readonly list = viewChild(CampaignListComponent);
+  private joinFocused = false;
 
   protected expandAll(): void {
     this.list()?.expandAll();
@@ -50,11 +75,55 @@ export class AllCampaignsPage {
   protected readonly chatStream = signal<UpdateStreamSubscription | null>(null);
 
   constructor() {
+    this.pinnedCampaignId.set(this.route.snapshot.queryParamMap.get('join'));
+    afterRenderEffect(() => this.focusSharedCampaign());
     const prefs = this.siteChatPrefs.read(this.auth.currentUser()?.preferredChatLanguage);
     this.composeLanguage.set(prefs.composeLanguage);
     this.visibleLanguages.set([...prefs.visibleLanguages]);
     void this.loadCampaigns();
     void this.loadChat();
+  }
+
+  private focusSharedCampaign(): void {
+    const id = this.pinnedCampaignId();
+    if (!id || this.joinFocused || this.loading()) {
+      return;
+    }
+
+    if (this.error() || !this.campaigns().some((campaign) => campaign.id === id)) {
+      this.joinFocused = true;
+      this.pinnedCampaignId.set(null);
+      void this.router.navigateByUrl('/');
+      return;
+    }
+
+    const list = this.list();
+    if (!list) {
+      return;
+    }
+
+    this.joinFocused = true;
+    list.focusForJoin(id);
+    afterNextRender(
+      () => {
+        document.getElementById(`campaign-${id}`)?.scrollIntoView({ block: 'center', inline: 'nearest' });
+      },
+      { injector: this.injector },
+    );
+    void this.clearJoinQuery();
+  }
+
+  private async clearJoinQuery(): Promise<void> {
+    try {
+      await this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { join: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+    } catch {
+      // The prompt is already open. A leftover query only repeats it on refresh.
+    }
   }
 
   protected viewerUserId(): string | null {

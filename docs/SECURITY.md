@@ -29,6 +29,11 @@ separate response models for public, participant, and staff views.
 - Registration and profile updates require username, first name, last name, city, state or
   province, country, and time zone. Middle initial, suffix, and avatar are optional.
 - Secure, HTTP-only, same-site cookies for the same-origin web application.
+- A signed-out visit to a protected page returns there after password sign-in, guest preview, or an
+  existing external login. The return address is a same-origin relative path. External addresses,
+  login and registration routes, and missing or unsafe targets go to Home. A private campaign the
+  user cannot view is replaced by the All Campaigns join prompt. New account registration does not
+  keep that return address.
 - Guest preview allocates a temporary Identity user named `Guest001`, `Guest002`, and so on.
   Numbers return to the pool on logout, cookie removal, or 24-hour expiry. Guests have no
   password, cannot post chat, join, save campaigns, or mutate account data. Middleware rejects
@@ -99,7 +104,9 @@ staff review requires them.
 
 In-app and email notifications are created through a transactional outbox. Email content must
 avoid exposing hidden order/relic/objective details and must never include private chat bodies
-or site-chat bodies; direct the recipient to authenticate for sensitive content. Private campaign
+or site-chat bodies; direct the recipient to authenticate for sensitive content. Private-objective
+reissue and claim notes go only to campaign managers, the affected player, and administrators. They are omitted
+from the public log and from unauthorized play payloads. Private campaign
 chat is omitted from unauthorized API payloads, including campaign-manager views. Only a system
 administrator who is the active debug actor on that campaign may inspect other members' private
 chats. Campaign log file downloads are limited to campaign managers and administrators and never

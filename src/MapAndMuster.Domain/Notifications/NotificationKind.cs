@@ -37,4 +37,16 @@ public enum NotificationKind
 
     /// <summary>A manager or administrator assigned a force status.</summary>
     StaffForceStatusAssigned = 10,
+
+    /// <summary>A player asked a manager to approve a completed private objective.</summary>
+    PrivateObjectiveClaimRequested = 11,
+
+    /// <summary>A manager approved or denied a completed private objective.</summary>
+    PrivateObjectiveClaimDecided = 12,
+
+    /// <summary>A player asked a manager to reissue a private objective.</summary>
+    PrivateObjectiveReissueRequested = 13,
+
+    /// <summary>A private objective was reissued or a reissue request was denied.</summary>
+    PrivateObjectiveReissueDecided = 14,
 }

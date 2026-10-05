@@ -104,6 +104,7 @@ public static class CampaignMapper
         var scoring = CampaignPointStandingsMapper.ToScoring(campaign, mappedParticipants, viewerUserId, staffView, utcNow);
         var canStaff = membership?.IsGameMaster == true || isAdministrator;
         var completed = progress.Status == CampaignStatus.Completed;
+        var inProgress = progress.Status == CampaignStatus.InProgress;
         var viewerAllyGroupId = ViewerAllyGroupId(campaign, membership?.FactionId);
         return new CampaignDetail
         {
@@ -234,7 +235,15 @@ public static class CampaignMapper
                 HasTokenImage = !string.IsNullOrWhiteSpace(status.TokenImageStorageKey),
             })],
             PrivateObjectiveTypes = VisiblePrivateTypes(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed, membership?.Subfaction),
-            PrivateObjectives = VisiblePrivateAssignments(campaign, viewerUserId, membership?.FactionId, viewerAllyGroupId, canStaff, completed, membership?.Subfaction),
+            PrivateObjectives = VisiblePrivateAssignments(
+                campaign,
+                viewerUserId,
+                membership?.FactionId,
+                viewerAllyGroupId,
+                canStaff,
+                completed,
+                membership?.Subfaction,
+                inProgress),
             PrivateObjectiveUnclaimedCounts = UnclaimedCounts(campaign, mappedParticipants),
             RivalObjectives = VisibleRivalObjectives(campaign, viewerUserId, canStaff, completed, mappedParticipants),
             RivalObjectivesEnabled = campaign.RivalObjectivesEnabled,
@@ -558,7 +567,8 @@ public static class CampaignMapper
         Guid? viewerAllyGroupId,
         bool staffView,
         bool campaignCompleted,
-        string? viewerSubfaction)
+        string? viewerSubfaction,
+        bool inProgress)
     {
         var play = campaign.PlayState;
         if (play is null)
@@ -588,6 +598,22 @@ public static class CampaignMapper
                     staffView,
                     campaignCompleted,
                     viewerSubfaction);
+                var pendingReissue = play.PrivateObjectiveReissues.Any(item =>
+                    item.AssignmentId == assignment.Id && item.Status == PrivateObjectiveReissueStatus.Pending);
+                var holder = IsHolder(assignment, viewerUserId, viewerFactionId, viewerAllyGroupId, viewerSubfaction);
+                var unrevealed = assignment.Status != PrivateObjectiveAssignmentStatus.Revealed;
+                var ownsAssignment = assignment.HolderKind is PrivateObjectiveHolderKind.Player or PrivateObjectiveHolderKind.Traitor
+                    && assignment.HolderId == viewerUserId;
+                var canReissueImmediately = inProgress
+                    && staffView
+                    && unrevealed
+                    && !pendingReissue
+                    && (ownsAssignment || play.DebugActorUserId == viewerUserId);
+                var showPrivate = visible || staffView;
+                var denial = play.PrivateObjectiveReissues
+                    .Where(item => item.AssignmentId == assignment.Id && item.Status == PrivateObjectiveReissueStatus.Denied)
+                    .OrderByDescending(item => item.ResolvedUtc)
+                    .FirstOrDefault();
                 var progress = visible && rules is not null
                     ? PrivateObjectiveRules.AutomaticProgress(
                         assignment,
@@ -616,10 +642,15 @@ public static class CampaignMapper
                     RequiredCount = visible ? progress?.Required : null,
                     CanClaim = assignment.ScoringKind == PrivateObjectiveScoringKind.Manual
                         && assignment.Status == PrivateObjectiveAssignmentStatus.Assigned
-                        && IsHolder(assignment, viewerUserId, viewerFactionId, viewerAllyGroupId, viewerSubfaction),
+                        && holder,
                     CanModerate = staffView
                         && assignment.ScoringKind == PrivateObjectiveScoringKind.Manual
                         && assignment.Status is PrivateObjectiveAssignmentStatus.Assigned or PrivateObjectiveAssignmentStatus.Claimed,
+                    CanRequestReissue = inProgress && unrevealed && !pendingReissue && holder && !canReissueImmediately,
+                    ReissuePending = showPrivate && pendingReissue,
+                    CanResolveReissue = inProgress && staffView && pendingReissue,
+                    CanReissueImmediately = canReissueImmediately,
+                    ReissueNote = showPrivate && !pendingReissue ? denial?.Note : null,
                 };
             }),
         ];

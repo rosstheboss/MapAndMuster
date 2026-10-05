@@ -14,6 +14,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, isConcurrencyConflict, readApiError } from '../../core/auth/auth.service';
+import { campaignNeedsJoinPrompt } from '../../core/campaigns/campaign-share';
 import {
   latestDelinquencyEntryForUser,
   mergeCampaignLog,
@@ -120,6 +121,7 @@ import {
   type MapHeldItem,
   type MapItemMarker,
 } from '../../shared/campaign-map-view/campaign-map-view.component';
+import { CampaignShareButtonComponent } from '../../shared/campaign-share-button/campaign-share-button.component';
 import { ConfirmButtonComponent } from '../../shared/confirm-button/confirm-button.component';
 import { AppDialogComponent } from '../../shared/dialog/dialog.component';
 import { FactionLogoComponent } from '../../shared/faction-logo/faction-logo.component';
@@ -301,6 +303,7 @@ function openSections(): Record<CampaignSection, boolean> {
     BackToTopComponent,
     CampaignLogComponent,
     CampaignMapViewComponent,
+    CampaignShareButtonComponent,
     ConfirmButtonComponent,
     AppDialogComponent,
     MapSymbolComponent,
@@ -362,6 +365,7 @@ export class CampaignDetailPage {
   protected readonly awardObjectiveId = signal('');
   protected readonly awardPlayerUserId = signal('');
   protected readonly grantHolderKind = signal('Player');
+  private readonly objectiveNotes = signal<Record<string, string>>({});
   protected readonly grantHolderId = signal('');
   protected readonly grantTypeId = signal('');
   private prefsHydrated = false;
@@ -405,6 +409,8 @@ export class CampaignDetailPage {
   private readonly expandedBattles = signal<Record<string, boolean>>({});
   private readonly expandedBattlePanels = signal<Record<string, boolean>>({});
   protected readonly updateStream = signal<UpdateStreamSubscription | null>(null);
+  private redirectingToJoin = false;
+  private loadResult: Promise<void> = Promise.resolve();
 
   constructor() {
     const id = this.campaignId;
@@ -418,7 +424,7 @@ export class CampaignDetailPage {
     });
     if (id) {
       this.applyMapEditNotice();
-      void this.load(id);
+      this.loadResult = this.load(id);
       void this.loadChat(id);
     } else {
       this.error.set('The campaign was not found.');
@@ -1578,8 +1584,75 @@ export class CampaignDetailPage {
         revision: campaign.revision,
         assignmentId,
         approved,
+        note: this.objectiveNote(assignmentId),
       }),
     );
+    this.clearObjectiveNote(assignmentId);
+  }
+
+  protected objectiveNote(assignmentId: string): string {
+    return this.objectiveNotes()[assignmentId] ?? '';
+  }
+
+  protected onObjectiveNote(assignmentId: string, event: Event): void {
+    const target = event.target;
+    const value = target instanceof HTMLTextAreaElement ? target.value : '';
+    this.objectiveNotes.update((current) => ({ ...current, [assignmentId]: value.slice(0, 500) }));
+  }
+
+  protected async requestObjectiveReissue(assignmentId: string): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign || !assignmentId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.requestPrivateObjectiveReissue(campaign.id, {
+        revision: campaign.revision,
+        assignmentId,
+      }),
+    );
+  }
+
+  protected async decideObjectiveReissue(assignmentId: string, approved: boolean): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign || !assignmentId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.decidePrivateObjectiveReissue(campaign.id, {
+        revision: campaign.revision,
+        assignmentId,
+        approved,
+        note: this.objectiveNote(assignmentId),
+      }),
+    );
+    this.clearObjectiveNote(assignmentId);
+  }
+
+  protected async reissueObjective(assignmentId: string): Promise<void> {
+    const campaign = this.campaign();
+    if (!campaign || !assignmentId) {
+      return;
+    }
+
+    await this.runPlay(() =>
+      this.campaignsApi.reissuePrivateObjective(campaign.id, {
+        revision: campaign.revision,
+        assignmentId,
+        note: this.objectiveNote(assignmentId),
+      }),
+    );
+    this.clearObjectiveNote(assignmentId);
+  }
+
+  private clearObjectiveNote(assignmentId: string): void {
+    this.objectiveNotes.update((current) => {
+      const next = { ...current };
+      delete next[assignmentId];
+      return next;
+    });
   }
 
   protected async resolveItemObjectiveChoice(itemId: string, choiceId: string): Promise<void> {
@@ -4200,7 +4273,8 @@ export class CampaignDetailPage {
   }
 
   protected movementWalkActive(): boolean {
-    return this.mapAction()?.step === 'walk' && this.mapAction()?.kind === 'Move';
+    const flow = this.mapAction();
+    return flow?.step === 'walk' && (flow.kind === 'Move' || flow.kind === 'Split');
   }
 
   protected movementRemaining(): number {
@@ -4399,17 +4473,18 @@ export class CampaignDetailPage {
   private writeMovePath(force: PlayForce, steps: readonly string[], finished: boolean): void {
     const encoded = encodeMovePath(steps);
     const current = this.draftFor(force.id);
+    const flow = this.mapAction();
+    const kind = (flow?.forceId === force.id && flow.kind === 'Split') || current.kind === 'Split' ? 'Split' : 'Move';
     this.markDraftDirty(force.id);
     this.drafts.update((drafts) => ({
       ...drafts,
       [force.id]: {
         ...current,
-        kind: 'Move',
+        kind,
         ...encoded,
         moveFinished: finished,
       },
     }));
-    const flow = this.mapAction();
     if (flow?.forceId === force.id && flow.step === 'walk') {
       this.selectedIds.set([flow.originId, ...steps]);
     }
@@ -4422,12 +4497,8 @@ export class CampaignDetailPage {
     }
 
     if (flow?.step === 'pick-target') {
-      if (flow.kind === 'Move') {
-        return 'Pick a territory to move to...';
-      }
-
-      if (flow.kind === 'Split') {
-        return 'Pick a territory to split forces to...';
+      if (flow.kind === 'Move' || flow.kind === 'Split') {
+        return 'Pick the next territory.';
       }
 
       if (this.isChosenTeleportKind(flow.kind)) {
@@ -4503,13 +4574,13 @@ export class CampaignDetailPage {
     }
 
     const force = this.myForces().find((item) => item.id === flow.forceId);
-    if (kind === 'Move') {
+    if (kind === 'Move' || kind === 'Split') {
       this.markDraftDirty(flow.forceId);
       this.drafts.update((drafts) => ({
         ...drafts,
         [flow.forceId]: emptyOrderDraft({
-          kind: 'Move',
-          droppedItemObjectiveIds: flow.droppedItemObjectiveIds,
+          kind,
+          droppedItemObjectiveIds: kind === 'Move' ? flow.droppedItemObjectiveIds : [],
         }),
       }));
       this.mapAction.set({
@@ -4521,17 +4592,13 @@ export class CampaignDetailPage {
         viaPath: [],
         viaCandidates: [],
         structureTypeId: '',
+        droppedItemObjectiveIds: kind === 'Move' ? flow.droppedItemObjectiveIds : [],
       });
       this.selectedIds.set([flow.originId]);
       return;
     }
 
-    if (
-      kind === 'Split' ||
-      kind === 'Surrender' ||
-      kind === 'Retreat' ||
-      (force && this.canChooseTeleport(force, kind))
-    ) {
+    if (kind === 'Surrender' || kind === 'Retreat' || (force && this.canChooseTeleport(force, kind))) {
       this.mapAction.set({
         ...flow,
         step: 'pick-target',
@@ -4680,7 +4747,7 @@ export class CampaignDetailPage {
         return false;
       }
 
-      if (draft.kind === 'Move' && !draft.moveFinished) {
+      if (!draft.moveFinished) {
         return false;
       }
 
@@ -4978,7 +5045,7 @@ export class CampaignDetailPage {
       viaPath: [...(saved?.viaPath ?? [])],
       destroyImmediately: saved?.destroyImmediately === true,
       droppedItemObjectiveIds: [...(saved?.droppedItemObjectiveIds ?? [])],
-      moveFinished: (saved?.kind ?? 'Hold') === 'Move' && !!saved?.targetTerritoryId,
+      moveFinished: (saved?.kind === 'Move' || saved?.kind === 'Split') && !!saved.targetTerritoryId,
     });
   }
 
@@ -5419,9 +5486,15 @@ export class CampaignDetailPage {
       }
       this.seedAwardDefaults();
     } catch (error: unknown) {
+      if (await this.redirectPrivateJoin(id)) {
+        return;
+      }
+
       this.error.set(readApiError(error, 'Unable to load this campaign.'));
     } finally {
-      this.loading.set(false);
+      if (!this.redirectingToJoin) {
+        this.loading.set(false);
+      }
     }
   }
 
@@ -5432,10 +5505,41 @@ export class CampaignDetailPage {
       this.applyLogSnapshot(await this.campaignsApi.getLog(id), true);
       this.startUpdateStream();
     } catch (error: unknown) {
+      await this.loadResult;
+      if (this.redirectingToJoin) {
+        return;
+      }
+
       this.chatLoadError.set(readApiError(error, 'Unable to load campaign chat.'));
     } finally {
-      this.chatLoading.set(false);
+      if (!this.redirectingToJoin) {
+        this.chatLoading.set(false);
+      }
     }
+  }
+
+  private async redirectPrivateJoin(id: string): Promise<boolean> {
+    const listed = await this.campaignsApi.listAll().catch(() => null);
+    if (!listed) {
+      return false;
+    }
+
+    const match = listed.find((campaign) => campaign.id === id);
+    if (!match || !campaignNeedsJoinPrompt(match)) {
+      return false;
+    }
+
+    this.redirectingToJoin = true;
+    try {
+      const opened = await this.router.navigate(['/campaigns/all'], { queryParams: { join: id } });
+      if (!opened) {
+        await this.router.navigateByUrl('/');
+      }
+    } catch {
+      await this.router.navigateByUrl('/');
+    }
+
+    return true;
   }
 
   private restoreViewPrefs(campaignId: string): void {

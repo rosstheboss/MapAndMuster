@@ -5,6 +5,7 @@
         <h1>{{ campaign.name }}</h1>
       </div>
       <div class="setup-toolbar-actions">
+        <app-campaign-share-button [campaignId]="campaign.id" [name]="campaign.name" />
         <a class="button-secondary" routerLink="/campaigns">Back to campaigns</a>
         <button type="button" class="button-secondary" (click)="expandAllSections()">Expand All</button>
         <button type="button" class="button-secondary" (click)="collapseAllSections()">Collapse All</button>
@@ -470,7 +471,7 @@
                         }
                       </select>
                     </div>
-                    @if (draftFor(force.id).kind === 'Move') {
+                    @if (draftFor(force.id).kind === 'Move' || draftFor(force.id).kind === 'Split') {
                       @for (step of moveStepFields(force); track step.index) {
                         <div class="field grow">
                           <label [attr.for]="'move-step-' + force.id + '-' + step.index">
@@ -753,17 +754,19 @@
                     Back Up
                   </button>
                   <button type="button" class="button-secondary" (click)="cancelMovement()">Cancel</button>
-                  @if (movementForce(); as moving) {
-                    @for (item of droppableItemsFor(moving); track item.id) {
-                      <label>
-                        <input
-                          type="checkbox"
-                          [ngModel]="isMapItemDropSelected(item.id)"
-                          (ngModelChange)="onMapDropItem(item.id, $event)"
-                          [name]="'map-drop-' + item.id"
-                        />
-                        Drop {{ item.name }}
-                      </label>
+                  @if (mapAction()?.kind === 'Move') {
+                    @if (movementForce(); as moving) {
+                      @for (item of droppableItemsFor(moving); track item.id) {
+                        <label>
+                          <input
+                            type="checkbox"
+                            [ngModel]="isMapItemDropSelected(item.id)"
+                            (ngModelChange)="onMapDropItem(item.id, $event)"
+                            [name]="'map-drop-' + item.id"
+                          />
+                          Drop {{ item.name }}
+                        </label>
+                      }
                     }
                   }
                 </div>
@@ -3215,6 +3218,44 @@
         <button type="button" class="button" (click)="claimPrivateObjective(assignment.id)">
           Claim for manager review
         </button>
+      }
+      @if (assignment.canRequestReissue) {
+        <button type="button" class="button-secondary" (click)="requestObjectiveReissue(assignment.id)">
+          Request objective reissue
+        </button>
+      }
+      @if (assignment.reissuePending && !assignment.canResolveReissue) {
+        <p class="muted">Reissue requested.</p>
+      }
+      @if (assignment.reissueNote) {
+        <p class="muted">Reissue note: {{ assignment.reissueNote }}</p>
+      }
+      @if (assignment.canModerate || assignment.canResolveReissue || assignment.canReissueImmediately) {
+        <div class="field">
+          <label [attr.for]="'objective-note-' + assignment.id">Note (optional)</label>
+          <textarea
+            [id]="'objective-note-' + assignment.id"
+            maxlength="500"
+            rows="2"
+            [value]="objectiveNote(assignment.id)"
+            (input)="onObjectiveNote(assignment.id, $event)"
+          ></textarea>
+        </div>
+      }
+      @if (assignment.canReissueImmediately) {
+        <button type="button" class="button-secondary" (click)="reissueObjective(assignment.id)">
+          Reissue objective
+        </button>
+      }
+      @if (assignment.canResolveReissue) {
+        <div class="choice-row">
+          <button type="button" class="button" (click)="decideObjectiveReissue(assignment.id, true)">
+            Approve reissue
+          </button>
+          <button type="button" class="button-secondary" (click)="decideObjectiveReissue(assignment.id, false)">
+            Deny reissue
+          </button>
+        </div>
       }
       @if (assignment.canModerate) {
         <div class="choice-row">

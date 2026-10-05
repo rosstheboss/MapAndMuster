@@ -34,6 +34,11 @@ Player and Game Master in the same campaign.
   optional Google/Facebook/Discord sign-in. The profile stores a date-and-time display format
   (Month Day, Year, Time Timezone with seconds by default).
 - Campaign creation, membership, factions, alliances, forces, rounds, deadlines, and roles.
+- Sharing a campaign from Your Campaigns, All Campaigns, or the campaign page. The link opens the
+  campaign when the viewer may view it. A private campaign the viewer has not joined and cannot view
+  opens All Campaigns with that entry expanded and the join-password prompt. A signed-out visitor
+  signs in or uses guest preview and then continues to that page. Creating an account still finishes
+  on Home after confirmation. If the return address is missing or unsafe, the visitor lands on Home.
 - Raster-map upload with polygon territories, adjacency, terrain, structures, spawn locations,
   ownership, force/relic markers, and viewer-selected map highlight colors.
 - Campaign-point standings with sortable current-holdings totals, ranking and points-per-territory

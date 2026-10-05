@@ -30,6 +30,7 @@ import type {
   GrantPrivateObjectivePayload,
   ClaimPrivateObjectivePayload,
   ModeratePrivateObjectivePayload,
+  PrivateObjectiveReissuePayload,
   ResolveItemObjectiveChoicePayload,
   SubmitBattleResultPayload,
   SubmitRetreatPayload,
@@ -609,6 +610,45 @@ export class CampaignService {
     return firstValueFrom(
       this.http.post<CampaignPlayDetail>(
         `/api/campaigns/${encodeURIComponent(campaignId)}/play/private-objectives/moderate`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async requestPrivateObjectiveReissue(
+    campaignId: string,
+    payload: PrivateObjectiveReissuePayload,
+  ): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/private-objectives/reissue/request`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async decidePrivateObjectiveReissue(
+    campaignId: string,
+    payload: PrivateObjectiveReissuePayload,
+  ): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/private-objectives/reissue/decide`,
+        payload,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  async reissuePrivateObjective(
+    campaignId: string,
+    payload: PrivateObjectiveReissuePayload,
+  ): Promise<CampaignPlayDetail> {
+    return firstValueFrom(
+      this.http.post<CampaignPlayDetail>(
+        `/api/campaigns/${encodeURIComponent(campaignId)}/play/private-objectives/reissue`,
         payload,
         { withCredentials: true },
       ),

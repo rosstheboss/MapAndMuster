@@ -219,7 +219,8 @@ Chaos require a subfaction.
 
 Named Hunt effect keys the engine enforces or calculates (matched by key, not display name).
 Faction and subfaction force movement speed (default 1; Kingdom of Bretonnia preset is 2) is how
-many adjacent territories a force may Move or Split in one action. Held item effects can add more.
+many adjacent territories a force may Move or Split in one action. Split uses that same hop-by-hop
+path as Move. Held item effects can add more.
 The order names the destination and each territory moved through. When the destination is not
 adjacent, the player selects every hop on the map, including when only one legal route exists.
 An enemy on the path stops the force there for battle. Allied forces do not interrupt a
@@ -355,6 +356,11 @@ is never returned. Publicly viewable campaigns may be opened by any signed-in us
 campaign is not publicly viewable, only players, managers, and administrators may open it after
 it starts. Upcoming campaigns still appear on All Campaigns so players can join. Campaign names
 and faction names reject the same prohibited-language terms as usernames.
+
+A Share control on Your Campaigns, All Campaigns, and the campaign page copies a link to that
+campaign. Opening the link shows the campaign when the viewer may view it. When the campaign is
+private, the viewer has not joined, and they cannot view it, the link opens All Campaigns on that
+entry and asks for the join password. They can submit the password or close the prompt.
 
 The campaign page lists attached members in a Participants panel: each player's display name
 (linked to their public profile), selected faction and subfaction when chosen, and roles
@@ -1385,7 +1391,14 @@ with the award as `(5 CP)`, and revealed rival victories appear in the claimed s
 exclude factions and ally groups as described in campaign setup. Manual private objectives are claimed by an authorized holder (the player, or any
 player in that faction or ally group) who reveals them to a manager. A manager or administrator
 approves the claim to reveal it publicly and add its points, or denies it so the holder may
-claim again later. Unclaimed manual objectives do not score at campaign end. Automatic private
+claim again later. The claim notifies the campaign managers. The approval or denial notifies the
+player and may include an optional note of up to 500 characters. While a campaign is in progress,
+a holder who cannot achieve an unrevealed private objective may request a reissue. A manager
+approves or denies that request, again with an optional note. Approval removes that catalog type
+from the campaign pool and issues another available objective for the same holder. A manager who
+holds the objective may reissue it immediately, and a manager in debug mode may immediately
+reissue an objective they can see. Reissue and claim notes are not written to the public log.
+They are shown only to campaign managers, the affected player, and administrators. Unclaimed manual objectives do not score at campaign end. Automatic private
 objectives are scored from live map facts after action resolution: currently controlled
 territories, currently controlled or pillaged structures of a configured type, a cumulative
 count of destroyed structures of a configured type attributed to the holder's faction, player,

@@ -4,6 +4,13 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import type { ExternalProvider } from '../../core/auth/auth.models';
 import { AuthService, readApiError } from '../../core/auth/auth.service';
+import {
+  clearReturnUrl,
+  peekReturnUrl,
+  rememberReturnUrl,
+  returnUrlOrHome,
+  safeReturnUrl,
+} from '../../core/auth/return-url';
 import { FormSubmitOverlayService } from '../../core/forms/form-submit-overlay.service';
 import { emailAddress, required } from '../../core/forms/validators';
 import { ExternalLoginButtonsComponent } from '../../shared/external-login-buttons/external-login-buttons.component';
@@ -61,7 +68,7 @@ export class LoginPage {
     try {
       await this.overlay.run(async () => {
         await this.auth.login(this.form.controls.email.value, this.form.controls.password.value);
-        await this.router.navigateByUrl('/');
+        await this.continueAfterSignIn();
       });
     } catch (error: unknown) {
       this.errorMessage.set(readApiError(error, 'Unable to sign in.'));
@@ -71,6 +78,13 @@ export class LoginPage {
   }
 
   protected startExternal(provider: string): void {
+    const returnUrl = safeReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl')) ?? peekReturnUrl();
+    if (returnUrl) {
+      rememberReturnUrl(returnUrl);
+    } else {
+      clearReturnUrl();
+    }
+
     this.auth.startExternalLogin(provider);
   }
 
@@ -80,12 +94,25 @@ export class LoginPage {
     try {
       await this.overlay.run(async () => {
         await this.auth.loginAsGuest();
-        await this.router.navigateByUrl('/');
+        await this.continueAfterSignIn();
       });
     } catch (error: unknown) {
       this.errorMessage.set(readApiError(error, 'Unable to start guest preview.'));
     } finally {
       this.guestSubmitting.set(false);
+    }
+  }
+
+  private async continueAfterSignIn(): Promise<void> {
+    const target = returnUrlOrHome(this.route.snapshot.queryParamMap.get('returnUrl') ?? peekReturnUrl());
+    clearReturnUrl();
+    try {
+      const landed = await this.router.navigateByUrl(target);
+      if (!landed && target !== '/') {
+        await this.router.navigateByUrl('/');
+      }
+    } catch {
+      await this.router.navigateByUrl('/');
     }
   }
 }

@@ -291,6 +291,11 @@ internal static class CampaignPlayPipeline
                 {
                     await notifications.PublishPlayAdvanceAsync(loaded.Previous, outcome.Campaign, cancellationToken)
                         .ConfigureAwait(false);
+                    await notifications.PublishPrivateObjectiveDecisionsAsync(
+                            loaded.Previous,
+                            outcome.Campaign,
+                            cancellationToken)
+                        .ConfigureAwait(false);
                 }
 
                 return OperationResults.Success(

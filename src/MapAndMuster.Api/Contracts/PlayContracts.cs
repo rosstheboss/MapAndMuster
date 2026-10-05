@@ -780,6 +780,48 @@ public sealed class ModeratePrivateObjectiveRequest
 
     /// <summary>Gets whether to approve and reveal the objective.</summary>
     public required bool Approved { get; init; }
+
+    /// <summary>Gets an optional note of at most 500 characters.</summary>
+    public string? Note { get; init; }
+}
+
+/// <summary>Request for a holder to ask for a different private objective.</summary>
+public sealed class RequestPrivateObjectiveReissueRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the assignment.</summary>
+    public required Guid AssignmentId { get; init; }
+}
+
+/// <summary>Request for a manager to approve or deny a reissue.</summary>
+public sealed class DecidePrivateObjectiveReissueRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the assignment.</summary>
+    public required Guid AssignmentId { get; init; }
+
+    /// <summary>Gets whether to replace the objective.</summary>
+    public required bool Approved { get; init; }
+
+    /// <summary>Gets an optional note of at most 500 characters.</summary>
+    public string? Note { get; init; }
+}
+
+/// <summary>Request for a manager to reissue an objective without a pending request.</summary>
+public sealed class ReissuePrivateObjectiveRequest
+{
+    /// <summary>Gets the last observed campaign revision.</summary>
+    public required int Revision { get; init; }
+
+    /// <summary>Gets the assignment.</summary>
+    public required Guid AssignmentId { get; init; }
+
+    /// <summary>Gets an optional note of at most 500 characters.</summary>
+    public string? Note { get; init; }
 }
 
 /// <summary>Request for a holder to resolve an item-objective choice.</summary>
@@ -1281,6 +1323,11 @@ public static class PlayResponses
                     RequiredCount = item.RequiredCount,
                     CanClaim = item.CanClaim,
                     CanModerate = item.CanModerate,
+                    CanRequestReissue = item.CanRequestReissue,
+                    ReissuePending = item.ReissuePending,
+                    CanResolveReissue = item.CanResolveReissue,
+                    CanReissueImmediately = item.CanReissueImmediately,
+                    ReissueNote = item.ReissueNote,
                 }),
             ],
             PrivateObjectiveUnclaimedCounts =

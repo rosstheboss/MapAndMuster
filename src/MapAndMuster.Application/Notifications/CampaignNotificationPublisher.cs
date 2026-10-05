@@ -257,6 +257,160 @@ public sealed class CampaignNotificationPublisher
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Notifies managers of new private-objective claims and reissue requests, and notifies the
+    /// affected player when a manager approves or denies one. Notes stay out of the public log.
+    /// </summary>
+    public async Task PublishPrivateObjectiveDecisionsAsync(
+        StoredCampaign previous,
+        StoredCampaign next,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        ArgumentNullException.ThrowIfNull(next);
+        var before = previous.PlayState ?? CampaignPlayState.Empty;
+        var after = next.PlayState ?? CampaignPlayState.Empty;
+        var path = $"/campaigns/{next.Id}";
+
+        foreach (var assignment in after.PrivateObjectives)
+        {
+            var prior = before.PrivateObjectives.FirstOrDefault(item => item.Id == assignment.Id);
+            if (assignment.Status != PrivateObjectiveAssignmentStatus.Claimed
+                || prior?.Status == PrivateObjectiveAssignmentStatus.Claimed)
+            {
+                continue;
+            }
+
+            await NotifyManagersExceptAsync(
+                    next,
+                    assignment.ClaimedByUserId,
+                    NotificationKind.PrivateObjectiveClaimRequested,
+                    "Private objective claim",
+                    $"A player asked you to approve a completed private objective in {next.Name}.",
+                    path,
+                    $"claim-request:{assignment.Id:N}:{assignment.ClaimedUtc:O}",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        foreach (var decision in after.PrivateObjectiveClaimDecisions)
+        {
+            if (before.PrivateObjectiveClaimDecisions.Any(item => item.Id == decision.Id))
+            {
+                continue;
+            }
+
+            var verb = decision.Approved ? "approved" : "denied";
+            await NotifyAsync(
+                    decision.SubjectUserId,
+                    NotificationKind.PrivateObjectiveClaimDecided,
+                    next,
+                    decision.Approved ? "Private objective approved" : "Private objective denied",
+                    WithNote($"Your completed private objective in {next.Name} was {verb}.", decision.Note),
+                    path,
+                    $"claim-decision:{decision.Id:N}:{decision.SubjectUserId:N}",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        foreach (var request in after.PrivateObjectiveReissues)
+        {
+            var prior = before.PrivateObjectiveReissues.FirstOrDefault(item => item.Id == request.Id);
+            if (prior is null && request.Status == PrivateObjectiveReissueStatus.Pending)
+            {
+                await NotifyManagersExceptAsync(
+                        next,
+                        request.RequestedByUserId,
+                        NotificationKind.PrivateObjectiveReissueRequested,
+                        "Private objective reissue",
+                        $"A player asked to reissue a private objective in {next.Name}.",
+                        path,
+                        $"reissue-request:{request.Id:N}",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                continue;
+            }
+
+            var decided = request.Status is PrivateObjectiveReissueStatus.Approved or PrivateObjectiveReissueStatus.Denied
+                && (prior is null || prior.Status == PrivateObjectiveReissueStatus.Pending);
+            if (!decided)
+            {
+                continue;
+            }
+
+            var actorId = request.ResolvedByUserId;
+            if (request.AffectedUserId != actorId)
+            {
+                var playerBody = request.Status == PrivateObjectiveReissueStatus.Approved
+                    ? $"Your private objective in {next.Name} was reissued. A new objective was issued."
+                    : $"Your request to reissue a private objective in {next.Name} was denied.";
+                await NotifyAsync(
+                        request.AffectedUserId,
+                        NotificationKind.PrivateObjectiveReissueDecided,
+                        next,
+                        request.Status == PrivateObjectiveReissueStatus.Approved
+                            ? "Private objective reissued"
+                            : "Private objective reissue denied",
+                        WithNote(playerBody, request.Note),
+                        path,
+                        $"reissue-decision:{request.Id:N}:{request.AffectedUserId:N}",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            var managerBody = request.Status == PrivateObjectiveReissueStatus.Approved
+                ? $"A private objective in {next.Name} was reissued and removed from the pool."
+                : $"A private-objective reissue request in {next.Name} was denied.";
+            await NotifyManagersExceptAsync(
+                    next,
+                    actorId,
+                    NotificationKind.PrivateObjectiveReissueDecided,
+                    request.Status == PrivateObjectiveReissueStatus.Approved
+                        ? "Private objective reissued"
+                        : "Private objective reissue denied",
+                    WithNote(managerBody, request.Note),
+                    path,
+                    $"reissue-decision:{request.Id:N}",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private static string WithNote(string body, string? note)
+    {
+        return string.IsNullOrWhiteSpace(note) ? body : $"{body} Note: {note}";
+    }
+
+    private async Task NotifyManagersExceptAsync(
+        StoredCampaign campaign,
+        Guid? exceptUserId,
+        NotificationKind kind,
+        string title,
+        string body,
+        string path,
+        string dedupePrefix,
+        CancellationToken cancellationToken)
+    {
+        foreach (var userId in campaign.Memberships.Where(member => member.IsGameMaster).Select(member => member.UserId))
+        {
+            if (userId == exceptUserId)
+            {
+                continue;
+            }
+
+            await NotifyAsync(
+                    userId,
+                    kind,
+                    campaign,
+                    title,
+                    body,
+                    path,
+                    $"{dedupePrefix}:{userId:N}",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
     private async Task NotifyManagersAsync(
         StoredCampaign campaign,
         NotificationKind kind,

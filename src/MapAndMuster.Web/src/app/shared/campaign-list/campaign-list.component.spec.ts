@@ -505,4 +505,68 @@ describe('CampaignListComponent', () => {
     fixture.detectChanges();
     expect(compiled.querySelector('[role="dialog"]')?.textContent).toContain('Join Secret War');
   });
+
+  it('shares a campaign from the expanded entry', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const fixture = TestBed.createComponent(CampaignListComponent);
+    const id = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+    fixture.componentRef.setInput('campaigns', [
+      item({
+        id,
+        name: 'Finished War',
+        status: 'Completed',
+        startsUtc: '2020-01-05T12:00:00+00:00',
+        endsUtc: '2020-03-02T12:00:00+00:00',
+      }),
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).not.toContain('Share');
+    compiled.querySelector<HTMLButtonElement>('button.campaign-toggle')?.click();
+    fixture.detectChanges();
+    const share = [...compiled.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Share');
+    expect(share?.getAttribute('aria-label')).toBe('Share Finished War');
+    share?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(writeText).toHaveBeenCalledWith(`${location.origin}/campaigns/${id}`);
+    expect(compiled.textContent).toContain('Link copied.');
+  });
+
+  it('opens a private campaign expanded and asks for the join password', async () => {
+    const fixture = TestBed.createComponent(CampaignListComponent);
+    const id = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+    fixture.componentRef.setInput('campaigns', [
+      item({
+        id,
+        name: 'Secret War',
+        description: 'Invite only.',
+        isPrivate: true,
+        canJoin: true,
+        canView: false,
+        status: 'Scheduled',
+        startsUtc: '2099-02-01T12:00:00+00:00',
+        endsUtc: '2099-04-01T12:00:00+00:00',
+      }),
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    fixture.componentInstance.collapseAll();
+    fixture.detectChanges();
+    fixture.componentInstance.focusForJoin(id);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const card = compiled.querySelector(`#campaign-${id}`);
+    expect(card?.querySelector('button.campaign-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    expect(card?.textContent).toContain('Invite only.');
+    const dialog = compiled.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain('Join Secret War');
+    expect(dialog?.textContent).toContain('Cancel');
+  });
 });

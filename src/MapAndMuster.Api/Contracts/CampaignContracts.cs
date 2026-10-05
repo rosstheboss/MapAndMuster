@@ -2225,6 +2225,21 @@ public sealed class PrivateObjectiveAssignmentResponse
 
     /// <summary>Gets whether the viewer may approve or deny a claim.</summary>
     public bool CanModerate { get; init; }
+
+    /// <summary>Gets whether the viewer may ask for a different private objective.</summary>
+    public bool CanRequestReissue { get; init; }
+
+    /// <summary>Gets whether a reissue request is waiting for a manager.</summary>
+    public bool ReissuePending { get; init; }
+
+    /// <summary>Gets whether the viewer may approve or deny a reissue request.</summary>
+    public bool CanResolveReissue { get; init; }
+
+    /// <summary>Gets whether the viewer may replace this objective without a request.</summary>
+    public bool CanReissueImmediately { get; init; }
+
+    /// <summary>Gets the latest denial note when the viewer may see it.</summary>
+    public string? ReissueNote { get; init; }
 }
 
 /// <summary>
@@ -3097,6 +3112,11 @@ public static class CampaignResponses
                     RequiredCount = item.RequiredCount,
                     CanClaim = item.CanClaim,
                     CanModerate = item.CanModerate,
+                    CanRequestReissue = item.CanRequestReissue,
+                    ReissuePending = item.ReissuePending,
+                    CanResolveReissue = item.CanResolveReissue,
+                    CanReissueImmediately = item.CanReissueImmediately,
+                    ReissueNote = item.ReissueNote,
                 }),
             ],
             PrivateObjectiveUnclaimedCounts =

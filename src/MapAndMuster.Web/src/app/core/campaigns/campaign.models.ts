@@ -425,6 +425,11 @@ export interface PrivateObjectiveAssignment {
   requiredCount?: number | null;
   canClaim?: boolean;
   canModerate?: boolean;
+  canRequestReissue?: boolean;
+  reissuePending?: boolean;
+  canResolveReissue?: boolean;
+  canReissueImmediately?: boolean;
+  reissueNote?: string | null;
 }
 
 export interface PrivateObjectiveUnclaimedCount {
@@ -1253,6 +1258,14 @@ export interface ModeratePrivateObjectivePayload {
   revision: number;
   assignmentId: string;
   approved: boolean;
+  note?: string | null;
+}
+
+export interface PrivateObjectiveReissuePayload {
+  revision: number;
+  assignmentId: string;
+  approved?: boolean;
+  note?: string | null;
 }
 
 export interface ResolveItemObjectiveChoicePayload {
