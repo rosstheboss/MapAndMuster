@@ -14,7 +14,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="SkiaSharp" />
+    <!-- net10.0 SkiaSharp does not pull Linux natives. The API image runs on Linux. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
   </ItemGroup>
 
   <ItemGroup>

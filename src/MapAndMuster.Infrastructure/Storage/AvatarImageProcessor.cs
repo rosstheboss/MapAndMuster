@@ -1,9 +1,7 @@
 using System.Text;
 using MapAndMuster.Application.Common;
 using MapAndMuster.Application.Ports;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace MapAndMuster.Infrastructure.Storage;
 
@@ -57,32 +55,19 @@ public sealed class AvatarImageProcessor : IAvatarImageProcessor
         }
 
         buffer.Position = 0;
-        try
+        cancellationToken.ThrowIfCancellationRequested();
+        var encoded = RasterImageTranscoder.EncodeFitted(buffer, maxDimension: 512, SKEncodedImageFormat.Jpeg, quality: 85);
+        if (encoded is null)
         {
-            using var image = await Image.LoadAsync(buffer, cancellationToken).ConfigureAwait(false);
-            image.Mutate(processor => processor.Resize(new ResizeOptions
-            {
-                Mode = ResizeMode.Max,
-                Size = new Size(512, 512),
-            }));
+            return Fail(ErrorCodes.UploadInvalidImage, "The profile picture could not be read.");
+        }
 
-            await using var output = new MemoryStream();
-            await image.SaveAsJpegAsync(output, new JpegEncoder { Quality = 85 }, cancellationToken).ConfigureAwait(false);
-            return new ProcessedAvatarResult
-            {
-                IsSuccess = true,
-                Content = output.ToArray(),
-                FileExtension = ".jpg",
-            };
-        }
-        catch (UnknownImageFormatException)
+        return new ProcessedAvatarResult
         {
-            return Fail(ErrorCodes.UploadInvalidImage, "The profile picture could not be read.");
-        }
-        catch (InvalidImageContentException)
-        {
-            return Fail(ErrorCodes.UploadInvalidImage, "The profile picture could not be read.");
-        }
+            IsSuccess = true,
+            Content = encoded,
+            FileExtension = ".jpg",
+        };
     }
 
     private static ProcessedAvatarResult Fail(string code, string message)

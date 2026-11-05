@@ -125,6 +125,8 @@ Modules may initially share a database and process. Keep public module interacti
   previous stored file when nothing else references it. Only user-uploaded files are deleted; built-in
   structure icons stay in the application. Structure logos (operational and pillaged) and faction flags
   are re-encoded and shrunk to at most 50×50 pixels.
+- Uploaded maps, avatars, structure logos, and faction flags are decoded with SkiaSharp and stored as
+  a new encoding of the resized pixels, which drops embedded metadata.
 - Adjacency is explicit and validated; geometry may suggest but not silently establish it.
 - Auto Generate Connections may propose edges from shared borders; user-created edges persist across
   regeneration. A pair of territories has at most one connection, and every connection is between

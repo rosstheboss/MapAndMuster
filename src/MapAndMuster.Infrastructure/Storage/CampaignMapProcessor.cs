@@ -1,9 +1,7 @@
 using System.Text;
 using MapAndMuster.Application.Common;
 using MapAndMuster.Application.Ports;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace MapAndMuster.Infrastructure.Storage;
 
@@ -63,32 +61,19 @@ public sealed class CampaignMapProcessor : ICampaignMapProcessor
 
         buffer.Position = 0;
         var dimension = maxDimension < 1 ? DefaultMaxDimension : maxDimension;
-        try
+        cancellationToken.ThrowIfCancellationRequested();
+        var encoded = RasterImageTranscoder.EncodeFitted(buffer, dimension, SKEncodedImageFormat.Png, quality: 100);
+        if (encoded is null)
         {
-            using var image = await Image.LoadAsync(buffer, cancellationToken).ConfigureAwait(false);
-            image.Mutate(processor => processor.Resize(new ResizeOptions
-            {
-                Mode = ResizeMode.Max,
-                Size = new Size(dimension, dimension),
-            }));
+            return Fail(ErrorCodes.UploadInvalidImage, "The campaign map could not be read.");
+        }
 
-            await using var output = new MemoryStream();
-            await image.SaveAsPngAsync(output, new PngEncoder(), cancellationToken).ConfigureAwait(false);
-            return new ProcessedCampaignMapResult
-            {
-                IsSuccess = true,
-                Content = output.ToArray(),
-                FileExtension = ".png",
-            };
-        }
-        catch (UnknownImageFormatException)
+        return new ProcessedCampaignMapResult
         {
-            return Fail(ErrorCodes.UploadInvalidImage, "The campaign map could not be read.");
-        }
-        catch (InvalidImageContentException)
-        {
-            return Fail(ErrorCodes.UploadInvalidImage, "The campaign map could not be read.");
-        }
+            IsSuccess = true,
+            Content = encoded,
+            FileExtension = ".png",
+        };
     }
 
     private static ProcessedCampaignMapResult Fail(string code, string message)
